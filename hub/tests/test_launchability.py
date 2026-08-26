@@ -5,6 +5,7 @@ import pytest
 from hub.launchability import (
     RUNNER_UNBOUND,
     access_path_notice,
+    auto_snapshot_notice,
     get_agent_config,
     probe_agent,
     probe_mcp_registered,
@@ -478,6 +479,17 @@ class TestAccessPath:
         assert "no AgentWeave tool surface is available" in notice
         for removed in ("agentweave msg", "agentweave task", "agentweave question"):
             assert removed not in notice
+
+    def test_f52_auto_snapshot_notice_says_the_agent_need_not_commit(self):
+        """F52 (`scripts/drive/FINDINGS.md`, 2026-08-26): two live runs each spent most of a
+        turn fighting a refused git commit, one giving up on the task entirely, because the
+        agent believed unrecorded work was lost. It was not — `snapshot_worktree` commits
+        automatically at every turn's end. The notice must say so and must not tell the agent
+        to keep trying git."""
+        notice = auto_snapshot_notice()
+        assert "do not need to" in notice.lower()
+        assert "commit" in notice.lower()
+        assert "record_evidence" in notice
 
 
 @pytest.mark.asyncio

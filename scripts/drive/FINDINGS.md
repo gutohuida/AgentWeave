@@ -1964,14 +1964,107 @@ keyboard. Every downstream promise this drive has verified — evidence, review,
 (F43's own `75ebebce`) — assumes the commit underneath it happened. On this build, for a `claude`
 runner with no operator-forced override, it did not, twice, without a single row anywhere saying so.
 
-### Not yet fixed
+### Correction and partial fix, 2026-08-26 (same drive, next iteration)
 
-Left for Q6. Candidate directions, none applied: (a) confirm/deny the version-drift hypothesis by
-testing `--permission-prompt-tool` against an older Claude Code build if one can be obtained; (b) if
-the CLI's own git-classification cannot be routed around, `--allowedTools` patterns
-(`Bash(git add:*)`, `Bash(git commit:*)`, `Bash(git config:*)`) pre-approve at the CLI level without
-ever reaching a prompt tool, which is a real option since `_decide` would have said yes anyway; (c)
-detect the pattern live — a run whose tool-result stream contains N "requires approval" refusals
-with zero matching `permission_denied` events is a run whose posture is not doing what it claims,
-and the operator currently has no way to learn that from the dashboard at all.
+Two things above are wrong or overstated, found while doing the two-runner check this write-up's
+own "Open, not closed" section said had not happened yet, and both change what F52 actually is.
+
+**1. It is not Claude-specific — confirmed, but not for the reason expected.** Fired a live turn on
+`relay` (Codex, `runner-fde56879`, app-server transport) with an equivalent git-touching
+instruction. It also could not commit — but Codex's own refusal names a completely different
+mechanism from Claude's: *"`git commit` is blocked by permissions on the shared
+`.git/worktrees/relay` metadata... needs to write the shared `.git/worktrees/relay` metadata
+outside the writable sandbox."* Claude's CLI refuses before `approve_tool_call` is ever invoked
+(zero `permission_requests`/`permission_denied` rows, as already established); Codex's sandbox
+boundary check *is* being invoked and is refusing on its own terms. Two independent mechanisms,
+both landing on "cannot commit inside a linked git worktree" — worth recording as agreement
+between two unrelated systems rather than one root cause, since nothing here shows they are the
+same defect.
+
+**2. Extensive isolated reproduction attempts, across every plausible axis, did NOT reproduce the
+Claude refusal.** Built a standalone repro harness (`testbed/scratch/f52_pty_repro.py`) spawning
+`claude` exactly as `runner_commands._build_claude_command` does — same flags
+(`--permission-mode manual --permission-prompt-tool mcp__agentweave__approve_tool_call
+--allowedTools mcp__agentweave__*`), same real `mcp_server.py` wired as a stdio MCP server, same
+compound `git add -A && git commit -m "..."` text verbatim from the failing transcript — and varied:
+plain subprocess vs. a real `winpty.PtyProcess` pseudo-terminal (matching `PtySession`, which is
+what production actually uses, not a plain pipe); `claude-opus-5` vs. `claude-haiku-4-5-20251001`
+(the actual cheap runner model); this machine's own `~/.claude/settings.json`
+(`defaultMode: auto`, present since 2026-08-23, so present during the original F52 drive too)
+included and excluded via `--setting-sources`; this session's own `CLAUDE_CODE_*`/`CLAUDECODE`
+child-session env vars included and stripped; a plain repo vs. a real linked `git worktree` (`git
+worktree add`) as `cwd`, matching production's `aw-stress/.agentweave/worktrees/builder` shape.
+**Every single combination committed successfully, first try, no refusal, `permission_denials: []`
+in every case.** The refusal is real (verified twice now, in two different live drives, by DB rows
+and by literal tool-result text) but its trigger is narrower and more specific to the full
+production turn than any of these axes — the large injected `--append-system-prompt-file` context,
+something about a resumed vs. fresh session, or something else not yet isolated. Recorded as a
+genuine open question, not swept under "CLI version drift" as the leading hypothesis any longer —
+that hypothesis is now weaker, not stronger, after this many negative results.
+
+**3. The claimed consequence — code lost, "indistinguishable from any other in-progress edit... the
+next firing could silently discard or overwrite" — is WRONG, and this is the important part.**
+`worktrees.snapshot_worktree` runs unconditionally at the end of *every* turn
+(`agent_trigger.py`'s finalize path, reached whether the run completes or fails, not something the
+agent has to invoke), commits whatever is dirty with `--no-verify` onto the agent's own branch, and
+stamps `run.snapshot_commit_sha`. `_restamp_evidence_footprints` then re-points any evidence
+recorded mid-turn (while the work was still dirty) at that real commit. Checked directly against the
+same worktree and the same two runs this finding was originally measured against:
+`run-2f63d76eeae2.snapshot_commit_sha = 1e35528...` and `run-9e793f8b5c35.snapshot_commit_sha =
+75d5b26...`, both real commits in `aw-stress/.agentweave/worktrees/builder`'s history, both holding
+exactly the fix content (banker's-rounding `quantize()`; account-code validation), both authored
+`AgentWeave <agentweave@localhost>` — the worktree read `nothing to commit, working tree clean`
+when checked. The code was never at risk. What was actually missing is `requirement_evidence` rows
+(genuinely zero for both runs) — but that is the **pre-existing, already-documented** "a plain loop
+task carries no `FR-` id to cite" gap this write-up itself named, not a consequence of the git
+refusal; `record_evidence`'s own docstring says `locator` is free text ("a path, a command, a run
+id"), never a commit sha the agent must produce. **Severity revised down**: this is not
+"foundational, undercuts the evidence/review/merge chain" (refuted — the chain's own commit
+capture does not depend on the agent's git succeeding, by design, and the design already
+anticipated evidence recorded before a commit exists). It is real and still costs a whole turn's
+attention and, for the first run, an abandoned task — that part stands.
+
+**Fix applied**, scoped to what is actually fixable without knowing the CLI's root cause: agents
+were burning most of a turn on a problem the Hub had already solved for them, because nothing told
+them so. Added `launchability.auto_snapshot_notice()`, appended to every writing agent's turn
+prompt (`agent_trigger.py`, gated on `isolated_workspace is not None and review_context is None` —
+the same condition `worktree` is computed under for the snapshot call itself) telling the agent it
+does not need to `git commit`, the Hub does it automatically at turn end regardless, and to call
+`record_evidence` with a free-text locator instead of retrying git. This does **not** fix the
+underlying CLI refusal (still open, root cause unconfirmed) — it stops the refusal from costing a
+whole turn and a possibly-abandoned task while that stays open.
+
+Two new tests, `hub/tests/test_launchability.py::test_f52_auto_snapshot_notice_says_the_agent_need_not_commit`
+and `hub/tests/test_agent_trigger.py::test_f52_writing_agent_gets_the_auto_snapshot_notice` (plus a
+negative case, `test_f52_read_only_agent_gets_no_auto_snapshot_notice`, for an agent with no
+worktree to snapshot). **Mutation-checked**: stashed `launchability.py` and `agent_trigger.py` only
+(not the tests) — `test_launchability.py` fails to even import (`auto_snapshot_notice` gone), and
+`test_f52_writing_agent_gets_the_auto_snapshot_notice` fails its exact assertion with the real
+pre-fix prompt text in the diff. Restored, reverified green: 81/81 in both files.
+
+**Verified LIVE**, not just against the fixture. Restarted the trial Hub on the beta database
+(confirmed via `e2e.py state proj-18e5d4e0` reading identical project state before and after).
+Fired a fresh `builder` turn on `ledger-stress` with the same kind of git-touching instruction:
+`run-021a5dfc357c`. The notice appeared, the agent tried the compound commit once, it was refused
+exactly as before ("contains multiple operations... requires approval"), and — unlike the original
+two runs, which tried five more phrasings each before one gave up on the task entirely — this run
+stopped after the one attempt, correctly reported *"According to the system message, the Hub will
+automatically commit my worktree's uncommitted changes at the end of this turn,"* and ended
+cleanly. `aw-stress/.agentweave/worktrees/builder`'s log confirms: `04e9d8d Auto-snapshot: builder's
+turn`, holding exactly the one-line edit the run made, tree clean afterward.
+
+### Still open
+
+The CLI-level refusal itself (both runners) — root cause unconfirmed, isolated reproduction failed
+across every axis tried above. Left for further investigation, not for a blind fix: applying
+`--allowedTools` patterns or a Claude-Code-version pin on the strength of a hypothesis this many
+negative results have weakened would risk false confidence more than it would help. Candidate
+directions, none applied: (a) capture the *actual* full production prompt/context a failing turn
+receives (not a synthetic stand-in) and bisect it; (b) `--allowedTools` patterns (`Bash(git add:*)`,
+`Bash(git commit:*)`) as a narrower pre-approval that sidesteps whatever is refusing, if (a) does
+not explain it; (c) for Codex, whether the app-server sandbox can be configured with the main
+repo's `.git/worktrees/<agent>` directory as an additional writable root; (d) detect the pattern
+live — a run whose tool-result stream contains N "requires approval" refusals with zero matching
+`permission_denied` events is a run whose posture is not doing what it claims, and the operator
+currently has no way to learn that from the dashboard at all.
 

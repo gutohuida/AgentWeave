@@ -330,6 +330,34 @@ def access_path_notice(access_path: str) -> str:
     )
 
 
+def auto_snapshot_notice() -> str:
+    """One line telling a writing agent it does not have to commit its own work.
+
+    F52 (`scripts/drive/FINDINGS.md`, 2026-08-26): a live drive found two Haiku/`claude` runs and
+    one `codex` run each spend most of a turn fighting a refused `git add`/`git commit` — every
+    phrasing tried, including a bare read-only `git --version` — and one gave up on the task
+    entirely rather than call `record_evidence`, believing an unrecorded commit meant the work
+    was lost. It was not: `worktrees.snapshot_worktree` commits whatever is dirty in the agent's
+    worktree unconditionally at the end of *every* turn (`agent_trigger.py`'s finalize path,
+    reached whether the run completes or fails), and `record_evidence`'s own `locator` argument
+    is free text — "a path, a command, a run id" — never a commit sha the agent must produce
+    itself. The agent spending its turn on git was solving a problem the Hub had already solved
+    for it. This notice is the fix: said once, up front, before a blocked git command can start
+    that spiral — not a workaround for the refusal itself, which stays open (root cause
+    unconfirmed; isolated reproduction attempts across several plausible axes did not reproduce
+    it, so whatever triggers it in production is narrower than "this posture always refuses
+    git").
+    """
+    return (
+        "[AgentWeave] You do not need to `git commit` your own changes. The Hub commits your "
+        "worktree's uncommitted changes automatically at the end of this turn, whether or not "
+        "any git command you run succeeds. If a git write command is refused, stop trying "
+        "variations of it — that turn budget is better spent finishing the work. Call "
+        "`record_evidence` when you are done; its `locator` can be a file path or a description "
+        "of what you changed, not only a commit sha."
+    )
+
+
 async def get_agent_config(project_id: str, agent: str, db: AsyncSession) -> Dict[str, Any]:
     """Return the merged runner config `probe_agent` expects for one agent.
 

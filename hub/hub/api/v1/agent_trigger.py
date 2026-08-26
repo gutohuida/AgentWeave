@@ -70,6 +70,7 @@ from ...inbound_queue import (
 )
 from ...launchability import (
     access_path_notice,
+    auto_snapshot_notice,
     get_agent_config,
     probe_agent,
     resolve_access_path,
@@ -591,6 +592,12 @@ async def trigger_agent_directly(
     # one that isn't actually available in this environment.
     access_path = resolve_access_path(runner, probe["cli"] or agent, config.get("hub_client"))
     notices = [access_path_notice(access_path)]
+    # F52: told once, up front, rather than discovered turn after turn by an agent that treats a
+    # refused git command as work lost. `review_context is None` matches the condition `worktree`
+    # is computed under below (a review checkout is read-only and never snapshotted); an agent with
+    # no worktree at all (`isolated_workspace is None`) has nothing this notice would help with.
+    if isolated_workspace is not None and review_context is None:
+        notices.append(auto_snapshot_notice())
     # A specification turn says so beside the operator's message, not only in the system context.
     # Three live runs had the phase block, the precedence statement and the tool list all correctly
     # delivered, and reached for a different workflow anyway: what an agent weighs against the

@@ -438,6 +438,89 @@ async def test_writing_agent_worktree_exists_before_first_spawn(
 
 
 @pytest.mark.asyncio
+async def test_f52_writing_agent_gets_the_auto_snapshot_notice(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """F52 (`scripts/drive/FINDINGS.md`, 2026-08-26): a writing agent with a real worktree to
+    snapshot must be told, before it can spend its turn fighting a refused git command, that the
+    Hub commits its worktree automatically at the end of every turn regardless."""
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    monkeypatch.setattr(worktrees, "resolve_agent_workspace", _REAL_RESOLVE_AGENT_WORKSPACE)
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"writer": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("writer", cli="claude")
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
+    )
+    captured_kwargs = {}
+    real_build_command = agent_trigger.build_command
+
+    def _capturing_build_command(**kwargs):
+        captured_kwargs.update(kwargs)
+        return real_build_command(**kwargs)
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command):
+                response = await app.post(
+                    "/api/v1/projects/proj-test/agent/trigger",
+                    json={"agent": "writer", "message": "write"},
+                    headers=auth_headers,
+                )
+                assert response.status_code == 200
+                await _await_background_run()
+
+    assert "do not need to" in captured_kwargs["prompt"].lower()
+    assert "record_evidence" in captured_kwargs["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_f52_read_only_agent_gets_no_auto_snapshot_notice(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """The read-only companion to the test above: an agent with no worktree has nothing for
+    `snapshot_worktree` to commit, so the notice — which promises exactly that — must not
+    appear and imply a guarantee this turn cannot back up."""
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    monkeypatch.setattr(worktrees, "resolve_agent_workspace", _REAL_RESOLVE_AGENT_WORKSPACE)
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"reader": {"runner": "claude", "read_only": True}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("reader", cli="claude")
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n']
+    )
+    captured_kwargs = {}
+    real_build_command = agent_trigger.build_command
+
+    def _capturing_build_command(**kwargs):
+        captured_kwargs.update(kwargs)
+        return real_build_command(**kwargs)
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command):
+                response = await app.post(
+                    "/api/v1/projects/proj-test/agent/trigger",
+                    json={"agent": "reader", "message": "inspect"},
+                    headers=auth_headers,
+                )
+                assert response.status_code == 200
+                await _await_background_run()
+
+    assert "do not need to" not in captured_kwargs["prompt"].lower()
+
+
+@pytest.mark.asyncio
 async def test_read_only_agent_spawns_in_primary_checkout(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
 ):

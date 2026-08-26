@@ -426,3 +426,102 @@ own gate), or (b) if the operator has redirected via `decisions_for_user`, follo
 Q4 itself stays open until the checkpoint hook gets a fresh live firing that actually reaches
 `submit_checkpoint_notes` — worth retrying on `relay` specifically once F52's cross-runner question
 is answered.
+
+---
+
+## Iteration 5 — F52: the cross-runner check, extensive isolated repro attempts, a correction,
+and a scoped fix
+
+**2026-08-26T00:55–01:13+01:00.** Reconciled first: branch/log matched `STATE.json` (`a58f8e4`
+tip after the Q4 heartbeat release), tree clean.
+
+**The two-runner check Q1 always insists on, finally run for F52.** Fired a live turn on `relay`
+(Codex, app-server transport) on `ledger-stress` with a git-touching instruction equivalent to the
+original. It also could not commit — but its own refusal names a different mechanism entirely:
+*"`git commit` is blocked by permissions on the shared `.git/worktrees/relay` metadata... needs to
+write the shared metadata outside the writable sandbox."* Claude's refusal happens before
+`approve_tool_call` is ever invoked; Codex's sandbox boundary check *is* invoked and refuses on its
+own terms. Confirmed cross-runner, but as two independent mechanisms converging on the same
+symptom, not necessarily one root cause.
+
+**Extensive isolated reproduction, all negative.** Built `testbed/scratch/f52_pty_repro.py`
+(deleted before this commit — throwaway) spawning `claude` through a real `winpty.PtyProcess`,
+matching `PtySession.spawn` exactly rather than a plain subprocess, with the same flags
+`runner_commands._build_claude_command` emits, the real `mcp_server.py` wired as a stdio MCP
+server, and the identical compound `git add -A && git commit -m "..."` text from the failing
+transcript. Varied six axes — PTY vs. plain pipe, `claude-opus-5` vs. `claude-haiku-4-5-20251001`,
+this machine's `~/.claude/settings.json` (`defaultMode: auto`, present since 2026-08-23, so present
+during the original F52 drive too) included and excluded, this session's own
+`CLAUDE_CODE_*`/`CLAUDECODE` child-session env vars included and stripped, a plain repo vs. a real
+linked `git worktree` as `cwd` — and **every single combination committed successfully**, first
+try, `permission_denials: []` every time. The refusal is real (confirmed twice now, by DB rows in
+Q4 and by literal tool-result text again this iteration) but its trigger is something in the full
+production turn none of these axes captured. Recorded as an open question, not swept toward "CLI
+version drift" — six negative results weaken that hypothesis rather than support it.
+
+**The claimed consequence was wrong, and this is the important correction.** Checked
+`aw-stress/.agentweave/worktrees/builder` directly: `git status --short` reads clean, and
+`git log` shows `Auto-snapshot: builder's turn` commits authored `AgentWeave
+<agentweave@localhost>`. `worktrees.snapshot_worktree` runs unconditionally at the end of *every*
+turn (`agent_trigger.py`'s finalize path, reached whether the run completes or fails) and commits
+whatever is dirty with `--no-verify`. Checked against the exact two runs F52 was measured on:
+`run-2f63d76eeae2.snapshot_commit_sha` and `run-9e793f8b5c35.snapshot_commit_sha` are both real,
+non-null commits holding exactly the fix content (banker's-rounding `quantize()`; account-code
+validation). The code was never at risk of being lost. What is genuinely missing —
+`requirement_evidence` rows, zero for both tasks — turned out to be the already-documented,
+pre-existing "a plain loop task carries no `FR-` id to cite" gap, not a consequence of the git
+refusal; `record_evidence`'s own docstring says `locator` is free text, never a commit sha. F52's
+severity is revised down from "foundational, undercuts the whole evidence/review/merge chain" to a
+real but narrower turn-wasting, task-abandoning UX defect.
+
+**Fix applied, scoped to what is actually fixable without the CLI's root cause.** Added
+`launchability.auto_snapshot_notice()`, appended to every writing agent's turn prompt in
+`agent_trigger.py` (gated on `isolated_workspace is not None and review_context is None`, the same
+condition the snapshot call itself uses), telling the agent the Hub commits its worktree
+automatically at turn end regardless of git success, so it should stop retrying git and call
+`record_evidence` with a free-text locator instead. Does not fix the CLI refusal — stops it from
+costing a whole turn and a possibly-abandoned task while that stays open.
+
+**Regression tests**: `test_launchability.py::test_f52_auto_snapshot_notice_says_the_agent_need_not_commit`
+and two in `test_agent_trigger.py` (`test_f52_writing_agent_gets_the_auto_snapshot_notice` positive,
+`test_f52_read_only_agent_gets_no_auto_snapshot_notice` negative — no worktree, no notice). 81/81
+passed in both files. **Mutation-checked**: stashed `launchability.py` and `agent_trigger.py` only
+— `test_launchability.py` fails to import (`auto_snapshot_notice` gone) and the positive
+`test_agent_trigger.py` case fails its exact assertion, showing the real pre-fix prompt text in the
+diff. Restored, reverified green. `ruff`/`black --target-version py311` clean on all four touched
+files. Broader slice (`-k "trigger or launchability or worktree or snapshot"`, 178 tests): 177
+passed, 1 skipped, 1 xpassed, 0 failed.
+
+**Verified LIVE.** Restarted the trial Hub on the beta database (confirmed via `e2e.py state
+proj-18e5d4e0` reading identical project state before/after the restart). Fired a fresh `builder`
+turn on `ledger-stress` (`run-021a5dfc357c`) with a git-touching instruction. The notice appeared;
+the agent tried the compound commit once, was refused exactly as before, and — unlike the original
+two runs, which each tried five or six more phrasings before one gave up on the task — stopped
+after one attempt and correctly self-reported *"the Hub will automatically commit my worktree's
+uncommitted changes at the end of this turn."* `aw-stress/.agentweave/worktrees/builder`'s log
+confirms: a fresh `Auto-snapshot: builder's turn` commit holding exactly that run's one-line edit,
+tree clean afterward. A real, measured behavior change, not a fixture result.
+
+**Write-up**: `scripts/drive/FINDINGS.md`'s F52 entry gained a full "Correction and partial fix"
+section rather than being rewritten in place, so the original (real, still-accurate-on-its-own-
+terms) refusal evidence stays intact and the correction is legible as a correction.
+
+**Jobs swept**: `select id, project_id, enabled, name from ai_jobs` against the beta database
+directly — all nine rows across all projects read `enabled: 0`. Nothing was enabled this
+iteration; the relay/builder probes were single `e2e.py turn` calls, not jobs.
+
+**Repository root** stayed untouched except `FINDINGS.md`, the two hub source files, the two hub
+test files, and `STATE.json`/the log — confirmed by `git status` before this commit. The throwaway
+`testbed/scratch/f52_pty_repro.py` and `testbed/scratch/builder_charter.txt` were deleted before
+committing; `/tmp/f52-repro` (outside the repo) was removed.
+
+**What a reviewer should distrust**: the CLI-level refusal's actual trigger is still unknown — the
+notice fix is a real mitigation, verified live, but it is not a fix for the underlying defect, and
+nothing here should be read as having found or ruled out its cause. The full `hub/tests/` suite
+(~3100 tests) was not rerun this iteration, only the touched-file and topic-relevant slices; Q9's
+sweep is still where whole-suite green gets re-established.
+
+**Next**: `current`/`next_action` in `STATE.json` point at retrying Q4's original target — a fresh
+live firing that reaches `submit_checkpoint_notes`, now that the notice fix should stop a run from
+dying mid-turn fighting git before it gets there. Disable whatever job is enabled for this before
+the iteration ends, the way every iteration so far has.
