@@ -2068,3 +2068,198 @@ live — a run whose tool-result stream contains N "requires approval" refusals 
 `permission_denied` events is a run whose posture is not doing what it claims, and the operator
 currently has no way to learn that from the dashboard at all.
 
+## F53 (B) — archiving a loop that never fired still permanently, irrevocably claims its spec document; the tasks it "adopted" have no recovery path
+
+Found 2026-08-26 driving Q4, self-inflicted and then traced to the code rather than dismissed as
+operator error — the whole value of finding it is that a real operator could do the exact same
+three clicks by accident.
+
+**Reproduction, three real API calls, no fixture:** on `drive-2026-08-26` (`proj-8605b92d0028`),
+created a flow job (`POST /projects/{id}/jobs` with `spec_document_id: spdoc-f64ba8051a5b`, an
+*approved* document with three real pending tasks). Its `agent` field named a self-registered poll
+agent, which turned out to be the wrong kind for a Hub-spawned loop (see the "held" note below), so
+before ever firing it once, I archived the job to replace it:
+`POST /projects/{id}/jobs/{id}/archive` → `200`, and the response showed the loop's own
+`archived_at` set to the same instant, so one call archived both. Then, to reuse the same
+document on a corrected job, `POST /projects/{id}/jobs` with the same `spec_document_id` again:
+
+```
+409 {"detail": "document 'spdoc-f64ba8051a5b' is already claimed by loop 'loop-2b337162dffd'"}
+```
+
+That loop is the one just archived. It never fired. It has no run, no conversation, no output —
+and it still permanently owns the document.
+
+### Root cause, both halves, read from the code
+
+1. `_check_spec_document_conflict` (`hub/hub/api/v1/jobs.py:103-124`) is the sole gate a new job's
+   `spec_document_id` passes through, on both the create path (line 590) and the "opt an existing
+   job into a loop" PATCH path (line 838). Its query is
+   `select(Loop).where(Loop.project_id == project_id, Loop.spec_document_id == spec_document_id)`
+   — **no `Loop.archived_at.is_(None)` filter anywhere in it.** An archived loop is exactly as
+   good a conflict as a live one, forever.
+2. Independently and more costly: `_adopt_document_tasks` (line 185) is *"restricted to
+   `loop_id IS NULL` so a task another loop already owns is never taken"* — a deliberate, correct
+   guard against double-claiming a task a live loop is using. But it does not distinguish "another
+   loop owns this and is still using it" from "another loop owned this, is dead, and nobody will
+   ever use it again." Once `_adopt_document_tasks` ran once (at this loop's creation) and stamped
+   `loop_id = 'loop-2b337162dffd'` onto the three tasks, archiving the loop did **not** null that
+   column back out. Confirmed directly against the row data, not inferred:
+   `sqlite3 … "select id, status, loop_id from tasks where project_id='proj-8605b92d0028'"` →
+   all three tasks still read `loop_id = 'loop-2b337162dffd'`, `status = 'pending'`, after the
+   archive. There is no operator API anywhere in `jobs.py`, `loops.py`, or `tasks.py` that clears
+   or reassigns a task's `loop_id`.
+
+### The consequence, stated plainly
+
+Once a loop has adopted a document's tasks even once, archiving that loop — the only tool the
+product offers for "get rid of a mistaken or unwanted loop" — does not release the document *or*
+the tasks. No second flow can ever be created against that document (permanent 409), and the three
+tasks are stranded: not deletable through any task API surface found in this drive, not
+reassignable to a different loop, and invisible to every loop-queue query in `scheduler.py` (which
+all read `Task.loop_id == <the live loop's id>`) because they belong to a loop that is not, and can
+never again be, live. The only way discovered to make progress on the underlying work was to
+create fresh replacement tasks by hand — the original three are simply gone from the product's own
+workflow, permanently, while still existing as un-completable rows in the database.
+
+**This did not require a git refusal, a permission wall, or any of this drive's other exotic
+seams.** It requires exactly what the `loops.py` archive-and-recreate UI flow invites: create a
+loop with the wrong agent, archive it, try again. `POST /jobs/{id}/archive`'s own success response
+gives no warning that the document claim survives it.
+
+### What a fix would need to decide
+
+Either (a) `_check_spec_document_conflict` excludes archived loops, which fixes the second flow but
+leaves the first three tasks still bound to a dead `loop_id` with no query surfacing them, or
+(b) archiving a loop also clears `loop_id` back to `NULL` on every task it adopted that never left
+a non-terminal, unclaimed state — which is the one that actually un-strands the tasks, but needs a
+decision about tasks the dead loop's agent had already started or completed (those should almost
+certainly keep their `loop_id` as history, not be silently reset). Left undecided and unfixed here;
+this is Q6's shape of item (design gap with a real, reproduced consequence), not a one-line patch.
+
+**What a reviewer should distrust:** the "wrong kind of agent for a loop" trigger for the first
+archive (self-registered poll agents cannot be a loop's `agent` — see the `409`,
+`"author is a self-registered poll agent and manages its own execution"`, reproduced live on the
+same project) is itself worth a line in a future finding if it recurs, but is not re-litigated here
+since it did not block anything once a Hub-managed agent was created instead.
+
+## F54 (A) — a job-creation request that 409s on a document conflict has already committed an enabled, spendable job; the error response is not the rollback it looks like
+
+Found live 2026-08-26, immediately after F53, on the very next API call in the same drive —
+creating the second attempt at the "Inventory flow" job (`agent: loopauthor`, same
+`spec_document_id` F53's archived loop still claims) returned `409` exactly as F53 describes. That
+response was trusted as a no-op, the same way any REST client would trust a 4xx. It was not one:
+`select id, project_id, enabled, name from ai_jobs` on the beta database, run for this iteration's
+mandatory job sweep, turned up `job-08e0c3b0329c`, project `proj-8605b92d0028`, **`enabled: 1`**,
+`cron: */5 * * * *`, `agent: loopauthor` — a real, spawnable, Hub-managed agent (not the
+self-registered kind F53's first attempt tripped over) — sitting enabled and unnoticed for roughly
+eight minutes before this sweep caught it.
+
+### Root cause, read from `create_job` (`hub/hub/api/v1/jobs.py:549-611`)
+
+The `AIJob` row is built, `session.add(job)`, and **committed** at line 575-577 — before any
+loop-related validation runs. Only afterward, at line 588-590, does
+`if _loop_opts_in(...): await _check_spec_document_conflict(...)` run, and
+`_check_spec_document_conflict` raises `HTTPException(409, ...)` with nothing between it and the
+already-committed job — no rollback, no compensating delete, no `enabled=False` write-back. The
+request that ends in `409` to the caller has already durably created the job the caller was told
+did not get created, `enabled` at whatever the request body asked for (default `true`, per
+`JobCreate.enabled`'s own default, confirmed by this job reading `enabled: 1` when the create body
+never mentioned `enabled` at all).
+
+This is the exact failure mode `initial_tasks` validation right above it (line 537-538) was
+explicitly written to prevent — *"validated up front, before any row is created, so one malformed
+entry cannot leave a job (and its loop) half-created behind a 422."* The document-conflict check
+sits fifty lines below that comment and does not follow its own rule.
+
+### Why this is severity A and not a cousin of F53
+
+F53 is a data-orphaning defect: real work becomes unreachable, but nothing spends while it sits
+there. This is a live-spend defect: the artifact left behind is not an inert row, it is **an
+enabled cron job bound to a real runner**, identical in every respect to any other enabled job this
+drive's own standing rule calls "the single most expensive mistake available" — except this one was
+never knowingly enabled by an operator at all. It was a side effect of a request the operator
+believed had failed. Measured, not hypothetical: `next_run` was already computed
+(`2026-08-26T00:30:00Z`) and `run_count: 0`/`last_session_id: null` only because this sweep found
+and disabled it a few minutes before its first tick — this is a "caught it in time," not a "it was
+never going to fire."
+
+### Verified live, not inferred
+
+`PATCH .../jobs/job-08e0c3b0329c {"enabled": false}` → `200`, then
+`POST .../jobs/job-08e0c3b0329c/archive` → `200`. Re-swept `ai_jobs` immediately after: all ten rows
+across all five projects read `enabled: 0`, including this one.
+
+### What a reviewer should distrust
+
+This job never actually fired (caught before its first cron tick), so there is no live evidence of
+what firing an orphan job with a dead loop reference (`loop: null` despite `spec_document_id` having
+been intended) would have done downstream — only that it was armed to. Whether the same
+already-committed-before-validation shape exists on the PATCH path (`update_job`, line ~752) that
+also calls `_check_spec_document_conflict` was not checked this iteration; the PATCH path mutates an
+existing row rather than creating one, so the blast radius is different (a bad edit rather than a
+phantom job) and untouched-agent-field jobs it patches are already enabled by the time PATCH is
+reachable, so the marginal risk is smaller but not obviously zero.
+
+## F55 (B) — an unprovoked, intermittent test failure, and a real "which checkpoint is newest" tie-break bug behind it (Windows clock resolution)
+
+Not something this iteration went looking for. Found running an unrelated broader slice
+(`pytest hub/tests/ -k "jobs or loops or scheduler"`) to sanity-check the F54 fix — one test failed
+that has nothing to do with `jobs.py`: `test_flow_checkpoint_lineage.py`. Re-running the same file
+alone, repeatedly, on the unmodified branch tip (stashed the F54 change to rule it out as the
+cause) confirmed this is **pre-existing and genuinely intermittent, not caused by this iteration's
+work**: 2 of 6 bare re-runs failed, alternating between two different tests in the same file
+(`test_the_briefing_carries_the_newest_checkpoint_whoever_wrote_it` and
+`test_a_loops_checkpoints_do_not_chain_and_that_is_the_point`).
+
+### Root cause, confirmed with a direct measurement on this machine, not inferred from reading
+
+Both failing tests call `_checkpoint_by` (the test's own helper) twice in a row, each call ending
+in `create_checkpoint`, which stamps `created_at` via `Checkpoint.created_at`'s column default,
+`_now()` = `datetime.now(timezone.utc)` (`hub/hub/db/models.py:23-24`). `latest_checkpoint_for_loop`
+(`hub/hub/checkpoints.py:107-118`) orders `select(Checkpoint)... .order_by(Checkpoint.created_at.desc(),
+Checkpoint.id.desc())` — id as the tie-break when timestamps are equal.
+
+Measured directly on this machine, no test harness involved:
+
+```python
+>>> [datetime.now(timezone.utc) for _ in range(5)]
+2026-08-26T00:45:13.392498+00:00   # all five calls, back to back, identical
+2026-08-26T00:45:13.392498+00:00
+2026-08-26T00:45:13.392498+00:00
+2026-08-26T00:45:13.392498+00:00
+2026-08-26T00:45:13.392498+00:00
+```
+
+Windows' `datetime.now()` resolution is coarser than the microsecond precision the value's own
+format implies — a known platform characteristic, not a Python bug — so two `create_checkpoint`
+calls separated only by an `await db.commit()` reliably land in the same tick more often than not.
+When they do, `Checkpoint.id.desc()` decides "which is newest" — and `id` is `short_id()`, a random
+hex string with **no relationship to insertion order at all**. Roughly half the time the second
+(truly newer) checkpoint's random id sorts *lower* than the first's, and
+`latest_checkpoint_for_loop` returns the wrong one — which is exactly what both flaky tests
+observe, each in its own assertion about which checkpoint's content should win.
+
+### Why this is a real product bug, not just a fragile test
+
+The tests only exercise it because they create two checkpoints with no delay between them; the
+product does the identical thing on real hardware whenever two loop firings (e.g. two agents in a
+width>1 flow) both complete and generate a handover checkpoint within the same clock tick — a
+window measured here as large enough to swallow at least five consecutive Python-level calls, not
+a one-in-a-million race. When it happens live, a briefing would be composed from the *older* of two
+checkpoints, silently — nothing errors, nothing logs a decision, the briefing just carries stale
+content while looking exactly like a correctly-functioning handover. The same pattern
+(`created_at.desc()` with an incidental secondary sort) likely recurs anywhere else in the
+codebase that orders checkpoints, notes, or events by timestamp with no monotonic tie-break —
+not audited exhaustively this iteration.
+
+### What a reviewer should distrust
+
+Not fixed this iteration — time was spent confirming the mechanism rather than patching it, since
+the right fix (a monotonic sequence column, the same shape `TaskTransition.sequence` already uses
+for exactly this reason per an existing `dead_ends` note) is a schema change, not a one-line patch,
+and deserves its own migration and test rather than being folded into the F54 commit that
+incidentally surfaced it. Left for Q6. The measured "identical timestamp" repro above is
+machine-specific (this Windows box); it is not claimed that every environment reproduces the tie at
+the same rate, only that the tie-break itself is unsound regardless of how often it fires.
+

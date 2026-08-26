@@ -805,6 +805,58 @@ async def test_a_second_loop_declaring_the_same_document_is_refused(app, auth_he
 
 
 @pytest.mark.asyncio
+async def test_f54_a_document_conflict_leaves_no_job_row_behind(app, auth_headers):
+    """F54: a 409 on the document conflict must mean nothing was created, not just nothing usable.
+
+    `create_job` used to commit the `AIJob` row before checking `_check_spec_document_conflict`,
+    so a caller told "409, nothing happened" had in fact left an enabled, spawnable job in the
+    database with no loop and no document — found live when re-attempting F53's Q4 drive job.
+    """
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import AIJob
+
+    first_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "F54 First Claimant",
+            "agent": "kimi",
+            "message": "Work the queue",
+            "cron": "0 9 * * *",
+            "purpose": "Drive doc-declare-f54's tasks",
+            "spec_document_id": "doc-declare-f54",
+        },
+        headers=auth_headers,
+    )
+    assert first_resp.status_code == 201
+
+    second_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "F54 Second Claimant",
+            "agent": "kimi",
+            "message": "Work the queue",
+            "cron": "0 9 * * *",
+            "purpose": "Also wants doc-declare-f54",
+            "spec_document_id": "doc-declare-f54",
+        },
+        headers=auth_headers,
+    )
+    assert second_resp.status_code == 409
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(AIJob).where(
+                AIJob.project_id == "proj-test", AIJob.name == "F54 Second Claimant"
+            )
+        )
+        assert (
+            result.scalar_one_or_none() is None
+        ), "a 409 on the document conflict must not leave a job row behind"
+
+
+@pytest.mark.asyncio
 async def test_a_loop_can_still_be_created_with_no_source_document(app, auth_headers):
     """Task 4.2(c): `spec_document_id` stays optional, unchanged from `many-named-loops`."""
     from sqlalchemy import select

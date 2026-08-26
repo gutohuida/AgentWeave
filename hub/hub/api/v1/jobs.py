@@ -546,6 +546,16 @@ async def create_job(
                 detail=f"invalid initial_tasks entry: {e}",
             ) from e
 
+    # F54: checked here, before the job row is created, for the same reason `initial_tasks` and the
+    # `session_mode`/loop check above are — a `409` response must not leave a half-created job
+    # behind. This used to run after the job was already committed (right where the loop itself is
+    # built, below), so the request that told a caller "nothing happened" had already left an
+    # enabled, spawnable job row in the database with no loop and no document. Measured live: a
+    # `409` from this exact check left `job-08e0c3b0329c` sitting `enabled: 1` for several minutes
+    # before an unrelated job sweep caught it.
+    if _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties):
+        await _check_spec_document_conflict(session, project_id, body.spec_document_id)
+
     job_id = f"job-{short_id()}"
 
     # Compute next run

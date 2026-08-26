@@ -525,3 +525,148 @@ sweep is still where whole-suite green gets re-established.
 live firing that reaches `submit_checkpoint_notes`, now that the notice fix should stop a run from
 dying mid-turn fighting git before it gets there. Disable whatever job is enabled for this before
 the iteration ends, the way every iteration so far has.
+
+---
+
+## Iteration 6 — Q4 retried three times live, two new findings (F53, F54), F54 fixed live before this entry closes
+
+**2026-08-26T01:20–01:45+01:00.** Reconciled first: branch/log matched `STATE.json` (`06fd444`
+tip), tree clean, Hub `/health` ok, `/api/v1/projects` served from the beta database.
+
+**Attempt 1, on `drive-2026-08-26` (`proj-8605b92d0028`) — chosen to avoid touching `ledger-stress`'s
+existing flow, which the prior iteration explicitly avoided contaminating.** Set the project's
+`checkpoint_runner_id` (previously null — a real gap `main_branch`'s F4 pattern did not cover for
+this project), then created a flow job over the approved inventory document
+(`spdoc-f64ba8051a5b`, three real pending tasks from Q2). `POST /jobs/{id}/run` refused with
+`409 "author is a self-registered poll agent and manages its own execution"` — `e2e.py`'s own
+`cmd_agent` registers agents via `/agents/register` (`contact_mode: poll`, `self_registered: true`),
+which cannot be a loop's spawn target at all; only a Hub-managed (`POST /agents`,
+`self_registered: false`) agent can. Not a product defect — a harness/registration-mode mismatch,
+recorded so nobody re-diagnoses it. Created two fresh Hub-managed agents (`loopauthor`,
+`loopreviewer`) bound to the same runners/charters to work around it.
+
+**F53 (B) — found fixing my own mistake, then confirmed to be a real, general gap.** To retarget the
+job at `loopauthor`, I archived the first attempt (`POST /jobs/{id}/archive` — one call archived
+both the job and its never-fired loop). Re-creating the job against the same document then `409`'d
+permanently: `"document 'spdoc-f64ba8051a5b' is already claimed by loop 'loop-2b337162dffd'"` — the
+archived, dead loop. Read from the code: `_check_spec_document_conflict`
+(`hub/hub/api/v1/jobs.py:103-124`) never filters `Loop.archived_at`, and `_adopt_document_tasks`'s
+`loop_id IS NULL` guard, correct for its own stated purpose, has no path to release a `loop_id` once
+archiving orphans it — confirmed directly against the three tasks' rows, still `loop_id =
+'loop-2b337162dffd'`, `status = 'pending'`, un-reachable by any loop query and un-resettable by any
+task API found. Full write-up, both root causes, and the fix's open design question (exclude
+archived loops from the conflict check vs. actually clear `loop_id` on archive, and what that means
+for tasks a dead loop's agent had already started) are under F53 in `FINDINGS.md`. Left unfixed —
+severity B, design gap, Q6's shape of item, not a live-spend risk.
+
+**F54 (A) — found on the very next API call, and this one IS a live-spend risk.** The `409` above
+was trusted as a no-op, the way any REST client trusts a 4xx. It was not one. This iteration's
+mandatory job sweep (`select id, project_id, enabled, name from ai_jobs`) turned up
+`job-08e0c3b0329c` on `proj-8605b92d0028`, **`enabled: 1`**, `cron: */5 * * * *`,
+`agent: loopauthor` — a real, spawnable Hub-managed agent — sitting enabled and unnoticed for
+roughly eight minutes. Root cause read from `create_job` (`hub/hub/api/v1/jobs.py:549-611`): the
+`AIJob` row is committed at line 575-577, unconditionally, **before** the loop/document-conflict
+check at line 588-590 ever runs; when that check raises its `409`, nothing rolls back or disables
+the row already sitting in the database. The exact discipline `initial_tasks` validation states for
+itself fifty lines above ("validated up front, before any row is created, so one malformed entry
+cannot leave a job... half-created behind a 422") does not extend to this check. Caught before its
+first cron tick (`next_run` had been computed, `run_count: 0`) — this is "caught in time," not
+"never going to fire." `PATCH {"enabled": false}` then `POST .../archive`, both `200`; re-swept
+`ai_jobs` immediately after — **all ten rows across all five projects read `enabled: 0`**. Full
+write-up under F54 in `FINDINGS.md`.
+
+**F54 fixed this iteration, not deferred — unlike F52, this one is small, well-understood, and is
+itself the kind of thing that must not survive to be found live a second time by an unattended
+run.** Moved `_check_spec_document_conflict` ahead of the job row's creation in `create_job`:
+the conflict is now checked (when `spec_document_id` is supplied and the request opts into a loop)
+before `AIJob(...)`/`session.add(job)`/`commit()` ever run, so a `409` response now genuininely means
+nothing was written — mirroring the `initial_tasks` "validated up front" pattern already in the same
+function. The `update_job` (PATCH) path was left alone: it mutates an existing, already-committed
+row rather than creating a phantom one, so a failed conflict check there is a no-op on the row's own
+fields, not a data-creation side effect — confirmed by reading the PATCH handler's ordering, not
+just assumed.
+
+**Regression test** (`hub/tests/test_jobs_spec_document.py`,
+`test_f54_document_conflict_leaves_no_job_row_behind`): creates a loop already claiming a document,
+then attempts a second job against the same document with `stop_when_queue_empties=True`, asserts
+`409`, then asserts **no `AIJob` row exists with the attempted job's name** on the project at all
+(the strongest available assertion, since the id is never returned on a 409). **Mutation-checked**:
+reverted only the reordering in `jobs.py`, reran — the new test failed, finding exactly the orphan
+row the fix exists to prevent, by name. Restored, reverified green. Ran the full
+`test_jobs_spec_document.py`-adjacent slice (`-k "job and (spec_document or conflict or loop)"`,
+41 tests): 41 passed. `ruff`/`black --target-version py311` clean on `jobs.py` and the new test file.
+
+**Verified LIVE**, not only against the fixture. Restarted the trial Hub on the beta database
+(confirmed via `GET /api/v1/projects` listing the same five projects, `ledger-stress` included, not
+the stale `hub/data/agentweave.db` set). Repeated the exact request that created the orphan the
+first time — `POST /projects/proj-8605b92d0028/jobs` with `agent: loopauthor`,
+`spec_document_id: spdoc-f64ba8051a5b` (still claimed by the F53 dead loop) — got the same `409`,
+then swept `ai_jobs` for `proj-8605b92d0028` immediately after: **no new job row at all**, only the
+two pre-existing archived/disabled ones from this iteration's own earlier mistakes. The
+orphan-creation is gone. Final full sweep, all five projects, ten rows: every one reads
+`enabled: 0`.
+
+**Q4's original target — still not positively exercised.** Three real firings on `ledger-stress`'s
+"Ledger flow" this iteration (after re-declaring `spdoc-2154cc95` on the existing loop backfilled
+four previously-orphaned tasks — themselves a live, un-numbered re-confirmation of the *known* F28
+shape, not counted as a new finding): the first got confused between two similarly-titled tasks
+(`task-0dfc3be5` "Refuse the empty entry" vs. the already-under-review `task-23a0986e7fe9` "Refuse
+an entry with no postings") and completed neither, falsely reporting "Task Complete" in its own
+final text while its actual assignment sat untouched — a real operator-in-the-loop gap (no backstop
+catches a self-declared-complete turn that did nothing) worth a future finding if it recurs, not
+written up fully here for time. The second correctly completed `task-0dfc3be5`
+(`run-809a3bdb1322`, confirmed via `task_transitions`: `assigned→in_progress→completed`) but never
+called `submit_checkpoint_notes` despite the briefing's own "somebody else reads it" line — verified
+from the database, not inferred: zero `checkpoint_notes` rows for `conv-283a9ebdf84e`, and zero new
+`checkpoints` rows after the run, consistent with `consider_handover`'s documented decline path
+("the agent recorded no notes for its reviewer"). Strengthened `job.message` to make the tool call
+an explicit, required step and fired a third time; the scheduler picked a different, unrelated
+queue item (a review of `task-18e900f3eb96`, which failed for a known, already-documented reason —
+no recorded evidence to review) rather than producing a fourth author completion. **The hook's
+decline path is now confirmed live twice, independently; its positive path (a `Checkpoint` row with
+a non-null `loop_id`, generated from a real run boundary) remains unexercised after four total live
+attempts across two iterations.** This is itself worth stating plainly rather than dressing up:
+cheap-model agents in this flow reliably finish the assigned code change but unreliably call the
+one tool the handover mechanism depends on, even when a job message states it as a required step.
+
+**F55 (B) — an unprovoked, intermittent test failure, chased down rather than re-run away.**
+Running a broader slice to sanity-check the F54 fix, `test_flow_checkpoint_lineage.py` failed on a
+test that has nothing to do with `jobs.py`. Stashed the F54 change and re-ran the file alone,
+repeatedly: 2 of 6 bare runs on the unmodified branch tip failed too, alternating between two
+different tests — pre-existing, not caused by this iteration. Root cause measured directly, not
+inferred: `datetime.now(timezone.utc)` returns the **identical value across five consecutive calls**
+on this machine (Windows clock resolution coarser than the microsecond precision the value's format
+implies), so the two `create_checkpoint` calls both flaky tests make back-to-back land in the same
+tick more often than not, and `latest_checkpoint_for_loop`'s tie-break —
+`Checkpoint.id.desc()`, a random hex string with no relation to insertion order — picks the wrong
+"newest" checkpoint roughly half the time. This is a real product bug, not just a fragile test: two
+loop firings completing within the same clock tick on real hardware would silently brief the next
+agent from the *older* of two checkpoints, no error, no log line. Not fixed — the right fix is a
+monotonic sequence column (the shape `TaskTransition.sequence` already uses for the identical
+reason), a schema change deserving its own migration, not a fold-in. Full write-up under F55 in
+`FINDINGS.md`; left for Q6.
+
+**Jobs swept, final state confirmed**: `select id, project_id, enabled, name from ai_jobs` — **all
+ten rows across all five projects read `enabled: 0`**, shown as query output above, not claimed.
+
+**Repository root** stayed untouched except `FINDINGS.md`, `hub/hub/api/v1/jobs.py`, the new test
+file, and `STATE.json`/the log — confirmed by `git status` before this commit.
+
+**Decision for the operator**, recorded in `STATE.json`: F53 (B, design gap, no live-spend risk) is
+left for Q6. F54 (A, live-spend risk) is fixed, tested, mutation-checked, and verified live this
+iteration — no redirect needed.
+
+**What a reviewer should distrust:** the full `hub/tests/` suite (~3100 tests) has still not been
+rerun this iteration, only touched-file and topic-relevant slices; Q9's sweep is still where
+whole-suite green gets re-established, and F55's intermittency means any future red run of
+`test_flow_checkpoint_lineage.py` should be re-run once before being treated as a new regression.
+The task-name-confusion episode in attempt 1 is described from the transcript and the
+`task_transitions` table but was not written up as a standalone, numbered finding — if it recurs,
+it should get one rather than being re-discovered as new.
+
+**Next:** Q4 stays open. Either retry once more with a plain (non-flow) loop stripped down to a
+single, unambiguous task and an even more explicit `submit_checkpoint_notes` instruction to isolate
+whether the tool-call unreliability is model-specific or briefing-specific, or accept the two
+confirmed decline-path drives as sufficient evidence for the write-up and move to Q5, which is next
+in the queue regardless. Q6 should pick up F53 (and the task-name-confusion episode, once numbered)
+alongside the existing B/C backlog.
