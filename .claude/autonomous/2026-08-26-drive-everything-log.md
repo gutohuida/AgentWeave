@@ -851,3 +851,83 @@ carrying `FR-3`, currently `assigned` to `builder`, is a live candidate once it 
 review-and-accept-evidence pass on `task-0dfc3be5` is another, once its `revision_needed` cycle
 resolves). The possible F10 recurrence on a mixed-batch review turn (above) should be traced and
 either written up or ruled out before Q5 closes.
+
+---
+
+## Iteration 9 — F10 recurrence ruled out (traced, not a recurrence), F57 found and fixed live
+
+**2026-08-26T02:22–02:38+01:00.** Reconciled first: branch/log matched `STATE.json` (`9abd6e2` tip
+after iteration 8's heartbeat release), tree clean, trial Hub `/health` ok. Picked up exactly where
+iteration 8 left off: trace the possible F10 recurrence, then continue driving Q5.
+
+**F10 recurrence traced and ruled out.** Iteration 8's log entry named the run `run-e842f0908da`,
+one character short of a real id; the actual row is `run-e842f20908da`, found by matching against
+the other three cascade run ids queried together. Pulled it and read its `task_id`, which is
+`task-3292072f63c3` ("Round half to even in `Money.quantize()`"), an already-`completed` task with
+no requirement links — **not** a `review_task_id` turn at all. Read `_review_task_from_entries`
+(`agent_trigger.py`): it only ever resolves a review target from the *batch's own queue entries*,
+and this batch carried none, so `review_turn.prepare_review_turn` — the actual machinery F10's fix
+lives in, and the thing this session's two clean drives exercised — was never invoked here. What
+really happened: `critic`, given nothing useful to do on its named task, went looking on its own
+initiative via `list_tasks`/`list_evidence`, found `task-0dfc3be5` genuinely `under_review`, and
+tried to inspect it **from its own ordinary working worktree** (correctly finding nothing — that
+worktree never had the builder's unmerged work), then discovered `git branch -a`/`git checkout`
+reach the builder's branch anyway (worktrees share one object database) and completed a real review
+that way. Two distinct things, not one: the structured review path is intact and untouched by this
+episode; an *ad hoc* git-based route to the same information also works, which the original F10
+write-up did not anticipate. Written up as an addendum under F10 in `scripts/drive/FINDINGS.md`
+(not reopened — a different, so far harmless, path to the same information). Not treated as
+severity-A: it succeeded, and the structured path this session actually depends on is unaffected.
+
+**F57 (A) found live, tracing the other half of iteration 8's flag.** The same transcript's
+`update_task("task-0dfc3be5", "revision_needed")` call, checked against the live `tasks` row: both
+`notes` and `deliverables` are `null`, despite substantial real reasoning in the transcript (traced
+the empty-postings logic, flagged scope creep in the `quantize()` addition, gave a line-by-line
+verdict). Root cause read directly in `hub/hub/mcp_server.py`: the `update_task` MCP tool took only
+`task_id` and `status` — never `notes` — even though the REST route it calls (`TaskUpdate` in
+`hub/hub/schemas/tasks.py`) and its handler (`update_task_for_actor`,
+`hub/hub/api/v1/tasks.py:1172`, `if body.notes is not None: task.notes = body.notes`) have always
+supported it. The capability exists end-to-end on the API; the tool an agent is actually handed
+never offered it — so a rejection has no way to say why, on the task record itself, ever.
+
+**Fixed live, `hub/hub/mcp_server.py`:** `update_task` gains `notes: Optional[str] = None`,
+forwarded unconditionally (`{"status": status, "notes": notes}`). Confirmed safe by reading the
+consuming line directly: the gate is `is not None`, not `model_fields_set`, so an explicit `null`
+and an absent key behave identically — a plain status-only call cannot clobber existing notes.
+Regression test added (`hub/tests/test_mcp_server.py`,
+`test_update_task_forwards_notes_so_a_rejection_is_legible_on_the_task_itself`), and the
+pre-existing `test_task_tools_use_agent_ledger_endpoints_without_assigner` updated for the new body
+shape (`{"status": "completed", "notes": None}`) rather than left stale. Mutation-checked: `git
+stash` on just `hub/hub/mcp_server.py` reproduced `update_task() got an unexpected keyword argument
+'notes'` on the new test; unstashed and reconfirmed green. `ruff` clean; `black
+--target-version py311` reformatted both touched files once, then reported clean.
+
+**Trial Hub restarted onto the fix and reconfirmed.** Stopped the process holding port 8010
+(`Stop-Process -Id 14644`), relaunched via the documented `uvicorn` command, `/health` ok within
+~8s. Confirmed back on the `beta` database: `GET /api/v1/projects` lists all five projects, and
+`ledger-stress`'s six `ai_jobs` rows all still read `enabled: false`.
+
+**What a reviewer should distrust.** F57's fix was verified through the regression suite (real HTTP
+body assertion) and by reading the exact consuming line, plus mutation-checked — but not
+re-exercised through a fresh live agent turn after the restart; the transcript that exposed the gap
+already stands as the live evidence the gap is real, and staging a second live rejection just to
+watch `notes` land non-null was judged not worth another cheap-model turn this iteration. Recorded
+explicitly in `FINDINGS.md` as a judgment call, not left implicit. `task-0dfc3be5` is still sitting
+`revision_needed` and is a ready-made target for that extra rep if a future session wants it. The
+full `hub/tests/` suite has still not been rerun this session (only the touched-file slice plus
+directly adjacent tool-surface/task-schema tests, 202 tests, all green); Q9's sweep remains where
+whole-suite green gets re-established.
+
+**Repository root** touched only `hub/hub/mcp_server.py`, `hub/tests/test_mcp_server.py`,
+`scripts/drive/FINDINGS.md`, and `STATE.json`/this log — confirmed by `git status` before commit.
+
+**Job sweep, as output:** `ai_jobs` on `ledger-stress`, all six rows `enabled: false`, queried live
+against the `beta` database immediately after the restart, shown above as output.
+
+**Next:** Q5 remains open. The F9 merge/landing-commit half is still undriven — `task-e6b05093`
+(FR-3) is still `assigned` to `builder`, not yet complete; once it reaches `under_review`, drive
+`critic` or `relay` to a verdict through the review flow and, on approval, confirm a landing commit
+through `integration-preview`/the actual merge, with the commit sha reported. Alternatively,
+re-reviewing `task-0dfc3be5` (FR-2, already evidence-bearing) after a builder revision cycle is a
+second route to the same F9 half, and would also supply the extra live rep F57's write-up flagged as
+optional. Either drives Q5's remaining open question.

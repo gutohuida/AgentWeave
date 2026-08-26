@@ -140,7 +140,27 @@ def test_task_tools_use_agent_ledger_endpoints_without_assigner(hub):
     assert "agent=worker" in calls[1].full_url
     assert get_task("task-1")["id"] == "task-1"
     assert update_task("task-1", "completed")["status"] == "completed"
-    assert _body(calls[3]) == {"status": "completed"}
+    assert _body(calls[3]) == {"status": "completed", "notes": None}
+
+
+def test_update_task_forwards_notes_so_a_rejection_is_legible_on_the_task_itself(hub):
+    """A status change alone leaves the task record silent about why; `notes` is the only way a
+    reviewer's reasoning survives on the task rather than only in its own run transcript."""
+    from hub.mcp_server import update_task
+
+    calls, responses = hub
+    responses.append(b'{"id":"task-1","status":"revision_needed"}')
+    update_task(
+        "task-1",
+        "revision_needed",
+        notes="Scope creep in the same commit: quantize() "
+        "logic looks wrong and needs to be split out before this can be reviewed.",
+    )
+    assert _body(calls[0]) == {
+        "status": "revision_needed",
+        "notes": "Scope creep in the same commit: quantize() logic looks wrong and needs to be "
+        "split out before this can be reviewed.",
+    }
 
 
 def test_question_tools_bind_asker_and_return_answer(hub, monkeypatch):

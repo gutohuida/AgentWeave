@@ -252,6 +252,30 @@ The fix is small relative to its value — a read-only "show me the diff this ev
 or permitting a reviewer read access to the commit its evidence cites. Until then, multi-agent
 review is a conversation about code rather than a review of it.
 
+### A lookalike traced and ruled out, 2026-08-26 (Q5, iteration 8's cascade)
+
+Iteration 8 flagged a possible recurrence: `critic`'s transcript on `run-e842f20908da` said, almost
+verbatim, "I cannot access the builder's worktree commits… I am blocked" before separately
+discovering it could read the builder's branch directly with `git`. Traced against the live `runs`
+table before treating it as F10 come back: `run-e842f20908da`'s `task_id` is `task-3292072f63c3`
+("Round half to even in `Money.quantize()`") — a plain, already-`completed`, non-review turn, not a
+`review_task_id` turn at all. `_review_task_from_entries` (`agent_trigger.py`) only ever resolves
+`review_task_id` from the batch's own queue entries; this batch carried none, so `review_turn`'s
+checkout — the machinery F10's original fix and every deliberate drive this session actually
+exercises — was never invoked. What happened instead: `critic`, reading its own regular task queue
+and finding nothing to do on the named task, went looking at `list_tasks`/`list_evidence` on its own
+initiative, found `task-0dfc3be5` genuinely `under_review`, and tried to inspect it **from its own
+ordinary working worktree** — which, correctly, does not contain another agent's uncommitted or
+unmerged work. It then discovered (correctly) that `git branch -a` / `git checkout` reach the
+builder's branch anyway, because worktrees share one object database, and completed a real review
+that way, ending in a genuine `revision_needed`. Two separate things are true at once: the
+*structured* review path (F10's actual fix) is intact and was not exercised here; and an *ad hoc*
+review conducted through raw git commands from a non-review worktree also worked, which the original
+F10 write-up did not anticipate as a possible route. Not reopening F10 — this is a different, and so
+far harmless, path to the same information, not the same blindness recurring. Worth a name if a
+future session sees it fail rather than succeed: an agent self-directing into reviewing a task the
+turn was never given `review_task_id` for.
+
 ## F11 (B) — `run_count` counts firings that did nothing
 
 **Confirmed.** After the loop's life: `run_count = 9`, of which only **4** spawned an agent. The
@@ -2413,4 +2437,69 @@ building a fresh three-refusal reproduction live would have meant deliberately w
 agent's queue to prove it un-wedges itself — judged not worth the extra live disruption once the
 mechanism was already confirmed live once (the escape hatch) and unit-tested against the real
 query path the running process uses. Flagged here rather than silently assumed equivalent.
+
+## F57 (A) — a rejection has no way to say why: `update_task` drops `notes` entirely
+
+Found live 2026-08-26, tracing the "does rejection route back legibly" half of Q5. During the
+`critic` self-drain that produced a real `revision_needed` verdict on `task-0dfc3be5`
+(`run-e842f20908da` — see F10's "lookalike" note above for the rest of that transcript), `critic`
+did substantial, real review work: read the diff, traced the empty-postings logic, wrote out a
+line-by-line verdict, and called `update_task("task-0dfc3be5", "revision_needed")`. Checked against
+the live `tasks` row afterward: `notes` and `deliverables` are both `null`. Every word of the
+reasoning above lives only in the run's own transcript — nowhere the task record itself, the board,
+or a later reader of the task carries it forward.
+
+### Root cause
+
+`hub/hub/mcp_server.py`'s `update_task` tool, before this fix, took exactly two parameters:
+
+```python
+def update_task(task_id: str, status: TaskStatus) -> Dict[str, Any]:
+    ...
+    return _hub_request("PATCH", f"/tasks/{task_id}", {"status": status})
+```
+
+The REST route it calls, `PATCH /tasks/{id}` (`TaskUpdate`, `hub/hub/schemas/tasks.py`), has always
+accepted `notes: Optional[Any]`, and `update_task_for_actor` (`hub/hub/api/v1/tasks.py:1172`) has
+always applied it (`if body.notes is not None: task.notes = body.notes`). The capability exists
+end-to-end on the API; the *tool an agent is actually given* just never offered it. An agent moving
+a task to `revision_needed` or `rejected` has no tool parameter to attach a reason to the task
+itself — only `send_message` to the author (which does not appear on the task record) or the run's
+own transcript (which an operator glancing at the board does not read).
+
+This is not a hypothetical gap: it is the exact mechanism behind the `task.notes`/`deliverables`
+being `null` that iteration 8 flagged as "a plausible gap, not yet confirmed" — confirmed here.
+
+### Fixed live, `hub/hub/mcp_server.py`
+
+`update_task` gains `notes: Optional[str] = None`, forwarded unconditionally in the PATCH body
+(`{"status": status, "notes": notes}`). Sending `notes: null` on a plain status-only call is safe
+and does not clobber existing notes: the route's own gate is `is not None`, not
+`model_fields_set`, so an explicit `null` and an absent key are handled identically by the consumer
+— read directly at `hub/hub/api/v1/tasks.py:1172` before relying on it, not assumed. The docstring
+states plainly that omitting `notes` on a rejection leaves the author with nothing but a status
+change, and that a fresh call overwrites rather than appends (there is no separate "append" verb),
+so a second-round rejection needs to restate what still matters from the first.
+
+Regression test added, `hub/tests/test_mcp_server.py`,
+`test_update_task_forwards_notes_so_a_rejection_is_legible_on_the_task_itself`: asserts the exact
+body sent to the Hub carries the reviewer's reasoning verbatim under `notes`. The pre-existing
+`test_task_tools_use_agent_ledger_endpoints_without_assigner` was updated for the body's new shape
+(`{"status": "completed", "notes": None}`) rather than left to rot. Mutation-checked: stashing just
+`hub/hub/mcp_server.py` reproduces `update_task() got an unexpected keyword argument 'notes'` on the
+new test; unstashing restores green. `ruff` and `black --target-version py311` clean on both touched
+files.
+
+### What a reviewer should distrust
+
+Verified through the regression suite and by reading the exact consuming line in
+`update_task_for_actor`, not by driving a fresh live rejection through a real agent turn — the
+mechanism this fixes was already caught in the act live (the `task-0dfc3be5` transcript above *is*
+the live evidence; the fix closes the exact gap that transcript exposed), so a second deliberately
+staged live rejection was judged not worth spending another cheap-model turn on. The trial Hub was
+restarted onto this fix and reconfirmed on the `beta` database (five projects, all twelve `ai_jobs`
+rows still `enabled: 0`) before this was written up, but no new live rejection was driven through
+the restarted process specifically to re-observe `notes` landing non-null. Flag if a future session
+wants that extra rep — `task-0dfc3be5` is still sitting `revision_needed` and is a ready-made target
+for exactly that, once a reviewer is triggered on it again.
 

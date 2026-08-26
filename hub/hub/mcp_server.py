@@ -274,15 +274,20 @@ def get_task(task_id: str) -> Dict[str, Any]:
 
 
 @mcp.tool()
-def update_task(task_id: str, status: TaskStatus) -> Dict[str, Any]:
+def update_task(task_id: str, status: TaskStatus, notes: Optional[str] = None) -> Dict[str, Any]:
     """Update a task's lifecycle status as the bound agent.
 
     Args:
         task_id: The task's ID.
         status: The new lifecycle status. One of "pending", "assigned", "in_progress",
             "completed", "under_review", "revision_needed", "approved", "rejected".
+        notes: Why, in your own words - required reading for whoever looks at this task next.
+            Moving a task to "revision_needed" or "rejected" without notes leaves the author with
+            only a status change and no reason; a message to another agent does not appear on the
+            task record itself. Overwrites the task's existing notes, so restate anything from a
+            prior round that still matters.
     """
-    return _hub_request("PATCH", f"/tasks/{task_id}", {"status": status})
+    return _hub_request("PATCH", f"/tasks/{task_id}", {"status": status, "notes": notes})
 
 
 @mcp.tool()
