@@ -115,6 +115,9 @@ export interface TaskIntegration {
   target_branch: string | null
   outcome: 'merged' | 'skipped' | 'failed'
   reason: string
+  /** Commits that landed alongside `commit_sha` because a merge brings in a commit's whole
+   *  ancestry, not its diff alone (F58). Empty means nothing rode along. */
+  rode_along_commits: string[]
   mechanism: string
   actor_kind: string
   actor: string

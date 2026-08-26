@@ -2622,6 +2622,41 @@ per-task worktrees instead of per-agent, which is a much larger change. Left for
 as the highest-severity item in that pass — it directly contradicts this module's own stated design
 guarantee and both existing tests that claim to cover it.
 
+### Blast radius made visible, iteration 12 — the merge shape is still unchosen, this is not the fix
+
+Q6, decision-free sub-piece, per the operator's own framing of the option: reduce F58's blast radius
+by naming what rode along, without picking a merge-semantics redesign no one has decided on yet.
+`task_integration.commits_riding_along()` runs `git rev-list --reverse <main_branch>..<commit_sha>`
+*before* the merge (the same query returns nothing once the merge has run, because the target is by
+then reachable from main) and records every commit besides the target itself. Persisted on
+`TaskIntegration.rode_along_commits` (migration `0089`, plain `ADD COLUMN`, no table recreate needed
+unlike `0088`), exposed on `GET .../integrations` as `rode_along_commits: string[]`, and rendered as
+an amber warning line under a merged row in `TaskIntegrationNote.tsx` — the UI previously discarded
+`reason` entirely for a `merged` outcome (confirmed by reading the component before touching it), so
+folding this into `reason` instead would have been invisible on screen, a mistake worth naming since
+it is exactly the "passes its test but cannot fire in production" shape this run keeps finding.
+
+Regression test `test_rode_along_commits_names_what_actually_landed` (`hub/tests/test_task_integration.py`)
+builds a branch with an earlier, unrelated commit before the evidence-named one, approves, and
+asserts the earlier commit **still lands** (the bug is unchanged) **and is named** in
+`rode_along_commits`. Mutation-checked twice: reverting `base.rode_along = rode_along` to `[]` in
+`task_integration.py` fails the new test with the exact list diff predicted; commenting out the
+UI's render guard (`{merged && rodeAlong.length > 0 && (...)}`) fails
+`warns when other commits rode along with a merge (F58)` by making the `getByTestId` query find
+nothing, in both cases restored and reconfirmed green afterward. `test_later_commits_on_the_branch_are_not_merged`
+gained one assertion (`rode_along_commits == []` for a clean single-commit branch) to cover the
+negative case in the same run. `ruff`/`black --target-version py311`/`tsc --noEmit`/`eslint` all
+clean on every touched file; `hub/tests/test_task_integration.py` (26/26),
+`test_migrations.py`+`test_project_persistence.py` (78 passed, 1 skipped, head bumped to `0089` in
+both) and the UI's `taskIntegrationRetry.test.tsx` (8/8) all green. Not verified live against the
+trial Hub this iteration — see the log for why (a full-suite background run took priority) — so
+treat the live-fire claim as unverified until a future iteration restarts the trial Hub onto this
+migration and re-drives an approval with a multi-commit branch.
+
+F58 itself is unchanged: the same 13-file, 16-commit merge this finding describes would still happen
+today, now with a warning line the operator can actually see. The redesign (candidates a/b/c above)
+remains the operator's decision.
+
 ### What HELD
 
 The conflict-then-abort path is real and clean: this same live drive hit an actual

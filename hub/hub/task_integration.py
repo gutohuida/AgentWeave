@@ -186,6 +186,22 @@ async def integration_targets(session: AsyncSession, task: Task) -> List[Target]
     return list(newest.values())
 
 
+def commits_riding_along(root: Path, main_branch: str, commit_sha: str) -> List[str]:
+    """Every commit `merge --no-ff <commit_sha>` would bring into *main_branch* besides the commit
+    itself (F58).
+
+    `git rev-list <main_branch>..<commit_sha>` walks history and touches nothing — same cost class
+    as `would_conflict`, and must run *before* the merge: once `commit_sha` is reachable from
+    `main_branch`, the same command reports nothing, because it now is. Oldest first, so a caller
+    reads the ancestry in the order it was actually built.
+    """
+    result = _git(root, "rev-list", "--reverse", f"{main_branch}..{commit_sha}")
+    if result.returncode != 0:
+        return []
+    shas = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return [sha for sha in shas if sha != commit_sha]
+
+
 def would_conflict(root: Path, commit: str, main_branch: str) -> List[str]:
     """The paths that would conflict, or an empty list for a clean merge.
 
@@ -217,6 +233,9 @@ class IntegrationResult:
     source_branch: Optional[str] = None
     target_branch: Optional[str] = None
     merged: List[str] = field(default_factory=list)
+    # Commits that landed alongside `commit_sha` because `merge --no-ff` merges a commit's whole
+    # ancestry (F58). Populated only when `outcome` is `merged`; empty means nothing rode along.
+    rode_along: List[str] = field(default_factory=list)
 
 
 def integrate(root: Path, target: Target, main_branch: str) -> IntegrationResult:
@@ -257,6 +276,11 @@ def integrate(root: Path, target: Target, main_branch: str) -> IntegrationResult
         base.reason = CHECKOUT_ELSEWHERE.format(current=on or "a detached HEAD", target=main_branch)
         return base
 
+    # Computed before the merge runs: once it succeeds, `target.commit_sha` is reachable from
+    # `main_branch` and the same query would report nothing rode along, because it now looks
+    # identical to what was always there.
+    rode_along = commits_riding_along(root, main_branch, target.commit_sha)
+
     # The identity is supplied, never assumed. A project whose repository has no configured
     # `user.email` is an ordinary project — git simply refuses to commit there — and the Hub
     # already supplies its own for worktree snapshots. Without the same here, the Hub could create
@@ -285,6 +309,7 @@ def integrate(root: Path, target: Target, main_branch: str) -> IntegrationResult
 
     base.outcome = MERGED
     base.reason = ""
+    base.rode_along = rode_along
     return base
 
 
@@ -306,6 +331,7 @@ def record(
         target_branch=result.target_branch,
         outcome=result.outcome,
         reason=result.reason,
+        rode_along_commits=",".join(result.rode_along),
         mechanism="local",
         actor_kind=actor_kind,
         actor=actor,

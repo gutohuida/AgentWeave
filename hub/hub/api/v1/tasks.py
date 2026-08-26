@@ -1018,6 +1018,9 @@ async def _integration_view(session: AsyncSession, task_id: str) -> dict:
                 "target_branch": row.target_branch,
                 "outcome": row.outcome,
                 "reason": row.reason,
+                "rode_along_commits": (
+                    row.rode_along_commits.split(",") if row.rode_along_commits else []
+                ),
                 "mechanism": row.mechanism,
                 "actor_kind": row.actor_kind,
                 "actor": row.actor,

@@ -320,6 +320,42 @@ async def test_later_commits_on_the_branch_are_not_merged(app, auth_headers, bui
     assert "done.py" in files_on(tmp_path, "main")
     assert "not-yet.py" not in files_on(tmp_path, "main")
 
+    # A branch with exactly one commit ahead of main has nothing to ride along.
+    rows = await integrations(app, auth_headers, task)
+    assert rows[-1]["rode_along_commits"] == []
+
+
+@pytest.mark.asyncio
+async def test_rode_along_commits_names_what_actually_landed(app, auth_headers, builder, tmp_path):
+    """F58: `merge --no-ff` brings in a commit's entire ancestry, not its diff alone — an earlier,
+    unreviewed commit on the same agent branch still rides along. Fixing the merge's shape is a real
+    design decision (cherry-pick range, single-commit patch, or per-task worktrees), deliberately not
+    made here. This only asserts what IS fixed: the commit that rode along is named on the record,
+    not merged in unnoticed.
+    """
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    # An earlier, unrelated commit on the same agent branch - a different task's work-in-progress,
+    # never named by any accepted evidence.
+    earlier = commit_on_branch(tmp_path, AGENT_BRANCH, "unrelated.py", "wip\n")
+    demonstrated = commit_on_branch(tmp_path, AGENT_BRANCH, "done.py", "ok\n", create=False)
+    await accept_evidence(app, auth_headers, builder)
+    git(tmp_path, "checkout", "-q", "main")
+
+    task = await linked_task(app, auth_headers)
+    assert (await approve(app, auth_headers, task)).status_code == 200
+
+    merged = commits_on(tmp_path, "main")
+    assert demonstrated in merged
+    assert earlier in merged  # the still-open F58 bug: it rides along uninvited
+
+    rows = await integrations(app, auth_headers, task)
+    newest = rows[-1]
+    assert newest["outcome"] == "merged"
+    assert newest["rode_along_commits"] == [earlier]
+
 
 # ---------------------------------------------------------------------------
 # The conflict refusal

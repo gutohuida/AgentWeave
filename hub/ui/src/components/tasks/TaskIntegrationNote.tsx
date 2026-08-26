@@ -54,20 +54,34 @@ export function TaskIntegrationNote({ taskId, status }: { taskId: string; status
         // than merged and failed. The one outcome meaning "nothing happened" was the most emphatic.
         const color = merged ? 'var(--green)' : failed ? 'var(--red)' : 'var(--text-3)'
         const glyph = merged ? 'check_circle' : failed ? 'error' : 'remove_circle'
+        const rodeAlong = row.rode_along_commits ?? []
         return (
-          <p key={row.id} className="text-[11px] flex items-start gap-1.5" style={{ color }}>
-            <Icon name={glyph} size={12} className="mt-px shrink-0" aria-hidden="true" />
-            {merged ? (
-              <>
-                Merged <code>{(row.commit_sha ?? '').slice(0, 8)}</code> into{' '}
-                <strong>{row.target_branch}</strong>
-              </>
-            ) : (
-              <>
-                {failed ? 'Merge failed' : 'Not merged'} — {row.reason}
-              </>
+          <div key={row.id}>
+            <p className="text-[11px] flex items-start gap-1.5" style={{ color }}>
+              <Icon name={glyph} size={12} className="mt-px shrink-0" aria-hidden="true" />
+              {merged ? (
+                <>
+                  Merged <code>{(row.commit_sha ?? '').slice(0, 8)}</code> into{' '}
+                  <strong>{row.target_branch}</strong>
+                </>
+              ) : (
+                <>
+                  {failed ? 'Merge failed' : 'Not merged'} — {row.reason}
+                </>
+              )}
+            </p>
+            {merged && rodeAlong.length > 0 && (
+              <p
+                className="text-[11px] flex items-start gap-1.5 pl-[18px]"
+                style={{ color: 'var(--amber, #b45309)' }}
+                data-testid={`task-integration-rode-along-${row.id}`}
+              >
+                <Icon name="warning" size={12} className="mt-px shrink-0" aria-hidden="true" />
+                {rodeAlong.length} earlier commit{rodeAlong.length === 1 ? '' : 's'} on the same
+                branch also landed with this merge, not just the reviewed one.
+              </p>
             )}
-          </p>
+          </div>
         )
       })}
       {stuck && !wantsABranch && (

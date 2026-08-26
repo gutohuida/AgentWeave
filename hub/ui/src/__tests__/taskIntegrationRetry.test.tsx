@@ -32,6 +32,7 @@ function row(over: Partial<TaskIntegration>): TaskIntegration {
     target_branch: 'main',
     outcome: 'skipped',
     reason: 'something',
+    rode_along_commits: [],
     mechanism: 'local',
     actor_kind: 'operator',
     actor: 'operator',
@@ -105,5 +106,22 @@ describe('TaskIntegrationNote', () => {
     rows = []
     const { container } = render(<TaskIntegrationNote taskId="task-6" status="in_progress" />)
     expect(container.firstChild).toBeNull()
+  })
+
+  it('warns when other commits rode along with a merge (F58)', () => {
+    rows = [
+      row({ id: 'tint-rode-along', outcome: 'merged', reason: '', rode_along_commits: ['a1', 'b2', 'c3'] }),
+    ]
+    render(<TaskIntegrationNote taskId="task-7" status="approved" />)
+
+    expect(screen.getByTestId('task-integration-rode-along-tint-rode-along')).toBeTruthy()
+    expect(screen.getByText(/3 earlier commits on the same branch also landed/)).toBeTruthy()
+  })
+
+  it('shows no warning when a merge brought in nothing extra', () => {
+    rows = [row({ outcome: 'merged', reason: '', rode_along_commits: [] })]
+    render(<TaskIntegrationNote taskId="task-8" status="approved" />)
+
+    expect(screen.queryByText(/also landed with this merge/)).toBeNull()
   })
 })

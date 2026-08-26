@@ -2407,6 +2407,11 @@ class TaskIntegration(Base):
     outcome: Mapped[str] = mapped_column(String(16), nullable=False)
     # Why it did not merge, in words an operator can act on. Empty for a successful merge.
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Comma-separated commit shas that landed alongside `commit_sha` because `git merge --no-ff`
+    # brings in a commit's entire ancestry, not its diff alone (F58). Empty when nothing rode along,
+    # or for an outcome that never merged. Not the fix — the fix is an unmade design choice between
+    # three shapes — just the truth about what a merge actually wrote, told rather than assumed.
+    rode_along_commits: Mapped[str] = mapped_column(Text, nullable=False, default="")
     mechanism: Mapped[str] = mapped_column(String(16), nullable=False, default="local")
     actor_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     actor: Mapped[str] = mapped_column(String(128), nullable=False, default="")
