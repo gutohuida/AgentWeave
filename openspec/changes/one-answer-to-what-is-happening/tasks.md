@@ -90,12 +90,12 @@
 
 ## 5. Pin what already holds (D7)
 
-- [ ] 5.1 Test: the crash path and the silence path stay disjoint — `return_run_entries` acts only on
+- [x] 5.1 Test: the crash path and the silence path stay disjoint — `return_run_entries` acts only on
       a failed run's delivered entries and the boundary check is skipped for them, while a completed
       run with no verdict reaches the boundary. Nothing states this today and a future edit could
       merge them, which is how F45 would return.
-- [ ] 5.2 Test: a re-delivered review entry keeps `review_task_id`, so the checkout survives requeue.
-- [ ] 5.3 Confirm re-delivery remains bounded by `DELIVERY_ATTEMPT_LIMIT` and that a withdrawn entry
+- [x] 5.2 Test: a re-delivered review entry keeps `review_task_id`, so the checkout survives requeue.
+- [x] 5.3 Confirm re-delivery remains bounded by `DELIVERY_ATTEMPT_LIMIT` and that a withdrawn entry
       still carries its `abandoned_reason`.
 
 ## 6. Verify live, not only against fixtures

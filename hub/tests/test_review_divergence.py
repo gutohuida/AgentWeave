@@ -32,6 +32,7 @@ from hub.db.models import (
     SpecDocument,
     Task,
 )
+from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT, return_run_entries
 from hub.run_divergence import evaluate_run_end
 from hub.run_task_binding import bind_run_to_task
 from hub.spec_payload import SCHEMA_VERSION, embed_payload
@@ -465,3 +466,104 @@ async def test_a_response_to_a_work_run_prepares_no_review_checkout(
     assert len(responses) == 1
     assert responses[0].review_task_id is None
     assert responses[0].task_id == "task-work-checkout"
+
+
+# ---------------------------------------------------------------------------
+# 5.1–5.3 — pin what already holds (D7)
+#
+# Flagged during exploration as needing reconciliation between the crash path and F45's withdrawal.
+# Reading both showed they cannot collide: they are separated by the run's exit status. Nothing
+# states that today, and a future edit could merge them — which is how F45 would return.
+# ---------------------------------------------------------------------------
+
+
+async def test_the_crash_path_and_the_silence_path_stay_disjoint(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """5.1. A **failed** run's delivered input goes back to the queue and the boundary check is
+    skipped for it — nothing was dropped, the work is about to be handed to a new run that binds to
+    the same task, and under `retry` checking it anyway would spawn a second run racing the
+    redelivery. A **completed** run that moved nothing reaches the boundary and is recorded.
+
+    All 23 divergence rows on the trial database carry `run_exit_status = 'completed'`; none of the
+    16 failed runs produced one. That is this separation already holding in production."""
+    await bind_project_workspace(_init_repo(tmp_path / "repo"))
+    await _roster(app, auth_headers, bind_runner, AUTHOR, "critic", "auditor")
+
+    async with async_session_factory() as db:
+        task = await _completed_by_the_author(db, "task-disjoint")
+        run = await _review_run_that_said_nothing(db, "run-disjoint", task, reviewer="critic")
+        run.status = "failed"
+        await db.commit()
+
+        requeued = await return_run_entries(db, "run-disjoint")
+        await db.commit()
+
+    assert requeued == ["entry-run-disjoint"], "a failed run's input goes back to the queue"
+
+    # The crash path's own caller passes `input_returned=True`. The boundary is skipped, so the
+    # same run produces no divergence — a re-delivery is not a silence.
+    assert await evaluate_run_end("run-disjoint", input_returned=True) is None
+    assert await _divergence("run-disjoint") is None
+    assert await _divergence_responses() == []
+
+
+async def test_a_re_delivered_review_entry_keeps_its_checkout(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """5.2. `review_task_id` survives requeue, so the reviewer that eventually receives this entry
+    still gets the checkout of the work under review. An entry that lost it on the way back would
+    reproduce F10 through the crash path instead of the divergence path."""
+    await bind_project_workspace(_init_repo(tmp_path / "repo"))
+    await _roster(app, auth_headers, bind_runner, AUTHOR, "critic")
+
+    async with async_session_factory() as db:
+        task = await _completed_by_the_author(db, "task-requeue")
+        run = await _review_run_that_said_nothing(db, "run-requeue", task, reviewer="critic")
+        run.status = "failed"
+        await db.commit()
+        await return_run_entries(db, "run-requeue")
+        await db.commit()
+
+        entry = await db.scalar(
+            select(InboundQueueEntry).where(InboundQueueEntry.id == "entry-run-requeue")
+        )
+        assert entry.state == "queued"
+        assert entry.review_task_id == "task-requeue"
+        assert entry.delivered_in_run_id is None
+        assert entry.delivery_attempts == 1
+
+
+async def test_re_delivery_is_bounded_and_says_why_it_stopped(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """5.3. The bound already exists — this states it, so the disjointness above cannot be defended
+    by "but re-delivery loops anyway". At `DELIVERY_ATTEMPT_LIMIT` the entry is withdrawn carrying
+    the reason, and `delivered_in_run_id` is kept as the operator's breadcrumb from a dropped input
+    to the run that ate it."""
+    await bind_project_workspace(_init_repo(tmp_path / "repo"))
+    await _roster(app, auth_headers, bind_runner, AUTHOR, "critic")
+
+    async with async_session_factory() as db:
+        task = await _completed_by_the_author(db, "task-bounded")
+        run = await _review_run_that_said_nothing(db, "run-bounded", task, reviewer="critic")
+        run.status = "failed"
+        await db.commit()
+
+        for _attempt in range(DELIVERY_ATTEMPT_LIMIT):
+            entry = await db.scalar(
+                select(InboundQueueEntry).where(InboundQueueEntry.id == "entry-run-bounded")
+            )
+            entry.state = "delivered"
+            entry.delivered_in_run_id = "run-bounded"
+            await db.commit()
+            await return_run_entries(db, "run-bounded")
+            await db.commit()
+
+        entry = await db.scalar(
+            select(InboundQueueEntry).where(InboundQueueEntry.id == "entry-run-bounded")
+        )
+        assert entry.state == "withdrawn"
+        assert entry.delivery_attempts >= DELIVERY_ATTEMPT_LIMIT
+        assert "stopped retrying" in entry.abandoned_reason
+        assert entry.delivered_in_run_id == "run-bounded", "the breadcrumb is kept"
