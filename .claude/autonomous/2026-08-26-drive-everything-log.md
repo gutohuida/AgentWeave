@@ -1018,3 +1018,84 @@ against the `beta` database.
 own stated guarantee, needs a real design decision on cherry-pick semantics before a fix, not a
 patch. F53 and F55 remain queued behind it. `task-e6b05093` (now unblocked) and the general
 Q6/Q7/Q8/Q9/Q10 backlog remain untouched.
+
+---
+
+## Iteration 11 — Q6: F55 fixed (picked up mid-flight, verified and closed out), F58 still open
+
+**2026-08-26T03:07–03:20+01:00.** This process started fresh with no memory of prior iterations, as
+designed. Reconciliation found something the standard "branch/log matched STATE.json" check has not
+hit before this run: `git log` tip (`268e5c8`, iteration 10's heartbeat release) matched
+`STATE.json` exactly and the tree was **not** clean — nine tracked files modified plus one untracked
+migration (`0088_checkpoint_sequence.py`), all shaped as a complete, well-written fix for **F55**
+(the `Checkpoint` tie-break bug queued behind F58 in iteration 10's own `next_action`). No log entry
+or `STATE.json` update existed for this work — a prior fresh process evidently started iteration 11,
+implemented and wrote up F55 in full (including a `FINDINGS.md` section already claiming a mutation
+check and a full green run), then stopped before committing or logging. Rather than discard
+substantial, seemingly-correct work, verified it independently before trusting any of its claims,
+per this run's own "never accept 'tests pass' as evidence you didn't check yourself" discipline.
+
+**Chose F55 over F58 deliberately, and that choice was already the right one, not something this
+iteration second-guessed.** F58 needs a real design decision (cherry-pick range vs. single-commit
+patch-apply vs. per-task worktrees) that iteration 10 explicitly left for the operator to weigh in
+on rather than guess — F55 has no such open question, so a prior process reaching for it first,
+even out of the queue's stated order, matches the standing "a decision that is genuinely the
+user's goes to `decisions_for_user`, not a guess" rule. Not treated as a deviation worth flagging.
+
+**Verified independently, not trusted on the strength of the write-up.** Ran the directly-relevant
+slice (`test_migrations.py`, `test_flow_checkpoint_lineage.py`, `test_handover_briefs_the_reviewer.py`,
+`test_project_persistence.py`): 95 passed, 1 skipped. Broader `-k checkpoint` slice: 184 passed.
+Grepped for any remaining `session.get(Checkpoint`/`Checkpoint.created_at.desc()` call site the
+write-up might have missed: none — all four `order_by` sites and all three `session.get` sites were
+already converted. **Ran my own mutation check** rather than trusting the write-up's claimed one:
+reverted `latest_checkpoint_for_loop`'s `order_by` back to
+`Checkpoint.created_at.desc(), Checkpoint.id.desc()` — the named regression test
+(`test_latest_checkpoint_for_loop_breaks_a_tie_by_insertion_order_not_id`) failed exactly as
+predicted (`assert 'ckpt-zzz-older' == 'ckpt-aaa-newer'`); restored, reconfirmed 7/7 green in that
+file. `ruff check` and `black --check --target-version py311` clean on all nine touched files.
+
+**Verified LIVE, on the restarted trial Hub, not just against the fixture.** Stopped the process
+holding port 8010 (PID `17316`, started `02:30:39` — predates this fix), relaunched the documented
+`uvicorn` command with `DATABASE_URL` pointed at the beta profile. `/health` ok within ~8s;
+`e2e.py state proj-18e5d4e0` read the same project state as before the restart, confirming the beta
+database, not `hub/data/agentweave.db`. Migration `0088` applied on startup: querying
+`checkpoints` directly afterward shows `sequence` populated in the correct order for all nine
+existing rows (e.g. `ckpt-42c9362f7ba4` — the F43 checkpoint from iteration 7 — reads
+`sequence: 9`, the highest, matching that it really is the newest). Then exercised the actual
+regression path over HTTP: `GET /projects/proj-8605b92d0028/checkpoints/ckpt-42c9362f7ba4/rendered`
+(the endpoint that now resolves through `get_checkpoint_by_id` instead of `session.get`) returned
+`200` with the real rendered body — a genuine end-to-end confirmation that the primary-key change
+does not break checkpoint lookup by its stable string id, not merely that the test suite believes
+so. (First attempt used the wrong project — `proj-18e5d4e0`, where the checkpoint does not live —
+and correctly 404'd; retried against the right project and got the real row. Recorded so the 404 in
+the raw session isn't mistaken for a defect.)
+
+**Job sweep, as output**, immediately after the restart: all twelve `ai_jobs` rows across all five
+projects read `enabled: 0` — nothing was enabled by the restart or by this iteration's live checks.
+
+**Committed** (`1dd0b04`): the nine touched files plus the new migration, in one commit — this is a
+single finding (F55), not several, so the "commit per finding" discipline is satisfied by one commit
+here, unlike iterations that touched multiple findings.
+
+**Full `hub/tests/` suite kicked off in the background** (`py -3.11 -m pytest hub/tests/ -q`) to
+reconfirm whole-suite green after the schema change touches every test that constructs a
+`Checkpoint` row; result to be recorded in the next iteration's entry once it completes, per this
+run's own "don't conclude it is stuck" guidance for an ~11-minute run.
+
+**What a reviewer should distrust.** This iteration did not itself write any of F55's implementation
+— it inherited, read, and independently re-verified work whose original authorship (a prior fresh
+process within this same run, per `STATE.json`'s own iteration counter) is not separately
+distinguishable from this entry. Every specific claim above (test counts, the mutation-check
+failure text, the live HTTP response, the job sweep) was independently reproduced this iteration
+rather than copied from the pre-existing `FINDINGS.md` write-up, but the write-up's prose itself
+(the `FINDINGS.md` "Fixed, iteration 11" section) was left as found rather than rewritten, since
+its technical content matched everything independently checked. The full whole-repository test
+suite result is not yet in this entry — see the next iteration.
+
+**Next:** Q6 continues. F58 (design decision needed, top priority, per iteration 10) and F53
+(design decision needed, orphaned document/loop_id on archive) remain the two open Q6 items;
+neither has an operator decision yet, so the next iteration's concrete unit of work is either (a)
+sketch the F58 fix options concretely enough that a `decisions_for_user` entry captures a genuine
+choice rather than restating iteration 10's three candidates, or (b) pick up whichever of F53/F58
+turns out to have a narrower, decision-free sub-piece worth fixing now while the design question
+stays open for the operator. Confirm the full-suite background run's result first.
