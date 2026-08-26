@@ -9,8 +9,8 @@
   "started_at": "2026-08-26T00:05:00+01:00",
   "stop_at": "2026-08-26T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 20,
-  "last_heartbeat": "2026-08-26T06:46:17+01:00",
+  "iteration": 21,
+  "last_heartbeat": "2026-08-26T07:30:39+01:00",
   "green_at_arming": {
     "sha": "the branch tip at arming time",
     "hub_tests": "3127 passed, 84 skipped, 1 xpassed, 0 failed (672s, 2026-08-26 00:02)",
@@ -115,7 +115,7 @@
     }
   ],
   "current": "done",
-  "next_action": "Iteration 20 re-confirmed, for the THIRD consecutive iteration, that there is nothing left to do: GET /health returns ok; ai_jobs WHERE enabled=1 count is 0; runs WHERE status IN (running,queued) count is 0. THE RUN IS COMPLETE: Q1-Q10 all closed or blocked-on-operator (Q6), every suite last confirmed green in iteration 16, every outstanding operator call already recorded in decisions_for_user. Stop_at is 08:00+01:00 with only ~30 minutes of runway left after this iteration - likely too little for another firing before the scheduled stop. If a future iteration still fires before then: there is NO mandatory or optional remaining scope - repeat the same minimal reconfirmation (health, jobs-disabled, runs table empty) and stand down immediately. Do not manufacture new queue items; the next real work on this line of effort should start as a FRESH autonomous-prep cycle, not a continuation of this one.",
+  "next_action": "Iteration 21 re-confirmed, for the FOURTH consecutive iteration, that there is nothing left to do: GET /health returns ok; ai_jobs WHERE enabled=1 count is 0; runs WHERE status IN (running,queued) count is 0. THE RUN IS COMPLETE: Q1-Q10 all closed or blocked-on-operator (Q6), every suite last confirmed green in iteration 16, every outstanding operator call already recorded in decisions_for_user. Stop_at is 08:00+01:00 with only ~25 minutes of runway left after this iteration - very likely no further firing before the scheduled stop. If a future iteration still fires before stop_at: there is NO mandatory or optional remaining scope - repeat the same minimal reconfirmation (health, jobs-disabled, runs table empty) and stand down immediately. Do not manufacture new queue items; the next real work on this line of effort should start as a FRESH autonomous-prep cycle, not a continuation of this one.",
   "decisions_for_user": [
     "NEW iteration 15, needs your judgment before it can be fixed: F60 (A) - an ask_user question whose 240s timeout expires, where the agent then resolves it itself and completes the task in the SAME turn before the run ends, leaves the task reading a clean 'completed' with nothing anywhere indicating a judgment call was made without the operator, and the orphaned question can still be PATCHed afterward into an answer that contradicts the shipped code, silently. One half is decision-free (refuse or flag a PATCH to a question whose run has already ended) and could be fixed in Q generic without your input. The other half - how a task that shipped on an unanswered question should be surfaced durably once it has already left in_progress, so a scan of the board actually catches it - is a design decision that belongs with F14's own eventual fix (F14 itself was never explicitly flagged for your judgment before; it is now, bundled with F60, since the two are the same gap at different points in the run's lifecycle). Full evidence in FINDINGS.md F60.",
     "RESOLVED iteration 14, recorded so nobody re-opens it: F59 (B) - the exact F55 clock-tick tie-break bug recurring in EvidenceReview (which review is 'latest' could pick the older decision). Fixed decision-free, same shape as F55 (a sequence autoincrement column), mutation-checked, live-verified against the restarted trial Hub. No operator input needed.",
