@@ -805,6 +805,51 @@ async def test_a_second_loop_declaring_the_same_document_is_refused(app, auth_he
 
 
 @pytest.mark.asyncio
+async def test_f53_an_archived_loops_document_claim_does_not_block_a_new_loop(app, auth_headers):
+    """F53: archiving a loop that claimed a document must release the document, not keep it forever.
+
+    Before this fix, `_check_spec_document_conflict` never excluded archived loops — a loop
+    created with the wrong agent, archived, and replaced left its document permanently 409ing
+    against every future attempt, reproduced live from three ordinary API calls with no fixture.
+    This only frees the document for a *new* loop; it does not claim anything about tasks the dead
+    loop already adopted, which is a separate, still-open question.
+    """
+    first_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "F53 First Claimant",
+            "agent": "kimi",
+            "message": "Work the queue",
+            "cron": "0 9 * * *",
+            "purpose": "Drive doc-declare-f53's tasks",
+            "spec_document_id": "doc-declare-f53",
+        },
+        headers=auth_headers,
+    )
+    assert first_resp.status_code == 201
+    first_job_id = first_resp.json()["id"]
+
+    archive_resp = await app.post(
+        f"/api/v1/projects/proj-test/jobs/{first_job_id}/archive", headers=auth_headers
+    )
+    assert archive_resp.status_code == 200
+
+    second_resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "F53 Second Claimant",
+            "agent": "kimi",
+            "message": "Work the queue",
+            "cron": "0 9 * * *",
+            "purpose": "Replaces the archived claimant",
+            "spec_document_id": "doc-declare-f53",
+        },
+        headers=auth_headers,
+    )
+    assert second_resp.status_code == 201, second_resp.json()
+
+
+@pytest.mark.asyncio
 async def test_f54_a_document_conflict_leaves_no_job_row_behind(app, auth_headers):
     """F54: a 409 on the document conflict must mean nothing was created, not just nothing usable.
 

@@ -111,10 +111,24 @@ async def _check_spec_document_conflict(
 
     A no-op re-declare of a loop's own existing document must not 409 against itself, hence
     `exclude_loop_id` on the update path.
+
+    An **archived** loop does not conflict (F53). Before this, a loop that never fired a single
+    turn — created with the wrong agent, archived, replaced — permanently and irrevocably kept the
+    document: no second loop could ever be created against it again, a real consequence reproduced
+    live from three ordinary API calls, not a hypothetical. Excluding archived loops here does not
+    by itself rescue the tasks the dead loop already adopted (`_adopt_document_tasks`'s
+    `loop_id IS NULL` guard still leaves them stamped with the dead loop's id, since nothing here
+    clears it) — deciding whether already-started work should keep or lose that `loop_id` is a
+    real judgement call, left for the operator, not guessed at here. This only stops the document
+    itself from being permanently unusable.
     """
     if spec_document_id is None:
         return
-    q = select(Loop).where(Loop.project_id == project_id, Loop.spec_document_id == spec_document_id)
+    q = select(Loop).where(
+        Loop.project_id == project_id,
+        Loop.spec_document_id == spec_document_id,
+        Loop.archived_at.is_(None),
+    )
     result = await session.execute(q)
     conflicting = result.scalars().first()
     if conflicting is not None and conflicting.id != exclude_loop_id:

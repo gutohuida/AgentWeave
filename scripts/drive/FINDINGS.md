@@ -2199,6 +2199,30 @@ archive (self-registered poll agents cannot be a loop's `agent` — see the `409
 same project) is itself worth a line in a future finding if it recurs, but is not re-litigated here
 since it did not block anything once a Hub-managed agent was created instead.
 
+### Resolution (partial) — 2026-08-26, Q6
+
+Fixed option **(a)** only, deliberately, per this write-up's own framing: option (a) is
+decision-free (a document is no longer permanently unusable), option (b) is not (whether an
+already-`loop_id`-stamped task should keep or lose that history is the operator's call, not
+guessed at here). `_check_spec_document_conflict` now excludes `Loop.archived_at.is_(None)`, and
+the database's own unconditional `unique=True` on `Loop.spec_document_id` was replaced with a
+partial unique index (`ux_loops_spec_document_live`, `WHERE archived_at IS NULL`, migration
+`0090`) — the API-level check alone was not sufficient, since the INSERT itself hit the old
+unconditional index and raised a raw `IntegrityError` rather than the intended `409`. Regression
+test `test_f53_an_archived_loops_document_claim_does_not_block_a_new_loop` added; mutation-checked
+by reverting the `archived_at` filter in `_check_spec_document_conflict` and confirming the test
+fails with the exact pre-fix `409`. **A real bug was caught in this verification pass, not
+authored by it**: the migration's `downgrade()` omitted the same missing-table guard `upgrade()`
+has, and crashed with `no such table: main.loops` under `test_migration_0085`/`0086`, which
+synthesize a database starting from an earlier revision — fixed before commit. Live-verified over
+real HTTP against the restarted trial Hub (migration `0090` applied, `alembic_version` reads
+`0090`, both indexes present): created a job against `doc-f53-live-verify-iter13` on
+`proj-8605b92d0028`, archived it, created a second job against the same `spec_document_id` — `201`,
+where before the fix this would have been the same permanent `409` the reproduction above shows.
+Both live-verification jobs archived immediately after; no job left enabled. **Task-`loop_id`
+orphaning (root cause 2, the `_adopt_document_tasks` half) is still open and still needs the
+operator's decision** — recorded as such in `decisions_for_user`, not closed here.
+
 ## F54 (A) — a job-creation request that 409s on a document conflict has already committed an enabled, spendable job; the error response is not the rollback it looks like
 
 Found live 2026-08-26, immediately after F53, on the very next API call in the same drive —

@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     TypeDecorator,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -1282,14 +1283,18 @@ class Loop(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
     created_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     updated_by_run_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    # Which document this loop draws its queue from, if any. `unique=True, index=True` — same shape
-    # as `Run.capability_token_hash` above — one loop per document, matching `job_id`'s own
-    # uniqueness reasoning above, so two loops cannot silently race to claim the same decomposition.
-    # Deliberately not a ForeignKey, the identical SQLite-irreversibility reasoning
-    # `Task.spec_document_id`/`Task.loop_id` already state (`models.py:636-647`).
-    spec_document_id: Mapped[Optional[str]] = mapped_column(
-        String(64), unique=True, index=True, nullable=True
-    )
+    # Which document this loop draws its queue from, if any. One *live* loop per document, matching
+    # `job_id`'s own uniqueness reasoning above, so two live loops cannot silently race to claim the
+    # same decomposition. Deliberately not a ForeignKey, the identical SQLite-irreversibility
+    # reasoning `Task.spec_document_id`/`Task.loop_id` already state (`models.py:636-647`).
+    #
+    # NOT `unique=True` here (F53). An unconditional unique column means an *archived* loop's row
+    # still occupies its document forever — `_check_spec_document_conflict` can be taught to ignore
+    # archived loops, but the INSERT itself still hits the same unconditional index and fails with
+    # a raw `IntegrityError`, not the intended 409. The partial index below is the actual fix: it
+    # only enforces uniqueness while `archived_at IS NULL`, so archiving a loop genuinely frees its
+    # document for a new one, the way the API-level check now promises.
+    spec_document_id: Mapped[Optional[str]] = mapped_column(String(64), index=True, nullable=True)
     # D17: housekeeping visibility, not lifecycle — a loop archives only after it has ended
     # (B2.3 refuses archiving a running loop), and archiving destroys nothing, so this is
     # orthogonal to `ending_state` below rather than a terminal value of the same axis. Mirrors
@@ -1333,7 +1338,16 @@ class Loop(Base):
     # `_loop_opts_in`'s own "at least one field" rule for loop creation).
     pending_edit_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
-    __table_args__ = (Index("ix_loops_project", "project_id"),)
+    __table_args__ = (
+        Index("ix_loops_project", "project_id"),
+        # F53: unique only among *live* (non-archived) loops — see `spec_document_id` above.
+        Index(
+            "ux_loops_spec_document_live",
+            "spec_document_id",
+            unique=True,
+            sqlite_where=text("archived_at IS NULL"),
+        ),
+    )
 
 
 class AgentJobDeletion(Base):
