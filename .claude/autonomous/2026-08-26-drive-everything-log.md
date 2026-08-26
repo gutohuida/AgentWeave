@@ -1929,3 +1929,32 @@ this one.
 before this commit.
 
 **Next:** none. Stand down.
+
+## Iteration 26 — 2026-08-26T07:55:45+01:00, ninth confirmation, window has effectively closed
+
+Started with **~4 minutes of runway** left before `stop_at` (08:00+01:00). Reconciled first:
+branch and `git log` matched `STATE.json` exactly (tip `559f12e`, the iteration-25 release
+heartbeat commit), tree clean. Iteration 25's `next_action` predicted it was almost certainly the
+final firing; this iteration fired anyway, with essentially no runway left, so per that same
+`next_action` repeated the identical minimal reconfirmation rather than manufacturing scope:
+
+| Check | Result |
+|---|---|
+| `GET /health` | `{"status":"ok","runtime":"native"}` |
+| `SELECT COUNT(*) FROM ai_jobs WHERE enabled=1` (beta db) | `0` |
+| `SELECT COUNT(*) FROM runs WHERE status IN ('running','queued')` (beta db) | `0` |
+
+All three unchanged from iteration 25. Q1–Q10 remain closed or blocked-on-operator (Q6); every
+suite last confirmed green in iteration 16; every outstanding operator call is already recorded in
+`decisions_for_user`, none newly surfaced this iteration.
+
+**This is, functionally, past the run's end.** `stop_at` is 08:00+01:00 and under 5 minutes remain
+at the time of this entry. If a firing somehow lands after `stop_at`, it should stand down
+immediately without even repeating this reconfirmation — the window is closed. The next real work
+on this line of effort should start as a fresh `autonomous-prep` cycle, not a continuation of this
+one.
+
+**Repository root** stayed untouched except `STATE.json`/the log — confirmed by `git status`
+before this commit.
+
+**Next:** none. Stand down.
