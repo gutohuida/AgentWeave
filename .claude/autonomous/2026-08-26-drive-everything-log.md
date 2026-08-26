@@ -1870,3 +1870,30 @@ whatever comes next: Q1–Q10 resolved, both suites and lint/type-check last gre
 all operator decisions carried in `decisions_for_user`, nothing enabled, nothing running. The next
 real work on this line of effort should start as a fresh `autonomous-prep` cycle, not a
 continuation of this one.
+
+## Iteration 24 — 2026-08-26T07:45:37+01:00
+
+Started with ~14 minutes of runway left before `stop_at` (08:00+01:00). State and `git log` agreed
+exactly with no reconciliation needed (tip `b0d201b`, tree clean). Iteration 23's `next_action` was
+explicit, for the sixth consecutive iteration: no mandatory or optional scope remains; if a future
+iteration fires anyway, reconfirm health and jobs-disabled, then stand down. Did exactly that.
+
+**Hub health:** `GET /health` → `{"status":"ok","runtime":"native"}`.
+
+**Jobs, read live via `sqlite3 mode=ro` against the beta trial database:** `SELECT COUNT(*) FROM
+ai_jobs WHERE enabled=1` → `0`. Nothing enabled anywhere, repository-wide, consistent with every
+prior confirmation this run.
+
+**Runs table:** `SELECT COUNT(*) FROM runs WHERE status IN ('running','queued')` → `0`. The Hub is
+fully idle.
+
+**Queue status: unchanged, Q1–Q10 all closed or blocked-on-operator (Q6).** `decisions_for_user`
+unchanged — no new operator decision surfaced this iteration. No project state touched; read-only
+verification only.
+
+**Run status: complete, confirmed for the seventh consecutive iteration.** `stop_at` (08:00+01:00)
+is now under 14 minutes away and this is very likely the final firing of this run — the next
+scheduled tick lands after the window closes. Closing state for whatever comes next: Q1–Q10
+resolved, both suites and lint/type-check last green in iteration 16, all operator decisions
+carried in `decisions_for_user`, nothing enabled, nothing running. The next real work on this line
+of effort should start as a fresh `autonomous-prep` cycle, not a continuation of this one.
