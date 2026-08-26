@@ -16,6 +16,7 @@ from hub.db.models import (
     Run,
     SpecDocument,
     SpecDocumentEvent,
+    Task,
 )
 from hub.run_divergence import evaluate_run_end
 
@@ -236,3 +237,47 @@ async def test_a_populated_digest_alone_does_not_mean_the_document_was_written(a
     await evaluate_run_end("run-f41-digest")
 
     assert await _noted("run-f41-digest")
+
+
+# ---------------------------------------------------------------------------
+# What D1 changes here (`one-answer-to-what-is-happening`, task 1.8)
+#
+# `note_turn_that_produced_nothing` is reached only from `evaluate_run_end`'s `if not run.task_id`
+# branch. Every review run was unbound, so a review that was also given a document took this branch
+# instead of the divergence check. After D1 a review is bound and takes the divergence branch — the
+# intended replacement, since a review that recorded no verdict is a divergence, not a note.
+#
+# The fixtures above still describe reachable behaviour: they build a run with no `task_id` and an
+# entry naming no task, which is what an ordinary authoring turn still produces.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_bound_review_takes_the_divergence_branch_not_the_note(app):
+    """A review turn given a document to look at, that wrote nothing and gave no verdict, is now a
+    divergence. Recording it as "produced nothing" instead would say the softer of the two true
+    things and leave the task sitting in `under_review` with nothing pointing at it."""
+    await _setup("run-f38-review")
+
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id="task-f38-review",
+                project_id="proj-test",
+                title="Work under review",
+                status="under_review",
+                assignee="author",
+            )
+        )
+        run = await session.get(Run, "run-f38-review")
+        run.task_id = "task-f38-review"
+        entry = await session.scalar(
+            select(InboundQueueEntry).where(InboundQueueEntry.id == "entry-run-f38-review")
+        )
+        entry.review_task_id = "task-f38-review"
+        await session.commit()
+
+    divergence_id = await evaluate_run_end("run-f38-review")
+
+    assert divergence_id is not None
+    assert not await _noted("run-f38-review")

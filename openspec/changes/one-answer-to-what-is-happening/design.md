@@ -68,6 +68,7 @@ Verified, not assumed:
 |---|---|
 | status | `allowed_targets('under_review', run)` = `approved`/`rejected`/`revision_needed`. No `in_progress`, so `bind_run_to_task` binds and returns `None`. |
 | assignee | already set by the scheduler when it staffed the review; the `not task.assignee` guard makes it a no-op. |
+| | **Confirmed by task 1.6, and it holds for a second reason the design did not have.** `_enter_selected_task` (`scheduler.py:769`) writes `task.assignee = agent` for every staged selection, review included, so the guard is a no-op on the flow path. The operator path has no such staging — a review triggered by `review_task_id` alone reaches binding on a task that may still be `completed` — and it is inert there too, because `allowed_targets('completed', run)` is `['under_review']` and offers no `in_progress` edge either. So the status half rests on the transition map at **both** entry statuses, not on the scheduler having gone first. `bind_run_to_task` needs no change; the two statuses are pinned by test rather than left to the argument. |
 | conversation | no unique constraint on `conversations.task_id`; author's and reviewer's threads may both bind. |
 
 What changes is the boundary. `run_advanced_its_task` returns `True` for any unbound run — *"no task
@@ -104,6 +105,28 @@ one."* `surface` is what the divergence row already is.
 
 The spec states reviews are **not governed by** `divergence_policy` rather than assigning reviews a
 policy value, so the eventual rule table can arrive without unpicking this.
+
+**Deviation found during implementation: this needs a migration after all, `0092`.** The Migration
+Plan below says "no database migration; no schema change", written from reading the columns. Both
+`run_divergences.policy_applied` and `run_divergences.outcome` carry CHECK constraints
+(`ck_run_divergences_policy`, `ck_run_divergences_outcome`) that the design did not account for, so
+recording the review régime at all requires widening them — SQLite cannot alter a CHECK in place,
+so the table is recreated, following `0058`'s idiom for the identical kind of widening.
+
+Two values are added and neither is a policy a task can hold. `policy_applied = 'review'` names the
+régime that governed, which is the only truthful thing to write: recording the task's own policy
+would show `retry` beside an outcome nothing retried. `outcome = 'restaffed'` is a failed review
+answered by resolving the reviewer again — distinct from `retried` (the same agent) and `escalated`
+(`task.escalation_agent`). `POLICY_REVIEW` is deliberately kept out of `run_task_binding.POLICIES`,
+which is what stops an operator setting it on a task.
+
+**Re-resolution is bounded by derivation, not by a hop count.** Excluding only the agent that just
+failed would let `A → B → A → B` run forever on a two-agent roster. The exclusion is instead every
+agent holding an *unresolved* review divergence on this task, read from the rows themselves — which
+terminates against a finite roster and reaches the spec's own "a second failure with nobody left
+surfaces" by the general rule. Scoping to unresolved is what lets a task that was revised and came
+back reach the same reviewer again: `resolve_divergences_for_task` closes them when an actor
+transition lands.
 
 *Alternatives.* A `review_divergence_policy` column was rejected on evidence: `escalation_agent` is
 NULL on all 40 tasks and was superseded before it ever fired. One policy governing both was rejected

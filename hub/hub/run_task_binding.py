@@ -59,12 +59,27 @@ POLICY_ESCALATE = "escalate"
 POLICIES = frozenset({POLICY_SURFACE, POLICY_RETRY, POLICY_ESCALATE})
 DEFAULT_POLICY = POLICY_SURFACE
 
+#: What governed a *review* that gave no verdict, recorded in `RunDivergence.policy_applied`.
+#:
+#: **Deliberately not a member of `POLICIES`, and a task can never carry it.** The column records
+#: which rule governed, and reviews are governed by the reviewer resolution rather than by the
+#: task's `divergence_policy` (design D3). Writing the task's own policy there instead would be a
+#: false record — a `retry` task whose review failed would show `policy_applied: retry` beside an
+#: outcome nothing retried, which is precisely the one-word-two-meanings defect this change exists
+#: to end. Keeping it out of `POLICIES` is what stops an operator setting it on a task.
+POLICY_REVIEW = "review"
+
 #: What was actually done. Differs from the policy whenever one fell back — `escalate` naming no
 #: agent, or a retry that had already spent its single hop.
 OUTCOME_SURFACED = "surfaced"
 OUTCOME_RETRIED = "retried"
 OUTCOME_ESCALATED = "escalated"
-OUTCOMES = frozenset({OUTCOME_SURFACED, OUTCOME_RETRIED, OUTCOME_ESCALATED})
+#: A failed review answered by resolving the reviewer again (design D4). Distinct from `retried`,
+#: which is the same agent given another turn, and from `escalated`, which is `task.escalation_agent`
+#: — a second reviewer resolution that `agent-flows` forbids in terms. It is a different agent,
+#: chosen by the one resolution the product already uses.
+OUTCOME_RESTAFFED = "restaffed"
+OUTCOMES = frozenset({OUTCOME_SURFACED, OUTCOME_RETRIED, OUTCOME_ESCALATED, OUTCOME_RESTAFFED})
 
 
 class TaskBindingError(Exception):
@@ -103,6 +118,28 @@ async def resolve_task_for_project(session: AsyncSession, task_id: str, project_
 # --------------------------------------------------------------------------------------
 
 
+def task_named_by(entry: InboundQueueEntry) -> Optional[str]:
+    """The task this entry is about, whichever way it says so.
+
+    Two columns name a task and they mean different things. `task_id` is the task the receiving run
+    is *working on*. `review_task_id` is the task it is *inspecting* — set only where the dispatch
+    made this selection as a review, and read at spawn to check out the author's commit (design D9
+    of `loop-becomes-a-flow`, finding F10). Both are statements that this turn is about that task,
+    which is the only thing binding needs.
+
+    Until 2026-08-26 binding read `task_id` alone, and no dispatch path has ever set it on a review
+    entry — so `run.task_id` was NULL on every review run the product had started, and the boundary
+    check waved each of them through on *"no task to have neglected"*. Two `under_review → approved`
+    transitions exist that no run records having caused.
+
+    `review_task_id` is **not** merged into `task_id` and does not stop meaning "check out this
+    commit". `task_id` wins where an entry carries both, which after design D5 is a divergence
+    response to a review: the two name the same task there, and the precedence keeps the two
+    purposes separable rather than collapsing them again — the exact defect this fixes, inverted.
+    """
+    return entry.task_id or entry.review_task_id
+
+
 def binding_from_entries(
     entries: Iterable[InboundQueueEntry],
 ) -> Tuple[Optional[str], Optional[str]]:
@@ -111,18 +148,47 @@ def binding_from_entries(
     A turn can deliver several items and more than one may name a task. The earliest queued wins,
     matching the order `format_turn_prompt` assembles the prompt in — deterministic rather than
     clever. The alternative is a run whose binding depends on delivery timing, which would make the
-    boundary check unreproducible.
+    boundary check unreproducible. Ordering is over both sources together, not `task_id` first: a
+    turn batching work and a review must bind by arrival, or the binding would depend on which
+    column happened to be set.
 
     Both values come from the *same* entry. Taking the source from a different one would let an
     unrelated item in the same turn spend a chain's retry hop.
     """
-    named = [entry for entry in entries if entry.task_id]
+    named = [entry for entry in entries if task_named_by(entry)]
     if not named:
         return None, None
     # `sequence` is the queue's own order and is what `queued_entries` sorts by. Falling back to 0
     # keeps this usable with unflushed entries in tests, where every sequence is None.
     named.sort(key=lambda entry: entry.sequence or 0)
-    return named[0].task_id, named[0].divergence_source_run_id
+    return task_named_by(named[0]), named[0].divergence_source_run_id
+
+
+async def review_task_for_run(session: AsyncSession, run: Run) -> Optional[str]:
+    """The task `run` was started to *review*, or None if it was not started to review one.
+
+    Read from the entries this run was delivered rather than from a column on `Run`, because that
+    is where the fact already lives: `review_task_id` is set by whichever dispatch made this
+    selection as a review — the flow's two staging paths and the operator's direct trigger — and
+    every review turn in the product reaches a runner through one of them. Adding a `Run.is_review`
+    column would restate a fact the queue already holds, and a restated fact is one that can
+    disagree with its source (this change's own principle).
+
+    Asked at the run boundary to decide which régime governs a divergence: a work run answers to
+    the task's `divergence_policy`, and a review answers to the reviewer resolution instead
+    (design D3). Before the boundary could ask, it could not tell the two apart, and after D1 it
+    must — a bound review reaches machinery that had never seen one.
+
+    `.limit(1)` is safe because a turn batching requests to review more than one task is refused
+    at trigger time with a 409 (`agent_trigger._review_task_from_entries`), so at most one distinct
+    value can exist here.
+    """
+    return await session.scalar(
+        select(InboundQueueEntry.review_task_id)
+        .where(InboundQueueEntry.delivered_in_run_id == run.id)
+        .where(InboundQueueEntry.review_task_id.isnot(None))
+        .limit(1)
+    )
 
 
 async def binding_for_delivery(

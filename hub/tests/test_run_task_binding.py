@@ -64,6 +64,155 @@ def test_an_entry_naming_a_task_beats_an_earlier_one_that_does_not():
 
 
 # ---------------------------------------------------------------------------
+# A review names a task too (`one-answer-to-what-is-happening`, D1)
+#
+# Until this change `binding_from_entries` read only `task_id`, and no dispatch path has ever set
+# it on a review entry — the scheduler sets `review_task_id` and nothing else. Measured on the
+# trial database: 34 entries with `task_id`, 9 with `review_task_id`, no row with both, and so
+# `run.task_id` NULL on every review run the product has ever started. The boundary check then let
+# each of them through on `if not run.task_id: return True` — "no task to have neglected".
+# ---------------------------------------------------------------------------
+
+
+def test_an_entry_that_only_names_a_task_to_review_still_binds_the_run():
+    """1.1. The one that fails before D1: a review turn's entry carries the task under review in
+    `review_task_id`, and binding was blind to it."""
+    entries = [InboundQueueEntry(id="e1", sequence=1, review_task_id="task-under-review")]
+    assert binding_from_entries(entries) == ("task-under-review", None)
+
+
+def test_a_turn_delivering_work_and_a_review_binds_to_exactly_one():
+    """1.3. Earliest queued still wins, across both sources rather than within one of them. The
+    same input must always produce the same binding or the boundary check is unreproducible."""
+    work_first = [
+        InboundQueueEntry(id="e1", sequence=1, task_id="task-work"),
+        InboundQueueEntry(id="e2", sequence=2, review_task_id="task-review"),
+    ]
+    review_first = [
+        InboundQueueEntry(id="e1", sequence=1, review_task_id="task-review"),
+        InboundQueueEntry(id="e2", sequence=2, task_id="task-work"),
+    ]
+    assert binding_from_entries(work_first) == ("task-work", None)
+    assert binding_from_entries(review_first) == ("task-review", None)
+
+    # Order of *presentation* must not matter either — `sequence` is the queue's own order and is
+    # the only thing consulted.
+    assert binding_from_entries(list(reversed(work_first))) == ("task-work", None)
+    assert binding_from_entries(list(reversed(review_first))) == ("task-review", None)
+
+
+def test_the_divergence_source_still_comes_from_the_entry_that_won():
+    """The pairing D1 preserves. Taking the source from a different entry would let an unrelated
+    item in the same turn spend a chain's retry hop — and after D5 a divergence response to a
+    review carries both columns on the one entry."""
+    entries = [
+        InboundQueueEntry(
+            id="e1", sequence=1, review_task_id="task-review", divergence_source_run_id="run-src"
+        ),
+        InboundQueueEntry(id="e2", sequence=2, task_id="task-work"),
+    ]
+    assert binding_from_entries(entries) == ("task-review", "run-src")
+
+
+def test_the_review_checkout_and_the_bound_task_stay_distinct():
+    """1.4. Neither value is derived by reinterpreting the other. `review_task_id` means "check out
+    this commit" (design D9, finding F10) and keeps meaning exactly that; binding merely stops
+    being blind to it. Reading a binding must not write, move or consume the checkout — a reviewer
+    fired into its own worktree is F10 reproduced.
+
+    Where one entry carries both, `task_id` wins: that is the task this run is *working on*, while
+    `review_task_id` is the task it is *inspecting*."""
+    review_only = InboundQueueEntry(id="e1", sequence=1, review_task_id="task-review")
+    assert binding_from_entries([review_only]) == ("task-review", None)
+    assert review_only.review_task_id == "task-review"
+    assert review_only.task_id is None
+
+    both = InboundQueueEntry(id="e2", sequence=1, task_id="task-work", review_task_id="task-review")
+    assert binding_from_entries([both]) == ("task-work", None)
+    assert both.review_task_id == "task-review"
+
+
+@pytest.mark.asyncio
+async def test_binding_a_review_leaves_the_task_where_the_author_left_it(app):
+    """1.2. Pins the inertness D2 asserts, so a later edit to `bind_run_to_task` cannot silently
+    start a task that is under review or hand it to its reviewer.
+
+    Two independent reasons it holds, and the test would catch either one breaking:
+    `allowed_targets('under_review', run)` is approve/reject/revise with no `in_progress`, and the
+    scheduler already staffed the review so the `not task.assignee` guard is a no-op."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-under-review", "under_review")
+        task.assignee = "author"
+        run = _run("run-review-1", agent="critic")
+        session.add(run)
+
+        transition = await bind_run_to_task(session, run, task)
+        await session.commit()
+
+        assert run.task_id == "task-under-review"
+        assert transition is None
+        assert task.status == "under_review"
+        assert task.assignee == "author"
+        assert await history_for(session, "task-under-review") == []
+
+
+@pytest.mark.asyncio
+async def test_binding_a_review_of_completed_work_does_not_restart_it(app):
+    """1.6, the second half. A review can be triggered by the operator on a task the flow never
+    staged, which reaches `bind_run_to_task` at `completed` rather than `under_review`. Inert for
+    the same structural reason: `completed` reaches only `under_review` for a run, so there is no
+    `in_progress` edge for binding to take."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-completed-review", "completed")
+        task.assignee = "author"
+        run = _run("run-review-2", agent="critic")
+        session.add(run)
+
+        transition = await bind_run_to_task(session, run, task)
+        await session.commit()
+
+        assert run.task_id == "task-completed-review"
+        assert transition is None
+        assert task.status == "completed"
+        assert task.assignee == "author"
+
+
+@pytest.mark.asyncio
+async def test_a_bound_review_that_recorded_no_verdict_has_not_advanced_its_task(app):
+    """1.7. The consequence of D1, and the whole point of it. Before, this run was unbound and
+    `run_advanced_its_task` returned True on *"no task to have neglected"* — which is how nine
+    review turns, every one this product has run, escaped the boundary check."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-review-silent", "under_review")
+        task.assignee = "critic"
+        run = _run("run-review-silent", agent="critic")
+        session.add(run)
+        await bind_run_to_task(session, run, task)
+        await session.commit()
+
+        assert run.task_id == "task-review-silent"
+        assert await run_advanced_its_task(session, run) is False
+
+
+@pytest.mark.asyncio
+async def test_a_bound_review_that_recorded_a_verdict_has_advanced_its_task(app):
+    """1.7, the passing half. A verdict is an `origin='actor'` transition by the reviewing run —
+    all 14 verdict transitions on the trial database carry that origin — so a reviewer that did its
+    job is absolved by the same query that catches one that did not."""
+    async with async_session_factory() as session:
+        task = await _make_task(session, "task-review-verdict", "under_review")
+        task.assignee = "critic"
+        run = _run("run-review-verdict", agent="critic")
+        session.add(run)
+        await bind_run_to_task(session, run, task)
+        await apply_transition(session, task, "approved", run_actor(run.id, run.agent))
+        await session.commit()
+
+        assert task.status == "approved"
+        assert await run_advanced_its_task(session, run) is True
+
+
+# ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
 

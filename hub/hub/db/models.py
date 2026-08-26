@@ -851,12 +851,21 @@ class RunDivergence(Base):
     __table_args__ = (
         Index("ix_run_divergences_project_task", "project_id", "task_id"),
         Index("ix_run_divergences_project_resolved", "project_id", "resolved_at"),
+        # `review` is a fourth *régime*, not a fourth policy: a task can never carry it (it is
+        # absent from `run_task_binding.POLICIES`), and only a divergence row records it. It says
+        # the reviewer resolution governed this divergence rather than the task's
+        # `divergence_policy` (`one-answer-to-what-is-happening`, D3), which is the only truthful
+        # thing to write for a review — the task's own policy did not apply.
         CheckConstraint(
-            "policy_applied IN ('surface', 'retry', 'escalate')",
+            "policy_applied IN ('surface', 'retry', 'escalate', 'review')",
             name="ck_run_divergences_policy",
         ),
+        # `restaffed` is a failed review answered by resolving the reviewer again (D4) — a
+        # different agent chosen by the one resolution the product already uses, which is neither
+        # `retried` (the same agent again) nor `escalated` (`task.escalation_agent`, a second
+        # resolution `agent-flows` forbids).
         CheckConstraint(
-            "outcome IN ('surfaced', 'retried', 'escalated')",
+            "outcome IN ('surfaced', 'retried', 'escalated', 'restaffed')",
             name="ck_run_divergences_outcome",
         ),
     )

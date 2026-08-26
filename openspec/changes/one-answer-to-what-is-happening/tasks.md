@@ -1,24 +1,24 @@
 ## 1. Bind review runs (D1, D2)
 
-- [ ] 1.1 Test: a run started to review a task records that task. Fails today — `binding_from_entries`
+- [x] 1.1 Test: a run started to review a task records that task. Fails today — `binding_from_entries`
       reads only `entry.task_id` and every review entry has it NULL.
-- [ ] 1.2 Test: binding a review leaves the task's status and assignee unchanged. Pins the inertness
+- [x] 1.2 Test: binding a review leaves the task's status and assignee unchanged. Pins the inertness
       the design asserts, so a later edit to `bind_run_to_task` cannot silently start a task under review.
-- [ ] 1.3 Test: a turn delivering both a work item and a review item binds to exactly one, and the
+- [x] 1.3 Test: a turn delivering both a work item and a review item binds to exactly one, and the
       same input always produces the same binding.
-- [ ] 1.4 Test: the review checkout value and the bound-task value remain distinct — neither derived
+- [x] 1.4 Test: the review checkout value and the bound-task value remain distinct — neither derived
       by reinterpreting the other.
-- [ ] 1.5 `binding_from_entries` accepts `review_task_id` as a second source of "names a task",
+- [x] 1.5 `binding_from_entries` accepts `review_task_id` as a second source of "names a task",
       preserving earliest-queued-wins ordering and the divergence-source pairing from the same entry.
-- [ ] 1.6 Confirm `bind_run_to_task` needs no change for a review: `allowed_targets('under_review',
+- [x] 1.6 Confirm `bind_run_to_task` needs no change for a review: `allowed_targets('under_review',
       run)` excludes `in_progress`, and the `not task.assignee` guard is a no-op for a staffed review.
       Record the finding either way — a change here is a design deviation, not a detail.
-- [ ] 1.7 Verify a review run now reaches `run_advanced_its_task` rather than short-circuiting on
+- [x] 1.7 Verify a review run now reaches `run_advanced_its_task` rather than short-circuiting on
       `if not run.task_id: return True`, and that a review recording a verdict passes it
       (verdict transitions carry `origin='actor'`).
-- [ ] 1.8 Confirm F38's `note_turn_that_produced_nothing` no longer fires for review runs, and that
+- [x] 1.8 Confirm F38's `note_turn_that_produced_nothing` no longer fires for review runs, and that
       its existing tests still describe reachable behaviour for the unbound runs that remain.
-- [ ] 1.9 Mutation check: revert 1.5 only; confirm 1.1 fails by name. Restore and re-confirm green.
+- [x] 1.9 Mutation check: revert 1.5 only; confirm 1.1 fails by name. Restore and re-confirm green.
 
 ## 2. How a verdict-less review is answered (D3, D4, D5, D6)
 
