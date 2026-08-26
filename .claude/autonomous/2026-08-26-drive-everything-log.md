@@ -1897,3 +1897,35 @@ scheduled tick lands after the window closes. Closing state for whatever comes n
 resolved, both suites and lint/type-check last green in iteration 16, all operator decisions
 carried in `decisions_for_user`, nothing enabled, nothing running. The next real work on this line
 of effort should start as a fresh `autonomous-prep` cycle, not a continuation of this one.
+
+---
+
+## Iteration 25 — eighth and final sanity confirmation; the window closes
+
+**2026-08-26T07:50–07:53+01:00.** Reconciled first: branch and `git log` matched `STATE.json`
+exactly (`9a62afb` tip), tree clean.
+
+**Current time is 07:50:40+01:00 against `stop_at` 08:00:00+01:00** — under ten minutes of runway,
+consistent with `next_action`'s own prediction that iteration 24 was very likely the last real
+firing before the window closed. Per that same `next_action`, repeated the minimal reconfirmation
+rather than manufacturing new scope:
+
+| Check | Result |
+|---|---|
+| `GET /health` | `{"status":"ok","runtime":"native"}` |
+| `SELECT COUNT(*) FROM ai_jobs WHERE enabled=1` (beta db) | `0` |
+| `SELECT COUNT(*) FROM runs WHERE status IN ('running','queued')` (beta db) | `0` |
+
+All three unchanged from iteration 24. Q1–Q10 remain closed or blocked-on-operator (Q6); every
+suite last confirmed green in iteration 16; every outstanding operator call is already recorded in
+`decisions_for_user`, none newly surfaced this iteration.
+
+**This is the run's last iteration.** The window closes at 08:00+01:00 and no further firing is
+expected before then. Nothing further to add beyond iteration 24's closing state. The next real
+work on this line of effort should start as a fresh `autonomous-prep` cycle, not a continuation of
+this one.
+
+**Repository root** stayed untouched except `STATE.json`/the log — confirmed by `git status`
+before this commit.
+
+**Next:** none. Stand down.
