@@ -212,7 +212,7 @@ async def test_a_review_in_flight_still_appears_on_the_board(app, auth_headers, 
 
     async with async_session_factory() as db:
         decision = await decide_firing(db, await _fresh_loop(db, loop.id), default_agent=job.agent)
-        assert (task.id, REVIEWER) in decision.in_flight
+        assert (task.id, REVIEWER) in decision._cannot_staff
         assert decision.selections == ()
 
 

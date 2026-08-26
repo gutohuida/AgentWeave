@@ -115,8 +115,8 @@ class LoopSummary(BaseModel):
     #: selection's agent, or a blocked task's assignee, and is absent when neither is known —
     #: never blank, so a reader is not shown an empty attribution.
     current_tasks: List[Dict[str, str]] = Field(
-        # {"id", "title", "status", "agent"?, "agent_role"?}
-        # `agent_role` says what the name means — "working" (a run is genuinely in flight),
+        # {"id", "title", "status", "agent"?, "agent_capacity"?}
+        # `agent_capacity` says what the name means — "working" (a run is genuinely in flight),
         # "held" (this agent owns it and nothing is running: a review that ended without a verdict,
         # or whose turn failed), "next" (who the next firing would give it to) or "assigned" (the
         # row's own assignee, the blocked case). It exists because the board rendered all of them

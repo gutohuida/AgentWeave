@@ -73,7 +73,7 @@ export function TaskIntegrationNote({ taskId, status }: { taskId: string; status
             {merged && rodeAlong.length > 0 && (
               <p
                 className="text-[11px] flex items-start gap-1.5 pl-[18px]"
-                style={{ color: 'var(--amber, #b45309)' }}
+                style={{ color: 'var(--amber)' }}
                 data-testid={`task-integration-rode-along-${row.id}`}
               >
                 <Icon name="warning" size={12} className="mt-px shrink-0" aria-hidden="true" />

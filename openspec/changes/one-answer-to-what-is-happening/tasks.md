@@ -64,28 +64,39 @@
 
 ## 4. One owned determination of capacity (D8, D9)
 
-- [ ] 4.1 Test, in **Python**, over the determination itself rather than a renderer: each of the four
+- [x] 4.1 Test, in **Python**, over the determination itself rather than a renderer: each of the four
       capacities from its own source. This is the coverage F49 lacked — five vitest cases over the
       renderer and none over the derivation, so an unreachable branch shipped and stayed.
-- [ ] 4.2 Test: a task under review whose run has ended and has nothing running is not presented as
+- [x] 4.2 Test: a task under review whose run has ended and has nothing running is not presented as
       working.
-- [ ] 4.3 Test: an agent mid-turn on one task while holding a second that nothing is running does not
+- [x] 4.3 Test: an agent mid-turn on one task while holding a second that nothing is running does not
       make the second read as worked — the over-report the current agent-fallback concedes to.
-- [ ] 4.4 Test: no module outside the owning module reads the firing decision's cannot-staff
+- [x] 4.4 Test: no module outside the owning module reads the firing decision's cannot-staff
       collection. Source-scanning, in the idiom `test_nothing_pushes` already uses for
       `task_integration.py`'s never-push guarantee.
-- [ ] 4.5 New module `hub/hub/task_attribution.py` taking the spec's own vocabulary, with one entry
+- [x] 4.5 New module `hub/hub/task_attribution.py` taking the spec's own vocabulary, with one entry
       point answering the capacity for a `(task, agent)` pair from four distinct sources.
-- [ ] 4.6 `FiringDecision` stops exposing the merged cannot-staff collection publicly; the owning
+- [x] 4.6 `FiringDecision` stops exposing the merged cannot-staff collection publicly; the owning
       module becomes its only reader.
-- [ ] 4.7 Remove the ~90-line derivation and the agent-fallback from `hub/hub/api/v1/jobs.py`; the
-      renderer consumes the determination and renders.
-- [ ] 4.8 Rename `agent_role` to `agent_capacity` across the Pydantic schema, `hub/ui/src/api/jobs.ts`,
+- [~] 4.7 Remove the ~90-line derivation and the agent-fallback from `hub/hub/api/v1/jobs.py`; the
+      renderer consumes the determination and renders. **Derivation removed; the agent-fallback
+      STAYS, blocked.** Measured on the beta database: a flow's ordinary work firing writes no
+      `task_id` (61 job-origin entries, 0 with one; 5 of 59 job-delivered runs bound), so removing
+      the fallback today would flip every actively-worked flow task to `held` — the same class of
+      lie in the other direction. Group 1 wrote the run→task edge for reviews only.
+      `openspec/explorations/2026-08-26-the-other-half-of-the-binding.md` is what this waits on.
+      The fallback is now an explicit `agent_fallback` parameter with both behaviours pinned by
+      test, so removing it will be a visible change rather than a silent one.
+- [x] 4.8 Rename `agent_role` to `agent_capacity` across the Pydantic schema, `hub/ui/src/api/jobs.ts`,
       `JobCard.tsx` and the vitest cases. Values unchanged.
-- [ ] 4.9 Mutation checks by name, one per capacity branch, as F63 and F64 were: collapsing `held`
+- [x] 4.9 Mutation checks by name, one per capacity branch, as F63 and F64 were: collapsing `held`
       into `working` fails 4.2; removing the per-source split fails 4.3; deleting the encapsulation
-      fails 4.4.
-- [ ] 4.10 `cd hub/ui && npm run build` then `make ui` (or `python scripts/refresh_ui_bundle.py`),
+      fails 4.4. **The third one initially passed** — every test in the new file built `FlowStaffing`
+      by hand, so nothing exercised `staffing_from_decision` against a real `FiringDecision`. Four
+      cases in `test_board_agent_role.py` caught it through the API, so the behaviour was covered
+      and the module's own boundary was not. Gap closed with a direct seam test; all three
+      mutations now fail a named test in the owning file.
+- [x] 4.10 `cd hub/ui && npm run build` then `make ui` (or `python scripts/refresh_ui_bundle.py`),
       committing `hub/ui/src` and `hub/hub/static/ui` together per CLAUDE.md.
 
 ## 5. Pin what already holds (D7)

@@ -723,7 +723,7 @@ async def test_a_task_a_busy_agent_is_working_is_reported_in_flight_not_skipped(
     decision = await _decide(job.id, loop.id)
 
     assert decision.selections == (), "nothing can be started — that agent is mid-turn"
-    assert decision.in_flight == (("task-width-inflight-a", SECOND),)
+    assert decision._cannot_staff == (("task-width-inflight-a", SECOND),)
 
 
 async def test_a_queue_whose_work_is_all_in_flight_is_not_stalled(app, auth_headers, bind_runner):
@@ -746,7 +746,7 @@ async def test_a_queue_whose_work_is_all_in_flight_is_not_stalled(app, auth_head
     decision = await _decide(job.id, loop.id)
 
     assert decision.stall_reason is None, "three agents mid-turn is the opposite of a stall"
-    assert len(decision.in_flight) == 3
+    assert len(decision._cannot_staff) == 3
     assert decision.kind == "in_flight"
 
 

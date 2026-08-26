@@ -9,6 +9,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import task_attribution
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, AIJob, JobRun, Loop, Project, Question, Run, Task
@@ -312,66 +313,27 @@ async def _batch_loop_summaries(
     # loop, which is worse than what this replaced. The per-candidate `candidate_is_startable`
     # calls that used to live here are gone; `decide_firing` does that work once.
     stall_reason_by_loop: Dict[str, Optional[str]] = {}
-    # `loop-becomes-a-flow` group 9, design D15. This held one task id per loop and took
-    # `selections[0]`, which was right while a firing made at most one selection and became an
-    # under-report the moment group 5 widened the walk: a flow working three tasks showed one.
-    # Keyed by task rather than collected as a list because the walk below needs to answer "is this
-    # candidate one the firing would claim, and by whom" per row, and a list would make that a scan.
-    claimed_agents_by_loop: Dict[str, Dict[str, str]] = {}
-    #: Task ids an agent is *mid-turn* on, as opposed to ones the next firing would claim. The
-    #: distinction is invisible in `claimed_agents_by_loop`, which merges both (F26).
-    working_by_loop: Dict[str, set] = {}
-    # **What is actually running right now** (finding F63), which `in_flight` cannot answer and was
-    # wrongly asked to. The scheduler puts an `under_review` task into `in_flight` unconditionally
-    # whenever it has an assignee, *deliberately* — that is what keeps a review which ended without
-    # a verdict visible on the board instead of vanishing from it (findings F23 and F45). So
-    # `in_flight` means "this firing cannot staff anybody onto this", and rendering it as "this
-    # agent is mid-turn on it" told the operator `relay` was working a task whose review run had
-    # already failed, with no run anywhere in the database.
+    # What each loop's firing said about who is on what. `FlowStaffing` keeps the firing's two
+    # answers — who it *selected* and who it *cannot staff* — as separate named questions, which is
+    # what stops a consumer merging them and reading the merge as activity (F26, F63).
     #
-    # Matched on `Run.task_id` where it is set and on the agent where it is not, because
-    # **`run.task_id` is NULL on most runs** — measured on the trial database while fixing F43,
-    # NULL on 6 of the 10 runs carrying a `completed` transition. Task-id-only would therefore say
-    # `held` about genuinely running work most of the time, which is the same class of lie in the
-    # other direction. The agent fallback can still over-report `working` when an agent is mid-turn
-    # on a *different* task, and that is the precision the scheduler itself staffs on
-    # (`_agents_running_a_turn`); it is bounded and one-directional, where the bug it replaces was
-    # unbounded.
+    # `loop-becomes-a-flow` group 9, design D15: keyed by task rather than collected as a list,
+    # because the walk below asks "is this candidate one the firing would claim, and by whom" per
+    # row, and a list would make that a scan. It held one task id per loop and took `selections[0]`
+    # until group 5 widened the walk, at which point a flow working three tasks showed one.
+    staffing_by_loop: Dict[str, task_attribution.FlowStaffing] = {}
+    # **Who is on what, and in what capacity** — answered by `task_attribution`, which is the only
+    # module that may read the firing decision's private cannot-staff collection (design D9). This
+    # renderer used to derive it inline, and the derivation it replaced is the reason the module
+    # exists: F49 shipped with five vitest cases over the rendering and none over the deriving, so
+    # a branch that could never match was live from the day it landed.
     #
-    # This is the seventh query, and it stays batched across every loop for design D7's reason.
-    running_rows = (
-        await session.execute(
-            select(Run.agent, Run.task_id).where(
-                Run.project_id.in_({loop.project_id for loop in loops}),
-                Run.status == "running",
-            )
-        )
-    ).all()
-    running_task_ids = {task_id for _agent, task_id in running_rows if task_id}
-    running_agents_without_task = {agent for agent, task_id in running_rows if not task_id}
+    # One batched query for every loop in the batch, for design D7's reason.
+    live = await task_attribution.live_runs(session, {loop.project_id for loop in loops})
     for job_id, loop in loop_by_job.items():
         decision = await decide_firing(session, loop, default_agent=job_agent_by_id.get(job_id, ""))
         stall_reason_by_loop[loop.id] = decision.stall_reason
-        # Selections *and* in-flight work, because this derivation answers "what is this loop
-        # working on" rather than "what can the next firing start" (finding F23). A task an agent is
-        # mid-turn on is the most current thing a loop has, and omitting it made a flow running
-        # three agents report no current item and a stall.
-        claimed_agents_by_loop[loop.id] = {
-            **dict(decision.in_flight),
-            **{selection.task.id: selection.agent for selection in decision.selections},
-        }
-        # Which of the two the name came from (F26). Both answer "which agent", and the board
-        # rendered them identically — so `completed | relay` read as "relay is working this" when
-        # it meant "relay is who would review this". Deciding that in the UI from the task's status
-        # is not possible: the same status can arrive by either route. Only this merge knows, and
-        # it is one dict comprehension away from saying so.
-        #
-        # **Task ids, not the `(task_id, agent)` pairs** (finding F49). `decision.in_flight` is a
-        # sequence of pairs, and `set(...)` of it is a set of tuples — which the membership test
-        # below asks with a bare `task.id`, so it never matched and `agent_role` could never be
-        # `working`. F26 shipped with the renderer tested and this derivation not tested at all;
-        # the branch it exists to feed was unreachable in production from the day it landed.
-        working_by_loop[loop.id] = {task_id for task_id, _agent in decision.in_flight}
+        staffing_by_loop[loop.id] = task_attribution.staffing_from_decision(decision)
 
     # The current item is the first candidate **in queue order** that is either the task the firing
     # would claim, or a `blocked` one. Order is what makes this `agent-loops` §85 rather than an
@@ -382,9 +344,11 @@ async def _batch_loop_summaries(
     # No `candidate_is_startable` call here any more: the decision has already answered which task
     # is claimable, so this walk is a lookup rather than a second evaluation of the dependency gate.
     for task in candidates_result.scalars().all():
-        claimed = claimed_agents_by_loop.get(task.loop_id, {})
+        staffing = staffing_by_loop.get(
+            task.loop_id, task_attribution.FlowStaffing(selected={}, unstaffable={})
+        )
         is_blocked = task.status == "blocked"
-        if not is_blocked and task.id not in claimed:
+        if not is_blocked and staffing.agent_for(task.id) is None:
             continue
         # A blocked task is not claimable and still the loop's current work — the operator is who
         # unblocks it. The firing and the board diverge here on purpose; see
@@ -394,29 +358,12 @@ async def _batch_loop_summaries(
         # while a firing could only ever claim one thing. Order still comes from the query's
         # `_loop_queue_order`, so the card lists them the way the firing considered them.
         entry: Dict[str, str] = {"id": task.id, "title": task.title, "status": task.status}
-        # The selection's agent where the firing made one, the task's own assignee for a blocked
-        # row (nobody is being selected for it — it is waiting on a person). Omitted rather than
-        # blank when neither exists, so a reader never sees an empty attribution.
-        agent = claimed.get(task.id) or task.assignee
-        if agent:
-            entry["agent"] = agent
-            # What the name means, so the reader is not left to infer it from the status (F26).
-            # `working` — this agent is mid-turn on it. `next` — this is who the next firing would
-            # give it to, which for a `completed` task is its reviewer, not the person who did it.
-            # `assigned` — nobody is being selected, and this is the row's own assignee, which is
-            # the blocked case waiting on a person.
-            # `held` — the loop cannot staff anybody onto this and nobody is mid-turn on it either:
-            # a review whose turn ended without a verdict, or failed. It is the state F23 asked to
-            # keep visible, finally wearing its own name instead of borrowing `working`'s (F63).
-            if task.id in working_by_loop.get(task.loop_id, ()):
-                if task.id in running_task_ids or agent in running_agents_without_task:
-                    entry["agent_role"] = "working"
-                else:
-                    entry["agent_role"] = "held"
-            elif task.id in claimed:
-                entry["agent_role"] = "next"
-            else:
-                entry["agent_role"] = "assigned"
+        # Who, and what the name means — one answer from one owner. Omitted rather than blank when
+        # nobody is on it, so a reader never sees an attribution with no meaning attached.
+        attribution = task_attribution.attribute(task, staffing=staffing, live=live)
+        if attribution:
+            entry["agent"] = attribution.agent
+            entry["agent_capacity"] = attribution.capacity
         current_tasks_by_loop.setdefault(task.loop_id, []).append(entry)
 
     # Distinct (job_id, conversation_id) pairs first, so a resume-mode job that fired more than

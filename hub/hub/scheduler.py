@@ -886,7 +886,7 @@ DECISION_PROCEED_EMPTY = "proceed_empty"
 #: Every candidate is already being worked by an agent mid-turn. Distinct from `DECISION_STALLED`,
 #: which means the queue is *waiting* on something, and from `DECISION_PROCEED_EMPTY`, which fires
 #: an agent to fill a queue that has nothing in it. Here the queue is full and moving, and the right
-#: thing for this firing to do is nothing at all -- see `FiringDecision.in_flight`.
+#: thing for this firing to do is nothing at all -- see `FiringDecision._cannot_staff`.
 DECISION_IN_FLIGHT = "in_flight"
 
 
@@ -1117,16 +1117,26 @@ class FiringDecision:
     #: surface a review it could not staff, or the operator never learns that the queue has
     #: finished work nobody can take.
     unstaffed: "tuple[tuple[str, str], ...]" = ()
-    #: `(task_id, agent)` for every candidate an agent is **already mid-turn on** (finding F23).
-    #: Not selectable by this firing -- `schedule_agent` would refuse a second turn for that agent
-    #: -- and still the loop's current work, which is the distinction that made this a defect.
+    #: `(task_id, agent)` for every candidate **this firing cannot staff anybody onto**, because
+    #: that agent already holds it (finding F23). Not selectable by this firing -- `schedule_agent`
+    #: would refuse a second turn for that agent -- and still the loop's current work, which is the
+    #: distinction that made this a defect.
     #:
     #: `decide_firing` has two callers asking two different questions: the firing asks *"what can I
     #: start"* and the board asks *"what is this loop working on"*. Skipping a busy agent's task
     #: answers only the first, and answering only the first made a flow running three agents report
     #: `current_tasks: []` and `"loop queue is stalled"` -- measured live, on the first firing of a
     #: real flow. The busier the flow, the more certainly it reported as stalled.
-    in_flight: "tuple[tuple[str, str], ...]" = ()
+    #:
+    #: **Private, and named for what it means** (`one-answer-to-what-is-happening`, D9). It was
+    #: `in_flight`, a public field on a frozen dataclass, and "in flight" reads as *"this is
+    #: running"* -- which it is not. An `under_review` task with an assignee is appended here
+    #: unconditionally and deliberately (F23, F45), so a verdict-less review stays visible; the
+    #: board then rendered it as its reviewer being mid-turn, with no run anywhere in the database
+    #: (F63). One word carrying two meanings, and any consumer could pick it up and read it as
+    #: either. `task_attribution.staffing_from_decision` is now its only reader outside this
+    #: module, and `test_task_attribution.py` scans the source to keep that true.
+    _cannot_staff: "tuple[tuple[str, str], ...]" = ()
     #: `(task_id, reason)` for every candidate whose agent resolved but was **already selected by
     #: this same firing** (design D6). Recorded rather than dropped silently, which is the whole of
     #: what D6 asks for: without it the second selection would reach `schedule_agent`, be refused
@@ -1302,7 +1312,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         return FiringDecision(
             kind=DECISION_CLAIM,
             selections=tuple(selections),
-            in_flight=tuple(in_flight),
+            _cannot_staff=tuple(in_flight),
             unstaffed=tuple(unstaffed),
             deferred=tuple(deferred),
         )
@@ -1313,7 +1323,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         # count those very tasks as "open" and report the flow stalled at its busiest.
         return FiringDecision(
             kind=DECISION_IN_FLIGHT,
-            in_flight=tuple(in_flight),
+            _cannot_staff=tuple(in_flight),
             unstaffed=tuple(unstaffed),
             deferred=tuple(deferred),
         )
@@ -2154,7 +2164,7 @@ class JobScheduler:
                         await _emit_loop_edit_applied(session, pending_edit_payload)
                     logger.debug(
                         f"Job {job.id} firing skipped: "
-                        f"{len(decision.in_flight)} task(s) already in flight"
+                        f"{len(decision._cannot_staff)} task(s) already in flight"
                     )
                     return False
                 selection = decision.selections[0] if decision.selections else None

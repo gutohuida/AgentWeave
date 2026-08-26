@@ -62,17 +62,17 @@ function getStatusLabel(enabled: boolean): string {
  */
 function CurrentTaskAgent({
   name,
-  role,
+  capacity,
 }: {
   name: string
-  role?: 'working' | 'held' | 'next' | 'assigned'
+  capacity?: 'working' | 'held' | 'next' | 'assigned'
 }) {
   const qualifier =
-    role === 'next'
+    capacity === 'next'
       ? 'next: '
-      : role === 'assigned'
+      : capacity === 'assigned'
         ? 'assigned: '
-        : role === 'held'
+        : capacity === 'held'
           ? 'waiting on '
           : ''
   return (
@@ -326,12 +326,12 @@ function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: str
                 className="text-[11px]"
               >
                 {task.title} ({task.status})
-                {task.agent ? <CurrentTaskAgent name={task.agent} role={task.agent_role} /> : null}
+                {task.agent ? <CurrentTaskAgent name={task.agent} capacity={task.agent_capacity} /> : null}
               </button>
             ) : (
               <p key={task.id} className="text-[11px]" style={{ color: 'var(--text-3)' }}>
                 {task.title} ({task.status})
-                {task.agent ? <CurrentTaskAgent name={task.agent} role={task.agent_role} /> : null}
+                {task.agent ? <CurrentTaskAgent name={task.agent} capacity={task.agent_capacity} /> : null}
               </p>
             ),
           )}

@@ -238,6 +238,23 @@ can bypass. Splitting `FiringDecision`'s field alone (no owned derivation) is a 
 could misread `cannot_staff` tomorrow. Materialising the answer in a column was rejected as the only
 option introducing a genuinely new failure mode, drift between stored and computed.
 
+**Built, with one deviation.** `FiringDecision.in_flight` is now `_cannot_staff`, private;
+`task_attribution.staffing_from_decision` is its only reader outside `scheduler.py`, enforced by a
+source scan over `hub/hub/**`. `jobs.py` lost the ~90-line derivation and renders.
+
+The deviation is the **agent-fallback, which stays** — see task 4.7 and
+`openspec/explorations/2026-08-26-the-other-half-of-the-binding.md`. D1 wrote the run→task edge for
+reviews; a flow's ordinary work firing still writes no `task_id`, so `working` cannot yet come from
+the runs table alone. It is now an explicit `agent_fallback` parameter defaulting to on, with
+**both** behaviours pinned by test — the truth it will tell once the edge is written, and the
+over-report it tells today. Removing it becomes a visible behaviour change rather than a silent one.
+
+Mutation check 4.9 found a real hole rather than confirming the work: emptying the encapsulated read
+left all fifteen tests in the new file green, because every one of them built `FlowStaffing` by
+hand. `test_board_agent_role.py` caught it through the API in four cases — so the *behaviour* was
+covered and the *module's own boundary* was not. A unit file that cannot fail when its subject is
+gutted is not testing its subject. Closed with a direct seam test.
+
 ### D10 — the "is it running" call sites are audited, not assumed
 
 At least eight modules compute `Run.status == "running"` with differing scope. They are **not** all

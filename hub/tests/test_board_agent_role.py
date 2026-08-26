@@ -4,15 +4,15 @@ Both were found live on 2026-08-25, immediately after F45's fix made in-flight w
 state of a flow rather than a rare one.
 
 **F49.** `_batch_loop_summaries` distinguishes an agent that is *mid-turn* on a task from the one
-the next firing *would* give it to, and puts the answer on `agent_role` — `working` against `next`.
+the next firing *would* give it to, and puts the answer on `agent_capacity` (`agent_role` until D8 renamed it) — `working` against `next`.
 The distinction is real and only that merge knows it, which is why F26 fixed it at the source. But
-the source built its lookup as `set(decision.in_flight)`, and `in_flight` is a sequence of
+the source built its lookup as `set(decision._cannot_staff)` (`in_flight` then), which is a sequence of
 `(task_id, agent)` **pairs** — so the set held tuples, the membership test asked it with a bare
-`task.id`, and it never matched. `agent_role` could not be `working` in production from the day it
+`task.id`, and it never matched. the capacity could not be `working` in production from the day it
 shipped.
 
 It shipped green because the only tests were five vitest cases against the *renderer*, each handed
-an `agent_role` value by the fixture. Nothing exercised the derivation. That is finding F41's
+the value by the fixture. Nothing exercised the derivation. That is finding F41's
 lesson for the third time in this change, and this module is the missing half.
 
 **F48.** A loop firing that declines because every candidate is already being worked records
@@ -149,7 +149,7 @@ async def test_a_task_being_reviewed_reads_as_working_not_next(app, auth_headers
     assert res.status_code == 200
     current = _card(res.json(), job.id)["loop"]["current_tasks"]
 
-    assert [(t["id"], t.get("agent"), t.get("agent_role")) for t in current] == [
+    assert [(t["id"], t.get("agent"), t.get("agent_capacity")) for t in current] == [
         (task.id, REVIEWER, "working")
     ]
 
@@ -168,7 +168,7 @@ async def test_a_task_awaiting_review_still_reads_as_next(app, auth_headers, bin
     res = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
     current = _card(res.json(), job.id)["loop"]["current_tasks"]
 
-    assert [(t["id"], t.get("agent"), t.get("agent_role")) for t in current] == [
+    assert [(t["id"], t.get("agent"), t.get("agent_capacity")) for t in current] == [
         (task.id, REVIEWER, "next")
     ]
 
@@ -185,9 +185,9 @@ async def test_a_review_nobody_is_running_reads_as_held_not_working(app, auth_he
     *failed*, the card still read `working` with zero non-terminal runs in the database.
 
     The cause is one word meaning two things. `scheduler.decide_firing` appends an `under_review`
-    task to `in_flight` unconditionally whenever it has an assignee, deliberately -- that is what
+    task to the cannot-staff collection unconditionally whenever it has an assignee, deliberately -- that is what
     keeps a verdict-less review visible instead of vanishing from the board (F23, F45) -- so
-    `in_flight` means "this firing cannot staff anybody onto this". `_batch_loop_summaries` rendered
+    the collection means "this firing cannot staff anybody onto this". `_batch_loop_summaries` rendered
     that as "this agent is mid-turn on it". Both were right about their own side.
     """
     await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
@@ -201,7 +201,7 @@ async def test_a_review_nobody_is_running_reads_as_held_not_working(app, auth_he
     assert res.status_code == 200
     current = _card(res.json(), job.id)["loop"]["current_tasks"]
 
-    assert [(t["id"], t.get("agent"), t.get("agent_role")) for t in current] == [
+    assert [(t["id"], t.get("agent"), t.get("agent_capacity")) for t in current] == [
         (task.id, REVIEWER, "held")
     ]
 
@@ -224,7 +224,7 @@ async def test_a_run_without_a_task_id_still_reads_as_working(app, auth_headers,
     res = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
     current = _card(res.json(), job.id)["loop"]["current_tasks"]
 
-    assert [(t["id"], t.get("agent"), t.get("agent_role")) for t in current] == [
+    assert [(t["id"], t.get("agent"), t.get("agent_capacity")) for t in current] == [
         (task.id, REVIEWER, "working")
     ]
 
@@ -249,7 +249,7 @@ async def test_a_terminal_run_does_not_keep_a_review_reading_as_working(
     res = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
     current = _card(res.json(), job.id)["loop"]["current_tasks"]
 
-    assert [(t["id"], t.get("agent"), t.get("agent_role")) for t in current] == [
+    assert [(t["id"], t.get("agent"), t.get("agent_capacity")) for t in current] == [
         (task.id, REVIEWER, "held")
     ]
 

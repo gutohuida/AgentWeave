@@ -454,21 +454,21 @@ describe('JobCard: what the row and the chips actually claim', () => {
               title: 'Fix row 42',
               status: 'in_progress',
               agent: 'builder',
-              agent_role: 'working',
+              agent_capacity: 'working',
             },
             {
               id: 'task-2',
               title: 'Name the two totals',
               status: 'completed',
               agent: 'relay',
-              agent_role: 'next',
+              agent_capacity: 'next',
             },
             {
               id: 'task-3',
               title: 'Await a decision',
               status: 'blocked',
               agent: 'critic',
-              agent_role: 'assigned',
+              agent_capacity: 'assigned',
             },
           ],
           open_questions: 0,
@@ -510,14 +510,14 @@ describe('JobCard: what the row and the chips actually claim', () => {
               title: 'Reviewed by nobody right now',
               status: 'under_review',
               agent: 'critic',
-              agent_role: 'held',
+              agent_capacity: 'held',
             },
             {
               id: 'task-2',
               title: 'Genuinely being worked',
               status: 'in_progress',
               agent: 'builder',
-              agent_role: 'working',
+              agent_capacity: 'working',
             },
           ],
           open_questions: 0,
@@ -536,7 +536,7 @@ describe('JobCard: what the row and the chips actually claim', () => {
   })
 
   it('falls back to the bare name when the Hub sends no role (F26)', async () => {
-    // A Hub older than this change sends `agent` without `agent_role`. It must render as it always
+    // A Hub older than this change sends `agent` without `agent_capacity`. It must render as it always
     // did rather than acquiring a qualifier the server never claimed.
     const user = userEvent.setup()
     loopTasks = [{ id: 'task-1' }]
