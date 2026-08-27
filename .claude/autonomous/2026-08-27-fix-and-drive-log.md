@@ -104,3 +104,113 @@ a proof of correctness. The section says so in the file.
 **Next:** `E2E-1` — the operator's headline ask. Full-surface `e2e-loop` sweep against a fresh
 throwaway project outside this repository, fixing what it finds, every fix carrying a test watched
 to fail.
+
+---
+
+## Iteration 2 — E2E-1, first pass: three defects found, three fixed, three filed
+
+**2026-08-27T22:47+01:00 · commits `03855bb`, `a33db58`, `d1561f5` · queue item `E2E-1` → in progress**
+
+### Reconciliation on arrival
+
+STATE, branch and `git log` agreed: `2643663` at the tip, tree clean, local and origin level.
+Nothing to reconcile.
+
+### Seams driven this iteration — so the next firing does not repeat them
+
+| Matrix row | Verdict |
+|---|---|
+| 1 Projects | driven — `POST /projects/open`, settings read, `main_branch` auto-detected as `master` correctly |
+| 2 Runners | driven — 2 seeded, a third pinned to `claude-haiku-4-5-20251001` created, launchability probed (all three runnable) |
+| 3 Agents | driven — `author`/`builder`/`reviewer` registered and bound to runner + charter |
+| 4 Charters | partly — the 9 starters confirmed seeded; create/edit/delete **not reached** |
+| 5 Conversations | driven — three real turns, transcripts read |
+| 7 Tasks | partly — materialisation and the transition machine's refusals; the full board **not reached** |
+| 9 Spec flow | **driven end to end** — create → content → close → propose → approve → tasks materialise |
+| 10 Evidence | driven — recorded, footprinted, duplicate-checked; **drift not reached** |
+| 17 Integration | **not reached** — blocked behind F76 |
+| 6, 8, 11–16, 18, 19 | **not reached** |
+
+Rows 11–19 are the next firing's work. Nothing here was marked covered on the strength of a 200.
+
+### What was found
+
+Three defects, all fixed, each with a test watched to fail. Three more filed and deliberately not
+fixed.
+
+**F73 — `ui_stale` is a false positive on any Windows checkout, and no rebuild clears it.**
+Found in Step 3, before driving a single screen, which is the only reason the UI rows would have
+meant anything. `/health` said the bundle was stale on a tree where `git diff` against the stamp's
+own commit was empty. `ui_source_fingerprint` hashed raw working-tree bytes, and with
+`core.autocrlf=true` nine tracked files stood CRLF on disk against LF in the index. Demonstrated
+by flipping one file's line endings — a change `git diff` reports as nothing — and watching the
+fingerprint move and move back. **The bundle was not stale**: rebuilt and diffed against a
+snapshot, every byte identical, only the stamp moved. Now hashes `git hash-object` output, so both
+sides agree on git's own normalisation.
+
+**F74 (severity A) — evidence from a task-bound run does not carry the task.** The headline find.
+`builder` was triggered with `task_id`, did the work, and called `record_evidence` without
+repeating the task. The row landed with `task_id` NULL; `commit_for_task_review` selects on exactly
+that column; the task's own review turn refused with *"has no recorded evidence, so there is no
+commit to review"* — which is false, and points the operator at the agent instead of at the gap.
+Three places in the Hub's own database named the task, including the branch the Hub itself created
+(`agentweave/task/task-a0409448ee8e`). `record()` now falls back to `runs.task_id`.
+
+**F75 — a reviewer's confirmation is refused as a duplicate of the author's claim.** Caused by
+F74's fix, and worth stating plainly: `duplicate_of` returns None when any part of its key is
+missing, so the check written for F7 **had never once fired in production for agent evidence**.
+Filling `task_id` switched it on, and the first thing it did was silence the reviewer. Actor is now
+part of the key.
+
+**F76 (severity A) — filed, not fixed. A hand-dispatched review turn dead-ends.** The reviewer did
+good work — re-ran the suite, wrote a comparison script, checked negative amounts and rounding
+boundaries, concluded APPROVED — and then found four closed doors: it could not move the task
+(assigned to its author), could not accept evidence (no grant), could not record its own (F75), and
+could not message the operator (F77). Every one of those refusals is individually excellent; the
+`under_review` one is the best-written refusal in the product. The gap is that the composition has
+no exit. Diagnosed precisely: `scheduler.py:767-780` staffs the task before a flow's review turn,
+and `POST /agent/trigger` with `review_task_id` does not — two dispatch paths for one operation,
+one of which leaves the reviewer unable to finish. **Not fixed because the repair shape is a
+product decision** (staff it / refuse up front / give reviewers a verdict channel); added to
+`decisions_for_user` rather than guessed.
+
+**F77 — an agent has no way to address the operator.** `send_message` to `Operator` 404s.
+`ask_user` blocks and is for questions. Recorded, not decided — it touches the deliberately-retired
+question-detection backstop.
+
+### What held, which matters as much
+
+- **F71's fix works.** The footprint captured the agent's real commit on `agentweave/task/…` with
+  `reachable_from_main: false` — not the operator's checkout.
+- **F10's fix works.** The reviewer got its own detached checkout at `.agentweave/reviews/reviewer`.
+- **The spec lifecycle gates hold and explain themselves.** Proposing from an unclosed exploration:
+  *"exploration has not been closed; the operator decides when it is complete"*. A no-op rigor
+  change, an illegal transition, and a review with no evidence all refused with the remedy stated.
+- **Task materialisation is correct**, and the document's `reviewer` field is resolved at review
+  time rather than stored — checked in `review_turn.resolve_declared_reviewer`, not assumed.
+
+### Friction worth recording
+
+- Spec routes live at `/projects/{id}/project/documents` — a doubled path segment that cost two
+  calls and an OpenAPI dump to find.
+- `POST /documents/propose` reports a **content** refusal as `200` with a `blocking` list and a
+  **lifecycle** refusal as `409`. Same refused operation, two shapes; a client checking the status
+  code believes the first one worked.
+- The agent burned three identical `ToolSearch` calls before `read_spec_document` resolved.
+
+### Verification
+
+Not just the suites. `03855bb` was proven by rebuild-and-diff; `a33db58` and `d1561f5` were proven
+**live against a restarted Hub** — fresh evidence carried the task with the agent again naming
+none, and the review turn that returned 409 returned 200. 135 evidence/review tests pass; ruff,
+black and mypy clean.
+
+### State left behind
+
+`proj-46b602c1f3cb` (`aw-e2e1` at `C:\Users\huida\Documents\aw-e2e1`) is **kept on purpose** —
+an approved document, a materialised task, two evidence rows spanning the fix, and a task worktree
+carrying real commits. Rebuilding that is the expensive part of the next sweep. No jobs and no
+loops exist in any project; confirmed by API, not assumed.
+
+**Next:** continue `E2E-1` at the unreached rows — loops/jobs, questions, permissions, dependencies,
+worktrees, accounting, resilience. Do not re-drive rows 1, 2, 3, 5, 9.
