@@ -441,3 +441,55 @@ async def test_retention_policy_is_the_projects_and_never_is_a_choice(app, auth_
         f"{BASE}/spec/evidence-retention", json={"policy": "whenever"}, headers=auth_headers
     )
     assert refused.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_evidence_inherits_the_task_its_run_is_bound_to(app, auth_headers, builder, tmp_path):
+    """An agent that does not restate its own task still produces reviewable evidence.
+
+    Found driving the e2e sweep, 2026-08-27 (`scripts/drive/FINDINGS.md`, F74). `builder` was
+    triggered with `task_id`, wrote the code, and called `record_evidence` without repeating the
+    task -- `task_id` is one optional argument among six on that tool, described as "when there is
+    one". The row landed with `task_id` NULL, and `commit_for_task_review` selects on exactly that
+    column, so the review turn refused with *"task ... has no recorded evidence, so there is no
+    commit to review"* while the evidence sat in the database with a correct commit footprint.
+
+    The binding is not ambiguous and never was: `runs.task_id` was set, and the footprint's own
+    branch was `agentweave/task/<that task>`. The Hub knew; it just made the agent say it again.
+    """
+    await _document(app, auth_headers, builder)
+    async with async_session_factory() as session:
+        run = await session.get(Run, "run-builder")
+        run.task_id = "task-bound"
+        await session.commit()
+
+    response = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran it"}, headers=builder
+    )
+    assert response.status_code == 201, response.text
+
+    async with async_session_factory() as session:
+        row = (await session.execute(select(RequirementEvidence))).scalars().first()
+    assert (
+        row.task_id == "task-bound"
+    ), "evidence from a run bound to a task must carry that task, or nothing can review it"
+
+
+@pytest.mark.asyncio
+async def test_an_agent_may_still_name_a_different_task(app, auth_headers, builder, tmp_path):
+    """The fallback fills a gap; it does not overrule an agent that answered."""
+    await _document(app, auth_headers, builder)
+    async with async_session_factory() as session:
+        run = await session.get(Run, "run-builder")
+        run.task_id = "task-bound"
+        await session.commit()
+
+    await app.post(
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "ran it", "task_id": "task-explicit"},
+        headers=builder,
+    )
+
+    async with async_session_factory() as session:
+        row = (await session.execute(select(RequirementEvidence))).scalars().first()
+    assert row.task_id == "task-explicit"

@@ -123,6 +123,12 @@ async def record(
             code="requirement_retired",
         )
 
+    if task_id is None:
+        # The run already knows its task, so an agent that did not repeat it is not ambiguous --
+        # only quiet. Without this the row lands with `task_id` NULL and `commit_for_task_review`,
+        # which selects on that column, reports the task as having no evidence at all (F74).
+        task_id = await task_bound_to_run(session, actor.run_id)
+
     taken: Optional[Footprint] = None
     if workspace is not None:
         # Design D7: the directory this actor's run was actually given, when there was a run.
@@ -325,6 +331,18 @@ async def recorded_workspace_dir(session: AsyncSession, run_id: Optional[str]) -
     if not run_id:
         return None
     return await session.scalar(select(Run.workspace_dir).where(Run.id == run_id))
+
+
+async def task_bound_to_run(session: AsyncSession, run_id: Optional[str]) -> Optional[str]:
+    """The task a run was started for, or None when there is no run and for an operator.
+
+    An operator has no run, so this is how the fallback stays a fallback: their evidence is still
+    task-less unless they say otherwise, which is what `POST /spec/evidence` has always meant for
+    them.
+    """
+    if not run_id:
+        return None
+    return await session.scalar(select(Run.task_id).where(Run.id == run_id))
 
 
 def _apply_footprint(

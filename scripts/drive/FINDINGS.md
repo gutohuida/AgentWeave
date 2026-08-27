@@ -4247,3 +4247,83 @@ branch re-records this repository's.
 **Cross-cutting note for the sweep.** This blocked Step 3 of the e2e method, which says every UI
 finding taken from a stale bundle is worthless. It was found *before* driving any screen, which is
 the only reason the UI rows of this sweep mean anything.
+
+---
+
+## F74 — evidence from a task-bound run does not carry the task, so its own review turn refuses it
+
+**Status:** fixed (this branch) — `requirement_evidence.record` falls back to the run's binding
+
+**Severity: A.** It breaks the spine the whole product is built around — completed → under_review →
+approved → integration — and it breaks it silently, reporting a *different* problem than the one
+that exists.
+
+**What happens.** An agent triggered with `task_id`, which does its work and calls
+`record_evidence` without repeating the task, produces evidence that the task's own review turn
+cannot see. Driven live on `proj-46b602c1f3cb`:
+
+```
+POST /projects/{P}/agent/trigger   {"agent":"builder","task_id":"task-a0409448ee8e", ...}
+  -> run-62f25237be45, task moves in_progress -> completed, calc.py + test_calc.py committed
+
+POST /projects/{P}/agent/trigger   {"agent":"reviewer","review_task_id":"task-a0409448ee8e"}
+  -> 409  "task task-a0409448ee8e has no recorded evidence, so there is no commit to review.
+           Evidence naming a commit is what a review turn is given."
+```
+
+**The refusal is false.** The evidence exists, and it names a commit:
+
+```
+sqlite> SELECT id, task_id, run_id FROM requirement_evidence;
+ev-e63d76084f80 | NULL | run-62f25237be45
+sqlite> SELECT evidence_id, commit_sha, branch FROM evidence_footprints;
+ev-e63d76084f80 | 9b2d781c93499… | agentweave/task/task-a0409448ee8e
+sqlite> SELECT id, task_id FROM runs WHERE id='run-62f25237be45';
+run-62f25237be45 | task-a0409448ee8e
+```
+
+Three separate places in the Hub's own database name the task — the run's binding, the branch the
+Hub itself created, and the worktree path — and the column the review turn reads is the one nobody
+filled in. `commit_for_task_review` selects `WHERE RequirementEvidence.task_id == task_id`
+(`requirement_evidence.py:718`), gets nothing, and reports the "no evidence at all" branch of its
+two-branch message. An operator reading that would conclude the agent recorded nothing and go
+looking at the agent.
+
+**Why it happens.** `POST /agent-actions/spec/evidence` passes `task_id=body.task_id` and nothing
+else. The MCP tool exposes `task_id` as the sixth of six arguments, described as *"The task this
+came out of, when there is one"* — optional, and phrased as though the agent might be the one who
+knows. The agent is not: it is told what task it is on by the Hub, and the Hub already stored the
+answer on the run.
+
+**One defect, or a design gap?** A design gap, and one this codebase has already named. The
+`every-run-knows-its-task` work (`1a92642`) established that a run's task is the Hub's fact rather
+than something restated per call; `run_task_binding.py:143` records the same shape biting review
+runs (*"`run.task_id` was NULL on every review run the product had started"*). Evidence was simply
+not swept in. Anything else keyed on `evidence.task_id` inherits the same hole — `duplicate_of`
+takes `task_id` too, so duplicate detection was scoped to NULL and could not have fired either.
+
+**The fix.** `record()` derives the task from `runs.task_id` when the caller did not name one, via
+`task_bound_to_run` — a near-twin of the `recorded_workspace_dir` helper already beside it. An
+agent that *does* name a task still wins, and an operator (no run) is unaffected, so the fallback
+stays a fallback.
+
+**Tests:** `test_evidence_inherits_the_task_its_run_is_bound_to`, watched to fail with
+`assert None == 'task-bound'`, plus `test_an_agent_may_still_name_a_different_task` guarding
+against the fallback overruling an explicit answer.
+
+**Verified live, not only in tests** — this repository's dominant failure mode is a change that
+passes its tests and cannot fire in production, so the same drive was re-run against the restarted
+Hub:
+
+```
+ev-e63d76084f80 | NULL                  | run-62f25237be45   <- recorded before the fix
+ev-5a98a7df0fa1 | task-a0409448ee8e     | run-17112845f36f   <- after, agent again named no task
+```
+
+and the review turn that returned 409 above returned **200** — `reviewer` started, and took its
+detached checkout at `.agentweave/reviews/reviewer`.
+
+**What held, in the same drive.** F71's fix is working: the footprint captured the agent's actual
+commit on `agentweave/task/…` with `reachable_from_main: false`, not the operator's checkout.
+F10's is working: the reviewer got its own checkout of the work rather than being refused at the
+author's worktree.
