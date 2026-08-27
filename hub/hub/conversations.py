@@ -40,10 +40,27 @@ def title_from_message(text: str, *, limit: int = CONVERSATION_TITLE_MAX_LENGTH)
     return cut[:boundary].rstrip()
 
 
-#: The one posture that is never carried into a conversation the operator did not open. Removing
+#: The posture that is never carried into a conversation the operator did not open. Removing
 #: every check is a deliberate choice for a thread being watched; reaching runs started by a peer
 #: or a job, by a route the operator cannot see, is not what choosing it meant.
 UNINHERITED_PERMISSION_MODE = "bypassPermissions"
+
+#: And the posture that is never carried into a conversation **nobody is watching**, which is a
+#: narrower case with the same sentence behind it. `manual` routes every tool call to a card and
+#: waits; a job fires on a schedule, at an hour chosen precisely because the operator is elsewhere.
+#: Measured live on 2026-08-28: a loop fired at 23:45, inherited `manual` from an interactive
+#: conversation the operator had used two hours earlier, and spent the next eight minutes opening
+#: cards and timing them out one by one — `Edit` denied after 120s, then `Bash`, then `PowerShell`
+#: — producing a turn that "completed" having been refused everything it tried.
+#:
+#: Dropped rather than replaced, exactly as `bypassPermissions` is: the agent's own
+#: `default_permission_mode` and then the catalog default are what should decide an unwatched
+#: turn's posture, and they already do when nothing is inherited.
+UNINHERITED_BY_A_SCHEDULE_PERMISSION_MODE = "manual"
+
+#: `Conversation.origin` for a firing. The only origin where the operator's absence is structural
+#: rather than incidental — a peer message usually follows something they just did.
+SCHEDULED_ORIGIN = "job"
 
 
 async def inherit_runtime_overrides(session: AsyncSession, conversation: Conversation) -> None:
@@ -57,6 +74,10 @@ async def inherit_runtime_overrides(session: AsyncSession, conversation: Convers
     This gives a starting point, not a shared setting: the values are copied, so changing one
     conversation's overrides later leaves the other's alone. `checkpoint_cutover` already does the
     same thing at the handoff boundary, for the same stated reason.
+
+    Two postures are held back, and which two depends on who opened the conversation — see the
+    constants above. `bypassPermissions` never travels; `manual` never travels into a firing,
+    because a posture that waits for a person is not a posture for a turn that runs at 03:00.
     """
     if conversation.runtime_overrides:
         return
@@ -79,10 +100,13 @@ async def inherit_runtime_overrides(session: AsyncSession, conversation: Convers
     previous = result.scalars().first()
     if not previous:
         return
+    withheld = {UNINHERITED_PERMISSION_MODE}
+    if conversation.origin == SCHEDULED_ORIGIN:
+        withheld.add(UNINHERITED_BY_A_SCHEDULE_PERMISSION_MODE)
     inherited = {
         key: value
         for key, value in previous.items()
-        if not (key == "permission_mode" and value == UNINHERITED_PERMISSION_MODE)
+        if not (key == "permission_mode" and value in withheld)
     }
     conversation.runtime_overrides = inherited or None
 

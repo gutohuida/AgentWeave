@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 import pytest
 
 from hub.conversations import (
+    SCHEDULED_ORIGIN,
+    UNINHERITED_BY_A_SCHEDULE_PERMISSION_MODE,
     UNINHERITED_PERMISSION_MODE,
     get_conversation_by_id,
     inherit_runtime_overrides,
@@ -99,6 +101,64 @@ async def test_other_overrides_survive_alongside_a_dropped_posture(app):
         "mixed", {"permission_mode": UNINHERITED_PERMISSION_MODE, "model": "claude-opus-5"}
     )
     assert await _inherit("mixed") == {"model": "claude-opus-5"}
+
+
+@pytest.mark.asyncio
+async def test_ask_me_first_is_not_carried_into_a_scheduled_firing(app):
+    """A posture that waits for a person is not a posture for a turn that runs at 03:00.
+
+    Measured live on 2026-08-28. An interactive drive left `manual` on a builder conversation; two
+    hours later a loop fired, inherited it, and spent eight minutes opening permission cards and
+    timing them out one at a time — `Edit`, then `Bash`, then `PowerShell`, each *"no operator
+    answered within 120s"*. The turn then recorded `completed`, having been refused everything it
+    tried, which is the worst shape the failure could take.
+
+    Dropped rather than replaced, exactly as `bypassPermissions` is: the agent's own
+    `default_permission_mode` and then the catalog default are what should decide an unwatched
+    turn's posture.
+    """
+    await _conversation("nightly", {"permission_mode": UNINHERITED_BY_A_SCHEDULE_PERMISSION_MODE})
+    assert await _inherit("nightly", origin=SCHEDULED_ORIGIN) is None
+
+
+@pytest.mark.asyncio
+async def test_ask_me_first_is_still_carried_into_a_peer_run(app):
+    """The other direction, and the reason this is scoped by origin rather than dropped outright.
+
+    A peer message usually follows something the operator just did, so they are there to answer;
+    an extra card is cheap and losing their chosen posture mid-conversation is not.
+    """
+    await _conversation("relay", {"permission_mode": UNINHERITED_BY_A_SCHEDULE_PERMISSION_MODE})
+    assert await _inherit("relay", origin="peer") == {
+        "permission_mode": UNINHERITED_BY_A_SCHEDULE_PERMISSION_MODE
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_firing_still_inherits_a_posture_it_can_act_on(app):
+    """Withholding one value must not turn into withholding the posture."""
+    await _conversation("worker", {"permission_mode": "workspace"})
+    assert await _inherit("worker", origin=SCHEDULED_ORIGIN) == {"permission_mode": "workspace"}
+
+
+@pytest.mark.asyncio
+async def test_a_firing_keeps_the_model_beside_a_withheld_posture(app):
+    """The model the operator chose is not a permission decision and travels either way."""
+    await _conversation(
+        "tuned",
+        {
+            "permission_mode": UNINHERITED_BY_A_SCHEDULE_PERMISSION_MODE,
+            "model": "claude-opus-5",
+        },
+    )
+    assert await _inherit("tuned", origin=SCHEDULED_ORIGIN) == {"model": "claude-opus-5"}
+
+
+@pytest.mark.asyncio
+async def test_full_access_is_withheld_from_a_firing_too(app):
+    """The original rule is unconditional and stays unconditional."""
+    await _conversation("widejob", {"permission_mode": UNINHERITED_PERMISSION_MODE})
+    assert await _inherit("widejob", origin=SCHEDULED_ORIGIN) is None
 
 
 @pytest.mark.asyncio

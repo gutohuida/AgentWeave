@@ -5022,3 +5022,13 @@ replaced, exactly as `bypassPermissions` is, so the agent's own `default_permiss
 the catalog default decide an unwatched turn's posture, which is what they are for. Peer
 conversations still inherit it: there the operator is usually present, and an extra card is cheap.
 
+**Verification.** Five tests, both dispositions mutation-checked. Removing the scoped withhold fails
+the firing test; widening it to every origin fails the peer test. Three more assert the fix did not
+overreach — a firing still inherits a posture it can act on, the model travels beside a withheld
+posture, and `bypassPermissions` stays unconditional.
+
+**Proven live** against a Hub restarted on the fixed code, with the same `manual` conversation still
+sitting at the top of the builder's history. Two firings, both `completed` in about twenty seconds,
+their conversations carrying `runtime_overrides: null` instead of `manual`, and **no new permission
+card created at all**.
+
