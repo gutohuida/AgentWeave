@@ -24,6 +24,7 @@ from .conversations import (
 )
 from .db.engine import async_session_factory
 from .db.models import Agent, AIJob, Checkpoint, JobRun, Loop, Message, Question, Run, Task
+from .loop_ending import QUEUE_DRAINED_REASON, end_loop
 from .run_task_binding import TERMINAL_FOR_BINDING, tasks_held_by_a_running_turn
 from .sse import sse_manager
 from .task_transition_service import apply_transition
@@ -328,7 +329,7 @@ async def _loop_stop_reason(session: AsyncSession, job: AIJob) -> Optional[str]:
                 select(func.count(Task.id)).where(Task.loop_id == loop.id)
             )
             if ever_count:
-                return "loop queue is empty"
+                return QUEUE_DRAINED_REASON
     return None
 
 
@@ -2104,16 +2105,10 @@ class JobScheduler:
             if loop_stop_reason:
                 run.status = "skipped"
                 run.error_summary = loop_stop_reason
-                if loop is not None:
-                    loop.stop_reason = loop_stop_reason
-                    loop.stopped_at = fired_at
-                    # D17/B2.5: the same string `_loop_stop_reason` returns for a drained queue,
-                    # already the trigger for `loop_queue_exhausted` below — the one place this
-                    # value is known, so it is set here rather than re-derived by a reader later.
-                    loop.ending_state = (
-                        "completed" if loop_stop_reason == "loop queue is empty" else "stopped"
-                    )
-                job.enabled = False
+                # D17/B2.5. One statement of what ending means, shared with the operator's own
+                # stop in `api/v1/jobs.py` — which used to keep a partial copy of this and left
+                # out the two halves that matter most, `stopped_at` and disabling the job.
+                end_loop(job, loop, reason=loop_stop_reason, when=fired_at)
                 await session.commit()
                 if pending_edit_payload is not None:
                     await _emit_loop_edit_applied(session, pending_edit_payload)
@@ -2145,7 +2140,7 @@ class JobScheduler:
                     loop_id=loop.id if loop is not None else None,
                 )
                 await sse_manager.broadcast(job.project_id, "loop_stopped", loop_stopped_payload)
-                if loop is not None and loop_stop_reason == "loop queue is empty":
+                if loop is not None and loop_stop_reason == QUEUE_DRAINED_REASON:
                     # A second, independent event (design D6) — "the queue is empty" and "was a
                     # request in flight when it emptied" are two facts a reader should not have to
                     # parse out of one payload. `loop_stopped` above is unchanged by this branch.

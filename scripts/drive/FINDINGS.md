@@ -4784,3 +4784,124 @@ above the seeding loop. 254 loop/job tests pass.
 
 **Proven live** against a Hub restarted on the fixed code — see the drive record for iteration 4.
 
+---
+
+## F83 — a loop created enabled with `initial_tasks` never reaches the scheduler
+
+**Status:** fixed — see the commit that adds `hub/tests/test_job_reaches_the_scheduler.py`
+
+**Severity: A.** The operator arms a loop and the loop does not exist. `enabled: true` in the
+response, a `next_run` in the response, a row reading `enabled = 1` — and no firing, ever, until
+the Hub restarts.
+
+**How it was found.** Driving row 11. I created a loop enabled, with one `initial_tasks` entry and
+a once-a-minute cron, then waited. `next_run` passed. Nothing. `run_count` stayed 0 for ten minutes
+while a *different* loop, created disabled and enabled afterwards through `PATCH`, fired on time
+every minute in the same Hub.
+
+Reading APScheduler own store against `ai_jobs` said it plainly:
+
+```
+job-46c034fb49f0  e2e-loop-drive       enabled=1  in_store=True     <- created disabled, PATCHed on
+job-62babfc5bf69  e2e-operator-stop    enabled=1  in_store=False    <- created enabled, seeded
+```
+
+Bisected to one variable. `loop-enabled-noseed` (enabled, loop, **no** `initial_tasks`) registered;
+`loop-enabled-seeded` (identical plus one initial task) did not. Reproduced on demand.
+
+**Cause.** APScheduler `SQLAlchemyJobStore` runs on a **separate synchronous engine** pointed at
+the same SQLite file (`JobScheduler._get_sync_engine`). `create_job` handed the job over while its
+own async session still had a transaction open, so the store INSERT could not take the write lock:
+
+```
+sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked
+[SQL: INSERT INTO apscheduler_jobs (id, next_run_time, job_state) VALUES (?, ?, ?)]
+```
+
+Seeding is what leaves the transaction open: `create_task_for_actor` ends with a `refresh` and four
+read helpers after its last commit, and a read transaction is enough. The bare path has nothing
+after its commit, which is why it always worked.
+
+Then **three layers of silence**, which is the part worth keeping. `add_job` catches the error,
+logs at `error`, and returns `False`. `create_job` did not read the return value. The whole block
+sat inside a bare `except Exception: pass` commented "Scheduler might not be initialized yet". So
+the one signal that survived was a log line under a logger whose output does not reach the Hub
+console — and the only way to notice from outside was that the loop you armed never ran.
+
+**The fix.** One `_hand_job_to_scheduler(session, job_id, job)` used by create, update and archive,
+which **commits before handing over** — the request must not hold the database it is about to ask
+a second engine to write. Registration failure is now logged loudly instead of swallowed; it is
+deliberately not raised, because the row is the source of truth and `JobScheduler.start` reads it,
+so an unregisterable job is picked up at the next restart. Late is a better answer than a 500 over
+a job that already exists — but silent is not an answer at all.
+
+**Verification.** Six tests. The stub scheduler records `session.in_transaction()` at the moment of
+handoff, because that — not "was the scheduler called", which it always was — is the fact that
+decides whether the store can write. Removing the commit fails all of them. Covers the seeded loop
+(the reproduction), the bare job (the case that worked, so the fix cannot invert it), a job created
+disabled, enable/disable through `PATCH`, and archive.
+
+**Proven live** against a Hub restarted on the fixed code: `live-fix-seeded`, created enabled with
+`initial_tasks`, appears in `apscheduler_jobs` immediately.
+
+---
+
+## F84 — an operator who stops a loop stops nothing; it fires for another seventeen minutes
+
+**Status:** fixed — see the commit that adds `hub/hub/loop_ending.py`
+
+**Severity: A.** The headline find of iteration 4, and the worst kind: every reader agreed the loop
+had stopped while it went on spending tokens unattended. This is precisely the governance failure
+the `archive_loop` docstring names — *"archiving one would hide unattended work that is still
+firing"* — arrived at through a different door.
+
+**How it was found.** Driving row 11. I created a loop, enabled, once-a-minute cron, then stopped
+it the way the API offers: `PATCH /jobs/{id}` with a `stop_reason`. The response was `200` with
+`ending_state: "stopped"`. Adding a task afterwards was refused, correctly, with *"This loop
+stopped (operator stops this loop now) at an unknown time and its queue is closed."*
+
+Seventeen minutes later:
+
+```
+STOPPED-LOOP enabled True runs 12 ending stopped queue {in_progress: 1}
+  history [(completed, 23:26:00), (completed, 23:25:00), (completed, 23:24:00), ...]
+```
+
+Twelve firings after the stop. Every one a real agent turn. Every one recorded `completed`, so
+nothing even looked wrong.
+
+**Cause — a partial copy of an ending.** A loop ends two ways, and both must leave four facts:
+`stop_reason`, `stopped_at`, `ending_state`, and `job.enabled = False`. The scheduler firing path
+set all four. The operator route set **two**, and the two it omitted were *when* it stopped and
+*the stopping itself*. `_loop_stop_reason` never consults `ending_state`, so nothing downstream
+compensated: the job stayed enabled, stayed registered, and kept its cron.
+
+`stopped_at` being NULL is the same omission quieter half. Two separate refusals quote it and both
+fall back to the literal "an unknown time" — the Hub saying it does not know when something
+happened that it did itself, a minute earlier.
+
+This is the shape iteration 3 carry-forward named again: **a rule enforced on one surface of two.**
+The docstring on `_authorize_loop_task_creation` even asserts the invariant that was false —
+`ending_state` is *"set once, at the same site as stop_reason/stopped_at, only by the loop own
+termination path"*. The operator route is a second site, and it set neither of the other two.
+
+**The fix.** `hub/hub/loop_ending.py` states an ending once — `end_loop(job, loop, reason, when)` —
+and both paths call it. The route additionally hands the now-disabled job back to the scheduler, or
+the row would say stopped while APScheduler kept firing it: the same defect one layer out, and it
+needed its own test because the row-level tests cannot see it. `QUEUE_DRAINED_REASON` replaces the
+literal compared against in two places and returned from a third.
+
+**Verification.** Eight tests across two files, each mutation-checked. Not clearing `job.enabled`
+fails `test_an_operator_stop_disables_the_job`; dropping `stopped_at` fails two, including the one
+that asserts the refusal text no longer says "an unknown time"; overwriting `ending_state`
+unconditionally fails the test that an operator re-editing the prose does not rewrite a recorded
+governance fact; not handing the job back to the scheduler fails
+`test_stopping_a_loop_unregisters_its_job`. That last mutation passed everything at first — the
+row-reading tests cannot see a stale scheduler registration, which is exactly how the original bug
+survived. Two tests assert the other direction, that editing a running loop neither ends it nor
+unregisters it. 260 loop/job tests pass.
+
+**Proven live** against a Hub restarted on the fixed code: the stop returns `enabled: false` and
+`stopped_at: 2026-08-27T23:32:09Z`, `apscheduler_jobs` is empty afterwards, and the queue refusal
+now names the real time instead of "an unknown time".
+

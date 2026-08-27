@@ -1,5 +1,6 @@
 """AI Jobs endpoints — CRUD + run for scheduled agent tasks."""
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -13,6 +14,7 @@ from ... import task_attribution
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, AIJob, JobRun, Loop, Project, Question, Run, Task
+from ...loop_ending import end_loop
 from ...scheduler import cron_day_ambiguity_reason
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate, LoopSummary
 from ...schemas.tasks import TaskCreate
@@ -20,6 +22,8 @@ from ...sse import sse_manager
 from ...task_transitions import operator, run_actor
 from ...utils import persist_event, short_id
 from .tasks import create_task_for_actor
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -481,6 +485,50 @@ def _pending_loop_edit(loop: Loop) -> Optional[Dict[str, Any]]:
     return pending
 
 
+async def _hand_job_to_scheduler(
+    session: AsyncSession, job_id: str, job: Optional[AIJob] = None
+) -> None:
+    """Register *job* with the running scheduler, or unregister it when `job` is None or disabled.
+
+    **Commits first, and that is the point.** APScheduler's job store is a *separate synchronous
+    engine* pointed at the same SQLite file (`JobScheduler._get_sync_engine`), so while this
+    request still holds a transaction open, the store's own INSERT cannot take the write lock and
+    raises `database is locked`. `add_job` catches that, logs it, and returns `False` — which no
+    caller read. The result was a job sitting `enabled = 1` in `ai_jobs` and absent from
+    `apscheduler_jobs`: enabled, scheduled-looking, and never firing until the Hub restarted and
+    `JobScheduler.start` loaded it from the database.
+
+    Measured on the trial Hub: creating an enabled loop with `initial_tasks` reproduced it every
+    time, while the same loop without them registered fine — the seeding leaves the session with
+    an open transaction that the bare path does not have.
+
+    A failure is logged rather than raised. The row is the source of truth and `start()` reads it,
+    so an enabled job that could not be registered now is picked up at the next restart; turning
+    the operator's write into a 500 after the job exists would be a worse answer than a late one.
+    But it is no longer *silent*, which is what let this hide.
+    """
+    await session.commit()
+    try:
+        from ...scheduler import get_scheduler
+
+        scheduler = get_scheduler()
+        if scheduler is None:
+            return  # not initialised yet; `start()` will load this job from the database
+        if job is not None and job.enabled:
+            registered = await scheduler.add_job(job)
+        else:
+            registered = await scheduler.remove_job(job_id)
+    except Exception:
+        logger.exception("could not hand job %s to the scheduler", job_id)
+        return
+    if not registered and job is not None and job.enabled:
+        logger.error(
+            "job %s is enabled but the scheduler would not take it; it will not fire until "
+            "this Hub restarts",
+            job_id,
+        )
+
+
 @router.post("", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
 async def create_job(
     body: JobCreate,
@@ -643,15 +691,7 @@ async def create_job(
         # route answers this question with; a second implementation is what drifted.
         loop_summary = (await _batch_loop_summaries(session, [job.id])).get(job.id)
 
-    # Add to scheduler if enabled
-    try:
-        from ...scheduler import get_scheduler
-
-        scheduler = get_scheduler()
-        if scheduler and job.enabled:
-            await scheduler.add_job(job)
-    except Exception:
-        pass  # Scheduler might not be initialized yet
+    await _hand_job_to_scheduler(session, job_id, job)
 
     await sse_manager.broadcast(project_id, "job_created", {"id": job_id, "name": body.name})
     await persist_event(
@@ -762,6 +802,7 @@ async def update_job(
     job = await session.get(AIJob, job_id)
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail="Job not found")
+    loop_ended = False
 
     # F13: re-enabling a loop that has already ended used to be accepted, and then silently
     # undone — the job fired once more a minute later, hit `_loop_stop_reason` again, and set
@@ -884,13 +925,14 @@ async def update_job(
                 loop.stop_when_queue_empties = body.stop_when_queue_empties
 
         if body.stop_reason is not None:
-            loop.stop_reason = body.stop_reason
             # B2.5/D17: an operator stating why this loop stopped is itself "an operator stop" —
             # the one ending path `scheduler.py`'s own stop-condition check cannot see, since it
-            # never fires from there. Only set when nothing has recorded an ending yet: editing
-            # the prose after the fact must not overwrite a governance fact already recorded.
-            if loop.ending_state is None:
-                loop.ending_state = "stopped"
+            # never fires from there. So it must end the loop the same way a firing does, through
+            # the same function: this route used to write `stop_reason` and `ending_state` and
+            # nothing else, leaving `stopped_at` NULL and the job *enabled*. A loop stopped by the
+            # operator went on firing once a minute while every reader reported it stopped.
+            end_loop(job, loop, reason=body.stop_reason, when=datetime.now(timezone.utc))
+            loop_ended = True
         loop.updated_by_run_id = run_identity
 
     # Design D4: a loop's continuity is by checkpoint, not by resumed session. Checked before
@@ -908,8 +950,9 @@ async def update_job(
                 detail="this job is a loop; continuity is by checkpoint, not by resumed session",
             )
 
-    # Track if we need to update scheduler
-    update_scheduler = False
+    # Track if we need to update scheduler. An ending is one of the reasons: `end_loop` clears
+    # `job.enabled`, and a job left registered would keep firing whatever the row says.
+    update_scheduler = loop_ended
 
     if body.name is not None:
         job.name = body.name
@@ -975,19 +1018,10 @@ async def update_job(
         )
         await sse_manager.broadcast(project_id, "loop_edit_staged", staged_edit_event)
 
-    # Update scheduler
+    # Update scheduler. `update_job` is remove-then-add, so handing it the job it should now be
+    # running under is the same statement as registering one for the first time.
     if update_scheduler:
-        try:
-            from ...scheduler import get_scheduler
-
-            scheduler = get_scheduler()
-            if scheduler:
-                if job.enabled:
-                    await scheduler.update_job(job)
-                else:
-                    await scheduler.remove_job(job_id)
-        except Exception:
-            pass
+        await _hand_job_to_scheduler(session, job_id, job if job.enabled else None)
 
     await sse_manager.broadcast(project_id, "job_updated", {"id": job_id, "enabled": job.enabled})
 
@@ -1077,14 +1111,7 @@ async def archive_job(
     await sse_manager.broadcast(project_id, "job_archived", {"id": job_id})
     await persist_event(session, project_id, "job_archived", {"id": job_id}, agent=agent_identity)
 
-    try:
-        from ...scheduler import get_scheduler
-
-        scheduler = get_scheduler()
-        if scheduler:
-            await scheduler.remove_job(job_id)
-    except Exception:
-        pass
+    await _hand_job_to_scheduler(session, job_id)
 
     loop_summaries = await _batch_loop_summaries(session, [job_id])
     job.loop = loop_summaries.get(job_id)
