@@ -116,6 +116,15 @@ async def sync_session(
 
     # Task 5.4: an agent no longer in the synced roster is "removed from the project" —
     # release its isolated worktree (if any), never discarding unmerged work silently.
+    #
+    # Task 6.10, decided rather than inherited: this releases the departing agent's **own**
+    # checkout and deliberately leaves the checkouts of the tasks it was working. A task's
+    # terminal status is the only thing that releases a task checkout (design D5). A roster edit
+    # says nothing about a task — its status is unchanged, and another agent may be assigned to
+    # continue it — so releasing here would take a working tree away from a live task for an
+    # unrelated reason. The work would survive on the branch either way; the point is that a
+    # roster edit must not act on the task lifecycle. Asserted by
+    # `test_removing_an_agent_leaves_the_checkouts_of_its_tasks_alone`.
     # Best-effort and after the DB commit above: a git failure here must not roll back
     # the roster sync itself, which is the thing this endpoint actually exists for.
     #

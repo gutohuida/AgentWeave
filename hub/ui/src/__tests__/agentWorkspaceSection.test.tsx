@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import type { AgentSummary } from '@/api/agents'
-import type { AgentWorkspaceInfo } from '@/api/workspace'
+import type { AgentWorkspaceInfo, TaskCheckoutInfo } from '@/api/workspace'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
 
 let workspace: AgentWorkspaceInfo | undefined
@@ -141,5 +141,113 @@ describe('where an agent works on disk', () => {
   it('says it is loading rather than rendering an empty workspace', () => {
     renderWorkspace(undefined, true)
     expect(screen.getByText('Loading…')).toBeInTheDocument()
+  })
+})
+
+describe('the checkouts of the tasks an agent is working', () => {
+  beforeEach(() => {
+    workspace = undefined
+    workspaceLoading = false
+  })
+
+  function checkout(overrides: Partial<TaskCheckoutInfo> = {}): TaskCheckoutInfo {
+    return {
+      task_id: 'task-aa11bb22cc33',
+      title: 'Wire the release path',
+      status: 'in_progress',
+      branch: 'agentweave/task/task-aa11bb22cc33',
+      path: '/repo/.agentweave/tasks/task-aa11bb22cc33',
+      provisioned: true,
+      grandfathered: false,
+      ...overrides,
+    }
+  }
+
+  it('lists every task checkout, not just the agent’s own directory', () => {
+    // The failure this replaces: an agent working three tasks was shown one directory, and two
+    // thirds of its work was somewhere the panel never named.
+    renderWorkspace(
+      info({
+        task_checkouts: [
+          checkout(),
+          checkout({
+            task_id: 'task-dd44ee55ff66',
+            title: 'Second piece',
+            branch: 'agentweave/task/task-dd44ee55ff66',
+            path: '/repo/.agentweave/tasks/task-dd44ee55ff66',
+          }),
+        ],
+      }),
+    )
+
+    const list = screen.getByTestId('agent-task-checkouts')
+    expect(list).toHaveTextContent('Wire the release path')
+    expect(list).toHaveTextContent('agentweave/task/task-aa11bb22cc33')
+    expect(list).toHaveTextContent('Second piece')
+    expect(list).toHaveTextContent('agentweave/task/task-dd44ee55ff66')
+    expect(screen.getByTestId('task-checkout-path-task-aa11bb22cc33')).toHaveTextContent(
+      '/repo/.agentweave/tasks/task-aa11bb22cc33',
+    )
+  })
+
+  it('distinguishes a task not yet checked out from one that never will be', () => {
+    // The two look identical from outside — no directory of this task's own — but one appears on
+    // the next turn and the other never does. An operator told only "not created yet" about a
+    // grandfathered task waits for something that is not coming.
+    renderWorkspace(
+      info({
+        task_checkouts: [
+          checkout({ provisioned: false }),
+          checkout({
+            task_id: 'task-dd44ee55ff66',
+            title: 'Older work',
+            grandfathered: true,
+            branch: 'agentweave/codex-1',
+            path: '/repo/.agentweave/worktrees/codex-1',
+          }),
+        ],
+      }),
+    )
+
+    const list = screen.getByTestId('agent-task-checkouts')
+    expect(list).toHaveTextContent('created the first time this task runs')
+    expect(list).toHaveTextContent('started before per-task checkouts')
+  })
+
+  it('names the agent’s own checkout for a grandfathered task rather than leaving it blank', () => {
+    // So the work is findable. A blank path reads as work that was lost.
+    renderWorkspace(
+      info({
+        task_checkouts: [
+          checkout({
+            grandfathered: true,
+            branch: 'agentweave/codex-1',
+            path: '/repo/.agentweave/worktrees/codex-1',
+          }),
+        ],
+      }),
+    )
+    expect(screen.getByTestId('task-checkout-path-task-aa11bb22cc33')).toHaveTextContent(
+      '/repo/.agentweave/worktrees/codex-1',
+    )
+  })
+
+  it('falls back to the task id when a task has no title', () => {
+    renderWorkspace(info({ task_checkouts: [checkout({ title: null })] }))
+    expect(screen.getByTestId('agent-task-checkouts')).toHaveTextContent('task-aa11bb22cc33')
+  })
+
+  it('renders no section at all for an agent holding no tasks', () => {
+    // An empty row would read as a panel that failed to load — the same reason the working
+    // directory is stated for an agent that has never run.
+    renderWorkspace(info({ task_checkouts: [] }))
+    expect(screen.queryByTestId('agent-task-checkouts')).not.toBeInTheDocument()
+    expect(screen.queryByText('Task checkouts')).not.toBeInTheDocument()
+  })
+
+  it('renders no section when the Hub does not send the field', () => {
+    // An older Hub omits it entirely; the panel must not render an empty list or crash.
+    renderWorkspace(info())
+    expect(screen.queryByTestId('agent-task-checkouts')).not.toBeInTheDocument()
   })
 })

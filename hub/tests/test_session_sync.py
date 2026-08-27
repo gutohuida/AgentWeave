@@ -16,6 +16,12 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent
 from hub.sse import sse_manager
 
+# Named import, for the reason `test_task_worktrees.py` states: conftest's autouse
+# `_no_real_worktree_provision` patches the module *attribute* to a no-op, and a name bound here
+# at collection time is a separate reference to the real function. `ensure_worktree` above is not
+# stubbed, so it stays a module lookup.
+from hub.worktrees import ensure_task_worktree
+
 
 def _drain(queue):
     events = []
@@ -171,3 +177,45 @@ async def test_removing_agent_that_never_had_a_worktree_is_a_no_op(
 
     events = _drain(queue)
     assert [name for name, _ in events if name == "worktree_released"] == []
+
+
+@pytest.mark.asyncio
+async def test_removing_an_agent_leaves_the_checkouts_of_its_tasks_alone(
+    app, auth_headers, bind_project_workspace, tmp_path
+):
+    """Task 6.10, and the decision it asked to be written down rather than inherited.
+
+    A task's terminal status is the only thing that releases its checkout. A roster edit is not
+    a statement about the task: its status is unchanged, another agent may be assigned to
+    continue it, and taking the working tree away would act on the task lifecycle for a reason
+    that has nothing to do with the task.
+
+    Asserted alongside the agent's *own* release in the same sync, because that is what makes it
+    a decision rather than an omission — a test showing only the task checkout surviving would
+    equally describe a removal path that had stopped releasing anything at all.
+    """
+    repo_root = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo_root)
+    base = _git(repo_root, "rev-parse", "HEAD").stdout.strip()
+    own = worktrees.ensure_worktree(repo_root, "leaving-agent")
+    task_checkout = ensure_task_worktree(repo_root, "task-ab12cd34ef56", base, ())
+    assert own.is_dir() and task_checkout.is_dir()
+
+    await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"leaving-agent": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    resp = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {}}},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200
+    assert not own.exists()
+    assert task_checkout.is_dir()
+    # And git still registers it, so the checkout is usable rather than merely present on disk.
+    assert worktrees._registered_worktree_branch(repo_root, task_checkout) == (
+        f"refs/heads/{worktrees.task_branch_name('task-ab12cd34ef56')}"
+    )

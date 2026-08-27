@@ -237,8 +237,17 @@ class ProjectLifecycleService:
             .select_from(Run)
             .where(Run.project_id == project.id, Run.status == "running")
         )
-        worktree_root = destination.path / ".agentweave" / "worktrees"
-        active_worktree_metadata = worktree_root.is_dir() and any(worktree_root.iterdir())
+        # Both checkout namespaces (task 6.9). A git worktree registration stores an **absolute**
+        # path, so relocating a project with live checkouts of either kind breaks every one of
+        # them — and a project whose only live checkouts are task checkouts would have relocated
+        # cleanly through the agent-only check while doing exactly that damage.
+        checkout_roots = (
+            destination.path / ".agentweave" / "worktrees",
+            destination.path / ".agentweave" / "tasks",
+        )
+        active_worktree_metadata = any(
+            root.is_dir() and any(root.iterdir()) for root in checkout_roots
+        )
         if active_runs or active_worktree_metadata:
             raise ProjectPathError(
                 "project cannot be relocated while a run or worktree mutation is active",

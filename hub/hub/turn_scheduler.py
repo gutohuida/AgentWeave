@@ -140,6 +140,12 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
             )
         except TriggerAgentError as exc:
             workspace_unavailable = getattr(exc, "workspace_unavailable", False)
+            # Does this refusal clear on its own? `workspace_unavailable` was the first refusal
+            # that did, and it still selects the operator event below, but it is no longer the only
+            # one: a turn refused because another agent holds the task's checkout (design D8) waits
+            # for that turn to end. Asking the classification rather than enumerating the causes is
+            # what stops the next transient refusal from having to edit this branch again.
+            transient = getattr(exc, "transient", workspace_unavailable)
             if workspace_unavailable:
                 await persist_event(
                     db,
@@ -162,7 +168,7 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                         "directory_state": exc.directory_state,
                     },
                 )
-            else:
+            elif not transient:
                 # No `Run` was ever created for this attempt, so `selected` never became
                 # `delivered` and `return_run_entries`'s own abandonment bookkeeping never runs
                 # for it (F56) — a refusal raised here (a review target with no evidence naming a
@@ -203,9 +209,14 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                         severity="warn",
                     )
                     await sse_manager.broadcast(project_id, "queue_entry_abandoned", payload)
+            # A transient refusal that is not the paused-workspace one records nothing at all,
+            # which is the shape the sibling per-agent rule already has: `schedule_agent` returns
+            # "agent is already running" above without an event, because a queue waiting its turn
+            # is the system working. The entry keeps `delivery_attempts` at whatever it was, stays
+            # `queued`, and the next tick tries again.
             return ScheduleResult(
                 waiting_reason=exc.detail,
-                terminal_failure=not workspace_unavailable,
+                terminal_failure=not transient,
             )
         return ScheduleResult(response=response, terminal_failure=False)
 

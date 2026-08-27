@@ -3,7 +3,7 @@ import { AgentSummary, useAgents, useAgentSessions, useArchiveAgent } from '@/ap
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/api/client'
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
-import { useAgentWorkspace } from '@/api/workspace'
+import { useAgentWorkspace, type TaskCheckoutInfo } from '@/api/workspace'
 import { useCopy } from '@/hooks/useCopy'
 import { tint } from '@/lib/colorTint'
 import {
@@ -367,7 +367,68 @@ function WorkspaceLocation({ agent }: { agent: string }) {
           )}
         </div>
       </SettingsRow>
+      <TaskCheckouts checkouts={data.task_checkouts ?? []} />
     </>
+  )
+}
+
+/**
+ * The checkouts of the tasks this agent is holding.
+ *
+ * The row above answers "where does a turn run", and for a task-bound turn that answer is not the
+ * agent's own directory — an agent working three tasks works in three places, and this panel used
+ * to name one of them. So this lists them, each with the branch and the task, because finding a
+ * task's work should not require knowing how checkouts are named.
+ *
+ * Rendered only when there is something to say. An agent holding no tasks would otherwise get an
+ * empty row that reads as a panel which failed to load, which is the same reason the working
+ * directory is stated for an agent that has never run.
+ */
+function TaskCheckouts({ checkouts }: { checkouts: TaskCheckoutInfo[] }) {
+  if (checkouts.length === 0) return null
+
+  return (
+    <SettingsRow
+      label="Task checkouts"
+      description="Each task this agent is working has its own checkout on its own branch. Work is merged when the task is approved, and the checkout is released then — the branch is kept."
+    >
+      <ul className="space-y-3" data-testid="agent-task-checkouts">
+        {checkouts.map((checkout) => (
+          <li key={checkout.task_id}>
+            <div className="text-sm" style={{ color: 'var(--text)' }}>
+              {checkout.title || checkout.task_id}
+            </div>
+            <code
+              className="mt-1 block truncate text-[11px]"
+              data-testid={`task-checkout-path-${checkout.task_id}`}
+              style={{
+                background: 'var(--surface-2)',
+                color: 'var(--text-2)',
+                padding: '3px 6px',
+                borderRadius: '4px',
+                fontFamily: "'JetBrains Mono', monospace",
+              }}
+            >
+              {checkout.path}
+            </code>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>
+              {checkout.branch}
+              {' — '}
+              {/* Three states, not two. "Not provisioned" and "worked in the agent's own
+                * checkout" look identical from the outside — no directory of this task's own —
+                * but one becomes a checkout on the next turn and the other never will. An
+                * operator told only "not created yet" would wait for something that is not
+                * coming. */}
+              {checkout.grandfathered
+                ? "worked in this agent's own checkout, because this task started before per-task checkouts"
+                : checkout.provisioned
+                  ? 'checked out and ready'
+                  : 'created the first time this task runs'}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </SettingsRow>
   )
 }
 

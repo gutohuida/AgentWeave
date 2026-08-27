@@ -95,3 +95,94 @@ async def test_an_isolated_agent_is_told_about_its_branch(app, auth_headers):
 
     assert "isolated git worktree on branch `agentweave/isolated-one`" in context
     assert "not a git repository" not in context
+
+
+@pytest.mark.asyncio
+async def test_a_task_bound_turn_is_told_the_task_branch_not_its_own(app, auth_headers):
+    """Task 6.5, and the reason phase 6 is not optional.
+
+    From phase 4B until this, the sentence was rendered from `branch_name(agent)` regardless of
+    what the process was standing on — so every task-bound turn was told it was on
+    `agentweave/<agent>` while its `cwd` was a checkout of `agentweave/task/<id>`. An agent acting
+    on that pushes, diffs and reports against a branch it is not on.
+    """
+    await _register(app, auth_headers, "bound-one")
+
+    context = await _render(
+        "bound-one",
+        isolated=True,
+        workspace_branch="agentweave/task/task-ab12cd34ef56",
+        isolation_unavailable=False,
+    )
+
+    assert "isolated git worktree on branch `agentweave/task/task-ab12cd34ef56`" in context
+    assert "agentweave/bound-one" not in context
+
+
+@pytest.mark.asyncio
+async def test_a_task_bound_turn_is_told_the_checkout_is_the_tasks_and_not_its_own(
+    app, auth_headers
+):
+    """The second half of 6.5. Naming the right branch is not enough on its own: an agent that
+    believes the directory is *its* will not expect another agent to continue in it, and will not
+    expect it to be taken away when the task is approved."""
+    await _register(app, auth_headers, "bound-two")
+
+    context = await _render(
+        "bound-two",
+        isolated=True,
+        workspace_branch="agentweave/task/task-ab12cd34ef56",
+        isolation_unavailable=False,
+    )
+
+    assert "checkout belongs to the task, not to you" in context
+    assert "released once the task is approved or rejected" in context
+
+
+@pytest.mark.asyncio
+async def test_an_unbound_turn_is_told_its_own_branch_and_no_task_sentence(app, auth_headers):
+    """The per-agent workspace is not legacy (design D3), so the unbound answer has to stay
+    exactly what it was — and must not acquire the task sentence."""
+    await _register(app, auth_headers, "unbound-one")
+
+    context = await _render(
+        "unbound-one",
+        isolated=True,
+        workspace_branch="agentweave/unbound-one",
+        isolation_unavailable=False,
+    )
+
+    assert "isolated git worktree on branch `agentweave/unbound-one`" in context
+    assert "belongs to the task" not in context
+
+
+@pytest.mark.asyncio
+async def test_the_separate_checkouts_sentence_no_longer_claims_a_branch_per_agent(
+    app, auth_headers
+):
+    """The sentence two lines below the branch, also corrected by 6.5.
+
+    "Other agents work in separate worktrees on their own branches" was true when a checkout
+    belonged to whoever held it. It is not true of an agent currently standing in a task's
+    checkout, which is on the *task's* branch — and the replacement has to keep saying the part
+    that is still true and load-bearing, which is that the changes are not visible across them.
+    """
+    await _register(app, auth_headers, "separate-one")
+
+    context = await _render("separate-one", isolated=True, isolation_unavailable=False)
+
+    assert "Other agents work in separate worktrees on their own branches" not in context
+    assert "Other work is in separate checkouts on separate branches" in context
+    assert "cannot see yours until branches are merged" in context
+
+
+@pytest.mark.asyncio
+async def test_a_caller_with_no_run_to_describe_still_gets_the_agent_branch(app, auth_headers):
+    """`GET /agents/agent-context` is asked outside any turn and supplies no branch. The fallback
+    is the agent's own, which is the branch an unbound turn would run on — the honest answer to
+    "where would you work", and the same one this endpoint gave before."""
+    await _register(app, auth_headers, "contextless")
+
+    context = await _render("contextless", isolated=True, isolation_unavailable=False)
+
+    assert "isolated git worktree on branch `agentweave/contextless`" in context

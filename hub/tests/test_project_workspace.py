@@ -118,6 +118,28 @@ def test_nested_agentweave_worktree_is_rejected(tmp_path) -> None:
         canonicalize_project_directory(nested)
 
 
+def test_nested_agentweave_task_checkout_is_rejected(tmp_path) -> None:
+    """Task 6.8. A task checkout is the same hazard as an agent worktree by a different path:
+    registering one as a project would give a project a working directory that another project's
+    git owns and removes at release. The refusal walked for `.agentweave/worktrees` only.
+    """
+    nested = tmp_path / "repo" / ".agentweave" / "tasks" / "task-ab12cd34ef56"
+    nested.mkdir(parents=True)
+    with pytest.raises(ProjectPathError, match="checkout"):
+        canonicalize_project_directory(nested)
+
+
+def test_a_directory_merely_named_tasks_is_still_registrable(tmp_path) -> None:
+    """The pair is what refuses, not the word. `tasks/` is an ordinary directory name and a
+    project that has one — outside `.agentweave/` — must stay registrable, or this guard breaks
+    real repositories to defend against a shape they do not have.
+    """
+    ordinary = tmp_path / "repo" / "tasks" / "sub"
+    ordinary.mkdir(parents=True)
+
+    assert canonicalize_project_directory(ordinary).path == ordinary.resolve()
+
+
 @pytest.mark.parametrize(
     "relative",
     [

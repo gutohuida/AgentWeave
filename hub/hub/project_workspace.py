@@ -174,8 +174,18 @@ def canonicalize_project_directory(
 
     folded_parts = [part.casefold() for part in canonical.parts]
     for index in range(len(folded_parts) - 1):
-        if folded_parts[index : index + 2] == [".agentweave", "worktrees"]:
+        pair = folded_parts[index : index + 2]
+        if pair[0] != ".agentweave":
+            continue
+        # Both namespaces, not just agents (task 6.8). A task checkout under `.agentweave/tasks`
+        # is the same hazard by a different path: git owns the directory, release removes it, and
+        # a project registered inside one would have its working directory deleted underneath it.
+        # Matched as a *pair* rather than on the second component alone, so an ordinary `tasks/`
+        # or `worktrees/` directory elsewhere in a repository stays registrable.
+        if pair[1] == "worktrees":
             raise ProjectPathError("nested AgentWeave worktree cannot be registered")
+        if pair[1] == "tasks":
+            raise ProjectPathError("nested AgentWeave task checkout cannot be registered")
 
     if hub_data_directory is not None:
         hub_data = Path(hub_data_directory).expanduser().resolve(strict=False)

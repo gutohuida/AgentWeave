@@ -217,8 +217,8 @@ async def test_worktree_endpoints_are_scoped_to_their_own_project(
 
     assert listing_a.status_code == 200
     assert listing_b.status_code == 200
-    assert {item["agent"] for item in listing_a.json()} == {"alice"}
-    assert {item["agent"] for item in listing_b.json()} == {"bob"}
+    assert {item["name"] for item in listing_a.json()} == {"alice"}
+    assert {item["name"] for item in listing_b.json()} == {"bob"}
 
 
 @pytest.mark.asyncio

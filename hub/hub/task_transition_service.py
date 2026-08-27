@@ -17,6 +17,7 @@ reaches the row a different way.
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from sqlalchemy import select
@@ -30,6 +31,8 @@ from .task_transitions import (
     refusal_detail,
 )
 from .utils import short_id
+
+logger = logging.getLogger(__name__)
 
 
 class TransitionRefusedError(Exception):
@@ -434,7 +437,89 @@ async def apply_transition(
     if to_status == "approved":
         await integrate_task(session, task, actor)
 
+    # **After** integration (design D5). Release snapshots any uncommitted change onto the task
+    # branch, so releasing first would advance the branch past the evidence commit before the merge
+    # reads it.
+    #
+    # Honest about what that costs today: `integration_targets` resolves the commit from the
+    # accepted evidence *footprint*, a database row, so the merged sha is the same under either
+    # order and nothing observable changes. The order is defence against the change that would make
+    # it matter — resolving the target from the branch tip instead — which is the exact shape of
+    # F58. `test_release_happens_after_integration` observes the order directly for that reason,
+    # rather than through the merged sha, which cannot discriminate it.
+    if to_status in TERMINAL_STATUSES:
+        await release_task_workspace(session, task)
+
     return transition
+
+
+#: The statuses at which a task stops being worked, and so stops needing a checkout on disk. Neither
+#: is a dead end — `approved -> revision_needed` and `rejected -> pending` are both legal
+#: operator-only edges (`task_transitions.py`) — which is exactly why release keeps the branch: a
+#: reopened task's next writing turn re-provisions from it with its prior work intact.
+TERMINAL_STATUSES = frozenset({"approved", "rejected"})
+
+
+async def release_task_workspace(session: AsyncSession, task: Task) -> None:
+    """Remove a finished task's checkout and keep its branch (design D5).
+
+    What bounds the disk is the *checkout*; the branch is the record of what the task did, and
+    deleting it would destroy both the history an operator reads after the fact and the work a
+    reopened task resumes from.
+
+    **It must never fail the transition** — the same rule integration already lives by, and for the
+    same reason: approval is a judgement that the work is good, and a git failure is not grounds to
+    reverse a judgement. So every failure is swallowed, logged, and written to the event log where
+    an operator can see that a directory was left behind.
+
+    A grandfathered task (`workspace_scheme == 'agent'`) has no checkout of its own — its turns ran
+    in the shared per-agent one, which belongs to the agent and outlives every task on it. Returning
+    early is not merely an optimisation: calling through would ask `release_task_worktree` for a
+    path that was never provisioned, and the honest answer for such a task is that there is nothing
+    here to release.
+    """
+    from . import project_workspace, task_workspace, worktrees
+    from .utils import persist_event
+
+    if task.workspace_scheme != task_workspace.TASK_SCHEME:
+        return
+
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, task.project_id)
+        result = worktrees.release_task_worktree(workspace.root, task.id)
+    except Exception as exc:  # noqa: BLE001 - any release failure is recorded, never a rollback
+        logger.warning("Could not release task %s's checkout", task.id, exc_info=True)
+        # `commit=False`: this runs inside `apply_transition`, whose caller commits. Committing
+        # here would land the transition row early, ahead of the contract this module states.
+        await persist_event(
+            session,
+            task.project_id,
+            "task_worktree_release_failed",
+            {"task_id": task.id, "reason": str(exc)},
+            severity="warn",
+            commit=False,
+        )
+        return
+
+    if not result.released:
+        return
+
+    await persist_event(
+        session,
+        task.project_id,
+        "task_worktree_released",
+        {
+            "task_id": task.id,
+            "branch": result.branch,
+            "had_uncommitted_changes": result.had_uncommitted_changes,
+            "snapshot_commit": result.snapshot_commit,
+            "unmerged_commits": result.unmerged_commits,
+        },
+        # An unmerged commit on a released branch is not a failure — a rejected task's work is
+        # supposed to stay unmerged — but it is the one thing here an operator may want to act on.
+        severity="warn" if result.has_unmerged_work else "info",
+        commit=False,
+    )
 
 
 async def retry_integration(session: AsyncSession, task: Task, actor: Actor) -> list:

@@ -37,6 +37,7 @@ from ... import (
     project_workspace,
     requirement_evidence,
     review_turn,
+    task_workspace,
     worktrees,
 )
 from ...agent_auth import hash_run_token, mint_run_token
@@ -98,6 +99,7 @@ from ...run_task_binding import (
     resolve_bound_task,
     resolve_task_for_project,
     spec_document_for_task,
+    tasks_held_by_a_running_turn,
 )
 from ...runner_commands import (
     OPERATOR_POSTURE,
@@ -238,11 +240,26 @@ class TriggerAgentError(Exception):
         *,
         workspace_unavailable: bool = False,
         directory_state: Optional[str] = None,
+        transient: bool = False,
     ) -> None:
         self.status_code = status_code
         self.detail = detail
         self.workspace_unavailable = workspace_unavailable
         self.directory_state = directory_state
+        #: Does this refusal describe a condition that **clears on its own**?
+        #:
+        #: `schedule_agent` sorts refusals into two buckets, and the terminal one counts a delivery
+        #: attempt and withdraws the entry at the third — its own comment gives the reason, that a
+        #: refusal raised here "repeats identically forever". That is true of an archived agent or
+        #: a review target with no commit, and false of a collision with another turn, which ends
+        #: when that turn does. Classifying the second as the first drops the operator's input
+        #: after three ticks of an ordinary flow (design D8).
+        #:
+        #: The classification is asked directly rather than derived from each cause, so a third
+        #: transient refusal does not mean editing `schedule_agent` again. `workspace_unavailable`
+        #: was the first of them and keeps its own name because it *also* selects an operator
+        #: event; it implies this flag rather than duplicating it.
+        self.transient = transient or workspace_unavailable
         super().__init__(detail)
 
 
@@ -467,6 +484,32 @@ async def trigger_agent_directly(
             directory_state=exc.directory_state,
         ) from exc
     repo_root = workspace_root.root
+
+    # Which task this turn is about, answered before *anything* is provisioned for it (D2) —
+    # before the review checkout, before the worktree, and before the turn context is rendered.
+    #
+    # Two problems, one answer. A builder triggered on a task could not find the document it was
+    # implementing: the read tool documents its argument as "the path, as given in your turn
+    # context", and a task-triggered context gave no path and no document id. Observed twice in one
+    # run, in two conversations — the second time it blocked recording evidence entirely, and the
+    # agents worked around it by messaging each other for the path. And a turn naming a task the
+    # project does not have used to be refused only *after* its worktree was on disk, so a mistyped
+    # id left a checkout and a branch behind for an agent that never ran.
+    #
+    # Below `resolve_project_workspace`, deliberately: an unavailable project directory is the more
+    # actionable of two simultaneous truths, so it keeps its 409 and its `directory_state`. Above
+    # every `work_dir` and review-turn refusal, equally deliberately: the task id is the more
+    # specific statement, and it is what decides which workspace the turn would have had at all.
+    # `hub/tests/test_task_resolved_before_workspace.py` pins all four of those answers.
+    #
+    # Reads only. The staging that acts on this stays where it is, below, before delivery.
+    binding = await resolve_bound_task(
+        session,
+        project_id=project_id,
+        conversation=conversation,
+        queue_entry_ids=queue_entry_ids,
+        task_id=task_id,
+    )
     yolo = bool(config.get("yolo"))
     resume_session_id = conversation.provider_session_id
     session_mode = "resume" if resume_session_id else "new"
@@ -524,15 +567,73 @@ async def trigger_agent_directly(
                 status.HTTP_400_BAD_REQUEST, f"Invalid work_dir: {exc}"
             ) from exc
         isolated_workspace: Optional[Path] = None
+        # Not isolated, so the renderer never reads it; named on every branch so mypy sees one
+        # type and a future branch cannot inherit a stale value from the one above it.
+        workspace_branch: Optional[str] = None
     elif review_context is not None:
         # Task 3.1: the review checkout replaces `resolve_agent_workspace` outright. The agent's own
         # working worktree is not part of this turn, which is what makes the wrong directory
         # *outside the boundary* rather than merely the wrong choice.
         effective_work_dir = str(review_context.workspace)
         isolated_workspace = review_context.workspace
+        # A review checkout is detached (`ensure_review_checkout`), so it is on no branch at all.
+        # The renderer's review block says so in its own words and never reaches the branch
+        # sentence, which is why this is `None` rather than the reviewer's own branch.
+        workspace_branch = None
     else:
+        # Which workspace this turn is about, not whose turn it is (design D3). A turn bound to a
+        # task executes in that task's own checkout, so approving one task cannot merge another
+        # task's commits along with it (F58); a turn bound to nothing gets the agent's own
+        # workspace, exactly as before. `binding` was resolved above precisely so this line could
+        # ask (D2), and the three values below are resolved in the Hub layer because `worktrees`
+        # does not read the database.
+        turn_workspace = await task_workspace.resolve_turn_workspace_inputs(
+            session,
+            project_id=project_id,
+            repo_root=repo_root,
+            task=binding.task,
+        )
+        # A task's checkout admits one writing turn at a time (design D8). This is the invariant
+        # that used to follow for free from one-checkout-per-agent: the per-agent refusal at the
+        # top of this function is per *agent*, `resolve_bound_task` never consults `Task.assignee`,
+        # and `bind_run_to_task` fills `assignee` only when it is empty — so before this line an
+        # operator starting task T on `builder-2` while `builder-1` was already running on it
+        # handed two live processes the same working directory on the same branch.
+        #
+        # **Scoped by `takes_task_workspace`, not by a restatement of it.** D8 names three
+        # exemptions — a review turn, a read-only agent, a grandfathered task — and each is a case
+        # where refusing would forbid something that is safe today. All three are already answered
+        # by *which workspace this turn gets*: a review turn never reaches this branch at all
+        # (`review_context` pre-empts it above), and read-only, non-repository and grandfathered
+        # turns share a checkout that two agents have always shared. Asking the resolver's own
+        # predicate is what keeps the refusal and the isolation from drifting apart.
+        #
+        # Below `resolve_turn_workspace_inputs` because that call is the grandfathering read and
+        # reads only; above `resolve_turn_workspace` because that call is the first thing that
+        # *provisions*. Nothing is on disk when this refuses.
+        if worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id):
+            holder = (await tasks_held_by_a_running_turn(session, project_id)).get(
+                turn_workspace.task_id
+            )
+            if holder is not None and holder != agent:
+                raise TriggerAgentError(
+                    status.HTTP_409_CONFLICT,
+                    f"{holder} is already running a turn on task {turn_workspace.task_id}; "
+                    f"a task's checkout takes one writing turn at a time.",
+                    # It clears when that turn ends, so the queue entry waits rather than counting
+                    # a delivery attempt towards abandonment (design D8, and `turn_scheduler`).
+                    transient=True,
+                )
+
         try:
-            workspace = worktrees.resolve_agent_workspace(repo_root, agent, config)
+            workspace = worktrees.resolve_turn_workspace(
+                repo_root,
+                agent,
+                config,
+                task_id=turn_workspace.task_id,
+                base=turn_workspace.base,
+                prerequisites=turn_workspace.prerequisites,
+            )
         except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
             raise TriggerAgentError(
                 status.HTTP_409_CONFLICT,
@@ -540,28 +641,19 @@ async def trigger_agent_directly(
             ) from exc
         effective_work_dir = str(workspace)
         isolated_workspace = workspace if workspace != repo_root else None
+        # Task 6.5. Same argument as `effective_work_dir` above: computed here, from the same
+        # inputs `resolve_turn_workspace` was just given, so the sentence the agent reads cannot
+        # disagree with the branch its process is standing on.
+        workspace_branch = worktrees.turn_branch_name(
+            repo_root, agent, config, task_id=turn_workspace.task_id
+        )
 
     # Build context from current Hub-owned state for every turn. Runners consume a file,
     # so materialize the canonical response inside the effective workspace immediately
     # before command construction; an edited charter is therefore visible on the next run.
     from .agents import _get_session_data, _render_hub_agent_context
 
-    # Which task this turn is about, answered before the context is rendered rather than after.
-    #
-    # A builder triggered on a task could not find the document it was implementing: the read tool
-    # documents its argument as "the path, as given in your turn context", and a task-triggered
-    # context gave no path and no document id. Observed twice in one run, in two conversations —
-    # the second time it blocked recording evidence entirely, and the agents worked around it by
-    # messaging each other for the path.
-    #
-    # Reads only. The staging that acts on this stays where it is, below, before delivery.
-    binding = await resolve_bound_task(
-        session,
-        project_id=project_id,
-        conversation=conversation,
-        queue_entry_ids=queue_entry_ids,
-        task_id=task_id,
-    )
+    # `binding` was resolved above, before any workspace was provisioned (D2).
     task_document = await spec_document_for_task(session, binding.task)
 
     session_data = await _get_session_data(project_id, session)
@@ -577,6 +669,7 @@ async def trigger_agent_directly(
         # write was refused.
         work_dir=effective_work_dir,
         isolated=isolated_workspace is not None,
+        workspace_branch=workspace_branch,
         # A writing agent working in the project directory is doing so because there is no
         # repository to cut a worktree from — the only remaining path through
         # `resolve_agent_workspace`. Told apart from a read-only agent sharing by choice,
@@ -738,6 +831,12 @@ async def trigger_agent_directly(
         capability_token_hash=hash_run_token(run_token),
         instance_id=instance_identity.get(),
         divergence_source_run_id=divergence_source_run_id,
+        # Design D7. The same value the process is given as its cwd, so the record and the
+        # process cannot disagree — the argument `workspace_branch` above is made for, applied to
+        # the directory rather than the branch. Written here rather than at either runner's
+        # finalisation because the Claude/Codex split happens later and *inside* `_execute_run`,
+        # so there is one write and no way for the two spawn paths to differ.
+        workspace_dir=effective_work_dir,
     )
 
     # The binding, and the automatic move it causes, are staged here — before delivery, which is

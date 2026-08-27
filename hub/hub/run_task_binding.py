@@ -22,7 +22,7 @@ both decides and spawns would be impossible to test without one.
 
 from __future__ import annotations
 
-from typing import Iterable, NamedTuple, Optional, Tuple
+from typing import Dict, Iterable, NamedTuple, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -164,10 +164,15 @@ def binding_from_entries(
     boundary check unreproducible. Ordering is over both sources together, not `task_id` first, for
     symmetry with the case that used to reach here: until `every-run-knows-its-task` (design D3), a
     turn could batch work and a review together and had to bind by arrival because nothing else
-    told them apart. That batch can no longer be assembled — the scheduler narrows `selected` to
-    one kind before a turn starts, and a caller that hand-builds a mixed one is refused at the
-    trigger — so every entry `binding_from_entries` now sees is already the same kind, and arrival
-    order remains the tie-break for two entries of that kind naming different tasks.
+    told them apart. That batch can no longer *survive* — the scheduler narrows `selected` to one
+    kind before a turn starts, and a caller that hand-builds a mixed one is refused at the trigger
+    with a 409. It can still be seen here, though, and that changed: since D2 of
+    `work-is-isolated-per-task` moved `resolve_bound_task` above the review-turn block,
+    `binding_from_entries` runs *before* `_review_task_from_entries` raises that refusal. So the
+    arrival-order tie-break below is not merely symmetry with a case that used to reach here — it
+    is what a mixed batch gets for the few statements between the two, and it must stay total
+    rather than assert one kind. Nothing is bound from it: the refusal follows before any run
+    exists.
 
     Both values come from the *same* entry. Taking the source from a different one would let an
     unrelated item in the same turn spend a chain's retry hop.
@@ -221,6 +226,37 @@ async def binding_for_delivery(
         .order_by(InboundQueueEntry.sequence)
     )
     return binding_from_entries(result.scalars().all())
+
+
+async def tasks_held_by_a_running_turn(session: AsyncSession, project_id: str) -> Dict[str, str]:
+    """`task_id -> the agent whose running turn is bound to it`, for one project (design D8).
+
+    Keying a workspace by task broke the coupling that used to make "one process per checkout" true
+    for free: a checkout belonged to an agent, and an agent may have only one run in flight. A task
+    can now be handed to two agents by two ordinary clicks, and they would share a working
+    directory on one branch — the silent lost update `worktrees` exists to prevent, arriving along
+    a new axis.
+
+    **One query, one implementation, two callers asking two different questions.** The trigger path
+    asks *"may this turn start"* and refuses; the flow scheduler asks *"why can this candidate not
+    be staffed"* and records it, for finding F23's reason — a candidate dropped silently makes a
+    busy flow report itself stalled. Answering it once as a map rather than twice as a predicate is
+    deliberate: the scheduler walks a whole queue and would otherwise ask per candidate, and
+    `scheduler.py`'s own comments record what happens when the same fact acquires a third asker.
+
+    Cheap by construction: at most one running `Run` exists per agent (`agent_trigger` refuses a
+    second), so this is bounded by the roster, not by history.
+    """
+    rows = await session.execute(
+        select(Run.task_id, Run.agent).where(
+            Run.project_id == project_id,
+            Run.status == "running",
+            Run.task_id.isnot(None),
+        )
+    )
+    # Last writer wins on a duplicate, which cannot arise while the refusal below holds and is not
+    # worth a second decision if it ever does: either agent is a truthful answer to "who holds it".
+    return {task_id: agent for task_id, agent in rows.all() if task_id and agent}
 
 
 class BoundTask(NamedTuple):

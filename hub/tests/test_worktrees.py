@@ -297,7 +297,9 @@ def test_detect_conflicts_reports_diverging_agents_and_paths(repo):
     reports = worktrees.detect_conflicts(repo)
     assert len(reports) == 1
     report = reports[0]
-    assert set(report.agents) == {"penny", "quinn"}
+    assert {w.name for w in report.workspaces} == {"penny", "quinn"}
+    assert {w.kind for w in report.workspaces} == {"agent"}
+    assert {w.branch for w in report.workspaces} == {"agentweave/penny", "agentweave/quinn"}
     assert report.paths == ["f.txt"]
 
 
@@ -325,9 +327,21 @@ async def test_worktree_endpoints_list_active_agents_and_their_conflicts(
     )
 
     assert listing.status_code == 200
-    assert {item["agent"] for item in listing.json()} == {"taylor", "uma"}
+    # `name`/`kind` since task 6.3 widened this listing past agents; both are agents here.
+    assert {(item["kind"], item["name"]) for item in listing.json()} == {
+        ("agent", "taylor"),
+        ("agent", "uma"),
+    }
     assert conflicts.status_code == 200
-    assert conflicts.json() == [{"agents": ["taylor", "uma"], "paths": ["f.txt"]}]
+    assert conflicts.json() == [
+        {
+            "workspaces": [
+                {"kind": "agent", "name": "taylor", "branch": "agentweave/taylor"},
+                {"kind": "agent", "name": "uma", "branch": "agentweave/uma"},
+            ],
+            "paths": ["f.txt"],
+        }
+    ]
 
 
 @pytest.mark.asyncio
