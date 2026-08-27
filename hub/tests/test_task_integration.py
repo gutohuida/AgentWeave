@@ -21,6 +21,7 @@ import subprocess
 
 import pytest
 
+from hub import worktrees
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Project, Run
@@ -296,15 +297,22 @@ async def test_latest_integration_is_null_before_any_approval(app, auth_headers,
 async def test_later_commits_on_the_branch_are_not_merged(app, auth_headers, builder, tmp_path):
     """D1: what merges is the commit the evidence names, not the agent's branch.
 
-    Branches are per agent, so the branch carries every task the builder ever touched. If this test
-    fails, approving one task ships another task's unreviewed work — which is the failure the whole
-    commit-not-branch decision exists to prevent.
+    If this test fails, approving one task ships work the evidence never demonstrated — which is the
+    failure the whole commit-not-branch decision exists to prevent.
+
+    The mirror of that rule is asserted here too, and it is what rules out squashing the evidence
+    commit's diff as F58's fix: an *earlier* commit on the same task's own branch is groundwork the
+    demonstrated commit was built on top of, and it has to land with it. Only what came after the
+    evidence stays out. The branch name is incidental to both halves — what decides them is the
+    named commit's ancestry.
     """
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
 
-    demonstrated = commit_on_branch(tmp_path, AGENT_BRANCH, "done.py", "ok\n")
+    # Groundwork this task's own demonstrated commit sits on top of, committed before the evidence.
+    earlier = commit_on_branch(tmp_path, AGENT_BRANCH, "groundwork.py", "prep\n")
+    demonstrated = commit_on_branch(tmp_path, AGENT_BRANCH, "done.py", "ok\n", create=False)
     await accept_evidence(app, auth_headers, builder)
 
     # Work that happened after the evidence was accepted, on the same branch.
@@ -316,45 +324,60 @@ async def test_later_commits_on_the_branch_are_not_merged(app, auth_headers, bui
 
     merged = commits_on(tmp_path, "main")
     assert demonstrated in merged
+    assert earlier in merged
     assert later not in merged
     assert "done.py" in files_on(tmp_path, "main")
+    assert "groundwork.py" in files_on(tmp_path, "main")
     assert "not-yet.py" not in files_on(tmp_path, "main")
 
-    # A branch with exactly one commit ahead of main has nothing to ride along.
+    # The groundwork is on the record as having come in with the demonstrated commit rather than
+    # having been demonstrated itself. It landed; the record still says which commit was reviewed.
     rows = await integrations(app, auth_headers, task)
-    assert rows[-1]["rode_along_commits"] == []
+    assert rows[-1]["rode_along_commits"] == [earlier]
 
 
 @pytest.mark.asyncio
-async def test_rode_along_commits_names_what_actually_landed(app, auth_headers, builder, tmp_path):
-    """F58: `merge --no-ff` brings in a commit's entire ancestry, not its diff alone — an earlier,
-    unreviewed commit on the same agent branch still rides along. Fixing the merge's shape is a real
-    design decision (cherry-pick range, single-commit patch, or per-task worktrees), deliberately not
-    made here. This only asserts what IS fixed: the commit that rode along is named on the record,
-    not merged in unnoticed.
+async def test_another_tasks_commits_do_not_ride_along(app, auth_headers, builder, tmp_path):
+    """F58: approving one task must not ship another task's unreviewed work.
+
+    This is the inversion of `test_rode_along_commits_names_what_actually_landed`, which asserted
+    the bug — that `merge --no-ff` brings in a commit's entire ancestry, so an earlier commit made
+    for a *different* task rode along uninvited — and only checked that the record named it. The
+    design decision that test declined to make has been made: work is isolated per task, so the
+    other task's commit is on the other task's branch and is not in this commit's ancestry at all.
+
+    The branch names come from the product, not from this test. That is the point: what makes the
+    two tasks' work separable is that the Hub can say where each task's work goes, and until it can
+    there is nothing here to assert.
     """
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
 
-    # An earlier, unrelated commit on the same agent branch - a different task's work-in-progress,
-    # never named by any accepted evidence.
-    earlier = commit_on_branch(tmp_path, AGENT_BRANCH, "unrelated.py", "wip\n")
-    demonstrated = commit_on_branch(tmp_path, AGENT_BRANCH, "done.py", "ok\n", create=False)
+    other = await linked_task(app, auth_headers, title="Someone else's task")
+    task = await linked_task(app, auth_headers)
+
+    # An earlier, unrelated commit on a *different* task's branch - work-in-progress never named by
+    # any accepted evidence, and never reviewed.
+    earlier = commit_on_branch(tmp_path, worktrees.task_branch_name(other), "unrelated.py", "wip\n")
+
+    # This task's own branch, cut from main rather than from whatever the other task left behind.
+    git(tmp_path, "checkout", "-q", "main")
+    demonstrated = commit_on_branch(tmp_path, worktrees.task_branch_name(task), "done.py", "ok\n")
     await accept_evidence(app, auth_headers, builder)
     git(tmp_path, "checkout", "-q", "main")
 
-    task = await linked_task(app, auth_headers)
     assert (await approve(app, auth_headers, task)).status_code == 200
 
     merged = commits_on(tmp_path, "main")
     assert demonstrated in merged
-    assert earlier in merged  # the still-open F58 bug: it rides along uninvited
+    assert earlier not in merged
+    assert "unrelated.py" not in files_on(tmp_path, "main")
 
     rows = await integrations(app, auth_headers, task)
     newest = rows[-1]
     assert newest["outcome"] == "merged"
-    assert newest["rode_along_commits"] == [earlier]
+    assert newest["rode_along_commits"] == []
 
 
 # ---------------------------------------------------------------------------

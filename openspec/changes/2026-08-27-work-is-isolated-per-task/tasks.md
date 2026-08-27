@@ -11,7 +11,19 @@ below says which fixture change makes the assertion mean what it claims.
 
 ## 1. Make the suite able to tell the implementations apart
 
-- [ ] 1.1 In `hub/tests/test_task_integration.py`, rewrite
+**Measured during phase 1, and it changed 1.1.** The fixture as written below — both branch names
+spelled out in the test — **passes against unmodified production code**, because two branches cut
+from `main` by hand are separable whatever the product does. Measured on 2026-08-27: with
+`f"agentweave/task/{other}"` and `f"agentweave/task/{task}"` as literals, `1 passed`. So the
+literal form is vacuous, and 1.3's "1.1 must fail" was unreachable through it. 1.1 as implemented
+takes both names from `worktrees.task_branch_name(...)` instead, so the *product* decides the
+branch shape the test asserts on — which is exactly what the preamble above says is missing. It is
+red today with `AttributeError: module 'hub.worktrees' has no attribute 'task_branch_name'`, and
+goes green at task 2.3. That is red for the right reason: the product has no way to say where a
+task's work goes, which is the defect. Full discrimination of *provisioning* is still phases 3 and
+7's, not phase 1's, and this phase does not claim it.
+
+- [x] 1.1 In `hub/tests/test_task_integration.py`, rewrite
   `test_rode_along_commits_names_what_actually_landed` (`:329`) as the regression test for F58 and
   rename it `test_another_tasks_commits_do_not_ride_along`. Its docstring today says the F58 bug is
   "deliberately not made here"; that is what changes. **Fixture change:** put `earlier` on a
@@ -20,12 +32,17 @@ below says which fixture change makes the assertion mean what it claims.
   `assert earlier in merged` to `assert earlier not in merged`, keep `assert demonstrated in
   merged`, and change `rode_along_commits == [earlier]` to `== []`. Record in the docstring that
   this is the inversion of the older test, so the history reads.
-- [ ] 1.2 In the same file, add to `test_later_commits_on_the_branch_are_not_merged` (`:296`) the
+- [x] 1.2 In the same file, add to `test_later_commits_on_the_branch_are_not_merged` (`:296`) the
   earlier-commit case its docstring already describes: a commit on **this task's own** branch,
   earlier than the evidence commit, and assert it **does** land. That is the case option (b)
   (squashing the evidence commit's diff) would break, and no test covers it today. Keep the existing
-  `later not in merged` assertions unchanged.
-- [ ] 1.3 Run both tests against the **current, unmodified** implementation and confirm 1.1 fails and
+  `later not in merged` assertions unchanged. **One assertion this task did not name had to move:**
+  the test asserted `rode_along_commits == []` with the comment "a branch with exactly one commit
+  ahead of main has nothing to ride along", which stops being true the moment the groundwork commit
+  exists. It is now `== [earlier]` — the groundwork lands *and* the record still says which commit
+  was the reviewed one. That is a strengthening, not a weakening: it pins that the two facts stay
+  separate.
+- [x] 1.3 Run both tests against the **current, unmodified** implementation and confirm 1.1 fails and
   1.2 passes. A 1.1 that passes before any production change means the fixture still does not build
   the case. Record the observed failure text.
 
