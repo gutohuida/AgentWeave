@@ -347,3 +347,114 @@ newly authored by this process — this iteration's contribution is the verifica
 line against `tasks.md`, running every test and both mutation checks, running the full sweep), not
 the code. If the inherited code had been subtly wrong in a way none of the specified checks would
 catch, this entry would not have found it either.
+
+---
+
+## Iteration 5 — Q2-R1: single verification round for `every-run-knows-its-task` (2026-08-27T02:09:15+01:00)
+
+**Reconciliation.** Fresh process. `git log`/`git status` matched `STATE.json` exactly — clean tree,
+`iteration: 5` about to start, HEAD at `9ea949b` (the heartbeat release after Q1-IMPL). No inherited
+dirty state this time.
+
+**Method, as `next_action` set it**: claim by claim, not file by file. Every `file:line` citation in
+`proposal.md`, `design.md` and `tasks.md` opened and read against the code it names, every "today the
+code does X" sentence checked against the code itself, every task's named function/file/line
+confirmed to exist, every scenario checked for falsifiability.
+
+**Citations verified exact, line for line** — `scheduler.py:2302` (the `review_task_id=` line, its
+whole D9 comment) and `:2621` (second staging path, same shape); `run_divergence.py:738`
+(`severity="warn"`, with the `warn`-not-`error` comment beside it), `:64` (the "open condition, not a
+verdict" docstring line), `:61` (`resolve_divergences_for_task` signature), `:84` (`_may_escalate`
+docstring); `agent_trigger.py:278` (`_review_task_from_entries` signature and docstring, matching D3's
+description exactly); `run_task_binding.py:143` (`binding_from_entries`, including the exact sentence
+D3 quotes as the one task 1.8 must replace) and `:167` (`review_task_for_run`); `turn_scheduler.py`
+lines 72-79 (the `selected` narrowing and the F5 comment D3 quotes verbatim); `checkpoints.py:138`
+(`loop_for_conversation`, confirming D5's join and its stated caller in `_batch_loop_summaries`).
+Every one said what the artifact claimed.
+
+**Migration plan checked against the actual head.** Current migration head is `0093`
+(`hub/tests/test_migrations.py:39` and `hub/tests/test_project_persistence.py:227` both assert
+`"0093"`), so bumping to `0094` (task 5.8) is correct, not stale. Read `0092` in full as the model
+task 5.7 names: table-recreation via `batch_alter_table`, the `_present()` guard on
+`{run_divergences, projects, tasks}` matching the `0033`/`0034` shape task 5.7 also cites. The current
+`policy_applied` CHECK (`hub/hub/db/models.py:869`) is exactly `('surface', 'retry', 'escalate',
+'review')` — widening it to add `'flow'` is the only change `0094` needs to make.
+
+**Confirmed, not just trusted: Q1 did not move D6's foundation.** `run_divergence.py:738` still reads
+`severity="warn"` literally — Q1's severity-normalisation fix lives entirely inside `persist_event`
+(`utils.py`), never touched this call site's literal. D6's derivation task (4.7) has exactly the line
+it was written against.
+
+**One real gap found and fixed: a missing spec requirement, not a wrong citation.** D3's *primary*
+mechanism — the scheduler narrows `selected` to the controlling entry's kind and *defers* the other
+kind's entries to the next turn — is pinned by tasks 1.1-1.4, but neither spec delta
+(`agent-conversation-workspace`, `agent-flows`) had a requirement describing it. Only the *secondary*
+mechanism — the trigger's 409 refusal, D3's own "defence in depth, for a caller that hand-assembles
+`queue_entry_ids`" — had a spec requirement (`agent-conversation-workspace`'s "A delivered turn
+carries a review or ordinary work, never both", whose scenarios describe *refusal*, not *deferral*).
+These are two different behaviours reachable by two different callers, and only one was specified.
+The sibling precedent already exists in the same file: "The hop budget bounds delivery, not only
+admission" specifies the identical shape (an over-budget entry stays queued, not refused) for the
+mechanism task 1.6 explicitly extends. Added a new ADDED Requirement, "A turn admits entries of one
+kind only", modelled on that sibling, with three scenarios matching tasks 1.1-1.3 exactly (controlling
+entry wins, reverse order gives reverse outcome, a deferred entry is not starved), and added one
+clarifying sentence to the existing refusal requirement stating it is defence-in-depth for the case
+the new requirement's own narrowing doesn't reach.
+
+**First attempt failed `--strict` on the exact pitfall `STATE.json`'s `dead_ends` already names**:
+"openspec requires SHALL/MUST on a requirement's OPENING line, not merely somewhere in its body." My
+first draft's `SHALL` landed on line 2 of the requirement body, not line 1, because the paragraph
+wrapped before it. Validator: `ADDED "A turn admits entries of one kind only" must contain SHALL or
+MUST`. Reworded so `SHALL` is the second word of the first physical line. Re-ran
+`npx openspec validate every-run-knows-its-task --strict` — now valid.
+
+**Measured claims spot-checked against the live beta database, not assumed from the exploration.**
+`select count(*) from inbound_queue_entries where origin_type='job'` returned **61**; the same query
+with `task_id is not null` returned **0** — the proposal's headline number is exact, not stale.
+`select count(*) from task_transitions where to_status='in_progress' and actor_kind='run'` returned
+**20** across **209** total runs today, against the proposal's dated "10... across 202 runs"
+(measured 2026-08-26). The database has grown by 7 runs and 10 transitions since that measurement —
+still "essentially never" (~10%, same conclusion) — and the latest `run.started_at` in the database is
+2026-08-26 19:18, before this iteration or Q1-IMPL's own work, so the drift predates this session
+entirely; nothing done tonight moved these numbers. **Deliberately left `proposal.md`'s dated snapshot
+unedited** rather than hand-patching a number that would go stale again before task 6.1 runs — task
+6.1 is explicitly "re-measure the baseline before driving" using this exact query, and design.md's own
+stated discipline ("the change is not complete until it has been driven live there") already treats
+this measurement as provisional pending a live drive, not as a fact the artifact commits to
+permanently. Did not attempt to reproduce the Risk section's scoped `9/19` / unscoped `45/55` figures
+— more expensive to reproduce (per-project scoping, per-run actor-transition joins) — same reasoning
+applies: task 6.1 supersedes them.
+
+**Everything else re-swept and found accurate**: `POLICY_REVIEW`/`POLICIES` (`run_task_binding.py:59,
+70`) confirmed `POLICY_REVIEW` absent from `POLICIES`, the shape task 5.4 pins for `POLICY_FLOW`;
+`_apply_policy`/`_decide` (`run_divergence.py:111-134, 417-463`) confirmed as the site task 5.9's
+suppression must reach, and confirmed `task.assignee`/`run.conversation_id` are available there for
+D6's severity derivation and D5's flow lookup; the `agent-flows` and `run-task-binding` spec deltas
+checked scenario by scenario against `design.md`'s Decisions and found no other gap — every WHEN
+names a real caller, every THEN names a real column, event kind, or transition.
+
+Test file citations: `test_scheduler.py` and `test_agent_trigger.py` exist; `test_turn_scheduler.py`
+(named by tasks 1.1-1.4) does not exist yet — not a defect, it is a new file the tasks create, though
+worth noting for the implementer that the sibling hop-budget tests task 1.6 extends already live in
+`test_hop_budget_bound.py`, testing the identical `selected`-narrowing code path.
+
+**Fix applied, IN the artifact**: `openspec/changes/every-run-knows-its-task/specs/agent-conversation-
+workspace/spec.md` — one new ADDED Requirement plus a clarifying sentence on the existing one.
+`npx openspec validate every-run-knows-its-task --strict` — valid, after the SHALL-placement fix
+above.
+
+**Round verdict: one real gap found and fixed** (missing spec coverage for the primary D3 mechanism);
+every citation, migration plan detail, and the headline measured number confirmed accurate; the two
+Risk-section figures and the proposal's own dated snapshot are left for task 6.1's live re-baseline,
+which the design already built for exactly this purpose.
+
+**Next: Q2-IMPL-A** — groups 1 and 2, in that order (group 1 narrows `selected` before group 2 makes
+work runs bindable, so the separation ships ahead of the hazard it exists to prevent).
+
+*What a reviewer should distrust about this entry*: the new spec requirement's wording and scenario
+shapes were authored by the same process that found the gap, with no independent second reading —
+this change gets only one round by the operator's own discipline (already proposed and `--strict`
+valid), so unlike Q1's three-round changes, nothing here gets an R2/R3 pass to catch what this entry
+missed. The Risk-section figures were spot-checked for the headline number only, not fully
+reproduced; if task 6.1's baseline disagrees sharply with `9/19`/`45/55`, that is new information, not
+a contradiction of anything checked here.

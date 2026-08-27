@@ -1,5 +1,33 @@
 ## ADDED Requirements
 
+### Requirement: A turn admits entries of one kind only
+
+The system SHALL, where an agent's queue holds both a review entry and a work entry in the same
+conversation, deliver a turn carrying only the controlling entry's kind — the same entry that
+decides the turn's depth (see "The hop budget bounds delivery, not only admission"). An entry of the
+other kind SHALL remain queued and SHALL be delivered on a later turn — held back, not refused and
+not dropped, the same treatment an over-budget entry already gets.
+
+#### Scenario: A turn admits only the controlling entry's kind
+
+- **GIVEN** an agent's queue holds a review entry and a work entry in the same conversation
+- **WHEN** the review entry is the earliest admitted
+- **THEN** the delivered turn carries only the review entry
+- **AND** the work entry remains queued
+
+#### Scenario: The reverse arrival order gives the reverse outcome
+
+- **GIVEN** an agent's queue holds a review entry and a work entry in the same conversation
+- **WHEN** the work entry is the earliest admitted
+- **THEN** the delivered turn carries only the work entry
+- **AND** the review entry remains queued
+
+#### Scenario: A deferred entry is not starved
+
+- **GIVEN** an entry left queued because a turn admitted only the other kind
+- **WHEN** the agent's next turn is scheduled
+- **THEN** the deferred entry is delivered
+
 ### Requirement: A delivered turn carries a review or ordinary work, never both
 
 The system SHALL refuse to start a turn whose queued input asks the agent both to review a task and
@@ -10,6 +38,10 @@ preparing a review means — and is then bound to whichever task an ordering rul
 which need not be the one it is looking at. A run bound to work the agent was never shown is worse
 than an unbound run: an unbound run is exempt from the check that asks whether it moved its task,
 while this one fails that check against work it was never given.
+
+This is defence in depth. The requirement above already keeps the normal scheduling path from ever
+assembling a mixed batch; this refusal is what catches a caller that hands `queue_entry_ids` to the
+trigger directly, bypassing that narrowing.
 
 Refusing SHALL happen before the agent is started, so that no workspace is prepared and no turn is
 delivered.
