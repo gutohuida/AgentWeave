@@ -568,3 +568,122 @@ change's own listed scope; that is a judgement call (a green suite is required t
 them red or reverting group 2 both seemed worse), not something `tasks.md` explicitly authorised in
 advance — recorded here and in `tasks.md` so the operator can see the reasoning rather than just the
 diff.
+
+---
+
+## Iteration 7 — Q2-IMPL-B: every-run-knows-its-task groups 3-5, finished and verified (2026-08-27T04:41:45+01:00)
+
+**Reconciliation.** Fresh process. `git log` matched `STATE.json` exactly (HEAD at `8369e00`, the
+release heartbeat after iteration 6) and the tree was clean — no uncredited work this time.
+
+**Design read before writing anything.** `design.md`'s D4-D7 and `tasks.md`'s groups 3-5 read in
+full first. The key design fact that shapes everything below: a review turn's conversation belongs
+to the **same live loop** a flow's work turns do (the flow staffs reviews too), so the predicate
+cannot be answered by "does this run's conversation belong to a live loop" alone — it has to
+exclude a review by kind (`review_task_for_run`) as a separate check, which is exactly what group
+3's task list already enumerated as its own branch ("a review turn is false").
+
+**Group 3 — `is_live_flow_work_turn`, in `hub/hub/run_divergence.py`.** Four gates, each its own
+way to return `False`: unbound (`run.task_id` falsy), a review (`review_task_for_run` non-None), no
+conversation, or `checkpoints.loop_for_conversation` finding no `Loop` — and if it finds one,
+`stopped_at`/`archived_at` must both be `None` (D5's explicit liveness check, not "any non-None
+loop"). `checkpoints.py` imports nothing from `run_divergence.py`, so the new
+`from .checkpoints import loop_for_conversation` import introduced no cycle.
+
+**Test fixtures build real rows, not shapes.** `hub/tests/test_flow_divergence_regime.py`'s
+`_flow_context` creates an actual `AIJob` → `Loop(job_id=...)` → `JobRun(job_id=..., conversation_id=...)`
+chain and a real `Run` bound via `bind_run_to_task` — the same construction pattern already used in
+`test_scheduler.py`, not a hand-built dict standing in for "this is a live flow". Task 3.4 named
+this explicitly, citing task 4.9 of `one-answer-to-what-is-happening` as the change that first
+passed its own mutation check for the wrong reason by testing only a fixture shaped like the thing.
+Seven predicate tests (3.1) all passed against these real rows on the first run after implementation
+— no red-herring fixture bugs this time, likely because the shape was copied directly from
+`test_scheduler.py`'s own `Loop`/`JobRun` construction rather than invented fresh.
+
+**Group 4 — severity derived, resolution gets its own event.** The `warn` hardcode had drifted from
+the task text's cited `:738` to `:805` by the time this group started (group 2's insertions above
+it shifted every line below), confirmed by reading the current file rather than trusting the task
+text's line number — the standing lesson from every review round this session. Severity check reads
+`task.assignee == run.agent` and `run.status == "completed"` against **post-policy** state
+deliberately: an escalation branch (which runs *before* this line, inside the same `if`/`else`) may
+have already moved `task.assignee` off `run.agent` in the same call, and that reassignment is not
+the quiet case even when a live flow started the run. `resolve_divergences_for_task` needed
+`persist_event` to grow a `commit: bool = True` parameter (default preserves all 72 pre-existing
+call sites) — it is reached from inside `task_transition_service.apply_transition`, *before* that
+function's own caller commits (`apply_transition`'s own docstring: "the caller commits"), so an
+unconditional inner commit would have landed the caller's still-in-flight `TaskTransition`/status
+write early. `sse_manager.broadcast` needed no equivalent care: its payload is exactly what is
+already held in memory, not a re-read of the database, so broadcasting before the enclosing
+transaction commits carries no staleness risk. UI: `EventRow.tsx` itself has no per-event-kind
+switch (it renders purely by severity), so the one registration point for a new event kind is
+`hub/ui/src/lib/eventSummary.ts`'s `summaryForEvent` — confirmed by grep before assuming there was
+a second place to touch. Added a case there plus two pinning tests in `eventSummary.test.ts`
+(singular/plural wording), then rebuilt the UI (`npm run build` + `scripts/refresh_ui_bundle.py`)
+since a shipped `hub/ui/src` file changed.
+
+**Group 5 — `POLICY_FLOW`, migration `0094`.** Modelled line-for-line on `0092`'s
+`batch_alter_table` + `{run_divergences, projects, tasks} <= tables` guard shape, as the task
+specified. The suppression sits in `evaluate_run_end`'s non-review branch only, reading the group-3
+predicate computed once above the review/work split (not re-derived): `if policy == POLICY_RETRY
+and flow_work_turn:` overrides to `policy_applied='flow'`, `outcome='surfaced'`, no response
+queued. `escalate` is untouched by design — it reassigns to a *different* agent, which the flow's
+own next firing does not duplicate.
+
+**Every task's test written and run red before its implementation landed**, per the standing
+discipline — confirmed for each of 3.1, 4.1-4.6, 5.1-5.5 by running the new test file against the
+pre-implementation tree first (all 15 behavioural tests failed with `ImportError`/`AttributeError`
+on `is_live_flow_work_turn`/`POLICY_FLOW` not existing yet, before either was added) — not narrated
+in full here since every one failed for the same reason (the names did not exist), but this is the
+same discipline iteration 6 applied file-by-file where the failures were more varied.
+
+**Mutation checks 4.10 and 5.10, run for real and reverted with `Edit` (never `git checkout --`,
+per iteration 6's own recorded near-miss).** All six predicted failures fired exactly as predicted:
+hardcoding `warn` failed 4.1; hardcoding `info` failed 4.2 and 4.3; suppressing the resolution event
+failed 4.6; removing the `retry` suppression failed 5.1; applying it unconditionally failed 5.2 and
+5.3; scoping the predicate to loop *existence* rather than *liveness* failed 5.5 — **and also two of
+group 3's own predicate tests** (the `stopped_at`/`archived_at` branches), which is a wider blast
+radius than task 5.10's text named. Recorded in `tasks.md` rather than narrowed to match the task
+text, since the wider failure is correct behaviour (that mutation genuinely breaks more than one
+guarantee) and hiding it would understate what the mutation check actually proved. Every mutation
+applied and reverted via `Edit`, verified with `git diff --stat` returning to the pre-mutation diff
+after each revert — confirmed clean at the end (`git diff --stat hub/hub/run_divergence.py` showed
+only the intended net change, no mutation residue).
+
+**Full-suite verification, run for real rather than trusted from the touched-file scope** (the
+standing lesson from groups 1-2's three-test ripple, which this iteration was watching for and did
+not find). `pytest hub/tests/ -q` in the background while mutation checks ran in the foreground:
+`3227 passed, 84 skipped, 1 xpassed` in 1062s (~17.7 min — longer than the "measured ~11 min" figure
+in `STATE.json`'s `dead_ends`, itself now stale; not investigated further since the number is a
+convenience for pacing, not a correctness signal, and zero tests failed). `grep -c "FAILED\|ERROR"`
+on the full log: `0`. CLI suite (`pytest tests/ -q`): `440 passed, 3 skipped`, untouched by this
+change and unaffected. Also clean: `ruff check src/ hub/ tests/` (one `F841` unused-variable warning
+in the new test file, fixed), `black --check --target-version py311 ...` (two files needed
+reformatting — `run_divergence.py` and the new test file — applied and reconfirmed clean),
+`mypy src/`, `cd hub/ui && npx tsc --noEmit`, `npm run lint`, `npx vitest run` (138 files, 1402
+tests, all passing — the `Error: boom` console spew during the run is `ErrorBoundary.test.tsx`
+deliberately throwing, not a real failure), `npx openspec validate every-run-knows-its-task
+--strict`. Confirmed `ai_jobs WHERE enabled=1` is `0` on the beta trial database before committing,
+per the standing rule — this iteration never touched the trial Hub at all (that is Q2-IMPL-C's
+job), so this was a pass-through check rather than a real risk.
+
+**Committed** (`e948770`): the 12 explicit paths (never `-A`) — four Python implementation files,
+one new migration, one new test file, two bumped head-assertion test files, two UI source files
+(`eventSummary.ts` and its test), the rebuilt `hub/hub/static/ui` directory, and `tasks.md` with
+3.1-3.4/4.1-4.10/5.1-5.10 checked and their actual measured results recorded inline.
+
+**Next: Q2-IMPL-C** — groups 6-7 (drive live against the trial Hub restarted onto this branch,
+confirm the project list, then the full sweep including task 7.6's design.md deviation check and
+7.7's confirmation that task 4.7 of `one-answer-to-what-is-happening` is now unblocked).
+
+*What a reviewer should distrust about this entry*: the predicate's four-gate shape and the
+severity condition's exact boundary (`task.assignee == run.agent` checked post-policy, not
+pre-policy) were both design decisions made by the same process writing the tests that pin them —
+this change gets one verification round only (already proposed, `--strict` valid per the operator's
+own discipline), so nothing here got an independent second reading the way `reachable-by-a-human`'s
+three-round changes did. The wider-than-specified mutation-5.10 finding was recorded but not
+chased further (e.g. by adding a dedicated test distinguishing "no loop" from "loop but not live"
+as two separately-named predicate branches, which is what 3.1 already does — so the two behaviours
+*are* independently pinned; the mutation-5.10 note is about which test named the failure, not a
+gap in coverage). Group 6's live drive (D6's own Risk section: "the change is not complete until it
+has been driven live there") has not happened yet — everything above is unit-level verification
+only, and the 9/19 and 45/55 figures `design.md` cites are still unre-measured against production.
