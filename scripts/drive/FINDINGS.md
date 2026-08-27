@@ -9,7 +9,41 @@ Severity: **A** = wrong behaviour an operator will act on · **B** = wrong/misle
 
 ---
 
+## Open severity-A baseline, 2026-08-27
+
+The start line for the operator's proposed freeze — *fix every severity A that driving can find,
+then migrate*. Every `## F<n>` section below now carries a `**Status:**` line, sourced from
+`git log --all --grep`/`-S` restricted to commits **at or after the commit that first wrote that
+section** (the F-numbers in `Q4-spec-ux-fixes` and `N6` commits belong to a different findings
+series — `.claude/autonomous/2026-08-16-operator-ux-findings.md` — and would otherwise produce
+false attributions), plus each section's own prose.
+
+**Severity A, still open — three, and only one of them is wholly open:**
+
+| Finding | State | Where it stands |
+|---|---|---|
+| **F12** — `stop_when_queue_empties` waits for a human, and burns a firing a minute meanwhile | **open**, no commit anywhere references it | The idling is correct; the defect is that idle firings evict the record of real work from the 100-`JobRun` window. Queued 2026-08-27 as `F12-SPEC` / `F12-IMPL`. |
+| **F52** — the "workspace" posture never sees a git command | **partially fixed** `68459ea`; the rest does not reproduce | The operator-visibility half shipped. Every axis of the underlying refusal is eliminated (`0cda570` disproved its central inference — `record_permission_decision` persists only refusals — and `57eb92b` drove a full live turn that committed). Out of scope: a new git refusal is a **new** finding. |
+| **F60** — an unanswered `ask_user` that resolves itself leaves the task reading `completed` | **partially fixed** `033ec4c` | The guard refusing an answer whose asking run has ended was already shipped before F60 was filed. The remaining half is **parked for F14**, whose fix shape is the operator's undecided call. |
+
+`F9 (A-)` is not a defect — it is the merge-on-approval behaviour, recorded because it is the most
+consequential thing the product does. Every other A (`F1 F5 F10 F23 F27 F41 F43 F45 F49 F51 F54 F56
+F57 F58 F70 F71 F72`) is fixed with a commit named in its `**Status:**` line.
+
+**Open below severity A**, for completeness: `F3` `F15` `F20` `F21` (C/C/C/B, all with the cause
+named), `F42` (C), `F47` (C, deliberately deferred — it needs a third actor kind), `F61` (B, fix
+chosen by the operator and not implemented), `F62` (C), `F65` (C, queued as `Q4-SPEC`), `F66`
+(unrated, a question for the operator), `F68` (B), and `F53`'s second half (B, queued as `Q4-SPEC`).
+`F14`'s task-state half is open and blocks `F60`.
+
+**Read this as a floor, not a ceiling.** A short A list measures what *this* corpus of driving has
+found, not what is there. Tonight's sweeps exist to lengthen it.
+
+---
+
 ## F1 (A) — One cron string, three different answers; the one on screen is wrong
+
+**Status:** fixed d706187 (backend) + 7fcd172 (UI half)
 
 **Confirmed live.** `hub/hub/scheduler.py` reads every cron expression twice, and the UI reads it a
 third time, and the three do not agree whenever **both** day-of-month and day-of-week are
@@ -45,6 +79,8 @@ renders two numeric answers for it.
 
 ## F2 (B) — "Server time" is a UTC clock wearing a local label
 
+**Status:** fixed 7fcd172
+
 **Confirmed live.** The scheduler is pinned to UTC (`scheduler.py:626` and `:683`). `cron.ts`
 correctly computes its preview in UTC and says why (`cron.ts:415-416`). But both jobs surfaces
 label the result **"server time"**:
@@ -59,6 +95,8 @@ word — "UTC" — not a timezone feature.
 
 ## F3 (C) — `contact_mode` still defaults to `"watchdog-spawn"`
 
+**Status:** open (no commit references it)
+
 Every agent created through `POST /projects/{id}/agents` comes back with
 `"contact_mode": "watchdog-spawn"` (measured: `agent-61634fab`, `agent-ee3a289d`, `agent-b38ef2b7`).
 The watchdog was deleted and CLAUDE.md lists `watchdog.py` among the modules that must never be
@@ -68,6 +106,8 @@ does not exist.
 
 ## F4 (C) — A fresh project does not adopt the main branch it can already see
 
+**Status:** fixed 3b4efd6
+
 `POST /projects/open` on a git repository returns `main_branch: null`, while
 `GET /projects/{id}/main-branch-suggestion` immediately answers
 `{"suggestion": "master", "chosen": null, "is_repository": true}`. The Hub knows the answer at open
@@ -76,6 +116,8 @@ needs a base branch (worktree isolation, conflict detection, evidence footprint 
 `project.main_branch`) is degraded until they do, with no prompt saying so.
 
 ## F5 (A) — The hop budget is defeated by any operator message, and the counter resets
+
+**Status:** fixed 7aef82d, re-driven live 407c01b
 
 **Confirmed live, reproduced deliberately.** The hop budget is the product's only guard against a
 runaway agent-to-agent loop. It bounds *admission* — but not *delivery*, and not the depth counter.
@@ -148,6 +190,8 @@ The depth it was released from survives only in the event: after the re-base the
 
 ## F6 (B) — A task being actively worked shows no assignee and an idle assignee-status
 
+**Status:** fixed 3b4efd6 + 7fcd172 (the board's half)
+
 While `run-f8f7a33c` was live on `task-cdd990b1`, the task read:
 
 ```
@@ -161,6 +205,8 @@ moment running. A board watcher sees an in-progress, unassigned card whose assig
 
 ## F7 (C) — Duplicate evidence for one requirement is accepted without comment
 
+**Status:** fixed 3b4efd6
+
 `builder` recorded evidence for FR-1 unprompted on its first turn (`ev-42cad5d2`), then recorded
 the same fact again when asked (`ev-5d0273ad`) — same requirement, same task, same commit, near
 identical prose. Both were stored, both entered `review_state: awaiting`, and coverage read
@@ -172,6 +218,8 @@ production time (`requirement_evidence.py:113`), which is a different and well-d
 There is simply no duplicate check.
 
 ## F8 (C) — Two refusals, two standards of helpfulness
+
+**Status:** fixed 3b4efd6
 
 Same session, same operator, minutes apart:
 
@@ -193,6 +241,8 @@ permission and stop trying.
 
 ## F9 (A-) — Approval merges to master, and that is worth stating loudly
 
+**Status:** not a defect (deliberate behaviour); stated loudly in the UI by 7fcd172
+
 Not a defect — the opposite — but it is the single most consequential behaviour in the product and
 it is not announced anywhere the operator will see it before it happens.
 
@@ -207,6 +257,8 @@ correctly reported `skipped: no accepted evidence names a commit`, which is the 
 is missing is any warning on the *successful* path that approval is a write.
 
 ## F10 (A) — A reviewer agent cannot see the work it is reviewing
+
+**Status:** fixed 3b75b02 + 3b3b7be, driven live 2a88b64, recurrence ruled out 31c8639
 
 **The most consequential finding of the run, and the product reported it itself.**
 
@@ -278,6 +330,8 @@ turn was never given `review_task_id` for.
 
 ## F11 (B) — `run_count` counts firings that did nothing
 
+**Status:** fixed d706187
+
 **Confirmed.** After the loop's life: `run_count = 9`, of which only **4** spawned an agent. The
 rest were skips (`loop queue is stalled`, `loop queue is empty`). `scheduler.py:796-797`
 increments `run_count` and stamps `last_run` *before* any skip branch runs, so both fields describe
@@ -288,6 +342,8 @@ The `JobRun` rows themselves are honest — they carry `status` — so the `Last
 right while the count beside them is wrong.
 
 ## F12 (A) — `stop_when_queue_empties` waits for a human, and burns a firing a minute meanwhile
+
+**Status:** open (no commit references it) — queued as F12-SPEC/F12-IMPL, 2026-08-27
 
 **Confirmed live.** "Empty" is defined by `TERMINAL_FOR_BINDING = ("approved", "rejected")`
 (`scheduler.py:91`). A loop whose agent has *finished every task* is therefore not empty: the tasks
@@ -307,6 +363,8 @@ But the consequence is not bounded:
 
 ## F13 (B) — Re-enabling a finished loop is accepted, useless, and leaves a contradictory state
 
+**Status:** fixed d706187
+
 `PATCH /jobs/{id} {"enabled": true}` on a loop that stopped with `ending_state: completed` returns
 `200` and `enabled: true`, while the same response still carries `stop_reason: "loop queue is
 empty"`, `stopped_at: 2026-08-23T18:00:00Z`, `ending_state: "completed"`. So the loop is
@@ -320,6 +378,8 @@ which is what the operator actually needs to hear.
 
 ## F14 (B) — A task waiting on the operator still reads `in_progress`
 
+**Status:** partially fixed 7fcd172 (a derived `awaiting_answer_reason` reports the wait); the task-state half is undecided and blocks F60's parked half
+
 `ask_user` worked well: `builder` asked a structured question with two labelled options,
 `blocking: true`, `asker_waiting: true`, and the answer reached the agent, which then completed the
 task. The whole operator-in-the-loop path is sound.
@@ -332,6 +392,8 @@ board says the work is progressing.
 
 ## F15 (C) — Stopping an agent does not stop the work
 
+**Status:** open (no fix commit; recorded as an operator decision in a2424d9 — there is no pause-this-agent lever, only a per-run stop)
+
 `POST /agent/builder/stop` behaved correctly: the run went to `stopped` (not `failed`), `ended_at`
 was set, and the already-delivered queue entry was not spuriously returned.
 
@@ -342,12 +404,16 @@ outlives it.
 
 ## F16 (C) — `loop_id` is accepted on task creation but never echoed back
 
+**Status:** fixed 3b4efd6
+
 `POST /tasks {"loop_id": "loop-8e8379bb"}` returns `201` with `"loop_id": null` in the body, while
 the loop's own summary immediately shows `queue: {pending: 2}` and names the task as
 `current_task`. The write worked; the response denies it. There is no way to confirm from the
 create call that a task joined the loop.
 
 ## F17 (B) — Every Hub-run agent says "No activity yet", forever
+
+**Status:** fixed 7fcd172
 
 **Confirmed in code, database and screenshot.** The agent rail renders
 (`AgentTree.tsx:163-167`):
@@ -372,11 +438,15 @@ roster.
 
 ## F18 (B) — Refinement of F6: the loop records an assignee, a direct trigger does not
 
+**Status:** fixed 3b4efd6 + 7fcd172
+
 The board screenshot shows `@builder · Idle` chips on the tasks the **loop** claimed
 (`scheduler.py:979` sets `claimed_task.assignee = job.agent`) and no assignee at all on the task a
 **direct `task_id` trigger** bound. Two paths reach `in_progress`; only one names who is doing it.
 
 ## F19 (C) — A gated task is indistinguishable from an ordinary pending one
+
+**Status:** fixed 7fcd172
 
 `task-b74d1511` ("Add a trial-balance report") depends on two unapproved tasks and cannot start.
 On the board it renders exactly like any other pending card — `Pending`, `Medium`, its requirement
@@ -389,6 +459,8 @@ board, but the operator has to already suspect there is something to look for.
 
 ## F20 (C) — Deep links use query parameters, and nothing says so
 
+**Status:** open (no commit references it)
+
 `/projects/{id}/tasks` silently renders Overview. The app has no router dependency; destinations
 are query parameters read from `window.location.search` (`navigation.ts:327-375`), so the working
 URL is `/?project={id}&tab=tasks`. This is a deliberate design (`useWorkspaceNavigation.ts` cites
@@ -396,6 +468,8 @@ URL is `/?project={id}&tab=tasks`. This is a deliberate design (`useWorkspaceNav
 Overview without comment rather than 404ing or correcting itself.
 
 ## F21 (B) — A Haiku agent cannot reach `record_evidence`, and burns a whole turn trying
+
+**Status:** open — investigated 2026-08-25, the proposed remedy was already shipped and the cause is not here; left open with the cause named
 
 **Observed live 2026-08-24**, during the review-checkout drive (`run-1515a942defc`), not while
 looking for it.
@@ -464,6 +538,8 @@ than closed with a change that would not have prevented it.
 
 ## F22 (B) — Shared dependencies are not symlinked on this machine, and nothing says so
 
+**Status:** fixed 5a76039
+
 **Measured 2026-08-24**, not inferred:
 
 ```
@@ -520,6 +596,8 @@ misdescribes the product.
 
 ## F23 (A) — A flow at full width reads as stalled with nothing to do
 
+**Status:** fixed 5716876
+
 **Found live, 2026-08-24, on the first firing of a real flow.** `loop-becomes-a-flow` group 5 gave a
 firing width; this is the regression it introduced into the *board*, and no unit test caught it
 because the unit tests never had three agents mid-turn at the moment the summary was read.
@@ -573,6 +651,8 @@ actually mid-turn — because in every test the turns are either finished or fak
 
 ## F24 (C) — a refused firing's status label says `scheduled`, contradicting the reason beside it
 
+**Status:** fixed 2656c0f
+
 Observed 2026-08-25 driving group 8's checks on `job-453b909ba418`. The collapsed stall row in the
 job card's Recent Runs renders its status word as **`scheduled`**, in the neutral text colour, with
 the amber stall reason immediately to its right:
@@ -593,6 +673,8 @@ the label is the first token on the row and it is wrong.
 
 ## F25 (C) — a stalled job card reads `0 runs` with a run visible underneath
 
+**Status:** fixed 2656c0f
+
 Same session. Before any real firing, the card showed the `0 runs` chip while Recent Runs displayed
 one entry. `run_count` counts firings that actually ran, so a queue that has only ever refused is
 honestly zero — and it went to `2 runs` once real firings happened, confirming the intent. But the
@@ -601,6 +683,8 @@ chip and the list are two counts of the same word on one card, and they disagree
 ---
 
 ## F26 (C) — the board names a different agent than the task's assignee
+
+**Status:** fixed 2656c0f
 
 Same session, after `builder` completed `task-18e900f3eb96` and the loop staffed a reviewer by
 itself. The database has `assignee = 'critic'`; the board's current item renders:
@@ -626,6 +710,8 @@ whose meaning changes with task status is exactly what would make three such lin
 ---
 
 ## F27 (A) — a run can complete tasks it was never given and never did
+
+**Status:** fixed 6c75edb (F42 is the residue it did not close)
 
 **2026-08-25 full-surface sweep, project `aw-sweep`.** The most expensive finding of the run.
 
@@ -680,6 +766,8 @@ the two gates already there.
 
 ## F28 (B) — a flow created after its document is approved has a permanently empty queue
 
+**Status:** fixed 96b54cd
+
 Same session. `spdoc-3e0dbec860d0` was approved, materialising five tasks. A flow was then created
 against that same document — accepted, `201`, the document claim held, everything looked right:
 
@@ -710,6 +798,8 @@ docstring, which says only that tasks "are added to this flow's queue automatica
 
 ## F29 (B) — an approved document tampered with on disk is served to everyone, silently
 
+**Status:** fixed 8f88114
+
 Same session. `spec/changes/spread-fairness-metric-fix-for-idle-staff/spec.html` was approved, then
 edited directly on disk with `<p>TAMPERED BEHIND THE HUB</p>`.
 
@@ -735,6 +825,8 @@ the bytes anyone subsequently reads.
 ---
 
 ## F30 (B) — a self-registered agent bound to a runner reports a CLI named after itself
+
+**Status:** fixed 6b1013f
 
 Same session. Three agents were created via `POST /agents/register` and then bound with
 `PATCH /agents/{name}` — the exact sequence this repo's own harness uses
@@ -767,6 +859,8 @@ reached through the other branch of the same condition.
 
 ## F31 (B) — `_SECRET_VALUE_RE` redacts any 32-character identifier, including the Hub's own
 
+**Status:** fixed 6b1013f
+
 Same session. Transcripts render as:
 
 ```
@@ -796,6 +890,8 @@ costly: it removes legitimate content to catch secrets the first two have caught
 ---
 
 ## F32 (B) — an agent is told what it may do, never what it may not
+
+**Status:** fixed b7136e6 + d04f9e9
 
 Same session, and the clearest instance of a general shape.
 
@@ -831,6 +927,8 @@ The review's actual conclusion — "Ship it", with its checks — is on a branch
 
 ## F33 (B) — a job for an agent that does not exist is created, enabled, and scheduled
 
+**Status:** fixed 96b54cd
+
 Same session.
 
 ```
@@ -863,6 +961,8 @@ does not exist at all. An operator would go looking for an agent to configure.
 
 ## F34 (B) — `agentweave --port N status` is silently ignored; `status --port N` works
 
+**Status:** fixed 6b1013f
+
 Same session, against a Hub confirmed live (`curl http://127.0.0.1:8010/health` → `{"status":"ok"}`).
 
 ```
@@ -888,6 +988,8 @@ this project uses. It returns `pass: 6  warn: 0  fail: 0` without examining the 
 ---
 
 ## F35 (C) — `submit_spec_document` answers a malformed call with raw Pydantic errors
+
+**Status:** fixed 29ab883, then reverted 78459e4 on the operator's call — the declared schema was preferred to the shaped refusal; closed by decision, not by repair
 
 Same session. `author` called `submit_spec_document` **ten times** in one turn before it succeeded.
 The refusals it was working from:
@@ -922,6 +1024,8 @@ the most complex payload in the surface is the one that does not follow it.
 
 ## F36 (C) — dependencies can only be declared by an agent, inside a spec document
 
+**Status:** fixed d431385
+
 Same session. `TaskDependency` rows are written in exactly one place in the codebase:
 `spec_tasks.py:375`, reached only by `materialise()` when an approved document's task entry carries
 a `depends_on` list of keys.
@@ -939,6 +1043,8 @@ the graph came out empty and the gate was never exercisable.
 ---
 
 ## F37 (C) — a document created by mistake is permanent, and becomes a standing warning
+
+**Status:** fixed d431385
 
 **S11 confirmed live**, three sessions after it was first suspected from reading the code.
 
@@ -965,6 +1071,8 @@ whether it was meant.
 ---
 
 ## F38 (B) — an agent that needs an answer ends its turn instead of asking
+
+**Status:** fixed 634d577, which could not fire until e2a4a29 (that gap is F41)
 
 Same session, and the reason F32's shape matters.
 
@@ -999,6 +1107,8 @@ a document in `exploring`, and that no `Question` row was written.
 ---
 
 ## F39 (B) — two of the three operator grants are announced in neither direction
+
+**Status:** fixed b7136e6 + d04f9e9
 
 **Found 2026-08-25 while fixing F32**, by the audit its own remediation task called for
 (`the-seams-of-the-sweep`, task 3.3) rather than by driving the product.
@@ -1044,6 +1154,8 @@ F21 knows this is part of the same question.
 ---
 
 ## F40 (B) — `test_relocate_repairs_and_redrains_queued_work` is flaky, and has been all along
+
+**Status:** fixed d916861
 
 **Measured 2026-08-25**, while verifying an unrelated change. Not a product defect — a defect in
 the suite that guards the product, which is worth the same attention because it is what decides
@@ -1095,6 +1207,8 @@ synchronisation while shipping six other changes would make a genuine failure ha
 Recorded so the next full-suite red run is read correctly rather than dismissed *or* chased.
 
 ## F41 (A) — F38's fix cannot fire: every document has a `content_digest` from birth
+
+**Status:** fixed e2a4a29, verified 71e6646
 
 Found 2026-08-25 during the live re-drive of `the-seams-of-the-sweep`, which is precisely what a
 re-drive is for: the fix is unit-tested six ways and green, and does nothing in production.
@@ -1155,6 +1269,8 @@ every other property of the design intact — including the rule that the agent'
 ---
 
 ## F42 (C) — F27 bounds the blast radius but a run can still claim work it will not do
+
+**Status:** open (no fix commit references it)
 
 Noted 2026-08-25 during the same re-drive, and **not a defect in the fix** — it is the documented
 consequence of Key decision 1, recorded so it is not mistaken for an oversight later.
@@ -1345,6 +1461,8 @@ these was driven, not read.
 
 ## F43 (A) — the flow tells every agent to brief its reviewer, and no flow path delivers it
 
+**Status:** fixed 488d92f, verified live 52d98aa and 97db33f
+
 Found 2026-08-25 while staging group 11's task 11.3, which handoff 0086 recorded as *"not
 answerable from this drive: no checkpoint was generated."* It is not answerable because it
 **cannot** be, and the reason is structural rather than a gap in the drive.
@@ -1435,6 +1553,8 @@ on the project, which `ledger-stress` does not have set (so even the operator bu
 ---
 
 ## F44 (B) — the reviewer is briefed by the loop's newest checkpoint, not the author's
+
+**Status:** fixed 488d92f, verified live 52d98aa
 
 Same reading, and it only bites once F43 is fixed — which is why it is recorded now rather than
 discovered afterwards.
@@ -1536,6 +1656,8 @@ question.
 ---
 
 ## F45 (A) — a review that ends without moving the task is re-staffed on every tick, forever
+
+**Status:** fixed fec52d1
 
 Found 2026-08-25 while checking whether the Ledger flow could safely be re-enabled to stage group
 11's remaining checks. It cannot, and the reason is a live spend loop.
@@ -1645,6 +1767,8 @@ this change's own precedent for a fix that passed six unit tests and could never
 
 ## F46 (B) — the review turn named a transition the task could not make
 
+**Status:** fixed fec52d1
+
 Found 2026-08-25 while fixing F45, and it is why no reviewer had ever moved a task rather than
 merely why one reviewer did not.
 
@@ -1678,6 +1802,8 @@ of recording this separately.
 
 ## F47 (C) — the flow's own routing is recorded as the operator's
 
+**Status:** open — deliberately not fixed in F45's change; the honest repair is a third actor kind, and it is pinned by test_flow_chain_end_to_end.py
+
 Recorded 2026-08-25 while fixing F45, which **extended** this defect rather than introducing it.
 
 `ACTOR_KINDS` has two members: `run` and `operator`. A firing is neither. So when the flow claims
@@ -1705,6 +1831,8 @@ so whoever fixes the attribution will be told exactly what to update.
 ---
 
 ## F48 (B) — pressing Run on a healthy flow reported "Failed to fire job"
+
+**Status:** fixed 40330bc
 
 Found live 2026-08-25, on the second firing of the F45 verification. Pre-existing, and made
 ordinary by F45's fix.
@@ -1741,6 +1869,8 @@ Verified live: 409 with that sentence, against the same flow that produced the 5
 ---
 
 ## F49 (A) — `agent_role` could never say `working`
+
+**Status:** fixed 40330bc
 
 Found live 2026-08-25, immediately after F45's fix — and it is **finding F41's pattern for the
 third time in this change**.
@@ -1785,6 +1915,8 @@ when F26 landed.
 ---
 
 ## F50 (B) — a checkpoint that failed its own probe is briefed to the reviewer as though it passed
+
+**Status:** fixed 3defb1e
 
 Found 2026-08-25 by the live drive that verified F43, and **caused by F43 becoming real**: before
 it, no loop checkpoint had ever existed, so nothing was ever briefed and the question could not
@@ -1837,6 +1969,8 @@ now reads `Status: failed`, `Probe: failed`, and the stated warning, unchanged s
 Task 14.7 in `openspec/changes/loop-becomes-a-flow/tasks.md` closed with this evidence.
 
 ## F51 (A) — "start exploration" orphans its own document; the agent writes a second one
+
+**Status:** fixed ccb8902, verified live 15da184
 
 Found 2026-08-25 driving Q2 live on a fresh project (`proj-8605b92d0028`), reproducing the UI's
 own "start exploration" flow through the real HTTP surface: `POST .../project/documents` (what
@@ -1931,6 +2065,8 @@ four: the two carried over from Q1/Q2 plus this one — `create_spec_document` w
 ---
 
 ## F52 (A) — the "workspace" permission posture never sees a git command; every commit is refused, silently, with no operator visibility
+
+**Status:** partially fixed 68459ea (the refusal is no longer invisible); the underlying CLI refusal does not reproduce — 0cda570 disproved its central inference and 57eb92b eliminated the last axis live. Out of scope, 2026-08-27: a new git refusal is a new finding
 
 Found 2026-08-26 driving Q4 live on `ledger-stress` (`proj-18e5d4e0`): enabling `job-f632ee565238`
 ("Width bench", a loop with no reviewer other than its own agent) and letting it fire twice,
@@ -2248,6 +2384,8 @@ as a finding because it was not driven deliberately or reproduced.
 
 ## F53 (B) — archiving a loop that never fired still permanently, irrevocably claims its spec document; the tasks it "adopted" have no recovery path
 
+**Status:** partially fixed 2239f38 (option (a) only — an archived loop's document claim no longer blocks a new loop); the `_adopt_document_tasks` orphaning half is open and queued as Q4-SPEC
+
 Found 2026-08-26 driving Q4, self-inflicted and then traced to the code rather than dismissed as
 operator error — the whole value of finding it is that a real operator could do the exact same
 three clicks by accident.
@@ -2347,6 +2485,8 @@ operator's decision** — recorded as such in `decisions_for_user`, not closed h
 
 ## F54 (A) — a job-creation request that 409s on a document conflict has already committed an enabled, spendable job; the error response is not the rollback it looks like
 
+**Status:** fixed 94e2dcb
+
 Found live 2026-08-26, immediately after F53, on the very next API call in the same drive —
 creating the second attempt at the "Inventory flow" job (`agent: loopauthor`, same
 `spec_document_id` F53's archived loop still claims) returned `409` exactly as F53 describes. That
@@ -2404,6 +2544,8 @@ phantom job) and untouched-agent-field jobs it patches are already enabled by th
 reachable, so the marginal risk is smaller but not obviously zero.
 
 ## F55 (B) — an unprovoked, intermittent test failure, and a real "which checkpoint is newest" tie-break bug behind it (Windows clock resolution)
+
+**Status:** fixed 1dd0b04 (migration 0088), verified f92ef0a
 
 Not something this iteration went looking for. Found running an unrelated broader slice
 (`pytest hub/tests/ -k "jobs or loops or scheduler"`) to sanity-check the F54 fix — one test failed
@@ -2506,6 +2648,8 @@ deliberately left alone as out of scope for this finding — a candidate for a f
 folded in here.
 
 ## F56 (A) — one review target with no evidence permanently wedges an agent's entire inbound queue, silently
+
+**Status:** fixed 67b2c95
 
 Found live 2026-08-26, at the very start of Q5, trying to do the thing Q5 asks for: trigger `critic`
 to give a real verdict on `task-23a0986e7fe9`. `POST /agent/trigger` with `task_id:
@@ -2626,6 +2770,8 @@ query path the running process uses. Flagged here rather than silently assumed e
 
 ## F57 (A) — a rejection has no way to say why: `update_task` drops `notes` entirely
 
+**Status:** fixed 31c8639
+
 Found live 2026-08-26, tracing the "does rejection route back legibly" half of Q5. During the
 `critic` self-drain that produced a real `revision_needed` verdict on `task-0dfc3be5`
 (`run-e842f20908da` — see F10's "lookalike" note above for the rest of that transcript), `critic`
@@ -2690,6 +2836,8 @@ wants that extra rep — `task-0dfc3be5` is still sitting `revision_needed` and 
 for exactly that, once a reviewer is triggered on it again.
 
 ## F58 (A) — approving one task's evidence merges its agent's *entire branch history*, including other unapproved tasks' work and scratch debris, not "the commit the evidence names"
+
+**Status:** fixed 9993c0f (the `work-is-isolated-per-task` merge), CI-green at e78c119
 
 Found live 2026-08-26, driving Q5's undriven F9 half to a full landing commit for the first time
 this run. `task_integration.py`'s own module docstring states three rules "each exists because the
@@ -2843,6 +2991,8 @@ design question, not yet a patch.
 
 ## F59 (B) — the same clock-tick tie-break bug as F55, in a second table: an evidence review's "latest" can pick the older decision
 
+**Status:** fixed 31c3825
+
 Found 2026-08-26, Q9's full-suite sweep run early (an iteration reconciling stale `STATE.json`/log
 bookkeeping used the time waiting on a background full-suite run to also finish it properly, having
 been lost across a process boundary twice in prior iterations). The suite reported exactly one
@@ -2933,6 +3083,8 @@ distinction F55's own live verification drew for `Checkpoint`.
 
 ## F60 (A) — An unanswered `ask_user` question that resolves itself mid-turn leaves the task reading `completed`, and the operator can still "answer" it afterward into a state that contradicts the code that shipped
 
+**Status:** partially fixed 033ec4c — the guard that refuses an answer whose asking run has ended predates the filing (`questions.py`, `_asker_is_gone`); the half that leaves the task reading `completed` is parked for F14
+
 Driven live (Q8), following the method's own directive to leave a question deliberately
 unanswered. `proj-8605b92d0028`'s `author` agent (Haiku, cheap runner) was told, honestly, to ask
 the operator a structured question before touching `task-a9f72e6c80f8` (the `is_low_stock` float
@@ -2993,6 +3145,8 @@ own eventual fix, not bolted on separately.
 
 ## F61 (B) — every flow conversation has the same title, and no API says which turn is a review
 
+**Status:** open — the operator chose the fix (title a flow conversation by its agent and role) and it is not implemented
+
 Found 2026-08-26 by the **operator**, judging group 11's check 11.2 ("the handover is legible")
 against the live trial Hub. This is the first finding in this series produced by a human judgement
 call rather than by a drive script, which is the point of group 11 existing.
@@ -3035,6 +3189,8 @@ tasks. Judge against the live rows, not the runbook's snapshot of them.
 
 ## F62 (C) — a mixed-CLI flow reports its tokens in full and its money in part
 
+**Status:** open (no fix commit references it); recorded rather than blocked on
+
 Found 2026-08-26 by the **operator**, judging group 11's check 11.6 ("the spend is visible"), and
 recorded rather than blocked on — the check passes, this is the caveat attached to the pass.
 
@@ -3059,6 +3215,8 @@ as partial whenever any contributing turn had no cost report (honest, cheaper, a
 pretend to a number the CLI never gave).
 
 ## F63 (B) — the board says an agent is mid-turn on work nothing is running; two meanings of "in flight" collided
+
+**Status:** fixed 2717687
 
 Found 2026-08-26 by the **operator**, judging group 11's check 11.5 ("is concurrent work
 comprehensible?") against a live firing of the `Width bench` flow (`job-f632ee565238`) on
@@ -3144,6 +3302,8 @@ all three agent queues were checked afterwards and none is wedged.
 
 ## F64 (B) — one unstaffable queue, two surfaces, two different causes, opposite remedies
 
+**Status:** fixed 2717687
+
 Found 2026-08-26 by the **operator**, judging group 11's check 11.4 ("does rung 3 read as staffing
 or as breakage?") on a live firing of the `Stall bench` flow (`job-453b909ba418`).
 
@@ -3201,6 +3361,8 @@ count, and the remedy. The one wrinkle worth a line: the product's own API calls
 operator has to translate the word before they can follow the instruction.
 
 ## F65 (C) — a review briefing refused for having no evidence stays queued, and blocks archiving its agent
+
+**Status:** open — `turn_scheduler.py` still ends a no-evidence review briefing on the first refusal rather than after three attempts; queued as Q4-SPEC
 
 Found 2026-08-26 by the **operator**, while setting up check 11.4 — an incidental discovery rather
 than a targeted one, which is why it is recorded separately from F64.
@@ -3310,6 +3472,8 @@ review is a separate question about the ladder**, not about this fix, and is lef
 
 ## F66 — A batched turn's workspace and its run binding are decided by two different rules, and they can name different tasks
 
+**Status:** open — deliberately not fixed; it asks the operator whether a turn should ever batch a review and ordinary work, and test 1.3 pins the binding meanwhile
+
 **Found:** 2026-08-26, driving group 6 of `one-answer-to-what-is-happening` live against the trial
 Hub on port 8010. Not by reading — by checking a claim I had already written down and finding it
 too generous to itself.
@@ -3359,6 +3523,8 @@ review tasks says the product already thinks one review per turn is the limit. O
 piece of work is the case nothing refuses and nothing reconciles.
 
 ## F67 — A divergence response is queued into a conversation that does not exist, so it can never be delivered
+
+**Status:** fixed b7bb8f1
 
 **Found:** 2026-08-26, driving task 6.4 of `one-answer-to-what-is-happening` live. **The repository's
 dominant failure mode, caught in my own work**: a fix that passes its tests and cannot fire.
@@ -3484,6 +3650,8 @@ and finding F5: *"nothing used to ask which entries may ride on it."* F66 is tha
 
 ## F68 (B) — two spellings of one severity, and the louder event is the one that renders as routine
 
+**Status:** open (no fix commit references it)
+
 Found 2026-08-26 while measuring the severity distribution for `every-run-knows-its-task`'s D6.
 Nothing was looking for it; it fell out of a count.
 
@@ -3527,6 +3695,8 @@ Adjacent to `every-run-knows-its-task` D6, which derives divergence severity rat
 it; that change should not land a new severity string without this normalisation existing.
 
 ## F69 — `every-run-knows-its-task` groups 1-5 driven live, all five behaviours held (not a defect — the record the group asked for)
+
+**Status:** not a defect — the record group 6 asked for; all five behaviours held
 
 Driven 2026-08-27, iteration 8, group 6 of `every-run-knows-its-task`, against `proj-18e5d4e0`
 (ledger-stress) restarted onto this branch (migration `0093 -> 0094` ran clean on startup;
@@ -3581,6 +3751,8 @@ fully reviewed and approved), and the job's own original task now operator-appro
 evidence has always been left in place.
 
 ## F70 (A) — an operator can move a task to `under_review` without staffing a reviewer, and the flow reads that forever as a healthy review in progress — silently removing the stuck agent from every future review too
+
+**Status:** fixed f58cc75
 
 **Driven 2026-08-27, iteration 10 (Q6), against a genuinely fresh project — `proj-bad259c0c9f2`
 (`drive-q6-2026-08-27`), created this iteration, outside the repository, registered via
@@ -3704,6 +3876,8 @@ real commits on the seed repo's `agentweave/flowauthor` branch. No further clean
 future session can inspect the exact rows this finding cites.
 
 ## F71 (A) — operator-recorded evidence footprints the operator's own checkout, not the commit the operator named, and a downstream review silently gets the wrong tree
+
+**Status:** fixed b96c222
 
 **Driven 2026-08-27, iteration 11 (Q7), continuing to exercise the verdict/approval/integration
 path Q6 explicitly did not reach — using the same live project, `proj-bad259c0c9f2`.** Built the
@@ -3902,6 +4076,8 @@ than by mutating them.
 ---
 
 ## F72 — every checkpoint ever produced reported no changed files (severity A, fixed 2026-08-27)
+
+**Status:** fixed 29a5e69 + eaaceb4
 
 **Found while implementing task 6.6 of `2026-08-27-work-is-isolated-per-task`**, which asked only
 that `checkpoints.agent_worktree` become task-aware. It was not wired at all.
