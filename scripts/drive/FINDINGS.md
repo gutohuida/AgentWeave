@@ -4660,3 +4660,71 @@ the field to `False` instead fails the two tests that assert a live asker and an
 still presumed waiting — so the fix cannot have simply inverted the constant. All 102 question tests
 pass.
 
+---
+
+## F81 — the operator's own refusal is written to the timeline twice
+
+**Status:** fixed — see the commit that adds `_operator_already_refused` to
+`hub/hub/api/v1/agent_actions.py`
+
+**Severity: C.** The record, not the behaviour. The tool call is refused exactly once and the run
+receives one answer; what doubles is what the operator is shown afterwards.
+
+**How it was found.** Driving row 14 (permissions) in `manual` posture. The builder asked to `Write`
+a file, the card came up, I pressed Deny once. The activity history then held two rows a second
+apart, same `tool_use_id`, same wording:
+
+```
+2026-08-27T22:49:47.393783Z  permission_denied  {"tool_name": "Write",
+    "tool_use_id": "toolu_01WvbJnCpC9U6Sdh8BKNjNiw", "reason": "the operator refused this action"}
+2026-08-27T22:49:48.512857Z  permission_denied  {"tool_name": "Write",
+    "tool_use_id": "toolu_01WvbJnCpC9U6Sdh8BKNjNiw", "reason": "the operator refused this action"}
+```
+
+**Cause — two writers, each correct in isolation.** `decide_permission_request` persists a
+`permission_denied` event when the operator refuses, which is right: the operator's decision is the
+event. Then the run reports the decision it received back through `approve_tool_call` ->
+`_report_decision` -> `POST /agent-actions/permission-decisions`, and `record_permission_decision`
+persists its own, which is also right for the decision it was built for — a refusal the *harness*
+made, like the two `'/c/Users/huida/Documents/aw-e2e1' is outside your workspace` rows sitting a few
+lines above these in the same history. `approve_tool_call` reports **every** decision, including
+the ones it did not make, and neither writer knows about the other.
+
+Two identical warn rows for one refusal is not merely noise: it reads exactly like an agent that
+tried the same call twice and was refused twice, which is a different and more alarming fact than
+what happened.
+
+**The fix, and why it is on the Hub rather than in the reporter.** `record_permission_decision`
+skips the event when a `PermissionRequest` for this run and this `tool_use_id` is already sitting
+at `denied` — the card is the join, and its existence at that status is precisely "the operator
+refused this, and the route that recorded their decision already wrote the row."
+
+The alternative was for `_ask_operator` to flag its own decisions as already-reported and have
+`_report_decision` stay silent about them. Rejected: it puts the invariant in the one process that
+must import only stdlib and fastmcp, and it holds only for as long as every client is well-behaved.
+The Hub-side join is the same lesson F79 paid for — put the guard where the traffic actually
+arrives, not where the intent is legible.
+
+Three neighbouring cases were checked rather than assumed, and each keeps its event:
+
+- a card the operator let **expire** — nobody wrote an event for it, so the run's report
+  (`"no operator answered within 20s"`) is the only record there is;
+- a refusal reported by a **different run** for the same `tool_use_id` — two agents hitting one
+  wall are two facts;
+- a **locally decided** refusal carrying no `tool_use_id` at all. `approve_tool_call` defaults it
+  to `""` and `open_permission_request` stores what it is given, so an empty id is a value a card
+  can genuinely hold — without an explicit guard it would match, and one anonymous denied card
+  would silence every anonymous refusal that run ever reports.
+
+**Verification.** Four tests. Every guard mutation-checked individually: removing the skip fails
+`test_the_operators_own_refusal_is_not_recorded_twice`; dropping the `run_id` scoping fails
+`test_another_runs_refusal_of_the_same_tool_call_does_not_silence_this_one`; dropping the
+`status == "denied"` filter fails `test_a_request_the_operator_let_expire_is_still_recorded`;
+dropping the empty-`tool_use_id` early return fails
+`test_a_locally_decided_refusal_without_a_tool_use_id_is_still_recorded`. The last of those needed
+the test strengthened — the guard was invisible until the test built the card with `tool_use_id=""`
+that it defends against. All 33 tests in `test_agent_actions_coordination.py` pass.
+
+**Proven live** against a Hub restarted on the fixed code: a fresh manual-posture run, denied once,
+left exactly one `permission_denied` row (`run-609b3c476147`, 22:58:05) where the pre-fix run left
+two.

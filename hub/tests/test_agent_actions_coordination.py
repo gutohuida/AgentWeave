@@ -652,6 +652,137 @@ async def test_an_allowed_action_is_not_recorded(app):
     assert rows == []
 
 
+async def _operator_card(run_id: str, agent: str, tool_use_id: str, status: str) -> str:
+    """A permission request the operator has already answered, as the decide route leaves it."""
+    from hub.db.models import PermissionRequest
+
+    request_id = f"perm-{tool_use_id}"
+    async with async_session_factory() as session:
+        session.add(
+            PermissionRequest(
+                id=request_id,
+                project_id="proj-test",
+                agent=agent,
+                run_id=run_id,
+                tool_name="Write",
+                tool_use_id=tool_use_id,
+                tool_input={},
+                status=status,
+            )
+        )
+        await session.commit()
+    return request_id
+
+
+async def _denied_events() -> list:
+    from hub.db.models import EventLog
+
+    async with async_session_factory() as session:
+        return list(
+            (
+                await session.execute(
+                    select(EventLog).where(EventLog.event_type == "permission_denied")
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+
+@pytest.mark.asyncio
+async def test_the_operators_own_refusal_is_not_recorded_twice(app):
+    """Pressing Deny once must read as one refusal.
+
+    The run reports every decision it reached, including the one the operator handed it, so the
+    refusal arrived here a second after `decide_permission_request` had already written it — two
+    identical warnings, indistinguishable from an agent that tried the same call twice.
+    """
+    headers, _ = await _active_run("run-op-denied", "walled")
+    await _operator_card("run-op-denied", "walled", "toolu_op", "denied")
+
+    resp = await app.post(
+        "/api/v1/agent-actions/permission-decisions",
+        headers=headers,
+        json={
+            "tool_name": "Write",
+            "tool_use_id": "toolu_op",
+            "allowed": False,
+            "reason": "the operator refused this action",
+        },
+    )
+    assert resp.status_code == 202, resp.text
+    assert resp.json() == {"recorded": False}
+    assert await _denied_events() == []
+
+
+@pytest.mark.asyncio
+async def test_a_request_the_operator_let_expire_is_still_recorded(app):
+    """Nobody wrote an event for a card that timed out, so the run's report is the only record."""
+    headers, _ = await _active_run("run-expired", "waiting")
+    await _operator_card("run-expired", "waiting", "toolu_late", "expired")
+
+    resp = await app.post(
+        "/api/v1/agent-actions/permission-decisions",
+        headers=headers,
+        json={
+            "tool_name": "Write",
+            "tool_use_id": "toolu_late",
+            "allowed": False,
+            "reason": "no operator answered within 20s, so this was not approved",
+        },
+    )
+    assert resp.status_code == 202, resp.text
+    rows = await _denied_events()
+    assert len(rows) == 1
+    assert "no operator answered" in rows[0].data["reason"]
+
+
+@pytest.mark.asyncio
+async def test_another_runs_refusal_of_the_same_tool_call_does_not_silence_this_one(app):
+    """The join is per run, not per tool_use_id: two runs are two agents hitting the same wall."""
+    await _active_run("run-first", "one")
+    headers, _ = await _active_run("run-second", "two")
+    await _operator_card("run-first", "one", "toolu_shared", "denied")
+
+    resp = await app.post(
+        "/api/v1/agent-actions/permission-decisions",
+        headers=headers,
+        json={
+            "tool_name": "Write",
+            "tool_use_id": "toolu_shared",
+            "allowed": False,
+            "reason": "'/etc/passwd' is outside your workspace",
+        },
+    )
+    assert resp.status_code == 202, resp.text
+    rows = await _denied_events()
+    assert len(rows) == 1
+    assert rows[0].agent == "two"
+
+
+@pytest.mark.asyncio
+async def test_a_locally_decided_refusal_without_a_tool_use_id_is_still_recorded(app):
+    """An empty id cannot be joined on, and the path that omits it has no card behind it.
+
+    `approve_tool_call` defaults `tool_use_id` to `""` and `open_permission_request` stores what
+    it is given, so a card carrying the empty string is reachable — and without the guard it
+    matches every anonymous refusal the same run ever reports.
+    """
+    headers, _ = await _active_run("run-anon", "walled")
+    await _operator_card("run-anon", "walled", "", "denied")
+    resp = await app.post(
+        "/api/v1/agent-actions/permission-decisions",
+        headers=headers,
+        json={
+            "tool_name": "Bash",
+            "allowed": False,
+            "reason": "'/etc' is outside your workspace",
+        },
+    )
+    assert resp.status_code == 202, resp.text
+    assert len(await _denied_events()) == 1
+
+
 @pytest.mark.asyncio
 async def test_permission_decisions_require_a_bound_run(app):
     """The endpoint is agent-authenticated like every other agent action."""

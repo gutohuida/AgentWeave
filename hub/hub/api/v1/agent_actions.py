@@ -595,6 +595,33 @@ class PermissionDecisionCreate(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+async def _operator_already_refused(
+    session: AsyncSession, actor: AgentActor, tool_use_id: str
+) -> bool:
+    """Did the operator refuse this exact tool call through a card of their own?
+
+    Answered from the request row rather than from which branch of `approve_tool_call` produced
+    the decision, so a retried report, or any other client, cannot write the second row either.
+    An empty `tool_use_id` cannot be joined on and is treated as "no" — the locally decided path,
+    which is the one that omits it, has no card behind it in the first place.
+    """
+    from ...db.models import PermissionRequest
+
+    if not tool_use_id:
+        return False
+    found = (
+        await session.execute(
+            select(PermissionRequest.id).where(
+                PermissionRequest.project_id == actor.project_id,
+                PermissionRequest.run_id == actor.run_id,
+                PermissionRequest.tool_use_id == tool_use_id,
+                PermissionRequest.status == "denied",
+            )
+        )
+    ).first()
+    return found is not None
+
+
 @router.post("/permission-decisions", status_code=status.HTTP_202_ACCEPTED)
 async def record_permission_decision(
     body: PermissionDecisionCreate,
@@ -608,8 +635,16 @@ async def record_permission_decision(
     and is the gap `2026-08-06-operator-in-the-loop-turns` records — an agent that hits a wall
     while the one person who could widen it never learns it happened.
 
+    A refusal the *operator* made is skipped, because `decide_permission_request` already wrote
+    it. The run reports every decision it reached, including the ones handed to it from a card,
+    so an operator who pressed Deny once was shown two identical warnings a second apart and had
+    no way to tell that from an agent that tried the same call twice. The card is the join:
+    a request for this run and tool call already sitting at `denied` means the timeline has it.
+
     Returns 202 rather than 201: the caller is not waiting on this and discards the response.
     """
+    if not body.allowed and await _operator_already_refused(session, actor, body.tool_use_id):
+        return {"recorded": False}
     if not body.allowed:
         await persist_event(
             session,
