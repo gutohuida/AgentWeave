@@ -953,3 +953,104 @@ other criterion; it was not independently re-verified by, say, temporarily un-we
 and confirming staffing then succeeds — that would have used remaining time better spent recording
 the finding than proving it twice. The charter/agent-setup friction (self-registered vs Hub-managed)
 was resolved by an already-recorded dead end, not discovered fresh — credit belongs to iteration 8.
+
+---
+
+## Iteration 11 — Q7: driving Q6's unreached path, F71 found (2026-08-27T07:23:14+01:00)
+
+**Reconciliation.** Fresh process. `git log` matched `STATE.json` exactly (HEAD at `7fe9242`, the
+release heartbeat after iteration 10) and the tree was clean. `current: Q7`, ~40 minutes remained
+before `stop_at` (08:00) — Q7's own `next_action` had already reasoned through this: F70's fix needs
+the operator's answer (in `decisions_for_user`, not guessed at), so the better use of the time left
+was named explicitly as "more Q6-style driving... to find additional findings," gated at 20 minutes
+remaining to fall back to a clean wrap-up instead. Confirmed the trial Hub was already on this
+branch's tip (no Hub code changed since iteration 10's restart) and re-confirmed the project list
+before touching anything.
+
+**Picked the specific gap Q6 named rather than a fresh sweep.** Q6's own write-up said
+verdict/approval/integration were never reached because the drive's tasks were never linked to a
+spec document, so `record_evidence` had nowhere to attach. Rather than re-running a whole new
+loop-driven project (high time cost, high risk of not finishing before `stop_at`), built the missing
+piece directly on the same live project (`proj-bad259c0c9f2`) as the operator: a document
+(`spec/changes/russet-kirin/spec.html`) with one requirement (`FR-1`, `discount-rounds-safely`), an
+acceptance criterion and a declared task, approved through `close-exploration` → `propose` →
+`phase=approved`, which adopted a real task onto the board (`task-7f49caae3c6d`). One false start
+along the way, left uncleaned deliberately: an earlier attempt at the same document
+(`spec/changes/lilac-chimera/spec.html`) was abandoned at `exploring` when its requirement key
+collided with the one actually used — harmless, and left as an honest trace of the false start
+rather than tidied away.
+
+**Recorded evidence as the operator, naming a real commit — and the footprint captured a different
+one.** `flowreviewer`'s actual fix for the seeded `apply_percent_discount` float-equality bug exists
+as a real, verified commit (`bd03e4d3`, an auto-snapshot on `agentweave/flowreviewer`, confirmed with
+`git diff master agentweave/flowreviewer -- cart.py` showing the real `math.isclose` fix). Recorded
+evidence for `FR-1` against `task-7f49caae3c6d` via the operator-facing `POST
+.../project/spec/evidence` route, with `locator: bd03e4d3...` naming that commit explicitly. Querying
+`evidence_footprints` directly for the row created (`ev-9d22a691db10`) showed `commit_sha:
+052632357...` — not `bd03e4d3`, but the project's *original seed commit*, still carrying the bug,
+sitting on `master` because the operator's own checkout had never advanced past it.
+`requirement_evidence.record` never reads `locator` to decide what to footprint — for an operator
+actor, `footprint_root` unconditionally returns the project's own checkout HEAD
+(`requirement_evidence.py:220`), an assumption its own docstring states plainly ("the operator keeps
+the project directory... if they are on a feature branch that is where they observed the thing") and
+that is simply false whenever the operator is describing an *agent's* separate worktree branch rather
+than their own tree — exactly what recording evidence about multi-agent work from outside a running
+turn looks like.
+
+**Confirmed mechanically what a review turn would actually be handed, not inferred from the schema.**
+Called `requirement_evidence.commit_for_task_review` directly against the live database — the same
+function a real review turn's wiring calls — and got `resolved: True, commit_sha: 052632357...,
+refusal: None`: a reviewer would be silently checked out to the pre-fix code with total (and
+unearned) confidence, not refused. `reachable_from_main: 1` on that footprint compounds it: an
+operator who then accepted this evidence would have the Hub believe the fix is already on `master`
+(verified directly it is not — `git show master:cart.py` still has `discounted == 0.0`). Written up
+in full as **F71 (severity A)** in `scripts/drive/FINDINGS.md`, including a second, smaller finding
+the same drive surfaced along the way: the record-evidence API response never reports the footprint
+it just captured (`_evidence_view(evidence)` called with no `footprint=` argument at
+`hub/hub/api/v1/spec.py:838`, unlike every sibling call site in the same file) — so the response read
+`"footprint": null`, indistinguishable from "nothing was captured," when a footprint row existed all
+along, just naming the wrong commit. That gap in the response is exactly what let the root cause go
+unnoticed until a direct database read.
+
+**Not fixed this iteration**, per the same standing discipline Q7 itself states (drive records, a
+separate pass fixes) and because of how little time remained. Three plausible remedies were written
+into F71's own text, none picked: validate `locator` against the captured footprint and refuse or
+warn on mismatch; resolve the operator's footprint from a `locator`-named commit/branch when one is
+given, falling back to the checkout only when it is not; or surface the footprint (and any mismatch)
+in the response itself. Added to `decisions_for_user` alongside F70 rather than guessed at.
+
+**Consolidated the driving scripts before committing.** The four scratch files written while working
+through this (`q7_drive.py` through `q7_drive3b.py`) were replaced with one file following the
+existing pattern in this directory (`t_hop.py`, `t_loop.py`, `t_spec.py` from earlier iterations):
+`t_evidence_footprint.py`, a runnable reproduction of the exact sequence that produced F71, left in
+place so a future session can re-run it or read it rather than re-deriving the steps from a diff.
+
+**Cleanup, before anything else.** `SELECT id FROM ai_jobs WHERE enabled=1` confirmed empty
+project-wide (queried directly, not trusted from an API response, per this same finding's own
+lesson about response completeness). No new jobs or loops were created this iteration — the whole
+drive used direct operator API calls and read-only database/git queries, no agent turn was
+triggered. `task-7f49caae3c6d` (`under_review`, assignee `flowreviewer`, carrying the mis-footprinted
+`ev-9d22a691db10`) left live and unresolved in `proj-bad259c0c9f2`, the same discipline F70's rows
+already follow, so the exact rows this finding cites stay inspectable.
+
+**Honest scope note.** No live agent turn was triggered this iteration — deliberately: with ~35-40
+minutes actually available, the risk of an unpredictable-length real review turn not finishing
+before `stop_at` outweighed the value of watching a reviewer agent's transcript confirm what the
+database query already proved mechanically (the exact function a review turn's own code calls,
+called directly, is not weaker evidence than watching an agent call it — it is the same code path
+with the transcript-reading step removed). What was not driven: whether a *reviewer agent*, faced
+with this wrong footprint, would itself notice the mismatch and say so, or would trust it and render
+a verdict against the wrong tree. That remains open for a future drive with more time.
+
+**Next: Q7 remains current.** Both F70 and F71 now sit in `decisions_for_user`, unfixed, each with a
+stated design question rather than a guessed remedy. Q8 (F47 third actor kind) stays gated on 3+
+hours remaining, which is not available before `stop_at` tonight.
+
+*What a reviewer should distrust about this entry*: F71's "wrong direction" framing (stale code, not
+ahead-of-work) is specific to this drive's particular starting state — the general claim that
+*either* direction is reachable through the same mechanism was reasoned from reading
+`footprint_root`'s logic, not independently reproduced by engineering the opposite case (recording
+evidence while the operator's checkout sat ahead of the described work) in the time available. The
+second finding (the null `footprint` in the API response) was noticed as a byproduct of investigating
+the first, not sought out — worth stating since it means the pass was not a deliberate audit of every
+`_evidence_view` call site, just the one this drive happened to exercise.
