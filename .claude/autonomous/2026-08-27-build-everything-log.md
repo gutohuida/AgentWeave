@@ -687,3 +687,98 @@ as two separately-named predicate branches, which is what 3.1 already does — s
 gap in coverage). Group 6's live drive (D6's own Risk section: "the change is not complete until it
 has been driven live there") has not happened yet — everything above is unit-level verification
 only, and the 9/19 and 45/55 figures `design.md` cites are still unre-measured against production.
+
+## Iteration 8 — Q2-IMPL-C: every-run-knows-its-task groups 6-7, drive live then sweep (2026-08-27T05:50:21+01:00)
+
+**Reconciliation.** Fresh process. `STATE.json` claimed iteration 8, `current: Q2-IMPL-C`, but
+`git log` showed a commit `git status` didn't: `9f09444` ("group 6 driven live") was already on the
+branch, one ahead of what the last committed `STATE.json` (`iteration: 8`, `last_heartbeat:
+04:03:59`) had been written against. The prior firing had done real work — driven group 6 live
+against `proj-18e5d4e0` (ledger-stress), recorded F69 in `scripts/drive/FINDINGS.md`, checked off
+all of `tasks.md`'s group 6 (6.1-6.9) — and committed it, but never wrote a log entry for it and
+never advanced `STATE.json`'s own heartbeat past a bump to `05:21:07` left uncommitted in the
+working tree, alongside uncommitted edits to `design.md` (task 7.6's deviation note) and
+`one-answer-to-what-is-happening/tasks.md` (task 7.7's unblock note) — group 7's first two tasks,
+started but not finished, checked into neither `tasks.md` nor a commit. Read `9f09444`'s diff and
+the uncommitted working-tree diff in full before touching anything, per the standing rule against
+`git checkout --` discarding uncommitted content (iteration 6's dead end). Nothing was lost;
+everything below builds on what was already there rather than redoing it.
+
+**Group 6 was already complete and verified from its own commit message** — restarted the trial Hub
+onto this branch, confirmed the project list, drove all five behaviours (D1/D2 binding, D6 derived
+severity + `run_divergence_resolved`, D7's flow-policy suppression, D3's turn batching) against a
+real scheduler tick, and measured the baseline delta: job-origin entries carrying `task_id` went
+from 0/61 to 8/71, `assigned → in_progress` transitions from 20 to 28. No job left enabled, no run
+left alive (task 6.9). This iteration re-verified only the standing rule independently
+(`SELECT id FROM ai_jobs WHERE enabled=1` on the beta database: empty) rather than re-driving
+anything group 6 already proved.
+
+**Group 7 — the sweep, run for real rather than assumed clean from the prior commits' green
+history.** `py -3.11 -m ruff check src/ hub/ tests/`: clean. `black --check --target-version py311
+...`: `494 files would be left unchanged`. `py -3.11 -m mypy src/`: clean. `hub/ui`: `npx tsc
+--noEmit` clean, `npm run lint` clean, `npx vitest run` — `138 files passed (138)`, `1402 tests
+passed (1402)` (the `Error: boom` spew is `ErrorBoundary.test.tsx` deliberately throwing). No UI
+source had changed since group 5's `eventSummary.ts` (already committed and rebuilt in `e948770`),
+but `npm run build` + `py -3.11 scripts/refresh_ui_bundle.py` were run again anyway as a real check
+rather than an assumption — `src_fingerprint` in the resulting stamp came back byte-identical,
+confirming no drift; only `src_commit`/`built_at` moved. `npx openspec validate
+every-run-knows-its-task --strict`: valid.
+
+**Both pytest suites run for real, not trusted from touched-file scope** (the standing lesson from
+groups 1-2's three-test ripple). CLI (`pytest tests/ -q`): `440 passed, 3 skipped` in 22.80s,
+untouched by this change. Hub (`pytest hub/tests/ -q`, backgrounded while the rest of the sweep ran
+in the foreground): `3227 passed, 84 skipped, 1 xpassed` in 1033s — `grep -ci "FAILED\|ERROR"` on
+the full log confirmed `0`. The 17m13s runtime is longer than the "measured ~11-18 min" figures
+already in `STATE.json`'s `dead_ends`, almost certainly because this run shared the machine with
+the concurrent ruff/black/mypy/tsc/lint/vitest/build passes rather than running alone; not
+investigated further since the number is for pacing, not correctness, and nothing failed.
+
+**Test accounting (7.5), counted with `pytest <file> --collect-only -q` at two real commits, not
+estimated from diff line counts:** "before" = `c0e4cba` (the commit immediately preceding group
+1-2's implementation commit `d23b9c6`, checked out into a throwaway `git worktree` and removed
+after counting), "after" = the tip of this group. `test_turn_scheduler.py`: 0 → 4 (new, group 1).
+`test_agent_trigger.py`: 42 → 43 (+1, group 1's mixed-kind test 1.5). `test_scheduler.py`: 54 → 59
+(+5, group 2's binding tests 2.1-2.5). `test_flow_divergence_regime.py`: 0 → 18 (new, groups 3-5).
+`test_flow_chain_end_to_end.py`, `test_flow_fires_a_review_turn.py`, `test_flow_width.py`: unchanged
+counts (5, 8, 26) — group 1's 3-test ripple fix corrected existing assertions rather than adding
+tests. `test_migrations.py`, `test_project_persistence.py`: unchanged counts (72, 7) — only the
+head-assertion string literal moved. **Total added: 28** (1 + 5 + 4 + 18), consistent with groups
+3-5's own log entry citing "+19 new" for that pair of groups alone (18 Python + 1
+`eventSummary.test.ts`, outside this Python accounting) plus groups 1-2's +9.
+
+**Design deviation check (7.6), written into `design.md` itself rather than only in this log** — a
+"Built, with no behavioural deviation" note after the Risks section: all eight decisions landed
+exactly as designed, confirmed twice (the unit suite, and group 6's live drive against a real
+scheduler tick). Two citations had drifted as surrounding code grew — D6's `severity="warn"`
+hardcode moved from `run_divergence.py:738` to `:813` once group 4's own insertions (the predicate,
+the resolution's event block) landed above it; D1's second staging path moved from
+`scheduler.py:2621` to `:2630`. Neither drift changes what either decision says — recorded as the
+ordinary kind of citation drift this document's own text already warns about, not a design error.
+This is the only deviation-check finding this round; unlike `reachable-by-a-human`'s three
+proposal-review rounds, this change gets one verification round total per the operator's own
+discipline (already proposed and `--strict` valid), so nothing here is a second independent
+reading — it is the first and only one.
+
+**Task 4.7 unblock (7.7), written into `one-answer-to-what-is-happening/tasks.md`'s own task 4.7**
+rather than only asserted here: groups 1-5 wrote the binding edge that task was waiting on, and
+group 6 measured it live on the same beta database that task's own figures were measured against
+(job-origin entries carrying `task_id`: 0/61 → 8/71). The removal itself — dropping
+`task_attribution.py`'s explicit `agent_fallback` parameter — stays out of this change (D8) and is
+Q3 next.
+
+**Committed** (paths only, never `-A`): `openspec/changes/every-run-knows-its-task/design.md`,
+`openspec/changes/every-run-knows-its-task/tasks.md`,
+`openspec/changes/one-answer-to-what-is-happening/tasks.md`, and
+`hub/hub/static/ui/ui-build-stamp.json` (the re-recorded, byte-identical-fingerprint stamp).
+
+**Next: Q3** — close task 4.7 of `one-answer-to-what-is-happening` by removing
+`task_attribution.py`'s `agent_fallback` parameter (a visible behavioural change, both current
+behaviours already pinned by test), mark 4.7 done, `openspec-sync-specs`, then
+`openspec-archive-change`.
+
+*What a reviewer should distrust about this entry*: the test-accounting "before" baseline was
+measured from a throwaway `git worktree` at `c0e4cba` rather than from any number written down
+during groups 1-2's own iteration — if that iteration's own count differs, trust a citation from
+its own log entry over this reconstruction. The 17-minute hub-suite runtime was not re-measured in
+isolation to confirm the "concurrent load" explanation; it is a plausible account, not a verified
+one.

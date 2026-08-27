@@ -292,15 +292,53 @@ expected projects including `proj-5e960453` (never given a turn). Drove against 
 
 ## 7. The sweep
 
-- [ ] 7.1 `py -3.11 -m pytest hub/tests/ -q` and `py -3.11 -m pytest tests/ -q`.
-- [ ] 7.2 `py -3.11 -m ruff check src/ hub/ tests/` and
-      `black --check src/ hub/hub/ hub/tests/ tests/ --target-version py311`.
-- [ ] 7.3 `cd hub/ui && npx tsc --noEmit`, `npm run lint`, `npx vitest run`. Rebuild and
-      `py -3.11 scripts/refresh_ui_bundle.py` only if any UI source changed under 4.9.
-- [ ] 7.4 `npx openspec validate every-run-knows-its-task --strict`.
-- [ ] 7.5 Test accounting: name each test file and its before/after count, and the total added.
-- [ ] 7.6 Re-read this change's `design.md` against what was built and record every deviation
-      inline, as `one-answer-to-what-is-happening` did with its five. A design that no longer
-      describes the code is worse than no design.
-- [ ] 7.7 Confirm task 4.7 of `one-answer-to-what-is-happening` is now unblocked, and say so in
-      that change's `tasks.md`. Do **not** implement it here (D8).
+- [x] 7.1 `py -3.11 -m pytest hub/tests/ -q` and `py -3.11 -m pytest tests/ -q`. CLI: `440 passed,
+      3 skipped` (22.80s), unaffected by this change. Hub: `3227 passed, 84 skipped, 1 xpassed`
+      in 1033s (17m13s — the whole sweep's other checks ran concurrently in the foreground while
+      this was in the background, which is the likely cause of it running longer than the ~11-18
+      min this suite has measured at before; zero tests failed either way).
+      `grep -ci "FAILED\|ERROR"` on the full log: `0`.
+- [x] 7.2 `py -3.11 -m ruff check src/ hub/ tests/`: `All checks passed!`.
+      `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`: `494 files would be
+      left unchanged`. `py -3.11 -m mypy src/`: `Success: no issues found in 22 source files`.
+- [x] 7.3 `cd hub/ui && npx tsc --noEmit`: clean, no output. `npm run lint`
+      (`eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0`): clean, no
+      output. `npx vitest run`: `138 files passed (138)`, `1402 tests passed (1402)` — the `Error:
+      boom` console spew is `ErrorBoundary.test.tsx` deliberately throwing, not a failure. No UI
+      source changed since group 5's `eventSummary.ts`/`.test.ts` (already committed in `e948770`
+      and rebuilt then), but `npm run build` + `py -3.11 scripts/refresh_ui_bundle.py` were run
+      again anyway as a real check rather than an assumption — bundle refreshed and stamp
+      re-recorded clean, `git diff --stat hub/hub/static/ui` shows only the stamp's own timestamp
+      field changed, confirming no drift.
+- [x] 7.4 `npx openspec validate every-run-knows-its-task --strict`: `Change
+      'every-run-knows-its-task' is valid`.
+- [x] 7.5 Test accounting, before = collected count at `c0e4cba` (the commit immediately before
+      group 1-2's implementation commit `d23b9c6`), after = collected count at the tip of this
+      group. Counted with `pytest <file> --collect-only -q` on both, not assumed from diff size:
+      - `hub/tests/test_turn_scheduler.py`: 0 → 4 (new file, group 1).
+      - `hub/tests/test_agent_trigger.py`: 42 → 43 (+1, group 1's mixed-kind `queue_entry_ids`
+        test 1.5).
+      - `hub/tests/test_scheduler.py`: 54 → 59 (+5, group 2's binding tests 2.1-2.5).
+      - `hub/tests/test_flow_divergence_regime.py`: 0 → 18 (new file, groups 3-5).
+      - `hub/tests/test_flow_chain_end_to_end.py`: 5 → 5 (unchanged count — group 1's 3-test
+        ripple fix corrected existing assertions, added none).
+      - `hub/tests/test_flow_fires_a_review_turn.py`: 8 → 8 (unchanged count, same ripple fix).
+      - `hub/tests/test_flow_width.py`: 26 → 26 (unchanged count, same ripple fix).
+      - `hub/tests/test_migrations.py`: 72 → 72 (unchanged count — only the head assertion's
+        string literal moved from `0093` to `0094`).
+      - `hub/tests/test_project_persistence.py`: 7 → 7 (same kind of head-assertion bump).
+      - **Total added: 28** (1 + 5 + 4 + 18), matching group 3-5's own log entry ("+19 new" for
+        groups 3-5 alone: 18 in `test_flow_divergence_regime.py` + 1 in `eventSummary.test.ts`,
+        which is a UI file outside this Python accounting) plus groups 1-2's +9 (4 + 5, with
+        1.5's +1 folding into `test_agent_trigger.py`'s count above).
+- [x] 7.6 Done in `design.md` itself — a "Built, with no behavioural deviation" note added after
+      the Risks section, confirming all eight decisions landed as designed, plus a correction of
+      two citations that drifted as line numbers moved (`run_divergence.py:738` → `:813` for D6's
+      replaced hardcode; `scheduler.py:2621` → `:2630` for D1's second staging path). Neither
+      citation drift changed what either decision says — recorded as the ordinary kind of drift
+      this document's own citations warn about, not a design error.
+- [x] 7.7 Confirmed and recorded in `openspec/changes/one-answer-to-what-is-happening/tasks.md`'s
+      task 4.7: groups 1-5 wrote the binding this task was waiting on, and group 6 measured it
+      live (job-origin entries carrying `task_id`: 0/61 → 8/71 on the same beta database that
+      task's own figures were measured against). The fallback removal itself stays out of this
+      change (D8) and is Q3 of the current autonomous queue.

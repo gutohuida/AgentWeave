@@ -166,6 +166,22 @@ meaningful.
 removes the agent-fallback that compensated for it being false. Landing 4.7 first flips every
 actively-worked flow task to `held`, which is the same lie pointed the other way.
 
+**Built, with no behavioural deviation.** All eight decisions landed exactly as designed — D1's
+`task_id` line beside each staging path's `review_task_id`, D2's separate fields, D3's
+`selected`-narrowing in `turn_scheduler.py` plus the trigger's defence-in-depth refusal, D4's single
+`is_live_flow_work_turn` predicate feeding both D6 and D7, D5's read through `loop_for_conversation`
+rather than a new column, D6's derived severity and dedicated `run_divergence_resolved` event, and
+D7's `POLICY_FLOW` kept out of `POLICIES`. Confirmed twice: once by the unit suite (`tasks.md`
+3.1-3.4/4.1-4.10/5.1-5.10) and again by group 6's live drive against `proj-18e5d4e0`, which produced
+every one of D1/D2/D6/D7/D3's outcomes against a real scheduler tick rather than a fixture.
+
+**Two citations drifted, corrected here rather than in the prose above** (both are the ordinary kind
+of drift this document's own citations warn about — line numbers move as surrounding code changes,
+not the decisions). D6's `hardcode="warn"` was cited at `run_divergence.py:738` when this document
+was written; group 4's insertions above it (`is_live_flow_work_turn`, the resolution's own event
+block) shifted it to line 813 by the time it was replaced. D1's second staging path was cited at
+`scheduler.py:2621`; it is `scheduler.py:2630` today. Neither changes what either decision says.
+
 ## Risks / Trade-offs
 
 **Every flow work turn now enters the divergence boundary; 9 of 19 measured job-origin work runs
