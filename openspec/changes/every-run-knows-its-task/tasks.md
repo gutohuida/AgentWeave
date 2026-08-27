@@ -219,21 +219,76 @@ files, 1402 tests, all passing — the "Error: boom" console output during the r
 The trial Hub on port 8010, beta profile, restarted onto this branch. **Confirm the project list,
 not only `/health`** — a Hub on a stale database still answers `{"status":"ok"}`.
 
-- [ ] 6.1 Re-measure the baseline before driving: job-origin entries carrying `task_id`, job-
-      delivered runs bound, runtime `→ in_progress` transitions. Record the numbers here.
-- [ ] 6.2 Drive a flow work firing end to end. Confirm the entry carries `task_id`, the run is
-      bound, and the task reaches `in_progress` with no agent action.
-- [ ] 6.3 Drive a flow work turn that moves nothing. Confirm the divergence row exists and the
-      event arrived at `info`, visible in the activity log with the filter on `all`.
-- [ ] 6.4 Drive the same task to completion. Confirm `run_divergence_resolved` arrived and names
-      the count.
-- [ ] 6.5 Drive a `retry` task under a live flow. Confirm nothing spawned and the row says `flow`.
-- [ ] 6.6 Queue a review and a work item for one agent and confirm the delivered turn carries one
-      kind, the other stays queued, and the next turn delivers it.
-- [ ] 6.7 Re-measure 6.1's figures after the drive and record the delta. This is what tells us
-      whether the boundary check now applies where it never did.
-- [ ] 6.8 Record every finding in `scripts/drive/FINDINGS.md`, including anything that worked.
-- [ ] 6.9 Leave no job enabled and no run alive. State in the handoff what the drive left behind.
+**DRIVEN 2026-08-27, iteration 8.** Restarted the trial Hub from `hub/` onto this branch (killed
+stale PID 4300, which had been serving sha `7219090`; the new process ran migration `0093 -> 0094`
+on startup, confirming the beta database is current). `GET /api/v1/projects` confirmed all 5
+expected projects including `proj-5e960453` (never given a turn). Drove against `proj-18e5d4e0`
+(ledger-stress), its pre-existing "Ledger flow" job (`job-bdea22bb0308`, live `Loop`
+`loop-e4b864459808`, `stopped_at`/`archived_at` both `NULL`).
+
+- [x] 6.1 Baseline **before** driving: 61 job-origin (`origin_type='job'`) entries, **0** carrying
+      `task_id`; 55 runs carrying `task_id`; runtime (`actor_kind='run'`) `→ in_progress`
+      transitions: **20** (not design.md's stale 10 — that figure predates this session's own
+      groups 1-2 landing and being driven once already in iteration 6; superseded here per the
+      design's own stated discipline).
+- [x] 6.2 Enabled the job, fired it via `POST /jobs/{id}/run`. New entry `entry-8abc48705d4a`
+      carried `task_id='task-e6b05093'` (the job's own pre-existing `assigned` task) — the first
+      job-origin entry in this database's history to do so. Bound run `run-f0d830489053` recorded
+      `task_id='task-e6b05093'`; `task_transitions` shows `assigned -> in_progress` with
+      `actor_kind='run'`, `run_id` set, no operator or agent action.
+- [x] 6.3 That same run ended without moving the task (still `in_progress`). `run_divergences`
+      recorded `div-c6184053c187` (`policy_applied='surface'`, `outcome='surfaced'`); the matching
+      `event_logs` row (`run_diverged`) carries **`severity='info'`** — D6's derived severity,
+      confirmed live, not just in the unit suite. Visible via `GET .../events/history` (the
+      severity-agnostic history endpoint; `filter=all` is the UI's own default query param, not a
+      server-side gate — confirmed the row is present with no filter applied).
+- [x] 6.4 The job's own next cron tick (5 min later, `run-34d1d409409f`) picked the same task back
+      up and completed it. `run_divergence_resolved` fired with `{"task_id": "task-e6b05093",
+      "count": 2}` — naming the count, and resolving not only 6.3's divergence but a second,
+      unrelated one from 2026-08-24 that predates this change entirely (both share one task and
+      neither had been resolved before now).
+- [x] 6.5 Created a fresh task (`task-4928038eba7e`), `divergence_policy='retry'`, assigned to
+      `builder`, in the live loop, instructed to make no change and not call `update_task`. Fired
+      the job; the run ended with the task still `assigned/in_progress` and unmoved.
+      `run_divergences` recorded **`policy_applied='flow'`** (not `retry`) — D7's suppression,
+      confirmed live. Confirmed nothing auto-spawned for this task afterward (exactly one `runs`
+      row exists for it).
+- [x] 6.6 Constructed a real reviewable task (`task-60d1d8183feb`, linked to requirement FR-1,
+      builder produced a real commit + evidence) so a genuine review entry could be queued. Fired
+      two `POST /agent/trigger` calls for `critic` back-to-back — one `review_task_id`, one
+      `task_id` (reusing an already-approved task, since only the entry's *kind* matters for this
+      check) — while `critic` was idle. The review entry was accepted and spawned the turn
+      immediately (`run-be3fc325f1d2`, `delivered_in_run_id` set); the work entry landed
+      `state='queued'` behind it. After the review turn ended, the deferred work entry's
+      `delivered_in_run_id` updated to the very next run (`run-30ab9bd030f5`) with no further
+      operator action — confirming D3 live: one turn, one kind, the deferred entry rides the next
+      turn exactly as designed.
+- [x] 6.7 Baseline **after**: 71 job-origin entries (**10** new from this drive), **8** carrying
+      `task_id` (0 -> 8; the other 2 new job-origin entries are review-staffing entries, which
+      carry `review_task_id` instead of `task_id` by design). Runs carrying `task_id`: 55 -> 70.
+      Runtime `→ in_progress` transitions: 20 -> **28** (+8, matching the 8 newly-bound job-origin
+      work entries 1:1). This is the delta the group exists to produce: the boundary the design
+      measured as *structurally unreachable* (0/61) now applies exactly where the change intended.
+- [x] 6.8 Recorded in `scripts/drive/FINDINGS.md` (F69) — everything above, plus what held: no
+      mixed turn occurred despite two concurrent live loops on the same agent roster (`builder`
+      appeared in both `loop-e4b864459808` and `loop-a5613d9f7723`'s queues during the drive), and
+      a pre-existing, unrelated staffing stall (a task naming `critic` as its own declared
+      reviewer after critic did the work itself, `scheduler.py:1050`'s `unresolved` rung) was hit
+      and resolved as a real operator would — by approving the task directly — which is itself
+      evidence the ladder's terminal rung behaves as documented under real, un-staged conditions.
+- [x] 6.9 Job `job-bdea22bb0308` disabled at the end (confirmed `SELECT id FROM ai_jobs WHERE
+      enabled=1` returns zero rows). Self-continuation and one peer-triggered message (`critic` ->
+      `builder`, `origin_type='agent'`) kept the conversation draining for several more minutes
+      after the job was disabled — expected per the standing `dead_ends` note, not a new finding —
+      until `runs`/`inbound_queue_entries` both showed nothing running and nothing queued. **Left
+      behind in `proj-18e5d4e0`**: four new tasks (`task-4928038eba7e` — probe, `in_progress`,
+      unresolved surfaced divergence, harmless and intentionally left as evidence of 6.5;
+      `task-c0bd47157c19` — real one-line comment commit, `completed`, no requirement link so no
+      evidence, never reviewed; `task-60d1d8183feb` — real one-line comment commit,
+      `approved`, requirement FR-1, fully reviewed by 6.6's drive; `task-e6b05093` — the job's own
+      pre-existing task, now `approved`, operator-approved directly after a stale staffing stall).
+      No cleanup performed beyond disabling the job, per the same reasoning `ledger-stress`'s other
+      accumulated drive evidence has always been left in place for.
 
 ## 7. The sweep
 
