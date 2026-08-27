@@ -695,6 +695,40 @@ def resolve_turn_workspace(
     return ensure_task_worktree(repo_root, task_id, base, prerequisites)
 
 
+def turn_branch_name(
+    repo_root: Path, agent: str, config: Dict[str, Any], *, task_id: Optional[str] = None
+) -> str:
+    """The branch `resolve_turn_workspace` would put this turn on. Pure — provisions nothing.
+
+    Exists so the *text* an agent is handed about its own workspace is derived from the same
+    dispatch that chose the workspace, rather than from a second copy of the rule (task 6.5).
+    The second copy is not hypothetical: `api/v1/agents.py` hardcoded `branch_name(agent)` and
+    told every task-bound turn it was on a branch it was not on, from phase 4B until this.
+
+    Asks `takes_task_workspace` for exactly the reason that function's own docstring gives, so a
+    read-only agent, a non-repository project and a grandfathered task are answered here the same
+    way they are answered there. Returns the agent branch for all of them, which is the branch
+    those turns are on.
+    """
+    if not takes_task_workspace(repo_root, config, task_id):
+        return branch_name(agent)
+    assert task_id is not None  # narrowed by `takes_task_workspace`
+    return task_branch_name(task_id)
+
+
+def task_id_of(worktree: Path) -> Optional[str]:
+    """The task whose checkout *worktree* is, or `None` for any other directory. Pure.
+
+    Derived from the directory rather than passed in, so a statement about a checkout cannot
+    disagree with the checkout it is about — `snapshot_worktree` names the task in its commit
+    message on the strength of this, and the commit lands in this very directory.
+    """
+    parent = worktree.parent
+    if parent.name != "tasks" or parent.parent.name != ".agentweave":
+        return None
+    return worktree.name if _TASK_ID_RE.fullmatch(worktree.name) else None
+
+
 def _has_uncommitted_changes(worktree: Path) -> bool:
     result = _run_git(worktree, "status", "--porcelain")
     return bool(result.stdout.strip())
@@ -714,6 +748,13 @@ def snapshot_worktree(
     *message* overrides the default subject for callers whose checkout does not belong to an
     agent's turn — `release_task_worktree`, whose branch belongs to a task. Keyword-only so the
     existing positional call sites cannot acquire one by accident.
+
+    The default subject names the task when the checkout is a task's (task 6.7). A task branch
+    accumulates a snapshot per turn and, before this, every one of them read `Auto-snapshot:
+    builder's turn` — identical subjects on the only per-commit statement of what a turn was, on
+    the branch where several agents' turns can land in sequence. Read off the directory via
+    `task_id_of` rather than threaded from the trigger, so the two call sites there cannot pass
+    one task's id while committing in another's checkout.
     """
     if not _has_uncommitted_changes(worktree):
         return None
@@ -721,6 +762,13 @@ def snapshot_worktree(
     staged = _run_git(worktree, "diff", "--cached", "--name-only")
     if not staged.stdout.strip():
         return None
+    if message is None:
+        task_id = task_id_of(worktree)
+        message = (
+            f"Auto-snapshot: {agent}'s turn on {task_id}"
+            if task_id
+            else f"Auto-snapshot: {agent}'s turn"
+        )
     _run_git(
         worktree,
         "-c",
@@ -730,7 +778,7 @@ def snapshot_worktree(
         "commit",
         "--no-verify",
         "-m",
-        message or f"Auto-snapshot: {agent}'s turn",
+        message,
     )
     sha = _run_git(worktree, "rev-parse", "HEAD")
     return sha.stdout.strip()
@@ -848,10 +896,37 @@ def release_task_worktree(repo_root: Path, task_id: str) -> ReleaseResult:
     )
 
 
-def list_agent_branches(repo_root: Path) -> List[str]:
-    """Return agents with a currently registered checkout, excluding retained branches."""
+@dataclass(frozen=True)
+class WorkspaceBranch:
+    """One currently registered Hub-owned checkout, and what it belongs to.
+
+    `kind` is `"agent"` or `"task"`; `name` is the agent's name or the task's id. Keyed by
+    *workspace* rather than by agent because a branch is no longer one per agent (design D6) —
+    see `list_workspace_branches`.
+    """
+
+    kind: str
+    name: str
+    branch: str
+    path: Path
+
+
+def list_workspace_branches(repo_root: Path) -> List[WorkspaceBranch]:
+    """Every Hub-owned checkout git currently has registered, agent and task alike.
+
+    Two filters used to drop task checkouts here, not one, and relaxing either alone would have
+    left them invisible (task 6.1): the `_AGENT_NAME_RE` match on what follows
+    `refs/heads/agentweave/`, which `task/<id>` fails on the `/`, and the comparison of the
+    registered path against `worktree_path(repo_root, agent)`, which a path under
+    `.agentweave/tasks/` fails too. Both are still applied — per namespace, against the path that
+    namespace's own pure function predicts, so a checkout registered somewhere unexpected is still
+    excluded rather than reported under a name it does not occupy.
+
+    Excludes retained branches (a branch with no checkout) and review checkouts (detached, so no
+    branch record at all), exactly as before.
+    """
     result = _run_git(repo_root, "worktree", "list", "--porcelain")
-    names: List[str] = []
+    found: List[WorkspaceBranch] = []
     record: Dict[str, str] = {}
 
     def append_record() -> None:
@@ -859,12 +934,27 @@ def list_agent_branches(repo_root: Path) -> List[str]:
         prefix = f"refs/heads/{BRANCH_PREFIX}"
         if not ref.startswith(prefix):
             return
-        agent = ref[len(prefix) :]
-        if not _AGENT_NAME_RE.fullmatch(agent):
-            return
         actual = Path(record.get("worktree", "")).resolve()
-        if actual == worktree_path(repo_root, agent).resolve():
-            names.append(agent)
+        suffix = ref[len(prefix) :]
+        if suffix.startswith("task/"):
+            task_id = suffix[len("task/") :]
+            if not _TASK_ID_RE.fullmatch(task_id):
+                return
+            if actual == task_worktree_path(repo_root, task_id).resolve():
+                found.append(
+                    WorkspaceBranch(
+                        kind="task", name=task_id, branch=ref[len("refs/heads/") :], path=actual
+                    )
+                )
+            return
+        if not _AGENT_NAME_RE.fullmatch(suffix):
+            return
+        if actual == worktree_path(repo_root, suffix).resolve():
+            found.append(
+                WorkspaceBranch(
+                    kind="agent", name=suffix, branch=ref[len("refs/heads/") :], path=actual
+                )
+            )
 
     for raw_line in [*result.stdout.splitlines(), ""]:
         line = raw_line.strip()
@@ -874,12 +964,29 @@ def list_agent_branches(repo_root: Path) -> List[str]:
             continue
         key, _, value = line.partition(" ")
         record[key] = value
-    return names
+    return sorted(found, key=lambda w: (w.kind, w.name))
+
+
+def list_agent_branches(repo_root: Path) -> List[str]:
+    """Return agents with a currently registered checkout, excluding retained branches.
+
+    The agent-kind half of `list_workspace_branches`, kept as the answer to a question that is
+    still asked — "which *agents* are provisioned" — rather than as a compatibility shim.
+    """
+    return [w.name for w in list_workspace_branches(repo_root) if w.kind == "agent"]
 
 
 @dataclass
 class ConflictReport:
-    agents: Tuple[str, str]
+    """Two diverging workspaces and the paths they disagree on.
+
+    `workspaces`, not `agents`: two of the branches that can now conflict belong to tasks rather
+    than to agents, and one task's branch can conflict with another's while both are held by the
+    same agent. A pair of agent names cannot express that — it would have named the same agent
+    twice, or dropped the report for want of a second name.
+    """
+
+    workspaces: Tuple[WorkspaceBranch, WorkspaceBranch]
     paths: List[str]
 
 
@@ -905,16 +1012,21 @@ def _merge_tree_conflicts(repo_root: Path, branch_a: str, branch_b: str) -> List
 
 
 def detect_conflicts(repo_root: Path) -> List[ConflictReport]:
-    """Pairwise-check every currently-provisioned writing agent's branch against
-    every other's, surfacing which agents diverge and on which files
+    """Pairwise-check every currently-provisioned Hub-owned branch against every
+    other's, surfacing which workspaces diverge and on which files
     (hub-native-runtime's "Divergent changes surface as a conflict" scenario).
+
+    Task branches are included (task 6.2). They are where the work actually is once a project is
+    on per-task isolation, so a check that walked agent branches only would have gone quiet on a
+    project doing everything through tasks — reporting no conflicts because it was looking at the
+    empty half of the namespace.
     """
-    agents = sorted(list_agent_branches(repo_root))
+    workspaces = list_workspace_branches(repo_root)
     reports: List[ConflictReport] = []
-    for i in range(len(agents)):
-        for j in range(i + 1, len(agents)):
-            a, b = agents[i], agents[j]
-            paths = _merge_tree_conflicts(repo_root, branch_name(a), branch_name(b))
+    for i in range(len(workspaces)):
+        for j in range(i + 1, len(workspaces)):
+            a, b = workspaces[i], workspaces[j]
+            paths = _merge_tree_conflicts(repo_root, a.branch, b.branch)
             if paths:
-                reports.append(ConflictReport(agents=(a, b), paths=paths))
+                reports.append(ConflictReport(workspaces=(a, b), paths=paths))
     return reports

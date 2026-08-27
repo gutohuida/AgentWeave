@@ -300,8 +300,11 @@ def test_a_released_review_checkout_can_be_provisioned_again(repo):
 
 
 def test_a_review_checkout_does_not_appear_as_an_agent_branch(repo):
-    """`detect_conflicts` walks `list_agent_branches`; a detached checkout has no branch."""
+    """`detect_conflicts` walks the registered checkouts; a detached one has no branch record."""
     sha = _head(repo)
     ensure_review_checkout(repo, "critic", sha)
 
     assert worktrees.list_agent_branches(repo) == []
+    # And not as a workspace of any kind: task checkouts joined this listing in phase 6A, and a
+    # detached review checkout must not have been swept in alongside them.
+    assert worktrees.list_workspace_branches(repo) == []

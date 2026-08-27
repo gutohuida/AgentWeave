@@ -1020,6 +1020,7 @@ async def _render_hub_agent_context(
     agent_row: Optional[Agent],
     work_dir: Optional[str] = None,
     isolated: bool = False,
+    workspace_branch: Optional[str] = None,
     isolation_unavailable: bool = False,
     spec_document: Optional[str] = None,
     task_spec_document: Optional[str] = None,
@@ -1048,6 +1049,11 @@ async def _render_hub_agent_context(
     (`2026-08-06-agent-permissions-tool-schemas-and-base-knowledge`). They are optional because the
     same renderer serves `GET /agents/agent-context`, which is asked outside any run and so has no
     workspace to describe.
+
+    `workspace_branch` is the third of that set and arrives for the same reason (task 6.5): the
+    branch the run will actually be on. Since per-task isolation that is not derivable from the
+    agent's name — a task-bound turn stands on `agentweave/task/<id>` — and this renderer stating
+    it independently is how it came to tell agents something untrue about their own checkout.
 
     `spec_document` is the specification document the operator has open in the specification
     workspace, when they have one. It is rendered only when the Hub can confirm the document
@@ -1156,12 +1162,27 @@ async def _render_hub_agent_context(
                     "the most recent one. If that difference matters to your verdict, ask."
                 )
         elif isolated:
+            # Task 6.5. `workspace_branch` is supplied by the caller from the same dispatch that
+            # chose the directory, for the reason `work_dir` is: this used to hardcode
+            # `branch_name(agent)`, and from phase 4B onwards it told every task-bound turn it was
+            # on `agentweave/<agent>` while the process stood on `agentweave/task/<id>`. Falls back
+            # to the agent branch only for callers with no run to describe — `GET
+            # /agents/agent-context`, which is asked outside any turn.
+            branch = workspace_branch or worktrees.branch_name(agent)
+            lines.append(f"- This is an isolated git worktree on branch `{branch}`.")
+            if branch.startswith(worktrees.TASK_BRANCH_PREFIX):
+                # Said because the agent will otherwise reason about this directory as its own and
+                # be wrong in both directions: it will not find its earlier unbound work here, and
+                # it will assume nobody else will ever stand where it is standing.
+                lines.append(
+                    "- **This checkout belongs to the task, not to you.** Whoever works this task "
+                    "next continues in this same directory on this same branch, and it is "
+                    "released once the task is approved or rejected."
+                )
             lines.append(
-                f"- This is an isolated git worktree on branch `{worktrees.branch_name(agent)}`."
-            )
-            lines.append(
-                "- Other agents work in separate worktrees on their own branches. You cannot see "
-                "their changes, and they cannot see yours until branches are merged."
+                "- Other work is in separate checkouts on separate branches — other agents, other "
+                "tasks, and your own turns that are not this one. You cannot see those changes, "
+                "and they cannot see yours until branches are merged."
             )
         elif isolation_unavailable:
             # Said rather than left to be discovered. The sentence above is true for a read-only

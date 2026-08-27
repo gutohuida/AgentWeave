@@ -1715,3 +1715,184 @@ phase 5 has an outstanding proof.
 **Phase 6's task 6.5 is still the live falsehood** flagged in iterations 10 and 11:
 `api/v1/agents.py:1160` tells an isolated agent it is on `agentweave/<agent>`, which has been false
 for every task-bound turn since 4B. Nothing in phase 5 touches it. Phase 6 remains not optional.
+
+
+## Iteration 13 — 2026-08-27 16:45 → F58-IMPL phase 6A, and the sentence that had been false for four phases
+
+**Unit of work.** `next_action`'s phase 6 part A — tasks 6.1, 6.2, 6.5 and 6.7 of
+`openspec/changes/2026-08-27-work-is-isolated-per-task/tasks.md`, with 6.5 first because it was a
+live falsehood rather than a latent one. All four are ticked; the change stands at **47/69**, up
+from 43.
+
+Branch and `git log` matched STATE.json on arrival (`4f8884e`, tree clean). Nothing to reconcile.
+
+**This is the last iteration of the run.** `stop_at` is `17:00`, the driver's stop check runs at
+*launch* and this firing was launched at 16:45, so the iteration itself is not cut off — but the
+next firing will unregister the scheduled task and stop. Everything below is written for a reader
+picking phase 6B up cold, not for a next firing that will not come.
+
+### The falsehood, and where it actually lived
+
+`api/v1/agents.py` rendered the workspace sentence from `worktrees.branch_name(agent)` — a pure
+function of the agent's *name*. From phase 4B, when task-bound turns started running in
+`agentweave/task/<id>`, that sentence told every one of them it was on `agentweave/<agent>`. The
+process was standing somewhere else. An agent asking "what have I already done on this branch"
+would have been asking about a branch it was not on.
+
+The fix is not "render the task branch when there is a task". It is that the renderer stops
+deciding at all. `worktrees.turn_branch_name(repo_root, agent, config, task_id=…)` mirrors
+`resolve_turn_workspace`'s dispatch by asking `takes_task_workspace` — the same predicate, for the
+same reason D8 gave when the one-turn-per-task refusal was scoped by it — and the trigger passes
+the answer as `workspace_branch`, beside `work_dir` and for the same stated reason: *the text an
+agent reads cannot disagree with the process*. The three consumers of that idea now sit on
+consecutive lines at the call site.
+
+The fallback matters and is deliberate: `GET /agents/agent-context` renders outside any run and
+supplies no branch, so it falls back to the agent's own — which is the branch an unbound turn
+*would* run on, and the same answer that endpoint has always given.
+
+A review turn passes `None` explicitly. A review checkout is detached, so it is on no branch at
+all, and the renderer's review block never reaches the branch sentence.
+
+### The second sentence, which was wrong in a subtler way
+
+"Other agents work in separate worktrees on their own branches" was true when a checkout belonged
+to whoever held it. Once it belongs to a task it is false in both directions at once: the agent
+reading it is not on its own branch, and the peer it is being told about may not be either. The
+replacement drops the per-agent framing and keeps the part that is load-bearing —
+
+> Other work is in separate checkouts on separate branches — other agents, other tasks, and your
+> own turns that are not this one. You cannot see those changes, and they cannot see yours until
+> branches are merged.
+
+— and a task-bound turn additionally gets the sentence it had no way to infer: **the checkout
+belongs to the task, not to you**, someone else may continue in it, and it is released when the
+task is approved or rejected. An agent that thinks the directory is its own is wrong twice: it
+will not find its earlier unbound work there, and it will not expect anyone else to stand where it
+is standing.
+
+### The test that pins the wiring, and the mutation that proves it does
+
+The renderer tests in `test_workspace_posture_context.py` assert the sentence *given* a branch.
+They cannot see the wiring, and a revert at the trigger leaves all five green. So
+`test_turn_workspace.py` gained a test that runs a real task-bound turn, reads
+`.agentweave/context/writer.md` **out of the workspace the trigger chose**, and compares it with
+`git rev-parse --abbrev-ref HEAD` in that same directory. Not the renderer's return value — the
+file the runner is pointed at, which is the only copy an agent ever reads.
+
+Measured, not assumed: deleting `workspace_branch=workspace_branch` from the trigger fails exactly
+that one test, 21 others green.
+
+### Two filters, and why the task text was right to insist on both
+
+Task 6.1 warned that relaxing only the `_AGENT_NAME_RE` match would be a half-fix. It is right,
+and the reason is worth keeping: `list_agent_branches` filtered a worktree record twice — the
+regex on what followed `refs/heads/agentweave/`, which `task/<id>` fails on the `/`, and a
+comparison of the registered path against `worktree_path(repo_root, agent)`, which a path under
+`.agentweave/tasks/` fails independently. Either one alone kept task checkouts invisible.
+
+`list_workspace_branches` now dispatches on the namespace and applies *both* filters within each —
+per namespace, against the path that namespace's own pure function predicts. So a task branch
+checked out somewhere unexpected is still excluded rather than reported under a name it does not
+occupy, which is a test of its own.
+
+`list_agent_branches` survives as the agent-kind half. It is not a compatibility shim: "which
+agents are provisioned" is still a question the product asks, and `GET /worktrees` still answers
+exactly it until 6.3/6.4 widen that endpoint.
+
+### `ConflictReport.agents` could not express the thing it was being asked
+
+`detect_conflicts` walked agent branches only, so a project doing its work through tasks got a
+clean bill of health from the empty half of the namespace. Widening it exposed why the report's
+shape had to change too, and the case that makes it concrete is in the suite: **two tasks held by
+the same agent, conflicting.** A fixed pair of agent names could only have reported
+`("builder", "builder")` — a report that reads as a bug in the reporter. So `ConflictReport` names
+two `WorkspaceBranch` records (kind, name, branch, path), and the API's `ConflictInfo` names two
+`ConflictWorkspaceInfo` objects.
+
+**No UI consumer reads `/worktrees/conflicts`** — grepped, `WorktreesPanel.tsx` is the stub task
+6.4b is about and calls no API at all. So the response shape changed cleanly, and the only
+callers to fix were two tests.
+
+### 6.7, and where the task id comes from
+
+A task branch collects one snapshot per turn and every one of them read `Auto-snapshot: builder's
+turn`. Identical subjects, on the only per-commit statement of what a turn was, on the one branch
+where several agents' turns can land in sequence.
+
+The id is read off the directory by `task_id_of(worktree)` rather than threaded down from the
+trigger. That was the cleaner answer for a reason worth stating: `snapshot_worktree`'s two call
+sites in `agent_trigger.py` receive a `Path` and no task, and threading one down would have created
+a way to pass one task's id while committing in another task's checkout. Derived from the
+directory, the message cannot describe a checkout other than the one the commit lands in.
+
+### Mutation-checked, all four
+
+| Mutation | Named test that failed |
+|---|---|
+| task namespace dropped from the listing | `…task_checkout_is_listed_as_a_workspace` + both conflict tests |
+| path filter dropped for the task namespace | `…task_branch_registered_at_an_unexpected_path_is_not_listed` |
+| snapshot message stops naming the task | `…snapshot_in_a_task_checkout_names_the_task` |
+| `workspace_branch` not passed at the trigger | `…task_bound_turn_is_told_the_branch_it_is_actually_on` |
+
+### A finding, recorded rather than worked around
+
+**Workspace isolation has no capability document in `openspec/specs/`.** All 41 were listed; none
+owns `worktrees.py` or `/api/v1/projects/{id}/worktrees`. The requirement the code's own docstrings
+cite — hub-native-runtime's "Divergent changes surface as a conflict" — belongs to a change that
+was archived, and its behaviour was never synced into a current-behaviour document. So this
+iteration changed a public API response shape with no requirement of record constraining it, and
+`openspec validate --strict` has nothing to say about that. It is not a blocker for this change,
+whose own deltas cover what it touches; it is a hole in the corpus, and the kind that only shows up
+when someone goes looking for the requirement they are about to break.
+
+### For whoever picks up 6B
+
+Remaining in phase 6: **6.3, 6.4, 6.4b, 6.6, 6.8, 6.9, 6.10** — the API + UI + lifecycle-guard
+half. `list_workspace_branches` is the function 6.3 and 6.4 want; it already returns kind, name,
+branch and path per checkout, and it provisions nothing, which is the promise 6.3 asks the endpoint
+to state.
+
+Still open from earlier phases, and not lost: **task 8.3**, the mutation check for phase 5's
+release call.
+
+### Verified outside the suite's fixtures
+
+Testing code I wrote myself inherits my blind spots, so the four behaviours were driven a
+second time from `testbed/phase6a_check.py` (gitignored, as the testbed is) - a throwaway
+repository, the real `hub.worktrees` functions, and no conftest, so none of the suite's
+autouse stubs were in play. Transcript:
+
+```
+--- git's own view -------------------------------------------------
+C:/Users/huida/AppData/Local/Temp/aw-phase6a-8bwcymkp/repo                                      0408fd4 [main]
+C:/Users/huida/AppData/Local/Temp/aw-phase6a-8bwcymkp/repo/.agentweave/tasks/task-00ff11ee22dd  0408fd4 [agentweave/task/task-00ff11ee22dd]
+C:/Users/huida/AppData/Local/Temp/aw-phase6a-8bwcymkp/repo/.agentweave/tasks/task-ab12cd34ef56  0408fd4 [agentweave/task/task-ab12cd34ef56]
+C:/Users/huida/AppData/Local/Temp/aw-phase6a-8bwcymkp/repo/.agentweave/worktrees/builder        0408fd4 [agentweave/builder]
+
+--- list_workspace_branches ---------------------------------------
+  agent  builder                 agentweave/builder
+  task   task-00ff11ee22dd       agentweave/task/task-00ff11ee22dd
+  task   task-ab12cd34ef56       agentweave/task/task-ab12cd34ef56
+
+--- list_agent_branches (still agents only) -----------------------
+  ['builder']
+
+--- snapshot commit subjects --------------------------------------
+  task-ab12cd34ef56       Auto-snapshot: builder's turn on task-ab12cd34ef56
+  task-00ff11ee22dd       Auto-snapshot: reviewer's turn on task-00ff11ee22dd
+  builder                 Auto-snapshot: builder's turn
+
+--- detect_conflicts ----------------------------------------------
+  agent:builder vs task:task-00ff11ee22dd  on ['f.txt']
+  agent:builder vs task:task-ab12cd34ef56  on ['f.txt']
+  task:task-00ff11ee22dd vs task:task-ab12cd34ef56  on ['f.txt']
+
+--- turn_branch_name vs the branch git registered -----------------
+  bound     says agentweave/task/task-ab12cd34ef56  is on agentweave/task/task-ab12cd34ef56  AGREE
+  unbound   says agentweave/builder                is on agentweave/builder                AGREE
+```
+
+The third conflict line is the case that justified the shape change: two task checkouts,
+both `builder`'s work, reported as two workspaces. `ConflictReport.agents` could only have
+said `("builder", "builder")`.

@@ -22,6 +22,11 @@ from hub import worktrees
 # real function. This file is one of the two that must have the real one.
 from hub.worktrees import ensure_task_worktree
 
+#: Captured at import, before conftest's autouse fixture replaces the attribute. `resolve_turn_workspace`
+#: reaches both of its implementations through the *module*, so restoring the named import alone is
+#: not enough for the two tests that exercise the resolver itself.
+_REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
+
 TASK = "task-ab12cd34ef56"
 OTHER = "task-00ff11ee22dd"
 
@@ -46,6 +51,18 @@ def _init_repo(path: Path) -> Path:
 @pytest.fixture
 def repo(tmp_path) -> Path:
     return _init_repo(tmp_path / "repo")
+
+
+@pytest.fixture
+def real_provisioning(monkeypatch):
+    """Restore both functions `resolve_turn_workspace` dispatches to.
+
+    conftest's `_no_real_worktree_provision` stubs each to return the repo root, so a test that
+    restored only one would find both schemes resolving to the same directory and pass without
+    discriminating anything — the warning `test_turn_workspace.py` records in its own docstring.
+    """
+    monkeypatch.setattr(worktrees, "ensure_task_worktree", ensure_task_worktree)
+    monkeypatch.setattr(worktrees, "resolve_agent_workspace", _REAL_RESOLVE_AGENT_WORKSPACE)
 
 
 def _commit_on_new_branch(repo: Path, branch: str, name: str, body: str) -> str:
@@ -327,3 +344,185 @@ def test_release_task_worktree_reports_nothing_when_never_provisioned(repo):
     assert result.released is False
     assert result.branch == worktrees.task_branch_name(TASK)
     assert result.snapshot_commit is None
+
+
+# --- what a task checkout looks like from the outside (tasks 6.1, 6.2, 6.7) -------------------
+
+
+def test_a_task_checkout_is_listed_as_a_workspace(repo):
+    """Task 6.1. **Two** filters dropped task checkouts from the listing, not one, and each was
+    on its own sufficient to hide them — so this asserts both are gone rather than one.
+    """
+    base = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    task_path = ensure_task_worktree(repo, TASK, base, ())
+    agent_path = worktrees.ensure_worktree(repo, "builder")
+
+    listed = worktrees.list_workspace_branches(repo)
+    by_name = {w.name: w for w in listed}
+
+    assert set(by_name) == {TASK, "builder"}
+    assert by_name[TASK].kind == "task"
+    assert by_name[TASK].branch == worktrees.task_branch_name(TASK)
+    assert by_name[TASK].path == task_path.resolve()
+    assert by_name["builder"].kind == "agent"
+    assert by_name["builder"].path == agent_path.resolve()
+
+    # Filter one: the old code matched `_AGENT_NAME_RE` against everything after
+    # `refs/heads/agentweave/`, and `task/<id>` fails it on the `/`.
+    suffix = by_name[TASK].branch[len(worktrees.BRANCH_PREFIX) :]
+    assert worktrees._AGENT_NAME_RE.fullmatch(suffix) is None
+    # Filter two: it then compared the registered path against `worktree_path(repo, <name>)`, and a
+    # task checkout lives under `.agentweave/tasks/`, not `.agentweave/worktrees/`. Relaxing only
+    # the regex would still have dropped this record here.
+    assert by_name[TASK].path != worktrees.worktree_path(repo, "builder").resolve()
+    assert worktrees.task_root(repo).resolve() in by_name[TASK].path.parents
+
+
+def test_a_task_checkout_is_not_reported_as_an_agent(repo):
+    """`list_agent_branches` still answers the question it names — which *agents* are
+    provisioned — so the endpoint and the callers that ask it did not silently change meaning."""
+    base = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    ensure_task_worktree(repo, TASK, base, ())
+    worktrees.ensure_worktree(repo, "builder")
+
+    assert worktrees.list_agent_branches(repo) == ["builder"]
+
+
+def test_a_task_branch_registered_at_an_unexpected_path_is_not_listed(repo):
+    """The path filter is still applied per namespace, not dropped along with the name filter.
+
+    A checkout of a task branch somewhere other than `task_worktree_path` is not that task's
+    workspace, and reporting it under the task's name would name a directory nobody works in.
+    """
+    base = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    elsewhere = repo.parent / "elsewhere"
+    _git(
+        repo,
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        worktrees.task_branch_name(TASK),
+        str(elsewhere),
+        base,
+    )
+
+    assert worktrees.list_workspace_branches(repo) == []
+
+
+def test_detect_conflicts_sees_a_task_branch_against_an_agent_branch(repo):
+    """Task 6.2. Before this the check walked agent branches only, so a project doing its work
+    through tasks got a clean bill of health from an empty half of the namespace."""
+    base = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    task_path = ensure_task_worktree(repo, TASK, base, ())
+    agent_path = worktrees.ensure_worktree(repo, "builder")
+    (task_path / "f.txt").write_text("the task's version\n")
+    worktrees.snapshot_worktree(task_path, "builder")
+    (agent_path / "f.txt").write_text("the agent's version\n")
+    worktrees.snapshot_worktree(agent_path, "builder")
+
+    reports = worktrees.detect_conflicts(repo)
+
+    assert len(reports) == 1
+    assert reports[0].paths == ["f.txt"]
+    assert {(w.kind, w.name) for w in reports[0].workspaces} == {
+        ("task", TASK),
+        ("agent", "builder"),
+    }
+
+
+def test_two_tasks_held_by_one_agent_conflict_as_two_workspaces(repo):
+    """Why `ConflictReport` names workspaces rather than agents.
+
+    Both checkouts here belong to the same agent's work. A pair of agent names could only have
+    reported `("builder", "builder")` — a report that reads as a bug in the reporter.
+    """
+    base = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    first = ensure_task_worktree(repo, TASK, base, ())
+    second = ensure_task_worktree(repo, OTHER, base, ())
+    (first / "f.txt").write_text("first task\n")
+    worktrees.snapshot_worktree(first, "builder")
+    (second / "f.txt").write_text("second task\n")
+    worktrees.snapshot_worktree(second, "builder")
+
+    reports = worktrees.detect_conflicts(repo)
+
+    assert len(reports) == 1
+    assert {w.name for w in reports[0].workspaces} == {TASK, OTHER}
+    assert {w.kind for w in reports[0].workspaces} == {"task"}
+
+
+def test_a_snapshot_in_a_task_checkout_names_the_task(repo):
+    """Task 6.7. A task branch collects one snapshot per turn, and every one of them read
+    `Auto-snapshot: builder's turn` — identical subjects on the only per-commit record of what a
+    turn was, on a branch several agents' turns can land on in sequence."""
+    base = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    path = ensure_task_worktree(repo, TASK, base, ())
+    (path / "f.txt").write_text("work\n")
+
+    sha = worktrees.snapshot_worktree(path, "builder")
+
+    subject = _git(repo, "log", "-1", "--format=%s", sha).stdout.strip()
+    assert subject == f"Auto-snapshot: builder's turn on {TASK}"
+
+
+def test_a_snapshot_in_an_agent_checkout_still_names_only_the_agent(repo):
+    """The unbound case is unchanged — a per-agent branch has one holder, so its id adds nothing."""
+    path = worktrees.ensure_worktree(repo, "builder")
+    (path / "f.txt").write_text("work\n")
+
+    sha = worktrees.snapshot_worktree(path, "builder")
+
+    subject = _git(repo, "log", "-1", "--format=%s", sha).stdout.strip()
+    assert subject == "Auto-snapshot: builder's turn"
+
+
+def test_task_id_of_reads_the_directory_rather_than_trusting_a_name(repo):
+    assert worktrees.task_id_of(worktrees.task_worktree_path(repo, TASK)) == TASK
+    assert worktrees.task_id_of(worktrees.worktree_path(repo, "builder")) is None
+    # A directory named like a task somewhere else is not a task checkout.
+    assert worktrees.task_id_of(repo / TASK) is None
+    assert worktrees.task_id_of(worktrees.task_root(repo) / "not-a-task-id") is None
+
+
+# --- the branch the turn is told it is on (task 6.5) ------------------------------------------
+
+
+def test_turn_branch_name_agrees_with_the_branch_the_resolver_provisions(repo, real_provisioning):
+    """The whole point of task 6.5: one dispatch, two consumers, and the invariant that they
+    cannot disagree. Asserted against the branch git actually registered, not against a
+    restatement of the rule."""
+    base = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    config = {}
+
+    workspace = worktrees.resolve_turn_workspace(repo, "builder", config, task_id=TASK, base=base)
+    branch = worktrees.turn_branch_name(repo, "builder", config, task_id=TASK)
+
+    assert branch == worktrees.task_branch_name(TASK)
+    assert worktrees._registered_worktree_branch(repo, workspace) == f"refs/heads/{branch}"
+
+
+def test_turn_branch_name_answers_the_agent_branch_for_an_unbound_turn(repo, real_provisioning):
+    config = {}
+
+    workspace = worktrees.resolve_turn_workspace(repo, "builder", config, task_id=None)
+    branch = worktrees.turn_branch_name(repo, "builder", config, task_id=None)
+
+    assert branch == worktrees.branch_name("builder")
+    assert worktrees._registered_worktree_branch(repo, workspace) == f"refs/heads/{branch}"
+
+
+def test_turn_branch_name_answers_the_agent_branch_for_a_read_only_agent(repo):
+    """A read-only agent shares the project checkout whether or not it is bound to a task, so
+    there is no task branch to name — and `takes_task_workspace` is what says so, here as
+    there."""
+    config = {"read_only": True}
+
+    assert worktrees.turn_branch_name(repo, "builder", config, task_id=TASK) == "agentweave/builder"
+
+
+def test_turn_branch_name_answers_the_agent_branch_outside_a_repository(tmp_path):
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+
+    assert worktrees.turn_branch_name(plain, "builder", {}, task_id=TASK) == "agentweave/builder"

@@ -323,12 +323,12 @@ Read 4.14's implementation note before changing where the guard sits.
 
 ## 6. Surfaces that assume one workspace per agent (D6, D7)
 
-- [ ] 6.1 Add a test asserting `worktrees.list_agent_branches` (`:553`) and `detect_conflicts`
+- [x] 6.1 Add a test asserting `worktrees.list_agent_branches` (`:553`) and `detect_conflicts`
   (`:609`) see task branches. **Two** filters drop them today, not one: the `_AGENT_NAME_RE` match
   on what follows `refs/heads/agentweave/` (`:565-566`), and the comparison of the registered
   worktree path against `worktree_path(repo_root, agent)` (`:567-568`). Relaxing only the regex
   changes nothing — assert both, or the test passes against a half-fix.
-- [ ] 6.2 Implement the listing and conflict-detection change, keyed by workspace rather than by
+- [x] 6.2 Implement the listing and conflict-detection change, keyed by workspace rather than by
   agent name, and update `ConflictReport.agents` (`worktrees.py:583`) and the API's `ConflictInfo`
   (`api/v1/worktrees.py:43-45`) to name what actually conflicts. Both are fixed two-tuples of agent
   names today.
@@ -347,7 +347,7 @@ Read 4.14's implementation note before changing where the guard sits.
   "No worktree activity" while task checkouts exist is worse after this change than before. Either
   point it at `GET /worktrees` or say in its own copy that it is not implemented — decide and record
   which, do not leave it as it is by default.
-- [ ] 6.5 Add a test asserting the turn context sentence for a task-bound turn names the task branch
+- [x] 6.5 Add a test asserting the turn context sentence for a task-bound turn names the task branch
   (`api/v1/agents.py:1160` today hardcodes `worktrees.branch_name(agent)`), and that an unbound turn
   still names the agent branch. Also correct the sentence two lines below (`:1162-1164`), "Other
   agents work in separate worktrees on their own branches … they cannot see yours" — true per agent,
@@ -356,7 +356,7 @@ Read 4.14's implementation note before changing where the guard sits.
 - [ ] 6.6 Add a test asserting `checkpoints.agent_worktree` (`checkpoints.py:363`) resolves a
   checkpoint's paths against the workspace the run actually used, and still returns `None` rather
   than raising for an agent that never ran.
-- [ ] 6.7 Change `snapshot_worktree`'s commit message (`worktrees.py:472`) to name the task when
+- [x] 6.7 Change `snapshot_worktree`'s commit message (`worktrees.py:472`) to name the task when
   there is one, and assert it. A branch of identically-messaged snapshots is unreadable, and the
   message is the only per-commit statement of what a turn was.
 

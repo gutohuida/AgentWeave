@@ -1,9 +1,13 @@
 """Project-scoped workspace-isolation read endpoints.
 
 Read-only views over `worktrees.py`'s git state (task 5, design.md Decision 7): which
-writing agents currently have an isolated checkout, and whether any of their branches
-would conflict if combined — the "interface identifies which agents diverged" half of
-hub-native-runtime's "Divergent changes surface as a conflict" scenario.
+writing agents currently have an isolated checkout, and whether any Hub-owned branch
+would conflict with another if combined — the "interface identifies which agents diverged"
+half of hub-native-runtime's "Divergent changes surface as a conflict" scenario.
+
+Since per-task isolation the conflict half no longer identifies *agents*: a branch can belong
+to a task, and two of one agent's tasks can diverge from each other. It names workspaces, and
+`ConflictInfo` says why.
 """
 
 from __future__ import annotations
@@ -40,8 +44,23 @@ class AgentWorkspaceInfo(BaseModel):
     unavailable_reason: Optional[str] = None
 
 
+class ConflictWorkspaceInfo(BaseModel):
+    """One side of a conflict: which checkout it is, and what that checkout belongs to."""
+
+    kind: str
+    name: str
+    branch: str
+
+
 class ConflictInfo(BaseModel):
-    agents: Tuple[str, str]
+    """`workspaces`, not `agents` (task 6.2).
+
+    A conflict is between two branches, and since per-task isolation a branch can belong to a
+    task rather than to an agent — including two tasks held by the *same* agent, which a pair of
+    agent names could only have reported as that agent conflicting with itself.
+    """
+
+    workspaces: Tuple[ConflictWorkspaceInfo, ConflictWorkspaceInfo]
     paths: List[str]
 
 
@@ -78,17 +97,28 @@ async def get_worktree_conflicts(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ) -> List[ConflictInfo]:
-    """Pairwise-check every provisioned agent branch against every other's with
-    `git merge-tree` and report which agents diverge, and on which files.
+    """Pairwise-check every provisioned Hub-owned branch against every other's with
+    `git merge-tree` and report which workspaces diverge, and on which files. Task checkouts
+    are included alongside agent checkouts.
     """
     project_id, _ = project
     repo_root = await _resolve_repo_root(project_id, session)
     if not worktrees.is_git_repo(repo_root):
         return []
     return [
-        ConflictInfo(agents=report.agents, paths=report.paths)
+        ConflictInfo(
+            workspaces=(
+                _conflict_workspace(report.workspaces[0]),
+                _conflict_workspace(report.workspaces[1]),
+            ),
+            paths=report.paths,
+        )
         for report in worktrees.detect_conflicts(repo_root)
     ]
+
+
+def _conflict_workspace(workspace: worktrees.WorkspaceBranch) -> ConflictWorkspaceInfo:
+    return ConflictWorkspaceInfo(kind=workspace.kind, name=workspace.name, branch=workspace.branch)
 
 
 # Declared after `/conflicts`, which would otherwise be claimed by this route's path parameter.

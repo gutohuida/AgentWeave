@@ -626,3 +626,75 @@ async def test_a_prerequisites_accepted_commits_are_in_the_task_checkout(
     assert Path(cwd) == worktrees.task_worktree_path(repo, BOUND_TASK)
     assert (Path(cwd) / "prerequisite.txt").read_text() == "groundwork\n"
     assert not (repo / "prerequisite.txt").exists()
+
+
+def _turn_context(cwd: str, agent: str) -> str:
+    """The context file the trigger materialized for this turn, read from the workspace it chose.
+
+    Not the renderer's return value: this is the file the runner is pointed at, inside the
+    directory the process was given, which is the only copy an agent ever reads.
+    """
+    return (Path(cwd) / ".agentweave" / "context" / f"{agent}.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_a_task_bound_turn_is_told_the_branch_it_is_actually_on(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """6.5, end to end — the falsehood this change shipped with, from 4B until phase 6.
+
+    The renderer tests in `test_workspace_posture_context.py` pin the sentence given a branch.
+    This one pins the *wiring*: that the branch reaching the renderer is the one
+    `resolve_turn_workspace` just provisioned. Reverting `workspace_branch` at the trigger leaves
+    those tests green and fails this one, which is the whole reason it is here.
+    """
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    _real_worktrees(monkeypatch)
+    await _agent(app, auth_headers, bind_runner, "writer")
+    conversation_id = await _conversation("writer")
+    await _task(BOUND_TASK)
+
+    cwd = await _turn(
+        async_session_factory,
+        project_id="proj-test",
+        agent="writer",
+        message="work on it",
+        conversation_id=conversation_id,
+        task_id=BOUND_TASK,
+    )
+
+    context = _turn_context(cwd, "writer")
+    branch = _git(Path(cwd), "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    assert branch == worktrees.task_branch_name(BOUND_TASK)
+    assert f"isolated git worktree on branch `{branch}`" in context
+    assert "agentweave/writer" not in context
+    assert "checkout belongs to the task, not to you" in context
+
+
+@pytest.mark.asyncio
+async def test_an_unbound_turn_is_still_told_its_own_branch(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """The other half of 6.5, and the regression the fix could plausibly have caused: telling
+    every isolated turn it was on a task branch would be exactly as wrong in the other
+    direction."""
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    _real_worktrees(monkeypatch)
+    await _agent(app, auth_headers, bind_runner, "writer")
+    conversation_id = await _conversation("writer")
+
+    cwd = await _turn(
+        async_session_factory,
+        project_id="proj-test",
+        agent="writer",
+        message="just do this",
+        conversation_id=conversation_id,
+    )
+
+    context = _turn_context(cwd, "writer")
+    branch = _git(Path(cwd), "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    assert branch == worktrees.branch_name("writer")
+    assert f"isolated git worktree on branch `{branch}`" in context
+    assert "belongs to the task" not in context

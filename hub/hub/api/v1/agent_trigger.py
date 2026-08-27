@@ -567,12 +567,19 @@ async def trigger_agent_directly(
                 status.HTTP_400_BAD_REQUEST, f"Invalid work_dir: {exc}"
             ) from exc
         isolated_workspace: Optional[Path] = None
+        # Not isolated, so the renderer never reads it; named on every branch so mypy sees one
+        # type and a future branch cannot inherit a stale value from the one above it.
+        workspace_branch: Optional[str] = None
     elif review_context is not None:
         # Task 3.1: the review checkout replaces `resolve_agent_workspace` outright. The agent's own
         # working worktree is not part of this turn, which is what makes the wrong directory
         # *outside the boundary* rather than merely the wrong choice.
         effective_work_dir = str(review_context.workspace)
         isolated_workspace = review_context.workspace
+        # A review checkout is detached (`ensure_review_checkout`), so it is on no branch at all.
+        # The renderer's review block says so in its own words and never reaches the branch
+        # sentence, which is why this is `None` rather than the reviewer's own branch.
+        workspace_branch = None
     else:
         # Which workspace this turn is about, not whose turn it is (design D3). A turn bound to a
         # task executes in that task's own checkout, so approving one task cannot merge another
@@ -634,6 +641,12 @@ async def trigger_agent_directly(
             ) from exc
         effective_work_dir = str(workspace)
         isolated_workspace = workspace if workspace != repo_root else None
+        # Task 6.5. Same argument as `effective_work_dir` above: computed here, from the same
+        # inputs `resolve_turn_workspace` was just given, so the sentence the agent reads cannot
+        # disagree with the branch its process is standing on.
+        workspace_branch = worktrees.turn_branch_name(
+            repo_root, agent, config, task_id=turn_workspace.task_id
+        )
 
     # Build context from current Hub-owned state for every turn. Runners consume a file,
     # so materialize the canonical response inside the effective workspace immediately
@@ -656,6 +669,7 @@ async def trigger_agent_directly(
         # write was refused.
         work_dir=effective_work_dir,
         isolated=isolated_workspace is not None,
+        workspace_branch=workspace_branch,
         # A writing agent working in the project directory is doing so because there is no
         # repository to cut a worktree from — the only remaining path through
         # `resolve_agent_workspace`. Told apart from a read-only agent sharing by choice,
