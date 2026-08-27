@@ -2302,6 +2302,15 @@ class JobScheduler:
                 review_task_id=(
                     selection.task.id if (selection is not None and selection.is_review) else None
                 ),
+                # `every-run-knows-its-task` D1/D2: the other half of the same selection, set only
+                # where the ladder made this an ordinary claim. Never both on one entry — a firing
+                # is either reviewing or working, and the field that isn't its kind stays `None`
+                # (design D3 depends on this: it is what lets the scheduler tell the two apart).
+                task_id=(
+                    selection.task.id
+                    if (selection is not None and not selection.is_review)
+                    else None
+                ),
             )
             session.add(entry)
             # The firing genuinely becomes "in progress" here, not at `JobRun` creation above —
@@ -2619,6 +2628,9 @@ class JobScheduler:
             # Design D9, same as the primary path: only a selection the ladder made *as a review*
             # gets a checkout of the author's work.
             review_task_id=task.id if is_review else None,
+            # `every-run-knows-its-task` D1/D2, same as the primary path: the other half of the
+            # same selection, and never both on one entry.
+            task_id=task.id if not is_review else None,
         )
         session.add(entry)
         # One per row, so `run_count` keeps counting `JobRun`s (finding F11 stamps the primary's at

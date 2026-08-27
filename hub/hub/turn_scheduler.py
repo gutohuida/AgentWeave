@@ -37,6 +37,21 @@ def _lock_for(project_id: str, agent: str) -> asyncio.Lock:
     return _agent_locks.setdefault((project_id, agent), asyncio.Lock())
 
 
+def _entry_kind(entry: InboundQueueEntry) -> Optional[str]:
+    """Returns "review" or "work", or `None` for an entry naming neither (design D3, F66).
+
+    `review_task_id` wins when both are set — the divergence response that restaffs a failed
+    review sets both to the same task (`run_divergence.py`), and that entry needs the review
+    checkout, not the ordinary worktree, so it is a review turn regardless of the `task_id` beside
+    it.
+    """
+    if entry.review_task_id is not None:
+        return "review"
+    if entry.task_id is not None:
+        return "work"
+    return None
+
+
 async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
     """Start at most one turn for *agent*; leave work durable when it cannot start."""
     from .api.v1.agent_trigger import TriggerAgentError, trigger_agent_directly
@@ -69,13 +84,25 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
         ):
             return ScheduleResult(waiting_reason="conversation is unavailable")
 
-        # Filter by depth as well as conversation. `can_start` asks whether the turn may begin;
-        # nothing used to ask which entries may ride on it, so an over-budget entry was bundled
-        # into a turn admitted by a shallower one and delivered anyway (design D1, finding F5).
+        # Filter by depth and by kind, as well as by conversation. `can_start` asks whether the
+        # turn may begin; nothing used to ask which entries may ride on it, so an over-budget
+        # entry was bundled into a turn admitted by a shallower one and delivered anyway (design
+        # D1, finding F5). F66 is the same defect one column over: a review entry and a work entry
+        # batched together delivered a turn that was neither, so the controlling entry's kind
+        # decides the turn and the other kind's entries are deferred to the next one (design D3).
+        # An entry naming neither — a plain message riding beside a delegation — has no kind to
+        # conflict with either and always rides along.
+        controlling_kind = _entry_kind(controlling)
         selected = [
             entry
             for entry in entries
-            if entry.conversation_id == conversation.id and entry.hop_depth <= hop_budget
+            if entry.conversation_id == conversation.id
+            and entry.hop_depth <= hop_budget
+            and (
+                controlling_kind is None
+                or _entry_kind(entry) is None
+                or _entry_kind(entry) == controlling_kind
+            )
         ][:cap]
         if not selected:
             return ScheduleResult(waiting_reason="hop budget exhausted")

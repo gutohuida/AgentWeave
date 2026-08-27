@@ -31,6 +31,7 @@ from hub.db.models import (
     Message,
     Question,
     Run,
+    RunDivergence,
     Task,
 )
 from hub.run_task_binding import TERMINAL_FOR_BINDING, release_block_for_question
@@ -503,7 +504,10 @@ async def test_loop_fire_claims_the_oldest_pending_task(app, auth_headers, bind_
     async with async_session_factory() as db:
         older = await db.get(Task, "task-loop-claim-older")
         newer = await db.get(Task, "task-loop-claim-newer")
-        assert older.status == "assigned"
+        # `every-run-knows-its-task` D1/D2: the staged entry now carries `task_id`, so the run
+        # that starts on it binds and advances it past `assigned` to `in_progress` before this
+        # drain returns — the claim ladder's own outcome (which task got claimed) is unchanged.
+        assert older.status == "in_progress"
         assert older.assignee == "loop-agent-claim-oldest"
         assert newer.status == "pending"
         assert newer.assignee is None
@@ -588,7 +592,9 @@ async def test_loop_fire_claims_the_oldest_even_when_updated_differs(
     async with async_session_factory() as db:
         older = await db.get(Task, "task-upd-older")
         newer = await db.get(Task, "task-upd-newer")
-        assert older.status == "assigned", "the OLDER pending task must be claimed"
+        # `every-run-knows-its-task` D1/D2: the started run binds and advances the claimed task
+        # past `assigned` to `in_progress` — see the sibling test above for the full reasoning.
+        assert older.status == "in_progress", "the OLDER pending task must be claimed"
         assert older.assignee == "loop-agent-claim-updated"
         assert newer.status == "pending", "the newer pending task must be left alone"
         assert newer.assignee is None
@@ -678,8 +684,13 @@ async def test_loop_fire_resumes_an_assigned_task_rather_than_stranding_it(
     could then neither claim it nor stop because of it. Demonstrated live on the trial Hub
     (`loop-33deddaf`: three firings, nothing claimed, `stopped_at` still null).
 
-    So: the older `assigned` task is resumed, its status is NOT re-entered, and the newer pending
-    task is left alone.
+    So: the loop's own claim ladder does not re-enter the older task's `assigned` status just to
+    resume it — it was never at risk of being skipped. What happens next is a separate mechanism:
+    the run started on it now binds via `task_id` (`every-run-knows-its-task` D1/D2) and advances
+    it to `in_progress`, the same way any other bound run does. Before that change, a job/flow
+    firing's queue entry never carried `task_id`, so this task sat labelled `assigned` for the
+    whole time the agent was actually working on it — resumed, yes, but invisible in its own
+    status. The newer pending task is left alone either way.
     """
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",
@@ -745,8 +756,9 @@ async def test_loop_fire_resumes_an_assigned_task_rather_than_stranding_it(
     async with async_session_factory() as db:
         resumed = await db.get(Task, "task-resume-assigned")
         untouched = await db.get(Task, "task-resume-untouched")
-        # Resumed, not re-entered: an already-active task keeps its status (design D3).
-        assert resumed.status == "assigned"
+        # Resumed and then advanced: the bound run moves it to `in_progress` (D1/D2), where before
+        # this change it would have stayed `assigned` for the run's entire duration.
+        assert resumed.status == "in_progress"
         assert resumed.assignee == "loop-agent-resume-assigned"
         # And the pending one is NOT claimed alongside it -- that skipping is what stranded work.
         assert untouched.status == "pending"
@@ -1016,7 +1028,9 @@ async def test_loop_whose_tasks_are_all_completed_but_unapproved_skips_instead_o
 
     async with async_session_factory() as db:
         unblocked = await db.get(Task, "task-spin-unblocked")
-        assert unblocked.status == "assigned"
+        # `every-run-knows-its-task` D1/D2: the recovering run binds via `task_id` and advances
+        # the claimed task past `assigned` to `in_progress`.
+        assert unblocked.status == "in_progress"
         assert unblocked.assignee == "loop-agent-spin"
 
 
@@ -2294,3 +2308,293 @@ def test_the_two_cron_readers_this_repository_holds_really_do_disagree():
     # croniter fires on the next Friday *or* the 15th, whichever comes first; APScheduler waits
     # for a 15th that is also a Friday. Months apart, from the same five fields.
     assert (and_reading - or_reading).days > 200
+
+
+# ---------------------------------------------------------------------------
+# `every-run-knows-its-task` group 2 (D1/D2, F66) — a flow work firing binds the run it starts
+#
+# Before this group both of the scheduler's staging paths set `review_task_id` for a review
+# selection and nothing at all for an ordinary one, so `run.task_id` was NULL on every flow work
+# run the product ever started (F5's measured "10 across 202 runs" — the ~10% is delegation and
+# operator triggers, which already set it). `binding_from_entries` reads `task_id` (or
+# `review_task_id`) off the *queue entry*, not off the selection the ladder made, so a firing that
+# claims a task for ordinary work must say so on the entry it stages, or nothing downstream ever
+# learns it.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_primary_firing_that_claims_work_stages_task_id_not_review_task_id(
+    app, auth_headers, bind_runner
+):
+    """2.1 — the primary staging path (`scheduler.py` ~2302)."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"flow-stages-work": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("flow-stages-work", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 6001
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-stages-1"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="stages-work", agent="flow-stages-work")
+        loop = await _make_loop(db, job_id=job.id, purpose="stage the work")
+        db.add(
+            Task(
+                id="task-flow-stages",
+                project_id="proj-test",
+                title="do the thing",
+                status="pending",
+                loop_id=loop.id,
+            )
+        )
+        await db.commit()
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                success = await scheduler._fire_job_internal(
+                    fresh_job, trigger="scheduled", session=db
+                )
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    assert success is True
+
+    async with async_session_factory() as db:
+        entry = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.agent == "flow-stages-work")
+                )
+            )
+            .scalars()
+            .first()
+        )
+        assert entry is not None
+        assert entry.task_id == "task-flow-stages"
+        assert entry.review_task_id is None
+
+
+@pytest.mark.asyncio
+async def test_a_firing_that_staffs_a_review_stages_review_task_id_not_task_id(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """2.2 — D2's separation pinned in both directions: a review selection carries
+    `review_task_id`, never `task_id`, even though the same firing now writes both fields."""
+    from .test_agent_trigger import _init_repo
+    from .test_flow_fires_a_review_turn import _attribute_completion, _flow, _queued_entry_for
+    from .test_review_turn import _author_commit, _reviewable_task, _roster
+
+    repo = _init_repo(tmp_path / "repo")
+    sha = _author_commit(repo, filename="ledger.py", body="x = 1\n")
+    await bind_project_workspace(repo)
+    await _roster(
+        app, auth_headers, bind_runner, "flow-stages-review-author", "flow-stages-review-critic"
+    )
+    await _reviewable_task(commit=sha)
+
+    async with async_session_factory() as db:
+        await _attribute_completion(db, "task-1", "flow-stages-review-author")
+        job, _loop = await _flow(
+            db, suffix="stages-review", agent="flow-stages-review-author", task_id="task-1"
+        )
+
+    scheduler = JobScheduler()
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        async with async_session_factory() as db:
+            fresh_job = await db.get(AIJob, job.id)
+            await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+    entry = await _queued_entry_for("flow-stages-review-critic")
+    assert entry is not None
+    assert entry.review_task_id == "task-1"
+    assert entry.task_id is None
+
+
+@pytest.mark.asyncio
+async def test_a_flow_work_run_binds_and_starts_its_claimed_task(app, auth_headers, bind_runner):
+    """2.3 — the run delivering the work entry is bound to that task, and the task reaches
+    `in_progress` without the agent moving it (the runtime's own move, `bind_run_to_task`)."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"flow-binds-work": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("flow-binds-work", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 6002
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-binds-1"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="binds-work", agent="flow-binds-work")
+        loop = await _make_loop(db, job_id=job.id, purpose="bind the work")
+        db.add(
+            Task(
+                id="task-flow-binds",
+                project_id="proj-test",
+                title="do the thing",
+                status="pending",
+                loop_id=loop.id,
+            )
+        )
+        await db.commit()
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    async with async_session_factory() as db:
+        run = (
+            (await db.execute(select(Run).where(Run.agent == "flow-binds-work"))).scalars().first()
+        )
+        assert run is not None
+        assert run.task_id == "task-flow-binds"
+
+        task = await db.get(Task, "task-flow-binds")
+        assert task.status == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_a_firing_that_claims_no_task_starts_an_unbound_run_with_no_divergence(
+    app, auth_headers, bind_runner
+):
+    """2.4 — a plain job with no loop makes no selection, so its run starts unbound and records
+    no divergence when it ends: there was no task to have neglected."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"flow-unbound-run": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("flow-unbound-run", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 6003
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-unbound-1"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    async with async_session_factory() as db:
+        await _make_job(db, suffix="unbound-run", agent="flow-unbound-run")
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, "job-sched-unbound-run")
+                await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    async with async_session_factory() as db:
+        run = (
+            (await db.execute(select(Run).where(Run.agent == "flow-unbound-run"))).scalars().first()
+        )
+        assert run is not None
+        assert run.task_id is None
+
+        divergences = (
+            (await db.execute(select(RunDivergence).where(RunDivergence.run_id == run.id)))
+            .scalars()
+            .all()
+        )
+        assert divergences == []
+
+
+@pytest.mark.asyncio
+async def test_a_flow_work_run_that_moves_nothing_is_divergent(app, auth_headers, bind_runner):
+    """2.5 — the behaviour that has never once fired in production: before this group,
+    `run.task_id` was NULL on every flow work run, so this boundary check never had anything to
+    check. With `task_id` staged, a run that ends without moving its task IS divergent."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"flow-neglects-work": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("flow-neglects-work", cli="claude")
+
+    fake_session = MagicMock()
+    fake_session.pid = 6004
+    fake_session.read.side_effect = [
+        '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-neglects-1"}\n',
+        "",
+    ]
+    fake_session.wait.return_value = 0
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="neglects-work", agent="flow-neglects-work")
+        loop = await _make_loop(db, job_id=job.id, purpose="neglect the work")
+        db.add(
+            Task(
+                id="task-flow-neglects",
+                project_id="proj-test",
+                title="do the thing",
+                status="pending",
+                loop_id=loop.id,
+            )
+        )
+        await db.commit()
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            scheduler = JobScheduler()
+            async with async_session_factory() as db:
+                fresh_job = await db.get(AIJob, job.id)
+                await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+            for task in list(agent_trigger._background_runs):
+                await task
+
+    async with async_session_factory() as db:
+        run = (
+            (await db.execute(select(Run).where(Run.agent == "flow-neglects-work")))
+            .scalars()
+            .first()
+        )
+        assert run is not None
+
+        task = await db.get(Task, "task-flow-neglects")
+        # The runtime's own move to `in_progress` is not an actor transition (design D5 in
+        # `run_task_binding.run_advanced_its_task`), so an agent that never records anything
+        # itself has genuinely moved nothing.
+        assert task.status == "in_progress"
+
+        divergences = (
+            (await db.execute(select(RunDivergence).where(RunDivergence.run_id == run.id)))
+            .scalars()
+            .all()
+        )
+        assert len(divergences) == 1
+        assert divergences[0].task_id == "task-flow-neglects"

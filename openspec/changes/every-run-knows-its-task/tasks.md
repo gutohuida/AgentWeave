@@ -6,46 +6,115 @@ after it.
 
 ## 1. A turn is a review or work, never both (D3, F66)
 
-- [ ] 1.1 Test in `hub/tests/test_turn_scheduler.py`: an agent whose queue holds a review entry
+- [x] 1.1 Test in `hub/tests/test_turn_scheduler.py`: an agent whose queue holds a review entry
       and a work entry on one conversation is delivered a turn carrying **only** the controlling
-      entry's kind, and the other entry is still `queued` afterwards.
-- [ ] 1.2 Test: the reverse arrival order gives the reverse outcome — the work entry controls, the
-      review waits. This is the case group 1 of `one-answer-to-what-is-happening` left reachable.
-- [ ] 1.3 Test: the deferred entry is delivered on the **next** turn, not starved (design risk
-      "a review that keeps arriving first could starve the work entry").
-- [ ] 1.4 Test: a batch of several work entries and no review is unchanged — still delivered
-      together, still bound by the existing ordering rule.
-- [ ] 1.5 Test in `hub/tests/test_agent_trigger.py`: `queue_entry_ids` naming both a review entry
+      entry's kind. **Corrected during implementation**: the original wording ("the other entry is
+      still `queued` afterwards") is false once self-continuation is accounted for —
+      `agent_trigger.py` starts the next turn unconditionally the moment one ends with entries
+      still queued (its own comment: "a turn ending with queued entries starts the next turn
+      without waiting for operator input"), so by the time a test's `_drain()` returns, the
+      deferred entry has almost always already been picked up as a turn of its own. Running the
+      test as originally written hung the test process indefinitely — not merely failed — because
+      the second, self-continued spawn reused a `MagicMock` session whose two-item `read.side_effect`
+      was already exhausted by the first turn, and a `StopIteration` raised from a
+      `run_in_executor` thread cannot be set on an `asyncio.Future` (`Future.set_exception`
+      rejects it), so the awaiting task never resolves. Fixed at the test level (give each spawn a
+      fresh session; not a product bug) and reworded to assert what the design doc actually
+      promises ("rides the next turn") and what mutation 1.6 actually protects: two **separate,
+      un-mixed** turns (distinct `PtySession.spawn` calls, each carrying only its own entry's
+      content), not a queue-state snapshot that self-continuation makes too transient to observe.
+- [x] 1.2 Test: the reverse arrival order gives the reverse outcome — the work entry controls, the
+      review waits. Left as originally written: here self-continuation's retry of the deferred
+      review genuinely fails (no evidence-backed reviewable commit in this fixture), so
+      `PtySession.spawn` is called once and "please review" legitimately stays `queued` — for a
+      different reason than 1.1's fix addresses, documented inline so a future reader does not
+      mistake this shape for "self-continuation skips a deferred entry of the other kind".
+- [x] 1.3 Test: the deferred entry is not starved (design risk "a review that keeps arriving first
+      could starve the work entry"). **Redesigned**: the original test tried to demonstrate this
+      via an explicit *second* manual `schedule_agent()` call, on the assumption that the deferred
+      entry needs a fresh trigger — false for the same self-continuation reason as 1.1, which makes
+      the second call redundant (nothing is left to schedule by then). Rewritten to test the
+      literal risk text instead: two review entries (naming the same reviewed task, so they are not
+      themselves a mixed batch) arrive ahead of one work entry; both reviews are delivered together
+      as the first turn, and the work entry still gets a turn of its own once they drain — proving
+      several entries of the other kind ahead of it do not lose it, not just one.
+- [x] 1.4 Test: a batch of several work entries and no review is unchanged — still delivered
+      together, still bound by the existing ordering rule. Passed as originally written.
+- [x] 1.5 Test in `hub/tests/test_agent_trigger.py`: `queue_entry_ids` naming both a review entry
       and a work entry, handed to the trigger directly, is refused 409 with both task ids in the
-      detail; no run is created and no workspace is prepared.
-- [ ] 1.6 Narrow `selected` in `hub/hub/turn_scheduler.py` so the controlling entry's kind decides
+      detail; no run is created and no workspace is prepared. **Fixed a missing fixture step**: the
+      test called `bind_runner("mixed-batch", ...)` without first registering the agent via
+      `POST .../session/sync`, so it 404'd ("Agent 'mixed-batch' not found") rather than exercising
+      the refusal at all — added the same registration step every sibling test in this file uses.
+- [x] 1.6 Narrow `selected` in `hub/hub/turn_scheduler.py` so the controlling entry's kind decides
       the turn. Keep it beside the existing conversation/hop-depth filter and extend that comment
       block — F5 and F66 are the same defect and should read as such.
-- [ ] 1.7 Extend `_review_task_from_entries` (or its caller) in `hub/hub/api/v1/agent_trigger.py`
+- [x] 1.7 Extend `_review_task_from_entries` (or its caller) in `hub/hub/api/v1/agent_trigger.py`
       to refuse the mixed batch, reusing the existing 409 rather than a second status.
-- [ ] 1.8 Update `binding_from_entries`' docstring in `hub/hub/run_task_binding.py`: it currently
+- [x] 1.8 Update `binding_from_entries`' docstring in `hub/hub/run_task_binding.py`: it currently
       states *"a turn batching work and a review must bind by arrival"*, a case that no longer
       exists. Say what replaced it and why, rather than deleting the sentence.
-- [ ] 1.9 Mutation check by name: reverting 1.6 fails 1.1 and 1.2; reverting 1.7 fails 1.5. Record
-      the actual failures here, including any that did **not** fail as predicted.
+- [x] 1.9 Mutation check by name, run for real (not assumed from the diff): reverting 1.6 (disabling
+      the kind filter in `selected`) failed both 1.1 and 1.2 exactly as predicted
+      (`2 failed, 5 warnings in 0.77s`). Reverting 1.7 (disabling the mixed-batch refusal in
+      `_review_task_from_entries`) failed 1.5 exactly as predicted. Both mutations were applied via
+      `Edit` and reverted via `Edit` back to the exact original text (verified with `git diff
+      --stat` unchanged) — **not** via `git checkout --`, which was tried once during this round and
+      destroyed the entire uncommitted implementation for `turn_scheduler.py` (it reverts a
+      tracked-but-uncommitted file to `HEAD`, not to "before my last edit"); the file was
+      reconstructed by hand from the diff read earlier in the session and re-verified against the
+      full test file before continuing. Nothing failed to fail as predicted for 1.6/1.7.
 
 ## 2. A flow work firing binds the run it starts (D1, D2)
 
-- [ ] 2.1 Test in `hub/tests/test_scheduler.py`: a firing that claims a task and stages ordinary
+- [x] 2.1 Test in `hub/tests/test_scheduler.py`: a firing that claims a task and stages ordinary
       work produces a queue entry carrying `task_id` and **not** `review_task_id`.
-- [ ] 2.2 Test: a firing that staffs a review still produces `review_task_id` and **not**
+- [x] 2.2 Test: a firing that staffs a review still produces `review_task_id` and **not**
       `task_id` — D2's separation, pinned in both directions.
-- [ ] 2.3 Test: the run delivering a work entry is bound to that task, and the task reaches
+- [x] 2.3 Test: the run delivering a work entry is bound to that task, and the task reaches
       `in_progress` without the agent moving it.
-- [ ] 2.4 Test: a firing that claims no task starts an unbound run, and that run records no
+- [x] 2.4 Test: a firing that claims no task starts an unbound run, and that run records no
       divergence when it ends.
-- [ ] 2.5 Test: a flow work run ending with no actor transition **is** divergent — the behaviour
+- [x] 2.5 Test: a flow work run ending with no actor transition **is** divergent — the behaviour
       that has never once fired in production.
-- [ ] 2.6 Add the `task_id` line to the primary staging path (`hub/hub/scheduler.py:2302` region),
+- [x] 2.6 Add the `task_id` line to the primary staging path (`hub/hub/scheduler.py:2302` region),
       beside the existing `review_task_id` line and its D9 comment.
-- [ ] 2.7 Add the same line to the second staging path (`hub/hub/scheduler.py:2621` region).
-- [ ] 2.8 Mutation check by name: removing either line fails 2.1/2.3 and 2.5; setting both fields
-      on one entry fails 2.2.
+- [x] 2.7 Add the same line to the second staging path (`hub/hub/scheduler.py:2621` region).
+- [x] 2.8 Mutation check by name, run for real: removing the `task_id=` line from the **primary**
+      path failed 2.1, 2.3, and 2.5 exactly as predicted (`3 failed, 5 warnings in 2.29s`). Setting
+      both fields unconditionally on one entry — tried first against the **second** staging path
+      (`hub/hub/scheduler.py`'s `_stage_selection`, ~line 2621) — did **not** fail 2.2
+      (`1 passed`): 2.2's fixture (`_flow`, author and critic as distinct agents) turns out to
+      staff the reviewer through the **primary** path, not the "additional selection" path the
+      task text's line-number hint suggested, so the second path was never exercised. Reapplying
+      the identical mutation to the primary path's `task_id=` line failed 2.2 as predicted
+      (`1 failed`). **Recorded because it did not fail as predicted on the first attempt** — the
+      task text's assumption about which staging path 2.2 exercises was wrong; both lines are
+      still correct and both are still covered (2.1/2.3/2.5 pin the primary path directly, 2.2 now
+      confirms the primary path's own never-both invariant), but the second path's own "never set
+      both" behavior has no dedicated mutation-verified test — worth a follow-up test naming
+      `_stage_selection` directly if that path is touched again.
+      All four mutations were applied and reverted with `Edit`, verified against `git diff --stat`
+      after each revert to confirm an exact restore (see 1.9's note on why `git checkout --` is
+      unsafe for this).
+
+**Full-suite ripple, found by running the whole thing rather than trusting the touched-file
+scope.** `pytest hub/tests/ -q` after groups 1-2 landed: `3 failed, 3205 passed`. All three
+failures were the identical shape (`assert 'in_progress' == 'assigned'`) in tests that predate this
+change and were not listed as touched by tasks 2.1-2.8:
+`test_flow_chain_end_to_end.py::test_the_chain_runs_a_review_and_then_b_with_no_operator_action`,
+`test_flow_fires_a_review_turn.py::test_an_unstaffable_review_does_not_stop_the_flow_doing_other_work`,
+and `test_flow_width.py::test_three_startable_tasks_and_one_agent_start_one_and_touch_nothing_else`.
+Cause: `run_task_binding.bind_run_to_task` is a **pre-existing** mechanism (already exercised by
+direct-`task_id` operator triggers) that advances a bound task past `assigned` to `in_progress` the
+moment a run starts on it. Group 2 is the first thing that makes a job/flow-fired queue entry carry
+`task_id`, so this pre-existing mechanism now reaches job/flow firings too — these three tests
+asserted the *old* gap (a job-fired task sat at `assigned` for its entire run) as if it were the
+permanent behaviour, rather than an artifact of `task_id` never having been staged for that path.
+Updated all three assertions to `in_progress` with an inline note; each test's own actual point
+(which task got claimed, that a stalled loop recovers, that the two untouched tasks in a width test
+stay untouched) is unchanged. Re-ran the full suite after the fix: `3208 passed, 84 skipped, 1
+xpassed` — 3205 + 3 fixed, 84/1 both matching the pre-existing baseline, nothing else moved.
 
 ## 3. One owned answer to "was this a live flow's own work turn" (D4, D5)
 
