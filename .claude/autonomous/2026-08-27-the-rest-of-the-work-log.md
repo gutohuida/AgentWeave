@@ -452,3 +452,119 @@ and a sample of the load-bearing citations for the failure the mechanical sweep 
 that is right about the number and wrong about what it means.
 
 **Next:** `F58-R3` — the second independent review round, on what R2 missed.
+
+## Iteration 4 — F58-R3: the final review round, and D8 would have thrown operator input away
+
+**Done:** the second and final independent review pass over
+`openspec/changes/2026-08-27-work-is-isolated-per-task`. No implementation. R3 was told to assume R2
+had also got something wrong, and it had — **six corrections**, one of them the kind that only shows
+up when you read the *caller* of the code a decision was written against. `npx openspec validate
+--all --strict` → 42 passed, 0 failed. Deltas: **9**, 5 ADDED / 4 MODIFIED (unchanged). Tasks: **69**
+(was 66).
+
+**Reconciliation:** branch `autonomous/2026-08-27-the-rest-of-the-work`, `HEAD` was `c5aae39`, tree
+clean, `STATE.json` said iteration 3 / `F58-R3` next. Everything agreed; nothing to reconcile.
+
+### The finding: D8's refusal is transient, and it lands in the branch built for permanent failures
+
+R2 asked R3 to check whether a *flow* or a *job* could start a second writing turn on one task by a
+route that misses D8's guard. **The answer is no** — and asking it is what surfaced the real defect
+one layer out.
+
+Every route to a turn funnels the same way: `new_entry` → `schedule_agent` → `trigger_agent_directly`
+(nine `new_entry` sites, twenty `schedule_agent` sites, and `trigger_agent_directly` has **exactly
+one caller**, `turn_scheduler.py:125`). So the guard is reachable by everything. But `schedule_agent`
+sorts a `TriggerAgentError` into two buckets and only `workspace_unavailable` is temporary.
+Everything else falls to `turn_scheduler.py:165-183`, whose comment states its own premise: *"a
+refusal raised here … repeats identically forever"*. It increments `delivery_attempts` and at
+`DELIVERY_ATTEMPT_LIMIT` (`inbound_queue.py:174`, three) marks the entries `withdrawn`.
+
+A collision with another agent is the one refusal in that set that does **not** repeat forever — it
+clears when the holder's run ends. Three ticks of an ordinary flow would have thrown the message
+away. The sibling per-agent rule never has this problem because it never reaches that branch:
+`schedule_agent` reads the per-agent `running` fact itself at `:60-66` and returns
+`terminal_failure=False`, leaving the entry queued.
+
+R2 wrote D8 by reading `agent_trigger.py`, where the refusal is raised, and never read the caller
+that decides what a refusal *means*. Closed with a transient marker in the shape
+`workspace_unavailable` already establishes (task 4.15), plus a new spec scenario — *the refused
+input is not thrown away*.
+
+### Five more corrections
+
+- **"Refused with a 409" is not observable.** `schedule_agent` never re-raises (`:206-209`), so
+  `/trigger` answers **200 `queued`** with a `waiting_reason` (`agent_trigger.py:1011`, `:1030-1040`).
+  The 409 is a field on an exception object, not an HTTP answer anybody sees — and the same is
+  already true of the per-agent 409, which is defence-in-depth behind `schedule_agent`'s own check.
+  The spec requirement never said 409 and was right; design D8 and task 4.12 both did, and now say
+  which layer each fact is asserted at.
+- **The spec delta was over-broad against its own decision.** D8 names three exemptions; the
+  requirement stated two, and its opening — "while a writing turn is in flight for a task" — covers a
+  **grandfathered** task, which D8 deliberately exempts. Fixed in the delta, not by narrowing D8.
+- **D1 said "that commit" where the code returns a list.** `integration_targets` returns one target
+  *per branch* and can return several for one prerequisite — the very fact R2 used to close open
+  question 2 (`task_integration.py:178-180`). The tasks were already written against a
+  `prerequisites` sequence, so only the prose was wrong.
+- **D1 named only half the failure.** A recorded `commit_sha` whose object is no longer in the
+  repository — an operator deleted the branch, the same hazard that killed half of R1's
+  grandfathering discriminator — fails `git merge` without ever conflicting. Same unwind, different
+  message, because "conflicts with yours" and "is no longer in this repository" ask the operator for
+  different things. Task 2.6b added.
+- **The `_trigger` that does not exist.** R2 called the function `_trigger` throughout. There is no
+  `_trigger` in the tree; it is `trigger_agent_directly` (`agent_trigger.py:331`), and `_trigger`
+  greps to nothing. Costs an implementer a search; corrected everywhere.
+
+### What held, checked rather than argued
+
+- **D5's premise — one writer.** "Released at a terminal status" is only a bound if every route
+  passes it. Swept `hub/hub/` and `src/`: `task.status = to_status`
+  (`task_transition_service.py:402`) is the **only** assignment to `Task.status` anywhere, there is
+  no `update(Task).values(status=…)` (the one `update(Task)` sets `loop_id`, `api/v1/jobs.py:223-229`),
+  and no migration writes it. Checked the other escape too — a task deleted while unfinished — and
+  there is **no task-delete endpoint at all**; the only `@router.delete` in `api/v1/tasks.py` removes
+  a dependency (`:1399`).
+- **D7 reaches both spawn paths by construction.** `effective_work_dir` is assigned in exactly three
+  places (`:521`, `:531`, `:541`), all before the single `Run(` at `:729`; the Claude/Codex split
+  happens later and *inside* `_execute_run`, at `:1310`. One write, no way for the two runners to
+  disagree. The blocks at `:1524`/`:2083` are run *finalisation* — where `snapshot_commit_sha` is
+  written, which is why D4 cites them — and D7 does not depend on them.
+- **D4's stamp is enforceable**, and R3 sharpened the test rather than the decision. Task 4.11 said
+  "grep the tree" without saying for what; a grep for `.workspace_scheme =` alone passes against
+  `Task(workspace_scheme=…)` and `.values(workspace_scheme=…)`. All three forms named now, plus the
+  default the design never stated (`'task'`).
+- **The citation sample came back clean.** Four load-bearing ones re-read for what the line *means*:
+  `worktrees.py:457-458` (snapshot returns `None` on a clean tree — D4's whole correction rests on
+  it), `:537-538` (release snapshots onto the branch *before* removing — D1's "do not reuse
+  `release_worktree`"), `:268-275` (the idempotent path validates the *registration*, not the tree's
+  state), `run_task_binding.py:350-351` (`assignee` filled only when empty — D8's premise). All four
+  say what the design says. Two rounds of mechanical sweeping appear to have worked.
+
+### Verification
+
+No code changed, so no suite was run; `green_at_arming` still stands for this tree.
+
+- **35 (file, line, expected-text) assertions** over every citation R3 introduced. **Ten were wrong
+  on the first run** — my own line numbers, all off by 1–9 — and were corrected against the tree:
+  `TriggerAgentError.__init__`, the abandonment block, `integration_targets`' comment, the
+  `integrate_task` call, `update(Task)`, and the scheduler's assignee/running block (`1274-1283`, not
+  `1281-1291`). Re-run as **14 range assertions** (does the cited span actually contain the claimed
+  text): **14/14**.
+- A scan of every `file.py:line` citation in all six artifacts for a path that does not resolve or a
+  line past EOF: **one hit**, `tests/test_task_integration.py:14`, which is pre-existing
+  `hub/`-relative shorthand consistent with the rest of the document. Left.
+- `npx openspec validate --all --strict` → 42 passed, 0 failed.
+- `npx openspec show --json` read back: 9 deltas, 5 ADDED / 4 MODIFIED, and the D8 requirement now
+  parses **four** scenarios including the new *refused input is not thrown away*.
+- `npx openspec list` → 0/69 tasks.
+
+**Contamination note, per the method:** the D8 caller finding, the grandfathering over-breadth in the
+delta and both D1 corrections came from reading the code against artifacts a *previous iteration*
+wrote, which is the shape the discipline is for. The ten bad line numbers are mine, caught in the
+same round by the same script — weaker evidence, and the reason the sweep is run rather than trusted.
+
+**R3 is clean.** Two rounds have now run against this change; the remaining uncertainty is in phases
+5–8 of `tasks.md`, which R3 read for consistency with its own corrections and no further. That is
+recorded in `design.md` under "What R3 caught" rather than left in my head. **Implementation starts
+next.**
+
+**Next:** `F58-IMPL` phase 1 — make the suite able to tell the implementations apart.

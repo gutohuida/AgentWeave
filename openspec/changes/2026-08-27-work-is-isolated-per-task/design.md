@@ -39,10 +39,28 @@ choice, and no splitting of existing per-agent branches.
 **Decision.** A task workspace is a linked git worktree at `.agentweave/tasks/<task_id>` on branch
 `agentweave/task/<task_id>`, created from the project's **integration base** — `Project.main_branch`
 when it is set and resolves, and the project checkout's `HEAD` otherwise. Immediately after
-creation, for each **direct** prerequisite of the task (`TaskDependency`) whose accepted evidence
-names a commit that is not already reachable from the new branch, that commit is merged into the
-task branch. A merge that conflicts leaves nothing provisioned and refuses the turn, naming the
-prerequisite whose work could not be brought in.
+creation, for each **direct** prerequisite of the task (`TaskDependency`), every commit its accepted
+evidence names that is not already reachable from the new branch is merged into the task branch. A
+merge that fails leaves nothing provisioned and refuses the turn, naming the prerequisite whose work
+could not be brought in.
+
+**Commits, plural, and the failure is not only conflict — both corrected in R3.** The Hub layer gets
+these commits from `integration_targets(session, task)` (`task_integration.py:142`), which is
+already exactly this query: newest **accepted** `git` footprint, one per distinct branch, `paths`
+footprints contributing nothing. It returns a *list*, and open question 2 above closed on the fact
+that more than one target is deliberate (`task_integration.py:178-180`). So a single prerequisite can
+contribute more than one commit, and D1 said "that commit" throughout. The tasks were already
+written against a `prerequisites` sequence, so only this prose was wrong.
+
+The second correction is the failure mode. `integration_targets` returns a `commit_sha` recorded in
+the database; nothing guarantees the object is still reachable in the repository. Ordinarily it is —
+the prerequisite's branch survives release by D5, and a grandfathered prerequisite's per-agent branch
+survives by D4 — but a branch is a ref an operator can delete, which is the same hazard that killed
+half of R1's grandfathering discriminator. `git merge <sha>` for an unknown revision fails without
+ever reaching a conflict. It takes the same unwind and the same refusal; what changes is the message,
+which must distinguish "the prerequisite's work conflicts with yours" from "the prerequisite's
+recorded commit is no longer in this repository", because those ask the operator for different
+things.
 
 **Why the prerequisite merge is needed at all.** The dependency objection was dissolved on the
 grounds that a prerequisite must be `approved` before its dependent may start, and approval merges.
@@ -273,6 +291,25 @@ beyond the primary checkout's HEAD.
 at release could add a commit after the evidence commit — harmless to the merge, but the merge must
 already have happened for that to be true, and reversing the order makes it depend on timing.
 
+**R3 checked the premise this rule stands on: one writer.** "Released when its task reaches a
+terminal status" is only a bound if every route to a terminal status passes the release. Swept across
+`hub/hub/` and `src/`: `task.status = to_status` (`task_transition_service.py:402`) is the **only**
+assignment to `Task.status` anywhere, there is no `update(Task).values(status=…)` (the one
+`update(Task)` in the tree sets `loop_id`, `api/v1/jobs.py:223-229`), and no migration writes it.
+`apply_transition` is the sole route, so a release placed beside `integrate_task` inside it cannot be
+gone around. R3 also checked the other way a task could escape the bound — being deleted while
+unfinished — and there is no task-delete endpoint at all; the only `@router.delete` under
+`api/v1/tasks.py` removes a *dependency* (`:1399`). The set of live task checkouts is therefore
+genuinely bounded by unfinished tasks.
+
+**One consequence of placing it inside the transaction, stated because a reviewer will ask.**
+`apply_transition` does not commit; its caller does. So a release removes a directory before the
+transition is durable, and a rollback would leave a task back in `in_progress` with no checkout.
+That is self-healing rather than lossy, and for the reason D5 already gives twice: the branch is
+never deleted, so the next writing turn re-provisions from it with the work intact — the same path a
+reopened task takes. `integrate_task` sits in the same position and does git merges from there, so
+this is the established shape rather than a new exposure.
+
 **Neither `approved` nor `rejected` is a dead end**, and this is why keeping the branch is not
 merely tidy: `approved -> revision_needed` and `rejected -> pending` are both legal, operator-only
 edges (`task_transitions.py:147-152`). A reopened task's next writing turn re-provisions its
@@ -375,6 +412,16 @@ per-agent workspace, grandfathered task, review checkout, and no-repository proj
 **This also corrects a case that is wrong today**: a reviewer recording evidence is currently
 footprinted at *its own* agent worktree, which is not the tree it reviewed.
 
+**R3 checked that one write reaches both spawn paths, because the two runners execute by completely
+separate code.** It does, and by construction rather than by discipline. `effective_work_dir` is
+assigned in exactly three places — the `work_dir` override (`agent_trigger.py:521`), the review
+checkout (`:531`) and the resolved workspace (`:541`) — all before the single `Run(` construction at
+`:729`. The Claude/Codex split happens later and *inside* `_execute_run`, at `:1310`
+(`if use_codex_app_server: await _execute_codex_appserver_run(...)`), by which point the row is
+already written. So there is one place to write the column and no way for the two runners to
+disagree. The two blocks at `:1524` and `:2083` are the per-runner run *finalisations* — where
+`snapshot_commit_sha` is written, which is why D4 cites them — and D7 does not depend on them.
+
 **Rejected: pass the task id into `footprint_root`.** It moves the same derivation one level out and
 still cannot answer for a review run.
 
@@ -405,8 +452,8 @@ state. The base commit and the prerequisite commits of D1 are passed *into* it f
 
 Today, "one process per checkout" is not a rule anywhere in the code — it is a *consequence* of two
 independent facts. A checkout belongs to an agent (`worktrees.worktree_path`), and an agent may have
-only one run in flight at a time: `_trigger` refuses with a 409 while a `running` row exists for
-that `(project, agent)` (`agent_trigger.py:439-445`). Keying the workspace by task breaks the
+only one run in flight at a time: `trigger_agent_directly` refuses with a 409 while a `running` row
+exists for that `(project, agent)` (`agent_trigger.py:439-445`). Keying the workspace by task breaks the
 coupling. Nothing anywhere refuses a second *agent* bound to the same task:
 `resolve_bound_task` takes the task from the delegation, the explicit `task_id`, or the
 conversation, and never consults `Task.assignee`; and `bind_run_to_task` only fills `assignee` when
@@ -418,18 +465,62 @@ the same branch**.
 That is the silent lost update `worktrees.py`'s own module docstring says the whole module exists to
 prevent, reintroduced along a new axis. It has to be closed by this change, not after it.
 
-**Decision.** A task's checkout admits one writing turn at a time. `_trigger` gains a second
-refusal, in the same shape as the existing per-agent one: while a `running` run is bound to this
-task and belongs to a *different* agent, a writing turn bound to that task is refused with a 409
-naming the agent that holds it.
+**Decision.** A task's checkout admits one writing turn at a time. `trigger_agent_directly` gains a
+second refusal, in the same shape as the existing per-agent one: while a `running` run is bound to
+this task and belongs to a *different* agent, a writing turn bound to that task is refused, naming
+the agent that holds it. **The refusal is transient, and must be classified as such** — see the two
+sections below, which is where R3 found this decision incomplete.
 
 **It cannot sit beside its sibling, and that is worth stating because the obvious reading is that it
 should.** The per-agent 409 runs at `agent_trigger.py:439-445`, thirty lines before `repo_root`
 exists and long before any binding is resolved — at that point the turn's task is simply not known.
 So this refusal goes immediately after the relocated `resolve_bound_task` (D2), which is the first
 line in the function where "which task is this turn about" has an answer. **D2 is therefore a
-prerequisite of D8, not merely a neighbour of it**: without the move there is no point in `_trigger`
-where this check could be written at all.
+prerequisite of D8, not merely a neighbour of it**: without the move there is no point in
+`trigger_agent_directly` where this check could be written at all.
+
+**R3: the refusal is transient, and the branch it lands in is built for permanent failures.** This
+is the correction that matters most in this round, because D8 as R2 left it would silently *drop an
+operator's input*. `trigger_agent_directly` has exactly one caller — `turn_scheduler.schedule_agent`
+(`turn_scheduler.py:57`, `:125`) — and everything that starts a turn reaches it the same way, by
+appending an `InboundQueueEntry` and calling `schedule_agent` (nine `new_entry` sites and twenty
+`schedule_agent` sites across `hub/hub/`). `schedule_agent` sorts a `TriggerAgentError` into two
+buckets, and only `workspace_unavailable` is treated as temporary. Everything else falls to
+`turn_scheduler.py:165-183`, whose comment states the reasoning in as many words: *"a refusal raised
+here … repeats identically forever"*. It increments `delivery_attempts` on every selected entry and,
+at `DELIVERY_ATTEMPT_LIMIT` (`inbound_queue.py:174`, three), marks them `withdrawn` and broadcasts
+`queue_entry_abandoned`.
+
+A collision with another agent is the one refusal in that set that does **not** repeat forever — it
+clears the moment the holder's run ends. Left in the terminal bucket, three ticks of an ordinary
+flow would throw the message away. The sibling rule never has this problem because it never reaches
+that branch: `schedule_agent` reads the per-agent `running` fact itself, before it calls
+(`turn_scheduler.py:60-66`), and returns `waiting_reason="agent is already running"` with
+`terminal_failure=False`, leaving the entry queued for the next tick.
+
+So D8 is only complete with the classification: the per-task refusal carries a transient marker in
+the same shape `workspace_unavailable` already establishes, and `schedule_agent` leaves the entry
+queued and reports a waiting reason instead of counting an attempt.
+
+**R3: and "a 409" is not what an operator observes, so the requirement must not promise one.** Since
+`schedule_agent` converts every `TriggerAgentError` into a `ScheduleResult` and never re-raises
+(`turn_scheduler.py:206-209`), the `/trigger` route answers **200 with `status: "queued"` and a
+`waiting_reason`** (`agent_trigger.py:1011`, answered at `:1030-1040`). That is the correct operator experience — the
+input is accepted and will run when the task is free — but it means the 409 is an internal status on
+an exception object, not an HTTP answer anybody sees. The same is already true of the per-agent 409,
+which is defence-in-depth behind `schedule_agent`'s own check rather than a reachable response. The
+spec requirement is therefore written as "refuses to start", not as a status code, and the tests
+assert at the layer each fact actually lives in.
+
+**R3: the flow scheduler needs a counterpart, for the reason F23 already established.** No flow or
+job bypasses the guard — that was open question 5, and the answer is no, because every route funnels
+through `schedule_agent`. But the flow scheduler does not *rely* on the sibling refusal either: it
+pre-empts it. A candidate whose `assignee` is mid-turn is recorded in `_cannot_staff` and skipped
+(`scheduler.py:1274-1283`), and finding F23 is precisely the record of what happens when such a
+candidate is dropped silently instead — a flow with every agent busy reported itself as stalled with
+`current_tasks: []`. D8 introduces a second way for a candidate to be unstartable that the walk
+cannot see: two loops racing on one task, or a task left `in_progress` with no assignee. Those turns
+should be recorded the way F23's are rather than discovered from an abandoned entry.
 
 Three cases deliberately fall outside it. A **review** turn is bound to the task it inspects
 (`run-task-binding`) but never touches the task workspace — `review_context` pre-empts workspace
@@ -495,15 +586,55 @@ where the decision they belong to lives, not here.
 4. **The F70 wedged-review recovery** — closed in D5. It leaves the task in `under_review`, which is
    not terminal, so release never fires; and the recovered turn takes the review checkout regardless.
 
-**Left for R3, deliberately, with what R2 already knows written down:**
+## What R3 caught
 
-- D8's refusal is the only decision in this document taken *after* the proposal was written, so it
-  has had one round of scrutiny rather than two. Its blind spot, if it has one, is the list of three
-  exemptions: check whether a *flow* or a *job* can start a second writing turn on one task by a
-  route that does not pass through `_trigger`'s guard.
-- D4's over-inclusive stamp should be checked against a project that has been running a long time:
-  the claim is that the set only shrinks, which depends on nothing writing `workspace_scheme` after
-  the migration.
-- Every citation in this document was mechanically re-swept in R2 and six were corrected; the
-  remaining risk is a citation that is *right* about the line and wrong about what the line means.
-  R3 should sample the load-bearing ones rather than re-run the sweep.
+R2 left three things for R3 and asked it to assume R2 had also got something wrong. It had.
+
+**The one that changes the work: D8's refusal was transient, classified as permanent, and would have
+dropped input.** Written up in D8 above. R2 asked whether a flow or a job could reach a second
+writing turn by a route that misses the guard; the answer is **no** — every route funnels through
+`new_entry` → `schedule_agent` → `trigger_agent_directly`, which has exactly one caller — but asking
+that question is what surfaced the real defect one layer out. The guard is reachable by everything;
+what happens *after* it fires is wrong. Three ticks of an ordinary flow would have marked the queue
+entry `withdrawn`. R2 wrote D8 by reading `agent_trigger.py`, where the refusal is raised, and never
+read the caller that decides what a refusal means.
+
+**D8's "409" was a promise about something an operator cannot see.** `schedule_agent` never
+re-raises; `/trigger` answers 200/`queued` with a waiting reason. The spec requirement never said
+409 and was already right; the design prose and task 4.12 both did, and are corrected.
+
+**The spec delta was over-broad against its own decision.** D8 names three exemptions; the
+requirement in `operator-agent-creation` stated two, and its opening sentence — "while a writing turn
+is in flight for a task" — covers a grandfathered task, which D8 deliberately exempts. Fixed in the
+delta, not by narrowing D8.
+
+**D1 said "that commit" where the code returns a list, and named only half the failure.** Both
+corrected in D1: `integration_targets` returns one target per branch and can return several for one
+prerequisite, and a recorded commit whose object is no longer in the repository fails the merge
+without conflicting.
+
+**D4's stamp holds, and R3 sharpened the test rather than the decision.** "Only the migration writes
+this column" is enforceable — `Task.status`'s single writer is the existing proof that this codebase
+holds invariants of exactly that shape, and `test_task_attribution.py` is the precedent for asserting
+one by scanning the source. But task 4.11 said "grep the tree" without saying for what, and a grep
+for `task.workspace_scheme =` alone passes against `Task(workspace_scheme=…)` and
+`update(Task).values(workspace_scheme=…)`. Named in the task now, along with the default the design
+never stated.
+
+**The citation sample came back clean.** Four of the load-bearing ones were re-read for what the line
+*means* rather than for the line number: `worktrees.py:457-458` (snapshot returns `None` on a clean
+tree — D4's whole correction rests on it), `:537-538` (release snapshots onto the branch *before*
+removing — D1's "do not reuse `release_worktree`"), `:268-275` (the idempotent path validates the
+registration and not the tree's state — task 2.7b), and `run_task_binding.py:350-351` (`assignee` is
+filled only when empty — D8's premise). All four say what the design says they say. So do
+`agent_trigger.py:439-445`, `:469`, `:492-497` and `task_transition_service.py:434-435`, checked in
+passing. Two rounds of mechanical sweeping appear to have worked.
+
+**One naming slip, worth a line because it costs an implementer a grep.** R2 called the function
+`_trigger` throughout. There is no `_trigger` in the tree; it is `trigger_agent_directly`
+(`agent_trigger.py:331`), and `_trigger` matches nothing. Corrected everywhere it appeared.
+
+**What R3 did not do.** It did not re-run the 65-assertion citation sweep — R2 ran it twice and the
+sample above suggests the remaining yield is low. It did not review phases 5–8 of `tasks.md` claim by
+claim; they were read for consistency with the corrections above and no further. If a third round is
+ever wanted, that is where it should start.

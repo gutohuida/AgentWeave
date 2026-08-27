@@ -90,11 +90,21 @@ A turn started to **review** a task SHALL NOT be refused by this rule. A review 
 
 An agent that works in the project's shared checkout rather than an isolated one SHALL NOT be refused by this rule either. It has no isolated checkout to collide over, and the shared checkout's behaviour is unchanged by this requirement.
 
+Nor SHALL a task still worked under the per-agent scheme be refused. Such a task has no checkout of its own to admit anybody to, and the coupling this rule replaces still holds for it, so refusing here would forbid something that is safe.
+
+The refusal SHALL be temporary rather than terminal: input that was refused for this reason SHALL be retained and delivered once the holding turn ends, not discarded. The condition clears by itself, which is what distinguishes it from a refusal about a request that will never become valid.
+
 #### Scenario: A second agent is refused while the first is working
 
 - **WHEN** a writing turn is triggered for a task that another agent already has a run in flight for
 - **THEN** the turn is refused
 - **AND** the refusal names the agent holding the task
+
+#### Scenario: The refused input is not thrown away
+
+- **WHEN** a turn is refused because another agent holds the task, and that agent's turn then ends
+- **THEN** the input that was refused is still pending
+- **AND** it is delivered on a subsequent attempt rather than having been discarded
 
 #### Scenario: A review is not refused
 

@@ -75,8 +75,11 @@ operator on 2026-08-26 and is what this change implements.
 - **A task's checkout admits one writing turn at a time.** Today "one process per checkout" is not
   a rule but a consequence: a checkout belongs to an agent, and an agent may have only one run in
   flight. Keying the workspace by task breaks that coupling, and nothing refuses a second agent
-  bound to the same task — so two live processes would share one working tree. A refusal beside the
-  existing per-agent one closes it. Added in review (design `D8`).
+  bound to the same task — so two live processes would share one working tree. A second refusal, in
+  the shape of the existing per-agent one but placed after the turn's task is known, closes it. It
+  is **temporary**: the input it refuses stays queued and is delivered once the holder finishes,
+  rather than being counted as a failed delivery and eventually dropped. Added in review
+  (design `D8`; the placement and the transience were both corrected in later rounds).
 - **Surfaces that assume one workspace per agent are updated**: the turn context sentences
   (`api/v1/agents.py:1160` and `:1162-1164`), the agent workspace section an operator actually reads
   (`GET /worktrees/{agent}` at `api/v1/worktrees.py:148-156`, rendered by `WorkspaceLocation` in

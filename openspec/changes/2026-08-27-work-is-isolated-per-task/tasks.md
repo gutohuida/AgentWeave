@@ -51,6 +51,10 @@ below says which fixture change makes the assertion mean what it claims.
   checkout and no branch are left behind** — provisioning is all-or-nothing. Assert the branch is
   gone with `git rev-parse --verify`, not only that the directory is: `worktree add` creates both,
   and a leftover branch is the half that would be reused silently by the next turn.
+- [ ] 2.6b **Added in R3.** Add a test for the other way the merge fails: a prerequisite commit SHA
+  that is not in the repository at all (an operator deleted the branch carrying it). Assert the same
+  all-or-nothing unwind, and that the message says the commit is **missing** rather than that it
+  conflicts — the two ask the operator for different things. D1 named only conflict.
 - [ ] 2.7 Implement `ensure_task_worktree` in `hub/hub/worktrees.py`. `base` and `prerequisites` are
   parameters, never resolved from a database inside this module — it states its independence from
   any DB/session layer at `worktrees.py:27-30`. Implement the unwind explicitly, in design D1's
@@ -121,15 +125,27 @@ below says which fixture change makes the assertion mean what it claims.
   `agent_trigger.py` in place of `resolve_agent_workspace` at `:535`. Keep
   `resolve_agent_workspace` as the unbound path so its existing behaviour has one implementation.
 - [ ] 4.10 Implement the grandfathering read and the prerequisite/base resolution in the Hub layer
-  (session-aware), passing plain values into `worktrees`.
+  (session-aware), passing plain values into `worktrees`. **Confirmed in R3:** the prerequisite
+  commits come from `task_integration.integration_targets(session, task)` (`:142`) — already exactly
+  this query (newest *accepted* `git` footprint, one per branch, `paths` footprints contributing
+  nothing), already async and session-bound, and returning a `list[Target]`. Call it per direct
+  prerequisite and pass the `commit_sha` values through; do not write a second implementation of
+  "which commit is this task's work", which is the drift this codebase names as a defect source.
 - [ ] 4.11 Add the `Task.workspace_scheme` column and its stamping migration, guarded for a missing
   table as `0033`/`0034` are, and bump the head assertions in `hub/tests/test_migrations.py` **and**
-  `hub/tests/test_project_persistence.py`. Nothing outside the migration may write this column;
-  assert that by grepping the tree in the test, because "only shrinks" is a property of that fact
-  alone.
-- [ ] 4.12 Add a test asserting a writing turn bound to a task is **refused with a 409** while a
-  different agent has a `running` run bound to that same task, and that the message names the agent
-  holding it (D8). This is the invariant that used to follow for free from one-checkout-per-agent
+  `hub/tests/test_project_persistence.py`. The column's default is `'task'`, and `'agent'` is written
+  only by the migration — the design left the default unstated. Nothing outside the migration may
+  write this column; assert that by scanning the source in the test, because "only shrinks" is a
+  property of that fact alone. **Corrected in R3: name the forms, or the assertion passes against a
+  real write.** Scan `hub/hub/` and `src/` for all three of `.workspace_scheme =`, `workspace_scheme=`
+  (the `Task(...)` keyword) and `values(workspace_scheme`, allowing only the migration file itself.
+  `test_task_attribution.py`'s source scan is the precedent for the shape.
+- [ ] 4.12 **Reworded in R3 — it said "refused with a 409", and no caller can observe one.** Add a
+  test asserting `trigger_agent_directly` raises `TriggerAgentError` naming the agent that holds the
+  task, while a different agent has a `running` run bound to that same task (D8). Assert it at that
+  function, not through `/trigger`: `schedule_agent` converts every `TriggerAgentError` into a
+  `ScheduleResult` and never re-raises (`turn_scheduler.py:206-209`), so the route answers 200 with
+  `status: "queued"`. This is the invariant that used to follow for free from one-checkout-per-agent
   and now has to be stated: `agent_trigger.py:439-445` refuses per agent only, and
   `bind_run_to_task` fills `assignee` only when it is empty (`run_task_binding.py:350-351`), so
   nothing refuses today.
@@ -142,6 +158,23 @@ below says which fixture change makes the assertion mean what it claims.
   before any binding is resolved, so the turn's task is unknown there. It goes immediately after the
   relocated `resolve_bound_task` from task 3.3 — which makes phase 3 a prerequisite of this task,
   not an independent phase.
+- [ ] 4.15 **Added in R3, and this is the one that would have lost operator input.** Mark the D8
+  refusal *transient* on `TriggerAgentError` — a second flag beside `workspace_unavailable`
+  (`agent_trigger.py:234-246`, the flag at `:239`), which is the existing precedent for "this refusal is about a
+  condition that clears" — and handle it in `turn_scheduler.schedule_agent` by returning
+  `ScheduleResult(waiting_reason=..., terminal_failure=False)` **without** entering the abandonment
+  branch at `:165-183`. Add a test asserting a queue entry refused this way keeps
+  `delivery_attempts == 0`, stays `queued`, and is delivered on a later `schedule_agent` once the
+  holding run ends. Without this the entry is `withdrawn` after `DELIVERY_ATTEMPT_LIMIT`
+  (`inbound_queue.py:174`, three) and the message is dropped — that branch exists for refusals its
+  own comment describes as repeating "identically forever", which this one does not.
+- [ ] 4.16 **Added in R3.** Give the flow scheduler a counterpart to the new refusal, for finding
+  F23's reason. `decide_firing` already skips a candidate whose `assignee` is mid-turn and records it
+  in `_cannot_staff` rather than dropping it (`scheduler.py:1274-1283`), because a bare `continue`
+  made a busy flow report itself stalled. D8 adds a second way to be unstartable that the walk cannot
+  see — two loops racing on one task, or a task left `in_progress` with no assignee. Record it the
+  same way, with a test, so the collision is visible on the board instead of arriving as an abandoned
+  entry.
 
 ## 5. Release when the task is finished (D5)
 
