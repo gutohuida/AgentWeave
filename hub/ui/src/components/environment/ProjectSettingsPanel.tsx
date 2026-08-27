@@ -146,6 +146,32 @@ export function ProjectSettingsPanel() {
       <SettingsRow label="Allow agent jobs" description="Agents may create and run scheduled jobs for this project.">
         <input className="control-choice" aria-label="Allow agent jobs" type="checkbox" checked={form.allow_agent_jobs} onChange={(event) => set('allow_agent_jobs', event.target.checked)} />
       </SettingsRow>
+      <SettingsRow label="Conversation titles" description="Truncate the first message, or have a runner generate a short title.">
+        <Select
+          aria-label="Conversation titles"
+          value={form.conversation_title_mode}
+          onChange={(event) => set('conversation_title_mode', event.target.value as ProjectSettings['conversation_title_mode'])}
+          wrapperClassName="w-48"
+          className="px-2 py-1.5 text-xs"
+        >
+          <option value="truncate">Truncate the first message</option>
+          <option value="generate">Generate one</option>
+        </Select>
+      </SettingsRow>
+      <SettingsRow label="Conversation title runner" description="Which runner generates a title. None falls back to the conversation's own agent's bound runner.">
+        <Select
+          aria-label="Conversation title runner"
+          value={form.conversation_title_runner_id ?? ''}
+          onChange={(event) => set('conversation_title_runner_id', event.target.value || null)}
+          wrapperClassName="w-48"
+          className="px-2 py-1.5 text-xs"
+        >
+          <option value="">None</option>
+          {runners.map((runner) => (
+            <option key={runner.id} value={runner.id}>{runner.name}</option>
+          ))}
+        </Select>
+      </SettingsRow>
 
       {/* Approving a task merges the agent's work into this branch. Until one is chosen nothing
           merges, and the note on an unmerged task sends the operator here to choose — so this is

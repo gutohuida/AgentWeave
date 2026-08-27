@@ -76,7 +76,7 @@ async def push_log(
 ):
     """Accept a log event from the CLI and persist it to EventLog + broadcast via SSE."""
     project_id, _ = project
-    await persist_event(
+    normalised_severity = await persist_event(
         session,
         project_id,
         body.event_type,
@@ -91,7 +91,7 @@ async def push_log(
             "event_type": body.event_type,
             "agent": body.agent,
             "data": body.data,
-            "severity": body.severity,
+            "severity": normalised_severity,
         },
     )
     return {"ok": True}

@@ -610,7 +610,7 @@ async def note_turn_that_produced_nothing(session: AsyncSession, run: Run) -> bo
             "run_exit_status": run.status,
         },
         agent=run.agent,
-        severity="warning",
+        severity="warn",
     )
     await session.commit()
     logger.info(
