@@ -31,6 +31,7 @@ from hub.scheduler import JobScheduler, _enter_selected_task
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import run_actor
 
+from .review_evidence import record_review_evidence
 from .test_review_turn import _roster
 
 pytestmark = pytest.mark.asyncio
@@ -165,6 +166,10 @@ async def test_a_task_awaiting_review_still_reads_as_next(app, auth_headers, bin
     async with async_session_factory() as db:
         job, _loop, task = await _flow(db, suffix="next")
         await _completed_by(db, task, AUTHOR)
+        # "The next firing would give it to the reviewer" is only true of a task the next firing
+        # could actually provision a review for, so the evidence is part of the premise, not
+        # scaffolding around it.
+        await record_review_evidence(db, task.id, suffix="board-next", actor=AUTHOR)
 
     res = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
     current = _card(res.json(), job.id)["loop"]["current_tasks"]

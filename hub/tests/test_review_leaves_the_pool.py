@@ -40,6 +40,7 @@ from hub.scheduler import (
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import TRANSITIONS, run_actor
 
+from .review_evidence import record_review_evidence
 from .test_review_turn import _roster
 
 pytestmark = pytest.mark.asyncio
@@ -184,6 +185,9 @@ async def test_a_review_in_flight_is_not_staffed_again(app, auth_headers, bind_r
     async with async_session_factory() as db:
         job, loop, task = await _loop_with_task(db, suffix="restaff")
         await _completed_by(db, task, AUTHOR)
+        # The firing only staffs a review it could provision, so the task needs a commit before
+        # "staffed once, not twice" is a question that can be asked of it at all.
+        await record_review_evidence(db, task.id, suffix="f45-restaff", actor=AUTHOR)
 
         first = await decide_firing(db, await _fresh_loop(db, loop.id), default_agent=job.agent)
         assert first.kind == DECISION_CLAIM

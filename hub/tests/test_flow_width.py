@@ -40,6 +40,7 @@ from hub.scheduler import JobScheduler, _compose_loop_briefing, decide_firing
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import run_actor
 
+from .review_evidence import record_review_evidence
 from .test_review_turn import _roster
 
 pytestmark = pytest.mark.asyncio
@@ -541,6 +542,9 @@ async def test_a_review_left_over_after_the_agents_are_taken_is_deferred_not_uns
                 await apply_transition(db, task, status, actor)
             task.assignee = None
             await db.commit()
+            # Each needs a commit to review, or the firing declines all three before the agent
+            # arithmetic this test is about ever happens.
+            await record_review_evidence(db, task.id, suffix=f"usedup-{key}", actor=THIRD)
 
     decision = await _decide(job.id, loop.id)
 
@@ -854,6 +858,10 @@ async def test_a_queue_nobody_can_staff_says_so_instead_of_blaming_the_queue(
         job, loop = await _flow(db, suffix="nostaff")
         task = await _task(db, loop, "nostaff-a")
         await _completed_by(db, task, OWNER)
+        # Reviewable, so the walk reaches rung 3 — the shortage this test is about is of *people*,
+        # and without a commit it would stall for the unrelated reason that there is nothing to
+        # review, which is the opposite of the distinction being pinned.
+        await record_review_evidence(db, task.id, suffix="nostaff", actor=OWNER)
 
     decision = await _decide(job.id, loop.id)
 

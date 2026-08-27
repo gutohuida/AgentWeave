@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional, Set
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import dependency_gate
+from . import dependency_gate, requirement_evidence
 from .checkpoint_generation import render_checkpoint
 from .checkpoints import checkpoint_by_task_author, latest_checkpoint_for_loop
 from .conversations import (
@@ -1352,6 +1352,32 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             # this is the safe direction. Not `unstaffed` either: nothing is waiting on staffing, the
             # task simply has no provenance, and the stall reason already counts it as open work.
             continue
+        # **Can a review turn be provisioned for this at all?** Asked before a reviewer is
+        # resolved, because a task with no commit to check out cannot be reviewed by anybody, and
+        # `prepare_review_turn` is going to refuse it either way.
+        #
+        # Asked with the function the trigger itself uses, not a reimplementation of the rule, so
+        # the gate and the refusal cannot come to different answers. Measured live: a loop claimed
+        # a task, the agent completed it *without recording evidence*, and the next firing selected
+        # it for review. `_enter_selected_task` moved it `completed -> under_review` and named a
+        # reviewer, and only then did the trigger refuse — leaving the task wedged with a reviewer
+        # who never ran, and the firing recorded `failed`. Every firing after that repeated it.
+        #
+        # `unstaffed`, so the walk continues and the operator is told (D4's "surface the step, not
+        # stop the flow", and F64's "say why, not merely that"). The remedy is the author's, and
+        # the sentence has to name it: nothing here can conjure a commit.
+        review_target = await requirement_evidence.commit_for_task_review(session, task.id)
+        if not review_target.resolved:
+            unstaffed.append(
+                (
+                    task.id,
+                    f"{review_target.refusal or 'there is no commit to review'} Until the work "
+                    f"that finished this task is recorded as evidence naming a commit, no "
+                    f"reviewer can be given anything to look at.",
+                )
+            )
+            continue
+
         choice = await resolve_reviewer(
             session, task, project_id=loop.project_id, exclude={author}, unavailable=taken
         )

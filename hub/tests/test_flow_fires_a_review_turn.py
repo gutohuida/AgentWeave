@@ -417,8 +417,21 @@ async def test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn
     somewhere it cannot see the work would report on what it *can* see, and the operator would read
     that as a review — which is why D9 rejected downgrading explicitly.
 
-    Asserted from outside the mechanism: no agent is spawned, and the queued entry still names the
-    task it could not review, so the operator can see what was attempted.
+    **What changed, and why the assertions below are stronger than the ones they replace.** This
+    test used to require that the firing *dispatched* the doomed review anyway — that a queued
+    entry existed naming the task — on the reasoning that the operator should see what was
+    attempted. Driving a real loop on 2026-08-28 showed what that costs. The selection is staged
+    before the turn is dispatched, so `_enter_selected_task` had already moved the task
+    `completed -> under_review` and written a reviewer into `assignee` by the time the refusal
+    happened. The task was left wedged with a reviewer who never ran, and every subsequent firing
+    repeated it, once a minute, each one recorded `failed`. See
+    `test_a_review_needs_something_to_review.py`.
+
+    So `decide_firing` now declines the step up front and reports it as `unstaffed` with the reason
+    — which reaches the loop card and the stall sentence (F64), where a queued entry and a failed
+    `JobRun` did not. The refusal in `prepare_review_turn` is untouched and still governs the
+    operator's own `review_task_id` trigger; this only stops the *flow* attempting an impossible
+    review on every tick.
     """
     repo = _init_repo(tmp_path / "repo")
     await bind_project_workspace(repo)
@@ -452,6 +465,9 @@ async def test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn
         "placed where it cannot see the work reports on what it can see, and that reads as a review"
     )
 
-    entry = await _queued_entry_for(REVIEWER)
-    assert entry is not None
-    assert entry.review_task_id == "task-no-evidence"
+    # Nothing was dispatched at all, and nothing was mutated on the way to finding that out.
+    assert await _queued_entry_for(REVIEWER) is None
+    async with async_session_factory() as db:
+        task = await db.get(Task, "task-no-evidence")
+        assert task.status == "completed"
+        assert task.assignee != REVIEWER

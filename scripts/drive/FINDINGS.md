@@ -4905,3 +4905,120 @@ unregisters it. 260 loop/job tests pass.
 `stopped_at: 2026-08-27T23:32:09Z`, `apscheduler_jobs` is empty afterwards, and the queue refusal
 now names the real time instead of "an unknown time".
 
+---
+
+## F85 — a loop stages a review it cannot start, wedges the task, and fails on it forever
+
+**Status:** fixed — see the commit that adds `hub/tests/test_a_review_needs_something_to_review.py`
+
+**Severity: A.** A single missing evidence call turns a working loop into a permanently stuck one,
+with a task no agent can move and a firing that fails every minute for as long as the loop is
+enabled.
+
+**How it was found.** Driving row 11, watching a real loop work a real task. Firing one, 23:07,
+claimed the task and the agent finished it. Firing two, 23:14:
+
+```
+history [('failed', '23:14:00'), ('completed', '23:07:00')]
+error_summary: task task-1b7af6b595e6 has no recorded evidence, so there is no commit to
+               review. Evidence naming a commit is what a review turn is given.
+```
+
+The task afterwards: `under_review`, `assignee: author`. It was `completed` a minute earlier.
+
+**Cause — the selection mutates before the dispatch can refuse.** `decide_firing` picks a
+`completed` task for review through the reviewer ladder, `_enter_selected_task` moves it
+`completed -> under_review` and writes the reviewer into `assignee`, the caller commits, and only
+*then* is the turn dispatched — where `prepare_review_turn` refuses, because a review turn is a
+detached checkout of the commit the task's evidence names and there was no evidence at all.
+
+Nothing in the walk had ever asked whether the review could be provisioned. The word **evidence did
+not appear anywhere in `scheduler.py`**. The ladder answered *who* should review; nothing answered
+*whether there is anything to review*.
+
+And it does not recover. The task now sits in `under_review` naming an agent that never ran, which
+is the F70 wedge reached by a new route: `_agents_that_are_free` counts that agent busy on it
+forever, so the project loses a reviewer for every other task too. The next firing re-stages the
+same review and fails identically.
+
+**The fix.** The walk asks `requirement_evidence.commit_for_task_review` — *the same function the
+trigger refuses with*, not a restatement of the rule, so the gate and the refusal cannot disagree —
+before resolving a reviewer, and reports an unreviewable task as `unstaffed` with the reason. The
+task is never moved, and the walk continues so ordinary work behind it still starts (D4: surface
+the step, do not stop the flow).
+
+`unstaffed` rather than a bare skip, deliberately: F64 already raised `unstaffed` into the loop's
+stall sentence, so the operator reads *why* on the card. A queued entry and a failed `JobRun` — what
+the old behaviour produced — appear on neither.
+
+**One existing test's premise changed, and that is worth stating plainly.**
+`test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn` required the firing to
+dispatch the doomed review anyway, so the operator could see what was attempted. The live drive
+priced that: it costs a status mutation the refusal cannot undo, a wedged task, and a failure
+every minute. The test now asserts the stronger position — nothing dispatched, nothing mutated —
+and its docstring records why it changed. Four other tests were fixture gaps: they built completed
+tasks with no evidence and expected a review, so they now record evidence through a shared
+`hub/tests/review_evidence.py` helper.
+
+**Verification.** Five new tests, three mutation-checked dispositions: removing the gate fails
+three; keeping the check but not skipping the selection fails three; turning the `continue` into a
+`break` fails the test that ordinary work behind an unreviewable task still starts. Two tests assert
+the other direction — a task whose evidence names a commit is still selected, and evidence that
+names *no* commit gets its own distinct reason rather than being flattened into the first. 587 tests
+across the loop, job, firing, review, flow, board and claimability suites pass.
+
+**Proven live** against a Hub restarted on the fixed code. A fresh loop, a real agent turn that
+completed the task without recording evidence, and then:
+
+```
+queue {'completed': 1}   current_tasks []
+stall: task task-6fa800255c8f has no recorded evidence, so there is no commit to review...
+history [('skipped', '23:52:00', tick_count 2), ('completed', '23:45:00', tick_count 1)]
+```
+
+The task stays `completed` instead of being wedged, the firing is `skipped` rather than `failed`,
+and repeated skips **coalesce into `tick_count`** instead of appending a row a minute — so this no
+longer feeds F12's history eviction either.
+
+---
+
+## F86 — an unattended loop inherits "ask me first" from a conversation the operator had hours ago
+
+**Status:** fixed — see the commit that adds `UNINHERITED_BY_A_SCHEDULE_PERMISSION_MODE`
+
+**Severity: B.** An overnight loop that stops to ask permission is an overnight loop that does
+nothing, slowly, while reporting that it ran.
+
+**How it was found.** Not looked for. While waiting on F85's live proof, the probe loop fired and
+then sat for eight minutes producing nothing:
+
+```
+23:47:22 permission_denied  Edit        "no operator answered within 120s, so this was not approved"
+23:49:24 permission_denied  Bash        "no operator answered within 120s, so this was not approved"
+23:51:2x permission_denied  PowerShell  "no operator answered within 120s, so this was not approved"
+```
+
+The agent's `default_permission_mode` was `None` and the job named no posture. The conversation the
+firing opened carried `{"permission_mode": "manual"}`.
+
+**Cause.** `inherit_runtime_overrides` copies the agent's most recent conversation overrides into
+any conversation opened without them, which is right and has a good reason: an operator sets a
+posture, an agent hands work to a peer, and without inheritance the reply runs under a posture
+nobody chose. It withholds exactly one value, `bypassPermissions`, whose comment says: *"reaching
+runs started by a peer or a job, by a route the operator cannot see, is not what choosing it
+meant."*
+
+That sentence is true of `manual` too, and more sharply. My interactive row-14 drive two hours
+earlier had set `manual` on a builder conversation; the loop inherited it at 23:45 and put every
+tool call to a person who, by the definition of a scheduled job, was not there. The turn then
+"completed" having been refused everything it attempted — the worst shape a failure can take,
+because the JobRun says `completed`.
+
+The asymmetry is that only the *permissive* extreme was considered. The blocking extreme fails the
+same test and was not.
+
+**The fix.** `manual` is withheld from a conversation whose `origin` is `job` — dropped, not
+replaced, exactly as `bypassPermissions` is, so the agent's own `default_permission_mode` and then
+the catalog default decide an unwatched turn's posture, which is what they are for. Peer
+conversations still inherit it: there the operator is usually present, and an extra card is cheap.
+

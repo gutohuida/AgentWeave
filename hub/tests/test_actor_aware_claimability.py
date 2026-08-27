@@ -279,6 +279,7 @@ async def test_the_board_and_the_firing_agree_about_a_completed_task(
     """
     from hub.api.v1.jobs import _batch_loop_summaries
 
+    from .review_evidence import record_review_evidence
     from .test_review_turn import _roster
 
     await _roster(app, auth_headers, bind_runner, AUTHOR)
@@ -286,6 +287,10 @@ async def test_the_board_and_the_firing_agree_about_a_completed_task(
     async with async_session_factory() as db:
         job, loop, task = await _loop_with_one_task(db, suffix="board")
         await _completed_by(db, task, AUTHOR)
+        # A reviewer needs a commit to be shown. Without one the firing declines the step for a
+        # different reason entirely and this test would pass on the wrong evidence — the subject
+        # here is whether the board keeps up with the firing, not whether the work is reviewable.
+        await record_review_evidence(db, task.id, suffix="actor-board", actor=AUTHOR)
         summaries = await _batch_loop_summaries(db, [job.id])
         assert summaries[job.id].current_tasks == [], (
             "with only the author on the roster there is nobody to review, and the board must not "
