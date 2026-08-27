@@ -5,8 +5,8 @@
   "permission_mode": "unattended-full-access",
   "branch": "autonomous/2026-08-27-the-rest-of-the-work",
   "parent_branch": "master",
-  "parent_sha": "0992d88",
-  "started_at": null,
+  "parent_sha": "a90cad6",
+  "started_at": "2026-08-27T09:45:00+01:00",
   "stop_at": "2026-08-27T17:00:00+01:00",
   "stop_when_queue_empties": false,
   "iteration": 0,
@@ -174,7 +174,7 @@
     }
   ],
   "current": "F58-EXPLORE",
-  "next_action": "Fetch origin and cut autonomous/2026-08-27-the-rest-of-the-work from origin/master (see parent_sha_note - do NOT pin to a literal sha). Confirm the STATE.json you then read has 22 queue items and current F58-EXPLORE. Open the log file named in log_file, then do F58-EXPLORE: write openspec/explorations/2026-08-27-per-task-worktrees.md per that queue item detail. EXPLORATION ONLY - do not propose in that item; F58-R1 is the propose round. Read method_reminders[0] before starting anything: the round discipline governs every change in this queue and the operator restated it twice.",
+  "next_action": "The branch is ALREADY CUT and checked out - the attended session did it, because run-iteration.ps1 refuses to run when the current branch does not match STATE.json branch, so a loop told to cut its own branch could never reach the instruction that would fix it. Do NOT cut or switch branches. Start directly on F58-EXPLORE: write openspec/explorations/2026-08-27-per-task-worktrees.md per that queue item detail. EXPLORATION ONLY - do not propose in that item; F58-R1 is the propose round. Read method_reminders[0] first: the round discipline governs every change in this queue, the operator restated it twice, and limits[0] says never to drop a round to save time.",
   "decisions_for_user": [
     "PRE-AUTHORISED, not a question - WHAT TO DROP WHEN TIME RUNS OUT. The operator was told explicitly that ~7.5 hours fits two or three changes and not five, and chose this order anyway. So: never drop a ROUND from a change you have started, and never leave a change half-proposed. Finish the change you are in, then stop. Dropping the tail of the queue is the intended outcome and needs no permission.",
     "PRE-AUTHORISED - if F58-R2 or F58-R3 concludes that per-task worktrees is the WRONG design after all, say so in the artifacts and STOP before F58-IMPL, writing it here. The decision for option (c) was taken on reasoning, not on a prototype; a review round that finds the reasoning false is the discipline working, not a reason to build it anyway. Do not silently substitute a different option.",
@@ -257,6 +257,5 @@
     "The best evidence is the failure you did not stage. Watch for unprovoked failures and write them up when they happen.",
     "Say when you contaminated your own test. Testing code you wrote yourself inherits your blind spots - a finding you did NOT make is weaker evidence, and the operator needs to know which is which.",
     "Record what HELD, not only what broke. A gate that correctly refused something is a result the next session needs."
-  ],
-  "parent_sha_note": "Cut from origin/master AS IT STANDS when the run starts, not from this exact sha. parent_sha cannot name its own commit - the brief has to be committed before it has a sha - so treat this value as the floor, not the target: fetch origin, and branch from origin/master. Any commit at or after 0992d88 carries this queue. Verify before starting that STATE.json on the branch you cut has 22 queue items and current F58-EXPLORE; if it has 23 items and current Q7, you cut from the wrong place and are about to work last night list."
+  ]
 }
