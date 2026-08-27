@@ -4728,3 +4728,59 @@ that it defends against. All 33 tests in `test_agent_actions_coordination.py` pa
 **Proven live** against a Hub restarted on the fixed code: a fresh manual-posture run, denied once,
 left exactly one `permission_denied` row (`run-609b3c476147`, 22:58:05) where the pre-fix run left
 two.
+
+---
+
+## F82 — creating a loop with initial tasks replies that its queue is empty
+
+**Status:** fixed — see the commit that adds
+`test_creating_a_loop_with_initial_tasks_reports_the_queue_it_just_seeded`
+
+**Severity: B.** No state is wrong; the answer is. The one call whose job is to seed a loop's queue
+tells the caller it did not.
+
+**How it was found.** Driving row 11 (jobs and loops). `POST /projects/{id}/jobs` with
+`stop_when_queue_empties`, a purpose, and one `initial_tasks` entry returned `201` with:
+
+```
+"loop": { "id": "loop-3f0427315dd9", ..., "queue": {}, "current_tasks": [] }
+```
+
+Reading the same loop back one call later:
+
+```
+"queue": { "pending": 1 },
+"current_tasks": [ { "id": "task-1b7af6b595e6", "title": "Add a MULTIPLY note to README",
+                     "status": "pending", "agent": "builder", "agent_capacity": "next" } ]
+```
+
+**Cause — the second implementation, built in the wrong order.** `_batch_loop_summaries` computes
+this block in six fixed queries and is what `list_jobs`, `get_job`, the update route and the loop
+routes all answer with. `create_job` does not call it. It assembles a `LoopSummary` by hand with
+literal `queue={}, current_tasks=[], open_questions=0` — and assembles it *above* the loop that
+creates `initial_tasks`, so even a computed block would have been computed before there was
+anything to count. Two independent reasons for the same wrong answer.
+
+The comment at the top of `loops.py` says of `firing_active` that every route "gets the same fact
+from the same query, so no second implementation can drift from this one." The intent was already
+written down; `create_job` is the surface it was not applied to. That is the shape iteration 3's
+carry-forward names — **a rule enforced on one surface of several** — and this is the same
+codebase's other habit, **a field hardcoded on one route and computed on another**, which is F80
+exactly.
+
+Why it matters beyond tidiness: an operator who has just defined a loop and its opening work is
+shown an empty queue, and the obvious next move on an empty queue is to add the tasks again.
+
+**The fix.** Delete the hand-assembled summary and call `_batch_loop_summaries` *after* the seeding
+loop, which is the only ordering that can be right. `create_task_for_actor` commits, so the count
+is of committed rows.
+
+**Verification.** Two tests. The seeded case asserts the response reports `{"pending": 2}` and a
+named current task, and that `GET /loops/{id}` agrees with it — the point of computing the block is
+that the two cannot disagree. The bare case asserts a loop created with no `initial_tasks` still
+reports an empty queue, so the fix cannot have simply invented content. Both mutations fail the
+seeded test: restoring the hardcoded literal, and keeping the computed call but moving it back
+above the seeding loop. 254 loop/job tests pass.
+
+**Proven live** against a Hub restarted on the fixed code — see the drive record for iteration 4.
+

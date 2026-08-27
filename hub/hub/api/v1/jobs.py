@@ -615,20 +615,6 @@ async def create_job(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(f"document '{body.spec_document_id}' is already claimed by another loop"),
             ) from e
-        loop_summary = LoopSummary(
-            id=loop.id,
-            label=job.name,
-            agent=job.agent,
-            purpose=loop.purpose,
-            stop_at=loop.stop_at,
-            stop_when_queue_empties=loop.stop_when_queue_empties,
-            stop_reason=loop.stop_reason,
-            stopped_at=loop.stopped_at,
-            queue={},
-            current_tasks=[],
-            open_questions=0,
-        )
-
         # Seeds the new loop's queue in the same call that creates it (design D2's "definition
         # window"). `create_task_for_actor` is the single `Task(` construction site — reused here
         # rather than duplicated — and its own loop-authorship gate (`_authorize_loop_task_creation`)
@@ -649,6 +635,13 @@ async def create_job(
                 actor=actor,
                 session=session,
             )
+
+        # Computed, never hand-assembled — and computed *after* `initial_tasks`, which is the
+        # whole point. This response used to carry a literal `queue={}, current_tasks=[]`, built
+        # before the seeding loop below it had run, so the one call that puts tasks into a loop's
+        # queue replied that the queue was empty. `_batch_loop_summaries` is what every other
+        # route answers this question with; a second implementation is what drifted.
+        loop_summary = (await _batch_loop_summaries(session, [job.id])).get(job.id)
 
     # Add to scheduler if enabled
     try:

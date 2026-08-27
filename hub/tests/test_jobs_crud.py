@@ -52,6 +52,71 @@ async def test_create_job_minimal(app, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_creating_a_loop_with_initial_tasks_reports_the_queue_it_just_seeded(
+    app, auth_headers
+):
+    """The one call that puts tasks into a loop's queue must not reply that the queue is empty.
+
+    `create_job` hand-assembled its `loop` block with a literal `queue={}` and `current_tasks=[]`,
+    and built it *above* the seeding loop, so an operator who created a loop with two initial
+    tasks was told it had none — and the next thing an operator does with an empty queue is fill
+    it again. Every other route answers this from `_batch_loop_summaries`.
+    """
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Seeded Loop",
+            "agent": "kimi",
+            "message": "work the queue",
+            "cron": "0 2 * * *",
+            "stop_when_queue_empties": True,
+            "initial_tasks": [
+                {"title": "First task"},
+                {"title": "Second task"},
+            ],
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    loop = resp.json()["loop"]
+    assert loop["queue"] == {"pending": 2}
+    # `current_tasks` is what the next firing would staff, not the whole queue, so one entry is
+    # right here — the point is that it names a real task rather than the hardcoded empty list.
+    assert [item["title"] for item in loop["current_tasks"]] == ["First task"]
+
+    # And the created loop reads the same way through its own route — the point of computing it
+    # is that the two cannot disagree.
+    detail = await app.get(f"/api/v1/projects/proj-test/loops/{loop['id']}", headers=auth_headers)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["queue"] == loop["queue"]
+
+
+@pytest.mark.asyncio
+async def test_creating_a_loop_with_no_initial_tasks_still_reports_an_empty_queue(
+    app, auth_headers
+):
+    """Computing the block must not invent one: a loop seeded with nothing has nothing."""
+    resp = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Bare Loop",
+            "agent": "kimi",
+            "message": "work the queue",
+            "cron": "0 2 * * *",
+            "stop_when_queue_empties": True,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    loop = resp.json()["loop"]
+    assert loop["queue"] == {}
+    assert loop["current_tasks"] == []
+    assert loop["label"] == "Bare Loop"
+    assert loop["agent"] == "kimi"
+    assert loop["stop_when_queue_empties"] is True
+
+
+@pytest.mark.asyncio
 async def test_create_job_with_all_fields(app, auth_headers):
     """POST /jobs with every field round-trips correctly."""
     resp = await app.post(
