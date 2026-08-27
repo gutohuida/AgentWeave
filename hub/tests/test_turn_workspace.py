@@ -137,18 +137,29 @@ async def _turn(app_session_factory, *, agent: str, **kwargs) -> Optional[str]:
             with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
                 await trigger_agent_directly(session=session, agent=agent, **kwargs)
 
-    # Wait for the *fact this function returns*, not for a proxy of it. Waiting on
-    # `_background_runs` alone is a race: `trigger_agent_directly` returns as soon as it has
-    # scheduled `_execute_run`, and on a loaded machine that task has not yet been registered when
-    # the drain below looks — so the drain finds nothing, returns immediately, and `cwd` is `None`
-    # for a turn that was about to resolve perfectly well. Measured: both two-turn tests failed
-    # exactly this way in a full-suite run and neither ever failed alone.
-    for _ in range(1000):
-        if "cwd" in captured:
-            break
-        await asyncio.sleep(0.01)
-    while agent_trigger._background_runs:
-        await asyncio.gather(*list(agent_trigger._background_runs), return_exceptions=True)
+                # Waited for and drained **inside the patch**, which is the whole of the fix.
+                #
+                # `trigger_agent_directly` returns as soon as it has scheduled `_execute_run`, and
+                # the spawn happens inside that task — so a `with` block that closes on the return
+                # releases the patch *before* the call it is patching happens. Under load the
+                # background task then reaches the real `PtySession.spawn`, finds no `claude`
+                # binary, fails, and `cwd` is never captured: the assertion dies on
+                # `Path(None)`. `test_project_workspace_unavailable.py` documents this same
+                # scoping bug as "the whole of F40's real cause", found there the same way — it
+                # read as flakiness because in isolation the spawn usually wins the race.
+                #
+                # Waiting on `_background_runs` alone is a second race on top of it, measured in
+                # phase 4B: the task is not registered yet at the moment the drain looks, so the
+                # drain finds nothing and returns immediately. So the wait is on the *fact this
+                # function returns*, and only then the drain.
+                for _ in range(1000):
+                    if "cwd" in captured:
+                        break
+                    await asyncio.sleep(0.01)
+                while agent_trigger._background_runs:
+                    await asyncio.gather(
+                        *list(agent_trigger._background_runs), return_exceptions=True
+                    )
     async with app_session_factory() as session:
         for run in (
             (await session.execute(select(Run).where(Run.agent == agent, Run.status == "running")))

@@ -1425,3 +1425,198 @@ which stops being true per-agent once a checkout belongs to a task.
 That is the strongest reason not to stop this change before phase 6: it would leave the product
 telling agents something untrue about their own workspace, which is the failure class F58 itself
 belongs to.
+
+## Iteration 11 — 2026-08-27 15:10 → F58-IMPL phase 4C, the refusal that had to exist by 4B
+
+Tasks 4.12, 4.13, 4.14, 4.15, 4.16 and 8.5b of
+`openspec/changes/2026-08-27-work-is-isolated-per-task`. **36/69 tasks**, up from 30.
+
+Phase 4B is what made this urgent rather than tidy. Before it, two agents triggered on one task got
+two different checkouts and nothing was lost; as of 4B they get **the same one**, on the same
+branch, and until this iteration nothing refused it. That window was exactly one iteration long.
+
+### What the refusal is, and the one thing it took to write
+
+"One process per checkout" was never a rule in this codebase. It was a *consequence* of two
+independent facts — a checkout belonged to an agent (`worktrees.worktree_path`), and an agent may
+have one run in flight (`agent_trigger.py`'s per-agent 409). Keying the workspace by task removes
+the coupling, and nothing else stands in: `resolve_bound_task` never consults `Task.assignee`, and
+`bind_run_to_task` fills `assignee` only when it is empty. Two ordinary clicks on the board hand two
+live processes one working tree.
+
+`trigger_agent_directly` now refuses a writing turn bound to a task another agent's running run is
+bound to, naming that agent. `run_task_binding.tasks_held_by_a_running_turn` answers
+`task_id -> holder` in one query, shared with the flow scheduler.
+
+### Where it went, which is not where task 4.14 said
+
+**4.14 said "immediately after the relocated `resolve_bound_task`". That is wrong, and the
+implementation deviates from it deliberately.** That line is the first place where the turn's *task*
+is known — but D8's three exemptions are every one of them a statement about the turn's
+**workspace**, not about its binding. Written there, each exemption becomes a restated clause, and a
+restated clause is what drifts apart from the thing it is supposed to mirror.
+
+It is instead the last line before anything is provisioned: below `resolve_turn_workspace_inputs`
+(which reads, including the grandfathering read) and above `worktrees.resolve_turn_workspace` (the
+first call that touches the disk). Its condition is a new predicate,
+`worktrees.takes_task_workspace(repo_root, config, task_id)`, factored out of
+`resolve_turn_workspace`'s own first line — so the refusal covers *exactly* the turns that get a
+task checkout, and a change to either moves both.
+
+All three exemptions then fall out with no clause of their own. A review turn never enters this
+branch (`review_context` pre-empts the whole workspace resolution). A read-only agent, a
+non-repository project and a grandfathered task all share a checkout that two agents have always
+shared.
+
+**This is not a matter of taste, and the mutation is the evidence.** Writing the guard where 4.14's
+text says, keyed on `binding.task`, turns *all three* exemption tests red at once. The naive reading
+of the task is a real defect that would have forbidden reviewing a task while it is worked, running
+a read-only analyst, and continuing a grandfathered task — three things that are safe today.
+
+### The correction that would have thrown away operator input
+
+R3 caught this in the artifacts and phase 4C had to carry it: `schedule_agent` sorts every
+`TriggerAgentError` into two buckets, and the terminal one increments `delivery_attempts` and
+withdraws the entry at three. That branch's own comment gives its reason — a refusal raised there
+"repeats identically forever". A collision with another turn is the one refusal in the set that does
+**not**: it clears when that turn ends. Three ticks of an ordinary flow would have discarded the
+message.
+
+`TriggerAgentError` gains **`transient`**, and it is named for the classification rather than for
+the cause. `workspace_unavailable` was a cause from which `schedule_agent` *derived* temporariness;
+a second cause-named flag would have made that derivation an `or` growing with every future
+refusal. `workspace_unavailable=True` now implies `transient` (it keeps its own name because it also
+selects the `queue_agent_paused` operator event), and `schedule_agent` asks the classification once.
+A transient refusal that is not the paused-workspace one records nothing at all — the same shape the
+sibling per-agent rule already has, because a queue waiting its turn is the system working.
+
+### The flow scheduler's counterpart (4.16)
+
+`decide_firing` gains the per-task counterpart of `running`, asked once before the walk. A candidate
+whose task is held by a different agent's turn is appended to `_cannot_staff` rather than skipped —
+finding F23's reason, one column over: a bare `continue` made a flow whose work was being done
+report itself stalled with `current_tasks: []`.
+
+The test's task has **no assignee at all**, which is the half the per-agent view cannot see. The
+existing busy branch finds nobody to recognise as busy, so without this the firing staffs its
+default agent onto a checkout somebody else is using.
+
+**The first version of this was placed wrong, and reviewing my own diff caught it.** I wrote the
+check below the agent resolution, mirroring the sibling branch. That is a defect: the
+`default_taken = True` arm runs *before* it, so a firing that hit a collision on its first candidate
+consumed the job's own agent for a selection it was about to drop, and the default agent then sat
+idle for the rest of the walk while a later ready task fell through to an empty `free` pool. A held
+task cannot be staffed onto anybody, so the question does not depend on who was resolved — and
+reaching the old position with `holder == agent` was impossible in any case, because all three arms
+exclude an agent that is running. Hoisted to the top of the ordinary-work arm.
+
+### Verification
+
+`hub/tests/test_task_turn_collision.py`, 7 tests. Two of them are not on 4.12–4.16's list:
+
+- **the refusal is per *task*, not per project.** A guard keyed on "any running run exists"
+  satisfies 4.12 word for word and serialises the whole project down to one writing turn — the
+  opposite of what per-task isolation is for. Caught by M3.
+- **the review exemption is asserted end to end**, not as an absence. It wires the real
+  `TaskRequirementLink` → `RequirementEvidence(accepted)` → `EvidenceFootprint(git)` chain so
+  `prepare_review_turn` succeeds, and asserts the spawned `cwd` is a checkout **of the reviewed
+  commit** while another agent holds the task.
+
+**Seven mutations, seven caught by a named test.** Each applied to the source, run, restored:
+
+| mutation | test that went red |
+|---|---|
+| M1 the refusal removed | `…second_agent_is_refused…`, `…entry_queued_and_delivers_it…` |
+| M2b scoping dropped, keyed on `binding.task` | `…read_only_agent_is_not_refused…`, `…grandfathered_task_is_not_refused` |
+| M3 keyed on any running run rather than this task | `test_a_turn_on_a_different_task_is_not_refused` |
+| M4 the refusal classified permanent | `…entry_queued_and_delivers_it_when_the_task_is_free` |
+| M5b transient refusals reach the abandonment branch | same |
+| M5c `terminal_failure` derived from the old flag | same |
+| M6 the flow counterpart removed | `…flow_records_a_task_another_agents_turn_holds…` |
+| M7 the guard moved above the review branch (4.14's own text) | **all three** exemption tests |
+
+**Two mutations I got wrong first, and both are worth recording** — they are the same class of
+error the whole mutation discipline exists to catch, pointed at the check rather than at the code.
+
+- My first M2 replaced only the `if` condition and left the body reading `turn_workspace.task_id`,
+  so a grandfathered turn looked up `.get(None)`, found nothing and was not refused. The mutation
+  reported the read-only test red and the grandfathered test green, and the green was the
+  mutation's fault, not the test's. M2b changes condition and body together.
+- My first M5 turned `elif not transient:` into `elif False:`, which *disables* abandonment
+  entirely — indistinguishable from correct behaviour. The discriminating mutation is
+  `elif not transient:` → `else:`, i.e. abandonment for transient refusals too.
+
+**8.5b's second half could not be done as written, and that is a result rather than a gap.** It asks
+to restore the refusal and confirm the review case still passes. With the placement above, no
+deletion or restoration can break the review case — the guard lives in a branch review turns never
+enter. The mutation that *does* discriminate it is a placement change (M7), which is a stronger
+statement than the one 8.5b asked for: it says the exemption survives the specific wrong turn a
+future reader is most likely to take.
+
+**One guard has no test and says so in this entry.** `holder != agent` is unreachable today: an
+agent's own second turn is refused thirty lines earlier by the per-agent 409. It is kept as
+defence-in-depth against that check being relaxed, and no test claims to cover it.
+
+### The failure I did not stage, and it was iteration 10's own harness
+
+The first full run came back **2 failed / 3297 passed**:
+`test_turn_workspace.py::test_a_read_only_agent_shares_the_project_checkout_bound_to_a_task_or_not`
+died on `Path(None)` for its *second* turn, and
+`test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work` found two
+runs where it asserts one.
+
+Neither is mine, and neither is flakiness to be retried. **Both were reproduced on unmodified
+`HEAD`** — `git stash`, run the two files, and a two-turn test fails the same way (a different one
+that time, which is itself the tell: it is whichever two-turn test loses the race, not a particular
+test).
+
+The cause is a scoping bug in the `_turn` harness iteration 10 wrote, and
+`test_project_workspace_unavailable.py` already had the diagnosis written down for its own version
+of it: *"Awaited **inside** the patch, and that is the whole of F40's real cause."*
+`trigger_agent_directly` returns as soon as it has scheduled `_execute_run`, and the spawn happens
+inside that task — so a `with patch(...)` that closes on the return **releases the patch before the
+call it is patching happens**. Under load the background run then reaches the real
+`PtySession.spawn`, fails for want of a `claude` binary, and no `cwd` is ever captured.
+
+Iteration 10 fixed the *second* race on top of this one (waiting on `_background_runs`, which is
+not populated yet when the drain looks) and left the first in place, because in isolation the spawn
+usually wins. The wait and the drain now sit **inside** the patch, in both
+`test_turn_workspace.py::_turn` and the new file's `_spawned_cwd`. `test_turn_workspace.py` (11
+tests, three of them two-turn) and `test_project_workspace_unavailable.py` then pass together.
+
+Worth stating plainly: **a harness that releases its own patch too early makes a green suite an
+accident of timing.** Nine of that file's tests were passing on luck, which is the same defect class
+as a test that passes while its guarantee is false.
+
+### Suite counts
+
+| | |
+|---|---|
+| Hub suite | **3299 passed, 84 skipped, 1 xpassed, 0 failed** — 18m01s |
+| iteration 10's baseline | 3292 passed / 84 skipped / 1 xpassed |
+| delta | **+7**, all of them `test_task_turn_collision.py` |
+
+No new Hub *source* file this phase, so there is no free parametrised case from
+`test_no_console_flash.py` — `takes_task_workspace` and `tasks_held_by_a_running_turn` were added to
+files that already existed.
+
+- CLI suite: **440 passed, 3 skipped**.
+- `py -3.11 -m ruff check src/ hub/ tests/` → All checks passed.
+  `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` → 502 files unchanged.
+  `py -3.11 -m mypy src/` → Success, 22 source files.
+- `npx openspec validate 2026-08-27-work-is-isolated-per-task --strict` → valid.
+  `npx openspec list` → **36/69**, up from 30/69: 4.12, 4.13, 4.14, 4.15, 4.16, 8.5b.
+- `npm run lint` not run: no file under `hub/ui/` was touched. Task 8.7 owns it.
+- No Hub was started or touched; no job exists to disable.
+
+### Carry into the next iteration
+
+Phase 5 (release on approval) is next in the change's own order, but **task 6.5 is still the live
+falsehood** iteration 10 flagged: `api/v1/agents.py:1160` tells an isolated agent it is "on branch
+`agentweave/<agent>`", which has been false for every task-bound turn since 4B. Nothing in 4C
+changed that. Phase 6 is not optional for this change.
+
+The spec delta for D8 (`specs/operator-agent-creation/spec.md`) already reads as implemented —
+including the sentence "An agent that works in the project's shared checkout rather than an isolated
+one SHALL NOT be refused", which is a broader and more accurate statement of the exemption set than
+tasks.md 4.13's three-item list. Where the two disagree, the delta is right.

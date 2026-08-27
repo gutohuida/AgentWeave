@@ -24,7 +24,7 @@ from .conversations import (
 )
 from .db.engine import async_session_factory
 from .db.models import Agent, AIJob, Checkpoint, JobRun, Loop, Message, Question, Run, Task
-from .run_task_binding import TERMINAL_FOR_BINDING
+from .run_task_binding import TERMINAL_FOR_BINDING, tasks_held_by_a_running_turn
 from .sse import sse_manager
 from .task_transition_service import apply_transition
 from .task_transitions import (
@@ -1214,6 +1214,10 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     # work draws from `free`.
     free = await _agents_that_are_free(session, loop.project_id)
     running = await _agents_running_a_turn(session, loop.project_id)
+    # The per-task counterpart of `running`, for design D8's refusal. Asked once before the walk
+    # for the same two reasons the line above is: a wide firing asks it about several candidates,
+    # and asking it per candidate would make this a third place the question is asked.
+    held = await tasks_held_by_a_running_turn(session, loop.project_id)
     default_taken = False
 
     for task in await _loop_candidates(session, loop):
@@ -1267,6 +1271,28 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
 
         if not wedged_review and task.status not in REVIEWABLE_LOOP_TASK_STATUSES:
             # Ordinary work, resolved per design D12.
+            #
+            # **Before anybody is resolved for it**, because a task another agent's turn already
+            # holds cannot be staffed onto *anyone*: `trigger_agent_directly` refuses a second
+            # writing turn on one task's checkout outright (design D8). Asked here rather than
+            # below the resolution so the firing does not spend its default agent on a selection
+            # it is about to drop -- `default_taken` is set by the branch below and would leave
+            # the job's own agent idle for the rest of the walk.
+            #
+            # Two ways to arrive here, and the per-agent view sees neither: two flows racing on
+            # one task, and a task left `in_progress` with its `assignee` cleared or never set,
+            # where the `agent in running` branch below finds nobody to recognise as busy.
+            #
+            # **Recorded rather than skipped, for finding F23's reason** -- the same reason the
+            # `agent in running` branch below records rather than skipping. A bare `continue` drops
+            # the row from the walk, and the board reads this same walk to ask what the loop is
+            # working on, so a flow whose work is being done reports itself stalled with
+            # `current_tasks: []`. The pair is `(task, the agent that holds it)`: the turn actually
+            # running, not the one this firing wanted to start.
+            holder = held.get(task.id)
+            if holder is not None:
+                in_flight.append((task.id, holder))
+                continue
             if task.assignee:
                 # Already staffed; this firing is *resuming* it, not staffing it. Overwriting the
                 # assignee with the job's default here is the defect group 5's spec review found:

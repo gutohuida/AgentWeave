@@ -156,9 +156,9 @@ between them, and giving it three values to distinguish would invite a fourth be
 
 **What phase 4B did *not* do, and it matters for reading the boxes below.** 4.5 and 4.11 were phase
 4A. 4.12–4.16 — the D8 one-turn-per-task refusal, its exemptions, its transient flag and the flow
-scheduler's counterpart — are phase 4C and remain unticked. A task bound to two agents at once is
-therefore still unrefused today, and now that both would get the *same* checkout rather than each
-their own, that is a sharper hazard than it was before this phase, not a milder one.
+scheduler's counterpart — were phase 4C. **Closed 2026-08-27**: a task bound to two agents at
+once was unrefused for exactly the length of phase 4B, which is why 4C was not allowed to slip.
+Read 4.14's implementation note before changing where the guard sits.
 
 - [x] 4.1 Add a test asserting a writing turn **bound to a task** executes in
   `.agentweave/tasks/<task_id>` on `agentweave/task/<task_id>`.
@@ -222,7 +222,7 @@ their own, that is a sharper hazard than it was before this phase, not a milder 
   real write.** Scan `hub/hub/` and `src/` for all three of `.workspace_scheme =`, `workspace_scheme=`
   (the `Task(...)` keyword) and `values(workspace_scheme`, allowing only the migration file itself.
   `test_task_attribution.py`'s source scan is the precedent for the shape.
-- [ ] 4.12 **Reworded in R3 — it said "refused with a 409", and no caller can observe one.** Add a
+- [x] 4.12 **Reworded in R3 — it said "refused with a 409", and no caller can observe one.** Add a
   test asserting `trigger_agent_directly` raises `TriggerAgentError` naming the agent that holds the
   task, while a different agent has a `running` run bound to that same task (D8). Assert it at that
   function, not through `/trigger`: `schedule_agent` converts every `TriggerAgentError` into a
@@ -230,17 +230,42 @@ their own, that is a sharper hazard than it was before this phase, not a milder 
   `status: "queued"`. This is the invariant that used to follow for free from one-checkout-per-agent
   and now has to be stated: `agent_trigger.py:439-445` refuses per agent only, and
   `bind_run_to_task` fills `assignee` only when it is empty (`run_task_binding.py:350-351`), so
-  nothing refuses today.
-- [ ] 4.13 Add tests for D8's three exemptions: a **review** turn bound to the same task is *not*
+  nothing refuses today. **Implemented in `hub/tests/test_task_turn_collision.py`**, which also
+  asserts the case this list did not name: the refusal is per *task*, not per project. A guard
+  keyed on "any running run exists" satisfies 4.12 word for word and serialises the whole
+  project down to one writing turn, which is the opposite of what per-task isolation is for.
+- [x] 4.13 Add tests for D8's three exemptions: a **review** turn bound to the same task is *not*
   refused (it takes the review checkout, `agent_trigger.py:527-532`), a **read-only** agent is not
   refused, and a **grandfathered** task is not refused. Each is a case where the refusal would
-  forbid something that is safe today.
-- [ ] 4.14 Implement the D8 refusal in `agent_trigger.py`, in the same shape as the per-agent 409
+  forbid something that is safe today. **All three are structural rather than clauses** - see
+  the note under 4.14. The review case is the strongest of the three: it wires the real
+  evidence chain so `prepare_review_turn` succeeds, and asserts the spawned `cwd` is a checkout
+  of the reviewed commit while another agent holds the task.
+- [x] 4.14 Implement the D8 refusal in `agent_trigger.py`, in the same shape as the per-agent 409
   but **not** beside it: the per-agent check runs at `:439-445`, before `repo_root` exists and
   before any binding is resolved, so the turn's task is unknown there. It goes immediately after the
   relocated `resolve_bound_task` from task 3.3 — which makes phase 3 a prerequisite of this task,
   not an independent phase.
-- [ ] 4.15 **Added in R3, and this is the one that would have lost operator input.** Mark the D8
+
+  **Placed lower than this text says, and the reason is measured.** "Immediately after
+  `resolve_bound_task`" is the first line where the turn's *task* is known — but not the first
+  line where the turn's *workspace* is known, and D8's three exemptions are every one of them a
+  statement about the workspace rather than about the binding. Written there, each exemption has
+  to be restated as a clause, and a restated clause is what drifts. It is instead the last line
+  before anything is provisioned: immediately below `resolve_turn_workspace_inputs` (which
+  reads, including the grandfathering read) and immediately above
+  `worktrees.resolve_turn_workspace` (the first call that touches the disk). Its condition is
+  `worktrees.takes_task_workspace(...)`, a predicate factored out of `resolve_turn_workspace`'s
+  own first line, so the refusal covers *exactly* the turns that get a task checkout and a
+  change to either moves both. All three exemptions then fall out with no clause of their own: a
+  review turn never enters this branch, and read-only, non-repository and grandfathered turns
+  share a checkout two agents have always shared.
+
+  **Mutation M7 is why this is not a matter of taste.** Writing the guard where this task's text
+  says, keyed on `binding.task`, turns *all three* exemption tests red at once — the review
+  turn, the read-only agent and the grandfathered task. The naive reading of 4.14 is a real
+  defect, and 4.13's tests catch it.
+- [x] 4.15 **Added in R3, and this is the one that would have lost operator input.** Mark the D8
   refusal *transient* on `TriggerAgentError` — a second flag beside `workspace_unavailable`
   (`agent_trigger.py:234-246`, the flag at `:239`), which is the existing precedent for "this refusal is about a
   condition that clears" — and handle it in `turn_scheduler.schedule_agent` by returning
@@ -250,13 +275,31 @@ their own, that is a sharper hazard than it was before this phase, not a milder 
   holding run ends. Without this the entry is `withdrawn` after `DELIVERY_ATTEMPT_LIMIT`
   (`inbound_queue.py:174`, three) and the message is dropped — that branch exists for refusals its
   own comment describes as repeating "identically forever", which this one does not.
-- [ ] 4.16 **Added in R3.** Give the flow scheduler a counterpart to the new refusal, for finding
+  **Named `transient` rather than after its cause.** `workspace_unavailable` is a *cause* from
+  which `schedule_agent` derived temporariness; a second cause-named flag would make that
+  derivation an `or` that grows with every future refusal. `TriggerAgentError.transient` is the
+  classification itself, `workspace_unavailable=True` implies it (it keeps its own name because
+  it *also* selects the `queue_agent_paused` operator event), and `schedule_agent` asks the
+  classification once. A transient refusal that is not the paused-workspace one records nothing
+  at all, which is the shape the sibling per-agent rule already has.
+- [x] 4.16 **Added in R3.** Give the flow scheduler a counterpart to the new refusal, for finding
   F23's reason. `decide_firing` already skips a candidate whose `assignee` is mid-turn and records it
   in `_cannot_staff` rather than dropping it (`scheduler.py:1274-1283`), because a bare `continue`
   made a busy flow report itself stalled. D8 adds a second way to be unstartable that the walk cannot
   see — two loops racing on one task, or a task left `in_progress` with no assignee. Record it the
   same way, with a test, so the collision is visible on the board instead of arriving as an abandoned
-  entry.
+  entry. **Implemented as `run_task_binding.tasks_held_by_a_running_turn`**, one query answering
+  `task_id -> holder`, asked once before the walk exactly as `_agents_running_a_turn` is and
+  shared with the trigger path - the alternative was a predicate asked per candidate, which
+  `scheduler.py`'s own comments record going wrong twice. The test's task has **no assignee at
+  all**, which is the half `running` cannot see: the branch above finds nobody to recognise as
+  busy, so without this the firing staffs its default agent onto a checkout somebody else is
+  using. **Asked before the agent is resolved, not after**, which the first implementation got
+  wrong: a held task cannot be staffed onto *anybody*, and checking below the resolution let the
+  `default_taken = True` branch consume the job's own agent for a selection about to be dropped —
+  leaving the default agent idle for the rest of the walk while a later ready task fell through to
+  an empty `free` pool. Reaching the old position with `holder == agent` was impossible anyway
+  (all three arms exclude a running agent), so the hoist loses nothing.
 
 ## 5. Release when the task is finished (D5)
 
@@ -359,9 +402,16 @@ their own, that is a sharper hazard than it was before this phase, not a milder 
 - [ ] 8.4 Mutation check, by name: revert the `list_agent_branches` parse change and confirm test 6.1
   fails — the silent-empty-list failure mode is the one a green suite would otherwise hide.
 - [ ] 8.5 Mutation check, by name: remove the grandfathering branch and confirm test 4.4 fails.
-- [ ] 8.5b Mutation check, by name: remove the D8 one-turn-per-task refusal and confirm test 4.12
+- [x] 8.5b Mutation check, by name: remove the D8 one-turn-per-task refusal and confirm test 4.12
   fails. Then, separately, restore it and confirm test 4.13's review-turn case still passes — an
   over-broad refusal that blocks reviews would be invisible to 4.12.
+  **Done in phase 4C, and the second half needed a different mutation than this text imagines.**
+  Merely restoring the refusal cannot break the review case, because with the placement 4.14's
+  note records the exemption is structural — the guard lives in a branch review turns never
+  enter. The mutation that *does* discriminate it is a placement change rather than a deletion:
+  writing the guard where 4.14's original text said, keyed on `binding.task`, which turns the
+  review, read-only and grandfathered tests red together (M7). Seven mutations in all, seven
+  caught by a named test; the table is in the iteration-11 log entry.
 - [ ] 8.6 Run the full Hub suite with `py -3.11 -m pytest hub/tests/ -q` and the CLI suite with
   `py -3.11 -m pytest tests/ -q`. Record counts.
 - [ ] 8.7 Run exactly what CI runs: `ruff check src/ hub/ tests/`,

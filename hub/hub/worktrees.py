@@ -635,6 +635,19 @@ def resolve_agent_workspace(repo_root: Path, agent: str, config: Dict[str, Any])
     return ensure_worktree(repo_root, agent)
 
 
+def takes_task_workspace(repo_root: Path, config: Dict[str, Any], task_id: Optional[str]) -> bool:
+    """Whether this turn's workspace is *the task's own checkout* rather than a shared one.
+
+    Split out of `resolve_turn_workspace` for design D8. The one-turn-per-task refusal applies to
+    exactly the turns that get a task checkout and to no others, and stating that twice is how the
+    refusal and the resolution drift apart — an over-broad copy would forbid a read-only agent or a
+    grandfathered task, each of which is safe today and is named in D8 as an exemption. So the
+    refusal asks this function, `resolve_turn_workspace` obeys it, and a change to either moves
+    both.
+    """
+    return task_id is not None and is_writing_agent(config) and is_git_repo(repo_root)
+
+
 def resolve_turn_workspace(
     repo_root: Path,
     agent: str,
@@ -671,7 +684,7 @@ def resolve_turn_workspace(
     `HEAD` would cut the branch from wherever the operator's checkout happened to be sitting, which
     is precisely the option D1 rejected.
     """
-    if task_id is None or not is_writing_agent(config) or not is_git_repo(repo_root):
+    if not takes_task_workspace(repo_root, config, task_id):
         return resolve_agent_workspace(repo_root, agent, config)
     if base is None:
         raise ValueError(f"a task workspace for {task_id} needs a base to be cut from")

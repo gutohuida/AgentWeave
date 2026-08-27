@@ -99,6 +99,7 @@ from ...run_task_binding import (
     resolve_bound_task,
     resolve_task_for_project,
     spec_document_for_task,
+    tasks_held_by_a_running_turn,
 )
 from ...runner_commands import (
     OPERATOR_POSTURE,
@@ -239,11 +240,26 @@ class TriggerAgentError(Exception):
         *,
         workspace_unavailable: bool = False,
         directory_state: Optional[str] = None,
+        transient: bool = False,
     ) -> None:
         self.status_code = status_code
         self.detail = detail
         self.workspace_unavailable = workspace_unavailable
         self.directory_state = directory_state
+        #: Does this refusal describe a condition that **clears on its own**?
+        #:
+        #: `schedule_agent` sorts refusals into two buckets, and the terminal one counts a delivery
+        #: attempt and withdraws the entry at the third — its own comment gives the reason, that a
+        #: refusal raised here "repeats identically forever". That is true of an archived agent or
+        #: a review target with no commit, and false of a collision with another turn, which ends
+        #: when that turn does. Classifying the second as the first drops the operator's input
+        #: after three ticks of an ordinary flow (design D8).
+        #:
+        #: The classification is asked directly rather than derived from each cause, so a third
+        #: transient refusal does not mean editing `schedule_agent` again. `workspace_unavailable`
+        #: was the first of them and keeps its own name because it *also* selects an operator
+        #: event; it implies this flag rather than duplicating it.
+        self.transient = transient or workspace_unavailable
         super().__init__(detail)
 
 
@@ -570,6 +586,38 @@ async def trigger_agent_directly(
             repo_root=repo_root,
             task=binding.task,
         )
+        # A task's checkout admits one writing turn at a time (design D8). This is the invariant
+        # that used to follow for free from one-checkout-per-agent: the per-agent refusal at the
+        # top of this function is per *agent*, `resolve_bound_task` never consults `Task.assignee`,
+        # and `bind_run_to_task` fills `assignee` only when it is empty — so before this line an
+        # operator starting task T on `builder-2` while `builder-1` was already running on it
+        # handed two live processes the same working directory on the same branch.
+        #
+        # **Scoped by `takes_task_workspace`, not by a restatement of it.** D8 names three
+        # exemptions — a review turn, a read-only agent, a grandfathered task — and each is a case
+        # where refusing would forbid something that is safe today. All three are already answered
+        # by *which workspace this turn gets*: a review turn never reaches this branch at all
+        # (`review_context` pre-empts it above), and read-only, non-repository and grandfathered
+        # turns share a checkout that two agents have always shared. Asking the resolver's own
+        # predicate is what keeps the refusal and the isolation from drifting apart.
+        #
+        # Below `resolve_turn_workspace_inputs` because that call is the grandfathering read and
+        # reads only; above `resolve_turn_workspace` because that call is the first thing that
+        # *provisions*. Nothing is on disk when this refuses.
+        if worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id):
+            holder = (await tasks_held_by_a_running_turn(session, project_id)).get(
+                turn_workspace.task_id
+            )
+            if holder is not None and holder != agent:
+                raise TriggerAgentError(
+                    status.HTTP_409_CONFLICT,
+                    f"{holder} is already running a turn on task {turn_workspace.task_id}; "
+                    f"a task's checkout takes one writing turn at a time.",
+                    # It clears when that turn ends, so the queue entry waits rather than counting
+                    # a delivery attempt towards abandonment (design D8, and `turn_scheduler`).
+                    transient=True,
+                )
+
         try:
             workspace = worktrees.resolve_turn_workspace(
                 repo_root,
