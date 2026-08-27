@@ -148,9 +148,13 @@ def binding_from_entries(
     A turn can deliver several items and more than one may name a task. The earliest queued wins,
     matching the order `format_turn_prompt` assembles the prompt in — deterministic rather than
     clever. The alternative is a run whose binding depends on delivery timing, which would make the
-    boundary check unreproducible. Ordering is over both sources together, not `task_id` first: a
-    turn batching work and a review must bind by arrival, or the binding would depend on which
-    column happened to be set.
+    boundary check unreproducible. Ordering is over both sources together, not `task_id` first, for
+    symmetry with the case that used to reach here: until `every-run-knows-its-task` (design D3), a
+    turn could batch work and a review together and had to bind by arrival because nothing else
+    told them apart. That batch can no longer be assembled — the scheduler narrows `selected` to
+    one kind before a turn starts, and a caller that hand-builds a mixed one is refused at the
+    trigger — so every entry `binding_from_entries` now sees is already the same kind, and arrival
+    order remains the tie-break for two entries of that kind naming different tasks.
 
     Both values come from the *same* entry. Taking the source from a different one would let an
     unrelated item in the same turn spend a chain's retry hop.

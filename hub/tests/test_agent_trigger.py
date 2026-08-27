@@ -2013,3 +2013,96 @@ async def test_codex_app_server_stop_signals_should_interrupt(app, auth_headers)
 # "unimplemented runner" 501 path this test exercised. The equivalent "cannot launch,
 # queues with a stated reason" behavior for an agent with no execution capability
 # configured is covered by test_unbound_agent_accumulates_queue_with_visible_reason above.
+
+
+@pytest.mark.asyncio
+async def test_a_batch_naming_a_review_and_work_is_refused(app, auth_headers, bind_runner):
+    """1.5 (`every-run-knows-its-task`, D3, F66): defence in depth for a caller that hand-builds
+    `queue_entry_ids` — the scheduler's own narrowing of `selected` keeps this from being
+    assembled through the ordinary queue path (`test_turn_scheduler.py`), but a direct call
+    naming both is still refused rather than delivered.
+    """
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import InboundQueueEntry, Run, Task
+
+    await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"mixed-batch": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    await bind_runner("mixed-batch", cli="claude")
+
+    async with async_session_factory() as session:
+        from hub.api.v1.agent_trigger import TriggerAgentError, trigger_agent_directly
+        from hub.conversations import new_conversation
+
+        conversation = new_conversation(
+            project_id="proj-test", agent="mixed-batch", origin="operator"
+        )
+        session.add(conversation)
+        session.add(
+            Task(id="task-review", project_id="proj-test", title="Reviewed", status="completed")
+        )
+        session.add(
+            Task(id="task-work", project_id="proj-test", title="Worked on", status="pending")
+        )
+        session.add(
+            InboundQueueEntry(
+                id="entry-review",
+                project_id="proj-test",
+                agent="mixed-batch",
+                origin_type="operator",
+                content="review",
+                hop_depth=0,
+                state="queued",
+                review_task_id="task-review",
+                conversation_id=conversation.id,
+            )
+        )
+        session.add(
+            InboundQueueEntry(
+                id="entry-work",
+                project_id="proj-test",
+                agent="mixed-batch",
+                origin_type="operator",
+                content="work",
+                hop_depth=0,
+                state="queued",
+                task_id="task-work",
+                conversation_id=conversation.id,
+            )
+        )
+        await session.commit()
+
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with pytest.raises(TriggerAgentError) as excinfo:
+                await trigger_agent_directly(
+                    project_id="proj-test",
+                    agent="mixed-batch",
+                    message="review and work",
+                    conversation_id=conversation.id,
+                    session=session,
+                    queue_entry_ids=["entry-review", "entry-work"],
+                )
+
+    assert "task-review" in excinfo.value.detail
+    assert "task-work" in excinfo.value.detail
+    assert excinfo.value.status_code == 409
+
+    async with async_session_factory() as session:
+        assert (await session.execute(select(Run.id))).first() is None
+        entries = (
+            (
+                await session.execute(
+                    select(InboundQueueEntry).where(
+                        InboundQueueEntry.id.in_(["entry-review", "entry-work"])
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert {entry.state for entry in entries} == {"queued"}
+        assert not any(entry.delivered_in_run_id for entry in entries)

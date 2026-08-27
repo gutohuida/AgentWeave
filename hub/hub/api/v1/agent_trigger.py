@@ -283,6 +283,12 @@ async def _review_task_from_entries(
     Refuses rather than picks when two entries in one batch name different tasks. A turn has one
     workspace (design D4), so "review both" is not a thing this can mean, and choosing one silently
     would put the reviewer on one commit while its context named the other.
+
+    Also refuses a batch mixing a review entry with a work entry (design D3, finding F66). The
+    scheduler's own narrowing of `selected` (`turn_scheduler.py`) already keeps this from
+    happening for anything it assembles, so a mixed batch reaching here can only be one a caller
+    hand-built by naming `queue_entry_ids` directly — this is defence in depth, not the primary
+    mechanism.
     """
     if not queue_entry_ids:
         return None
@@ -291,12 +297,12 @@ async def _review_task_from_entries(
     from ...db.models import InboundQueueEntry
 
     result = await session.execute(
-        select(InboundQueueEntry.review_task_id).where(
+        select(InboundQueueEntry.review_task_id, InboundQueueEntry.task_id).where(
             InboundQueueEntry.id.in_(queue_entry_ids),
-            InboundQueueEntry.review_task_id.isnot(None),
         )
     )
-    named = {row for row in result.scalars().all() if row}
+    rows = result.all()
+    named = {review_task_id for review_task_id, _ in rows if review_task_id}
     if not named:
         return None
     if len(named) > 1:
@@ -305,7 +311,21 @@ async def _review_task_from_entries(
             "this turn batches requests to review more than one task "
             f"({', '.join(sorted(named))}); a review turn has one workspace and one subject",
         )
-    return named.pop()
+    review_task_id = named.pop()
+    # A "work entry" here means one asserting `task_id` with no `review_task_id` beside it — the
+    # same distinction `turn_scheduler._entry_kind` makes. An entry naming neither (a plain message
+    # riding along) has no kind to conflict with a review and is not counted (the existing
+    # `test_entries_agreeing_on_one_review_task_resolve_to_it` pins exactly this).
+    work_task_ids = sorted(
+        {task_id for review_task_id_col, task_id in rows if review_task_id_col is None and task_id}
+    )
+    if work_task_ids:
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            f"this turn batches a request to review {review_task_id} together with work on "
+            f"{', '.join(work_task_ids)}; a turn admits entries of one kind only",
+        )
+    return review_task_id
 
 
 async def trigger_agent_directly(

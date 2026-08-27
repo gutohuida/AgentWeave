@@ -194,7 +194,10 @@ async def test_three_startable_tasks_and_one_agent_start_one_and_touch_nothing_e
             .all()
         )
 
-    assert rows["task-width-one-a"] == ("assigned", OWNER)
+    # `every-run-knows-its-task` D1/D2: the staged entry now carries `task_id`, so the run it
+    # starts binds and advances the claim past `assigned` to `in_progress` — the two untouched
+    # tasks, never claimed at all, are exactly where this test's own point still lives.
+    assert rows["task-width-one-a"] == ("in_progress", OWNER)
     assert rows["task-width-one-b"] == ("pending", None)
     assert rows["task-width-one-c"] == ("pending", None)
     assert len(entries) == 1

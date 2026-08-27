@@ -256,7 +256,10 @@ async def test_the_chain_runs_a_review_and_then_b_with_no_operator_action(
     assert "Report on the balanced ledger" in entries[1].content
 
     async with async_session_factory() as db:
-        assert (await db.get(Task, "task-chain-b")).status == "assigned"
+        # `every-run-knows-its-task` D1/D2: the staged entry now carries `task_id`, so the run
+        # it starts binds and advances the claim past `assigned` to `in_progress` before this
+        # drain returns.
+        assert (await db.get(Task, "task-chain-b")).status == "in_progress"
         assert (await db.get(Task, "task-chain-a")).status == "approved"
 
 

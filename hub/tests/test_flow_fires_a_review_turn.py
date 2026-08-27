@@ -395,7 +395,9 @@ async def test_an_unstaffable_review_does_not_stop_the_flow_doing_other_work(
             .all()
         )
         assert len(events) == 1, "and the review is still surfaced, not swallowed by the work"
-        assert (await db.get(Task, "task-still-to-do")).status == "assigned"
+        # `every-run-knows-its-task` D1/D2: the staged entry now carries `task_id`, so the run
+        # it starts binds and advances the claim past `assigned` to `in_progress`.
+        assert (await db.get(Task, "task-still-to-do")).status == "in_progress"
 
 
 # ---------------------------------------------------------------------------
