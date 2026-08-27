@@ -139,7 +139,7 @@ no record. 2.5's test now pins the commit count at three, and dropping `--no-ff`
 - [ ] 4.4 Add a test for grandfathering (D4, **corrected in review**): a task stamped
   `workspace_scheme = 'agent'` resolves to the **per-agent** workspace and no task branch is created
   for it, while an unstamped task gets a task workspace. The stamp is read, never recomputed.
-- [ ] 4.5 Add a migration test asserting the stamp is applied to exactly the tasks that had at least
+- [x] 4.5 Add a migration test asserting the stamp is applied to exactly the tasks that had at least
   one `Run` at migration time, and to no others — including a task whose runs committed nothing,
   which is grandfathered too. R1's live discriminator (a prior run with a non-null
   `snapshot_commit_sha`) was **wrong** and must not be reintroduced: `snapshot_worktree` returns
@@ -163,7 +163,7 @@ no record. 2.5's test now pins the commit count at three, and dropping `--no-ff`
   nothing), already async and session-bound, and returning a `list[Target]`. Call it per direct
   prerequisite and pass the `commit_sha` values through; do not write a second implementation of
   "which commit is this task's work", which is the drift this codebase names as a defect source.
-- [ ] 4.11 Add the `Task.workspace_scheme` column and its stamping migration, guarded for a missing
+- [x] 4.11 Add the `Task.workspace_scheme` column and its stamping migration, guarded for a missing
   table as `0033`/`0034` are, and bump the head assertions in `hub/tests/test_migrations.py` **and**
   `hub/tests/test_project_persistence.py`. The column's default is `'task'`, and `'agent'` is written
   only by the migration — the design left the default unstated. Nothing outside the migration may

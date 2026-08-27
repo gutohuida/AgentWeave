@@ -1052,3 +1052,206 @@ otherwise: what phase 3 closes is the four precedence questions, measured red th
 
 **Next:** `F58-IMPL` phase 4 — choosing the workspace from the binding (D1, D3, D4). It is the
 largest phase in the change and the first one whose failure is visible to an agent at runtime.
+
+## Iteration 9 — F58-IMPL phase 4A: the stamp, and the fourth spelling of a write
+
+**13:20–13:51, 2026-08-27.** Branch `autonomous/2026-08-27-the-rest-of-the-work` at `7eef7a4`,
+matching STATE.json (`git log` verified before any work: `7eef7a4` release, `7826661` phase 3,
+`44b3917` claim, `b4e2d04` release — exactly what iteration 8 recorded). Tree clean. Phase 4A only:
+tasks **4.5** and **4.11** of `openspec/changes/2026-08-27-work-is-isolated-per-task/tasks.md`,
+design D4. **4B was not started** — the resolver (4.9, 4.10, 4.14) is untouched and the column is
+written by the migration and read by nobody, which is exactly the state phase 4A is supposed to
+leave. No review round was owed: R2 and R3 both ran for this change, and R3 is what corrected both
+of these tasks.
+
+### What shipped
+
+Three files, one of them new twice over:
+
+- `hub/hub/db/models.py` — `Task.workspace_scheme`, `String(16)`, `default="task"`,
+  `server_default="task"`, `nullable=False`. No CHECK constraint, matching `status`, `priority` and
+  `divergence_policy` on the same table: a table-level CHECK naming a column makes that column
+  undroppable in SQLite, and this migration has a working downgrade *because* of that omission.
+- `hub/hub/migrations/versions/0095_task_workspace_scheme.py` — adds the column and stamps
+  `'agent'` on every task that had at least one `Run` at that moment.
+- `hub/tests/test_task_workspace_scheme.py` — 10 tests, new file.
+- Head assertions bumped in **both** `hub/tests/test_migrations.py` (`HEAD_REVISION`) and
+  `hub/tests/test_project_persistence.py:227`. The CLAUDE.md checklist names both and the second is
+  the one that goes red late; it needed two `sed` attempts because the line number had drifted, and
+  the fix was to grep for the assertion rather than trust the offset.
+
+### The discriminator, and the one test that is the whole argument
+
+The rule is *the existence of a `Run`* — not its status, not its outcome, not what it committed.
+R1 proposed "a prior run with a non-null `snapshot_commit_sha`" and R2 rejected it because
+`snapshot_worktree` returns `None` for a clean tree (`hub/hub/worktrees.py:457-458`), so an agent
+that **commits its own work** ends its turn clean and records `NULL`. Under R1's rule that task —
+the one with the most real work on the per-agent branch — would *not* be grandfathered, and its next
+turn would start in a fresh task checkout cut from the integration base with its own history gone.
+
+Task 4.5 said to assert that case **by name**, and the measurement below is why that wording
+mattered rather than being belt-and-braces. Reinstating R1's discriminator in the migration
+(`AND snapshot_commit_sha IS NOT NULL`):
+
+```
+FAILED test_a_task_whose_runs_committed_nothing_is_grandfathered_too
+FAILED test_the_migration_is_idempotent_over_an_already_migrated_column
+2 failed, 8 passed
+```
+
+**`test_the_migration_stamps_the_agent_scheme_on_exactly_the_tasks_that_had_a_run` does not fail.**
+Its four-task table has both grandfathered tasks carrying at least one run with a non-null snapshot,
+so R1's wrong rule produces the same answer there. The broad "exactly these tasks" test — the one
+that reads like the assertion that covers everything — is blind to the exact error the review round
+found. Only the by-name test catches it. That is the shape of finding this repository keeps
+producing, arriving inside the test written to prevent it.
+
+### The four mutations against the migration, each caught by a named test
+
+| Mutation | Failed |
+|---|---|
+| R1's discriminator (`AND snapshot_commit_sha IS NOT NULL`) | `test_a_task_whose_runs_committed_nothing_is_grandfathered_too` (+1) |
+| Drop the missing-`tasks` guard | `test_the_migration_is_a_no_op_when_tasks_is_missing` |
+| Drop the separate `runs` guard (`if True:`) | `test_the_column_is_added_but_nothing_is_stamped_when_runs_is_missing` |
+| Drop `server_default="task"`, make it nullable | 4 tests, incl. `test_an_existing_row_is_never_left_null` |
+
+`runs` is guarded **separately** from `tasks` rather than in one `{tasks, runs} <= present` check,
+because a synthetic chain can reach `0095` with one and not the other: a database with tasks and no
+runs table has no runs to grandfather, which is the correct answer and not an error. The third row
+is that decision made falsifiable.
+
+### The finding: R3's three-form source scan would have been vacuous
+
+Task 4.11 requires a source scan proving nothing outside the migration writes the column, because
+"the grandfathered set can only shrink" is true if and only if that one write is the only write.
+R1 scanned for one form; **R3 corrected it to three** — `.workspace_scheme =`, `workspace_scheme=`
+and `values(workspace_scheme` — on the grounds that a scan for one form passes against a real write
+in either of the others.
+
+Implementing it showed the same hole one level down. All three are **Python** write forms, and the
+migration's own write is raw SQL: `UPDATE tasks SET workspace_scheme = 'agent'`. That matches none
+of them. So R3's scan would have:
+
+1. exempted `0095` from a scan `0095` never triggered — an allow-list entry that proves nothing, and
+   a test that is green over a source tree it never really examined; and
+2. **missed a runtime raw-SQL write anywhere else in the Hub**, which is a real way to write this
+   column — `session.execute(text(...))` is used across `hub/hub/`.
+
+Measured rather than argued. With a probe write appended to `hub/hub/task_integration.py`:
+
+```
+_PROBE_SQL = "UPDATE tasks SET workspace_scheme = 1"
+
+R3 three forms      -> NO OFFENDERS (test would pass)
+with the SQL form   -> ['hub\hub\task_integration.py']
+```
+
+So the scan ships with **four** forms, the fourth being `set workspace_scheme` (the source is
+lowercased first). Two consequences, both deliberate:
+
+- The migration's `UPDATE` is spelled **literally** rather than interpolated from its own `_TABLE`
+  and `_COLUMN` constants, so the one exempted file actually matches the scan. A write hidden behind
+  an f-string is a write the scan cannot see, and the exemption would go vacuous again.
+- The test carries a second assertion, `matched_allowed`, that fails if the migration matches none
+  of the four forms. Mutating the migration's SQL back to the f-string form fails that assertion by
+  name — the test refuses to be vacuous rather than trusting the next author to notice.
+
+Four source-scan mutations, all caught: an attribute write in `hub/hub/run_task_binding.py`, a
+keyword write in `src/agentweave/task.py`, the raw-SQL write above, and the vacuous-exemption case.
+
+What the scan still cannot see, recorded in its docstring rather than chased:
+`setattr(task, "workspace_scheme", ...)` and any write assembled from a variable. Both are visible
+in review in a way an ordinary assignment is not, and a scan that tried to catch them would match
+its own docstring.
+
+### The real-data dry run — seven tasks R1's rule would have restarted from nowhere
+
+Synthetic rows prove the migration does what it says. They cannot say whether the correction R2 made
+matters in practice, so the migration was run against a **copy** of the trial Hub's own database
+(`~/.agentweave/hub/profiles/beta/agentweave.db`, 14 MB, real accumulated state). The copy only —
+the live file is untouched and still at `0094`, and no Hub was started.
+
+```
+version before: 0094          version after: 0095
+tasks total:                47      agent 22 / task 25
+tasks with >=1 run:         22      nulls: 0
+R1 rule would have stamped: 15      rows disagreeing with the rule: 0
+```
+
+**Seven of the operator's own tasks separate the two rules.** Each has at least one run and no run
+with a non-null `snapshot_commit_sha` — which is precisely the shape R2 predicted from
+`snapshot_worktree`'s clean-tree return: an agent that committed its own work. Under R1's
+discriminator those seven would have been left on the task scheme and their next turn started in a
+fresh checkout cut from the integration base, with their own commits absent. The review round did
+not catch a hypothetical; it caught 7/22 of the grandfathered set on the one real database this
+project has.
+
+The `rows disagreeing with the rule` line is the whole stamp recomputed independently in SQL and
+compared against what the migration wrote — 0, over 47 real rows.
+
+**Carry this into 4B:** the trial Hub's live database is at `0094` and this branch's head is `0095`.
+Restarting that Hub from this checkout will run the migration against those 47 rows for real.
+
+### Verification
+
+- `py -3.11 -m pytest hub/tests/test_task_workspace_scheme.py -q` → **10 passed**.
+- Mutation table above: **8 mutations, 8 caught by a named test**, each run and restored.
+- Full hub suite: `py -3.11 -m pytest hub/tests/ -q` → **3280 passed, 84 skipped, 1 xpassed,
+  0 failed** in 17m41s. Iteration 8 measured **3269 / 84 / 1 xpassed**, so the delta is **+11 and
+  I added 10 tests.** That extra one was chased down rather than waved through, because an
+  unexplained +1 is indistinguishable from a test that started being collected for a bad reason:
+
+  ```
+  collected here, without the new file : 3355
+  collected in a clean worktree at 7eef7a4 : 3354
+  diff of the two node-id lists:
+  > test_no_console_flash.py::test_every_spawn_reaches_console_suppression[0095_task_workspace_scheme.py]
+  ```
+
+  `test_every_spawn_reaches_console_suppression` is parametrized over every Hub source file
+  (`ids=lambda p: p.name`), so **adding a source file adds a case** — the migration is now itself
+  asserted to contain no unsuppressed subprocess spawn. +10 new tests, +1 parametrised case, and
+  nothing else moved: skips unchanged at 84, the lone `xpassed` still the known `strict=False`
+  fixture defect from iteration 7. The measurement was taken in a throwaway `git worktree` at
+  `7eef7a4`, which was removed afterwards (`git worktree list` back to the repo plus the six
+  pre-existing agent worktrees).
+- `py -3.11 -m pytest tests/ -q` (CLI suite) → **440 passed, 3 skipped**.
+- `py -3.11 -m ruff check src/ hub/ tests/` → All checks passed.
+  `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` → 499 files unchanged
+  (498 plus the new test file; black reformatted it once before this was clean).
+  `py -3.11 -m mypy src/` → Success, 22 source files.
+- `npx openspec validate 2026-08-27-work-is-isolated-per-task --strict` → valid.
+  `npx openspec list` → **21/69 tasks**, up from 19/69: 4.5 and 4.11.
+- No Hub was started or touched; no job exists to disable. The trial Hub is on an older revision of
+  this branch and does not see `0095` — nothing pointed at that database was run.
+
+### Which spec text 4A actually closes
+
+`specs/operator-agent-creation/spec.md`, "Work already under way keeps the checkout it started in",
+has five normative paragraphs. Two of them are entirely about *recording* and are closed here:
+
+- *"The set of covered tasks SHALL be recorded once, when per-task isolation is introduced, and
+  SHALL NOT be recomputed afterwards"* — the column plus the source scan. The scan is the only thing
+  that can hold "shall not be recomputed"; the rest is a comment.
+- *"The recorded set SHALL cover every task that has already been worked at all, whether or not a
+  commit can be found for it"* — `test_a_task_whose_runs_committed_nothing_is_grandfathered_too`,
+  and 7 real rows on the trial database.
+
+The three remaining paragraphs and all four scenarios are about which checkout a *turn* gets, which
+nothing yet decides. None of them is claimable on 4A, and none is marked.
+
+### What phase 4A does not do
+
+The column exists and **nothing reads it.** No turn resolves differently, no worktree path changed,
+and a task stamped `agent` is indistinguishable from one stamped `task` at runtime today. That is
+phase 4B (4.9, 4.10, 4.14) and it is the first thing an agent could see fail. A task is not complete
+on the strength of a prerequisite existing, and 4A does not claim otherwise: what it closes is *who
+is grandfathered*, fixed at migration time and falsifiable in eight places.
+
+One thing worth carrying into 4B: `0095` is now the head, so the trial Hub's database
+(`profiles/beta`) is one revision behind this branch. Any restart of that Hub from this checkout
+will run `0095` against real rows — which is the migration's first real exercise, and the first
+place the stamp becomes observable.
+
+**Next:** `F58-IMPL` phase 4B — the resolver (4.1–4.4, 4.6–4.10), which is where the column starts
+being read.
