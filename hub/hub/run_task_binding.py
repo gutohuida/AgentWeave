@@ -164,10 +164,15 @@ def binding_from_entries(
     boundary check unreproducible. Ordering is over both sources together, not `task_id` first, for
     symmetry with the case that used to reach here: until `every-run-knows-its-task` (design D3), a
     turn could batch work and a review together and had to bind by arrival because nothing else
-    told them apart. That batch can no longer be assembled — the scheduler narrows `selected` to
-    one kind before a turn starts, and a caller that hand-builds a mixed one is refused at the
-    trigger — so every entry `binding_from_entries` now sees is already the same kind, and arrival
-    order remains the tie-break for two entries of that kind naming different tasks.
+    told them apart. That batch can no longer *survive* — the scheduler narrows `selected` to one
+    kind before a turn starts, and a caller that hand-builds a mixed one is refused at the trigger
+    with a 409. It can still be seen here, though, and that changed: since D2 of
+    `work-is-isolated-per-task` moved `resolve_bound_task` above the review-turn block,
+    `binding_from_entries` runs *before* `_review_task_from_entries` raises that refusal. So the
+    arrival-order tie-break below is not merely symmetry with a case that used to reach here — it
+    is what a mixed batch gets for the few statements between the two, and it must stay total
+    rather than assert one kind. Nothing is bound from it: the refusal follows before any run
+    exists.
 
     Both values come from the *same* entry. Taking the source from a different one would let an
     unrelated item in the same turn spend a chain's retry hop.

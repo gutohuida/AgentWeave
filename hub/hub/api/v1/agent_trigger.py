@@ -467,6 +467,32 @@ async def trigger_agent_directly(
             directory_state=exc.directory_state,
         ) from exc
     repo_root = workspace_root.root
+
+    # Which task this turn is about, answered before *anything* is provisioned for it (D2) —
+    # before the review checkout, before the worktree, and before the turn context is rendered.
+    #
+    # Two problems, one answer. A builder triggered on a task could not find the document it was
+    # implementing: the read tool documents its argument as "the path, as given in your turn
+    # context", and a task-triggered context gave no path and no document id. Observed twice in one
+    # run, in two conversations — the second time it blocked recording evidence entirely, and the
+    # agents worked around it by messaging each other for the path. And a turn naming a task the
+    # project does not have used to be refused only *after* its worktree was on disk, so a mistyped
+    # id left a checkout and a branch behind for an agent that never ran.
+    #
+    # Below `resolve_project_workspace`, deliberately: an unavailable project directory is the more
+    # actionable of two simultaneous truths, so it keeps its 409 and its `directory_state`. Above
+    # every `work_dir` and review-turn refusal, equally deliberately: the task id is the more
+    # specific statement, and it is what decides which workspace the turn would have had at all.
+    # `hub/tests/test_task_resolved_before_workspace.py` pins all four of those answers.
+    #
+    # Reads only. The staging that acts on this stays where it is, below, before delivery.
+    binding = await resolve_bound_task(
+        session,
+        project_id=project_id,
+        conversation=conversation,
+        queue_entry_ids=queue_entry_ids,
+        task_id=task_id,
+    )
     yolo = bool(config.get("yolo"))
     resume_session_id = conversation.provider_session_id
     session_mode = "resume" if resume_session_id else "new"
@@ -546,22 +572,7 @@ async def trigger_agent_directly(
     # before command construction; an edited charter is therefore visible on the next run.
     from .agents import _get_session_data, _render_hub_agent_context
 
-    # Which task this turn is about, answered before the context is rendered rather than after.
-    #
-    # A builder triggered on a task could not find the document it was implementing: the read tool
-    # documents its argument as "the path, as given in your turn context", and a task-triggered
-    # context gave no path and no document id. Observed twice in one run, in two conversations —
-    # the second time it blocked recording evidence entirely, and the agents worked around it by
-    # messaging each other for the path.
-    #
-    # Reads only. The staging that acts on this stays where it is, below, before delivery.
-    binding = await resolve_bound_task(
-        session,
-        project_id=project_id,
-        conversation=conversation,
-        queue_entry_ids=queue_entry_ids,
-        task_id=task_id,
-    )
+    # `binding` was resolved above, before any workspace was provisioned (D2).
     task_document = await spec_document_for_task(session, binding.task)
 
     session_data = await _get_session_data(project_id, session)

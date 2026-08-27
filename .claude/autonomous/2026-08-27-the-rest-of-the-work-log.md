@@ -885,3 +885,170 @@ blind.
 
 **Next:** `F58-IMPL` phase 3 — resolving the task before the workspace (tasks 3.1–3.4, D2). It is a
 prerequisite of phase 4's task 4.14, so the order is not free.
+
+## Iteration 8 — F58-IMPL phase 3: the task is resolved before any workspace exists
+
+**12:52–13:30, 2026-08-27.** Branch `autonomous/2026-08-27-the-rest-of-the-work` at `b4e2d04`,
+matching STATE.json (`git log` verified before any work: `b4e2d04` release, `3a8f70d` log,
+`60a471c` claim, `fed29cf` phase 2 — exactly what iteration 7 recorded). Phase 3 only. Phase 4 not
+started. No review round was owed: R2 and R3 both ran for this change.
+
+### What moved, and what that costs
+
+One call. `resolve_bound_task` left `agent_trigger.py:558` — a hundred lines *below* the workspace
+decision — and now sits at `:489`, immediately after `repo_root = workspace_root.root` and above
+everything that provisions anything. `spec_document_for_task`, `_render_hub_agent_context` and the
+staging block all still read the same `binding` value; only the resolution moved.
+
+The diff is small and the blast radius is not. **Four refusals change relative order**, and phase 3
+existed to choose which one wins in each case rather than discover it afterwards. The new file
+`hub/tests/test_task_resolved_before_workspace.py` (6 tests) pins all four plus a positive control.
+
+### The pre-move red, measured before the move and not after
+
+The five precedence tests were written first and run against the tree as phase 2 left it:
+
+```
+4 failed, 2 passed
+FAILED test_a_task_that_does_not_exist_is_refused_and_provisions_no_worktree
+FAILED test_a_missing_task_outranks_work_dir_on_a_review_turn
+FAILED test_a_missing_task_outranks_work_dir_for_a_writing_agent
+FAILED test_a_missing_task_outranks_an_unresolvable_review_target
+```
+
+That split is the whole design, visible as a measurement rather than an argument:
+
+- The **four reds are exactly the four answers D2 said would move.** Three of them failed by
+  raising the *other* refusal (`TriggerAgentError: work_dir cannot be combined with a review turn`,
+  `... cannot override workspace isolation for a writing agent`, and
+  `TriggerAgentError: task task-review has no recorded evidence, so there is no commit to review`).
+- The **two greens are the two things that must not move**: `test_an_unavailable_workspace_still_
+  wins_over_the_task_refusal` (D2's preserved precedence — it passed before *and* after, which is
+  the only way to state "unchanged") and the positive control below.
+
+The fourth red is the interesting one, because the refusal was already correct and the *side effect*
+was not:
+
+```
+>       assert not worktrees.worktree_path(repo, "writer").exists()
+E       AssertionError: assert not True
+E        +  where True = exists()
+E        +    where exists = WindowsPath('.../repo/.agentweave/worktrees/writer').exists
+```
+
+`TaskBindingError` was raised in both worlds. Before the move, the writing agent's worktree and
+branch were already on disk by the time it fired — a mistyped task id left a checkout behind for an
+agent that never ran. That assertion is the one that fails if the call ever slides back down the
+function, and it is why the test restores the **real** `resolve_agent_workspace`: the suite stubs it
+to a no-op by default (`conftest.py::_no_real_worktree_provision`), which would have made this test
+pass for the wrong reason and proved nothing.
+
+After the move: **6 passed.**
+
+### Reachability — recorded because it bounds what these tests are evidence of
+
+Traced while writing 3.1, and it is not what the design implies. The explicit `task_id` argument is
+the only route by which `resolve_task_for_project`'s refusal reaches this code path at all:
+
+- `POST /agent/trigger` validates `body.task_id` **itself**, at `agent_trigger.py:941-945`, before
+  it ever calls into the turn. An operator typing a bad task id is refused there, above all of this,
+  and always was.
+- The drain path (`turn_scheduler.py:125`) does **not** pass `task_id` — it passes
+  `queue_entry_ids`, and the delegated branch of `resolve_bound_task` deliberately *swallows*
+  `TaskBindingError` (`run_task_binding.py:270-276`: "refusing to start would let removing a row
+  cancel work the agent was legitimately asked to do").
+- `grep` finds no other caller of `trigger_agent_directly` in `hub/hub/` at all.
+
+So the observable consequence of the move — "a nonexistent task leaves no worktree behind" — is
+today reachable only through a direct call to `trigger_agent_directly(task_id=...)`, which is what
+the tests do (the same thing the sibling precedence test at `test_agent_trigger.py:2081` does). This
+is **not** a reason the move is wrong: the reordering is what makes the binding available to phase 4,
+which is the point, and the four precedence changes are real for any caller that does pass one. It
+*is* a reason not to describe phase 3 as fixing a live operator-facing leak. It is a preparatory
+reorder with four defensible side effects, and phase 4 is what makes it load-bearing.
+
+### Task 3.4 — what was read, not assumed
+
+3.4 is not satisfiable by assertion, so here is the reading. Every line between the new call site
+(`:489`) and the old one (`:576`) was read, and the check was done **by name** on the three inputs
+`resolve_bound_task` consumes.
+
+*Every assignment target in the traversed region*, extracted mechanically rather than by eye:
+`yolo`, `resume_session_id`, `session_mode`, `env`, `project_is_repo`, `review_task_id`,
+`review_context`, `workspace`, `effective_work_dir`, `isolated_workspace`, `task_document`.
+
+**None of `conversation`, `queue_entry_ids` or `task_id` is among them.** Every occurrence of those
+three names in the region is a keyword argument passed by value (`conversation=conversation`,
+`queue_entry_ids=queue_entry_ids`, `task_id=task_id`), plus one `task_id=review_task_id` at
+`:529` — which is `prepare_review_turn`'s *parameter* name, not this function's local. No attribute
+assignment (`conversation.<x> = ...`) and no in-place list mutation of `queue_entry_ids` occurs
+either; both were grepped for explicitly, not skimmed.
+
+Three further things the reading turned up that the task did not ask for and that matter anyway:
+
+1. **The region performs no database write of any kind.** `grep -E "session\.(add|commit|flush|
+   delete|merge)"` over lines 496-575 returns nothing. Of the four callees, three take no session
+   at all — `resolve_agent_env(runner, config)` (`launchability.py:137`),
+   `seed_repo_excludes(root)` (`repo_hygiene.py:83`), `is_git_repo(path)` /
+   `ensure_review_checkout(repo_root, agent, sha)` (`worktrees.py:109,547`) — and the fourth,
+   `prepare_review_turn`, reads only: its one DB call besides `session.get(Task, ...)` is
+   `requirement_evidence.commit_for_task_review` (`:653-712`), and an AST pass over that module
+   confirms all four of its `session.add` sites live in `record`, `_apply_footprint`, `decide` and
+   `detect_drift` — none of them inside `commit_for_task_review`.
+2. **Two reads of the queue entries swapped order, and the swap is inert.** `resolve_bound_task`'s
+   `binding_for_delivery` now runs *before* `_review_task_from_entries` instead of after. Both
+   `SELECT` from the same `InboundQueueEntry` rows and neither writes, so nothing either observes
+   can have been changed by the other.
+3. `_review_task_from_entries` has locals named `review_task_id` and `task_id` in its
+   comprehensions. Different scope, no bearing — recorded only so the next reader doing this grep
+   does not stop on them the way this one did.
+
+### One stale claim the move created, found by the reading and fixed
+
+`binding_from_entries`'s docstring (`run_task_binding.py:155-173`) justified its arrival-order
+tie-break by asserting that a mixed batch — one entry naming work, another naming a review — can no
+longer reach it, "so every entry `binding_from_entries` now sees is already the same kind". After
+the move that sentence is **false**: `_review_task_from_entries` is the thing that refuses a mixed
+batch with a 409, and it now runs *after* `resolve_bound_task`. A hand-built mixed batch is seen by
+`binding_from_entries` for the few statements between the two.
+
+No behaviour changed — the 409 still fires, before any run exists, and
+`test_agent_trigger.py:2081` still gets both task ids in its detail (it is in the full-suite run
+below). Nothing is bound from what `binding_from_entries` returns in that window. But the sentence
+was load-bearing *as a reason*: a later reader taking it at face value could replace the tie-break
+with an assertion that the entries are one kind, and that assertion would now fire. The docstring
+now says which of the two runs first and that the tie-break must stay total. This is the
+restated-fact failure mode this codebase keeps naming, arriving on schedule inside a change whose
+whole content is a reordering.
+
+### Verification
+
+- `py -3.11 -m pytest hub/tests/test_task_resolved_before_workspace.py -q` → **6 passed**, from
+  **4 failed / 2 passed** on the pre-move tree. Both runs are quoted above.
+- The neighbourhood the reorder actually touches, run as its own set before the full suite:
+  `test_agent_trigger.py test_run_task_binding.py test_review_turn.py test_conversation_task_binding.py`
+  `test_task_integration.py test_task_worktrees.py` → **157 passed** in 103s.
+- Full hub suite: `py -3.11 -m pytest hub/tests/ -q` → **3269 passed, 84 skipped,
+  1 xpassed, 0 failed** in 17m56s. Iteration 7 measured **3263 / 84 / 1 xpassed** on the
+  phase-2 tree, so the delta is exactly the six tests added here and nothing else — no test
+  moved from passing to skipped, and the skip count did not move at all. The lone `xpassed`
+  is the known `strict=False` fixture defect iteration 7 wrote up
+  (`test_agent_trigger_overrides.py::test_a_conversation_whose_model_changed_attributes_usage_per_turn`);
+  it passes or xfails by timing and either outcome is green.
+- `py -3.11 -m ruff check src/ hub/ tests/` → All checks passed.
+  `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` → 497 files unchanged
+  (496 plus the new test file).
+- `npx openspec validate 2026-08-27-work-is-isolated-per-task --strict` → valid.
+  `npx openspec list` → **19/69 tasks**, up from 14/69: 3.1, 3.2, 3.2b, 3.3, 3.4.
+- No Hub was started or touched; no job exists to disable.
+
+### What phase 3 does not do
+
+Nothing yet *uses* the earlier answer. `binding` is resolved above the workspace decision and the
+workspace decision still ignores it — a turn bound to a task still gets the agent's own worktree.
+That is phase 4's task 4.14, and phase 3 is its prerequisite, which is why the order was not free.
+**A task is not complete on the strength of a prerequisite existing**, and this one is not claiming
+otherwise: what phase 3 closes is the four precedence questions, measured red then green.
+
+**Next:** `F58-IMPL` phase 4 — choosing the workspace from the binding (D1, D3, D4). It is the
+largest phase in the change and the first one whose failure is visible to an agent at runtime.

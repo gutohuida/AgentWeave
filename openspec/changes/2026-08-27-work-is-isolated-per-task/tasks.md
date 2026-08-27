@@ -108,22 +108,22 @@ no record. 2.5's test now pins the commit count at three, and dropping `--no-ff`
 
 ## 3. Resolving the task before the workspace (D2)
 
-- [ ] 3.1 Add a test in `hub/tests/` asserting that triggering an agent with a `task_id` that does
+- [x] 3.1 Add a test in `hub/tests/` asserting that triggering an agent with a `task_id` that does
   not exist in the project returns the `TaskBindingError` refusal **and leaves no worktree
   provisioned** for that agent — the observable consequence of the move.
-- [ ] 3.2 Add a test asserting that when the project workspace is unavailable *and* the named task
+- [x] 3.2 Add a test asserting that when the project workspace is unavailable *and* the named task
   does not exist, the response is still the workspace 409 with its `directory_state`, not the task
   refusal. This pins the precedence D2 promises to preserve.
-- [ ] 3.2b Add tests pinning the three precedences that D2 *does* change, so they are chosen rather
+- [x] 3.2b Add tests pinning the three precedences that D2 *does* change, so they are chosen rather
   than discovered: a nonexistent `task_id` combined with (a) `work_dir` on a review turn
   (`agent_trigger.py:492-497`), (b) `work_dir` for a writing agent (`:511-516`), and (c) an
   unresolvable review target (`ReviewTurnRefused`, `:506-509`) now each answer with the task
   refusal. R1 named only the workspace-409 precedence; these four answers move together.
-- [ ] 3.3 Move the `resolve_bound_task` call in `hub/hub/api/v1/agent_trigger.py` from `:558` to
+- [x] 3.3 Move the `resolve_bound_task` call in `hub/hub/api/v1/agent_trigger.py` from `:558` to
   immediately after `repo_root` is set (`:469`) and before the review-turn block (`:483`). Leave
   `spec_document_for_task`, `_render_hub_agent_context` and the staging block at `:749` reading the
   same `binding` value.
-- [ ] 3.4 Confirm by reading, not by assuming, that nothing between the old and new call sites
+- [x] 3.4 Confirm by reading, not by assuming, that nothing between the old and new call sites
   mutates `conversation`, `queue_entry_ids` or `task_id`. Record what you read.
 
 ## 4. Choosing the workspace from the binding (D1, D3, D4)
