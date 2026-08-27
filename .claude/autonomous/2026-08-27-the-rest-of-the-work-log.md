@@ -672,3 +672,216 @@ the history reads without a rename hunt.
 **Next:** `F58-IMPL` phase 2 — task workspace paths, names and provisioning (tasks 2.1–2.9). 2.3 is
 what turns this iteration's red green, and phase 2 should confirm that transition explicitly rather
 than only running its own new tests.
+
+## Iteration 6 — F58-IMPL phase 2: the guard that no test could fail, and the flag that mattered instead
+
+*Appended by iteration 7. Iteration 6 wrote this draft to disk, committed and pushed
+`fed29cf`, and died before appending it. The full-suite line below is iteration 7's
+measurement; everything else is iteration 6's own account, and iteration 7 re-ran its
+headline numbers independently — see the next entry.*
+
+**11:15–11:5x, 2026-08-27.** Branch `autonomous/2026-08-27-the-rest-of-the-work` at `9c64f9c`,
+matching STATE.json. Phase 2 of `openspec/changes/2026-08-27-work-is-isolated-per-task/tasks.md`,
+tasks 2.1–2.9, and nothing else. No review round was opened: R2 and R3 both ran, and the discipline
+is done for this change.
+
+### What was built
+
+`hub/hub/worktrees.py` gains the per-task half of the module it already had for agents:
+
+- `validate_task_id`, `task_root`, `task_worktree_path`, `task_branch_name` (2.3) — pure, and
+  refusing anything that is not `task-` followed by **lowercase** hex. Lowercase is not
+  pedantry: two ids differing only in case are two git refs but one directory on Windows and
+  macOS, so accepting both would let one task's checkout be handed to another. The test names
+  that reason.
+- `ensure_task_worktree(repo_root, task_id, base, prerequisites=())` (2.7), with the unwind
+  written out in D1's order — `merge --abort`, `worktree remove --force`, `branch -D`,
+  `worktree prune`, each `check=False`, and only then raise. `release_worktree` is **not** reused,
+  and the docstring says why: it snapshots the dirty tree onto the branch first, which here would
+  commit a conflicted merge as though it were the agent's work.
+- The mid-merge refusal (2.7b), on the idempotent path, for the one state a process killed between
+  `worktree add` and the unwind can leave.
+- `release_task_worktree` (2.9), returning the same `ReleaseResult` as `release_worktree` rather
+  than a second dataclass. `snapshot_worktree` gained a keyword-only `message=` for it — a task's
+  branch does not belong to an agent's turn, and "Auto-snapshot: task-ab12cd34ef56's turn" would
+  have been a small lie in the git history.
+- `.agentweave/tasks/` in `repo_hygiene.EXCLUDE_PATTERNS` (2.8).
+
+`hub/tests/test_task_worktrees.py` is new: 21 tests, red first, all 21 failing with
+`AttributeError` before any of the above existed.
+
+### The finding: 2.5's guard was a branch no test could fail
+
+Task 2.5 asks that a prerequisite already reachable from `base` "is not merged a second time", and
+the obvious implementation is a `merge-base --is-ancestor` check before the merge. It was written,
+and then mutation-tested:
+
+```
+# guard stubbed to `if False and already_here.returncode == 0:`
+py -3.11 -m pytest hub/tests/test_task_worktrees.py -q
+21 passed
+```
+
+The mutation survived, so the guard was doing nothing the suite could see. Measured directly, on a
+throwaway repository rather than reasoned about:
+
+```
+$ git merge --no-ff -m "bring in" $ANC
+Already up to date.
+exit=0
+count before: 2
+count after: 2
+```
+
+`git merge --no-ff <ancestor>` is a no-op. The guarantee 2.5 names is git's, not ours, and the
+guard was a line whose deletion nothing would notice — which is the failure mode this repository
+names as a defect source. **It was deleted.** The comment in its place records the measurement, so
+a later reader does not "restore the missing check", and the test's own docstring says out loud
+that it does not discriminate any control flow of ours.
+
+### What the same mutation pass found instead
+
+`--no-ff` *is* load-bearing, and nothing was testing it. The task branch sits at `base`, and a
+prerequisite is typically `base` plus one commit — so a plain `merge` **fast-forwards**: the task
+branch tip becomes the prerequisite's own commit, two tasks share a branch tip, and the act of
+bringing the work in leaves no record at all. That is F58's shape reappearing inside the fix for
+F58. The test now pins the commit count at three (base, prerequisite, merge) and asserts
+`HEAD != prerequisite`:
+
+```
+# `--no-ff` removed from the merge
+FAILED test_a_prerequisite_not_reachable_from_the_base_is_merged_in
+1 failed, 20 passed
+```
+
+So phase 2 removed one untestable line and added one real assertion, on the same pass. The net is
+one fewer branch in the module and one more thing that cannot silently regress.
+
+### Verification
+
+- `py -3.11 -m pytest hub/tests/test_task_worktrees.py -q` → **21 passed**. All 21 were run red
+  first, against the tree as phase 1 left it: `21 failed, 5 warnings in 2.05s`, every one of them
+  on a name that did not exist yet. (The per-test tracebacks were not kept; the summary line and
+  the count are what is claimed here.)
+- **The phase-1 red is green, and 2.3 is what turned it.** `hub/tests/test_task_integration.py`
+  went from **25 passed / 1 failed** (iteration 5, `AttributeError: module 'hub.worktrees' has no
+  attribute 'task_branch_name'`) to **26 passed**. That is the whole point of phase 1 paying off,
+  and it is recorded here as both a before and an after because phase 2's own instruction asked
+  for exactly that.
+- Three mutations, three named failures:
+  - `.agentweave/tasks/` removed from `EXCLUDE_PATTERNS` → `test_seeding_writes_the_block` and
+    `test_git_agrees_about_the_hubs_own_files` fail.
+  - `branch -D` removed from the unwind → `test_a_conflicting_prerequisite_leaves_no_checkout_and_no_branch`
+    **and** `test_a_prerequisite_commit_missing_from_the_repository_says_so` fail. Both, because
+    `worktree add -b` has already made the branch by the time either failure is detected.
+  - `--no-ff` removed → the case above.
+  - The fourth mutation is the finding above: it *survived*, and the code changed rather than the
+    test.
+- `py -3.11 -m pytest hub/tests/test_task_worktrees.py hub/tests/test_worktrees.py hub/tests/test_repo_hygiene.py -q`
+  → 74 passed. `test_task_integration.py test_review_checkout.py test_session_sync.py` → 55 passed.
+- Full hub suite: **not run by this iteration** — the process died before it. Filled in by
+  iteration 7 against the same tree: `py -3.11 -m pytest hub/tests/ -q` → **3263 passed,
+  84 skipped, 1 xpassed, 0 failed** in 18m25s. That is `green_at_arming`'s 3242 plus exactly
+  the 21 tests added here, with the skip count unmoved.
+- `py -3.11 -m ruff check src/ hub/ tests/` → All checks passed.
+  `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` → 496 files unchanged.
+- `npx openspec validate 2026-08-27-work-is-isolated-per-task --strict` → valid.
+  `npx openspec list` → **14/69 tasks**, up from 3/69.
+- No Hub was started or touched; no job exists to disable.
+
+### Two things deliberately left for later phases
+
+- `list_agent_branches` still cannot see a task branch — `task/<id>` fails `_AGENT_NAME_RE` after
+  the prefix strip, and the checkout path fails the second filter too. That is D6's recorded
+  degradation and phase 6's task, not a regression introduced here: nothing rendered these lists
+  before and nothing does now.
+- Nothing calls `ensure_task_worktree` or `release_task_worktree` yet. Phase 2 is the mechanism;
+  phases 3 and 4 are what choose it, and phase 5 is what releases it. **A task is not complete on
+  the strength of a mechanism existing either** — the wiring is phases 3–5's to prove.
+
+**Next:** `F58-IMPL` phase 3 — resolving the task before the workspace (tasks 3.1–3.4, D2). It is a
+prerequisite of phase 4's task 4.14, so the order is not free.
+
+## Iteration 7 — the interrupted close-out, reconciled: phase 2 re-verified from the outside
+
+**12:30–12:51, 2026-08-27.** Branch `autonomous/2026-08-27-the-rest-of-the-work` at `60a471c`,
+matching STATE.json. No new implementation. Iteration 6 committed and pushed phase 2 (`fed29cf`)
+and then died before appending its log entry or rewriting STATE.json, leaving its draft at
+`.claude/autonomous/iter6-entry.md` and one line — the full hub suite — as a placeholder. This
+iteration's whole job was to close that out **without trusting the draft**: re-run the evidence
+independently, fill in the missing line, and hand phase 3 to the next firing.
+
+### What was re-measured, not read
+
+Every number below was produced by this iteration against the tree at `60a471c`, not copied from
+the draft.
+
+- `py -3.11 -m pytest hub/tests/test_task_worktrees.py hub/tests/test_worktrees.py hub/tests/test_repo_hygiene.py hub/tests/test_task_integration.py -q`
+  → **100 passed** in 84.73s. That is the draft's 74 and its 26 in one run, and it includes the
+  phase-1 red: `test_task_integration.py` is green, so 2.3 did turn it.
+- `hub/tests/test_task_worktrees.py` collects **21 tests**, the count the draft claims — and
+  `grep -c "mock\|Mock\|monkeypatch"` over it is **0**. Every one of them builds a real repository
+  and runs real `git`, so what they pin is git's behaviour and not a stub's imitation of it. That
+  matters more than usual here, because the finding below is a claim *about git*.
+- `py -3.11 -m pytest hub/tests/ -q` → **3263 passed, 84 skipped, 1 xpassed, 0 failed** in
+  18m25s. `green_at_arming` recorded 3242 passed / 84 skipped, so the delta is exactly the
+  21 tests phase 2 added and nothing else — no test moved from passing to skipped to hide a
+  regression. The single `xpassed` is
+  `test_agent_trigger_overrides.py::test_a_conversation_whose_model_changed_attributes_usage_per_turn`,
+  whose `xfail` is `strict=False` and documents a *fixture* defect
+  (`:memory:` resolves to a StaticPool shared across sessions); it passes or xfails by
+  timing, and either outcome is green. Recorded here so a later run that sees 3262/1 xfailed
+  does not go looking for a regression.
+- `py -3.11 -m ruff check src/ hub/ tests/` → All checks passed.
+  `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` → 496 files unchanged.
+- `npx openspec validate 2026-08-27-work-is-isolated-per-task --strict` → valid.
+  `npx openspec list` → **14/69 tasks**. Phase 2's boxes (2.1–2.9, including 2.6b and 2.7b) are all
+  ticked in `tasks.md`; phase 3 onward is untouched.
+- No Hub was started or touched; no job exists to disable.
+
+### The draft's central finding reproduces independently
+
+Phase 2 deleted a `merge-base --is-ancestor` guard on the grounds that `git merge --no-ff <ancestor>`
+is a measured no-op — a claim load-bearing enough that a deleted guard rests on it. Re-measured this
+iteration in a throwaway repository built from scratch, not the one the draft used:
+
+```
+count before: 2
+Already up to date.
+exit=0
+count after: 2
+```
+
+Same result. The guarantee task 2.5 names is git's, and the comment that replaced the guard is
+accurate.
+
+### Read, not just run
+
+`fed29cf` is 602 insertions across five files, and the diff was read rather than accepted on the
+strength of its tests. Two things worth recording because a later phase depends on them:
+
+- `ensure_task_worktree` merges prerequisites **only on the creation path**. The idempotent path
+  and the resumed-branch path (`branch_exists`) both skip the merge, and the docstring says why:
+  the all-or-nothing unwind is safe only because the branch is seconds old. Phase 5's release keeps
+  the branch, so the resumed path is the one phase 5 makes reachable — the two designs agree.
+- `_unwind_task_worktree` is deliberately not `release_task_worktree`, because releasing snapshots
+  the dirty tree first and would commit a conflicted merge as the agent's work. Anything in phases
+  3–5 that wants to "just reuse release" has to read that docstring first.
+
+### What phase 2 leaves for later, unchanged from the draft
+
+Nothing calls `ensure_task_worktree` or `release_task_worktree` yet — phases 3 and 4 choose it,
+phase 5 releases it. `list_agent_branches` still cannot see a task branch; that is D6's recorded
+degradation and phase 6's task, not a regression.
+
+### The reconciliation itself, as a finding
+
+The iteration-6 process was interrupted **after** its code commit and **before** its state write,
+which is the one ordering that leaves a branch whose git history is ahead of its STATE.json. It
+cost this iteration a full cycle to close, and the only reason it cost just one is that iteration 6
+had written its entry to a file on disk before committing. Draft the entry to disk **before** the
+commit, not after: the draft is what made the difference between reconciliation and re-doing phase 2
+blind.
+
+**Next:** `F58-IMPL` phase 3 — resolving the task before the workspace (tasks 3.1–3.4, D2). It is a
+prerequisite of phase 4's task 4.14, so the order is not free.
