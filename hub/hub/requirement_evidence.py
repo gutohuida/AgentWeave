@@ -46,6 +46,7 @@ from .db.models import (
     EvidenceReview,
     RequirementDrift,
     RequirementEvidence,
+    Run,
     SpecRequirement,
 )
 from .project_workspace import ProjectWorkspace
@@ -124,7 +125,10 @@ async def record(
 
     taken: Optional[Footprint] = None
     if workspace is not None:
-        taken = _take_footprint(workspace, actor, locator)
+        # Design D7: the directory this actor's run was actually given, when there was a run.
+        taken = _take_footprint(
+            workspace, actor, locator, await recorded_workspace_dir(session, actor.run_id)
+        )
         already = await duplicate_of(
             session, requirement, task_id=task_id, commit_sha=taken.commit_sha
         )
@@ -221,7 +225,12 @@ async def duplicate_of(
     return result.scalars().first()
 
 
-def _take_footprint(workspace: ProjectWorkspace, actor: Actor, locator: str) -> Footprint:
+def _take_footprint(
+    workspace: ProjectWorkspace,
+    actor: Actor,
+    locator: str,
+    recorded_dir: Optional[str] = None,
+) -> Footprint:
     """The footprint this evidence should carry, given who is recording it and what they named.
 
     **Finding F71, found live 2026-08-27.** An operator recorded evidence whose `locator` was the
@@ -249,7 +258,7 @@ def _take_footprint(workspace: ProjectWorkspace, actor: Actor, locator: str) -> 
     and all, and `restamp_run_footprints` corrects it once the commit exists — a locator-named
     commit would fight that mechanism rather than improve it.
     """
-    root = footprint_root(workspace, actor.kind, actor.name or "")
+    root = footprint_root(workspace, actor.kind, actor.name or "", recorded_dir)
     named = locator_commit(locator) if actor.kind == "operator" else None
     if named is None:
         return read_footprint(root)
@@ -267,7 +276,12 @@ def _take_footprint(workspace: ProjectWorkspace, actor: Actor, locator: str) -> 
     return read_footprint(root, at=resolved)
 
 
-def footprint_root(workspace: ProjectWorkspace, actor_kind: str, actor: str) -> Path:
+def footprint_root(
+    workspace: ProjectWorkspace,
+    actor_kind: str,
+    actor: str,
+    recorded_dir: Optional[str] = None,
+) -> Path:
     """The directory whose HEAD is the work this evidence is about.
 
     An agent works in its own checkout, on its own branch. Reading the *project* directory instead
@@ -279,10 +293,38 @@ def footprint_root(workspace: ProjectWorkspace, actor_kind: str, actor: str) -> 
     their own checkout, and if they are on a feature branch that is where they observed the thing.
     It is also safe by construction — git refuses to check out a branch already checked out in a
     linked worktree, so the project checkout can never *be* an agent's branch.
+
+    **`recorded_dir` is the directory the run actually executed in (`Run.workspace_dir`, design
+    D7), and it wins when it still exists.** Passed in as a plain value rather than looked up here,
+    for the same reason D1 passes the base and prerequisite commits into `worktrees`: the answer
+    depends on database state and this function is synchronous and git-only.
+
+    It replaces a derivation that has no correct form once work is isolated per task. Deriving from
+    the agent's name gives the per-agent checkout, which is not where a task-bound turn ran; and
+    **it is already wrong today for a reviewer**, whose evidence is footprinted at its own worktree
+    rather than at the detached review checkout it actually inspected. A recorded fact answers the
+    task workspace, the per-agent workspace, a grandfathered task, a review checkout and a project
+    with no repository with one rule.
+
+    The fallback is deliberate and load-bearing in two cases at once: a run predating the column
+    (never recorded), and a task checkout that has since been **released**, whose directory is
+    gone by design (D5). Both land on the behaviour this function already had rather than on a
+    path that does not exist.
     """
+    if recorded_dir:
+        candidate = Path(recorded_dir)
+        if candidate.is_dir():
+            return candidate
     if actor_kind != "agent" or not actor:
         return workspace.root
     return worktrees.existing_worktree(workspace.root, actor) or workspace.root
+
+
+async def recorded_workspace_dir(session: AsyncSession, run_id: Optional[str]) -> Optional[str]:
+    """The directory a run executed in, or None when there is no run or it predates the column."""
+    if not run_id:
+        return None
+    return await session.scalar(select(Run.workspace_dir).where(Run.id == run_id))
 
 
 def _apply_footprint(
@@ -336,7 +378,16 @@ async def capture_footprint(
     passes the actor it is about to write onto the row.
     """
     if taken is None:
-        taken = read_footprint(footprint_root(workspace, evidence.actor_kind, evidence.actor))
+        # Resolved from the evidence row, keeping this function's stated principle: a later caller
+        # gets the right answer without knowing the rule exists (design D7).
+        taken = read_footprint(
+            footprint_root(
+                workspace,
+                evidence.actor_kind,
+                evidence.actor,
+                await recorded_workspace_dir(session, evidence.run_id),
+            )
+        )
     return _apply_footprint(session, evidence, taken)
 
 

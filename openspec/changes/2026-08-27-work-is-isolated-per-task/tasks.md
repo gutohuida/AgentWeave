@@ -375,19 +375,19 @@ Read 4.14's implementation note before changing where the guard sits.
 
 ## 7. Evidence footprints follow the run's workspace (D7)
 
-- [ ] 7.1 Add a migration in `hub/hub/migrations/versions/` adding the workspace column to `runs`,
+- [x] 7.1 Add a migration in `hub/hub/migrations/versions/` adding the workspace column to `runs`,
   guarded for a missing table as `0033`/`0034` are. Bump the head assertions in
   `hub/tests/test_migrations.py` **and** `hub/tests/test_project_persistence.py`.
-- [ ] 7.2 Write the column at spawn in `agent_trigger.py`, from `effective_work_dir` — the value
+- [x] 7.2 Write the column at spawn in `agent_trigger.py`, from `effective_work_dir` — the value
   already computed and passed to `_execute_run` — so it cannot disagree with the process's cwd.
-- [ ] 7.3 Add a test asserting an agent recording evidence during a task-bound turn is footprinted at
+- [x] 7.3 Add a test asserting an agent recording evidence during a task-bound turn is footprinted at
   the task workspace's HEAD, not at the agent workspace's.
-- [ ] 7.4 Add a test asserting a **reviewer** recording evidence is footprinted at its review
+- [x] 7.4 Add a test asserting a **reviewer** recording evidence is footprinted at its review
   checkout, not at its own agent worktree. This is a behaviour change and today's answer is wrong.
-- [ ] 7.5 Add a test asserting the fallback holds: a run whose recorded workspace no longer exists
+- [x] 7.5 Add a test asserting the fallback holds: a run whose recorded workspace no longer exists
   (released) footprints at the project checkout, as `footprint_root` does today
   (`requirement_evidence.py:285`).
-- [ ] 7.6 Implement in `hub/hub/requirement_evidence.py`, changing `footprint_root`'s inputs and its
+- [x] 7.6 Implement in `hub/hub/requirement_evidence.py`, changing `footprint_root`'s inputs and its
   two call sites (`:252`, `:339`).
 
 ## 8. Prove it, rather than assert it

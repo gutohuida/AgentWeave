@@ -1095,6 +1095,22 @@ class Run(Base):
     # an identical message, and matching commits to turns by timestamp is guesswork. Recorded per
     # run, the union over a conversation's runs is exact.
     snapshot_commit_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # The directory this run actually executed in, written at spawn from `effective_work_dir`
+    # (`2026-08-27-work-is-isolated-per-task`, design D7).
+    #
+    # A recorded fact rather than a derivation, because under per-task isolation the right
+    # directory depends on the turn and no derivation answers every case:
+    # `RequirementEvidence.task_id` comes from the agent and is optional, and `Run.task_id` names
+    # the wrong tree for a **review** run, which binds to the task it inspects but executes in a
+    # detached review checkout. Recording what the run was handed makes the task workspace, the
+    # per-agent workspace, a grandfathered task, a review checkout and a project with no
+    # repository one rule instead of five.
+    #
+    # NULL means "not recorded" — runs predating this column executed somewhere nobody wrote down,
+    # and `requirement_evidence.footprint_root` falls back to the behaviour they already had. Not
+    # backfilled on purpose: a computed per-agent path would be exactly the wrong answer for a
+    # review run, and would make old rows indistinguishable from recorded ones.
+    workspace_dir: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         CheckConstraint("initiator IN ('operator', 'autonomous')", name="ck_runs_initiator"),

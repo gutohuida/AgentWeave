@@ -831,6 +831,12 @@ async def trigger_agent_directly(
         capability_token_hash=hash_run_token(run_token),
         instance_id=instance_identity.get(),
         divergence_source_run_id=divergence_source_run_id,
+        # Design D7. The same value the process is given as its cwd, so the record and the
+        # process cannot disagree — the argument `workspace_branch` above is made for, applied to
+        # the directory rather than the branch. Written here rather than at either runner's
+        # finalisation because the Claude/Codex split happens later and *inside* `_execute_run`,
+        # so there is one write and no way for the two spawn paths to differ.
+        workspace_dir=effective_work_dir,
     )
 
     # The binding, and the automatic move it causes, are staged here — before delivery, which is

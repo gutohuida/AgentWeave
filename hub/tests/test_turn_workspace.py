@@ -698,3 +698,78 @@ async def test_an_unbound_turn_is_still_told_its_own_branch(
     assert branch == worktrees.branch_name("writer")
     assert f"isolated git worktree on branch `{branch}`" in context
     assert "belongs to the task" not in context
+
+
+@pytest.mark.asyncio
+async def test_a_run_records_the_directory_it_actually_executed_in(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """7.2, and the wiring half of design D7.
+
+    `test_evidence_footprint_root.py` sets `Run.workspace_dir` by hand and asserts what
+    `footprint_root` then does with it. Those tests prove the resolution and observe nothing about
+    whether anything ever writes the column — which is precisely the shape that let F72 sit in the
+    product unnoticed. So this one runs a real task-bound turn and compares the recorded value
+    against the directory the process was actually given.
+    """
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    _real_worktrees(monkeypatch)
+    await _agent(app, auth_headers, bind_runner, "writer")
+    conversation_id = await _conversation("writer")
+    await _task(BOUND_TASK)
+
+    cwd = await _turn(
+        async_session_factory,
+        project_id="proj-test",
+        agent="writer",
+        message="work on it",
+        conversation_id=conversation_id,
+        task_id=BOUND_TASK,
+    )
+
+    async with async_session_factory() as session:
+        recorded = (
+            (
+                await session.execute(
+                    select(Run).where(Run.conversation_id == conversation_id).order_by(Run.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(recorded) == 1
+    # The cwd the process was handed, not a restatement of the rule that produced it.
+    assert recorded[0].workspace_dir == str(cwd)
+    assert Path(recorded[0].workspace_dir) == worktrees.task_worktree_path(repo, BOUND_TASK)
+
+
+@pytest.mark.asyncio
+async def test_an_unbound_run_records_its_own_checkout_too(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """The column records where the run ran, whatever scheme it ran under — it is not a task
+    field. A version that wrote it only for task-bound turns would leave every ordinary turn
+    resolving through the fallback and look correct in the task tests."""
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    _real_worktrees(monkeypatch)
+    await _agent(app, auth_headers, bind_runner, "writer")
+    conversation_id = await _conversation("writer")
+
+    cwd = await _turn(
+        async_session_factory,
+        project_id="proj-test",
+        agent="writer",
+        message="work on it",
+        conversation_id=conversation_id,
+    )
+
+    async with async_session_factory() as session:
+        run = (
+            (await session.execute(select(Run).where(Run.conversation_id == conversation_id)))
+            .scalars()
+            .one()
+        )
+    assert run.workspace_dir == str(cwd)
+    assert Path(run.workspace_dir) == worktrees.worktree_path(repo, "writer")

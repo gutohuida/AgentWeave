@@ -37,6 +37,10 @@ ALPHA = {"key": "alpha", "statement": "It records a check-in", "modal": "MUST"}
 #: `git worktree` against the checkout pytest was invoked from. Captured here at import time, before
 #: the fixture runs, for the one test that needs the genuine article against a `tmp_path` repo.
 _REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
+#: Same reason, for the three functions design D7's tests need against a real `tmp_path` repo.
+_REAL_ENSURE_TASK_WORKTREE = worktrees.ensure_task_worktree
+_REAL_RELEASE_TASK_WORKTREE = worktrees.release_task_worktree
+_REAL_ENSURE_REVIEW_CHECKOUT = worktrees.ensure_review_checkout
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -888,3 +892,145 @@ async def test_an_agents_locator_does_not_move_its_footprint(
 
     footprint = await only_footprint()
     assert footprint.commit_sha == agent_commit, "the worktree's HEAD, not the locator's commit"
+
+
+# --- the footprint follows the workspace the run was given (design D7, tasks 7.3-7.5) ---------
+
+
+async def _record_workspace_dir(run_id: str, directory) -> None:
+    """Set `Run.workspace_dir`, the way the trigger does at spawn."""
+    async with async_session_factory() as session:
+        run = await session.get(Run, run_id)
+        run.workspace_dir = str(directory)
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_a_task_bound_turns_evidence_is_footprinted_at_the_task_checkout(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """Task 7.3. The agent-name derivation gives the per-agent checkout, which is not where a
+    task-bound turn ran — so the footprint described a tree the work is not in.
+
+    The agent's own worktree is provisioned *and committed to* here, with different content, so
+    the assertion cannot pass by the two directories happening to agree.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+
+    own = worktrees.ensure_worktree(repo, "builder")
+    commit_in(own, "not_this_one.py", "wrong tree\n")
+
+    task_checkout = _REAL_ENSURE_TASK_WORKTREE(repo, "task-aa11bb22cc33", head_of(repo), ())
+    task_commit = commit_in(task_checkout, "the_work.py", "print('hi')\n")
+    await _record_workspace_dir("run-fp", task_checkout)
+
+    assert task_commit != head_of(own), "the two checkouts must differ or this proves nothing"
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    footprint = await only_footprint()
+    assert footprint.commit_sha == task_commit
+    assert footprint.branch == worktrees.task_branch_name("task-aa11bb22cc33")
+    assert "the_work.py" in (footprint.entries or {})
+    assert "not_this_one.py" not in (footprint.entries or {})
+
+
+@pytest.mark.asyncio
+async def test_a_reviewers_evidence_is_footprinted_at_the_tree_it_reviewed(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """Task 7.4, and a behaviour change: today's answer is wrong.
+
+    A review run binds to the task it is inspecting but executes in a **detached** review
+    checkout. Deriving from the actor's name footprints it at the reviewer's own worktree — a tree
+    it never looked at — so a reviewer's evidence described its own unrelated work.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+
+    # The reviewer has a checkout of its own, carrying something else entirely. That is what the
+    # old derivation would have named.
+    own = worktrees.ensure_worktree(repo, "builder")
+    commit_in(own, "reviewers_own_work.py", "unrelated\n")
+
+    # The tree under review: work committed on another branch, then checked out detached.
+    authored = _REAL_ENSURE_TASK_WORKTREE(repo, "task-dd44ee55ff66", head_of(repo), ())
+    reviewed_commit = commit_in(authored, "under_review.py", "the change\n")
+
+    review_checkout = _REAL_ENSURE_REVIEW_CHECKOUT(repo, "builder", reviewed_commit)
+    await _record_workspace_dir("run-fp", review_checkout)
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "reviewed it"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    footprint = await only_footprint()
+    assert footprint.commit_sha == reviewed_commit
+    assert footprint.commit_sha != head_of(own)
+    assert "under_review.py" in (footprint.entries or {})
+    assert "reviewers_own_work.py" not in (footprint.entries or {})
+
+
+@pytest.mark.asyncio
+async def test_a_released_workspace_falls_back_rather_than_naming_a_missing_directory(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """Task 7.5. A task's checkout is removed when the task reaches a terminal status (design D5),
+    so a recorded directory can legitimately stop existing. The fallback is the behaviour this
+    code already had, not a new failure mode.
+
+    Asserted against the *agent's own* checkout rather than the project root, because that is what
+    the pre-D7 derivation answers for an agent — this test pins that the fallback is genuinely the
+    old path and not merely "something that did not crash".
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+
+    own = worktrees.ensure_worktree(repo, "builder")
+    own_commit = commit_in(own, "agent_work.py", "still here\n")
+
+    task_checkout = _REAL_ENSURE_TASK_WORKTREE(repo, "task-aa11bb22cc33", head_of(repo), ())
+    await _record_workspace_dir("run-fp", task_checkout)
+    _REAL_RELEASE_TASK_WORKTREE(repo, "task-aa11bb22cc33")
+    assert not task_checkout.exists()
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    footprint = await only_footprint()
+    assert footprint.commit_sha == own_commit
+    assert footprint.branch == "agentweave/builder"
+
+
+@pytest.mark.asyncio
+async def test_a_run_predating_the_column_keeps_the_behaviour_it_had(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """`workspace_dir` is nullable and not backfilled: a run recorded before it existed resolves
+    the way it always did. Stated as its own test because "NULL means not recorded" is the whole
+    reason there is no backfill."""
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    own = worktrees.ensure_worktree(repo, "builder")
+    own_commit = commit_in(own, "agent_work.py", "print('hi')\n")
+
+    async with async_session_factory() as session:
+        assert (await session.get(Run, "run-fp")).workspace_dir is None
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    assert (await only_footprint()).commit_sha == own_commit
