@@ -48,28 +48,60 @@ Where the project directory is a Git repository and the isolated checkout cannot
 
 ### Requirement: Work already under way keeps the checkout it started in
 
-A task that already carries committed work on a per-agent branch when per-task isolation is introduced SHALL continue to be worked in that per-agent checkout for the remainder of its life, and SHALL NOT be given a task checkout.
+A task that was already being worked on a per-agent branch when per-task isolation is introduced SHALL continue to be worked in that per-agent checkout for the remainder of its life, and SHALL NOT be given a task checkout.
 
 No existing branch SHALL be renamed, deleted, split, or rewritten in order to introduce per-task isolation. There is no record of which commit on a per-agent branch belongs to which task — that absence is the defect being fixed — so any automatic split would be a guess, and a guess that rewrites history cannot be undone by the operator who did not ask for it.
 
 Adopting such a branch as the task's own branch SHALL NOT be done either. The branch carries other tasks' commits, so adopting it would leave the system claiming that one approval lands one task's work while that claim was false for an unbounded set of tasks, and false silently.
 
-The condition SHALL be determined from recorded fact rather than inferred from a date or a version: a task whose earlier runs produced no commit has no work to preserve and is not covered by this requirement.
+The set of covered tasks SHALL be recorded once, when per-task isolation is introduced, and SHALL NOT be recomputed afterwards. Determining it from the state of the world at each turn — whether a branch exists, or whether a particular kind of commit was recorded — makes a task's scheme depend on things that change after the fact, so a task could move between schemes mid-life without anyone deciding it should. Because nothing writes the record after it is made, the set is fixed when the change ships and only shrinks.
 
-Because a task's first writing turn provisions its task checkout from that point on, the set of tasks covered by this requirement is fixed when the change ships and only shrinks.
+The recorded set SHALL cover every task that has already been worked at all, whether or not a commit can be found for it. Covering a task that had nothing to preserve costs it only the isolation it never had; failing to cover a task that did have work costs that work its place in the checkout the agent is about to be given, with no statement that anything is missing. Those costs are not comparable, so the boundary is drawn on the safe side of it.
 
-#### Scenario: A task with committed work on a per-agent branch keeps it
+#### Scenario: A task already worked keeps its per-agent checkout
 
-- **WHEN** a writing turn is taken on a task that already produced a commit on its agent's branch
+- **WHEN** a writing turn is taken on a task that was already worked before per-task isolation
 - **THEN** the turn runs in that per-agent checkout
 - **AND** no task branch is created for that task
 
-#### Scenario: A task whose earlier turns produced nothing is not covered
+#### Scenario: An agent that committed its own work does not lose it
 
-- **WHEN** a writing turn is taken on a task that has earlier runs but none that produced a commit
-- **THEN** the turn runs in a checkout provisioned for that task
+- **WHEN** a writing turn is taken on a task whose earlier turns committed their work directly, so
+  the system recorded no automatic snapshot for them
+- **THEN** the turn still runs in the per-agent checkout, with that work present
+
+#### Scenario: A task created afterwards is not covered
+
+- **WHEN** a task is created after per-task isolation is introduced and given a writing turn
+- **THEN** it runs in a checkout provisioned for that task
 
 #### Scenario: No branch is destroyed to make room
 
 - **WHEN** per-task isolation is introduced into a project with existing per-agent branches
 - **THEN** every one of those branches still exists, at the same commit, with the same history
+
+### Requirement: A task's checkout is worked by one turn at a time
+
+While a writing turn is in flight for a task, the system SHALL refuse to start another writing turn for that same task on behalf of a different agent, and the refusal SHALL name the agent already holding it.
+
+Before work was isolated per task, this held without being stated: a checkout belonged to an agent, and an agent could have only one turn in flight, so no two processes could share a working tree. Isolating per task removes that coupling — nothing else in the system prevents two agents from being pointed at the same task — and two live processes editing one working tree lose each other's changes silently, which is the outcome workspace isolation exists to prevent.
+
+A turn started to **review** a task SHALL NOT be refused by this rule. A review runs in a checkout of the commit under review rather than in the task's own checkout, so there is nothing for it to collide with, and refusing it would stop a task being reviewed while it is being worked.
+
+An agent that works in the project's shared checkout rather than an isolated one SHALL NOT be refused by this rule either. It has no isolated checkout to collide over, and the shared checkout's behaviour is unchanged by this requirement.
+
+#### Scenario: A second agent is refused while the first is working
+
+- **WHEN** a writing turn is triggered for a task that another agent already has a run in flight for
+- **THEN** the turn is refused
+- **AND** the refusal names the agent holding the task
+
+#### Scenario: A review is not refused
+
+- **WHEN** a review turn is triggered for a task that an agent is currently working
+- **THEN** the review turn starts
+
+#### Scenario: The same agent's next turn is unaffected
+
+- **WHEN** an agent's turn on a task ends and it is triggered on that task again
+- **THEN** the turn starts in the same task checkout

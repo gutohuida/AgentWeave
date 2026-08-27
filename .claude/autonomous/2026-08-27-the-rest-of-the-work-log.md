@@ -293,3 +293,162 @@ code rather than from the exploration's table; and the F70 wedged-review recover
 release-on-terminal rule.
 
 **Next:** `F58-R2` — the first review round. Claim by claim, against the code, fixing the artifacts.
+
+## Iteration 3 — F58-R2: the first review round, and it found a way for two agents to share one checkout
+
+**Done:** the first independent review pass over
+`openspec/changes/2026-08-27-work-is-isolated-per-task`, claim by claim against the code. No
+implementation — R3 still has to run. All four questions R1 left open are closed, two of R1's
+answers are **overturned**, one new decision (`D8`) was added, and 65 file:line citations were
+re-verified mechanically. `npx openspec validate --all --strict` → 42 passed, 0 failed. Deltas: **9**
+(was 8), 5 ADDED / 4 MODIFIED. Tasks: **66** (was 55).
+
+**Reconciliation:** branch `autonomous/2026-08-27-the-rest-of-the-work`, `HEAD` was `6fe175b`,
+`parent_sha` `a90cad6` in history, tree clean. `STATE.json` said iteration 2 / `F58-R2` next.
+Everything agreed; nothing to reconcile.
+
+### The finding that most changes the work — two agents, one task, one working tree
+
+Under per-task isolation, nothing stops two live agent processes being given the **same directory on
+the same branch**. Today that is impossible, but not because any rule says so — it is a *consequence*
+of two unrelated facts: a checkout belongs to an agent (`worktrees.worktree_path`), and an agent may
+have only one run in flight (`agent_trigger.py:439-445` refuses per `(project, agent)`). Keying the
+workspace by task breaks the coupling and nothing else replaces it:
+
+- `resolve_bound_task` takes the task from the delegation, the explicit `task_id`, or the
+  conversation, and never consults `Task.assignee`;
+- `bind_run_to_task` only fills `assignee` when it is **empty** (`run_task_binding.py:350-351`), so
+  it cannot refuse a second holder either.
+
+An operator starting task `T` on `builder-2` from the board while `builder-1` is already running on
+`T` is an ordinary sequence of clicks. That is the silent lost update `worktrees.py`'s own module
+docstring says the module exists to prevent, reintroduced along a new axis. Written up as **D8**,
+with three deliberate exemptions (review turns, which take the review checkout; read-only agents;
+grandfathered tasks) and a new spec requirement, *A task's checkout is worked by one turn at a time*.
+
+**And a second-order catch inside my own D8.** The first draft said the refusal sits "beside the
+existing per-agent one". It cannot: the per-agent 409 runs thirty lines before `repo_root` exists and
+long before any binding is resolved, so the turn's task is not known there. The refusal has to go
+immediately after D2's relocated `resolve_bound_task` — which makes **D2 a prerequisite of D8**, not
+a neighbour. Corrected in both `design.md` and task 4.14.
+
+### R1's grandfathering discriminator was wrong in both halves
+
+R1 proposed reading it live: a prior run bound to the task with a non-null `snapshot_commit_sha`,
+*and* no task branch of its own yet.
+
+- **Under-inclusive, in the direction that loses work.** `snapshot_commit_sha` is written only from
+  `worktrees.snapshot_worktree` (`agent_trigger.py:1524-1533`, `:2083-2092`), which returns `None`
+  when the worktree is **clean** (`worktrees.py:457-458`). An agent that commits its own work ends
+  its turn clean and records `NULL`. That task has real committed work on the per-agent branch, would
+  not be grandfathered, and its next turn would start in a fresh checkout cut from the integration
+  base **with all of its own prior work missing** — exactly the loss of continuity the two rejected
+  alternatives were rejected for causing.
+- **The second half is not a recorded fact at all.** "No task branch exists yet" is a `git rev-parse`
+  against a ref an operator can delete, so a task could flip schemes mid-life because someone tidied
+  up branches.
+
+**Corrected:** the migration stamps `Task.workspace_scheme = 'agent'` for every task with at least
+one run at that moment, and the resolver reads that column and nothing else. Deliberately
+over-inclusive — a grandfathered task that had nothing to preserve loses only isolation it never had,
+where the opposite error loses an agent's work — and self-extinguishing *by construction* rather than
+by argument. The `operator-agent-creation` delta and tasks 4.4/4.5/4.11 were rewritten to match.
+
+### The four open questions, closed
+
+1. **`commit_for_task_review` after release** — D5 was right, and now for a checked reason rather than
+   an argued one. It is a single `select` over `RequirementEvidence` joined to `EvidenceFootprint`
+   (`requirement_evidence.py:653`) and touches no path at all; `ensure_review_checkout`
+   (`worktrees.py:352`) resolves and `worktree add --detach`es **from `repo_root`**, against a ref
+   store every worktree shares, and the task branch survives release.
+2. **`integration_targets` producing two targets** — a false alarm, and the code says so in as many
+   words: "work produced on two branches has to be merged twice, and silently dropping one of them
+   would integrate half of what was approved" (`task_integration.py:178-180`). Merging twice is
+   correct. D4 forbids the situation anyway.
+3. **The eleven call sites, re-derived from the code** — see below. Four were missing.
+4. **F70's wedged-review recovery** — no interaction. It leaves the task in `under_review`, which is
+   not terminal, so release never fires, and the recovered turn takes the review checkout regardless.
+
+### Four surfaces R1 and the exploration both missed, and one that does not exist
+
+Re-derived by sweeping every reference to `worktree_path`, `branch_name`, `existing_worktree`,
+`resolve_agent_workspace`, `ensure_worktree`, `release_worktree`, `list_agent_branches`,
+`detect_conflicts`, `worktree_root` and every literal `.agentweave/worktrees` path across `hub/hub/`
+and `src/`:
+
+- `project_workspace.py:175-178` — refuses to register a project whose path runs through
+  `.agentweave/worktrees`. A task checkout is the same hazard by a different path.
+- `project_lifecycle.py:240-241` — refuses relocation while `.agentweave/worktrees` is non-empty. A
+  project whose only live checkouts are *task* checkouts would relocate, breaking every git worktree
+  registration (they store absolute paths).
+- `api/v1/worktrees.py:148-156` (`GET /worktrees/{agent}`) — the **only** worktree endpoint with a UI
+  caller, and its answer is wrong for every task-bound turn.
+- `api/v1/agents.py:1162-1164` — "other agents work in separate worktrees … they cannot see yours".
+  True per agent; false as written once a checkout belongs to a task.
+
+**`WorktreesPanel.tsx` is a stub.** The proposal listed it as a surface that assumes one workspace per
+agent. It assumes nothing: it renders a hard-coded `EmptyState` ("No worktree activity") and calls no
+API. The operator-facing surface is `WorkspaceLocation` inside `AgentSettingsPage.tsx`, reading
+`GET /worktrees/{agent}`. The `agent-configuration` delta was already written against *that*, so the
+delta was right and the prose naming the component was wrong. Task 6.4 was rewritten and 6.4b added.
+
+### Three more corrections to R1's reasoning
+
+- **"Leaves nothing provisioned" was asserted with no mechanism.** By the time a prerequisite merge
+  can conflict, `worktree add` has created the directory *and* the branch, and the failed merge has
+  left `MERGE_HEAD`. The obvious cleanup is the wrong one: `release_worktree` **snapshots the dirty
+  tree onto the branch** first (`worktrees.py:537-538`), so it would commit a conflicted merge as the
+  agent's work and keep the branch carrying it. D1 now names the unwind explicitly — `merge --abort`,
+  `worktree remove --force`, `branch -D`, `worktree prune`, in that order because git will not delete
+  a checked-out branch — plus the one state neither provisioning nor release owns (a process killed
+  mid-merge; `ensure_worktree`'s idempotent path at `:268-275` returns a registered directory
+  unexamined).
+- **D2 moves four observable answers, not one.** R1 recorded only the project-workspace 409
+  precedence. The new position is also above the review-turn refusal (`:506-509`) and both `work_dir`
+  400s (`:492-497`, `:511-516`). Task 3.2b pins all of them.
+- **`list_agent_branches` has two filters, not one.** R1 named the `_AGENT_NAME_RE` match
+  (`:565-566`); `append_record` also compares the registered worktree path against
+  `worktree_path(repo_root, agent)` (`:567-568`). Relaxing only the regex changes nothing. Also
+  corrected: "and look healthy" overstated it — `GET /worktrees` and `/worktrees/conflicts` have **no
+  caller in `hub/ui/src/`** (a gap already recorded on 2026-08-18), so the degradation would be
+  invisible rather than misleading.
+
+### What held
+
+- `resolve_bound_task` really is read-only, as R1 claimed and the exploration demanded be checked:
+  `binding_for_delivery`'s one `select` (`:219-222`), `resolve_task_for_project`'s one
+  `session.get` (`:120`), `binding_for_conversation`'s one `session.get` (`:402`). No writes.
+- D5's release-after-integration ordering, D3's keying by what the turn is about, D6's `task/`
+  segment being load-bearing, and D7's "record the workspace rather than derive it" all survived the
+  round unchanged.
+- The six skip reasons D1 leans on are exactly six: `ALREADY_INTEGRATED` is not one of them, because
+  in that case the work *is* in the target.
+
+### Verification
+
+No code changed, so no suite was run; `green_at_arming` still stands for this tree. Instead:
+
+- **65 (file, line, expected-text) assertions** run as a script over the working tree, covering every
+  citation this round introduced or altered. **Nine were wrong on the first run and are fixed** —
+  `ensure_worktree`'s idempotent block, `select(Run.id)`, the `ReviewTurnRefused` raise, the
+  `work_dir` isolation guard, `ConflictInfo`, its `paths` field, `get_agent_workspace`'s docstring,
+  its `worktree_path` call, and the endpoint's last line. Final run: **65/65, 0 wrong.**
+- `npx openspec validate --all --strict` → 42 passed, 0 failed.
+- `npx openspec show --json` read back: **9 deltas, 5 ADDED and 4 MODIFIED**, with D8's requirement
+  parsed as its own ADDED requirement rather than folded into the grandfathering one.
+- `npx openspec list` → 0/66 tasks.
+
+**Contamination note, per the method:** D8, the D4 correction and the four missing call sites came
+from reading the code against artifacts *someone else's process* wrote (R1 was a separate iteration),
+which is the shape the discipline is for. The D8 placement error and the nine bad citations are the
+opposite — mistakes I made this round and caught in the same round, which is weaker evidence and is
+why R3 exists.
+
+**Left for R3, written into `design.md` rather than left in my head:** whether a *flow* or a *job* can
+start a second writing turn on one task by a route that never reaches `_trigger`'s guard (D8's blind
+spot, since it has had one round of scrutiny rather than two); whether anything can write
+`Task.workspace_scheme` after the migration, since "the set only shrinks" rests entirely on that;
+and a sample of the load-bearing citations for the failure the mechanical sweep cannot catch — a line
+that is right about the number and wrong about what it means.
+
+**Next:** `F58-R3` — the second independent review round, on what R2 missed.

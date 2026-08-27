@@ -59,10 +59,12 @@ operator on 2026-08-26 and is what this change implements.
   evidence commit that is not already reachable. A merge that conflicts refuses the turn and names
   the prerequisite, rather than starting the agent on a base that silently lacks what it was told to
   build on.
-- **Work already under way keeps the workspace it started in.** A task that already carries
-  committed work on a per-agent branch stays on that branch for the rest of its life. No history is
-  split, rewritten, or guessed at. The set of such tasks is fixed at the moment this ships and only
-  shrinks.
+- **Work already under way keeps the workspace it started in.** A task that has already been worked
+  stays on its per-agent branch for the rest of its life. No history is split, rewritten, or guessed
+  at. The set is stamped by the migration and written by nothing afterwards, so it is fixed at the
+  moment this ships and only shrinks. Review corrected how that set is determined: the live
+  discriminator R1 proposed missed every task whose agent committed its own work, and would have
+  started such a task afresh with its own history absent (design `D4`).
 - **A task workspace is released when its task reaches a terminal status**, after integration has
   run. The checkout directory goes; the branch never does. This is what bounds the number of live
   checkouts.
@@ -70,12 +72,23 @@ operator on 2026-08-26 and is what this change implements.
   `test_rode_along_commits_names_what_actually_landed`'s assertion is **inverted**, not deleted, and
   `test_later_commits_on_the_branch_are_not_merged` gains the earlier-commit case its docstring
   already describes.
-- **Surfaces that assume one workspace per agent are updated**: the turn context sentence
-  (`api/v1/agents.py:1160`), the agent workspace panel (`api/v1/worktrees.py`,
-  `WorktreesPanel.tsx`), evidence footprint resolution (`requirement_evidence.footprint_root`), the
-  checkpoint path resolver (`checkpoints.py:373`), and conflict detection
+- **A task's checkout admits one writing turn at a time.** Today "one process per checkout" is not
+  a rule but a consequence: a checkout belongs to an agent, and an agent may have only one run in
+  flight. Keying the workspace by task breaks that coupling, and nothing refuses a second agent
+  bound to the same task — so two live processes would share one working tree. A refusal beside the
+  existing per-agent one closes it. Added in review (design `D8`).
+- **Surfaces that assume one workspace per agent are updated**: the turn context sentences
+  (`api/v1/agents.py:1160` and `:1162-1164`), the agent workspace section an operator actually reads
+  (`GET /worktrees/{agent}` at `api/v1/worktrees.py:148-156`, rendered by `WorkspaceLocation` in
+  `AgentSettingsPage.tsx`), evidence footprint resolution
+  (`requirement_evidence.footprint_root`), the checkpoint path resolver
+  (`checkpoints.agent_worktree`, `checkpoints.py:363`), conflict detection
   (`worktrees.list_agent_branches` / `detect_conflicts`), which would otherwise silently report
-  nothing because a task branch fails its agent-name parse.
+  nothing because a task branch fails both of its filters, and two guards written against the
+  `.agentweave/worktrees` path specifically — the nested-project registration refusal
+  (`project_workspace.py:175-178`) and the relocation refusal (`project_lifecycle.py:240-241`).
+  `WorktreesPanel.tsx` is **not** on this list: it is a stub rendering a hard-coded empty state and
+  calling no API, so it assumes nothing. Correcting that claim was a review finding.
 
 ## Non-Goals
 
@@ -107,9 +120,12 @@ where the isolation guarantee actually lives (`:63`, "the scheduler provisions *
 isolated worktree"), and it was not on the exploration's list.
 
 **Affected code:** `hub/hub/worktrees.py` (task workspace paths, branch names, provisioning,
-release, listing), `hub/hub/api/v1/agent_trigger.py` (binding resolved before workspace),
-`hub/hub/task_transition_service.py` (release on terminal status),
+release, listing), `hub/hub/api/v1/agent_trigger.py` (binding resolved before workspace, and the
+one-turn-per-task refusal), `hub/hub/task_transition_service.py` (release on terminal status),
 `hub/hub/requirement_evidence.py` (`footprint_root`), `hub/hub/checkpoints.py`,
-`hub/hub/repo_hygiene.py` (ignore the new checkout root), `hub/hub/api/v1/worktrees.py`,
-`hub/hub/api/v1/agents.py`, `hub/ui/src/components/environment/WorktreesPanel.tsx`, and one
-database migration for the column recording which task a run's workspace was for.
+`hub/hub/repo_hygiene.py` (ignore the new checkout root), `hub/hub/project_workspace.py` and
+`hub/hub/project_lifecycle.py` (two guards written against the old checkout root only),
+`hub/hub/api/v1/worktrees.py`, `hub/hub/api/v1/agents.py`,
+`hub/ui/src/components/agents/AgentSettingsPage.tsx`, and two database migrations — one for the
+column recording which workspace a run executed in, one stamping the tasks that keep the per-agent
+scheme.
