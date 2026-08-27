@@ -184,3 +184,112 @@ found live by someone else on 2026-08-26 and is the stronger of the two.
 **Next:** `F58-R1` — propose `work-is-isolated-per-task` from this document. The exploration ends
 with six open questions ordered by what they block; R1 closes them in `design.md` with rejected
 alternatives, and questions 1 and 2 are the ones that decide the shape of the change.
+
+## Iteration 2 — F58-R1: the change is proposed, and two of its answers came out of the code rather than the exploration
+
+**Done:** `openspec/changes/2026-08-27-work-is-isolated-per-task/` — `proposal.md`, `design.md`
+(seven decisions, each with its rejected alternatives), `tasks.md` (8 phases, 55 tasks, tests first),
+and six spec deltas. `npx openspec validate --all --strict` → **42 passed, 0 failed**, first try.
+Propose only; R2 and R3 are still ahead of any implementation.
+
+**Reconciliation:** branch, `git log` and `STATE.json` agree. `HEAD` was `468da44`, the branch is
+`autonomous/2026-08-27-the-rest-of-the-work`, `parent_sha` `a90cad6` is in its history, tree clean.
+Nothing to reconcile.
+
+### The six open questions, closed
+
+1. **What a task worktree is cut from** — the project's integration base (`Project.main_branch`,
+   else `HEAD`), then each direct prerequisite's accepted evidence commit merged in. The option that
+   *sounded* cleanest — make the dependency gate require *integrated* rather than `approved` — is
+   **refused by the code**: `NOTHING_TO_MERGE` fires for every `paths`-footprint project, which
+   `task_integration.py:150` calls "a supported project shape, not a degraded one", so that option
+   would leave such a project permanently unable to advance a dependency chain. Also recorded: three
+   of the six skip reasons are facts about the *operator's* checkout and cannot apply to a fresh task
+   worktree, which is why the merge that could not happen into `main` can happen into the task branch.
+2. **Moving `resolve_bound_task` above the workspace** — verified rather than assumed, as the
+   exploration demanded. Three reads, no writes (`run_task_binding.py:218-223`, `:120`, and the
+   conversation binding), and its own docstring states the invariant: *"Safe to read twice because
+   the mutations never feed back into this"* (`:257-259`). `conversation` is available from `:362`.
+   One real behaviour change, written into the spec delta: a request naming a nonexistent task is
+   refused *before* a checkout is provisioned instead of after, so it stops leaving one behind.
+3. **A turn with no bound task** — keeps the per-agent worktree, and that is not a legacy path: the
+   workspace is keyed by what the turn is *about*, and "no task" is a permanent category
+   (`db/models.py:1048-1049` says unbound runs are legitimate). The conversation binding is what
+   stops the two schemes coexisting by accident.
+4. **Migration** — no migration, made precise as **grandfather the task, not the branch**. A task
+   with a prior run carrying a non-null `Run.snapshot_commit_sha` and no task branch of its own stays
+   on the per-agent workspace for life. The discriminator is a recorded fact, and it is
+   self-extinguishing: after this ships, no new task can enter that state. The alternative —
+   *adopting* the per-agent branch as the task branch — was rejected in writing because it would ship
+   the guarantee "one approval lands one task's work" while that guarantee was false, silently, for
+   an unbounded set of tasks. That is this repository's named failure mode, chosen deliberately.
+5. **Reaping** — release on either terminal status, after `integrate_task` runs, keeping the branch
+   always. Both terminal statuses have operator-only exits (`task_transitions.py:145-150`), so the
+   branch surviving is what makes a reopened task get its work back. The disk backstop is a visible
+   count plus an explicit operator release; a hard cap that refuses turns and LRU eviction are both
+   rejected with reasons.
+6. **The two tests** — phase 1, and it opens with a warning that changes what the work is (below).
+
+### What this round found that the exploration had not
+
+- **Inverting the assertion in `test_rode_along_commits_names_what_actually_landed` would produce a
+  red test that is red for the wrong reason.** Both fixtures build `agentweave/builder` *by hand*
+  with `commit_on_branch(tmp_path, AGENT_BRANCH, …)` (`:307`, `:342`) and never touch worktree
+  provisioning — so the shape of the branch is decided by the test, not by the product. Flipping
+  `assert earlier in merged` alone fails against *any* implementation. `tasks.md` therefore names the
+  fixture change (put `earlier` on a second task's branch) beside every assertion change, and opens
+  with a paragraph saying so.
+- **A silent-empty-list failure mode nobody had named.** `list_agent_branches` (`worktrees.py:551`)
+  strips `refs/heads/agentweave/` and requires `_AGENT_NAME_RE` to match what remains. A task branch
+  `agentweave/task/<id>` contains a `/` and fails, so `detect_conflicts` and
+  `GET /worktrees/conflicts` would return `[]` forever and look healthy. Conflict detection is
+  exactly what per-task isolation makes *more* likely to matter.
+- **Task ids match the agent-name regex.** `_AGENT_NAME_RE` is `^[a-zA-Z0-9_-]{1,32}$`
+  (`worktrees.py:65`) and task ids are `task-<12 hex>` (`spec_tasks.py:206`), so `agentweave/task-…`
+  and `.agentweave/worktrees/task-…` would be indistinguishable from a real agent's. The `task/`
+  segment is load-bearing, not cosmetic — `/` is not in that character class.
+- **The exploration's guess at which capabilities this touches was wrong, and the correction is in
+  `proposal.md`.** It named `agent-flows`, `agent-run-sandboxing` and `agent-conversation-workspace`.
+  Checked: sandboxing's requirements say "the run's workspace" without saying how it is keyed;
+  the review-checkout requirements are about a detached checkout at an evidence commit, unaffected
+  because the branch survives release; `agent-flows` says nothing about workspaces. The requirement
+  that actually carries the isolation guarantee is `operator-agent-creation`'s *"the scheduler
+  provisions **that agent's** isolated worktree"* — which was not on the list.
+- **`footprint_root` cannot be fixed by a derivation.** `RequirementEvidence.task_id` is
+  agent-supplied and optional (`api/v1/agent_actions.py:840`), and deriving from `Run.task_id` gives
+  the *author's* task tree for a **review** run, which is bound to the task it inspects but executes
+  in a detached review checkout. So the run records the workspace it was actually given. That also
+  corrects a case wrong today: a reviewer's evidence is currently footprinted at its own agent
+  worktree, which is not the tree it reviewed.
+
+### Verification
+
+No code changed, so no suite was run and `green_at_arming` still stands for this tree. What was done
+instead, because a propose round's failure mode is a plausible artifact that does not match the code:
+
+- **Every file:line citation in the three artifacts was opened and checked mechanically** — 57
+  (path, line, expected-text) assertions run as a script over the working tree, not read by eye.
+  **Four were wrong and are fixed**: `_AGENT_NAME_RE` 112→65, `snapshot_worktree`'s `git add -A`
+  463→459, `ConflictReport` 600→583, and the "supported project shape" sentence 142→150 (142 is
+  `integration_targets`' `def` line, which is what the exploration cited — the sentence is eight
+  lines below it).
+- **The four MODIFIED requirement headers were matched against the live specs** so each delta
+  replaces a requirement that exists: `agent-configuration:218`, `agent-context-onboarding:153`,
+  `operator-agent-creation:63`, `task-lifecycle-governance:571`.
+- `npx openspec show --json` was read back to confirm the deltas parse as intended: **8 deltas, 4
+  MODIFIED and 4 ADDED**, none silently swallowed.
+- `npx openspec validate --all --strict` → 42 passed, 0 failed. `npx openspec list` → 0/55 tasks.
+
+**Contamination note, per the method:** every finding above came from reading the code against
+artifacts I had just written, which is the weakest form of review and the reason R2 and R3 exist.
+The citation sweep is the exception — it is mechanical and could have failed, and it did, four times.
+
+**Left for R2/R3 deliberately**, written into `design.md` as open questions rather than answered
+here: whether `commit_for_task_review` still resolves after a checkout is released (argued yes,
+not executed); what `integration_targets` does when one task's evidence spans a grandfathered
+per-agent branch *and* a later task branch, since it keys by `EvidenceFootprint.branch` and would
+produce two targets; a re-derivation of the eleven "one workspace per agent" call sites from the
+code rather than from the exploration's table; and the F70 wedged-review recovery against the
+release-on-terminal rule.
+
+**Next:** `F58-R2` — the first review round. Claim by claim, against the code, fixing the artifacts.
