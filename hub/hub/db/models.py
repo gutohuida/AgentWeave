@@ -865,8 +865,13 @@ class RunDivergence(Base):
         # the reviewer resolution governed this divergence rather than the task's
         # `divergence_policy` (`one-answer-to-what-is-happening`, D3), which is the only truthful
         # thing to write for a review — the task's own policy did not apply.
+        #
+        # `flow` is a fifth régime, added by `every-run-knows-its-task` (design D7) for the same
+        # reason: a live flow governs its own work turn's divergence directly when the task's
+        # policy is `retry`, because the flow is going to fire the task again on its own next
+        # tick and starting a `retry` run here would race it. Also absent from `POLICIES`.
         CheckConstraint(
-            "policy_applied IN ('surface', 'retry', 'escalate', 'review')",
+            "policy_applied IN ('surface', 'retry', 'escalate', 'review', 'flow')",
             name="ck_run_divergences_policy",
         ),
         # `restaffed` is a failed review answered by resolving the reviewer again (D4) — a

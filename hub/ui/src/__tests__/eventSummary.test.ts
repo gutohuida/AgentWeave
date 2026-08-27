@@ -45,4 +45,15 @@ describe('summaryForEvent', () => {
     expect(summaryForEvent('task_status', { task_id: 't-1', prev: 'pending', status: 'assigned' }))
       .toBe('t-1: pending → assigned')
   })
+
+  // `every-run-knows-its-task`, task 4.9: a kind the timeline had never rendered before this
+  // change, registered here rather than left to the default branch's best-effort guess.
+  it('names the task and the count when open divergences resolve', () => {
+    expect(summaryForEvent('run_divergence_resolved', { task_id: 'task-1', count: 1 })).toBe(
+      '1 open divergence on task-1 resolved'
+    )
+    expect(summaryForEvent('run_divergence_resolved', { task_id: 'task-1', count: 3 })).toBe(
+      '3 open divergences on task-1 resolved'
+    )
+  })
 })

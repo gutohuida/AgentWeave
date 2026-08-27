@@ -118,62 +118,101 @@ xpassed` — 3205 + 3 fixed, 84/1 both matching the pre-existing baseline, nothi
 
 ## 3. One owned answer to "was this a live flow's own work turn" (D4, D5)
 
-- [ ] 3.1 Test the predicate directly, per branch: a live flow's work turn is true; a review turn
+- [x] 3.1 Test the predicate directly, per branch: a live flow's work turn is true; a review turn
       is false; a delegated run is false; an operator-started run is false; a flow whose loop is
       `stopped_at` is false; a flow whose loop is `archived_at` is false; a run whose conversation
-      has no `JobRun` is false.
-- [ ] 3.2 Implement the predicate as one named function with a docstring stating why it exists —
-      that two consumers need the same fact and drift is the defect this change inherits from
-      `one-answer-to-what-is-happening`.
-- [ ] 3.3 Resolve the flow through `checkpoints.loop_for_conversation`, checking `stopped_at` and
-      `archived_at` explicitly rather than treating a non-None loop as live (D5).
-- [ ] 3.4 Seam test: the predicate is exercised against a real `Run` and real `Loop` rows, not a
-      hand-built fixture. Task 4.9 of `one-answer-to-what-is-happening` initially passed its
-      mutation check because every test built its input by hand — do not repeat that.
+      has no `JobRun` is false. All seven in `hub/tests/test_flow_divergence_regime.py`'s
+      `test_a_live_flows_work_turn_is_true` through `test_a_conversation_with_no_jobrun_is_not_a_flow_work_turn`.
+- [x] 3.2 Implemented as `is_live_flow_work_turn(session, run)` in `hub/hub/run_divergence.py`,
+      with a docstring stating exactly this: read by both D6 and D7, never re-derived at either
+      site.
+- [x] 3.3 Resolves the flow through `checkpoints.loop_for_conversation`, checking `stopped_at` and
+      `archived_at` explicitly (D5) — confirmed by mutation 3's third case below.
+- [x] 3.4 Seam test: every fixture in `test_flow_divergence_regime.py` builds real `AIJob`/`Loop`/
+      `JobRun`/`Run` rows (`_flow_context`, `_flow_work_run`, `_flow_review_run`,
+      `_unbound_flow_conversation_run`, `_orphan_job_conversation_run`) rather than a hand-built
+      stand-in for "this is a live flow" — the exact gap task 4.9 of
+      `one-answer-to-what-is-happening` left, named in this task's own text.
 
 ## 4. A divergence says whether it needs attention (D6)
 
-- [ ] 4.1 Test: a flow work run that moves nothing, on a task still held by the same agent under a
-      live loop, emits `run_diverged` at `info`.
-- [ ] 4.2 Test: the same run where the task's assignee was cleared emits at `warn`.
-- [ ] 4.3 Test: the same run where the run did not end cleanly emits at `warn`.
-- [ ] 4.4 Test: a delegated run's divergence is still `warn` — nothing outside the flow path
-      changes.
-- [ ] 4.5 Test: the durable `RunDivergence` row is byte-identical whichever severity was emitted;
-      severity governs the announcement, never the record.
-- [ ] 4.6 Test: resolving open divergences emits one `run_divergence_resolved` naming the task and
-      the count; moving a task with no open divergences emits nothing.
-- [ ] 4.7 Replace the hardcoded `severity="warn"` at `hub/hub/run_divergence.py:738` with the
-      derivation, reading the predicate from group 3. Keep the existing comment's reasoning for the
-      `warn` case — it is still correct for the case it was written about.
-- [ ] 4.8 Emit `run_divergence_resolved` from `resolve_divergences_for_task`, and broadcast it over
-      SSE alongside the persisted event, as `run_diverged` already is.
-- [ ] 4.9 Register the new event kind wherever event kinds are enumerated for the UI, and confirm
-      `EventRow` renders it — do not assume a kind it has never seen renders sensibly.
-- [ ] 4.10 Mutation check by name: hardcoding `warn` again fails 4.1; hardcoding `info` fails 4.2
-      and 4.3; suppressing the resolution event fails 4.6.
+- [x] 4.1 Test: `test_a_healthy_flow_work_divergence_is_announced_at_info`.
+- [x] 4.2 Test: `test_the_same_shape_with_the_assignee_cleared_is_warn`.
+- [x] 4.3 Test: `test_the_same_shape_with_an_unclean_ending_is_warn`.
+- [x] 4.4 Test: `test_a_delegated_divergence_is_still_warn`.
+- [x] 4.5 Test: `test_the_divergence_row_does_not_carry_severity_at_all` — asserts `severity` is
+      not even a column on `RunDivergence`, and that every tracked column matches across an
+      `info`-announced and a `warn`-announced row.
+- [x] 4.6 Test: `test_resolving_open_divergences_names_the_task_and_the_count` — one event on the
+      transition that closes the open row, nothing on a later transition with nothing left open.
+- [x] 4.7 `hub/hub/run_divergence.py`'s hardcoded `severity="warn"` (the line the task named as
+      `:738` had drifted to `:805` by the time this group started, from group 2's insertions)
+      replaced with the derivation: `info` only when `flow_work_turn` and `task.assignee ==
+      run.agent` and `run.status == "completed"`, else `warn`. Checked against the task's
+      *post-policy* state deliberately — an escalation branch runs before this line and may have
+      just moved `task.assignee` off `run.agent`, and that is not the quiet case either.
+- [x] 4.8 `resolve_divergences_for_task` now emits `run_divergence_resolved` (payload
+      `{task_id, count}`, `severity="info"`) and broadcasts it over SSE, only when `open_rows` is
+      non-empty. Required a `commit: bool = True` parameter on `utils.persist_event` (default
+      preserves all 72 other call sites): this function is reached from inside
+      `task_transition_service.apply_transition`, before that function's own caller commits —
+      `apply_transition`'s own docstring states "the caller commits", and `persist_event`'s
+      unconditional commit would have landed that still-in-flight write early. `commit=False`
+      here; `sse_manager.broadcast` needed no equivalent change, since its payload is already in
+      memory rather than a re-read of the database.
+- [x] 4.9 Registered in `hub/ui/src/lib/eventSummary.ts` — the one place event kinds are
+      enumerated for the timeline (`EventRow.tsx` itself has no per-kind switch; it renders purely
+      by severity). Pinned by two new cases in `hub/ui/src/__tests__/eventSummary.test.ts`
+      (singular/plural count wording). UI rebuilt (`npm run build` +
+      `scripts/refresh_ui_bundle.py`) and committed alongside the source change.
+- [x] 4.10 Mutation check by name, run for real: hardcoding `severity = "warn"` failed 4.1 exactly
+      as predicted (`assert 'warn' == 'info'`). Hardcoding `severity = "info"` failed both 4.2 and
+      4.3 exactly as predicted (`assert 'info' == 'warn'`, both). Suppressing the resolution event
+      (`if False and open_rows:`) failed 4.6 exactly as predicted (`assert [] == [{'count': 1, ...}]`).
+      All three mutations applied and reverted with `Edit`, verified against `git diff --stat`
+      after each revert.
 
 ## 5. The flow governs its own work divergence, not `retry` (D7)
 
-- [ ] 5.1 Test: a live flow work run diverging on a task whose policy is `retry` starts **no** run
-      and records `policy_applied='flow'`, `outcome='surfaced'`.
-- [ ] 5.2 Test: the same task, same policy, but the run was delegated rather than fired by the
-      flow — `retry` still applies and still starts a run.
-- [ ] 5.3 Test: a live flow work run on a task whose policy is `escalate` **does** escalate, with
-      the previous assignee recorded.
-- [ ] 5.4 Test: `POLICY_FLOW` is absent from `POLICIES`, so no task can be given it — the same
-      assertion group 2 made for `POLICY_REVIEW`.
-- [ ] 5.5 Test: a flow work run diverging on a task whose loop has stopped is governed by the
-      task's policy again, not by the flow régime. The flow is not going to fire it.
-- [ ] 5.6 Add `POLICY_FLOW = "flow"` in `hub/hub/run_task_binding.py` beside `POLICY_REVIEW`, and
-      widen the `run_divergences.policy_applied` CHECK in `hub/hub/db/models.py`.
-- [ ] 5.7 Migration `0094`, modelled on `0092`. Guard for a missing table as `0033`/`0034` do.
-- [ ] 5.8 Bump the head assertions `0093 → 0094` in `hub/tests/test_migrations.py` **and**
-      `hub/tests/test_project_persistence.py`.
-- [ ] 5.9 Apply the suppression in `hub/hub/run_divergence.py`, reading the predicate from group 3
-      rather than re-deriving it.
-- [ ] 5.10 Mutation check by name: removing the suppression fails 5.1; applying it unconditionally
-      fails 5.2 and 5.3; scoping it to the loop's existence rather than its liveness fails 5.5.
+- [x] 5.1 Test: `test_a_live_flows_retry_task_records_the_flow_regime_and_starts_nothing`.
+- [x] 5.2 Test: `test_the_same_policy_off_the_flow_path_still_retries`.
+- [x] 5.3 Test: `test_a_live_flows_escalate_task_still_escalates`.
+- [x] 5.4 Test: `test_policy_flow_can_never_be_set_on_a_task`.
+- [x] 5.5 Test: `test_a_stopped_flows_retry_task_is_governed_by_the_task_policy_again`.
+- [x] 5.6 `POLICY_FLOW = "flow"` added in `hub/hub/run_task_binding.py` beside `POLICY_REVIEW`
+      (documented as deliberately absent from `POLICIES`, same reasoning). CHECK constraint in
+      `hub/hub/db/models.py` widened to `('surface', 'retry', 'escalate', 'review', 'flow')`.
+- [x] 5.7 Migration `0094_flow_divergence_regime.py`, modelled on `0092`: `batch_alter_table` table
+      recreation, the `{run_divergences, projects, tasks} <= tables` guard from `0033`/`0034`'s
+      shape, downgrade rewrites `flow` back to `retry`.
+- [x] 5.8 Head assertions bumped `0093 → 0094` in both `hub/tests/test_migrations.py`
+      (`HEAD_REVISION`) and `hub/tests/test_project_persistence.py`. Both files' full suites still
+      green (78 passed, 1 skipped).
+- [x] 5.9 Applied in `evaluate_run_end`'s non-review branch: `if policy == POLICY_RETRY and
+      flow_work_turn:` overrides to `policy = POLICY_FLOW`, `outcome = OUTCOME_SURFACED`, no
+      response queued — reading the group-3 predicate computed once, above the review/work split,
+      not re-derived here.
+- [x] 5.10 Mutation check by name, run for real: removing the suppression (`if False and
+      policy == POLICY_RETRY and flow_work_turn:`) failed 5.1 exactly as predicted (`assert 'retry'
+      == 'flow'`). Applying it unconditionally (`if True:`) failed both 5.2 and 5.3 exactly as
+      predicted (`assert 'flow' == 'retry'`, `assert 'flow' == 'escalate'`). Scoping the predicate
+      to the loop's existence rather than its liveness (`return loop is not None`) failed 5.5 as
+      predicted, and also failed two of group 3's own predicate tests (the `stopped_at`/
+      `archived_at` branches) — a mutation that broke more than the task named, recorded rather
+      than narrowed to match the task text. All mutations applied and reverted with `Edit`,
+      verified against `git diff --stat` after each revert.
+
+**Full-suite check, run for real rather than assumed from the touched-file scope (the standing
+lesson from groups 1-2's ripple).** `pytest hub/tests/ -q`: `3227 passed, 84 skipped, 1 xpassed`
+(3208 baseline + 19 in this group's new/extended files — `test_flow_divergence_regime.py`'s 18 plus
+one added case elsewhere in the touched-file set) — **zero failures, no ripple** into any
+pre-existing test. `pytest tests/ -q` (CLI suite): `440 passed, 3 skipped`, unrelated to this
+change and unaffected. Also run and clean: `ruff check src/ hub/ tests/`,
+`black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` (one file needed
+reformatting, applied), `mypy src/`, `npx tsc --noEmit`, `npm run lint`, `npx vitest run` (138
+files, 1402 tests, all passing — the "Error: boom" console output during the run is
+`ErrorBoundary.test.tsx` deliberately throwing), `npx openspec validate every-run-knows-its-task
+--strict`.
 
 ## 6. Drive it live
 

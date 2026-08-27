@@ -23,6 +23,7 @@ from typing import Optional, Tuple
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .checkpoints import loop_for_conversation
 from .conversations import get_conversation_by_id, name_conversation, new_conversation
 from .db.engine import async_session_factory
 from .db.models import (
@@ -43,6 +44,7 @@ from .run_task_binding import (
     OUTCOME_RETRIED,
     OUTCOME_SURFACED,
     POLICY_ESCALATE,
+    POLICY_FLOW,
     POLICY_RETRY,
     POLICY_REVIEW,
     block_task_for_question,
@@ -68,6 +70,13 @@ async def resolve_divergences_for_task(session: AsyncSession, task_id: str) -> i
 
     `resolved_at` is the one field ever written after the row is created. The record survives its
     own resolution: "this happened" stays true regardless of what happened next.
+
+    Emits `run_divergence_resolved` naming the task and the count, and only when the count is
+    non-zero — closing nothing is not news (design D6). `commit=False`: this is reached from
+    `apply_transition`, before its own `TaskTransition` and status write are committed by the
+    caller (`task_transition_service.py`'s own docstring: "the caller commits") — committing here
+    would land that still-in-flight write early. `sse_manager.broadcast` needs no such care: its
+    payload is exactly what is already in memory, not a re-read of the database.
     """
     result = await session.execute(
         select(RunDivergence)
@@ -78,7 +87,49 @@ async def resolve_divergences_for_task(session: AsyncSession, task_id: str) -> i
     now = datetime.now(timezone.utc)
     for row in open_rows:
         row.resolved_at = now
+    if open_rows:
+        payload = {"task_id": task_id, "count": len(open_rows)}
+        await persist_event(
+            session,
+            open_rows[0].project_id,
+            "run_divergence_resolved",
+            payload,
+            severity="info",
+            commit=False,
+        )
+        await sse_manager.broadcast(open_rows[0].project_id, "run_divergence_resolved", payload)
     return len(open_rows)
+
+
+async def is_live_flow_work_turn(session: AsyncSession, run: Run) -> bool:
+    """Was `run` a live flow's own ordinary work turn?
+
+    One owned answer, read by both the severity derivation (D6) and the `retry` suppression (D7)
+    — writing this check inline at both sites is the exact defect `one-answer-to-what-is-happening`
+    exists to end: one question, two answers, free to drift.
+
+    Four things must all be true, and each is its own way to be False:
+
+    - the run was bound to a task at all (`run.task_id`) — an unbound run has no work turn to ask
+      about;
+    - it was not a review (`review_task_for_run`) — a review's conversation belongs to the same
+      live loop the flow's work turns do, so this cannot be answered by conversation lookup alone;
+    - its conversation was actually fired by a flow (`loop_for_conversation` finds a `Loop`) — a
+      delegated or operator-started run's conversation names no `JobRun` at all;
+    - that flow is still live — `stopped_at` and `archived_at` are both checked explicitly rather
+      than treating a non-None `Loop` as live (design D5, and the Risk this design names for
+      exactly that trap).
+    """
+    if not run.task_id:
+        return False
+    if await review_task_for_run(session, run) is not None:
+        return False
+    if run.conversation_id is None:
+        return False
+    loop = await loop_for_conversation(session, run.conversation_id)
+    if loop is None:
+        return False
+    return loop.stopped_at is None and loop.archived_at is None
 
 
 async def _may_escalate(session: AsyncSession, run: Run) -> bool:
@@ -675,6 +726,11 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
         if task.status == STATUS_BLOCKED:
             return None
 
+        # One owned answer to "was this a live flow's own work turn" (design D4), read below by
+        # both the `retry` suppression (D7) and the severity derivation (D6) — never re-derived at
+        # either site, which is the exact defect `one-answer-to-what-is-happening` exists to end.
+        flow_work_turn = await is_live_flow_work_turn(session, run)
+
         # Which régime governs (design D3). A review answers to the reviewer resolution; everything
         # else answers to the task's `divergence_policy`. Split here, at the one place both arrive,
         # rather than inside `_apply_policy` — a review must not *enter* the policy at all, or the
@@ -690,7 +746,16 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
             )
         else:
             policy = task.divergence_policy or DEFAULT_POLICY
-            outcome, response_agent, previous_assignee = await _apply_policy(session, run, task)
+            if policy == POLICY_RETRY and flow_work_turn:
+                # Design D7: the flow is going to fire this task again on its own next tick, so
+                # `retry` starting a second run here would race it. Recorded as its own régime
+                # rather than as `policy_applied='retry'` beside an outcome nothing retried — the
+                # one-word-two-meanings defect `POLICY_REVIEW` was kept out of `POLICIES` to avoid,
+                # now hit a second way.
+                policy = POLICY_FLOW
+                outcome, response_agent, previous_assignee = OUTCOME_SURFACED, None, None
+            else:
+                outcome, response_agent, previous_assignee = await _apply_policy(session, run, task)
 
         divergence = RunDivergence(
             id=f"div-{short_id()}",
@@ -727,15 +792,25 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
             payload["was_review"] = True
             if reason:
                 payload["reason"] = reason
-        # `warn`, not `error`: the work is not lost and nothing is broken. It is the operator's
-        # attention this needs, which is what `warn` means in the operator's view.
+        # Derived, not hardcoded (design D6). `warn` is still right for everything this comment
+        # used to describe in full — the work is not lost and nothing is broken, but it is the
+        # operator's attention this needs. `info` is for the one case that comment predates: a
+        # live flow's own work turn that ended cleanly, on a task still held by the same agent —
+        # long work spanning several turns, not a drop. Checked against the *post-policy* state of
+        # the task deliberately: an escalation just moved `task.assignee` off `run.agent`, and a
+        # divergence that reassigned the work is not the quiet case even when a flow started it.
+        severity = (
+            "info"
+            if flow_work_turn and task.assignee == run.agent and run.status == "completed"
+            else "warn"
+        )
         await persist_event(
             session,
             run.project_id,
             "run_diverged",
             payload,
             agent=run.agent,
-            severity="warn",
+            severity=severity,
         )
         await sse_manager.broadcast(run.project_id, "run_diverged", payload)
 
