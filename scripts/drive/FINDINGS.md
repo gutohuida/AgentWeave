@@ -4443,3 +4443,67 @@ cannot, because nothing would.
 **Whether this should be fixed is genuinely open**, and connects to the retired question-detection
 backstop: the product deliberately does not guess when trailing prose is addressed to a human. An
 explicit `notify_operator` would not be a guess. Recorded, not decided.
+
+---
+
+## F78 — the operator cannot clear a task's assignee, and the API reports that they did
+
+**Status:** fixed — see the commit that adds `test_clearing_the_assignee_lets_the_operator_review_it_themselves`
+
+**Severity: A.** A hard refusal names two remedies and only one of them is reachable; the other
+returns `200 OK` and changes nothing.
+
+**How it was found.** Driving row 17 (integration) in `proj-46b602c1f3cb`, taking the completed
+`task-a0409448ee8e` through review so its work could reach `master`. F70's guard refused, correctly:
+
+```
+PATCH /tasks/task-a0409448ee8e {"status": "under_review"}
+  -> 403 "... it is still assigned to 'builder', the agent recorded as completing it ...
+          Assign a different reviewer, or clear the assignee to review it yourself."
+```
+
+I did what the second half of that sentence says:
+
+```
+PATCH /tasks/task-a0409448ee8e {"assignee": null}
+  -> 200 {"assignee": "builder", "status": "completed"}      <-- unchanged, and reported as fine
+PATCH /tasks/task-a0409448ee8e {"status": "under_review"}
+  -> 403 (the same refusal, naming the same remedy I had just been told I performed)
+```
+
+**Cause.** `TaskUpdate.assignee` is `Optional[str] = None` and `update_task_for_actor` read it as
+`if body.assignee is not None: task.assignee = body.assignee`. `null` and *field omitted* are the
+same value, so the only reading available was "leave it alone". There was no way to say "nobody
+holds this".
+
+**The pattern was already in the file, one field away.** `escalation_agent`, declared eleven lines
+below `assignee` in the same schema, carries a comment saying *"Deliberately not `Optional[str] =
+None means leave alone` for this one: clearing an escalation agent is a thing the operator must be
+able to do"*, and the service reads it through `"escalation_agent" in body.model_fields_set`. The
+same problem had been recognised, solved and documented for the field where a hard guard did **not**
+depend on it, and not applied to the field where one does.
+
+**What made it severity A rather than a papercut.** A refusal would have sent the operator to the
+other remedy. A success that changes nothing sends them nowhere — the response body is the wrong
+answer to the question the request asked, so the natural next step is to disbelieve the guard rather
+than the update. The escape hatch that does exist is undiscoverable and was never intended:
+`{"assignee": ""}` satisfied `is not None`, so it wrote an **empty string** into the column. That
+worked only by accident — every reader of `Task.assignee` in the Hub happens to test Python
+truthiness — while the four `Task.assignee.isnot(None)` queries (`scheduler.py:968`,
+`agents.py:303`, `agents.py:335`, `status.py:69`) would have counted `""` as a live holder.
+`_agents_that_are_free` is one of them, which is the same capacity leak F70 was filed for.
+
+**Why no test caught it.** `test_reviewer_is_not_the_author.py` had a test named *"the remedy the
+refusal names has to work in one call, or the guard is a papercut"* — for the reassignment remedy.
+The refusal names two. Only one was ever exercised.
+
+**Fix.** `"assignee" in body.model_fields_set` in `update_task_for_actor`, so `null` means *clear
+it* and an omitted field still means *leave it alone*; plus a `normalise_assignee` field validator
+so `""` and `"   "` arrive as `None` and the column never grows a second spelling of "nobody".
+Three tests, two of which were watched to fail against the defect, and both mutation directions
+checked: restoring `is not None` fails the two F78 tests, and making the write unconditional fails
+`test_an_omitted_assignee_still_leaves_the_holder_alone` and F70's own HTTP refusal test.
+
+**Verified live**, not only in pytest: against a Hub restarted on the fixed code, `{"assignee":
+null}` cleared to `None`, a priority-only PATCH left the holder alone, and `{"assignee": "   "}`
+normalised to `None`.

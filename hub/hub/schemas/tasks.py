@@ -113,6 +113,12 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     status: Optional[str] = Field(default=None, max_length=64)
     priority: Optional[str] = Field(default=None, max_length=64)
+    # `None` means *clear it*, not *leave it alone* — the difference is carried by
+    # `model_fields_set`, exactly as `escalation_agent` below carries it.
+    # `update_task_for_actor` read this field as "unset when None" until F78, which made the
+    # remedy `_guard_reviewer_is_not_the_author` names — "clear the assignee to review it
+    # yourself" — unreachable, and unreachable *silently*: the PATCH returned 200 with the old
+    # holder still in it.
     assignee: Optional[str] = Field(default=None, max_length=64)
     description: Optional[str] = Field(default=None, max_length=10000)
     notes: Optional[Any] = None
@@ -170,6 +176,17 @@ class TaskUpdate(BaseModel):
     @field_validator("escalation_agent")
     @classmethod
     def normalise_escalation_agent(cls, v: Optional[str]) -> Optional[str]:
+        return v.strip() or None if isinstance(v, str) else v
+
+    @field_validator("assignee")
+    @classmethod
+    def normalise_assignee(cls, v: Optional[str]) -> Optional[str]:
+        """`""` and `"  "` are the same claim as `null`: nobody holds this task.
+
+        Without this the column grows a second falsy spelling of "unassigned", which every reader
+        happens to survive today only because they all test Python truthiness — while the four
+        `Task.assignee.isnot(None)` queries in the Hub would quietly start counting it as a holder.
+        """
         return v.strip() or None if isinstance(v, str) else v
 
     @model_validator(mode="before")

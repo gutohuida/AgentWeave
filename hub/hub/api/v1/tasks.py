@@ -1142,7 +1142,15 @@ async def update_task_for_actor(
     # of an assignee the same request was about to replace, and the operator had to make two.
     # Nothing between here and the transition reads the old value: `release_reason` and
     # `release_conversations_bound_to` are about the task and its runs, not about who holds it.
-    if body.assignee is not None:
+    if "assignee" in body.model_fields_set:
+        # `model_fields_set`, not `is not None` (finding F78). The guard immediately below names
+        # two remedies -- reassign, or "clear the assignee to review it yourself" -- and read as
+        # "None means leave it alone" the second one could not be expressed at all: `assignee:
+        # null` was indistinguishable from an omitted field, so the operator's PATCH came back
+        # `200` with the author still in it and the guard refused them again. Omitting the field
+        # still leaves the holder untouched, which is the half of the old reading that was right:
+        # a PATCH about the priority must not unassign anybody. `""` arrives here as `None` --
+        # the schema normalises it -- so the column never grows a second spelling of "nobody".
         task.assignee = body.assignee
     if body.status is not None:
         if body.status == STATUS_BLOCKED and not actor.is_operator:

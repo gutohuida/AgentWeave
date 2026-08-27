@@ -340,3 +340,100 @@ async def test_a_refused_review_move_does_not_leave_the_assignee_changed(app, au
         assert task.status == "completed"
         assert task.assignee == AUTHOR
         assert task.priority != "high", "no field of a refused update survives, not just the status"
+
+
+# ---------------------------------------------------------------------------
+# Finding F78 — the refusal's *other* remedy, which had no test and did not work
+# ---------------------------------------------------------------------------
+
+
+async def test_clearing_the_assignee_lets_the_operator_review_it_themselves(app, auth_headers):
+    """F78, found live 2026-08-27 driving `proj-46b602c1f3cb` to integration.
+
+    `_guard_reviewer_is_not_the_author` names two remedies: *"Assign a different reviewer, or clear
+    the assignee to review it yourself."* Only the first had a test, and only the first worked.
+    `TaskUpdate.assignee` is `Optional[str] = None`, and `update_task_for_actor` read it as
+    ``if body.assignee is not None`` — so `{"assignee": null}` was indistinguishable from the field
+    being omitted. The operator followed the refusal's own instruction, got `200 OK` back with the
+    author still in the response body, and was refused again by the same guard.
+
+    Silence is what makes it worse than a papercut: a refusal would have sent the operator to the
+    other remedy. A success that changes nothing sends them nowhere.
+
+    `escalation_agent` in the same schema already solves exactly this with `model_fields_set`, and
+    says so in a comment — *"clearing an escalation agent is a thing the operator must be able to
+    do"*. The pattern was in the file; it just had not been applied to the field a hard refusal
+    depends on.
+    """
+    async with async_session_factory() as session:
+        await _completed_task(session, "task-f78-clear", by=AUTHOR, assignee=AUTHOR)
+
+    cleared = await app.patch(
+        "/api/v1/projects/proj-test/tasks/task-f78-clear",
+        json={"assignee": None},
+        headers=auth_headers,
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert (
+        cleared.json()["assignee"] is None
+    ), "the response must not report the assignee the request just cleared"
+
+    async with async_session_factory() as session:
+        task = await session.get(Task, "task-f78-clear")
+        assert task.assignee is None, "cleared to NULL, not to a second falsy spelling"
+
+    reviewed = await app.patch(
+        "/api/v1/projects/proj-test/tasks/task-f78-clear",
+        json={"status": "under_review"},
+        headers=auth_headers,
+    )
+    assert reviewed.status_code == 200, (
+        "the remedy the guard names must actually reach review: " + reviewed.text
+    )
+    assert reviewed.json()["status"] == "under_review"
+
+
+async def test_clearing_and_sending_to_review_in_one_patch_is_accepted(app, auth_headers):
+    """And in one call, for the same reason the reassignment remedy has to work in one call.
+
+    The assignee is written before the transition (F70's ordering fix), so the guard reads the
+    cleared value rather than the one the request is replacing.
+    """
+    async with async_session_factory() as session:
+        await _completed_task(session, "task-f78-onecall", by=AUTHOR, assignee=AUTHOR)
+
+    response = await app.patch(
+        "/api/v1/projects/proj-test/tasks/task-f78-onecall",
+        json={"status": "under_review", "assignee": None},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "under_review"
+    assert body["assignee"] is None
+
+
+async def test_an_omitted_assignee_still_leaves_the_holder_alone(app, auth_headers):
+    """The half of the old behaviour that was correct, and that the fix must not trade away.
+
+    `null` now means *clear it*, so "unset" has to mean something different — a PATCH about the
+    priority cannot silently unassign the agent holding the task. This is the mutation check for
+    the fix: switch it back to `if body.assignee is not None` and F78's two tests fail; switch it
+    to an unconditional write and this one does.
+    """
+    async with async_session_factory() as session:
+        await _completed_task(session, "task-f78-untouched", by=AUTHOR, assignee=AUTHOR)
+
+    response = await app.patch(
+        "/api/v1/projects/proj-test/tasks/task-f78-untouched",
+        json={"priority": "high"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["assignee"] == AUTHOR
+    async with async_session_factory() as session:
+        task = await session.get(Task, "task-f78-untouched")
+        assert task.assignee == AUTHOR
+        assert task.priority == "high"
