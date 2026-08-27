@@ -8,7 +8,7 @@
   "parent_sha": "bbe00a7",
   "stop_at": "2026-08-28T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 3,
+  "iteration": 4,
   "log_file": ".claude/autonomous/2026-08-27-fix-and-drive-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "exploration_file": "openspec/explorations/2026-08-26-what-is-still-unanswered.md",
@@ -132,5 +132,5 @@
   ],
   "carry_forward": "Iteration 3 drove rows 8, 13 and 17 and fixed three defects (two severity A), each with tests watched to fail and each proven LIVE against a restarted Hub. THE LOOP CLOSED for the first time: specification document -> requirement -> task -> agent turn -> evidence -> operator acceptance -> approval -> merge into master (d6735a3 in aw-e2e1), verified in the repository rather than from a 200. Three things worth carrying. (1) THE DOMINANT FAILURE MODE BIT AGAIN, and this time inside one sitting: F79's refusal was first written into resolve_bound_task's explicit-task_id branch, where it read naturally and passed a unit test - and could never fire, because POST /agent/trigger queues an entry rather than running a turn, so the task always arrives there as a DELEGATION, and trigger_agent_directly's one caller never passes task_id. Only the live call caught it. Ask of every guard you write: what actually reaches this line in production? (2) F78 AND F79 COMPOSE INTO UNDOING EACH OTHER - clearing the assignee was impossible, and once made possible, a stale queued turn wrote it straight back. Expect findings to interact; fixing one can switch another on, exactly as F74's fix switched on the duplicate check that produced F75. (3) A RULE ENFORCED ON ONE SURFACE OF THREE is this codebase's other recurring shape: TERMINAL_FOR_BINDING's docstring states the rule generally and release_conversations_bound_to applied it to conversations only, while queue entries and the trigger route bypassed it. When you find a rule, count the surfaces it must hold on. Environment notes that still hold: the API wants 'Authorization: Bearer'; spec routes are at /projects/{id}/project/... with a doubled segment; InboundQueueEntry's primary key is `sequence`, not `id`, so session.get() by id silently returns None (cost one test round). No job or loop exists in any project - confirmed by API.",
   "started_at": "2026-08-27T22:05:00+01:00",
-  "last_heartbeat": "2026-08-27T23:01:41+01:00"
+  "last_heartbeat": "2026-08-27T23:46:57+01:00"
 }
