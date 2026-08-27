@@ -3832,3 +3832,48 @@ Covered now by a `conversation-checkpoint` delta in that change, with scenarios 
 case, the released-checkout case, and the unresolvable-project case (which still yields a
 checkpoint, carrying no file list — a checkpoint that does not exist is worse than one that reports
 nothing).
+
+---
+
+## Live drive, 2026-08-27: work is isolated per task (task 8.8) — **no defect found**
+
+Driven against the trial Hub on 8010, restarted from source onto this change's code. The Hub was
+confirmed by its **project list**, not `/health`, because a Hub on a stale database still answers
+`{"status":"ok"}`. Migrations `0095` and `0096` applied to the beta profile on startup; the database
+was backed up to `agentweave.db.bak-pre-0096` first.
+
+Script: `scripts/drive/t_task_isolation.py`. Throwaway projects `proj-1b7c4196a041`
+(`drive-f58-2026-08-27`) and `proj-1c3a...` (`drive-f58b-2026-08-27`), both created for this.
+Neither `proj-5e960453` nor `proj-18e5d4e0` was touched, which was the condition attached to
+implementing this change unattended.
+
+**What the drive did.** Two tasks for one project, each provisioned through `ensure_task_worktree`,
+a commit made in each task's own checkout, evidence recorded by the operator naming the *first*
+task's commit, then the first task approved.
+
+**What held — the whole point, and worth recording as much as a break would be:**
+
+| Observed | |
+|---|---|
+| Each task got `.agentweave/tasks/<id>` on `agentweave/task/<id>` | per-task provisioning, live |
+| `git branch --contains` on each tip named **only that task's own branch** | the two are siblings of `main`, not of each other — this is F58's absence, stated positively |
+| Approval merged `a8e7bbc7189c` and nothing else | "Integrate approved work \<sha>" |
+| The second task's commit is **not** on `main`, and `second.py` does not exist in the working tree | **F58 does not reproduce** |
+| The approved task's checkout was removed, its branch kept | design D5 |
+| The **un**approved task's checkout survived the other's approval | design D5, and task 6.10's decision holding |
+
+**F71's fix was exercised in the same run, and worked.** The operator recorded evidence with the
+task's commit sha as `locator`; the footprint captured that commit, on the task's branch, with
+`reachable_from_main=False` — the exact field whose wrong value was F71's harm. Under the old
+behaviour it would have footprinted the operator's own checkout, sitting on `main`.
+
+**One thing the first attempt got wrong, and it was the drive rather than the product.** The first
+run approved a task with no accepted evidence and nothing merged. That is correct behaviour, stated
+plainly by the integration record — `outcome: skipped`, *"no accepted evidence names a commit, so
+there is nothing to merge"* — and the reason `main_branch` looked unset was that the drive PATCHed a
+route that does not exist (405) while `POST /projects/open` had already auto-detected `main`
+correctly. Recorded because a reader of the first transcript would otherwise read a skipped
+integration as a defect.
+
+**Left live:** both throwaway projects and their repositories, with the task branches intact, so the
+state described above is inspectable rather than merely reported.

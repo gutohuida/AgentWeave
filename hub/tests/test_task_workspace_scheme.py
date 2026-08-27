@@ -40,6 +40,11 @@ PREVIOUS_REVISION = "0094"
 def _run_alembic_with(db_url: str, revision: str = "head") -> None:
     """Run `alembic upgrade`/`downgrade` synchronously against *db_url*.
 
+    **Every call here passes `REVISION` rather than taking the `head` default.** This file is about
+    what migration 0095 does, so it must stop where 0095 stops: upgrading to `head` made
+    `_version(...) == REVISION` an assertion about the newest migration in the tree, and adding
+    0096 turned two tests red without either one's subject having changed.
+
     Same shape as `test_migrations._run_alembic_with`, including the `settings.database_url` patch —
     `env.py` reads the singleton to build its engine, so without it alembic would migrate whatever
     database the suite happens to be configured for instead of the temporary one.
@@ -170,7 +175,7 @@ def test_the_migration_stamps_the_agent_scheme_on_exactly_the_tasks_that_had_a_r
         _add_run(conn, "run-3", "task-ran-twice", None)
         _add_run(conn, "run-4", None, "999aaaa")
 
-    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}", REVISION)
 
     assert _schemes(db_file) == {
         "task-ran": "agent",
@@ -200,7 +205,7 @@ def test_a_task_whose_runs_committed_nothing_is_grandfathered_too(tmp_path) -> N
         _add_task(conn, "task-committed-its-own-work")
         _add_run(conn, "run-clean", "task-committed-its-own-work", None)
 
-    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}", REVISION)
 
     assert _schemes(db_file) == {"task-committed-its-own-work": "agent"}
 
@@ -215,7 +220,7 @@ def test_a_task_with_no_runs_at_all_keeps_the_task_scheme(tmp_path) -> None:
     with sqlite3.connect(db_file) as conn:
         _add_task(conn, "task-fresh")
 
-    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}", REVISION)
 
     assert _schemes(db_file) == {"task-fresh": "task"}
 
@@ -230,7 +235,7 @@ def test_an_existing_row_is_never_left_null(tmp_path) -> None:
     with sqlite3.connect(db_file) as conn:
         _add_task(conn, "task-old")
 
-    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}", REVISION)
 
     with sqlite3.connect(db_file) as conn:
         nulls = conn.execute(
@@ -250,7 +255,7 @@ def test_the_migration_is_a_no_op_when_tasks_is_missing(tmp_path) -> None:
     the column already on it. Without the guard the upgrade raises and the database is stranded."""
     db_file = _database_at_0094(tmp_path, with_tasks=False, with_runs=False)
 
-    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}", REVISION)
 
     assert _version(db_file) == REVISION
     with sqlite3.connect(db_file) as conn:
@@ -271,7 +276,7 @@ def test_the_column_is_added_but_nothing_is_stamped_when_runs_is_missing(tmp_pat
     with sqlite3.connect(db_file) as conn:
         _add_task(conn, "task-in-a-runless-database")
 
-    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}", REVISION)
 
     assert "workspace_scheme" in _columns(db_file, "tasks")
     assert _schemes(db_file) == {"task-in-a-runless-database": "task"}
@@ -292,7 +297,7 @@ def test_the_migration_is_idempotent_over_an_already_migrated_column(tmp_path) -
         _add_task(conn, "task-ran")
         _add_run(conn, "run-1", "task-ran", None)
 
-    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}")
+    _run_alembic_with(f"sqlite+aiosqlite:///{db_file}", REVISION)
 
     # Loaded by path, not by name: `versions/` is not a package and the module's name starts with
     # a digit, so alembic itself reaches it this way.
@@ -317,7 +322,7 @@ def test_the_downgrade_drops_the_column(tmp_path) -> None:
         _add_run(conn, "run-1", "task-ran", None)
 
     db_url = f"sqlite+aiosqlite:///{db_file}"
-    _run_alembic_with(db_url)
+    _run_alembic_with(db_url, REVISION)
     assert "workspace_scheme" in _columns(db_file, "tasks")
 
     _downgrade_alembic_with(db_url, PREVIOUS_REVISION)

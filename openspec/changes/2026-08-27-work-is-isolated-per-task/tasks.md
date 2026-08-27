@@ -392,16 +392,31 @@ Read 4.14's implementation note before changing where the guard sits.
 
 ## 8. Prove it, rather than assert it
 
-- [ ] 8.1 Mutation check, by name: delete the prerequisite merge in `ensure_task_worktree` and
+- [x] 8.1 Mutation check, by name: delete the prerequisite merge in `ensure_task_worktree` and
   confirm test 2.5 fails. Record the failure text, restore, re-verify green.
-- [ ] 8.2 Mutation check, by name: make the task workspace cut from the agent's branch instead of the
+- [x] 8.2 Mutation check, by name: make the task workspace cut from the agent's branch instead of the
   base, and confirm test 1.1 (`test_another_tasks_commits_do_not_ride_along`) fails. This is the
   mutation that reproduces F58; if the test survives it, the test is still wrong.
-- [ ] 8.3 Mutation check, by name: remove the release call from `task_transition_service` and confirm
+  **Measured: test 1.1 SURVIVED, and the test was indeed still wrong — but this was already known.**
+  Phase 1's own preamble records why: 1.1 builds both branches by hand with `git checkout -b` from
+  `main`, so it pins the *integration* half and "full discrimination of provisioning is still
+  phases 3 and 7's, not phase 1's". The mutated line never executes in it. So the instruction as
+  written was unreachable, exactly as 1.3's was for the same reason.
+  **Closed by adding the test 8.2 was actually asking for**, rather than by declaring the survival
+  acceptable: `test_task_release.py::test_approving_one_task_ships_none_of_another_tasks_work`
+  provisions **both** checkouts through the real `ensure_task_worktree`, works the other task
+  first, and approves the second — and it now footprints its evidence at the checkout the run was
+  given, which is phase 7 doing the work.
+  Two further measurements, because the first mutation attempted here was itself vacuous: cutting
+  from `HEAD` rather than `base` does **not** fail, since the project checkout sits on `main` and
+  the two are the same commit. The mutation that discriminates is the one that reproduces F58's
+  actual shape — inherit the last worked `agentweave/*` branch instead of the base — and under it
+  the new test fails while 1.1 stays green, which is the whole finding in one line.
+- [x] 8.3 Mutation check, by name: remove the release call from `task_transition_service` and confirm
   test 5.1 fails.
-- [ ] 8.4 Mutation check, by name: revert the `list_agent_branches` parse change and confirm test 6.1
+- [x] 8.4 Mutation check, by name: revert the `list_agent_branches` parse change and confirm test 6.1
   fails — the silent-empty-list failure mode is the one a green suite would otherwise hide.
-- [ ] 8.5 Mutation check, by name: remove the grandfathering branch and confirm test 4.4 fails.
+- [x] 8.5 Mutation check, by name: remove the grandfathering branch and confirm test 4.4 fails.
 - [x] 8.5b Mutation check, by name: remove the D8 one-turn-per-task refusal and confirm test 4.12
   fails. Then, separately, restore it and confirm test 4.13's review-turn case still passes — an
   over-broad refusal that blocks reviews would be invisible to 4.12.
@@ -414,13 +429,13 @@ Read 4.14's implementation note before changing where the guard sits.
   caught by a named test; the table is in the iteration-11 log entry.
 - [ ] 8.6 Run the full Hub suite with `py -3.11 -m pytest hub/tests/ -q` and the CLI suite with
   `py -3.11 -m pytest tests/ -q`. Record counts.
-- [ ] 8.7 Run exactly what CI runs: `ruff check src/ hub/ tests/`,
+- [x] 8.7 Run exactly what CI runs: `ruff check src/ hub/ tests/`,
   `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`, and
   `cd hub/ui && npm run lint`.
-- [ ] 8.8 Drive it live against the trial Hub on port 8010, in a throwaway project created for the
+- [x] 8.8 Drive it live against the trial Hub on port 8010, in a throwaway project created for the
   purpose — **never** `proj-5e960453` (this repository) or `proj-18e5d4e0` (ledger-stress). Two
   tasks for one agent, work committed on each, approve the first, and confirm by `git log` that the
   second task's commits are not on the main branch. Restart the Hub deliberately first and confirm
   the **project list**, not `/health`.
-- [ ] 8.9 Record in `scripts/drive/FINDINGS.md` what the live drive showed, including anything that
+- [x] 8.9 Record in `scripts/drive/FINDINGS.md` what the live drive showed, including anything that
   held rather than broke.

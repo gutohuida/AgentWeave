@@ -464,3 +464,69 @@ async def test_a_grandfathered_task_has_no_checkout_to_release(app, auth_headers
 
     assert checkout.exists(), "a grandfathered task's turns did not run here; nothing to reclaim"
     assert await events_of_type("task_worktree_released") == []
+
+
+# ---------------------------------------------------------------------------
+# 8.2 — F58 end to end, through the provisioning the product actually does
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_approving_one_task_ships_none_of_another_tasks_work(
+    app, auth_headers, builder, tmp_path
+):
+    """The F58 regression, with both checkouts provisioned by `ensure_task_worktree` itself.
+
+    **Why this exists on top of `test_another_tasks_commits_do_not_ride_along`.** That test builds
+    its two branches by hand with `git checkout -b` from `main`, which is what phase 1 recorded as
+    the honest limit of what it could claim: two branches cut from `main` by hand are separable
+    whatever the product does, so it pins the *integration* half and observes nothing about
+    provisioning. Task 8.2 asks for the mutation "cut the task workspace from the agent's branch
+    instead of the base" to turn that test red; measured, it does not, and cannot — the mutated
+    code never runs in it.
+
+    So this one lets the product decide where each task's work goes. Both tasks are provisioned
+    through the real function, the second one *after* the first already has a commit, which is the
+    arrangement that makes the base matter: cut from the base the two are siblings, cut from
+    whatever was last worked on the second inherits the first's commit and approval ships it.
+
+    Measured against the mutation 8.2 names: it fails here.
+    """
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    other = await make_task(app, auth_headers)
+    task = await make_task(app, auth_headers, requirement_ids=["FR-1"])
+
+    # The other task is worked first, and its work is never reviewed or approved.
+    other_checkout = _REAL_ENSURE_TASK_WORKTREE(tmp_path, other, "main")
+    unreviewed = work_in(other_checkout, "unrelated.py", "wip\n", "someone else's unfinished work")
+
+    # This task is provisioned afterwards. Cut from the base it is a sibling of `main`; cut from
+    # the other task's branch it would already contain `unreviewed`.
+    checkout = _REAL_ENSURE_TASK_WORKTREE(tmp_path, task, "main")
+    demonstrated = work_in(checkout, "done.py", "ok\n", "this task's work")
+    assert unreviewed not in commits_on(tmp_path, worktrees.task_branch_name(task)), (
+        "the task branch already carries the other task's commit — provisioning, not integration, "
+        "is what this test is about"
+    )
+
+    # The evidence names this task's own commit, footprinted at the checkout the run was given —
+    # which is phase 7 (design D7) doing the work, rather than the merge-and-reset dance
+    # `test_release_happens_after_integration` needed before that shipped.
+    async with async_session_factory() as session:
+        run = await session.get(Run, "run-rel")
+        run.workspace_dir = str(checkout)
+        await session.commit()
+    await accept_evidence(app, auth_headers, builder)
+
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+
+    merged = commits_on(tmp_path, "main")
+    assert demonstrated in merged
+    assert unreviewed not in merged
+    assert not (tmp_path / "unrelated.py").exists()
+    # And the other task's own work is untouched by someone else's approval.
+    assert unreviewed in commits_on(tmp_path, worktrees.task_branch_name(other))
