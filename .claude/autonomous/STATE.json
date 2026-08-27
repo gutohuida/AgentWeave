@@ -5,7 +5,7 @@
   "permission_mode": "unattended-full-access",
   "branch": "autonomous/2026-08-27-the-rest-of-the-work",
   "parent_branch": "master",
-  "parent_sha": "b26c212cfa69ed683c73fa8ee267ba59209b783f",
+  "parent_sha": "59a156912e2a15055cd6f8cafa93c2b555ad4a50",
   "started_at": null,
   "stop_at": "2026-08-27T17:00:00+01:00",
   "stop_when_queue_empties": false,
@@ -174,7 +174,7 @@
     }
   ],
   "current": "F58-EXPLORE",
-  "next_action": "Cut autonomous/2026-08-27-the-rest-of-the-work from master at b26c212cfa69ed683c73fa8ee267ba59209b783f, open the log file named in log_file, then do F58-EXPLORE: write openspec/explorations/2026-08-27-per-task-worktrees.md per that queue item's detail. EXPLORATION ONLY - do not propose in that item; F58-R1 is the propose round. Read method_reminders[0] before starting anything: the round discipline governs every change in this queue and the operator restated it twice.",
+  "next_action": "Cut autonomous/2026-08-27-the-rest-of-the-work from master at 59a156912e2a15055cd6f8cafa93c2b555ad4a50, open the log file named in log_file, then do F58-EXPLORE: write openspec/explorations/2026-08-27-per-task-worktrees.md per that queue item's detail. EXPLORATION ONLY - do not propose in that item; F58-R1 is the propose round. Read method_reminders[0] before starting anything: the round discipline governs every change in this queue and the operator restated it twice.",
   "decisions_for_user": [
     "PRE-AUTHORISED, not a question - WHAT TO DROP WHEN TIME RUNS OUT. The operator was told explicitly that ~7.5 hours fits two or three changes and not five, and chose this order anyway. So: never drop a ROUND from a change you have started, and never leave a change half-proposed. Finish the change you are in, then stop. Dropping the tail of the queue is the intended outcome and needs no permission.",
     "PRE-AUTHORISED - if F58-R2 or F58-R3 concludes that per-task worktrees is the WRONG design after all, say so in the artifacts and STOP before F58-IMPL, writing it here. The decision for option (c) was taken on reasoning, not on a prototype; a review round that finds the reasoning false is the discipline working, not a reason to build it anyway. Do not silently substitute a different option.",
