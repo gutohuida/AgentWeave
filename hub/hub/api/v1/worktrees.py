@@ -16,12 +16,16 @@ from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import project_workspace, worktrees
 from ...auth import get_project
 from ...db.engine import get_session
+from ...db.models import Task
 from ...launchability import get_agent_config
+from ...task_transition_service import TERMINAL_STATUSES
+from ...task_workspace import TASK_SCHEME
 
 router = APIRouter(prefix="/worktrees", tags=["worktrees"])
 
@@ -40,6 +44,24 @@ class WorkspaceInfo(BaseModel):
     path: str
 
 
+class TaskCheckoutInfo(BaseModel):
+    """One of an agent's live tasks, and where that task's work happens (task 6.4).
+
+    `grandfathered` is the distinction the operator cannot otherwise draw. A task whose work
+    began before per-task isolation keeps running in the agent's own checkout (design D4), so
+    it has no directory of its own — and an operator looking for one and finding nothing would
+    reasonably conclude the work was lost.
+    """
+
+    task_id: str
+    title: Optional[str] = None
+    status: str
+    branch: str
+    path: str
+    provisioned: bool
+    grandfathered: bool
+
+
 class AgentWorkspaceInfo(BaseModel):
     """Where one agent works on disk, without provisioning anything to find out."""
 
@@ -50,6 +72,9 @@ class AgentWorkspaceInfo(BaseModel):
     branch: Optional[str] = None
     provisioned: bool = False
     unavailable_reason: Optional[str] = None
+    # An agent working three tasks has three checkouts and this endpoint used to name one of
+    # them, so the operator was shown a place two thirds of the work is not (task 6.4).
+    task_checkouts: List[TaskCheckoutInfo] = []
 
 
 class ConflictWorkspaceInfo(BaseModel):
@@ -143,6 +168,65 @@ def _conflict_workspace(workspace: worktrees.WorkspaceBranch) -> ConflictWorkspa
     return ConflictWorkspaceInfo(kind=workspace.kind, name=workspace.name, branch=workspace.branch)
 
 
+async def _task_checkouts(
+    session: AsyncSession, project_id: str, agent: str, repo_root
+) -> List[TaskCheckoutInfo]:
+    """The checkouts of the tasks *agent* is currently holding (task 6.4).
+
+    **Live tasks only.** A terminal task's checkout has been released (design D5), so listing it
+    would name a directory that is deliberately gone and read as something missing.
+
+    Pure path functions throughout — `task_worktree_path` and `task_branch_name` compute, they do
+    not create — so this keeps the endpoint's promise that opening a settings panel provisions
+    nothing. `provisioned` is the honest answer for a task whose first turn has not run yet.
+    """
+    rows = (
+        (
+            await session.execute(
+                select(Task)
+                .where(
+                    Task.project_id == project_id,
+                    Task.assignee == agent,
+                    Task.status.notin_(TERMINAL_STATUSES),
+                )
+                .order_by(Task.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    checkouts: List[TaskCheckoutInfo] = []
+    for task in rows:
+        grandfathered = task.workspace_scheme != TASK_SCHEME
+        if grandfathered:
+            # No directory of its own: this task's turns run in the agent's own checkout, and
+            # saying so is the whole point of the flag. Naming the agent's path here rather than
+            # leaving it blank means the operator can still find the work.
+            path = worktrees.worktree_path(repo_root, agent)
+            branch = worktrees.branch_name(agent)
+        else:
+            try:
+                path = worktrees.task_worktree_path(repo_root, task.id)
+                branch = worktrees.task_branch_name(task.id)
+            except ValueError:
+                # An id this module would refuse to provision a checkout for cannot have one.
+                # Skipped rather than reported with a path nothing occupies.
+                continue
+        checkouts.append(
+            TaskCheckoutInfo(
+                task_id=task.id,
+                title=task.title,
+                status=task.status,
+                branch=branch,
+                path=str(path),
+                provisioned=path.exists(),
+                grandfathered=grandfathered,
+            )
+        )
+    return checkouts
+
+
 # Declared after `/conflicts`, which would otherwise be claimed by this route's path parameter.
 @router.get("/{agent}", response_model=AgentWorkspaceInfo)
 async def get_agent_workspace(
@@ -198,6 +282,10 @@ async def get_agent_workspace(
         )
 
     path = worktrees.worktree_path(repo_root, agent)
+    # Task checkouts are listed only here, and that mirrors `takes_task_workspace` rather than
+    # restating it: the two returns above are exactly the cases where no turn gets a task
+    # workspace — a read-only agent, and a project that is not a repository — so listing task
+    # checkouts there would name directories that will never exist.
     return AgentWorkspaceInfo(
         agent=agent,
         repo_root=str(repo_root),
@@ -205,4 +293,5 @@ async def get_agent_workspace(
         isolated=True,
         branch=worktrees.branch_name(agent),
         provisioned=path.exists(),
+        task_checkouts=await _task_checkouts(session, project_id, agent, repo_root),
     )

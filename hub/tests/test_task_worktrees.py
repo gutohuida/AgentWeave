@@ -590,3 +590,133 @@ async def test_reading_the_worktrees_listing_provisions_nothing(
     # And git agrees: the only registered worktree is the project checkout itself.
     registered = _git(repo, "worktree", "list", "--porcelain").stdout
     assert registered.count("worktree ") == 1
+
+
+# --- an agent's own workspace, and the task checkouts beside it (task 6.4) ---------------------
+
+
+async def _task_row(project_id, task_id, *, assignee, status="in_progress", scheme="task"):
+    """A task row, written directly. `workspace_scheme` is set by migration 0095 and by nothing
+    else, so a test that wanted a grandfathered task could not produce one through the API."""
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Task
+
+    async with async_session_factory() as db:
+        db.add(
+            Task(
+                id=task_id,
+                project_id=project_id,
+                title=f"work for {task_id}",
+                assignee=assignee,
+                status=status,
+                workspace_scheme=scheme,
+            )
+        )
+        await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_an_agents_workspace_lists_the_checkouts_of_its_tasks(
+    app, auth_headers, repo, bind_project_workspace
+):
+    """Task 6.4. An agent working three tasks has three checkouts, and this endpoint named one.
+
+    Both tasks are asserted, not just their count: the point of the row is that an operator can
+    find a task's work, which needs the branch and the path to be right per task, not merely
+    present.
+    """
+    await bind_project_workspace(repo)
+    base = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    first = "task-aa11bb22cc33"
+    second = "task-dd44ee55ff66"
+    await _task_row("proj-test", first, assignee="builder")
+    await _task_row("proj-test", second, assignee="builder")
+    provisioned = ensure_task_worktree(repo, first, base, ())
+
+    resp = await app.get("/api/v1/projects/proj-test/worktrees/builder", headers=auth_headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["branch"] == worktrees.branch_name("builder")
+    by_id = {row["task_id"]: row for row in body["task_checkouts"]}
+    assert set(by_id) == {first, second}
+    assert by_id[first]["branch"] == worktrees.task_branch_name(first)
+    assert by_id[first]["path"] == str(provisioned)
+    assert by_id[first]["provisioned"] is True
+    assert by_id[first]["grandfathered"] is False
+    # The second task's first turn has not run, so its checkout does not exist yet. Reported as
+    # where it *will* be rather than omitted — the same choice the agent's own row makes, and for
+    # the same reason: an absent row reads as work that was lost.
+    assert by_id[second]["path"] == str(worktrees.task_worktree_path(repo, second))
+    assert by_id[second]["provisioned"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_grandfathered_task_is_shown_as_worked_in_the_agents_own_checkout(
+    app, auth_headers, repo, bind_project_workspace
+):
+    """A task whose work began before per-task isolation has no checkout of its own (design D4).
+
+    Without the flag an operator goes looking for `.agentweave/tasks/<id>`, finds nothing, and
+    concludes the work was lost — so the row names the agent's own checkout and says why.
+    """
+    await bind_project_workspace(repo)
+    task_id = "task-aa11bb22cc33"
+    await _task_row("proj-test", task_id, assignee="builder", scheme="agent")
+
+    resp = await app.get("/api/v1/projects/proj-test/worktrees/builder", headers=auth_headers)
+
+    assert resp.status_code == 200
+    (row,) = resp.json()["task_checkouts"]
+    assert row["grandfathered"] is True
+    assert row["branch"] == worktrees.branch_name("builder")
+    assert row["path"] == str(worktrees.worktree_path(repo, "builder"))
+    assert row["path"] != str(worktrees.task_worktree_path(repo, task_id))
+
+
+@pytest.mark.asyncio
+async def test_a_finished_tasks_checkout_is_not_listed(
+    app, auth_headers, repo, bind_project_workspace
+):
+    """A terminal task's checkout was released on purpose (design D5). Listing it would name a
+    directory that is deliberately gone, which reads as something missing rather than something
+    finished."""
+    await bind_project_workspace(repo)
+    await _task_row("proj-test", "task-aa11bb22cc33", assignee="builder", status="approved")
+    await _task_row("proj-test", "task-dd44ee55ff66", assignee="builder", status="rejected")
+    await _task_row("proj-test", "task-771188229933", assignee="builder", status="in_progress")
+
+    resp = await app.get("/api/v1/projects/proj-test/worktrees/builder", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert [row["task_id"] for row in resp.json()["task_checkouts"]] == ["task-771188229933"]
+
+
+@pytest.mark.asyncio
+async def test_another_agents_tasks_are_not_listed_under_this_agent(
+    app, auth_headers, repo, bind_project_workspace
+):
+    await bind_project_workspace(repo)
+    await _task_row("proj-test", "task-aa11bb22cc33", assignee="builder")
+    await _task_row("proj-test", "task-dd44ee55ff66", assignee="reviewer")
+
+    resp = await app.get("/api/v1/projects/proj-test/worktrees/builder", headers=auth_headers)
+
+    assert [row["task_id"] for row in resp.json()["task_checkouts"]] == ["task-aa11bb22cc33"]
+
+
+@pytest.mark.asyncio
+async def test_listing_an_agents_task_checkouts_provisions_none_of_them(
+    app, auth_headers, repo, bind_project_workspace
+):
+    """The promise this endpoint's docstring already made, now with a second namespace to keep it
+    in. Reading a settings panel must not create three worktrees."""
+    await bind_project_workspace(repo)
+    await _task_row("proj-test", "task-aa11bb22cc33", assignee="builder")
+
+    resp = await app.get("/api/v1/projects/proj-test/worktrees/builder", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.json()["task_checkouts"][0]["provisioned"] is False
+    assert not worktrees.task_root(repo).exists()
+    assert _git(repo, "worktree", "list", "--porcelain").stdout.count("worktree ") == 1

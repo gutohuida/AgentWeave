@@ -336,13 +336,13 @@ Read 4.14's implementation note before changing where the guard sits.
   lists task workspaces as well as agent workspaces, each stating which it is, and that reading it
   provisions nothing — the promise `get_agent_workspace`'s docstring makes at `:103-106`, which this
   endpoint shares and does not state.
-- [ ] 6.4 **Corrected in review.** Extend `GET /worktrees/{agent}` (`api/v1/worktrees.py:148-156`)
+- [x] 6.4 **Corrected in review.** Extend `GET /worktrees/{agent}` (`api/v1/worktrees.py:148-156`)
   and `WorkspaceLocation` in `hub/ui/src/components/agents/AgentSettingsPage.tsx` to list the task
   checkouts belonging to that agent's tasks alongside the agent's own, each naming its branch and
   its task, and to mark a grandfathered task as worked in the agent's own checkout. This — not
   `WorktreesPanel.tsx` — is the surface an operator reads and the one the `agent-configuration`
   delta is written against. Extend `hub/ui/src/__tests__/agentWorkspaceSection.test.tsx`.
-- [ ] 6.4b `hub/ui/src/components/environment/WorktreesPanel.tsx` is a **stub**: a hard-coded
+- [x] 6.4b `hub/ui/src/components/environment/WorktreesPanel.tsx` is a **stub**: a hard-coded
   `EmptyState` that calls no API. Building it out is out of scope, but leaving it silently claiming
   "No worktree activity" while task checkouts exist is worse after this change than before. Either
   point it at `GET /worktrees` or say in its own copy that it is not implemented — decide and record

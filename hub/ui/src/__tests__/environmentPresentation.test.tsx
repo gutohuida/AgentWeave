@@ -7,6 +7,14 @@ import { WorktreesPanel } from '@/components/environment/WorktreesPanel'
 
 const writeText = vi.fn()
 
+// The shape a disabled query has: no project is selected in this presentation-only test, so the
+// hook never runs and there is no answer yet. Mocked rather than wrapped in a QueryClientProvider,
+// matching how this file already stands in for `@/api/status`.
+vi.mock('@/api/workspace', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/api/workspace')>()
+  return { ...actual, useWorktrees: () => ({ data: undefined, isLoading: false, error: null }) }
+})
+
 vi.mock('@/api/status', () => ({
   useStatus: () => ({
     data: { status: 'ok', project_name: 'Website', agents: 3 },
@@ -52,9 +60,14 @@ describe('configuration surface presentation', () => {
     expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument()
   })
 
-  it('states the reachable worktree surface honestly when there is no activity API data', () => {
+  it('says nothing about worktree activity until it has been told (task 6.4b)', () => {
+    // This panel used to be a stub that rendered "No worktree activity" unconditionally — the
+    // same answer for a project with a dozen checkouts as for one with none. It reads
+    // `GET /worktrees` now, so with no project selected the query never runs and the honest
+    // answer is "not yet", not an empty project and not a failure.
     render(<WorktreesPanel />)
-    expect(screen.getByText('No worktree activity')).toBeInTheDocument()
-    expect(screen.getByText(/appear here when an agent starts work/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Loading worktrees')).toBeInTheDocument()
+    expect(screen.queryByText('No worktree activity')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

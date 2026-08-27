@@ -43,6 +43,22 @@ export function useWorkspaceFile(path: string | null) {
   })
 }
 
+/** One live task this agent holds, and where that task's work happens. */
+export interface TaskCheckoutInfo {
+  task_id: string
+  title?: string | null
+  status: string
+  branch: string
+  path: string
+  provisioned: boolean
+  /**
+   * True when this task's work began before per-task isolation, so it runs in the agent's own
+   * checkout and has no directory of its own. Without saying so, an operator looking for the
+   * task's checkout finds none and concludes the work was lost.
+   */
+  grandfathered: boolean
+}
+
 export interface AgentWorkspaceInfo {
   agent: string
   repo_root: string
@@ -53,6 +69,9 @@ export interface AgentWorkspaceInfo {
   provisioned: boolean
   /** Set when isolation cannot be prepared — the same condition that refuses a turn. */
   unavailable_reason?: string | null
+  /** The checkouts of the tasks this agent is holding. An agent working three tasks has three,
+   *  and this panel used to show only the first. Absent on an older Hub. */
+  task_checkouts?: TaskCheckoutInfo[]
 }
 
 /** Where one agent works on disk. Reading it provisions nothing: the Hub answers from the paths
@@ -64,5 +83,29 @@ export function useAgentWorkspace(agent: string | null) {
     queryFn: () =>
       getJson<AgentWorkspaceInfo>(`/api/v1/projects/${projectId}/worktrees/${agent}`),
     enabled: isConfigured && !!projectId && !!agent,
+  })
+}
+
+/** One Hub-owned checkout under the project's repo root, and what it belongs to. */
+export interface WorkspaceInfo {
+  /** `'agent'` or `'task'`. Two namespaces share this list, and `name` alone cannot separate them. */
+  kind: string
+  name: string
+  branch: string
+  path: string
+}
+
+/**
+ * Every provisioned checkout in the project, agent and task alike.
+ *
+ * Reading it provisions nothing — the Hub answers from git's own registration, so an empty list
+ * means no checkout exists rather than that none was created for the asking.
+ */
+export function useWorktrees() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<WorkspaceInfo[]>({
+    queryKey: ['project', projectId, 'worktrees'],
+    queryFn: () => getJson<WorkspaceInfo[]>(`/api/v1/projects/${projectId}/worktrees`),
+    enabled: isConfigured && !!projectId,
   })
 }
