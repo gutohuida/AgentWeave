@@ -87,16 +87,26 @@ def ui_source_fingerprint(
     """A stable hash of the interface source as it actually reads on disk right now.
 
     Enumerated via `git ls-files` — one subprocess, and it honours .gitignore without
-    reimplementing it — but hashed from each file's *working-tree bytes*, not the index's blob id.
-    That makes the fingerprint depend only on file content, never on whether that content has been
-    staged or committed, which is the property the previous approach lacked: it hashed `git
-    ls-files -s`'s blob ids and folded in `git status --porcelain`'s dirty diff as a separate
-    component, so a stamp recorded against a dirty tree (`scripts/refresh_ui_bundle.py` always
-    runs before `git add`/`git commit` — `CLAUDE.md`'s documented build-then-commit order) could
-    never match again once that same content was committed and porcelain went quiet. Confirmed
-    live: commit `8898155` rebuilt and committed byte-identical output to a fresh rebuild, and only
-    the stamp moved (`ab7e5fe`) — see `known_debts.ui-stale-false-positive`. An edit nobody has
-    committed still moves this fingerprint, same as before: the bytes on disk changed.
+    reimplementing it — and hashed from each working-tree file's *git-normalised* content, obtained
+    by `git hash-object` with the clean filter applied. Two properties have to hold at once, and
+    each was learned from a false positive that made the warning unclearable:
+
+    - It must not depend on whether content is staged or committed. The first approach hashed `git
+      ls-files -s`'s blob ids and folded in `git status --porcelain`'s dirty diff, so a stamp
+      recorded against a dirty tree (`scripts/refresh_ui_bundle.py` always runs before `git
+      add`/`git commit` — `CLAUDE.md`'s documented build-then-commit order) could never match once
+      that same content was committed and porcelain went quiet. Confirmed live at `8898155`/
+      `ab7e5fe` — see `known_debts.ui-stale-false-positive`. `git hash-object` reads the working
+      tree, so it keeps that property.
+    - It must not depend on the checkout's line-ending policy. The second approach hashed raw
+      working-tree bytes, which on Windows with `core.autocrlf=true` is a question about the
+      checkout rather than about the source: measured 2026-08-27, `hub/ui/src` was byte-identical
+      to the commit the stamp named (`git diff` empty, tree clean) with nine tracked files standing
+      CRLF on disk against LF in the index, and `/health` reported `ui_stale` regardless. No
+      rebuild can clear that, because the next checkout renormalises it back.
+
+    `git hash-object` applies each path's own `.gitattributes`, so a genuine change to a binary
+    asset still moves the hash — the normalisation is text-only, exactly as git decides it.
     """
     pathspec = [".", *(f":(exclude){p}" for p in exclude)]
     try:
@@ -113,16 +123,53 @@ def ui_source_fingerprint(
     if listing.returncode != 0 or not listing.stdout.strip():
         return None
 
+    rel_paths = sorted(listing.stdout.splitlines())
+    normalised = _git_normalised_hashes(ui_src, rel_paths)
+    if normalised is None:
+        return None
+
     digest = hashlib.sha256()
-    for rel_path in sorted(listing.stdout.splitlines()):
+    for rel_path in rel_paths:
         digest.update(rel_path.encode("utf-8"))
-        try:
-            digest.update((ui_src / rel_path).read_bytes())
-        except OSError:
-            # Listed by git but unreadable right now (mid-rename, deleted since the listing) --
-            # fold in a marker rather than letting the health check crash over it.
-            digest.update(b"<unreadable>")
+        # Listed by git but unreadable right now (mid-rename, deleted since the listing) -- fold in
+        # a marker rather than letting the health check crash over it.
+        digest.update(normalised.get(rel_path, "<unreadable>").encode("utf-8"))
     return digest.hexdigest()
+
+
+#: `git hash-object` is invoked in batches so one very large tree cannot overrun the Windows command
+#: line (~32 KB). Small enough to be safe for long paths, large enough that the real tree costs one
+#: or two subprocesses.
+_HASH_OBJECT_BATCH = 200
+
+
+def _git_normalised_hashes(ui_src: Path, rel_paths: Sequence[str]) -> Optional[dict[str, str]]:
+    """`{relative path: git blob id of its working-tree content, filters applied}`.
+
+    Missing paths are simply absent from the mapping rather than failing the batch they are in --
+    `git hash-object` aborts the whole invocation on the first unreadable file, and one file
+    vanishing mid-rename must not blank the fingerprint for all the others.
+    """
+    existing = [p for p in rel_paths if (ui_src / p).is_file()]
+    hashes: dict[str, str] = {}
+    for start in range(0, len(existing), _HASH_OBJECT_BATCH):
+        batch = existing[start : start + _HASH_OBJECT_BATCH]
+        try:
+            result = subprocess.run(
+                ["git", "hash-object", "--", *batch],
+                cwd=ui_src,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                **no_console_kwargs(),
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        lines = result.stdout.split()
+        if result.returncode != 0 or len(lines) != len(batch):
+            return None
+        hashes.update(zip(batch, lines, strict=True))
+    return hashes
 
 
 def read_ui_build_stamp(ui_dist: Path) -> Optional[dict]:

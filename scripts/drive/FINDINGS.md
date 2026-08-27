@@ -4166,3 +4166,84 @@ integration as a defect.
 
 **Left live:** both throwaway projects and their repositories, with the task branches intact, so the
 state described above is inspectable rather than merely reported.
+
+---
+
+## F73 — `ui_stale` is a false positive on any Windows checkout, and no rebuild can clear it
+
+**Status:** fixed (this branch) — `ui_source_fingerprint` now hashes git-normalised content
+
+**Severity: B.** Not a product surface an end user sees, but it disables the one signal that
+catches a genuinely stale dashboard bundle, and it disables it *permanently* — which is worse than
+not having the signal, because the operator is told the check exists.
+
+**What happens.** `GET /health` reports `ui_stale: true` on a checkout whose `hub/ui/src` is
+byte-identical to the commit the build stamp names. Measured on this branch at `2643663`:
+
+```
+$ curl -s http://127.0.0.1:8011/health
+{"status":"ok","runtime":"native","ui_stale":true,
+ "ui_stale_detail":"...asserts it was built from hub/ui/src as of 2026-08-27T17:10:27+00:00,
+                    but the source has changed since..."}
+
+$ git diff --stat d1f04e5 HEAD -- hub/ui/src      # d1f04e5 is the stamp's own src_commit
+                                                   # (empty -- no change at all)
+$ git status --short hub/ui/src
+                                                   # (empty -- clean)
+```
+
+**Why.** `ui_source_fingerprint` hashed each file's *working-tree bytes*. With
+`core.autocrlf=true`, working-tree bytes are a function of checkout policy, not of the source: at
+the time of measurement nine tracked, unmodified files under `hub/ui/src` stood CRLF on disk
+against LF in the index —
+
+```
+$ git ls-files --eol hub/ui/src | grep 'w/crlf'
+i/lf w/crlf attr/text=auto eol=lf   components/agents/ComposerModelControls.tsx
+i/lf w/crlf attr/text=auto eol=lf   components/agents/ComposerSpecControl.tsx
+i/lf w/crlf attr/text=auto eol=lf   components/agents/ConversationControls.tsx
+i/lf w/crlf attr/text=auto eol=lf   components/agents/ModelPicker.tsx
+i/lf w/crlf attr/text=auto eol=lf   components/layout/Drawer.tsx
+i/lf w/crlf attr/text=auto eol=lf   components/layout/LoopFiringGroup.tsx
+i/lf w/crlf attr/text=auto eol=lf   components/layout/RowMenu.tsx
+i/lf w/crlf attr/text=auto eol=lf   components/layout/SidebarItem.tsx
+i/lf w/crlf attr/text=auto eol=lf   components/layout/StatusBar.tsx
+```
+
+— so the fingerprint answered a question about the checkout rather than about the source.
+Demonstrated directly: rewriting one LF file as CRLF, a change `git diff` reports as nothing at
+all, moved the fingerprint `132c4aa…` → `71ae825…`, and restoring it moved it back.
+
+**The bundle was not stale.** Verified rather than assumed: `npm run build` then
+`scripts/refresh_ui_bundle.py`, diffed against a snapshot of `hub/hub/static/ui` taken beforehand.
+Every byte of the bundle is identical; only `ui-build-stamp.json` changed.
+
+**One defect, or a design gap?** A design gap, and the third instance of one shape. The stamp
+mechanism was introduced precisely because the previous comparison (commit dates) could not be
+cleared by doing what it asked; `test_a_stamp_recorded_against_a_dirty_tree_survives_the_commit`
+records the second instance (a stamp taken against a dirty tree could never match once committed).
+This is the third: a stamp taken on one checkout cannot match the same content on another. Each
+time, the property that was actually wanted is *content as git defines it*, and each fix
+approximated it with something cheaper.
+
+**The fix.** Hash `git hash-object`'s output — the working-tree file's content with its own
+`.gitattributes` clean filter applied. That keeps the dirty-tree property the current code was
+written for (it reads the working tree, not the index, so staged-vs-committed is still irrelevant)
+and adds the missing one, since git's own normalisation is what both sides of the comparison now
+agree on. Binary assets are unaffected: `text=auto` means git does not normalise them, so a real
+change to one still moves the hash. Batched at 200 paths so a large tree cannot overrun the
+Windows command line.
+
+**Test:** `test_the_fingerprint_is_blind_to_working_tree_line_endings`, watched to fail before the
+fix with *"a line-ending-only difference git normalises away is not a source change"*. Note the
+trap it caught on the way in: a first version of the test used `Path.write_text`, which on Windows
+already emits CRLF — so it compared CRLF against CRLF and passed against the defect. It writes
+bytes now, and says why.
+
+**Consequence to expect once.** The fingerprint algorithm changed, so every existing stamp is
+invalidated and each checkout will report `ui_stale` one final time until it is re-recorded. This
+branch re-records this repository's.
+
+**Cross-cutting note for the sweep.** This blocked Step 3 of the e2e method, which says every UI
+finding taken from a stale bundle is worthless. It was found *before* driving any screen, which is
+the only reason the UI rows of this sweep mean anything.

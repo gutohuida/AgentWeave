@@ -258,3 +258,40 @@ def test_the_committed_bundle_was_built_from_the_committed_source():
         "hub/hub/static/ui was built from different source than is present. "
         "Run `cd hub/ui && npm run build && make ui`."
     )
+
+
+def test_the_fingerprint_is_blind_to_working_tree_line_endings(checkout):
+    """A checkout whose line endings differ from the commit's is not a source change.
+
+    Measured on Windows with `core.autocrlf=true` on 2026-08-27: `hub/ui/src` was
+    byte-identical to the commit the stamp named (`git diff d1f04e5 HEAD -- hub/ui/src` empty,
+    tree clean), nine tracked files stood CRLF on disk against LF in the index, and `/health`
+    reported `ui_stale` anyway. The fingerprint hashes *working-tree bytes*, so it answers a
+    question about the checkout rather than about the source, and on Windows the two differ by
+    policy alone.
+
+    Same shape as `test_a_stamp_recorded_against_a_dirty_tree_survives_the_commit`, one step
+    further out: a warning nobody can clear, because the remedy (rebuild, re-stamp, commit)
+    cannot change what git renormalises on the next checkout.
+
+    Bytes are written with `write_bytes`, never `write_text` -- on Windows the latter already
+    translates LF to CRLF, so a test using it would compare CRLF against CRLF and pass against
+    the defect. That cost one round here.
+    """
+    root, src, dist = checkout
+    (root / ".gitattributes").write_bytes(b"* text=auto eol=lf\n")
+    target = src / "App.tsx"
+    target.write_bytes(b"export const App = () => null\n")
+    commit_at(root, "2026-01-02T00:00:00+00:00")
+
+    stamp(dist, ui_source_fingerprint(src))
+    assert _compute_ui_staleness_warning(dist, src) is None
+
+    # Exactly what a Windows checkout does to a file declared `eol=lf`: same content, CRLF.
+    target.write_bytes(target.read_bytes().replace(b"\n", b"\r\n"))
+    assert git(root, "diff", "--stat").stdout.strip() == "", "git itself sees no change"
+
+    assert _compute_ui_staleness_warning(dist, src) is None, (
+        "a line-ending-only difference git normalises away is not a source change, "
+        "and must not report the bundle stale"
+    )
