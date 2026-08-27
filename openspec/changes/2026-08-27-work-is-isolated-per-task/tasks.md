@@ -427,8 +427,16 @@ Read 4.14's implementation note before changing where the guard sits.
   writing the guard where 4.14's original text said, keyed on `binding.task`, which turns the
   review, read-only and grandfathered tests red together (M7). Seven mutations in all, seven
   caught by a named test; the table is in the iteration-11 log entry.
-- [ ] 8.6 Run the full Hub suite with `py -3.11 -m pytest hub/tests/ -q` and the CLI suite with
+- [x] 8.6 Run the full Hub suite with `py -3.11 -m pytest hub/tests/ -q` and the CLI suite with
   `py -3.11 -m pytest tests/ -q`. Record counts.
+  **Hub: 3349 passed, 84 skipped, 1 xpassed, 0 failed (13m57s). CLI: 440 passed, 3 skipped.**
+  The first full run was **red**, and only the full run could have caught it: migration `0096`
+  moved `head`, and `test_task_workspace_scheme.py` asserted `_version(...) == "0095"` after
+  upgrading to `head` — two tests red without either one's subject having changed. Every upgrade in
+  that file now pins `REVISION`, because the file is about what 0095 does and must stop where 0095
+  stops; bumping the constant would have left it tracking head and breaking on the next migration
+  too. Recorded because the targeted per-phase runs were green throughout and would have shipped
+  it.
 - [x] 8.7 Run exactly what CI runs: `ruff check src/ hub/ tests/`,
   `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`, and
   `cd hub/ui && npm run lint`.
