@@ -45,6 +45,13 @@ def test_seeding_writes_the_block(tmp_path):
     for pattern in repo_hygiene.EXCLUDE_PATTERNS:
         assert pattern in written
 
+    # Named rather than left to the loop above, which passes for any list at all. Each of these
+    # is a Hub-owned checkout that `snapshot_worktree`'s `git add -A` would otherwise commit
+    # wholesale onto an agent's branch; `.agentweave/tasks/` joined them with per-task isolation.
+    for checkout in (".agentweave/worktrees/", ".agentweave/reviews/", ".agentweave/tasks/"):
+        assert checkout in repo_hygiene.EXCLUDE_PATTERNS
+        assert checkout in written
+
 
 def test_git_agrees_about_the_hubs_own_files(tmp_path):
     """The claim is about `git status`, not about the contents of a file."""
@@ -53,6 +60,8 @@ def test_git_agrees_about_the_hubs_own_files(tmp_path):
 
     for relative in (
         ".agentweave/worktrees/builder/x",
+        ".agentweave/tasks/task-ab12cd34ef56/x",
+        ".agentweave/reviews/critic/x",
         ".agentweave/logs/events.jsonl",
         ".agentweave/evidence/e",
         ".agentweave/context/builder.md",

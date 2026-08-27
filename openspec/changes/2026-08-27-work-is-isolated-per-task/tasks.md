@@ -48,46 +48,61 @@ task's work goes, which is the defect. Full discrimination of *provisioning* is 
 
 ## 2. Task workspace paths, names, and provisioning (D1, D6)
 
-- [ ] 2.1 Add `hub/tests/test_task_worktrees.py`. Assert `worktrees.task_worktree_path` and
+**Measured during phase 2, and it removed a line rather than adding one.** 2.5 asks for a
+prerequisite "already reachable from `base`" not to be merged a second time, and the obvious
+implementation is a `merge-base --is-ancestor` guard before the merge. That guard was written,
+then **mutation-tested and deleted**: with it stubbed out to `if False`, all 21 tests still
+passed. `git merge --no-ff <ancestor>` is measured to be a no-op — "Already up to date.", exit 0,
+no commit — so the guard was a branch no test could fail, which this codebase treats as a defect
+source. The guarantee 2.5 names is git's, the test asserts the guarantee rather than our control
+flow, and its docstring says so out loud so a later reader does not "restore the missing check".
+
+**What the same mutation pass did find.** `--no-ff` *is* load-bearing and was untested: the task
+branch sits at `base` and a prerequisite is typically `base` plus one commit, so a plain `merge`
+fast-forwards, two tasks end up sharing a branch tip, and the act of bringing the work in leaves
+no record. 2.5's test now pins the commit count at three, and dropping `--no-ff` turns it red.
+
+
+- [x] 2.1 Add `hub/tests/test_task_worktrees.py`. Assert `worktrees.task_worktree_path` and
   `worktrees.task_branch_name` are pure (create nothing), that they produce
   `.agentweave/tasks/<task_id>` and `agentweave/task/<task_id>`, and that a task id which is not
   `task-` followed by hex is refused — mirroring `test_worktrees.py`'s coverage of
   `validate_agent_name`.
-- [ ] 2.2 Add a test asserting a task branch name can never collide with an agent branch name: an
+- [x] 2.2 Add a test asserting a task branch name can never collide with an agent branch name: an
   agent literally named `task-ab12cd34ef56` (which `_AGENT_NAME_RE`, `worktrees.py:65`, accepts)
   and a task with id `task-ab12cd34ef56` produce different refs and different directories.
-- [ ] 2.3 Implement `validate_task_id`, `task_worktree_path`, `task_branch_name` in
+- [x] 2.3 Implement `validate_task_id`, `task_worktree_path`, `task_branch_name` in
   `hub/hub/worktrees.py`, beside `worktree_path`/`branch_name` (`:139`, `:144`).
-- [ ] 2.4 Add a test asserting `ensure_task_worktree(repo_root, task_id, base, prerequisites=[])`
+- [x] 2.4 Add a test asserting `ensure_task_worktree(repo_root, task_id, base, prerequisites=[])`
   creates a checkout whose branch tip is `base`, and that calling it twice is idempotent.
-- [ ] 2.5 Add a test asserting `ensure_task_worktree` with a prerequisite commit not reachable from
+- [x] 2.5 Add a test asserting `ensure_task_worktree` with a prerequisite commit not reachable from
   `base` produces a checkout containing that commit's files, and that a prerequisite already
   reachable from `base` is not merged a second time (assert the commit count).
-- [ ] 2.6 Add a test asserting a prerequisite whose merge conflicts raises
+- [x] 2.6 Add a test asserting a prerequisite whose merge conflicts raises
   `IsolationUnavailableError`, that the error message names the prerequisite's commit, and that **no
   checkout and no branch are left behind** — provisioning is all-or-nothing. Assert the branch is
   gone with `git rev-parse --verify`, not only that the directory is: `worktree add` creates both,
   and a leftover branch is the half that would be reused silently by the next turn.
-- [ ] 2.6b **Added in R3.** Add a test for the other way the merge fails: a prerequisite commit SHA
+- [x] 2.6b **Added in R3.** Add a test for the other way the merge fails: a prerequisite commit SHA
   that is not in the repository at all (an operator deleted the branch carrying it). Assert the same
   all-or-nothing unwind, and that the message says the commit is **missing** rather than that it
   conflicts — the two ask the operator for different things. D1 named only conflict.
-- [ ] 2.7 Implement `ensure_task_worktree` in `hub/hub/worktrees.py`. `base` and `prerequisites` are
+- [x] 2.7 Implement `ensure_task_worktree` in `hub/hub/worktrees.py`. `base` and `prerequisites` are
   parameters, never resolved from a database inside this module — it states its independence from
   any DB/session layer at `worktrees.py:27-30`. Implement the unwind explicitly, in design D1's
   order — `merge --abort`, `worktree remove --force`, `branch -D`, `worktree prune`, each with
   `check=False`, and only then raise. **Do not reuse `release_worktree`**: it snapshots the dirty
   tree onto the branch first (`worktrees.py:537-538`), which would commit a conflicted merge as the
   agent's work.
-- [ ] 2.7b Add a test asserting `ensure_task_worktree` refuses a registered task checkout that is
+- [x] 2.7b Add a test asserting `ensure_task_worktree` refuses a registered task checkout that is
   mid-merge (`MERGE_HEAD` present) rather than returning it, and implement that refusal. This is the
   one state a process killed between `worktree add` and the unwind can leave, and
   `ensure_worktree`'s idempotent path (`worktrees.py:268-275`) returns a correctly-registered
   directory unexamined.
-- [ ] 2.8 Add `.agentweave/tasks/` to `EXCLUDE_PATTERNS` in `hub/hub/repo_hygiene.py:59`, and extend
+- [x] 2.8 Add `.agentweave/tasks/` to `EXCLUDE_PATTERNS` in `hub/hub/repo_hygiene.py:59`, and extend
   the existing exclude-patterns test to assert it is present. Without it `snapshot_worktree`'s
   `git add -A` (`worktrees.py:459`) commits an entire second checkout.
-- [ ] 2.9 Add `release_task_worktree` to `hub/hub/worktrees.py`, with a test asserting it snapshots
+- [x] 2.9 Add `release_task_worktree` to `hub/hub/worktrees.py`, with a test asserting it snapshots
   uncommitted changes onto the task branch first, removes the checkout, and leaves the branch and
   its commits intact.
 

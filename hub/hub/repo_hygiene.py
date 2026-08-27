@@ -62,6 +62,10 @@ EXCLUDE_PATTERNS = [
     # and the same failure if it is missing: `snapshot_worktree` runs `git add -A`, so an agent that
     # both writes and reviews would commit an entire second checkout onto its own branch.
     ".agentweave/reviews/",
+    # A task's own checkout (`2026-08-27-work-is-isolated-per-task`, design D6). Same reason and
+    # same failure as the two lines above: an agent holding a task commits from one of these, and
+    # `snapshot_worktree`'s `git add -A` would sweep every *other* task's checkout onto its branch.
+    ".agentweave/tasks/",
     ".agentweave/logs/",
     ".agentweave/evidence/",
     # Rewritten from the canonical context on every single turn (`agent_trigger`), so it is pure

@@ -32,13 +32,14 @@ config dict, the same shape `launchability.get_agent_config` already returns.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .repo_hygiene import seed_repo_excludes
 from .subprocess_windows import no_console_kwargs
@@ -61,8 +62,12 @@ COMMIT_IDENTITY = ("AgentWeave", "agentweave@localhost")
 # expensive to regenerate and safe to share read-only across concurrent worktrees.
 SHARED_DEPENDENCY_DIRS = ("node_modules", ".venv", "venv")
 
+#: Task branches are nested one segment deeper than agent branches. See `task_branch_name`.
+TASK_BRANCH_PREFIX = BRANCH_PREFIX + "task/"
+
 _GIT_TIMEOUT_SECONDS = 30
 _AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
+_TASK_ID_RE = re.compile(r"^task-[0-9a-f]{1,64}$")
 
 
 class GitCommandError(RuntimeError):
@@ -144,6 +149,46 @@ def worktree_path(repo_root: Path, agent: str) -> Path:
 def branch_name(agent: str) -> str:
     validate_agent_name(agent)
     return f"{BRANCH_PREFIX}{agent}"
+
+
+def validate_task_id(task_id: str) -> None:
+    """Reject ids that cannot safely become both a path component and a git ref suffix.
+
+    Its own validator rather than a reuse of `validate_agent_name` (design D6): the two accept
+    different shapes for different reasons, and a task id is `task-` followed by hex because
+    that is what `short_id()` produces (`spec_tasks.py`, `api/v1/tasks.py`) — an id the product
+    did not mint is not a task id this module will provision a checkout for.
+
+    Lowercase only, deliberately. Two ids differing solely in case are two distinct git refs but
+    a single directory on Windows and macOS, so accepting both would let one task's checkout be
+    handed to another.
+    """
+    if not _TASK_ID_RE.fullmatch(task_id):
+        raise ValueError(
+            "invalid task id; expected 'task-' followed by 1-64 lowercase hexadecimal digits"
+        )
+
+
+def task_root(repo_root: Path) -> Path:
+    return repo_root / ".agentweave" / "tasks"
+
+
+def task_worktree_path(repo_root: Path, task_id: str) -> Path:
+    """Where *task_id*'s work happens (design D1). Pure — provisions nothing."""
+    validate_task_id(task_id)
+    return task_root(repo_root) / task_id
+
+
+def task_branch_name(task_id: str) -> str:
+    """The branch *task_id*'s work lives on. Pure.
+
+    The `task/` segment is not cosmetic (design D6). `_AGENT_NAME_RE` accepts `task-ab12cd34ef56`
+    as an agent name, so `agentweave/<task-id>` would be indistinguishable from that agent's own
+    branch; `/` is not in the agent name character class, which makes the two namespaces disjoint
+    by construction rather than by luck.
+    """
+    validate_task_id(task_id)
+    return f"{TASK_BRANCH_PREFIX}{task_id}"
 
 
 def review_root(repo_root: Path) -> Path:
@@ -302,6 +347,156 @@ def ensure_worktree(repo_root: Path, agent: str) -> Path:
     return path
 
 
+def _is_mid_merge(worktree: Path) -> bool:
+    """True when a merge was started in *worktree* and never finished or aborted."""
+    result = _run_git(worktree, "rev-parse", "--verify", "--quiet", "MERGE_HEAD", check=False)
+    return result.returncode == 0
+
+
+def _merge_prerequisites(worktree: Path, task_id: str, prerequisites: Tuple[str, ...]) -> None:
+    """Bring each prerequisite commit not already reachable from *worktree*'s HEAD into it.
+
+    Raises `IsolationUnavailableError` on the first one that cannot be brought in. The two ways
+    that happens are told apart deliberately (design D1, corrected in R3): a commit that
+    *conflicts* asks the operator to reconcile two pieces of work, and a commit that is *missing*
+    from the repository asks them to restore a deleted ref. A single message covering both would
+    send them looking for the wrong thing.
+    """
+    for sha in prerequisites:
+        present = _run_git(
+            worktree, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}", check=False
+        )
+        if present.returncode != 0:
+            raise IsolationUnavailableError(
+                f"the work {task_id} depends on cannot be brought in: commit {sha[:12]} is "
+                "missing from this repository. It was recorded as a prerequisite's accepted "
+                "evidence, so the branch that carried it has probably been deleted."
+            )
+
+        # D1 says only commits "not already reachable" are merged, and there is deliberately no
+        # reachability check here: `git merge --no-ff <ancestor>` is *measured* to be a no-op —
+        # "Already up to date.", exit 0, no commit — so an explicit `merge-base --is-ancestor`
+        # guard is a branch no test can fail, which this codebase treats as a defect source. The
+        # ordinary case (the prerequisite was integrated into the base before this task started)
+        # is therefore handled, and `test_a_prerequisite_already_reachable_from_the_base_is_not_
+        # merged_twice` pins it by commit count rather than by inspecting our own control flow.
+        #
+        # `--no-ff` matches `task_integration`'s merge and is load-bearing: without it a task
+        # branch cut from the base would *fast-forward* onto a prerequisite's tip, so two tasks
+        # would share a branch tip and the merge that brought the work in would leave no record.
+        merged = _run_git(
+            worktree,
+            "-c",
+            f"user.name={COMMIT_IDENTITY[0]}",
+            "-c",
+            f"user.email={COMMIT_IDENTITY[1]}",
+            "merge",
+            "--no-ff",
+            "-m",
+            f"Bring in prerequisite work {sha[:12]}",
+            sha,
+            check=False,
+        )
+        if merged.returncode != 0:
+            detail = (merged.stdout or merged.stderr).strip()[:2000]
+            raise IsolationUnavailableError(
+                f"the work {task_id} depends on conflicts with its base: merging prerequisite "
+                f"commit {sha[:12]} failed. {detail}"
+            )
+
+
+def _unwind_task_worktree(repo_root: Path, path: Path, branch: str) -> None:
+    """Undo a half-provisioned task checkout, in the order git forces (design D1).
+
+    A branch that is checked out in a worktree cannot be deleted, so the removal has to come
+    first; and `worktree prune` last, matching `ensure_worktree`'s own defence against metadata
+    outliving a directory.
+
+    Every step is `check=False` on purpose: a cleanup step that fails must not replace the
+    refusal the operator needs to read with a second, less useful one.
+
+    Deliberately **not** `release_task_worktree`, which snapshots the dirty tree onto the branch
+    before removing the checkout — here that would commit a conflicted merge as though it were
+    the agent's work, and then keep the branch carrying it.
+
+    `branch -D` is safe unconditionally only because this function is reached solely from the
+    creation path, seconds after `worktree add -b` made the branch: it carries nothing that was
+    not already reachable from the base.
+    """
+    if path.is_dir():
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
+            _run_git(path, "merge", "--abort", check=False)
+    _run_git(repo_root, "worktree", "remove", "--force", str(path), check=False)
+    _run_git(repo_root, "branch", "-D", branch, check=False)
+    _run_git(repo_root, "worktree", "prune", check=False)
+
+
+def ensure_task_worktree(
+    repo_root: Path,
+    task_id: str,
+    base: str,
+    prerequisites: Sequence[str] = (),
+) -> Path:
+    """Provision *task_id*'s isolated checkout at *base*, creating it if absent. Idempotent.
+
+    The per-task counterpart of `ensure_worktree` (design D1). `base` and `prerequisites` are
+    parameters rather than anything this module looks up: it is independent of the DB/session
+    layer by design (see the module docstring), so the Hub layer resolves the project's
+    integration base and `task_integration.integration_targets` and passes plain values in.
+
+    Prerequisites are merged **only when the branch is created**. On any later call the branch
+    already carries the task's own work, and the all-or-nothing unwind below would destroy it —
+    the unwind is safe precisely because the branch is seconds old and carries nothing unique.
+
+    Provisioning is all-or-nothing: a prerequisite that cannot be brought in leaves no checkout
+    and no branch behind, and refuses the turn.
+    """
+    path = task_worktree_path(repo_root, task_id)
+    branch = task_branch_name(task_id)
+    expected_ref = f"refs/heads/{branch}"
+
+    if path.exists():
+        if path.is_symlink() or _registered_worktree_branch(repo_root, path) != expected_ref:
+            raise IsolationUnavailableError(
+                f"refusing existing path {path}: it is not the registered git worktree "
+                f"for {expected_ref}"
+            )
+        if _is_mid_merge(path):
+            # The one state a process killed between `worktree add` and the unwind can leave.
+            # `ensure_worktree`'s idempotent path returns any correctly-registered directory
+            # unexamined; handing this one over asks the agent to work out what happened to it
+            # from a tree full of conflict markers.
+            raise IsolationUnavailableError(
+                f"refusing the checkout for {task_id} at {path}: it was left in an unfinished "
+                "merge. Resolve or abort that merge before this task runs again."
+            )
+        return path
+
+    _run_git(repo_root, "worktree", "prune", check=False)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    branch_exists = (
+        _run_git(repo_root, "rev-parse", "--verify", "--quiet", branch, check=False).returncode == 0
+    )
+    if branch_exists:
+        # The task was released (design D5) and is being worked again. Its own history is on
+        # the branch, so it resumes from there rather than restarting at the base — and its
+        # prerequisites were merged when the branch was created.
+        _run_git(repo_root, "worktree", "add", str(path), branch)
+        _symlink_shared_dependencies(repo_root, path)
+        return path
+
+    _run_git(repo_root, "worktree", "add", "-b", branch, str(path), base)
+    try:
+        _merge_prerequisites(path, task_id, tuple(prerequisites))
+    except IsolationUnavailableError:
+        _unwind_task_worktree(repo_root, path, branch)
+        raise
+
+    _symlink_shared_dependencies(repo_root, path)
+    return path
+
+
 def resolve_review_commit(repo_root: Path, sha: str) -> str:
     """Return the full SHA *sha* names, or refuse with a reason (tasks 1.5, 2.2).
 
@@ -445,7 +640,9 @@ def _has_uncommitted_changes(worktree: Path) -> bool:
     return bool(result.stdout.strip())
 
 
-def snapshot_worktree(worktree: Path, agent: str) -> Optional[str]:
+def snapshot_worktree(
+    worktree: Path, agent: str, *, message: Optional[str] = None
+) -> Optional[str]:
     """Commit any dirty working-tree state in *worktree* onto the agent's own branch.
 
     Best-effort, internal safety net — not a user-facing commit meant to pass a
@@ -453,6 +650,10 @@ def snapshot_worktree(worktree: Path, agent: str) -> Optional[str]:
     hook blocking this would silently strand the agent's own work uncommitted, which is
     exactly what this function exists to prevent. Returns the new commit SHA, or `None`
     if there was nothing to commit.
+
+    *message* overrides the default subject for callers whose checkout does not belong to an
+    agent's turn — `release_task_worktree`, whose branch belongs to a task. Keyword-only so the
+    existing positional call sites cannot acquire one by accident.
     """
     if not _has_uncommitted_changes(worktree):
         return None
@@ -469,7 +670,7 @@ def snapshot_worktree(worktree: Path, agent: str) -> Optional[str]:
         "commit",
         "--no-verify",
         "-m",
-        f"Auto-snapshot: {agent}'s turn",
+        message or f"Auto-snapshot: {agent}'s turn",
     )
     sha = _run_git(worktree, "rev-parse", "HEAD")
     return sha.stdout.strip()
@@ -547,6 +748,43 @@ def release_worktree(repo_root: Path, agent: str) -> ReleaseResult:
         snapshot_commit=snapshot_commit,
         unmerged_commits=unmerged,
         review_checkout_released=review_released,
+    )
+
+
+def release_task_worktree(repo_root: Path, task_id: str) -> ReleaseResult:
+    """Release *task_id*'s checkout (design D5): remove the directory, keep the branch.
+
+    The per-task counterpart of `release_worktree`, and it keeps the same guarantees for the same
+    reasons — any uncommitted change is snapshotted onto the task branch first, and every commit
+    the branch carries beyond the primary checkout's HEAD is reported rather than discarded. What
+    bounds the disk is the *checkout*; the branch is the record of what the task did, and deleting
+    it would destroy the history an operator reads after the fact.
+
+    Returns a `ReleaseResult` like `release_worktree`, with `review_checkout_released` always
+    false: review checkouts are keyed by the reviewing agent, not by a task, so there is never
+    one to release here.
+    """
+    path = task_worktree_path(repo_root, task_id)
+    branch = task_branch_name(task_id)
+
+    if not path.exists():
+        return ReleaseResult(released=False, branch=branch)
+
+    had_uncommitted = _has_uncommitted_changes(path)
+    snapshot_commit = (
+        snapshot_worktree(path, task_id, message=f"Auto-snapshot: {task_id}")
+        if had_uncommitted
+        else None
+    )
+
+    _run_git(repo_root, "worktree", "remove", "--force", str(path))
+
+    return ReleaseResult(
+        released=True,
+        branch=branch,
+        had_uncommitted_changes=had_uncommitted,
+        snapshot_commit=snapshot_commit,
+        unmerged_commits=_commits_not_on_head(repo_root, branch),
     )
 
 
