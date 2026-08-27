@@ -136,7 +136,11 @@ async def record(
             workspace, actor, locator, await recorded_workspace_dir(session, actor.run_id)
         )
         already = await duplicate_of(
-            session, requirement, task_id=task_id, commit_sha=taken.commit_sha
+            session,
+            requirement,
+            task_id=task_id,
+            commit_sha=taken.commit_sha,
+            actor=actor,
         )
         if already is not None:
             raise EvidenceRefusedError(
@@ -193,30 +197,38 @@ async def duplicate_of(
     *,
     task_id: Optional[str],
     commit_sha: Optional[str],
+    actor: Optional[Actor] = None,
 ) -> Optional[RequirementEvidence]:
     """The evidence a new piece would merely repeat, if there is one.
 
-    Same requirement, same task, same commit is the narrowest key that means "this demonstrates
-    nothing the record does not already hold": the requirement fixes what is being shown, the task
-    fixes which piece of work is showing it, and the commit fixes the state of the code it was shown
-    against. Observed live — `builder` recorded FR-1 unprompted on its first turn and again when
-    asked, near-identical prose, both stored, both `awaiting`, coverage reading `evidence_count: 2,
-    accepted_count: 0` (`scripts/drive/FINDINGS.md`, F7).
+    Same requirement, same task, same commit, **same actor** is the narrowest key that means "this
+    demonstrates nothing the record does not already hold": the requirement fixes what is being
+    shown, the task fixes which piece of work is showing it, the commit fixes the state of the code
+    it was shown against, and the actor fixes whose demonstration it is. Observed live — `builder`
+    recorded FR-1 unprompted on its first turn and again when asked, near-identical prose, both
+    stored, both `awaiting`, coverage reading `evidence_count: 2, accepted_count: 0`
+    (`scripts/drive/FINDINGS.md`, F7).
+
+    **Actor is in the key because a confirmation is not a copy** (F75). A review turn runs in a
+    detached checkout of the very commit under review, so a reviewer that checks the work itself
+    produces the same requirement, task and commit as the author it is checking — and without this
+    the one actor whose evidence the record most needs is the one refused. That case was
+    unreachable while agent evidence carried no task at all (F74) and appeared the moment it did.
 
     Note the existing `digest` column is *not* this check and never was. It pins the requirement's
     wording at production time, which is the mechanism behind staleness — a different and
     well-designed thing that happens to be equal across duplicates for the same reason it is equal
     across two genuinely distinct demonstrations.
 
-    Silent — returns None — where either half of the key is unknown. A project with no repository
-    has no commit, and evidence recorded against no task has nothing to be a second copy *of*;
-    guessing in either case would refuse a first piece of evidence, which is far worse than
-    accepting a second.
+    Silent — returns None — where any part of the key is unknown. A project with no repository has
+    no commit, and evidence recorded against no task has nothing to be a second copy *of*; guessing
+    in either case would refuse a first piece of evidence, which is far worse than accepting a
+    second.
 
     A `rejected` piece never matches. It was judged inadequate, and a re-record at the same commit
     with a better summary is the honest response to that judgement rather than a duplicate of it.
     """
-    if not task_id or not commit_sha:
+    if not task_id or not commit_sha or actor is None:
         return None
     result = await session.execute(
         select(RequirementEvidence)
@@ -224,6 +236,8 @@ async def duplicate_of(
         .where(RequirementEvidence.requirement_id == requirement.id)
         .where(RequirementEvidence.task_id == task_id)
         .where(EvidenceFootprint.commit_sha == commit_sha)
+        .where(RequirementEvidence.actor_kind == actor.kind)
+        .where(RequirementEvidence.actor == (actor.name or ""))
         .where(RequirementEvidence.review_state != REJECTED)
         .order_by(RequirementEvidence.produced_at, RequirementEvidence.id)
         .limit(1)

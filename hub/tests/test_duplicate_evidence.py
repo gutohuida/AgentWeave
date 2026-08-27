@@ -252,3 +252,99 @@ async def test_a_rejected_piece_does_not_block_a_second_attempt(app, auth_header
 
     assert second.status_code == 201, second.text
     assert await evidence_count() == 2
+
+
+@pytest.mark.asyncio
+async def test_a_reviewer_confirming_the_authors_work_is_not_a_duplicate(app, worked):
+    """Two actors, same commit: a confirmation is a second demonstration, not a second copy.
+
+    Driven live 2026-08-27 (`scripts/drive/FINDINGS.md`, F75). `reviewer` was dispatched onto
+    `builder`'s finished task, checked the work itself, and tried to record what it had verified.
+    It was refused as a duplicate of `builder`'s own claim -- so the one actor whose evidence the
+    key exists to protect (somebody other than the author) is the one it silenced.
+
+    The key's own rationale is about a single agent recording the same fact twice, which is what
+    F7 measured. Actor is the dimension that separates that from this.
+    """
+    headers, worktree = worked
+    author = await app.post(
+        AGENT_EVIDENCE,
+        json={
+            "identifier": "FR-1",
+            "summary": "I implemented it and the tests pass",
+            "task_id": TASK_ID,
+        },
+        headers=headers,
+    )
+    assert author.status_code == 201, author.text
+
+    async with async_session_factory() as session:
+        session.add(Agent(id="ag-dupe-rev", project_id="proj-test", name="reviewer"))
+        session.add(
+            Run(
+                id="run-dupe-rev",
+                project_id="proj-test",
+                agent="reviewer",
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token("aw_run_dupe-rev-secret"),
+                # A real review turn runs in a detached checkout of the very commit under review,
+                # so both footprints name the same sha -- which is what makes this a duplicate
+                # candidate at all. Without it the test passes against the defect.
+                workspace_dir=str(worktree),
+            )
+        )
+        await session.commit()
+
+    confirmation = await app.post(
+        AGENT_EVIDENCE,
+        json={
+            "identifier": "FR-1",
+            "summary": "I re-ran the suite in my own checkout and read the diff; it holds",
+            "task_id": TASK_ID,
+        },
+        headers={"Authorization": "Bearer aw_run_dupe-rev-secret"},
+    )
+
+    assert confirmation.status_code == 201, confirmation.text
+    assert await evidence_count() == 2
+
+
+@pytest.mark.asyncio
+async def test_the_same_actor_is_still_refused_when_another_has_recorded_too(app, worked):
+    """Adding actor to the key must not weaken F7's case in the presence of a second actor."""
+    headers, worktree = worked
+    await app.post(
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "ran it", "task_id": TASK_ID},
+        headers=headers,
+    )
+    async with async_session_factory() as session:
+        session.add(Agent(id="ag-dupe-rev2", project_id="proj-test", name="reviewer"))
+        session.add(
+            Run(
+                id="run-dupe-rev2",
+                project_id="proj-test",
+                agent="reviewer",
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token("aw_run_dupe-rev2-secret"),
+                workspace_dir=str(worktree),
+            )
+        )
+        await session.commit()
+    await app.post(
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "checked it", "task_id": TASK_ID},
+        headers={"Authorization": "Bearer aw_run_dupe-rev2-secret"},
+    )
+
+    again = await app.post(
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "ran it again", "task_id": TASK_ID},
+        headers=headers,
+    )
+
+    assert again.status_code == 409, again.text
+    assert again.json()["detail"]["code"] == "duplicate_evidence"
+    assert await evidence_count() == 2

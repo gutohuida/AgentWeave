@@ -4327,3 +4327,119 @@ detached checkout at `.agentweave/reviews/reviewer`.
 commit on `agentweave/task/…` with `reachable_from_main: false`, not the operator's checkout.
 F10's is working: the reviewer got its own checkout of the work rather than being refused at the
 author's worktree.
+
+---
+
+## F75 — a reviewer's independent confirmation is refused as a duplicate of the author's claim
+
+**Status:** fixed (this branch) — `duplicate_of` keys on the actor as well
+
+**Severity: B.** It silences the one actor whose evidence the record exists to collect.
+
+**What happens.** `reviewer`, dispatched onto `builder`'s finished task, checked the work itself
+and tried to record what it had verified:
+
+```
+mcp__agentweave__record_evidence {"identifier": "FR-1", "kind": "test_result", ...}
+  -> 409 "ev-5a98a7df0fa1 already records evidence for FR-1 on this task at this commit,
+          and is awaiting. Recording the same demonstration twice makes the reviewer decide
+          once per copy and overstates FR-1's evidence count."
+```
+
+`ev-5a98a7df0fa1` is **`builder`'s** evidence, not the reviewer's. A review turn runs in a detached
+checkout of the very commit under review, so the reviewer's requirement, task and commit are all
+necessarily the author's — the key `duplicate_of` uses cannot tell a confirmation from a copy.
+
+**This was created by F74's fix, and that is the honest way to describe it.** Before it, agent
+evidence carried no `task_id` at all, and `duplicate_of` returns None the moment any part of its
+key is missing — so the duplicate check **had never fired in production for agent evidence since it
+was written for F7.** Fixing F74 switched it on for the first time, and the first thing it did was
+refuse a reviewer. Two findings, one root: a column nothing filled in.
+
+**The fix.** Add the actor to the key. F7's measured case — one agent recording the same fact
+twice — is unchanged, because that is the same actor. A different actor at the same commit is a
+second demonstration and is stored.
+
+**Tests:** `test_a_reviewer_confirming_the_authors_work_is_not_a_duplicate`, watched to fail with
+the live message above, and `test_the_same_actor_is_still_refused_when_another_has_recorded_too`,
+which fails pre-fix too and exists so the new dimension cannot weaken F7's case. Note what the
+first version of that test got wrong: without setting the reviewer run's `workspace_dir` to a
+checkout of the same commit, the two footprints name different shas, no duplicate is possible, and
+the test passes against the defect.
+
+---
+
+## F76 — a review turn dispatched by hand dead-ends: the reviewer cannot record its verdict anywhere
+
+**Status:** open — filed, not fixed. The fix shape is an operator decision (see below).
+
+**Severity: A.** The operator starts a review through the product's own mechanism, pays for a full
+turn, and the verdict exists only in the chat transcript.
+
+**What happens.** `POST /agent/trigger {"agent":"reviewer","review_task_id":"task-…"}` succeeds,
+provisions the reviewer's detached checkout, and the agent does careful work — it re-ran the suite,
+wrote a comparison script, and checked negative amounts and rounding boundaries. Then every route
+for recording the verdict refused it:
+
+| It tried | It got |
+|---|---|
+| `update_task` to `approved` | 409 *"Cannot move a task from 'completed' to 'approved'. From 'completed' the available transitions are: under_review."* |
+| `update_task` to `under_review` | 403 *"it is still assigned to 'builder', the agent recorded as completing it, so the move would claim its own author is reviewing it. Assign a different reviewer, or clear the assignee to review it yourself."* |
+| `record_evidence` | 409 duplicate — F75 above |
+| `send_message` to `Operator` | 404 *"Unknown recipient 'Operator': no agent by that name is registered in this project"* — F77 below |
+| `decide_evidence` | never attempted; `agents.can_accept_evidence = 0` for every agent in the project, so it would have been refused too |
+
+Four closed doors, and the agent said so in its own words: *"There's a task assignment issue
+preventing the formal status update, so let me notify the operator directly."*
+
+**Each refusal is individually excellent.** The `under_review` one is the best refusal in the
+product: it names the problem, gives two remedies, and states the cost of doing nothing (*"Left as
+is, the task is claimable by nobody and 'builder' counts as busy for every other review in this
+project."*). This finding is not about any one of them. It is that the composition has no exit.
+
+**One defect, or a design gap?** A design gap, and the diagnosis is specific: **the loop/flow
+dispatch path staffs the task and the manual trigger path does not.** `scheduler.py:767-780` sets
+`task.assignee = agent` and applies `completed -> under_review` *before* the reviewer's turn —
+written before the transition deliberately, which is F70's fix. `POST /agent/trigger` with
+`review_task_id` does none of this: `run_task_binding.task_named_by` treats `review_task_id` as
+"check out this commit", explicitly *not* as ownership. So the same operation has two dispatch
+paths and only one of them leaves the reviewer able to finish.
+
+**Not fixed here, deliberately.** The repair could be (a) the manual trigger staffs the task the
+way the scheduler does, (b) the trigger refuses up front when the task's assignee would block the
+review, saying so before the money is spent, or (c) a reviewer gets a verdict channel that does not
+require owning the task. (a) matches existing behaviour, (b) is the cheapest, (c) is the largest.
+Which one is right is a product decision, and this run's standing instruction is to record rather
+than guess — see `decisions_for_user`.
+
+**Cost, since severity is ranked by that:** one full review turn (~3 minutes of Haiku, real
+tokens) producing an approved verdict that reached no durable record.
+
+---
+
+## F77 — an agent has no way to address the operator
+
+**Status:** open — filed, not fixed
+
+**Severity: C**, but it is the reason F76's turn ended in prose rather than a record.
+
+**What happens.** The reviewer, having concluded, tried to tell the person who asked:
+
+```
+mcp__agentweave__send_message {"to": "Operator", "content": "## Review Verdict: APPROVED ..."}
+  -> 404 "Unknown recipient 'Operator': no agent by that name is registered in this project"
+```
+
+`send_message` addresses the roster, and the operator is not on it. `ask_user` exists but is for
+*questions* — it takes 1-4 structured questions, blocks the run, and waits for answers. A verdict
+is not a question, and an agent that used `ask_user` to deliver one would be misusing the one
+blocking primitive the product has.
+
+**The refusal is legible about the wrong thing.** It correctly says no agent is named `Operator`;
+it does not say whether addressing the operator is possible at all, so the agent's next move is to
+guess another name. Per the standing rule that a refusal must say what *would* work, this one
+cannot, because nothing would.
+
+**Whether this should be fixed is genuinely open**, and connects to the retired question-detection
+backstop: the product deliberately does not guess when trailing prose is addressed to a human. An
+explicit `notify_operator` would not be a guess. Recorded, not decided.
