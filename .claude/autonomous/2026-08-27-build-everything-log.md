@@ -1054,3 +1054,29 @@ evidence while the operator's checkout sat ahead of the described work) in the t
 second finding (the null `footprint` in the API response) was noticed as a byproduct of investigating
 the first, not sought out — worth stating since it means the pass was not a deliberate audit of every
 `_evidence_view` call site, just the one this drive happened to exercise.
+
+## Iteration 12 — clean wrap-up, no new work started
+
+**07:30 local, 30 minutes before `stop_at` (08:00).** Read STATE.json and the iteration-11 log entry
+above; verified branch (`autonomous/2026-08-27-build-everything-decided`, up to date with origin,
+clean tree) and `git log` both matched what STATE.json claimed — `current: Q7`, HEAD at
+`b5aaee1` (a heartbeat-release commit), no reconciliation needed.
+
+`next_action` (written at the end of iteration 11) was explicit for exactly this situation: both F70
+and F71 sit in `decisions_for_user`, still unanswered — this is not a later night with the operator's
+input given, it is the same night, closer to `stop_at`. The instruction was to do a clean wrap-up
+only and not start new work if that is the case. Checked what else the queue offers regardless: Q4/R1
+and Q5/R1 were already skipped by the pre-authorised 05:00 rule (iteration 9) and nothing in this
+run's mandate authorises un-skipping them unattended; Q8 is explicitly gated on 3+ hours remaining,
+and 30 minutes remained. There is no queue item this iteration could both start and finish-and-verify
+before `stop_at`, so no code was touched. This entry, STATE.json's heartbeat, and the release commit
+are the only changes.
+
+Confirmed nothing was left dangling from iteration 11: `SELECT id FROM ai_jobs WHERE enabled=1`
+against the beta database is still empty, and no uncommitted changes exist anywhere in the tree
+(`git status` clean before this entry was written).
+
+**Next:** unchanged from iteration 11 — Q7 stays current, blocked on the operator's answer to either
+F70 or F71 (`decisions_for_user`). Once an answer is given, work that finding first; Q8 stays gated on
+3+ hours. If this branch fires again tonight with still no answer, repeat this same wrap-up rather
+than guessing at a remedy or reaching past the gate on Q8.
