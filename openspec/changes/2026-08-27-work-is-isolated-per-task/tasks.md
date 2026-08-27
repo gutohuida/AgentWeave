@@ -332,7 +332,7 @@ Read 4.14's implementation note before changing where the guard sits.
   agent name, and update `ConflictReport.agents` (`worktrees.py:583`) and the API's `ConflictInfo`
   (`api/v1/worktrees.py:43-45`) to name what actually conflicts. Both are fixed two-tuples of agent
   names today.
-- [ ] 6.3 Add a test asserting `GET /api/v1/projects/{id}/worktrees` (`api/v1/worktrees.py:57`)
+- [x] 6.3 Add a test asserting `GET /api/v1/projects/{id}/worktrees` (`api/v1/worktrees.py:57`)
   lists task workspaces as well as agent workspaces, each stating which it is, and that reading it
   provisions nothing — the promise `get_agent_workspace`'s docstring makes at `:103-106`, which this
   endpoint shares and does not state.
@@ -360,14 +360,14 @@ Read 4.14's implementation note before changing where the guard sits.
   there is one, and assert it. A branch of identically-messaged snapshots is unreadable, and the
   message is the only per-commit statement of what a turn was.
 
-- [ ] 6.8 Add `.agentweave/tasks` to the nested-project registration refusal
+- [x] 6.8 Add `.agentweave/tasks` to the nested-project registration refusal
   (`project_workspace.py:175-178`), with a test. It refuses registering a directory inside
   `.agentweave/worktrees` today; a task checkout is the same hazard by a different path.
-- [ ] 6.9 Extend the relocation guard (`project_lifecycle.py:240-241`) to count task checkouts, with
+- [x] 6.9 Extend the relocation guard (`project_lifecycle.py:240-241`) to count task checkouts, with
   a test. It refuses to relocate a project while `.agentweave/worktrees` is non-empty; a project
   whose only live checkouts are task checkouts would relocate today and break every git worktree
   registration, which stores absolute paths.
-- [ ] 6.10 Decide and record what removing an agent from the roster does to the task checkouts of
+- [x] 6.10 Decide and record what removing an agent from the roster does to the task checkouts of
   tasks it was working. `session_sync.py:131` calls `release_worktree` for the departing agent only,
   which now releases its per-agent checkout and leaves every task checkout behind. Argued correct —
   a task outlives whoever held it — but it is a behaviour nobody has written down, so write it down

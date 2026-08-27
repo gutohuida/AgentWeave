@@ -327,7 +327,11 @@ async def test_worktree_endpoints_list_active_agents_and_their_conflicts(
     )
 
     assert listing.status_code == 200
-    assert {item["agent"] for item in listing.json()} == {"taylor", "uma"}
+    # `name`/`kind` since task 6.3 widened this listing past agents; both are agents here.
+    assert {(item["kind"], item["name"]) for item in listing.json()} == {
+        ("agent", "taylor"),
+        ("agent", "uma"),
+    }
     assert conflicts.status_code == 200
     assert conflicts.json() == [
         {

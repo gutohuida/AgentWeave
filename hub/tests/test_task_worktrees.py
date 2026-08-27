@@ -526,3 +526,67 @@ def test_turn_branch_name_answers_the_agent_branch_outside_a_repository(tmp_path
     plain.mkdir()
 
     assert worktrees.turn_branch_name(plain, "builder", {}, task_id=TASK) == "agentweave/builder"
+
+
+# --- the endpoint that reports them (task 6.3) ------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_worktrees_endpoint_lists_task_workspaces_and_says_which_is_which(
+    app, auth_headers, repo, bind_project_workspace
+):
+    """Task 6.3. The listing is keyed by workspace now, so a task checkout appears beside an
+    agent checkout and each says what it belongs to.
+
+    `kind` is asserted per entry rather than only across the set: without it the response is two
+    rows whose `name` fields come from different namespaces, and an operator reading
+    `task-ab12cd34ef56` has no way to tell it is not an oddly-named agent.
+    """
+    await bind_project_workspace(repo)
+    base = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    task_path = ensure_task_worktree(repo, TASK, base, ())
+    agent_path = worktrees.ensure_worktree(repo, "builder")
+
+    listing = await app.get("/api/v1/projects/proj-test/worktrees", headers=auth_headers)
+
+    assert listing.status_code == 200
+    by_name = {item["name"]: item for item in listing.json()}
+    assert set(by_name) == {TASK, "builder"}
+    assert by_name[TASK] == {
+        "kind": "task",
+        "name": TASK,
+        "branch": worktrees.task_branch_name(TASK),
+        "path": str(task_path.resolve()),
+    }
+    assert by_name["builder"] == {
+        "kind": "agent",
+        "name": "builder",
+        "branch": worktrees.branch_name("builder"),
+        "path": str(agent_path.resolve()),
+    }
+
+
+@pytest.mark.asyncio
+async def test_reading_the_worktrees_listing_provisions_nothing(
+    app, auth_headers, repo, bind_project_workspace
+):
+    """Task 6.3's second half — the promise `get_agent_workspace` states in its docstring and
+    this endpoint kept only by accident of never having been asked to provision.
+
+    Asserted twice over, because either alone is weak. The listing of a repository with no
+    checkouts is empty *and* nothing appeared on disk: a test that only checked the response
+    would pass against an endpoint that provisioned a checkout and then filtered it back out of
+    its own answer, and a test that only checked disk would pass against one that reported a
+    workspace it had not created.
+    """
+    await bind_project_workspace(repo)
+
+    listing = await app.get("/api/v1/projects/proj-test/worktrees", headers=auth_headers)
+
+    assert listing.status_code == 200
+    assert listing.json() == []
+    assert not worktrees.task_root(repo).exists()
+    assert not worktrees.worktree_root(repo).exists()
+    # And git agrees: the only registered worktree is the project checkout itself.
+    registered = _git(repo, "worktree", "list", "--porcelain").stdout
+    assert registered.count("worktree ") == 1

@@ -233,6 +233,53 @@ async def test_copied_active_worktree_metadata_blocks_relocation(app, tmp_path) 
 
 
 @pytest.mark.asyncio
+async def test_copied_task_checkout_blocks_relocation(app, tmp_path) -> None:
+    """Task 6.9. A git worktree registration stores an absolute path, so relocating breaks every
+    live checkout — and since per-task isolation a project's only live checkouts can be task
+    checkouts, which the agent-only guard walked straight past.
+
+    Deliberately creates *no* `.agentweave/worktrees` directory: with one present the test would
+    pass against the unfixed guard and prove nothing.
+    """
+    original = tmp_path / "original"
+    relocated = tmp_path / "relocated"
+    original.mkdir()
+    async with async_session_factory() as session:
+        await ProjectLifecycleService(session).open_existing(original)
+
+    original.rename(relocated)
+    (relocated / ".agentweave" / "tasks" / "task-ab12cd34ef56").mkdir(parents=True)
+    assert not (relocated / ".agentweave" / "worktrees").exists()
+
+    async with async_session_factory() as session:
+        with pytest.raises(ProjectPathError) as caught:
+            await ProjectLifecycleService(session).open_existing(relocated)
+    assert caught.value.code == "project_relocation_active"
+
+
+@pytest.mark.asyncio
+async def test_empty_checkout_roots_do_not_block_relocation(app, tmp_path) -> None:
+    """The guard is about *live* checkouts, not about the directories having ever existed.
+
+    `release_task_worktree` removes the checkout and leaves `.agentweave/tasks` behind, so a
+    project that has finished every task it started would otherwise be permanently unrelocatable.
+    """
+    original = tmp_path / "original"
+    relocated = tmp_path / "relocated"
+    original.mkdir()
+    async with async_session_factory() as session:
+        await ProjectLifecycleService(session).open_existing(original)
+
+    original.rename(relocated)
+    (relocated / ".agentweave" / "tasks").mkdir(parents=True)
+    (relocated / ".agentweave" / "worktrees").mkdir(parents=True)
+
+    async with async_session_factory() as session:
+        project = await ProjectLifecycleService(session).open_existing(relocated)
+    assert project.working_directory == str(relocated.resolve())
+
+
+@pytest.mark.asyncio
 async def test_marker_write_failure_rolls_back_new_project(app, tmp_path, monkeypatch) -> None:
     directory = tmp_path / "rollback"
     directory.mkdir()

@@ -26,8 +26,16 @@ from ...launchability import get_agent_config
 router = APIRouter(prefix="/worktrees", tags=["worktrees"])
 
 
-class WorktreeInfo(BaseModel):
-    agent: str
+class WorkspaceInfo(BaseModel):
+    """One provisioned checkout, and what it belongs to (task 6.3).
+
+    `kind` and `name` rather than `agent`, for the reason `ConflictInfo` gives below: since
+    per-task isolation a checkout can belong to a task, and `name` alone puts two namespaces
+    in one field with nothing to tell them apart. A task id is not an oddly-named agent.
+    """
+
+    kind: str
+    name: str
     branch: str
     path: str
 
@@ -72,23 +80,37 @@ async def _resolve_repo_root(project_id: str, session: AsyncSession):
     return workspace.root
 
 
-@router.get("", response_model=List[WorktreeInfo])
+@router.get("", response_model=List[WorkspaceInfo])
 async def list_worktrees(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
-) -> List[WorktreeInfo]:
-    """List every agent branch currently provisioned under this project's repo root."""
+) -> List[WorkspaceInfo]:
+    """List every Hub-owned checkout currently provisioned under this project's repo root —
+    task checkouts as well as agent checkouts, each saying which it is (task 6.3).
+
+    Reads git's own registration through `list_workspace_branches` rather than composing an
+    answer from the pure path functions, so a checkout registered somewhere unexpected is
+    absent instead of being reported at the location it does not occupy.
+
+    **Provisions nothing**, the same promise `get_agent_workspace` makes below and for the same
+    reason — stated here rather than merely kept, because this endpoint now has a second
+    namespace to be tempted into materializing, and a listing that created what it reports would
+    make opening a panel a write.
+    """
     project_id, _ = project
     repo_root = await _resolve_repo_root(project_id, session)
     if not worktrees.is_git_repo(repo_root):
         return []
     return [
-        WorktreeInfo(
-            agent=agent,
-            branch=worktrees.branch_name(agent),
-            path=str(worktrees.worktree_path(repo_root, agent)),
+        WorkspaceInfo(
+            kind=workspace.kind,
+            name=workspace.name,
+            branch=workspace.branch,
+            path=str(workspace.path),
         )
-        for agent in sorted(worktrees.list_agent_branches(repo_root))
+        for workspace in sorted(
+            worktrees.list_workspace_branches(repo_root), key=lambda w: (w.kind, w.name)
+        )
     ]
 
 

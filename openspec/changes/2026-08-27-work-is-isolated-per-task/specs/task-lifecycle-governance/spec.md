@@ -66,6 +66,14 @@ Release SHALL NOT be able to fail a transition. A checkout that cannot be remove
 
 Because a terminal status can be left again, a task whose work resumes SHALL have its checkout re-provisioned with its previous work present. That is what keeping the branch is for.
 
+A task's terminal status SHALL be the only thing that releases its checkout. Removing from the roster the agent that was working a task SHALL release that agent's own checkout and SHALL NOT release the task's. A task outlives whoever held it: its status is unchanged by a roster edit, another agent may be assigned to continue it, and releasing its checkout would take the working tree away from a task for a reason that says nothing about the task. The work would survive on the branch either way — this is about not making a roster edit act on the task lifecycle.
+
+#### Scenario: Removing an agent leaves the checkouts of its tasks alone
+
+- **WHEN** an agent holding a task with its own checkout is removed from the roster
+- **THEN** the agent's own checkout is released
+- **AND** the task's checkout still exists, and the task's status is unchanged
+
 #### Scenario: An approved task's checkout is released
 
 - **WHEN** a task is approved
