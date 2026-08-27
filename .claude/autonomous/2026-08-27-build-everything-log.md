@@ -1104,3 +1104,28 @@ written.
 **Next:** unchanged — Q7 stays current, blocked on the operator's answer to F70 or F71. Once given,
 work that finding first, in whichever order the operator answered. Q8 stays gated on 3+ hours
 remaining. If this branch fires again tonight with still no answer, repeat this same wrap-up.
+
+## Iteration 14 — clean wrap-up, no new work started
+
+**07:40 local, 20 minutes before `stop_at` (08:00).** Fresh process. Read `STATE.json` and the
+iteration-13 entry above; verified branch (`autonomous/2026-08-27-build-everything-decided`, up to
+date with `origin`, clean tree) and `git log` both matched what `STATE.json` claimed — `current: Q7`,
+HEAD at `bb99dd5` (a heartbeat-release commit). No reconciliation needed.
+
+Same situation iterations 12 and 13 both describe, still unchanged: `decisions_for_user` carries no
+operator answer to either F70 or F71 — this is still the same night, now 20 minutes from `stop_at`,
+not a later session with input given. Checked the rest of the queue regardless: Q4/R1 and Q5/R1
+remain skipped under the pre-authorised 05:00 rule (iteration 9), and Q8 is explicitly gated on 3+
+hours remaining — 20 minutes does not clear that gate. No queue item can both start and
+finish-and-verify in the time left, so no code was touched.
+
+Confirmed nothing was left dangling: `SELECT id FROM ai_jobs WHERE enabled=1` against the beta
+database read empty (queried directly via `py -3.11` + `sqlite3`, `mode=ro`, not trusted from an API
+response). `git status` was clean before this entry was written.
+
+**Next:** unchanged — Q7 stays current, blocked on the operator's answer to F70 or F71. Once given,
+work that finding first, in whichever order the operator answered. Q8 stays gated on 3+ hours
+remaining. If this branch fires again tonight with still no answer, repeat this same wrap-up. If
+`stop_at` (08:00) has passed by the time of a future firing, that is the operator's signal the night
+is over — a firing after that point should still do this same minimal wrap-up rather than assume
+authorisation to keep going past the stated window.
