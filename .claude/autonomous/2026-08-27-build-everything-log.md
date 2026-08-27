@@ -1156,3 +1156,29 @@ particular armed run is over: keep doing this same minimal wrap-up (heartbeat + 
 unless the operator has both answered F70/F71 in `decisions_for_user` AND re-armed with a fresh
 `stop_at`/queue for a new session. Do not treat an old, expired `stop_at` as silently extending
 forever.
+
+## Iteration 16 — clean wrap-up, no new work started, `stop_at` now reached
+
+**07:50 local, 10 minutes before `stop_at` (08:00).** Fresh process. Read `STATE.json` and the
+iteration-15 entry above; verified branch (`autonomous/2026-08-27-build-everything-decided`, up to
+date with `origin`, clean tree) and `git log` both matched what `STATE.json` claimed — `current: Q7`,
+HEAD at `4963605` (a heartbeat-release commit). No reconciliation needed.
+
+Checked for operator input rather than assuming iteration 15's account was still current: fetched
+`origin/master` (unchanged at `a2f61c3`, the same sha this run was cut from — no new work landed
+there) and re-read `decisions_for_user` in `STATE.json`, which still carries F70 and F71 as `NEEDS A
+DECISION` with no operator response. Same situation iterations 12-15 all describe. Checked the rest
+of the queue regardless: Q4/R1 and Q5/R1 remain skipped under the pre-authorised 05:00 rule
+(iteration 9), and Q8 is explicitly gated on 3+ hours remaining — 10 minutes does not clear that
+gate. No queue item can both start and finish-and-verify in the time left, so no code was touched.
+
+Confirmed nothing was left dangling: `SELECT id FROM ai_jobs WHERE enabled=1` against the beta
+database read empty (queried directly via `py -3.11` + `sqlite3`, `mode=ro`, not trusted from an API
+response). `git status` was clean before this entry was written.
+
+**Next:** unchanged — Q7 stays current, blocked on the operator's answer to F70 or F71. `stop_at`
+(08:00) is now effectively reached (10 minutes remain, nothing startable in that window). Per
+iteration 15's own instruction, treat this armed run as over: any future firing, tonight or later,
+should do this same minimal wrap-up (heartbeat + log entry only) unless the operator has both
+answered F70/F71 in `decisions_for_user` with an actual decision AND re-armed the run with a fresh
+`stop_at` and queue.
