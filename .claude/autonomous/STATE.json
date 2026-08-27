@@ -124,5 +124,5 @@
   ],
   "carry_forward": "Iteration 1 (f8e0cf0) closed BASELINE: all 72 findings in scripts/drive/FINDINGS.md now carry a `**Status:**` line and the file opens with the open severity-A baseline. Open A: F12 (wholly open), F52 (partial, out of scope), F60 (partial, parked for F14). Two statuses came out different from what the commit subjects suggested and are worth not re-deriving: F14 is PARTIALLY fixed (7fcd172 shipped a derived awaiting_answer_reason that reports the wait WITHOUT moving the task status - the task-state half is the undecided operator call that blocks F60), and F35 was fixed 29ab883 then REVERTED 78459e4 on the operator's call, machinery removed with it. F60's guard is 033ec4c, 2026-08-10, sixteen days BEFORE F60 was filed - it is not a response to the finding. Scratch artefacts from the scan are in .claude/autonomous/scratch/ (mentions.txt, births.json, status-scan.txt), untracked. Before this run: merged F58 to master with CI green on all nine cells, and investigated F52 to a conclusion - every axis eliminated, its central inference disproved.",
   "started_at": "2026-08-27T22:05:00+01:00",
-  "last_heartbeat": "2026-08-27T22:08:00+01:00"
+  "last_heartbeat": "2026-08-27T21:28:26+01:00"
 }
