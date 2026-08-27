@@ -1080,3 +1080,27 @@ against the beta database is still empty, and no uncommitted changes exist anywh
 F70 or F71 (`decisions_for_user`). Once an answer is given, work that finding first; Q8 stays gated on
 3+ hours. If this branch fires again tonight with still no answer, repeat this same wrap-up rather
 than guessing at a remedy or reaching past the gate on Q8.
+
+## Iteration 13 — clean wrap-up, no new work started
+
+**07:35 local, 25 minutes before `stop_at` (08:00).** Fresh process. Read `STATE.json` and the
+iteration-12 entry above; verified branch (`autonomous/2026-08-27-build-everything-decided`, up to
+date with `origin`, clean tree) and `git log` both matched what `STATE.json` claimed — `current: Q7`,
+HEAD at `583fe7d` (a heartbeat-release commit). No reconciliation needed.
+
+Same situation iteration 12 described, unchanged: neither F70 nor F71 has an operator answer in
+`decisions_for_user` — this is still the same night, now 25 minutes from `stop_at`, not a later
+session with input given. Iteration 12's own `next_action` said to repeat the wrap-up rather than
+guess in that circumstance. Checked the rest of the queue regardless: Q4/R1 and Q5/R1 remain skipped
+under the pre-authorised 05:00 rule (iteration 9), and Q8 is explicitly gated on 3+ hours remaining —
+25 minutes does not clear that gate. No queue item can both start and finish-and-verify in the time
+left, so no code was touched.
+
+Confirmed nothing was left dangling: `SELECT id FROM ai_jobs WHERE enabled=1` against the beta
+database (`C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db`) read empty, queried directly
+via `sqlite3` rather than trusted from an API response. `git status` was clean before this entry was
+written.
+
+**Next:** unchanged — Q7 stays current, blocked on the operator's answer to F70 or F71. Once given,
+work that finding first, in whichever order the operator answered. Q8 stays gated on 3+ hours
+remaining. If this branch fires again tonight with still no answer, repeat this same wrap-up.
