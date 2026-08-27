@@ -22,6 +22,13 @@ def short_id() -> str:
     return uuid.uuid4().hex[:_ID_HEX_CHARS]
 
 
+#: The only severities the operator's views recognise (`EventRow.tsx`'s `SEVERITY_CHIP`,
+#: `ActivityLog.tsx`'s `SEVERITY_FILTERS`). Anything else — a caller's typo, an external
+#: `POST /logs` request, the historical `"warning"` spelling — is normalised to `"warn"` rather
+#: than written through, so an unrecognised spelling can never reach the operator unfiltered.
+_KNOWN_SEVERITIES = frozenset({"info", "warn", "error", "debug"})
+
+
 async def persist_event(
     session: AsyncSession,
     project_id: str,
@@ -30,14 +37,18 @@ async def persist_event(
     agent: Optional[str] = None,
     severity: str = "info",
     loop_id: Optional[str] = None,
-) -> None:
-    """Write one row to event_logs. Import is deferred to avoid circular imports.
+) -> str:
+    """Write one row to event_logs and return the (normalised) severity written.
+
+    Import is deferred to avoid circular imports.
 
     `loop_id` (design D13, task A4.1): the caller states it explicitly when the event is about a
     specific loop — never re-derived from `data` here, so a payload shaped differently than
     expected cannot silently leave the column NULL.
     """
     from .db.models import EventLog
+
+    normalised_severity = severity if severity in _KNOWN_SEVERITIES else "warn"
 
     entry = EventLog(
         id=f"evt-{short_id()}",
@@ -46,7 +57,8 @@ async def persist_event(
         agent=agent,
         loop_id=loop_id,
         data=data or {},
-        severity=severity,
+        severity=normalised_severity,
     )
     session.add(entry)
     await session.commit()
+    return normalised_severity

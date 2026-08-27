@@ -9,8 +9,8 @@
   "started_at": "2026-08-27T00:30:00+01:00",
   "stop_at": "2026-08-27T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 4,
-  "last_heartbeat": "2026-08-27T00:32:31+01:00",
+  "iteration": 5,
+  "last_heartbeat": "2026-08-27T02:02:07+01:00",
   "green_at_arming": "CI run 33022066377 on master: ALL 8 matrix cells green - ui-test, hub-test, and test x {ubuntu, windows, macos} x {3.11, 3.12}. This is the first time this code has ever been through Linux, macOS or Python 3.12; it had only ever run on Windows/3.11 locally. AW_CHECK_UI_BUNDLE=1 test_ui_build_stamp.py also green after the stamp was re-recorded. You are starting from a genuinely green tree - any red is yours.",
   "log_file": ".claude/autonomous/2026-08-27-build-everything-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
@@ -58,7 +58,7 @@
     {
       "id": "Q1-IMPL",
       "title": "reachable-by-a-human - implement",
-      "status": "open",
+      "status": "done",
       "detail": "Work the tasks.md the three rounds produced. UI work means cd hub/ui && npm run build, then py -3.11 scripts/refresh_ui_bundle.py, and commit hub/ui/src and hub/hub/static/ui TOGETHER. Do the mutation checks by name and record any that did not fail as predicted."
     },
     {
@@ -176,8 +176,8 @@
       "detail": "Work the tasks.md the three rounds produced. Mutation checks by name."
     }
   ],
-  "current": "Q1-IMPL",
-  "next_action": "Q1-IMPL: work openspec/changes/reachable-by-a-human/tasks.md in order (all three rounds are done; Q1-R3 found nothing to fix, recorded in the log with its four checks). Section 1 (severity normalisation, tasks 1.1-1.10) touches hub/hub/utils.py (persist_event), hub/hub/run_divergence.py:613, and hub/hub/api/v1/logs.py (push_log) plus their tests in hub/tests/ - follow the test-before-impl order the tasks are numbered in, and do NOT skip mutation checks 1.9/1.10 (revert the fix, confirm the named test fails, restore). Section 2 (conversation-title settings control, tasks 2.1-2.5) touches hub/ui/src/components/environment/ProjectSettingsPanel.tsx and hub/ui/src/__tests__/projectSettingsPanel.test.tsx - do NOT gate the runner Select's visibility on mode==='generate' (design rejected that; match the Checkpoint runner precedent's unconditional visibility), and do include a 'None' option (confirmed meaningful: falls back to the conversation's own agent's bound runner, not just tolerated by validation). Section 3 is the build+sweep: npm run build, py -3.11 scripts/refresh_ui_bundle.py (commit hub/ui/src and hub/hub/static/ui together), full hub pytest suite, ruff/black/mypy, npm run lint, npx openspec validate reachable-by-a-human --strict. This closes Q1 entirely - after it, advance to Q2-R1 (every-run-knows-its-task's one verification round), noting Q2-R1's own instruction to check whether Q1 moved run_divergence.py's severity emission and update design D6 if so (Q1-IMPL keeps severity='warn' at run_divergence.py:613 exactly as R1-R3 decided, so D6 should not need changing, but confirm rather than assume).",
+  "current": "Q2-R1",
+  "next_action": "Q2-R1: every-run-knows-its-task's single verification round (this change is ALREADY PROPOSED and --strict valid, so it gets ONE round, not three). Go claim by claim through proposal.md, design.md and tasks.md in openspec/changes/every-run-knows-its-task/: open every file:line citation and confirm it says what the artifact claims, verify every 'today the code does X' sentence against the code itself, confirm every task names a function/file/line that exists and is executable by a stranger in the stated order, and confirm every scenario is falsifiable. Pay particular attention to line numbers, which drift fastest: scheduler.py:2302 and :2621 (review_task_id lines), run_divergence.py:738 (severity), :64 (resolve docstring), :61, :84; agent_trigger.py:278; run_task_binding.py:143 and :167; turn_scheduler.py ~72 (batch selection, D1/F5 comment); checkpoints.py:138. FIRST confirm whether Q1-IMPL moved run_divergence.py's severity emission in a way that affects design D6 - it did not (run_divergence.py:613 still reads severity='warn', unchanged by Q1's fix, which lives entirely inside persist_event), but verify against D6's actual current text rather than trusting this sentence. Fix whatever is wrong IN the artifacts, then re-run `npx openspec validate every-run-knows-its-task --strict`. Record what this round found, including if it finds nothing (enumerate what was checked). This is the last verification round before Q2's implementation groups (Q2-IMPL-A/B/C) begin.",
   "decisions_for_user": [
     "THE 05:00 RULE, pre-authorised: the operator asked for the e2e-loop test explicitly, and the queue is now long enough that it may not be reached. If it is past 05:00 local and Q6 has not started, SKIP any change that has not started and go straight to Q6 and Q7. Do not abandon a change already part-built - finish or revert it first, never leave one half-landed. Rationale: an e2e drive of what was built is worth more than one more unproven change, and the operator's own ordering put the drive after the building precisely so it would test real work.",
     "SCOPE WARNING, stated so the morning is not a surprise: the operator's round discipline (three rounds per unproposed change, one for the proposed one) turns three changes into twelve queue items before their implementations. This is deliberate and is a quality decision, not an oversight - but the full queue almost certainly does not fit in one night. It is ordered so that stopping anywhere leaves complete work behind rather than a row of half-written proposals. If little got built, that is the discipline working as asked, not the loop failing.",

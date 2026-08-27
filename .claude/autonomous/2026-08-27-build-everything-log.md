@@ -258,3 +258,92 @@ the tasks.md the three rounds produced.
 evidence than one that catches something, precisely because a clean pass and a lazy pass look
 identical from outside. The four numbered checks above are the falsifiable record of what was
 actually queried and read this round, not a claim to take on faith.
+
+---
+
+## Iteration 4 — Q1-IMPL: implement `reachable-by-a-human` (2026-08-27T02:02:07+01:00)
+
+**Reconciliation, before any new work.** This process started fresh with a working tree that was
+already dirty — a prior iteration had begun Q1-IMPL (backend severity normalisation, the UI panel
+control, a UI rebuild) but had died before committing, logging, or advancing `STATE.json`
+(`iteration` still read 4, `current` still read `Q1-IMPL`, and `last_heartbeat` predated the last
+real commit). Per the "verify it" step, the inherited diff was not trusted on sight: every file was
+read claim-by-claim against `tasks.md` rather than assumed correct because it looked plausible.
+
+One cosmetic side-quest, resolved and not worth more time: `hub/hub/api/v1/logs.py` in `HEAD`
+already had a **pre-existing mix** of CRLF (68 lines) and bare LF (29 lines) line endings — confirmed
+with a binary-safe `git cat-file -p` read via `subprocess`, not through Git Bash pipes (which
+themselves add or strip `\r` in text mode and gave contradictory readings first). The inherited edit
+had normalised the whole file to CRLF, which is why its diff looked like ~60 lines changed for a
+~4-line edit. Normalising the other direction (all-LF) made the diff *worse*, not better, because
+`HEAD` itself isn't internally consistent. Left as the inherited full-CRLF version — CRLF vs LF has
+no behavioural effect in Python, and untangling a pre-existing per-line inconsistency in `HEAD` is
+out of scope for this task. Not introduced by this run; recording it so a future session doesn't
+re-diagnose it as new damage.
+
+**What the inherited diff actually contained, verified against `tasks.md` section by section:**
+
+- Section 1 (severity normalisation): `hub/hub/utils.py`'s `persist_event` gained
+  `_KNOWN_SEVERITIES = frozenset({"info", "warn", "error", "debug"})`, normalises any other value to
+  `"warn"`, and now returns the normalised value instead of `None`. `run_divergence.py:613` changed
+  `"warning"` → `"warn"`. `logs.py`'s `push_log` captures `persist_event`'s return and broadcasts
+  that instead of `body.severity`. `hub/tests/test_event_severity.py` (new, 116 lines) covers tasks
+  1.1, 1.2, 1.5, 1.6 exactly as specified.
+- Section 2 (conversation-title control): `ProjectSettingsPanel.tsx` gained two rows — a mode
+  `Select` (`truncate`/`generate`) and a runner `Select` with a `None` option falling back to the
+  triggering conversation's own agent's bound runner (confirmed by Q1-R3's check 4, not re-derived
+  here) — modelled directly on the existing Checkpoint runner row. `projectSettingsPanel.test.tsx`
+  restructured its `settings` fixture into a `makeSettings()` factory (needed because the new "changes
+  the mode" test mutates the fixture before render) and added the two tests tasks 2.1 specifies.
+  All citations in the diff matched the code they touched; nothing was invented.
+
+**Ran what the inherited work had not**, in task order:
+
+- 1.8: `hub/tests/test_event_severity.py` — 4/4 passed in isolation.
+- **1.9 mutation check**: reverted `persist_event`'s mapping to `normalised_severity = severity`
+  (no-op). `test_persist_event_normalises_unknown_severity` failed exactly as predicted (extra
+  `'warn'` in the expected set never appeared; raw `'warning'`/`'critical'` were written through).
+  Restored; re-ran green.
+- **1.10 mutation check**: reverted `push_log`'s broadcast to read `body.severity` again.
+  `test_push_log_broadcast_carries_normalised_severity` failed exactly as predicted
+  (`'critical' == 'warn'` assertion error). Restored; re-ran green.
+- 2.4: `npx vitest run src/__tests__/projectSettingsPanel.test.tsx` — 13/13 passed. `npm run lint` —
+  clean.
+- **2.5 mutation check**: replaced the mode `Select`'s `onChange` with a no-op. `changes the
+  conversation title mode and saves it` failed exactly as predicted (`update` was called with
+  `conversation_title_mode: 'truncate'`, the untouched initial value, instead of `'generate'`).
+  Restored; re-ran 13/13 green.
+- 3.1: `cd hub/ui && npm run build` — same asset hash (`index-awJ7Bmpi.js`) as the inherited build,
+  confirming the source content matched what iteration 4 had already built, not a fluke of a stale
+  bundle. `py -3.11 scripts/refresh_ui_bundle.py` re-recorded the stamp.
+  `git status` after showed exactly a rename (`index-CsVsE-C3.js` → `index-awJ7Bmpi.js`) plus
+  `index.html`/`ui-build-stamp.json` — the expected shape of a real rebuild, not a no-op.
+- 3.3: **Full `pytest hub/tests/ -v` (actually `-q`, 3282 collected)** — `3198 passed, 84 skipped,
+  1 xpassed in 1189.63s (0:19:49)`. No failures, no new skips beyond the suite's existing baseline.
+  The one `xpassed` is not new to this change (nothing touched here carries an `xfail` marker) and
+  was not chased further under this iteration's scope.
+- 3.4: `ruff check src/ hub/ tests/` — all checks passed. `black --check --target-version py311
+  src/ hub/hub/ hub/tests/ tests/` — 491 files unchanged. `mypy src/` — no issues, 22 files.
+- 3.5: `cd hub/ui && npm run lint` — clean (0 warnings, `--max-warnings 0`).
+- 3.6: `npx openspec validate reachable-by-a-human --strict` — valid.
+
+All of `tasks.md`'s 21 checkboxes are now checked, each with the measured result recorded inline in
+the task list itself, not just here.
+
+**Q1 is closed.** Staged explicit paths (never `-A`): `hub/hub/api/v1/logs.py`,
+`hub/hub/run_divergence.py`, `hub/hub/utils.py`, `hub/hub/static/ui/` (rename + `index.html` +
+stamp), `hub/tests/test_event_severity.py`, `hub/ui/src/__tests__/projectSettingsPanel.test.tsx`,
+`hub/ui/src/components/environment/ProjectSettingsPanel.tsx`, and the updated `tasks.md`.
+
+**Next: Q2-R1** — every-run-knows-its-task's single verification round. Its own queue text already
+flags the one thing to check first: whether Q1 moved `run_divergence.py`'s severity emission in a
+way that invalidates design D6. It did not — `run_divergence.py:613` still reads `severity="warn"`,
+the exact literal D6 was written against (R1/R2/R3 all decided the fix stays *inside*
+`persist_event`, not by changing what call sites pass) — but Q2-R1 should confirm this against D6's
+actual text rather than trust this paragraph's account of it.
+
+*What a reviewer should distrust about this entry*: the implementation itself was inherited, not
+newly authored by this process — this iteration's contribution is the verification (reading every
+line against `tasks.md`, running every test and both mutation checks, running the full sweep), not
+the code. If the inherited code had been subtly wrong in a way none of the specified checks would
+catch, this entry would not have found it either.

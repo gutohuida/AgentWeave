@@ -13,22 +13,41 @@ const project = {
   turn_delivery_cap: 8, agent_budget: 4, token_budget: 10000, allow_agent_jobs: false, agents: [],
 }
 
-const settings = {
-  name: 'Website',
-  hop_budget: 12,
-  turn_delivery_cap: 8,
-  agent_budget: 4,
-  token_budget: 10000,
-  allow_agent_jobs: false,
-  conversation_title_mode: 'generate' as const,
-  conversation_title_runner_id: 'runner-titles',
-  checkpoint_mode: 'offered' as const,
-  checkpoint_threshold_mode: 'tokens' as const,
-  checkpoint_threshold_value: 150_000,
-  checkpoint_notes_value: 120_000,
-  checkpoint_runner_id: 'runner-haiku',
-  checkpoint_model: 'claude-haiku-4-5-20251001',
+function makeSettings(): {
+  name: string
+  hop_budget: number
+  turn_delivery_cap: number
+  agent_budget: number
+  token_budget: number
+  allow_agent_jobs: boolean
+  conversation_title_mode: 'truncate' | 'generate'
+  conversation_title_runner_id: string | null
+  checkpoint_mode: 'off' | 'offered' | 'automatic'
+  checkpoint_threshold_mode: 'percent' | 'tokens'
+  checkpoint_threshold_value: number
+  checkpoint_notes_value: number
+  checkpoint_runner_id: string | null
+  checkpoint_model: string | null
+} {
+  return {
+    name: 'Website',
+    hop_budget: 12,
+    turn_delivery_cap: 8,
+    agent_budget: 4,
+    token_budget: 10000,
+    allow_agent_jobs: false,
+    conversation_title_mode: 'generate',
+    conversation_title_runner_id: 'runner-titles',
+    checkpoint_mode: 'offered',
+    checkpoint_threshold_mode: 'tokens',
+    checkpoint_threshold_value: 150_000,
+    checkpoint_notes_value: 120_000,
+    checkpoint_runner_id: 'runner-haiku',
+    checkpoint_model: 'claude-haiku-4-5-20251001',
+  }
 }
+
+let settings = makeSettings()
 
 let suggestion: { suggestion: string | null; chosen: string | null; is_repository: boolean } = {
   suggestion: 'master',
@@ -48,7 +67,12 @@ vi.mock('@/api/projects', () => ({
 }))
 
 vi.mock('@/api/runners', () => ({
-  useRunners: () => ({ data: [{ id: 'runner-haiku', name: 'Haiku 4.5', cli: 'claude', model: null }] }),
+  useRunners: () => ({
+    data: [
+      { id: 'runner-haiku', name: 'Haiku 4.5', cli: 'claude', model: null },
+      { id: 'runner-titles', name: 'Titler', cli: 'claude', model: null },
+    ],
+  }),
 }))
 
 vi.mock('@/api/modelCatalog', () => ({
@@ -67,6 +91,7 @@ describe('phase 5 project settings and locate repair', () => {
     update.mockReset()
     relocate.mockReset()
     suggestion = { suggestion: 'master', chosen: null, is_repository: true }
+    settings = makeSettings()
     useConfigStore.setState({ selectedProjectId: 'proj-a' })
   })
 
@@ -176,6 +201,21 @@ describe('phase 5 project settings and locate repair', () => {
       checkpoint_threshold_mode: null,
       checkpoint_threshold_value: null,
       checkpoint_notes_value: null,
+    }))
+  })
+
+  it('reflects the stored conversation title mode', () => {
+    render(<ProjectSettingsPanel />)
+    expect(screen.getByLabelText('Conversation titles')).toHaveValue('generate')
+  })
+
+  it('changes the conversation title mode and saves it', () => {
+    settings.conversation_title_mode = 'truncate'
+    render(<ProjectSettingsPanel />)
+    fireEvent.change(screen.getByLabelText('Conversation titles'), { target: { value: 'generate' } })
+    fireEvent.click(screen.getByText('Save settings'))
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      conversation_title_mode: 'generate',
     }))
   })
 })
