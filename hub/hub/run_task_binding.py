@@ -69,6 +69,19 @@ DEFAULT_POLICY = POLICY_SURFACE
 #: to end. Keeping it out of `POLICIES` is what stops an operator setting it on a task.
 POLICY_REVIEW = "review"
 
+#: What governed a *live flow's own work turn* diverging on a task whose policy was `retry`,
+#: recorded in `RunDivergence.policy_applied` (design D7).
+#:
+#: **Deliberately not a member of `POLICIES`**, for the same reason `POLICY_REVIEW` is kept out:
+#: the column records which rule actually governed, and a live flow governs its own work turn's
+#: divergence directly rather than through the task's `divergence_policy` — the flow is going to
+#: fire the task again on its own next tick, so starting a `retry` run here would race it. Writing
+#: `policy_applied='retry'` beside an outcome nothing retried would be the one-word-two-meanings
+#: defect this change exists to end, inverted onto a fourth case `POLICY_REVIEW` did not cover.
+#: `escalate` is unaffected — it reassigns to a *different* agent, which is not something the
+#: flow's next firing does.
+POLICY_FLOW = "flow"
+
 #: What was actually done. Differs from the policy whenever one fell back — `escalate` naming no
 #: agent, or a retry that had already spent its single hop.
 OUTCOME_SURFACED = "surfaced"

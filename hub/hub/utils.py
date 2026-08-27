@@ -37,6 +37,7 @@ async def persist_event(
     agent: Optional[str] = None,
     severity: str = "info",
     loop_id: Optional[str] = None,
+    commit: bool = True,
 ) -> str:
     """Write one row to event_logs and return the (normalised) severity written.
 
@@ -45,6 +46,13 @@ async def persist_event(
     `loop_id` (design D13, task A4.1): the caller states it explicitly when the event is about a
     specific loop — never re-derived from `data` here, so a payload shaped differently than
     expected cannot silently leave the column NULL.
+
+    `commit=False` (`every-run-knows-its-task`, task 4.8) is for a caller that is itself called
+    from inside another function's uncommitted transaction — `resolve_divergences_for_task`,
+    reached from `apply_transition` before its own caller commits. Committing here would land the
+    caller's still-in-flight write early, ahead of the "the caller commits" contract
+    `apply_transition` states of itself. Every other caller keeps the default: an event usually is
+    the transaction, not a passenger in someone else's.
     """
     from .db.models import EventLog
 
@@ -60,5 +68,6 @@ async def persist_event(
         severity=normalised_severity,
     )
     session.add(entry)
-    await session.commit()
+    if commit:
+        await session.commit()
     return normalised_severity

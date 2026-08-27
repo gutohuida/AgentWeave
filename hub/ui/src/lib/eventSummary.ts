@@ -45,6 +45,10 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     // The opposite of the above, and worded so it cannot be mistaken for it: the agent asked
     // rather than guessed, and the work is waiting on the operator, not on nobody.
     case 'task_blocked': return `${data.agent} is waiting on you before continuing "${data.task_title ?? data.task_id}"`
+    // The close to `run_diverged`, and deliberately its own kind rather than a `resolved` flag on
+    // that one — a consumer filtering by event kind (this timeline, a future count) would tally a
+    // resolution as a new divergence otherwise.
+    case 'run_divergence_resolved': return `${data.count} open divergence${data.count === 1 ? '' : 's'} on ${data.task_id} resolved`
     case 'task_unblocked': return `your answer released "${data.task_title ?? data.task_id}"`
     case 'watchdog_started': return `transport=${data.transport}`
     case 'watchdog_stopped': return 'watchdog stopped'
