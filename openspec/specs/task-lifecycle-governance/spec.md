@@ -261,6 +261,81 @@ history states that an operator did so.
 - **WHEN** the agent that completed a task requests `rejected` or `revision_needed` on it
 - **THEN** the request is refused on the same grounds as self-approval
 
+### Requirement: A task entering review must not still name its author as its holder
+
+The system SHALL refuse a transition to `under_review` when the task's assignee is the **agent**
+recorded as having moved it to `completed`. Where the task has no assignee, or no completer is
+recorded, the transition SHALL be permitted.
+
+This rule binds **every actor, including the operator**, and that is what distinguishes it from
+author/reviewer separation above. That rule is about authority — who is entitled to sign work off —
+and exempts the operator because a single-operator project must be able to approve anything. This
+rule is about the state the move produces, which misdescribes the world whoever writes it: it
+asserts that a reviewer holds the task while naming its author. An operator who intends to review
+the work themselves SHALL do so by clearing or reassigning the assignee, which the refusal states.
+
+The permitted cases are deliberate. An unassigned task claims that nobody holds it, so nothing is
+false and no work is stranded. An unattributable one follows the same asymmetry the offer rule uses
+— refuse to *offer* finished work whose author cannot be ruled out, but permit an actor to *act* on
+it — because a rule that blocked every move it could not attribute would strand tasks completed
+before transitions were recorded.
+
+Because the assignee is read at the moment of the transition, any surface that sets both a status
+and an assignee in one operation SHALL apply the assignee first, so that a single request naming a
+reviewer and sending the task to review is accepted rather than refused on the assignee it replaces.
+
+#### Scenario: Sending a task to review without reassigning it is refused
+
+- **WHEN** a task is moved to `under_review` while still assigned to the agent that completed it
+- **THEN** the request is refused with a typed error naming the remedy
+- **AND** the task remains in its pre-request status
+
+#### Scenario: The operator is bound by the same rule
+
+- **WHEN** the operator makes that same move
+- **THEN** it is refused on the same grounds
+
+#### Scenario: Naming a reviewer in the same request succeeds
+
+- **WHEN** one request sets the assignee to a different agent and the status to `under_review`
+- **THEN** the request succeeds
+
+#### Scenario: A task with no assignee may enter review
+
+- **WHEN** a completed task with no assignee is moved to `under_review`
+- **THEN** the request succeeds
+
+#### Scenario: A task whose completer is unknown may enter review
+
+- **WHEN** a completed task with no recorded completer is moved to `under_review`
+- **THEN** the request succeeds
+
+### Requirement: A review a flow cannot staff is not reported as staffed
+
+A flow SHALL NOT treat a task in `under_review` as held by a reviewer when that task's assignee is
+the agent recorded as completing it. It SHALL instead resolve a reviewer for it through the ordinary
+reviewer ladder, which excludes the author, and record the result as a staffing outcome.
+
+Such a task is claimable by nobody and its assignee counts as holding active work, so left
+unrecognised it is never reviewed and its assignee is unavailable to review anything else in the
+project, with nothing reporting either fact. This rule is what lets a task recorded that way before
+the refusal above existed recover, rather than remaining stuck behind a rule that arrived later.
+
+Recovery SHALL be a reassignment and SHALL NOT move the task to another status: the task is already
+in review, and only who holds it was wrong.
+
+#### Scenario: A task in review held by its own author is restaffed
+
+- **WHEN** a flow fires on a queue holding such a task and an eligible reviewer exists
+- **THEN** the task's assignee becomes that reviewer
+- **AND** the task remains in `under_review`
+- **AND** a review turn is dispatched to the new reviewer
+
+#### Scenario: The author is never restaffed onto it
+
+- **WHEN** a reviewer is resolved for such a task
+- **THEN** the agent that completed the work is not among the candidates
+
 ### Requirement: Governance holds identically over HTTP and MCP
 
 Transition validation, actor separation, and history recording SHALL be enforced at the shared

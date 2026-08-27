@@ -1135,6 +1135,15 @@ async def update_task_for_actor(
     # below. A no-op restatement of the current status returns `None` from `apply_transition`, which
     # carries no advisories the same way it carries no new transition row.
     approval_report: List[Any] = []
+    # **Before the transition, not after it** (finding F70). `_guard_reviewer_is_not_the_author`
+    # refuses `-> under_review` while the task still names the agent that completed it, and the
+    # remedy it names -- assign a different reviewer -- is most naturally done in the same PATCH
+    # that sends the task to review. Applied afterwards, that one call was refused on the strength
+    # of an assignee the same request was about to replace, and the operator had to make two.
+    # Nothing between here and the transition reads the old value: `release_reason` and
+    # `release_conversations_bound_to` are about the task and its runs, not about who holds it.
+    if body.assignee is not None:
+        task.assignee = body.assignee
     if body.status is not None:
         if body.status == STATUS_BLOCKED and not actor.is_operator:
             # A block is observed, never asserted (design D3). An agent that could declare itself
@@ -1151,8 +1160,11 @@ async def update_task_for_actor(
                 ),
             )
         # Raises TransitionRefusedError — an illegal move, or one this actor may not make — which the
-        # exception handler turns into 409/403. Nothing has been mutated at that point, so the
-        # refusal cannot leave a half-applied update behind.
+        # exception handler turns into 409/403. A refusal cannot leave a half-applied update behind:
+        # the assignee written above is *staged*, not committed, and `get_session` closes the session
+        # on the way out, which rolls the transaction back. (This comment used to say nothing had
+        # been mutated at this point, which stopped being true when F70 moved the assignee write
+        # above the transition — the guarantee is the same, the reason for it is not.)
         transition = await apply_transition(session, task, body.status, actor)
         approval_report = list(getattr(transition, "reported_advisories", None) or [])
         # Every exit from the waiting status drops the text, whichever exit it was — released,
@@ -1169,8 +1181,6 @@ async def update_task_for_actor(
             await release_conversations_bound_to(session, task)
     if body.priority is not None:
         task.priority = body.priority
-    if body.assignee is not None:
-        task.assignee = body.assignee
     if body.description is not None:
         task.description = body.description
     if body.notes is not None:

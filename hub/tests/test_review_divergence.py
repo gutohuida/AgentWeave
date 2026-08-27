@@ -120,9 +120,16 @@ async def _review_run_that_said_nothing(db, run_id: str, task: Task, *, reviewer
     assignee (what `_enter_selected_task` does for every staged review), and the entry delivered to
     the run carries `review_task_id` and no `task_id` — which is exactly the shape that made every
     review run in this product's history unbound before D1.
+
+    **The assignee is written before the transition, and the order is now load-bearing** (finding
+    F70). `_guard_reviewer_is_not_the_author` refuses `-> under_review` while the task still names
+    the agent that completed it, which is what `assignee` holds until this line runs. Writing it
+    afterwards — as this fixture did, and as `_enter_selected_task` itself did — meant the guard saw
+    the author and refused a review the product had staffed correctly. Both moved together, so this
+    fixture keeps meaning what its first paragraph claims.
     """
-    await apply_transition(db, task, "under_review", run_actor(f"run-stage-{task.id}", reviewer))
     task.assignee = reviewer
+    await apply_transition(db, task, "under_review", run_actor(f"run-stage-{task.id}", reviewer))
     run = Run(id=run_id, project_id="proj-test", agent=reviewer, status="completed")
     db.add(run)
     await db.flush()

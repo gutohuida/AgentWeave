@@ -171,6 +171,59 @@ async def _guard_author_is_not_reviewer(
         )
 
 
+async def _guard_reviewer_is_not_the_author(
+    session: AsyncSession, task: Task, to_status: str, actor: Actor
+) -> None:
+    """A task entering `under_review` may not still name its author as the one holding it.
+
+    Found live 2026-08-27 (F70), driving a fresh project. A task was moved straight from
+    `completed` to `under_review` without reassigning it away from the agent that completed it.
+    Nothing refused, nothing logged, and the row was wedged permanently: `scheduler`'s
+    `WITH_REVIEWER_LOOP_TASK_STATUSES` branch reads `under_review` as *a reviewer already holds
+    this*, so the task is claimable by nobody and its exits are never offered; and because
+    `_agents_that_are_free` counts that assignee as holding active work, the agent became
+    unrecruitable as a reviewer for every **other** task in the project too. One bad edge, and the
+    project's whole review capacity quietly drops by one.
+
+    **This binds the operator, and that is the difference from `_guard_author_is_not_reviewer`.**
+    That guard is about *authority* — who is entitled to sign off work — and the operator is
+    exempt because a single-operator project must be able to approve anything. This one is about
+    the *state the move produces*, which is a lie about the world no matter who writes it: it says
+    a reviewer holds the task while naming the author. An operator reviewing the work themselves is
+    still free to; they clear or reassign `assignee` first, which is what the refusal asks for.
+
+    Two permissive cases, both deliberate:
+
+    * **No assignee.** Nobody is claimed to hold it, so nothing is false and nothing wedges — the
+      scheduler's branch records an in-flight holder only `if task.assignee`. This is the operator
+      taking a task off the agents' board to look at themselves.
+    * **No recorded completer.** The same asymmetry `_guard_author_is_not_reviewer` documents and
+      `task_is_claimable_by` explains at length: refuse to *offer*, permit to *act*. A guard that
+      blocked every move it could not attribute would stop legitimate work over a missing history
+      row, and a task completed before the transition table existed has no completer to compare.
+
+    The flow's own path satisfies this by construction — `_enter_selected_task` writes the
+    reviewer into `assignee` before it transitions, which it must, or the flow would refuse itself
+    here on every review it staffs.
+
+    **`actor` is deliberately unread**, and keeping it in the signature is the point rather than an
+    oversight: this is one of the three actor-entitlement guards `apply_transition` calls in a row,
+    so it takes their shape — and the fact that the parameter goes unused is exactly the paragraph
+    above, in code. Nobody is exempt because the rule is not about who is asking.
+    """
+    if to_status != "under_review" or not task.assignee:
+        return
+    completing_agent = await _agent_that_completed(session, task.id)
+    if completing_agent is not None and completing_agent == task.assignee:
+        raise ActorNotPermittedError(
+            f"Cannot move task {task.id} to 'under_review': it is still assigned to "
+            f"{task.assignee!r}, the agent recorded as completing it, so the move would claim its "
+            f"own author is reviewing it. Assign a different reviewer, or clear the assignee to "
+            f"review it yourself. Left as is, the task is claimable by nobody and "
+            f"{task.assignee!r} counts as busy for every other review in this project."
+        )
+
+
 async def _guard_run_holds_the_task(
     session: AsyncSession, task: Task, to_status: str, actor: Actor
 ) -> None:
@@ -300,6 +353,12 @@ async def apply_transition(
         raise IllegalTransitionError(refusal_detail(from_status, to_status, actor.kind))
 
     await _guard_author_is_not_reviewer(session, task, to_status, actor)
+
+    # Beside the author/reviewer guard for the same reason `_guard_run_holds_the_task` is: it asks
+    # whether this actor may make this move, not whether the work is ready. It runs on the other
+    # end of the review — the entry rather than the verdict — and F70 is what the missing half
+    # cost.
+    await _guard_reviewer_is_not_the_author(session, task, to_status, actor)
 
     # Who is doing the work, before anything about whether the work may proceed (F27). Beside the
     # author/reviewer guard because it answers the same kind of question — is this actor entitled to

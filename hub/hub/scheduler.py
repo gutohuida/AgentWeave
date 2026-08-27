@@ -754,19 +754,31 @@ async def _enter_selected_task(
     adding the review half to one and not the other is exactly the drift this module's own
     `_loop_queue_order` comment warns about.
     """
+    # The selection's agent, not the job's: from group 2 these differ whenever a flow staffs a task
+    # with someone other than the job's own agent, and a task assigned to the job's agent while
+    # another works it is the first place that divergence would become a lie the board repeats.
+    #
+    # **Written before the transition, not after** (finding F70). `_guard_reviewer_is_not_the_author`
+    # refuses `-> under_review` while the task still names the agent that completed it, which is
+    # exactly what `assignee` holds at this moment on a flow-staffed review. Assigning afterwards
+    # left the guard reading the author and refusing the flow's own correct staffing. Both writes
+    # are staged and the caller commits them together, so this is an ordering change within one
+    # transaction and nothing observes the intermediate state.
+    task.assignee = agent
     if is_review:
         if task.status in WITH_REVIEWER_LOOP_TASK_STATUSES:
             # Already with a reviewer. Reachable when a firing re-stages a selection whose entry
             # was queued but whose turn never started; moving again would be an illegal edge.
+            #
+            # Also how an F70-wedged row recovers: the walk below routes a task whose reviewer is
+            # its own author back through the ladder, and it arrives here already in
+            # `under_review`. The assignment above is the whole repair -- a real reviewer replaces
+            # the author, and no edge is travelled.
             pass
         elif task.status in REVIEWABLE_LOOP_TASK_STATUSES:
             await apply_transition(session, task, "under_review", operator())
     elif task.status == "pending":
         await apply_transition(session, task, "assigned", operator())
-    # The selection's agent, not the job's: from group 2 these differ whenever a flow staffs a task
-    # with someone other than the job's own agent, and a task assigned to the job's agent while
-    # another works it is the first place that divergence would become a lie the board repeats.
-    task.assignee = agent
 
 
 async def _claim_loop_task(session: AsyncSession, loop: Loop, *, agent: str) -> "list[Task]":
@@ -1205,6 +1217,9 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     default_taken = False
 
     for task in await _loop_candidates(session, loop):
+        # Set by the `WITH_REVIEWER` branch only; declared here so the arms below can read it
+        # unconditionally rather than each guarding on which branch ran.
+        wedged_review = False
         startable, refusal = await candidate_is_startable(session, task)
         if not startable:
             assert refusal is not None  # only the gated branch reports not-startable
@@ -1227,11 +1242,30 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             # would read as having nothing to do. It is also what makes a review that ended
             # without a verdict *visible* -- the task stays here with its reviewer named, which is
             # a stall the operator can see and act on, where F45 was a spend loop they could not.
+            #
+            # **Unless the reviewer it names is the author** (finding F70). A task moved into
+            # `under_review` without being reassigned satisfies every word above and none of its
+            # meaning: nobody is reviewing it, the exits are offered to nobody, and
+            # `_agents_that_are_free` counts the author busy on it forever -- costing the project a
+            # reviewer for every *other* task too, silently. `_guard_reviewer_is_not_the_author`
+            # now refuses the edge that creates this, so no new row can arrive here; rows already
+            # wedged before that guard existed, or written straight into the status, still can.
+            #
+            # Recovered rather than merely reported, and through the ladder rather than by falling
+            # through to the ordinary-work arm below -- that arm would find the author in
+            # `assignee` and re-staff the review as implementation, which is F10 arriving by the
+            # new route this branch's own comment warns about. `wedged_review` carries the decision
+            # past that arm to the ladder, which excludes the author by construction.
             if task.assignee:
-                in_flight.append((task.id, task.assignee))
-            continue
+                wedged_author = await _agent_that_completed(session, task.id)
+                if wedged_author is not None and wedged_author == task.assignee:
+                    wedged_review = True
+                else:
+                    in_flight.append((task.id, task.assignee))
+            if not wedged_review:
+                continue
 
-        if task.status not in REVIEWABLE_LOOP_TASK_STATUSES:
+        if not wedged_review and task.status not in REVIEWABLE_LOOP_TASK_STATUSES:
             # Ordinary work, resolved per design D12.
             if task.assignee:
                 # Already staffed; this firing is *resuming* it, not staffing it. Overwriting the
