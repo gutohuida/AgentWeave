@@ -458,3 +458,327 @@ valid), so unlike Q1's three-round changes, nothing here gets an R2/R3 pass to c
 missed. The Risk-section figures were spot-checked for the headline number only, not fully
 reproduced; if task 6.1's baseline disagrees sharply with `9/19`/`45/55`, that is new information, not
 a contradiction of anything checked here.
+
+---
+
+## Iteration 6 — Q2-IMPL-A: every-run-knows-its-task groups 1-2, finished and verified (2026-08-27T04:03:52+01:00)
+
+**Reconciliation.** Fresh process. `git log` matched `STATE.json` (HEAD at `c0e4cba`, the heartbeat
+release after iteration 5), but the tree was **dirty**: a prior, uncredited firing had already
+written the group 1-2 implementation and its tests (`turn_scheduler.py`, `agent_trigger.py`,
+`run_task_binding.py`, `scheduler.py`, `test_scheduler.py`, `test_agent_trigger.py`, and a new
+`test_turn_scheduler.py`) but never ran a single test, updated `tasks.md`, committed, or logged —
+`iteration` in `STATE.json` already read `6` with a `last_heartbeat` *older* than iteration 5's own
+log timestamp, meaning that firing started, wrote code, and died before reaching any of the verify
+steps this driver requires. Read every diff against `tasks.md` before running anything: group 1's
+`_entry_kind` narrowing in `turn_scheduler.py`, the mixed-batch refusal in `agent_trigger.py`'s
+`_review_task_from_entries`, and the docstring update in `run_task_binding.py` all matched the
+design exactly; group 2's two `task_id=` lines in `scheduler.py` matched too. The code was sound —
+what was missing was ever running it.
+
+**First real run of the new tests hung the process, not merely failed it.**
+`pytest hub/tests/test_turn_scheduler.py tests/test_agent_trigger.py tests/test_scheduler.py -q`
+sat at zero CPU progress for 10+ minutes (measured twice with a `Monitor` polling loop: identical
+CPU-seconds across 100 seconds of wall time). Localised with `asyncio.all_tasks()` +
+`task.print_stack()` dumped from a watchdog task inside the hung test itself (`faulthandler`'s
+thread-level dump showed only "sitting in the event loop", not useful; the asyncio task stack was)
+to `_execute_run`'s read loop, `await loop.run_in_executor(None, pty.read)`, never returning.
+Root cause, confirmed by instrumenting `spawn.call_count` and `read.call_count` at the hang: a
+turn ending with queued entries self-continues **unconditionally** (`agent_trigger.py`'s own
+comment, "a turn ending with queued entries starts the next turn without waiting for operator
+input") — so completing the review turn in test 1.1 immediately triggered a second, real spawn for
+the deferred work entry, reusing the *same* `MagicMock` session object whose two-item
+`read.side_effect` was already exhausted by the first turn. The third `pty.read()` call raised
+`StopIteration`, and `asyncio.Future.set_exception` explicitly refuses to accept `StopIteration`
+(a documented PEP-479-era guard) — so `run_in_executor`'s wrapping callback itself raised trying to
+report the failure, the future was never resolved, and the `await` hung forever. This is a **test
+bug, not a product bug**: fixed by giving `spawn`'s mock a fresh session per call
+(`side_effect=lambda *a, **k: _completed_session(...)`) rather than a shared `return_value`.
+
+**The self-continuation discovery also invalidated the original tests' assertions, not just their
+mocks.** Tests 1.1 and 1.3 (written by the crashed prior firing) asserted that a deferred entry
+stays `queued` after `_drain()` — false once self-continuation is accounted for: by the time
+`_drain()` returns, the deferred entry has almost always already been picked up as a turn of its
+own, exactly as `design.md` says ("the deferred entry rides the next turn") — just faster than
+whoever wrote the tests assumed, since "the next turn" turns out to mean "immediately", not "on a
+manually retriggered `schedule_agent()` call". Rewrote both to pin what mutation 1.6 actually
+protects: two **separate, un-mixed** turns (verified via `spawn.call_count` and per-call prompt
+content), not a queue-state snapshot. 1.3 was redesigned around the literal risk text ("a review
+that keeps arriving first could starve the work entry") using two reviews ahead of one work entry,
+rather than the original's now-redundant explicit second `schedule_agent()` call. Test 1.2 needed no
+behavioural fix — its self-continued review retry genuinely fails cleanly against the real,
+unmocked `prepare_review_turn` — but got an explanatory comment so a future reader does not
+generalise its shape incorrectly. Test 1.5 was missing a `session/sync` registration step before
+`bind_runner`, 404ing before it ever exercised the refusal under test — added the step every sibling
+test in the file already uses. Full detail, including the exact commands and numbers, is in
+`tasks.md` under 1.1-1.5 and 1.9 rather than restated here.
+
+**Mutation checks 1.9 and 2.8 run for real** (the crashed firing had not attempted them). All
+predicted failures fired exactly as predicted, with one exception recorded rather than
+smoothed over: 2.8's "setting both fields fails 2.2" was first tried against the **second** staging
+path (`scheduler.py`'s `_stage_selection`, ~line 2621, matching the task text's line-number hint) and
+did **not** fail — test 2.2's fixture actually staffs its reviewer through the **primary** path.
+Reapplying the identical mutation to the primary path failed as predicted. Both `task_id=` lines are
+still correct and both still have direct-or-indirect coverage, but the second path's own
+never-both invariant has no dedicated mutation-verified test — flagged in `tasks.md` as a
+follow-up rather than built tonight, since Q2-IMPL-A's scope is groups 1-2 only. Every mutation was
+applied and reverted with `Edit`, and verified against `git diff --stat` after each revert.
+
+**One self-inflicted near-miss, recorded so it is not repeated**: mid-mutation-testing, I ran
+`git checkout -- hub/hub/turn_scheduler.py` intending to undo my *own* mutation edit, and instead
+reverted the entire file to `HEAD` — discarding the crashed prior firing's real group-1
+implementation along with my mutation, since `git checkout --` restores from the last *commit*, not
+from "one edit ago." Caught immediately by `git diff --stat` reading empty where it should have
+read `+15/-1`. Reconstructed the file by hand from the diff already read earlier in this same
+conversation turn and re-verified against the full test file before continuing; no work was
+actually lost, but only because the diff was still in context to reconstruct from. Do not use
+`git checkout --` to undo a mutation-testing edit on a file with real uncommitted content — use
+`Edit` to apply the exact inverse text instead, the same way every other mutation in this session
+was reverted.
+
+**Full-suite ripple, found by running the whole thing rather than trusting the touched-file
+scope.** `pytest hub/tests/ -q`: 3 pre-existing, untouched-by-this-change tests failed with the
+identical shape (`assert 'in_progress' == 'assigned'`) —
+`test_flow_chain_end_to_end.py::test_the_chain_runs_a_review_and_then_b_with_no_operator_action`,
+`test_flow_fires_a_review_turn.py::test_an_unstaffable_review_does_not_stop_the_flow_doing_other_work`,
+`test_flow_width.py::test_three_startable_tasks_and_one_agent_start_one_and_touch_nothing_else`.
+Cause: `run_task_binding.bind_run_to_task` is a pre-existing mechanism, previously reachable only by
+direct-`task_id` operator triggers, that advances a bound task past `assigned` to `in_progress` the
+moment a run starts on it. Group 2 is the first thing that stages `task_id` on a job/flow-fired
+entry, so this mechanism now reaches that path too — these three tests had encoded the old gap as a
+permanent guarantee. Fixed all three assertions with an inline note; each test's own actual point is
+unchanged. Full suite after: `3208 passed, 84 skipped, 1 xpassed` (3205 + 3 fixed; 84/1 both matching
+the pre-existing baseline — nothing else moved). Also ran, all clean: `ruff check src/ hub/ tests/`,
+`black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`,
+`pytest tests/ -q` (CLI suite), `npx openspec validate every-run-knows-its-task --strict`. Confirmed
+`ai_jobs WHERE enabled=1` is `0` on the beta trial database before committing.
+
+**Committed** (`d23b9c6`): the 11 explicit paths (never `-A`) — the four implementation files, six
+test files, and `tasks.md` with 1.1-1.9 and 2.1-2.8 checked and their actual measured results
+recorded inline, including the two findings above that did not fail as predicted.
+
+**Next: Q2-IMPL-B** — groups 3-5 (the owned predicate for "was this a live flow's own work turn",
+the derived severity replacing the hardcoded `warn`, and `POLICY_FLOW`/migration 0094).
+
+*What a reviewer should distrust about this entry*: the corrected tests (1.1, 1.3) were authored by
+the same process that found the self-continuation behaviour, with no independent second reading —
+if the "two separate, un-mixed turns" framing itself misses something design.md actually requires,
+nothing here would have caught it. The full-suite ripple fix touched three tests outside this
+change's own listed scope; that is a judgement call (a green suite is required to commit; leaving
+them red or reverting group 2 both seemed worse), not something `tasks.md` explicitly authorised in
+advance — recorded here and in `tasks.md` so the operator can see the reasoning rather than just the
+diff.
+
+---
+
+## Iteration 7 — Q2-IMPL-B: every-run-knows-its-task groups 3-5, finished and verified (2026-08-27T04:41:45+01:00)
+
+**Reconciliation.** Fresh process. `git log` matched `STATE.json` exactly (HEAD at `8369e00`, the
+release heartbeat after iteration 6) and the tree was clean — no uncredited work this time.
+
+**Design read before writing anything.** `design.md`'s D4-D7 and `tasks.md`'s groups 3-5 read in
+full first. The key design fact that shapes everything below: a review turn's conversation belongs
+to the **same live loop** a flow's work turns do (the flow staffs reviews too), so the predicate
+cannot be answered by "does this run's conversation belong to a live loop" alone — it has to
+exclude a review by kind (`review_task_for_run`) as a separate check, which is exactly what group
+3's task list already enumerated as its own branch ("a review turn is false").
+
+**Group 3 — `is_live_flow_work_turn`, in `hub/hub/run_divergence.py`.** Four gates, each its own
+way to return `False`: unbound (`run.task_id` falsy), a review (`review_task_for_run` non-None), no
+conversation, or `checkpoints.loop_for_conversation` finding no `Loop` — and if it finds one,
+`stopped_at`/`archived_at` must both be `None` (D5's explicit liveness check, not "any non-None
+loop"). `checkpoints.py` imports nothing from `run_divergence.py`, so the new
+`from .checkpoints import loop_for_conversation` import introduced no cycle.
+
+**Test fixtures build real rows, not shapes.** `hub/tests/test_flow_divergence_regime.py`'s
+`_flow_context` creates an actual `AIJob` → `Loop(job_id=...)` → `JobRun(job_id=..., conversation_id=...)`
+chain and a real `Run` bound via `bind_run_to_task` — the same construction pattern already used in
+`test_scheduler.py`, not a hand-built dict standing in for "this is a live flow". Task 3.4 named
+this explicitly, citing task 4.9 of `one-answer-to-what-is-happening` as the change that first
+passed its own mutation check for the wrong reason by testing only a fixture shaped like the thing.
+Seven predicate tests (3.1) all passed against these real rows on the first run after implementation
+— no red-herring fixture bugs this time, likely because the shape was copied directly from
+`test_scheduler.py`'s own `Loop`/`JobRun` construction rather than invented fresh.
+
+**Group 4 — severity derived, resolution gets its own event.** The `warn` hardcode had drifted from
+the task text's cited `:738` to `:805` by the time this group started (group 2's insertions above
+it shifted every line below), confirmed by reading the current file rather than trusting the task
+text's line number — the standing lesson from every review round this session. Severity check reads
+`task.assignee == run.agent` and `run.status == "completed"` against **post-policy** state
+deliberately: an escalation branch (which runs *before* this line, inside the same `if`/`else`) may
+have already moved `task.assignee` off `run.agent` in the same call, and that reassignment is not
+the quiet case even when a live flow started the run. `resolve_divergences_for_task` needed
+`persist_event` to grow a `commit: bool = True` parameter (default preserves all 72 pre-existing
+call sites) — it is reached from inside `task_transition_service.apply_transition`, *before* that
+function's own caller commits (`apply_transition`'s own docstring: "the caller commits"), so an
+unconditional inner commit would have landed the caller's still-in-flight `TaskTransition`/status
+write early. `sse_manager.broadcast` needed no equivalent care: its payload is exactly what is
+already held in memory, not a re-read of the database, so broadcasting before the enclosing
+transaction commits carries no staleness risk. UI: `EventRow.tsx` itself has no per-event-kind
+switch (it renders purely by severity), so the one registration point for a new event kind is
+`hub/ui/src/lib/eventSummary.ts`'s `summaryForEvent` — confirmed by grep before assuming there was
+a second place to touch. Added a case there plus two pinning tests in `eventSummary.test.ts`
+(singular/plural wording), then rebuilt the UI (`npm run build` + `scripts/refresh_ui_bundle.py`)
+since a shipped `hub/ui/src` file changed.
+
+**Group 5 — `POLICY_FLOW`, migration `0094`.** Modelled line-for-line on `0092`'s
+`batch_alter_table` + `{run_divergences, projects, tasks} <= tables` guard shape, as the task
+specified. The suppression sits in `evaluate_run_end`'s non-review branch only, reading the group-3
+predicate computed once above the review/work split (not re-derived): `if policy == POLICY_RETRY
+and flow_work_turn:` overrides to `policy_applied='flow'`, `outcome='surfaced'`, no response
+queued. `escalate` is untouched by design — it reassigns to a *different* agent, which the flow's
+own next firing does not duplicate.
+
+**Every task's test written and run red before its implementation landed**, per the standing
+discipline — confirmed for each of 3.1, 4.1-4.6, 5.1-5.5 by running the new test file against the
+pre-implementation tree first (all 15 behavioural tests failed with `ImportError`/`AttributeError`
+on `is_live_flow_work_turn`/`POLICY_FLOW` not existing yet, before either was added) — not narrated
+in full here since every one failed for the same reason (the names did not exist), but this is the
+same discipline iteration 6 applied file-by-file where the failures were more varied.
+
+**Mutation checks 4.10 and 5.10, run for real and reverted with `Edit` (never `git checkout --`,
+per iteration 6's own recorded near-miss).** All six predicted failures fired exactly as predicted:
+hardcoding `warn` failed 4.1; hardcoding `info` failed 4.2 and 4.3; suppressing the resolution event
+failed 4.6; removing the `retry` suppression failed 5.1; applying it unconditionally failed 5.2 and
+5.3; scoping the predicate to loop *existence* rather than *liveness* failed 5.5 — **and also two of
+group 3's own predicate tests** (the `stopped_at`/`archived_at` branches), which is a wider blast
+radius than task 5.10's text named. Recorded in `tasks.md` rather than narrowed to match the task
+text, since the wider failure is correct behaviour (that mutation genuinely breaks more than one
+guarantee) and hiding it would understate what the mutation check actually proved. Every mutation
+applied and reverted via `Edit`, verified with `git diff --stat` returning to the pre-mutation diff
+after each revert — confirmed clean at the end (`git diff --stat hub/hub/run_divergence.py` showed
+only the intended net change, no mutation residue).
+
+**Full-suite verification, run for real rather than trusted from the touched-file scope** (the
+standing lesson from groups 1-2's three-test ripple, which this iteration was watching for and did
+not find). `pytest hub/tests/ -q` in the background while mutation checks ran in the foreground:
+`3227 passed, 84 skipped, 1 xpassed` in 1062s (~17.7 min — longer than the "measured ~11 min" figure
+in `STATE.json`'s `dead_ends`, itself now stale; not investigated further since the number is a
+convenience for pacing, not a correctness signal, and zero tests failed). `grep -c "FAILED\|ERROR"`
+on the full log: `0`. CLI suite (`pytest tests/ -q`): `440 passed, 3 skipped`, untouched by this
+change and unaffected. Also clean: `ruff check src/ hub/ tests/` (one `F841` unused-variable warning
+in the new test file, fixed), `black --check --target-version py311 ...` (two files needed
+reformatting — `run_divergence.py` and the new test file — applied and reconfirmed clean),
+`mypy src/`, `cd hub/ui && npx tsc --noEmit`, `npm run lint`, `npx vitest run` (138 files, 1402
+tests, all passing — the `Error: boom` console spew during the run is `ErrorBoundary.test.tsx`
+deliberately throwing, not a real failure), `npx openspec validate every-run-knows-its-task
+--strict`. Confirmed `ai_jobs WHERE enabled=1` is `0` on the beta trial database before committing,
+per the standing rule — this iteration never touched the trial Hub at all (that is Q2-IMPL-C's
+job), so this was a pass-through check rather than a real risk.
+
+**Committed** (`e948770`): the 12 explicit paths (never `-A`) — four Python implementation files,
+one new migration, one new test file, two bumped head-assertion test files, two UI source files
+(`eventSummary.ts` and its test), the rebuilt `hub/hub/static/ui` directory, and `tasks.md` with
+3.1-3.4/4.1-4.10/5.1-5.10 checked and their actual measured results recorded inline.
+
+**Next: Q2-IMPL-C** — groups 6-7 (drive live against the trial Hub restarted onto this branch,
+confirm the project list, then the full sweep including task 7.6's design.md deviation check and
+7.7's confirmation that task 4.7 of `one-answer-to-what-is-happening` is now unblocked).
+
+*What a reviewer should distrust about this entry*: the predicate's four-gate shape and the
+severity condition's exact boundary (`task.assignee == run.agent` checked post-policy, not
+pre-policy) were both design decisions made by the same process writing the tests that pin them —
+this change gets one verification round only (already proposed, `--strict` valid per the operator's
+own discipline), so nothing here got an independent second reading the way `reachable-by-a-human`'s
+three-round changes did. The wider-than-specified mutation-5.10 finding was recorded but not
+chased further (e.g. by adding a dedicated test distinguishing "no loop" from "loop but not live"
+as two separately-named predicate branches, which is what 3.1 already does — so the two behaviours
+*are* independently pinned; the mutation-5.10 note is about which test named the failure, not a
+gap in coverage). Group 6's live drive (D6's own Risk section: "the change is not complete until it
+has been driven live there") has not happened yet — everything above is unit-level verification
+only, and the 9/19 and 45/55 figures `design.md` cites are still unre-measured against production.
+
+## Iteration 8 — Q2-IMPL-C: every-run-knows-its-task groups 6-7, drive live then sweep (2026-08-27T05:50:21+01:00)
+
+**Reconciliation.** Fresh process. `STATE.json` claimed iteration 8, `current: Q2-IMPL-C`, but
+`git log` showed a commit `git status` didn't: `9f09444` ("group 6 driven live") was already on the
+branch, one ahead of what the last committed `STATE.json` (`iteration: 8`, `last_heartbeat:
+04:03:59`) had been written against. The prior firing had done real work — driven group 6 live
+against `proj-18e5d4e0` (ledger-stress), recorded F69 in `scripts/drive/FINDINGS.md`, checked off
+all of `tasks.md`'s group 6 (6.1-6.9) — and committed it, but never wrote a log entry for it and
+never advanced `STATE.json`'s own heartbeat past a bump to `05:21:07` left uncommitted in the
+working tree, alongside uncommitted edits to `design.md` (task 7.6's deviation note) and
+`one-answer-to-what-is-happening/tasks.md` (task 7.7's unblock note) — group 7's first two tasks,
+started but not finished, checked into neither `tasks.md` nor a commit. Read `9f09444`'s diff and
+the uncommitted working-tree diff in full before touching anything, per the standing rule against
+`git checkout --` discarding uncommitted content (iteration 6's dead end). Nothing was lost;
+everything below builds on what was already there rather than redoing it.
+
+**Group 6 was already complete and verified from its own commit message** — restarted the trial Hub
+onto this branch, confirmed the project list, drove all five behaviours (D1/D2 binding, D6 derived
+severity + `run_divergence_resolved`, D7's flow-policy suppression, D3's turn batching) against a
+real scheduler tick, and measured the baseline delta: job-origin entries carrying `task_id` went
+from 0/61 to 8/71, `assigned → in_progress` transitions from 20 to 28. No job left enabled, no run
+left alive (task 6.9). This iteration re-verified only the standing rule independently
+(`SELECT id FROM ai_jobs WHERE enabled=1` on the beta database: empty) rather than re-driving
+anything group 6 already proved.
+
+**Group 7 — the sweep, run for real rather than assumed clean from the prior commits' green
+history.** `py -3.11 -m ruff check src/ hub/ tests/`: clean. `black --check --target-version py311
+...`: `494 files would be left unchanged`. `py -3.11 -m mypy src/`: clean. `hub/ui`: `npx tsc
+--noEmit` clean, `npm run lint` clean, `npx vitest run` — `138 files passed (138)`, `1402 tests
+passed (1402)` (the `Error: boom` spew is `ErrorBoundary.test.tsx` deliberately throwing). No UI
+source had changed since group 5's `eventSummary.ts` (already committed and rebuilt in `e948770`),
+but `npm run build` + `py -3.11 scripts/refresh_ui_bundle.py` were run again anyway as a real check
+rather than an assumption — `src_fingerprint` in the resulting stamp came back byte-identical,
+confirming no drift; only `src_commit`/`built_at` moved. `npx openspec validate
+every-run-knows-its-task --strict`: valid.
+
+**Both pytest suites run for real, not trusted from touched-file scope** (the standing lesson from
+groups 1-2's three-test ripple). CLI (`pytest tests/ -q`): `440 passed, 3 skipped` in 22.80s,
+untouched by this change. Hub (`pytest hub/tests/ -q`, backgrounded while the rest of the sweep ran
+in the foreground): `3227 passed, 84 skipped, 1 xpassed` in 1033s — `grep -ci "FAILED\|ERROR"` on
+the full log confirmed `0`. The 17m13s runtime is longer than the "measured ~11-18 min" figures
+already in `STATE.json`'s `dead_ends`, almost certainly because this run shared the machine with
+the concurrent ruff/black/mypy/tsc/lint/vitest/build passes rather than running alone; not
+investigated further since the number is for pacing, not correctness, and nothing failed.
+
+**Test accounting (7.5), counted with `pytest <file> --collect-only -q` at two real commits, not
+estimated from diff line counts:** "before" = `c0e4cba` (the commit immediately preceding group
+1-2's implementation commit `d23b9c6`, checked out into a throwaway `git worktree` and removed
+after counting), "after" = the tip of this group. `test_turn_scheduler.py`: 0 → 4 (new, group 1).
+`test_agent_trigger.py`: 42 → 43 (+1, group 1's mixed-kind test 1.5). `test_scheduler.py`: 54 → 59
+(+5, group 2's binding tests 2.1-2.5). `test_flow_divergence_regime.py`: 0 → 18 (new, groups 3-5).
+`test_flow_chain_end_to_end.py`, `test_flow_fires_a_review_turn.py`, `test_flow_width.py`: unchanged
+counts (5, 8, 26) — group 1's 3-test ripple fix corrected existing assertions rather than adding
+tests. `test_migrations.py`, `test_project_persistence.py`: unchanged counts (72, 7) — only the
+head-assertion string literal moved. **Total added: 28** (1 + 5 + 4 + 18), consistent with groups
+3-5's own log entry citing "+19 new" for that pair of groups alone (18 Python + 1
+`eventSummary.test.ts`, outside this Python accounting) plus groups 1-2's +9.
+
+**Design deviation check (7.6), written into `design.md` itself rather than only in this log** — a
+"Built, with no behavioural deviation" note after the Risks section: all eight decisions landed
+exactly as designed, confirmed twice (the unit suite, and group 6's live drive against a real
+scheduler tick). Two citations had drifted as surrounding code grew — D6's `severity="warn"`
+hardcode moved from `run_divergence.py:738` to `:813` once group 4's own insertions (the predicate,
+the resolution's event block) landed above it; D1's second staging path moved from
+`scheduler.py:2621` to `:2630`. Neither drift changes what either decision says — recorded as the
+ordinary kind of citation drift this document's own text already warns about, not a design error.
+This is the only deviation-check finding this round; unlike `reachable-by-a-human`'s three
+proposal-review rounds, this change gets one verification round total per the operator's own
+discipline (already proposed and `--strict` valid), so nothing here is a second independent
+reading — it is the first and only one.
+
+**Task 4.7 unblock (7.7), written into `one-answer-to-what-is-happening/tasks.md`'s own task 4.7**
+rather than only asserted here: groups 1-5 wrote the binding edge that task was waiting on, and
+group 6 measured it live on the same beta database that task's own figures were measured against
+(job-origin entries carrying `task_id`: 0/61 → 8/71). The removal itself — dropping
+`task_attribution.py`'s explicit `agent_fallback` parameter — stays out of this change (D8) and is
+Q3 next.
+
+**Committed** (paths only, never `-A`): `openspec/changes/every-run-knows-its-task/design.md`,
+`openspec/changes/every-run-knows-its-task/tasks.md`,
+`openspec/changes/one-answer-to-what-is-happening/tasks.md`, and
+`hub/hub/static/ui/ui-build-stamp.json` (the re-recorded, byte-identical-fingerprint stamp).
+
+**Next: Q3** — close task 4.7 of `one-answer-to-what-is-happening` by removing
+`task_attribution.py`'s `agent_fallback` parameter (a visible behavioural change, both current
+behaviours already pinned by test), mark 4.7 done, `openspec-sync-specs`, then
+`openspec-archive-change`.
+
+*What a reviewer should distrust about this entry*: the test-accounting "before" baseline was
+measured from a throwaway `git worktree` at `c0e4cba` rather than from any number written down
+during groups 1-2's own iteration — if that iteration's own count differs, trust a citation from
+its own log entry over this reconstruction. The 17-minute hub-suite runtime was not re-measured in
+isolation to confirm the "concurrent load" explanation; it is a plausible account, not a verified
+one.

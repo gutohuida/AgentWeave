@@ -87,6 +87,14 @@
       `openspec/explorations/2026-08-26-the-other-half-of-the-binding.md` is what this waits on.
       The fallback is now an explicit `agent_fallback` parameter with both behaviours pinned by
       test, so removing it will be a visible change rather than a silent one.
+
+      **UNBLOCKED 2026-08-27** (`every-run-knows-its-task`, task 7.7). Groups 1-5 wrote the edge
+      this task was waiting on, and group 6 measured it live: job-origin entries carrying
+      `task_id` went from 0/61 to 8/71 on the same beta database this note's own figures were
+      measured against. The remaining work — removing the now-provably-unnecessary fallback — is
+      explicitly D8's and stays out of this change; it lands in Q3 of the current autonomous
+      queue, in `every-run-knows-its-task`'s own change directory, per this task's original
+      instruction ("do not implement it here").
 - [x] 4.8 Rename `agent_role` to `agent_capacity` across the Pydantic schema, `hub/ui/src/api/jobs.ts`,
       `JobCard.tsx` and the vitest cases. Values unchanged.
 - [x] 4.9 Mutation checks by name, one per capacity branch, as F63 and F64 were: collapsing `held`
