@@ -131,4 +131,72 @@ Committed `3b80f99`. Next: Q1-R2 — compare the proposal to the code claim-by-c
 *What a reviewer should distrust about this entry*: the exploration and the proposal were written
 by the same pass with no independent check yet — that is exactly what R2 exists to catch.
 
+---
 
+## Iteration 2 — Q1-R2: reachable-by-a-human, compare to the code, fix the change (2026-08-27T01:12:00+01:00)
+
+Confirmed branch and `git log` matched `STATE.json` before starting: `autonomous/2026-08-27-build-
+everything-decided` at `288e00e`, five commits ahead of `master@a2f61c3` (arming + iteration 1 +
+heartbeat release). Clean tree. No reconciliation needed.
+
+**Went claim by claim, not file by file**, through `proposal.md`, `design.md`, `tasks.md`, and both
+spec deltas. Every `file:line` citation was opened and read against the current code, not against
+iteration 1's own account of it:
+
+- `hub/hub/utils.py:25` `persist_event` signature, `:49` `severity=severity` — exact match.
+- `run_divergence.py:613` `severity="warning"` — exact match, still the only one.
+- All `severity=` call sites re-grepped directly (not re-read from the log): confirmed 20 literal
+  `info`/`warn`/`error` sites plus `logs.py:85` `severity=body.severity` (external, unbounded) —
+  matches the "20 use info/warn/error, one uses warning" claim exactly.
+- `EventRow.tsx:37-47` `SEVERITY_CHIP`/`SEVERITY_BORDER`, `ActivityLog.tsx:31` `SEVERITY_FILTERS`
+  and its filter — re-read at their cited lines; `ActivityLog.tsx`'s filter is genuinely at `:165`
+  (design.md already had this right; only the original queue item's own text, `~163`, was
+  approximate — not a defect in the artifacts, so left alone).
+- `events.py:42-43`, `logs.py:58-59`, `schemas/logs.py:15,25` — exact match, including the
+  `Field(default="info", max_length=64)` text on both `EventLogResponse` and `LogEventCreate`.
+- `conversation_titles.py:168-224`, `db/models.py:96,103`, `projects.py:87-89,446-496,485-496`,
+  `projects.ts:88-89`, `ProjectSettingsPanel.tsx:243-272` (checkpoint runner/model row structure,
+  including the `set(...)` helper at `:86` that task 2.2 depends on), and
+  `projectSettingsPanel.test.tsx:23-24,146-147` — every citation confirmed exact. Also confirmed
+  `useRunners` is already imported and bound to a local `runners` array in the panel (`:12,55`), so
+  task 2.3 is executable as written without a new import.
+- Every task in `tasks.md` names a function/file/line that exists and is reachable by a stranger
+  following it — no task named something absent.
+- Every scenario in both spec deltas is falsifiable: each names a WHEN a real caller can trigger and
+  a THEN that a real assertion can check against a real column or a real rendered element.
+
+**One real drift found, not a citation error but a gap in what the design claims to close.**
+`push_log` (`hub/hub/api/v1/logs.py:71-97`) calls `persist_event` (`:79-86`) and then builds an SSE
+broadcast dict **independently**, at `:87-96`, reading `body.severity` a second time rather than
+reusing what was just normalised and written. `ActivityLog`'s live view (`useSSE.ts`'s
+`dispatchEvent`, fed by the `log_event` SSE frame) reads severity from that broadcast payload, not
+from a history fetch. So the proposal's central claim — "a call site (or an external `POST /logs`
+caller) cannot introduce a spelling the operator's views do not recognise" — would have been true
+for the persisted row and **false for the live one**: an out-of-vocabulary `POST /logs` severity
+would still have reached a connected operator's screen unnormalised immediately, only self-correcting
+the next time something refetched history. This is exactly the class of bug the change exists to
+close, just relocated from the write path to the broadcast path. Confirmed by reading `useSSE.ts`'s
+`dispatchEvent` (`:179-190`, extracts `obj?.severity` from the event's own `data`) end to end from
+the SSE frame back to `push_log`'s broadcast dict — not assumed from the exploration's account.
+
+**Fixed in the artifacts, not just noted**: `persist_event` now returns the normalised value
+(`proposal.md`, `design.md` new Decision, `tasks.md` 1.7); `push_log` broadcasts that return value
+instead of `body.severity` (`proposal.md` Impact, `tasks.md` 1.6 test + 1.10 mutation check); the
+`agent-capability-plane` spec delta gained a requirement sentence and a fifth scenario ("A live
+broadcast matches the persisted value") so the spec, design and tasks all describe the same fixed
+behaviour rather than the design alone knowing about it. Re-ran `npx openspec validate
+reachable-by-a-human --strict` after every edit — passes.
+
+**What this round checked and found nothing wrong with**: every citation in `design.md`'s Context
+and Decisions sections; the two Non-Goals (`EventLog.severity` CHECK constraint, backfill of
+existing `"warning"` rows) — both still correctly out of scope, no code changed under them; the
+Migration Plan's "no migration needed" claim — confirmed both fields already exist as columns with
+no pending Alembic revision under `hub/hub/migrations/versions/` naming them.
+
+Committed `<pending>`. Next: Q1-R3 — a second independent pass for what this round did not catch
+(claims that are true but incomplete, tasks that cannot execute in the stated order, scenarios that
+would pass regardless of the code).
+
+*What a reviewer should distrust about this entry*: the SSE-broadcast fix was designed and written
+into the artifacts by the same round that found it, with no independent second check yet — exactly
+what R3 exists to catch, same as iteration 1's own caveat about itself.
