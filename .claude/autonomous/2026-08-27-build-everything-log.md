@@ -782,3 +782,69 @@ during groups 1-2's own iteration — if that iteration's own count differs, tru
 its own log entry over this reconstruction. The 17-minute hub-suite runtime was not re-measured in
 isolation to confirm the "concurrent load" explanation; it is a plausible account, not a verified
 one.
+
+## Iteration 9 — Q3: close task 4.7, remove agent-fallback, archive one-answer-to-what-is-happening (2026-08-27T06:25:39+01:00)
+
+**Reconciliation.** Fresh process, as always. `STATE.json` claimed `iteration: 9`, `current: Q3`,
+committed tip `c50f093` (a released heartbeat). `git log` matched exactly — no commit ahead that
+`STATE.json` didn't know about, unlike iteration 8's start. But `git status` was not clean: a prior
+firing (never logged, presumably crashed or ran out of turn before writing this entry) had already
+done essentially all of Q3's real work, uncommitted. Read every diff in full before touching
+anything, per the standing rule against `git checkout --` discarding uncommitted content:
+- `hub/hub/task_attribution.py`: `agent_fallback` parameter removed from `attribute`, along with
+  `LiveRuns.agents_without_task` and the `live_runs` query's agent column. `working` now reads
+  `live.task_ids` alone.
+- `hub/tests/test_task_attribution.py` and `hub/tests/test_board_agent_role.py`: both previously-
+  pinned fallback behaviours rewritten to assert the corrected (`held`, not `working`) outcome —
+  `test_a_run_without_a_task_id_still_reads_as_working` renamed to
+  `test_a_run_without_a_task_id_no_longer_reads_as_working`, and
+  `test_an_agent_mid_turn_elsewhere_does_not_make_a_second_task_read_as_worked` collapsed from a
+  two-call before/after comparison to the single corrected assertion.
+- `openspec/changes/one-answer-to-what-is-happening/` already `git mv`d (staged) to
+  `openspec/changes/archive/2026-08-27-one-answer-to-what-is-happening/`, with task 4.7 marked
+  `[x]` and a `CLOSED 2026-08-27` note recording the mutation check
+  (`running = True` unconditionally → 5 named tests failed as predicted, reverted with `Edit`).
+- `openspec/specs/agent-flows/spec.md`, `agent-loops/spec.md`, `run-task-binding/spec.md`: purely
+  additive deltas already folded in (`openspec-sync-specs` already run) — confirmed with
+  `git diff --stat`, 203 insertions, 0 deletions across the three.
+
+Nothing was lost and nothing needed redoing — this iteration's job became **verify independently,
+then commit**, exactly the posture the standing rules ask for when inheriting uncommitted work.
+
+**Verification performed fresh, not trusted from the working tree's own notes.**
+`pytest hub/tests/test_task_attribution.py hub/tests/test_board_agent_role.py hub/tests/test_jobs.py
+-q`: `79 passed, 1 skipped` — matches the inherited note exactly. Full hub suite
+(`pytest hub/tests/ -q`, backgrounded via `Monitor` while other checks ran): `3227 passed, 84
+skipped, 1 xpassed` in 1263s (21m03s) — identical pass/skip/xpass counts to iteration 8's own
+post-Q2-IMPL-C baseline, confirming zero ripple from removing the fallback anywhere else in the
+suite. CLI suite (`pytest tests/ -q`): `440 passed, 3 skipped`, untouched. `ruff check src/ hub/
+tests/`: clean. `black --check --target-version py311` on the three touched Python files: clean.
+`npx openspec validate --all --strict`: `43 passed, 0 failed` (`one-answer-to-what-is-happening` no
+longer appears — correctly archived; `every-run-knows-its-task` and `reachable-by-a-human` still
+appear as open changes, correctly — Q3 only archives the one change it names). Confirmed
+`SELECT id FROM ai_jobs WHERE enabled=1` empty on the beta database per the standing rule (this
+iteration never touched the trial Hub — pass-through check).
+
+**Committed** (`12b648e`), explicit paths only: the three Python files, the archive rename plus its
+further-modified `tasks.md`, and the three synced spec files.
+
+**The 05:00 rule, invoked.** It is `06:47` local at the point of this decision — well past the
+`05:00` threshold in `decisions_for_user`, and neither `Q4` (`a-dead-thing-holds-nothing`) nor `Q5`
+(a separate review capacity) has a single artifact written. Per the pre-authorised rule: skip both
+entirely rather than start a proposal round that cannot reach implementation before `stop_at`
+(`08:00`), and go straight to `Q6` (the e2e-loop drive) and `Q7` (fixing what it finds). All eight
+`Q4-*`/`Q5-*` queue items marked `skipped` below with this rationale, not attempted. `Q8` was
+already gated on "3+ hours remain" and there are roughly 70 minutes left, so it stays untouched and
+ungated-in — no decision needed there, the gate itself already covers it.
+
+**Next: Q6** — e2e-loop full test against a fresh throwaway project outside the repository. Given
+the time remaining before `stop_at`, the next iteration should size its scope to what can be driven
+and recorded honestly in the time left, per the standing operator preference for "record what you
+could verify" over silently claiming more coverage than was actually driven.
+
+*What a reviewer should distrust about this entry*: this iteration verified the inherited diff was
+internally consistent and green, but did not independently re-derive the design decision to remove
+`agent_fallback` from first principles — that judgement (and D8's own reasoning) belongs to
+whichever firing actually wrote the diff, which crashed before logging itself. If that firing's
+reasoning was flawed, this entry's "verified" only means "verified against its own stated intent,"
+not "independently re-litigated."

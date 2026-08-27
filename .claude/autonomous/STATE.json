@@ -9,8 +9,8 @@
   "started_at": "2026-08-27T00:30:00+01:00",
   "stop_at": "2026-08-27T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 9,
-  "last_heartbeat": "2026-08-27T05:29:38+01:00",
+  "iteration": 10,
+  "last_heartbeat": "2026-08-27T06:52:00+01:00",
   "green_at_arming": "CI run 33022066377 on master: ALL 8 matrix cells green - ui-test, hub-test, and test x {ubuntu, windows, macos} x {3.11, 3.12}. This is the first time this code has ever been through Linux, macOS or Python 3.12; it had only ever run on Windows/3.11 locally. AW_CHECK_UI_BUNDLE=1 test_ui_build_stamp.py also green after the stamp was re-recorded. You are starting from a genuinely green tree - any red is yours.",
   "log_file": ".claude/autonomous/2026-08-27-build-everything-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
@@ -88,55 +88,55 @@
     {
       "id": "Q3",
       "title": "Close task 4.7 and archive one-answer-to-what-is-happening",
-      "status": "open",
-      "detail": "No proposal rounds: this change is built (50/51) and was driven live. Only 4.7 is open, and the binding from Q2 is what unblocked it. Remove the agent-fallback from hub/hub/task_attribution.py's `attribute` (the explicit agent_fallback parameter). Both behaviours are currently pinned by test, so the removal must be a visible change. Then mark 4.7 done, run openspec-sync-specs, then openspec-archive-change. The operator held this change open specifically so 4.7 could close inside it."
+      "status": "done",
+      "detail": "DONE iteration 9, commit 12b648e. Found already implemented, uncommitted, by a crashed prior firing (agent_fallback removed from hub/hub/task_attribution.py's attribute, LiveRuns.agents_without_task removed, both fallback tests rewritten to assert the corrected `held` outcome, task 4.7 marked done with a CLOSED note, the change already git-mv'd to openspec/changes/archive/2026-08-27-one-answer-to-what-is-happening/, openspec-sync-specs already folded into openspec/specs/{agent-flows,agent-loops,run-task-binding}/spec.md). This iteration verified independently rather than trusting it: hub/tests/test_task_attribution.py + test_board_agent_role.py + test_jobs.py (79 passed, 1 skipped, matches inherited note), full hub suite (3227 passed, 84 skipped, 1 xpassed in 1263s, zero ripple vs iteration 8's baseline), CLI suite (440 passed, 3 skipped), ruff/black clean, openspec validate --all --strict (43 passed, one-answer-to-what-is-happening correctly absent), ai_jobs enabled=1 empty. Committed and pushed. See iteration 9 log entry."
     },
     {
       "id": "Q4-R1",
       "title": "a-dead-thing-holds-nothing - round 1: explore the code, then propose",
-      "status": "open",
+      "status": "skipped",
       "detail": "EXPLORE FIRST: hub/hub/api/v1/jobs.py _adopt_document_tasks (~185) and _check_spec_document_conflict (~103-124, and how migration 0090 fixed it - that is the shape to copy); hub/hub/inbound_queue.py DELIVERY_ATTEMPT_LIMIT (~174) and the abandonment path (~221); hub/hub/turn_scheduler.py's refusal branch (~138-175); hub/hub/requirement_evidence.py:595 (the no-evidence refusal text); hub/hub/api/v1/questions.py's PATCH handler and how a question records created_by_run_id. THEN propose `a-dead-thing-holds-nothing`. Decisions are made, in openspec/explorations/2026-08-26-what-is-still-unanswered.md sections 3, 4 and 6. One principle, three instances: an ended thing stops exerting force. (1) F53(b): NEVER null task.loop_id - the operator's words are 'keep the history to retrace it later', so the column stays on every task in every state; change the GATE instead, from 'loop_id IS NULL' to 'owned by a LIVE loop'. (2) F65: the no-evidence review refusal is terminal on the FIRST refusal, not after three attempts. (3) F60: the GUARD ONLY - refuse an answer whose asking run has ended. The durable board-surfacing half is PARKED for F14; do not build it."
     },
     {
       "id": "Q4-R2",
       "title": "a-dead-thing-holds-nothing - round 2: compare to the code, fix the change",
-      "status": "open",
+      "status": "skipped",
       "detail": "Method for a review round: go claim by claim, not file by file. For EVERY file:line citation in proposal.md, design.md and tasks.md, open that line and confirm it says what the artifact claims. For every sentence of the form 'today the code does X', verify X against the code rather than against the exploration. For every task, confirm the function, file and line it names exist and that a stranger could execute it. For every scenario, confirm it is falsifiable - that it could actually fail. Fix what is wrong IN the artifacts. Then re-run `npx openspec validate <change> --strict`. Write down what you found: a round that corrects three citations is worth more than one that reports success, and the corrections are the record of how far the exploration drifted from the code. Target: openspec/changes/a-dead-thing-holds-nothing/."
     },
     {
       "id": "Q4-R3",
       "title": "a-dead-thing-holds-nothing - round 3: compare again, fix again",
-      "status": "open",
+      "status": "skipped",
       "detail": "Second independent pass, for what round 2 missed. Ask specifically: does making the adoption gate liveness-aware let TWO live loops claim the same task if one is archived mid-flight, and is that refused elsewhere? Does withdrawing the no-evidence briefing on the first refusal interact with DELIVERY_ATTEMPT_LIMIT's existing bookkeeping, or double-count? Does the F60 guard need to distinguish a run that ENDED from one that was never running? Are the three behaviours genuinely one principle in the spec text, or three patches wearing one title - if the latter, say so and split them. Fix, re-validate --strict, record what this round caught."
     },
     {
       "id": "Q4-IMPL",
       "title": "a-dead-thing-holds-nothing - implement",
-      "status": "open",
+      "status": "skipped",
       "detail": "Work the tasks.md the three rounds produced. Mutation checks by name."
     },
     {
       "id": "Q5-R1",
       "title": "a separate review capacity - round 1: explore the code, then propose",
-      "status": "open",
+      "status": "skipped",
       "detail": "EXPLORE FIRST: hub/hub/scheduler.py _agents_that_are_free (~916) and resolve_reviewer (~982) with its whole ladder including the `deferred` and `unstaffed` rungs; hub/hub/task_transitions.py LIVE_STATUSES (~338) and the bands it is built from; review_turn.resolve_declared_reviewer; and every other caller of _agents_that_are_free (there is at least one at ~286). THEN propose. Decision recorded in openspec/explorations/2026-08-26-what-is-still-unanswered.md section 2: option 2, a SEPARATE review capacity. Today _agents_that_are_free answers one question - 'is this agent free' - and rung 2 uses it for two. Split them: 'free to be given work' keeps the current rule, 'free to review' gets its own. Measured justification to cite: LIVE_STATUSES includes under_review and staffing a review makes the reviewer the assignee, so a review consumes an agent entirely; ledger-stress has 0 of 3 free and review_unstaffed has fired 10 times. Rejected alternative to record: merely excluding under_review, which fixes the measured case but leaves one question doing two jobs. D4's pile-up argument is about BEING GIVEN WORK - a review is a bounded turn against somebody else's commit."
     },
     {
       "id": "Q5-R2",
       "title": "a separate review capacity - round 2: compare to the code, fix the change",
-      "status": "open",
+      "status": "skipped",
       "detail": "Method for a review round: go claim by claim, not file by file. For EVERY file:line citation in proposal.md, design.md and tasks.md, open that line and confirm it says what the artifact claims. For every sentence of the form 'today the code does X', verify X against the code rather than against the exploration. For every task, confirm the function, file and line it names exist and that a stranger could execute it. For every scenario, confirm it is falsifiable - that it could actually fail. Fix what is wrong IN the artifacts. Then re-run `npx openspec validate <change> --strict`. Write down what you found: a round that corrects three citations is worth more than one that reports success, and the corrections are the record of how far the exploration drifted from the code. Target: the reviewer-capacity change directory."
     },
     {
       "id": "Q5-R3",
       "title": "a separate review capacity - round 3: compare again, fix again",
-      "status": "open",
+      "status": "skipped",
       "detail": "Second independent pass. Ask specifically: can an agent now hold several concurrent reviews, and is that wanted or does it need its own bound? Does the split change the `deferred` rung's meaning, which exists so a firing that used up its free agents does not raise a false alarm? Does FiringDecision's unstaffed collection - which feeds _emit_review_unstaffed and the board - still say something true after the split? Does anything else read _agents_that_are_free and silently inherit the new semantics? Fix, re-validate --strict, record what this round caught."
     },
     {
       "id": "Q5-IMPL",
       "title": "a separate review capacity - implement",
-      "status": "open",
+      "status": "skipped",
       "detail": "Work the tasks.md the three rounds produced. Mutation checks by name."
     },
     {
@@ -176,9 +176,10 @@
       "detail": "Work the tasks.md the three rounds produced. Mutation checks by name."
     }
   ],
-  "current": "Q3",
-  "next_action": "Q3: close task 4.7 of one-answer-to-what-is-happening and archive that change. No proposal rounds - it is built (50/51) and driven live; only 4.7 was open, and every-run-knows-its-task's Q2 work is what unblocked it (confirmed in that change's tasks.md task 4.7, iteration 8). Read hub/hub/task_attribution.py's `attribute` function and its existing tests first (both the fallback and non-fallback behaviours are already pinned by test per the task's own text). Remove the explicit `agent_fallback` parameter - a VISIBLE behavioural change, not a no-op, so update/remove whichever tests assumed the fallback path and confirm the removal actually changes attribution for a run that would have used it. Then: mark 4.7 done in openspec/changes/one-answer-to-what-is-happening/tasks.md, run the openspec-sync-specs skill to fold the change's delta specs into openspec/specs/, then the openspec-archive-change skill to move it to openspec/changes/archive/. Run both pytest suites afterward (task_attribution.py is shared code - check for ripple the way groups 1-2 found a three-test ripple). Commit and push at the end. Next after Q3 is Q4-R1 (a-dead-thing-holds-nothing, round 1) - do not start it in this iteration unless Q3 finishes with substantial time left in the turn.",
+  "current": "Q6",
+  "next_action": "Q3 is DONE (iteration 9, commit 12b648e) - verified independently and pushed. Q4 (a-dead-thing-holds-nothing) and Q5 (a separate review capacity) are SKIPPED per the pre-authorised 05:00 rule, invoked at 06:47 local with neither change having a single artifact written and only ~70 minutes left before stop_at (08:00) - see decisions_for_user for the record. Go straight to Q6: e2e-loop full test against a FRESH throwaway project outside this repository (not drive-2026-08-26, not ledger-stress, not proj-5e960453). Use the e2e-loop skill. Given the time actually remaining, size this to what can be driven and recorded HONESTLY rather than attempting the full sweep the original Q6 detail describes - a partial drive that is truthfully reported beats a claimed-complete one that wasn't. At minimum: create the project, seed it with a small module carrying deliberately seeded defects the tests don't cover (as ledger was built), and drive at least one real flow firing -> work turn -> binding -> review staffing -> verdict cycle, since that is exactly the every-run-knows-its-task path built tonight and it has never been driven live end-to-end on a brand-new project. Record everything in scripts/drive/FINDINGS.md, including what worked and what this iteration did NOT get to. If stop_at arrives mid-drive, stop cleanly, record exactly how far the drive got, and leave Q7 (fix what Q6 found) for the next session rather than guessing at fixes under time pressure.",
   "decisions_for_user": [
+    "05:00 RULE INVOKED at 06:47 on 2026-08-27 (iteration 9), per the pre-authorisation already in this list: Q4 (a-dead-thing-holds-nothing) and Q5 (a separate review capacity) were skipped with zero artifacts written for either - not part-built, so nothing was abandoned mid-flight. Rationale as pre-authorised: an e2e drive of what was actually built is worth more than starting a proposal round that cannot reach implementation before stop_at. Both remain fully queued and untouched for a future session; nothing about tonight's decision judges their merit, only their timing.",
     "THE 05:00 RULE, pre-authorised: the operator asked for the e2e-loop test explicitly, and the queue is now long enough that it may not be reached. If it is past 05:00 local and Q6 has not started, SKIP any change that has not started and go straight to Q6 and Q7. Do not abandon a change already part-built - finish or revert it first, never leave one half-landed. Rationale: an e2e drive of what was built is worth more than one more unproven change, and the operator's own ordering put the drive after the building precisely so it would test real work.",
     "SCOPE WARNING, stated so the morning is not a surprise: the operator's round discipline (three rounds per unproposed change, one for the proposed one) turns three changes into twelve queue items before their implementations. This is deliberate and is a quality decision, not an oversight - but the full queue almost certainly does not fit in one night. It is ordered so that stopping anywhere leaves complete work behind rather than a row of half-written proposals. If little got built, that is the discipline working as asked, not the loop failing.",
     "PRE-AUTHORISED, not a question: approval authority. `under_review -> approved` is _BOTH today, so an agent may approve, and approval auto-runs integrate_task (a real merge). The operator's position, given this session: 'the approval can be both... this should be talked over on the spec and at the spec we decide if an agent can approve or only operator.' So approval authority is a PER-SPEC-DOCUMENT property, not a global rule, and that is a FUTURE change - do not build it tonight and do not change the transition table. Tonight's e2e runs on a fresh throwaway project, so an over-wide merge damages nothing real.",
