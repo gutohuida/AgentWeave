@@ -105,9 +105,15 @@ class TaskBindingError(Exception):
 
     http_status = 404
 
-    def __init__(self, detail: str) -> None:
+    def __init__(self, detail: str, http_status: Optional[int] = None) -> None:
         super().__init__(detail)
         self.detail = detail
+        if http_status is not None:
+            # A task that exists, is visible, and is simply finished being worked on is a conflict
+            # with its state, not a missing row (F79). Overridden per raise rather than by a second
+            # exception class, because `main.py`'s single handler is what makes these reach HTTP and
+            # MCP identically.
+            self.http_status = http_status
 
 
 async def resolve_task_for_project(session: AsyncSession, task_id: str, project_id: str) -> Task:
@@ -129,6 +135,33 @@ async def resolve_task_for_project(session: AsyncSession, task_id: str, project_
 # --------------------------------------------------------------------------------------
 # Binding
 # --------------------------------------------------------------------------------------
+
+
+def decided_task_refusal(task: Task) -> Optional[str]:
+    """Why `task` takes no new work, or None because it still does (F79).
+
+    The band is `TERMINAL_FOR_BINDING`, the same one `release_bindings_to` releases at and for the
+    same stated reason: work that has been approved or abandoned is finished being worked on, and a
+    run that kept attributing turns to it would put stalled markers on something the operator has
+    already decided about (design D7). Asking one function rather than writing the band twice is
+    what keeps the release and the refusal from drifting apart.
+
+    Only ever asked about `task_id` -- the task a turn *works on*. `review_task_id` names the task a
+    turn *inspects*, and inspecting decided work is exactly what a review is for.
+
+    Two callers, two dispositions, and the difference is who is speaking. `POST /agent/trigger`
+    refuses on it, because the operator is naming the task right now and is reading the response.
+    `resolve_bound_task` drops the binding on it, because a delegation naming the task was true
+    when it was queued and has merely stopped being so, and `turn_scheduler` would read a refusal
+    there as grounds to abandon the message entirely.
+    """
+    if task.status not in TERMINAL_FOR_BINDING:
+        return None
+    return (
+        f"Task {task.id!r} is {task.status!r}, which is a decision the operator has already made "
+        f"about it, so a run cannot be started to work on it. Move it to 'revision_needed' to "
+        f"reopen it, or start the turn without naming a task."
+    )
 
 
 def task_named_by(entry: InboundQueueEntry) -> Optional[str]:
@@ -310,6 +343,14 @@ async def resolve_bound_task(
             # deleted the turn still runs, unbound: refusing to start would let removing a row
             # cancel work the agent was legitimately asked to do.
             bound_task = None
+        if bound_task is not None and decided_task_refusal(bound_task) is not None:
+            # The same disposition, one column over, and for the same reason (F79). An entry queued
+            # before the operator approved the task is an instruction that has stopped being true,
+            # not a wrong request — and `turn_scheduler` would read a refusal here as grounds to
+            # abandon the entry after three attempts, discarding a message the agent was
+            # legitimately sent because of a decision taken about something else. The turn runs;
+            # only the claim that it is work on that task is dropped.
+            bound_task = None
     elif task_id:
         # Asked for explicitly, now, by the operator or by a divergence response. A refusal here is
         # the right answer — nothing else in the request implies the work.
@@ -465,6 +506,45 @@ async def release_conversations_bound_to(session: AsyncSession, task: Task) -> i
     for conversation in conversations:
         conversation.task_id = None
     return len(conversations)
+
+
+async def release_bindings_to(session: AsyncSession, task: Task) -> None:
+    """Release everything still claiming to be work on `task`, at the moment it is decided.
+
+    Two surfaces can carry that claim into a *future* run and both have to let go together, or the
+    rule holds on one and is bypassed on the other — which is exactly what F79 was: the
+    conversations released on approval, the queued turns did not, and one of them was delivered 29
+    minutes later against work that had already merged to `master`.
+
+    Called from the one place a task reaches a terminal status, so a third surface acquiring a
+    binding has one function to be added to rather than a call site to be remembered at.
+    """
+    await release_conversations_bound_to(session, task)
+    await _release_queued_entries_bound_to(session, task)
+
+
+async def _release_queued_entries_bound_to(session: AsyncSession, task: Task) -> int:
+    """Unbind the turns still waiting to be delivered against `task`. Returns how many.
+
+    **Queued only.** A `delivered` entry is the record of a turn that already happened, and its
+    run's boundary check was decided against that binding; rewriting it would make the history
+    disagree with the runs it explains.
+
+    **`task_id` only.** `review_task_id` says this turn *inspects* the task, which is legitimate
+    precisely when the work is finished, and clearing it would put back the hole
+    `every-run-knows-its-task` D3 closed -- review runs with a NULL `task_id`, and `under_review ->
+    approved` transitions that no run records having caused.
+    """
+    result = await session.execute(
+        select(InboundQueueEntry).where(
+            InboundQueueEntry.task_id == task.id,
+            InboundQueueEntry.state == "queued",
+        )
+    )
+    entries = list(result.scalars().all())
+    for entry in entries:
+        entry.task_id = None
+    return len(entries)
 
 
 # --------------------------------------------------------------------------------------

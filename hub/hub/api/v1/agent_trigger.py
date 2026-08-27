@@ -95,6 +95,7 @@ from ...pty_runner import (
 from ...run_divergence import evaluate_run_end, record_response_run
 from ...run_task_binding import (
     bind_run_to_task,
+    decided_task_refusal,
     rebind_conversation,
     resolve_bound_task,
     resolve_task_for_project,
@@ -1041,7 +1042,22 @@ async def trigger_agent(
         # Refused now, while the operator is looking at the response, rather than at spawn — a
         # request that names a task the project does not have is a mistake, not a reason to start
         # an unbound run whose boundary is then never checked.
-        await resolve_task_for_project(session, body.task_id, project_id)
+        named_task = await resolve_task_for_project(session, body.task_id, project_id)
+        # And one refusal more, for the same reason (F79). A task the operator has already approved
+        # or rejected takes no new work: `resolve_bound_task` drops the binding when it meets one,
+        # so without this the request would be answered `200` and the run would start silently
+        # ignoring the task it was asked about — the same shape as F78, where following the
+        # product's own instruction returned success and changed nothing.
+        #
+        # **Here rather than in `resolve_bound_task`.** This route does not run the turn; it queues
+        # an entry, and the task reaches `resolve_bound_task` as a *delegation*, where dropping the
+        # binding is the right disposition and refusing is not (see that function). The explicit
+        # branch there is reached only by a caller passing `task_id` to `trigger_agent_directly`,
+        # and its one caller never does — a guard placed there would be tested, correct, and unable
+        # to fire.
+        decided = decided_task_refusal(named_task)
+        if decided is not None:
+            raise HTTPException(status_code=409, detail=decided)
 
     if body.review_task_id:
         # Same reasoning, and one refusal more: a task with no evidence naming a commit cannot be

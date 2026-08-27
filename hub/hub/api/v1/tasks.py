@@ -45,7 +45,7 @@ from ...requirement_links import LinkRefusedError, absorb_free_text, link, resol
 from ...run_task_binding import (
     TERMINAL_FOR_BINDING,
     reason_from_question,
-    release_conversations_bound_to,
+    release_bindings_to,
     release_reason,
 )
 from ...schemas.tasks import (
@@ -1141,7 +1141,7 @@ async def update_task_for_actor(
     # that sends the task to review. Applied afterwards, that one call was refused on the strength
     # of an assignee the same request was about to replace, and the operator had to make two.
     # Nothing between here and the transition reads the old value: `release_reason` and
-    # `release_conversations_bound_to` are about the task and its runs, not about who holds it.
+    # `release_bindings_to` are about the task and its runs, not about who holds it.
     if "assignee" in body.model_fields_set:
         # `model_fields_set`, not `is not None` (finding F78). The guard immediately below names
         # two remedies -- reassign, or "clear the assignee to review it yourself" -- and read as
@@ -1182,11 +1182,14 @@ async def update_task_for_actor(
             release_reason(task)
         else:
             task.blocked_reason = body.blocked_reason
-        # There is no more working to do at these, so a thread that stayed bound would keep
+        # There is no more working to do at these, so anything that stayed bound would keep
         # attributing turns to a task the operator has already decided about — and put stalled
-        # markers on work they approved (design D7).
+        # markers on work they approved (design D7). `release_bindings_to`, not the conversation
+        # release it used to call: a turn already sitting in the inbound queue carries the same
+        # claim and was not covered, so approving a task did not stop the turn queued against it
+        # from arriving afterwards (F79).
         if body.status in TERMINAL_FOR_BINDING:
-            await release_conversations_bound_to(session, task)
+            await release_bindings_to(session, task)
     if body.priority is not None:
         task.priority = body.priority
     if body.description is not None:
