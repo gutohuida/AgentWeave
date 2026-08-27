@@ -5,7 +5,7 @@
   "permission_mode": "unattended-full-access",
   "branch": "autonomous/2026-08-27-fix-and-drive",
   "parent_branch": "master",
-  "parent_sha": "57eb92b8c66778ec7e4ef5d55268523fe499a58f",
+  "parent_sha": "bbe00a7",
   "stop_at": "2026-08-28T08:00:00+01:00",
   "stop_when_queue_empties": false,
   "iteration": 0,
@@ -122,5 +122,7 @@
     "A Hub on a stale database still answers {\"status\":\"ok\"}. Confirm the PROJECT LIST.",
     "Only Python 3.11 exists on this machine; 3.12 is CI-only."
   ],
-  "carry_forward": "This session (2026-08-27 evening, before arming): merged F58 to master with --no-ff and got CI green on all nine cells - the first time that code had ever been through CI - after fixing the one red cell, a collision test that could only pass on a machine with `claude` on PATH. Hand-synced seven capabilities into openspec/specs and archived the change. Authored openspec/specs/workspace-isolation/spec.md, a capability document for a mechanism that had none while F58 renamed its public API shapes. Then investigated F52 to a conclusion: every axis eliminated, and its central inference disproved."
+  "carry_forward": "This session (2026-08-27 evening, before arming): merged F58 to master with --no-ff and got CI green on all nine cells - the first time that code had ever been through CI - after fixing the one red cell, a collision test that could only pass on a machine with `claude` on PATH. Hand-synced seven capabilities into openspec/specs and archived the change. Authored openspec/specs/workspace-isolation/spec.md, a capability document for a mechanism that had none while F58 renamed its public API shapes. Then investigated F52 to a conclusion: every axis eliminated, and its central inference disproved.",
+  "started_at": "2026-08-27T22:05:00+01:00",
+  "last_heartbeat": null
 }
