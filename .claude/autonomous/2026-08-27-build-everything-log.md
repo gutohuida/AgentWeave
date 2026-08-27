@@ -1207,3 +1207,25 @@ response). `git status` was clean before this entry was written.
 run (`stop_at` 08:00) is over in substance. Any future firing, tonight or later, should do this same
 minimal wrap-up (heartbeat + log entry only) unless the operator has both answered F70/F71 in
 `decisions_for_user` with an actual decision AND re-armed the run with a fresh `stop_at` and queue.
+
+## Iteration 18 — clean wrap-up, no new work started, `stop_at` reached exactly
+
+**08:00:09 local, at `stop_at` (08:00).** Fresh process. Read `STATE.json` and the iteration-17
+entry above; verified branch (`autonomous/2026-08-27-build-everything-decided`, up to date with
+`origin`, clean tree) and `git log` both matched what `STATE.json` claimed — `current: Q7`, HEAD at
+`1b8ea32` (a heartbeat-release commit). No reconciliation needed.
+
+Checked for operator input rather than assuming iteration 17's account was still current: fetched
+`origin/master` (unchanged at `a2f61c3`, the same sha this run was cut from — no new work landed
+there) and re-read `decisions_for_user` in `STATE.json`, which still carries F70 and F71 as `NEEDS A
+DECISION` with no operator response. Same situation iterations 12-17 all describe. No queue item can
+both start and finish-and-verify in the time left, so no code was touched.
+
+Confirmed nothing was left dangling: `SELECT id FROM ai_jobs WHERE enabled=1` against the beta
+database read empty (queried directly via `py -3.11` + `sqlite3`, `mode=ro`, not trusted from an API
+response). `git status` was clean before this entry was written.
+
+**Next:** unchanged — Q7 stays current, blocked on the operator's answer to F70 or F71. This armed
+run's `stop_at` (08:00) has now been reached exactly. Any future firing, tonight or later, should do
+this same minimal wrap-up (heartbeat + log entry only) unless the operator has both answered F70/F71
+in `decisions_for_user` with an actual decision AND re-armed the run with a fresh `stop_at` and queue.
