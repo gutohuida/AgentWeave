@@ -78,7 +78,7 @@
       point answering the capacity for a `(task, agent)` pair from four distinct sources.
 - [x] 4.6 `FiringDecision` stops exposing the merged cannot-staff collection publicly; the owning
       module becomes its only reader.
-- [~] 4.7 Remove the ~90-line derivation and the agent-fallback from `hub/hub/api/v1/jobs.py`; the
+- [x] 4.7 Remove the ~90-line derivation and the agent-fallback from `hub/hub/api/v1/jobs.py`; the
       renderer consumes the determination and renders. **Derivation removed; the agent-fallback
       STAYS, blocked.** Measured on the beta database: a flow's ordinary work firing writes no
       `task_id` (61 job-origin entries, 0 with one; 5 of 59 job-delivered runs bound), so removing
@@ -92,9 +92,31 @@
       this task was waiting on, and group 6 measured it live: job-origin entries carrying
       `task_id` went from 0/61 to 8/71 on the same beta database this note's own figures were
       measured against. The remaining work — removing the now-provably-unnecessary fallback — is
-      explicitly D8's and stays out of this change; it lands in Q3 of the current autonomous
-      queue, in `every-run-knows-its-task`'s own change directory, per this task's original
-      instruction ("do not implement it here").
+      explicitly D8's and stays out of `every-run-knows-its-task`; it landed in Q3 of the
+      2026-08-27 autonomous queue, in *this* change's own directory (per this task's original
+      instruction, "do not implement it here" — meaning not inside `every-run-knows-its-task`).
+
+      **CLOSED 2026-08-27.** `attribute`'s `agent_fallback` parameter is gone; `working` now reads
+      `live.task_ids` alone. `LiveRuns.agents_without_task` removed with it — nothing else read it.
+      Both previously-pinned behaviours are now visibly different: the unit test that demonstrated
+      the fallback's over-report
+      (`test_an_agent_mid_turn_elsewhere_does_not_make_a_second_task_read_as_worked`) now asserts
+      the corrected `held` outcome instead of the two-call before/after comparison, and the API-level
+      test that pinned the fallback through `_batch_loop_summaries`
+      (`test_board_agent_role.py::test_a_run_without_a_task_id_still_reads_as_working`) was renamed
+      to `test_a_run_without_a_task_id_no_longer_reads_as_working` and now asserts `held`, not
+      `working`. Mutation check: reverted the `working` branch to `running = True` unconditionally —
+      5 named tests failed as predicted
+      (`test_held_comes_from_the_firing_minus_the_runs`,
+      `test_the_four_capacities_are_reachable_and_distinct`,
+      `test_a_review_whose_run_has_ended_is_not_presented_as_working`,
+      `test_an_agent_mid_turn_elsewhere_does_not_make_a_second_task_read_as_worked`,
+      `test_working_is_answered_only_by_the_runs_tables_own_task_id`); reverted with `Edit`, re-ran
+      green. Full verification: `hub/tests/test_task_attribution.py` (16 passed),
+      `hub/tests/test_board_agent_role.py` + `hub/tests/test_jobs.py` (79 passed, 1 skipped),
+      `pytest hub/tests/ -q` (full suite, no ripple beyond the two files above), `pytest tests/ -q`
+      (440 passed, 3 skipped, untouched), `ruff check src/ hub/ tests/` clean, `black --check
+      --target-version py311 ...` clean after reformatting the touched test file, `mypy src/` clean.
 - [x] 4.8 Rename `agent_role` to `agent_capacity` across the Pydantic schema, `hub/ui/src/api/jobs.ts`,
       `JobCard.tsx` and the vitest cases. Values unchanged.
 - [x] 4.9 Mutation checks by name, one per capacity branch, as F63 and F64 were: collapsing `held`

@@ -41,8 +41,8 @@ def _staffing(*, selected=None, unstaffable=None) -> FlowStaffing:
     return FlowStaffing(selected=selected or {}, unstaffable=unstaffable or {})
 
 
-def _live(*, task_ids=(), agents=()) -> LiveRuns:
-    return LiveRuns(task_ids=frozenset(task_ids), agents_without_task=frozenset(agents))
+def _live(*, task_ids=()) -> LiveRuns:
+    return LiveRuns(task_ids=frozenset(task_ids))
 
 
 # ---------------------------------------------------------------------------
@@ -137,48 +137,41 @@ def test_a_review_whose_run_has_ended_is_not_presented_as_working():
     result = attribute(
         task,
         staffing=_staffing(unstaffable={"task-f63": "relay"}),
-        live=_live(task_ids={"some-other-task"}, agents=set()),
+        live=_live(task_ids={"some-other-task"}),
     )
     assert result.capacity == CAPACITY_HELD
     assert result.capacity != CAPACITY_WORKING
 
 
 def test_an_agent_mid_turn_elsewhere_does_not_make_a_second_task_read_as_worked():
-    """4.3. `builder` is mid-turn on an unbound run and also holds a second task nothing is running
-    against. The second must not read as worked.
+    """4.3. `builder` is mid-turn on an unbound task and also holds a second task nothing is
+    running against. The second must not read as worked.
 
-    **Asserted with the agent-fallback off, because the fallback is still on by default and still
-    tells this lie.** It is carried deliberately: a flow's ordinary work firing writes no
-    `task_id`, so with the fallback removed today every actively-worked flow task would read
-    `held` — the same class of lie in the other direction. Both halves are asserted here so the
-    carried defect is a measured fact rather than a footnote, and
-    `openspec/explorations/2026-08-26-the-other-half-of-the-binding.md` is what removing it waits on.
+    This used to require the agent-fallback turned off to hold — the fallback, carried
+    deliberately until `every-run-knows-its-task` wrote the run→task edge for flow work firings,
+    matched on agent alone and over-reported `working` here. The fallback is gone now (D8's other
+    half, closed in that change's own task 7.7), so this is the only behaviour there is: a run
+    with no `task_id` no longer has any way to attribute itself to a second task by agent name.
     """
     task = _task("task-second", status="under_review", assignee="builder")
     staffing = _staffing(unstaffable={"task-second": "builder"})
-    live = _live(agents={"builder"})
+    live = _live()
 
-    assert attribute(task, staffing=staffing, live=live, agent_fallback=False).capacity == (
-        CAPACITY_HELD
+    assert (
+        attribute(task, staffing=staffing, live=live).capacity == CAPACITY_HELD
     ), "with a written run→task edge this is held, which is the truth"
 
-    assert attribute(task, staffing=staffing, live=live).capacity == CAPACITY_WORKING, (
-        "and this is the over-report the fallback still concedes to — pinned so that removing the "
-        "fallback is visible as a behaviour change rather than a silent one"
-    )
 
-
-def test_the_fallback_never_changes_a_task_the_runs_table_can_answer():
-    """The fallback is bounded and one-directional: it only ever adds `working` where `task_id`
-    said nothing. A task the runs table names is answered by the runs table either way."""
+def test_working_is_answered_only_by_the_runs_tables_own_task_id():
+    """`live.task_ids` is the only source `working` reads. A task the runs table names is
+    `working`; a task it does not name is not, however that agent's other runs are labelled."""
     task = _task("task-bound")
     staffing = _staffing(unstaffable={"task-bound": "builder"})
-    live = _live(task_ids={"task-bound"})
-    assert attribute(task, staffing=staffing, live=live).capacity == CAPACITY_WORKING
     assert (
-        attribute(task, staffing=staffing, live=live, agent_fallback=False).capacity
+        attribute(task, staffing=staffing, live=_live(task_ids={"task-bound"})).capacity
         == CAPACITY_WORKING
     )
+    assert attribute(task, staffing=staffing, live=_live()).capacity == CAPACITY_HELD
 
 
 # ---------------------------------------------------------------------------

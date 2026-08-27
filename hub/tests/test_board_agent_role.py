@@ -75,10 +75,11 @@ async def _flow(db, *, suffix):
 async def _running_turn(db, task, agent, *, with_task_id=True):
     """A `Run` genuinely in flight, which is what `working` is now allowed to mean (F63).
 
-    `with_task_id=False` is not a convenience: `run.task_id` is NULL on most real runs -- measured
-    on the trial database at 6 of the 10 carrying a `completed` transition -- so the agent fallback
-    in `_batch_loop_summaries` is the branch production actually takes, and a fixture that always
-    set `task_id` would leave it untested.
+    `with_task_id=False` exercises the edge `every-run-knows-its-task` closed: a run with no
+    `task_id` used to still read `working` through `task_attribution.attribute`'s agent-fallback,
+    removed once that change wrote the run->task edge for flow work firings
+    (`one-answer-to-what-is-happening` task 4.7). Now it does not, and that is the point of the
+    test that uses this flag -- see `test_a_run_without_a_task_id_no_longer_reads_as_working`.
     """
     run = Run(
         id=f"run-live-{agent}-{task.id}",
@@ -206,12 +207,15 @@ async def test_a_review_nobody_is_running_reads_as_held_not_working(app, auth_he
     ]
 
 
-async def test_a_run_without_a_task_id_still_reads_as_working(app, auth_headers, bind_runner):
-    """The agent fallback, which is the branch production actually takes.
+async def test_a_run_without_a_task_id_no_longer_reads_as_working(app, auth_headers, bind_runner):
+    """D8's other half, closed by `one-answer-to-what-is-happening` task 4.7.
 
-    `run.task_id` is NULL on most runs, so matching on it alone would report `held` about genuinely
-    running work -- the same lie as F63 in the opposite direction. Deliberately paired with the test
-    above: together they say `working` is about a *run existing*, not about which column carries it.
+    This used to pin the agent-fallback: a run with no `task_id` still read `working` by matching
+    on agent alone, because `run.task_id` was NULL on most runs. `every-run-knows-its-task` wrote
+    the run->task edge for flow work firings (measured live on the beta database: job-origin
+    entries carrying `task_id` went from 0/61 to 8/71), which is what made removing the fallback a
+    correct visible change rather than a regression -- a run genuinely in flight but not bound to
+    this task is no longer attributed to it; `held` is the honest answer now.
     """
     await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
     async with async_session_factory() as db:
@@ -225,7 +229,7 @@ async def test_a_run_without_a_task_id_still_reads_as_working(app, auth_headers,
     current = _card(res.json(), job.id)["loop"]["current_tasks"]
 
     assert [(t["id"], t.get("agent"), t.get("agent_capacity")) for t in current] == [
-        (task.id, REVIEWER, "working")
+        (task.id, REVIEWER, "held")
     ]
 
 

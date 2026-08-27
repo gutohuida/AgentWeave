@@ -89,32 +89,28 @@ class LiveRuns:
     Asked once per batch rather than per task: this is the seventh query in the loop-summary path
     and it stays batched for design D7's reason.
 
-    Two collections rather than one because `Run.task_id` is not always set. `task_ids` is the
-    precise answer and is the only one this module trusts to mean *"this task is being worked"*.
-    `agents_without_task` is the imprecise one — see `agent_fallback` on `attribute`.
+    `task_ids` is the only thing this module trusts to mean *"this task is being worked"* — the
+    runs table's own `task_id`, now written for every flow-fired run
+    (`every-run-knows-its-task`), not only operator-triggered ones.
     """
 
     task_ids: frozenset
-    agents_without_task: frozenset
 
 
 async def live_runs(session: AsyncSession, project_ids: Iterable[str]) -> LiveRuns:
-    """Everything running in *project_ids*, split by whether it knows what task it is for."""
+    """Everything running in *project_ids*, keyed by the task each run is bound to."""
     ids = list(project_ids)
     if not ids:
-        return LiveRuns(frozenset(), frozenset())
+        return LiveRuns(frozenset())
     rows = (
         await session.execute(
-            select(Run.agent, Run.task_id).where(
+            select(Run.task_id).where(
                 Run.project_id.in_(ids),
                 Run.status == "running",
             )
         )
     ).all()
-    return LiveRuns(
-        task_ids=frozenset(task_id for _agent, task_id in rows if task_id),
-        agents_without_task=frozenset(agent for agent, task_id in rows if not task_id),
-    )
+    return LiveRuns(task_ids=frozenset(task_id for (task_id,) in rows if task_id))
 
 
 @dataclass(frozen=True)
@@ -158,7 +154,6 @@ def attribute(
     *,
     staffing: FlowStaffing,
     live: LiveRuns,
-    agent_fallback: bool = True,
 ) -> Attribution:
     """Which agent is on *task*, and in what capacity. The one entry point.
 
@@ -169,26 +164,21 @@ def attribute(
     - the firing selected it → `next`;
     - neither, and the task names an assignee → `assigned`.
 
-    **`agent_fallback` is a defect being carried deliberately, not a feature.** When `Run.task_id`
-    is set, `live.task_ids` answers precisely. It is not set for a flow's own work firings — 61
-    job-origin queue entries on the trial database, none carrying `task_id` — so without the
-    fallback every actively-worked flow task would read `held`, which is the same class of lie in
-    the other direction. Matching on the agent instead over-reports `working` when that agent is
-    mid-turn on a *different* task: bounded and one-directional, where the bug it replaces was
-    unbounded.
-
-    It exists because only half of the missing run→task edge has been written.
-    `one-answer-to-what-is-happening` group 1 wrote it for reviews;
-    `openspec/explorations/2026-08-26-the-other-half-of-the-binding.md` is the other half, and
-    removing this parameter is what closing that gap buys. The parameter exists so a test can
-    demonstrate the difference rather than argue about it.
+    `working` is answered from `live.task_ids` alone — the runs table's own `task_id`, which is
+    the precise edge. This used to also match on agent alone (`agents_without_task`) as a
+    deliberately-carried fallback, because a flow's ordinary work firing wrote no `task_id` and
+    without it every actively-worked flow task read `held`. `every-run-knows-its-task` wrote that
+    edge (measured live on the beta database: job-origin entries carrying `task_id` went from
+    0/61 to 8/71), so the fallback's reason is gone and so is the fallback — matching on agent
+    alone over-reported `working` when that agent was mid-turn on a *different* task, and that is
+    no longer a trade this module needs to make.
     """
     agent = staffing.agent_for(task.id) or task.assignee
     if agent is None:
         return Attribution()
 
     if task.id in staffing.unstaffable:
-        running = task.id in live.task_ids or (agent_fallback and agent in live.agents_without_task)
+        running = task.id in live.task_ids
         return Attribution(agent, CAPACITY_WORKING if running else CAPACITY_HELD)
 
     if task.id in staffing.selected:
