@@ -72,3 +72,63 @@ preparation only.
 ## Iteration 1 onwards
 
 *(appended by the driver, one entry per iteration)*
+
+---
+
+## Iteration 1 — Q1-R1: reachable-by-a-human, explore then propose (2026-08-27T01:01:11+01:00)
+
+Confirmed branch and `git log` matched `STATE.json` before starting: current branch is
+`autonomous/2026-08-27-build-everything-decided`, cut from `master@a2f61c3` with one prep commit
+(`174abb8`) on top. No reconciliation needed.
+
+**Explored every path Q1-R1 named, before writing anything**, and one it didn't:
+
+- `hub/hub/utils.py:25` `persist_event` — confirmed it writes `severity` verbatim
+  (`entry = EventLog(..., severity=severity)`, `:49`), no normalisation.
+- All 21 `persist_event` call sites: 20 use `"info"`/`"warn"`/`"error"`; exactly one
+  (`run_divergence.py:613`) uses `"warning"`.
+- `EventRow.tsx` `SEVERITY_CHIP` (:37-42) and `SEVERITY_BORDER` (:44-47) — key on `error`/`warn`/
+  `info`/`debug` (chip) and `error`/`warn` (border) only. `"warning"` matches neither map.
+- `ActivityLog.tsx` `SEVERITY_FILTERS` (:31) and its strict-equality filter (:165) — same hole.
+- `events.py:42-43` (`GET /events/history`) and `logs.py:58-59` (`GET /logs`) — both filter
+  `EventLog.severity ==` exactly.
+- **Not named in the queue item, found by reading `persist_event`'s callers exhaustively**:
+  `hub/hub/api/v1/logs.py:85` (`POST /logs`) passes `severity=body.severity` straight from an
+  external request body; `schemas/logs.py:15,25` bounds it only to 64 characters, no enum. This is
+  why the exploration's "normalise in `persist_event`, not just the one call site" recommendation is
+  the only fix that actually closes the input surface — an API boundary fix alone would still leave
+  every internal call site free to drift.
+- `conversation_titles.py:168-224` `generate_conversation_title` — confirmed fully wired: gated on
+  `project.conversation_title_mode == "generate"` (:185), called from `agent_trigger.py` at run
+  completion, declines correctly on an operator-set title (:181, :213) and an unsupported runner CLI
+  (:189-190).
+- `db/models.py:96,103`, `api/v1/projects.py:87-89`, `ui/src/api/projects.ts:88-89` — field exists
+  end to end. `PUT /projects/{id}/settings` (`projects.py:446-496`) already validates and persists
+  both `conversation_title_mode` and `conversation_title_runner_id`, including the cross-project
+  runner check at :485-496 — confirmed no backend work is needed for this half.
+- `ProjectSettingsPanel.tsx` — zero references to either field, confirmed by grep.
+  `projectSettingsPanel.test.tsx:23-24,146-147` fixtures `conversation_title_mode: 'generate'` with
+  no control in the panel that could produce that value.
+
+**Design choice made while proposing, not left to the exploration's account**: rather than
+inventing a new capability, searched `openspec/specs/*/spec.md` for existing requirements this
+change makes newly true. Found `agent-capability-plane`'s "Operator-facing severity values are the
+ones the operator's view understands" (already states the general rule, pinned by only one
+scenario — a refused action) and `conversation-lifecycle`'s "Title generation is a project setting,
+off by default" (documents the setting, never requires it be operator-reachable). Both are modified
+in place rather than duplicated as new requirements.
+
+**Ran `openspec new change reachable-by-a-human`**, then wrote `proposal.md`, `design.md`, two
+spec deltas (`agent-capability-plane`, `conversation-lifecycle`), and `tasks.md` (3 groups, tests
+opening each phase per the method reminder, mutation checks 1.7 and 2.5 named explicitly).
+`npx openspec validate reachable-by-a-human --strict` passes.
+
+**What this round did NOT do**: no code was touched. Per the round discipline, R1 is explore-then-
+propose only; R2 and R3 are separate queue items and separate commits.
+
+Committed `3b80f99`. Next: Q1-R2 — compare the proposal to the code claim-by-claim and fix drift.
+
+*What a reviewer should distrust about this entry*: the exploration and the proposal were written
+by the same pass with no independent check yet — that is exactly what R2 exists to catch.
+
+
