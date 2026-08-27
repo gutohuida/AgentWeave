@@ -2133,6 +2133,90 @@ live — a run whose tool-result stream contains N "requires approval" refusals 
 `permission_denied` events is a run whose posture is not doing what it claims, and the operator
 currently has no way to learn that from the dashboard at all.
 
+### Correction 3, 2026-08-27: the reasoning behind the leading hypothesis is unsound, and the last untested axis is now eliminated
+
+Investigated on request, going at root cause rather than at the detector. Three results, and the
+third invalidates the direction the previous two corrections were pointing in.
+
+**1. The real production turn context does NOT reproduce it — the last named untested axis is
+eliminated.** Correction 2 closed with the refusal's trigger being "narrower and more specific to
+the full production turn than any of these axes — the large injected `--append-system-prompt-file`
+context, something about a resumed vs. fresh session, or something else not yet isolated." The
+context half of that is now tested. A real 14,988-byte context, written by a real turn of
+`ledger-stress`'s own `builder` agent and still on disk at
+`aw-stress/.agentweave/worktrees/builder/.agentweave/context/builder.md`, was injected through the
+real `_build_claude_command` (imported, not restated, so the flags cannot drift) into a linked git
+worktree, against Claude Code 2.1.238. Two variants differing in nothing but that file:
+
+| variant | context | approver calls | refusal | committed |
+|---|---|---|---|---|
+| A, no context | 0 B | 3 | none | n/a (nothing to add) |
+| B, real production context | 13,988 B | 3 | none | **yes** |
+
+The turn committed. The context is not the trigger.
+
+**2. `--permission-mode manual` is a valid flag that Claude Code 2.1.238 aliases to `default`.**
+Measured directly: `bogusmode` is rejected by the CLI with an argument error, `manual` is accepted
+and the `init` event reports `permissionMode: "default"`, while `acceptEdits` reports itself. So
+`manual` is not silently dropped, and nothing is broken by it — the posture's behaviour is carried
+by `--permission-prompt-tool`, exactly as `runner_commands.py`'s own comment says ("what makes it
+'workspace' rather than 'ask the operator' is the approver flag"). Recorded because the flag
+AgentWeave passes and the mode Claude reports do not match by name, which will mislead the next
+person who reads a transcript.
+
+**3. The evidence for "refused before the approver was ever consulted" does not support it.**
+This is the important one. The original write-up says:
+
+> Two independent checks confirm `approve_tool_call` was not invoked for any of these refusals
+> [...] `select * from event_logs where event_type='permission_denied' ...` → **0 rows**
+
+`record_permission_decision` (`agent_actions.py:598`) persists **only refusals** — its own
+docstring says so: *"Only refusals are persisted. An allowed call is the unremarkable case and
+would bury the interesting one under a row per tool call."* The handler body is `if not
+body.allowed:`. An allowed call writes no event, no row, nothing, anywhere — confirmed by grep;
+there is no second sink.
+
+So **zero `permission_denied` rows is exactly what an approver that ran and allowed everything
+looks like.** It is not evidence that the approver never ran. And an approver that allowed
+everything is precisely what this finding's own analysis predicts: *"`_decide` would have said yes
+to every one of them, instantly, if it had ever been asked."*
+
+`_report_decision` compounds it from the other end: every failure is swallowed
+(`except Exception: pass`, deliberately — a Hub that is down must not turn an answered request into
+an unanswered one). So a Hub that was slow or unreachable also produces zero rows, with the
+decision still correctly returned to Claude.
+
+Three different states are therefore indistinguishable in the record: the approver never ran; the
+approver ran and allowed; the approver ran, allowed, and failed to report. The leading hypothesis
+picked the first of the three with no evidence separating it from the other two — which is why
+every reproduction attempt aimed at "Claude refuses before consulting the approver" has come back
+negative. They were reproducing the wrong mechanism.
+
+**What this changes.** F52's root cause is still unknown, but the search space is different, and
+the "CLI refuses locally" theory should no longer be treated as leading. Untested axes that remain,
+now in the right order: the real `mcp_server.py` against a live Hub rather than a stub approver
+(where `_ask_operator`, `AW_PERMISSION_POSTURE`, `AW_DECISION_TIMEOUT` and a blocking HTTP call all
+exist and none were in any harness); `--resume` on a second turn, which every loop firing after the
+first uses and no harness has ever exercised; and the real production prompt with its inbound state,
+rather than a synthetic one.
+
+**And it strengthens (d) for a better reason than the one originally given.** The case for
+detecting this live was "the operator cannot learn a refusal happened". The stronger case is that
+**an allow is unobservable by design**, so the system cannot show its own posture ever worked. A
+detector that compares refusal-shaped tool results against recorded decisions is not merely a
+convenience — it is the only way to tell the three indistinguishable states apart, and it would
+have prevented this finding's central inference from being made at all.
+
+**A diagnostic distinction worth keeping**, found by getting the stub wrong first: an approver whose
+return shape is wrong (a dict rather than the `json.dumps(...)` string the real
+`approve_tool_call` returns) produces `Error calling tool (Bash): Permission prompt tool returned
+an invalid result` on **every** tool call, with the approver **logged as called**. That is a
+different signature from F52, where nothing is logged at all. Do not confuse the two.
+
+**Harness:** `testbed/scratch/f52_context_repro.py` and `f52_stub_approver.py` — gitignored, as
+`testbed/` is meant to be. Rebuild rather than restore if needed; the earlier
+`f52_pty_repro.py` was not kept either.
+
 ## F53 (B) — archiving a loop that never fired still permanently, irrevocably claims its spec document; the tasks it "adopted" have no recovery path
 
 Found 2026-08-26 driving Q4, self-inflicted and then traced to the code rather than dismissed as
