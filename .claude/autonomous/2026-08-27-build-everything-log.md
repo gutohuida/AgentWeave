@@ -1054,3 +1054,178 @@ evidence while the operator's checkout sat ahead of the described work) in the t
 second finding (the null `footprint` in the API response) was noticed as a byproduct of investigating
 the first, not sought out — worth stating since it means the pass was not a deliberate audit of every
 `_evidence_view` call site, just the one this drive happened to exercise.
+
+## Iteration 12 — clean wrap-up, no new work started
+
+**07:30 local, 30 minutes before `stop_at` (08:00).** Read STATE.json and the iteration-11 log entry
+above; verified branch (`autonomous/2026-08-27-build-everything-decided`, up to date with origin,
+clean tree) and `git log` both matched what STATE.json claimed — `current: Q7`, HEAD at
+`b5aaee1` (a heartbeat-release commit), no reconciliation needed.
+
+`next_action` (written at the end of iteration 11) was explicit for exactly this situation: both F70
+and F71 sit in `decisions_for_user`, still unanswered — this is not a later night with the operator's
+input given, it is the same night, closer to `stop_at`. The instruction was to do a clean wrap-up
+only and not start new work if that is the case. Checked what else the queue offers regardless: Q4/R1
+and Q5/R1 were already skipped by the pre-authorised 05:00 rule (iteration 9) and nothing in this
+run's mandate authorises un-skipping them unattended; Q8 is explicitly gated on 3+ hours remaining,
+and 30 minutes remained. There is no queue item this iteration could both start and finish-and-verify
+before `stop_at`, so no code was touched. This entry, STATE.json's heartbeat, and the release commit
+are the only changes.
+
+Confirmed nothing was left dangling from iteration 11: `SELECT id FROM ai_jobs WHERE enabled=1`
+against the beta database is still empty, and no uncommitted changes exist anywhere in the tree
+(`git status` clean before this entry was written).
+
+**Next:** unchanged from iteration 11 — Q7 stays current, blocked on the operator's answer to either
+F70 or F71 (`decisions_for_user`). Once an answer is given, work that finding first; Q8 stays gated on
+3+ hours. If this branch fires again tonight with still no answer, repeat this same wrap-up rather
+than guessing at a remedy or reaching past the gate on Q8.
+
+## Iteration 13 — clean wrap-up, no new work started
+
+**07:35 local, 25 minutes before `stop_at` (08:00).** Fresh process. Read `STATE.json` and the
+iteration-12 entry above; verified branch (`autonomous/2026-08-27-build-everything-decided`, up to
+date with `origin`, clean tree) and `git log` both matched what `STATE.json` claimed — `current: Q7`,
+HEAD at `583fe7d` (a heartbeat-release commit). No reconciliation needed.
+
+Same situation iteration 12 described, unchanged: neither F70 nor F71 has an operator answer in
+`decisions_for_user` — this is still the same night, now 25 minutes from `stop_at`, not a later
+session with input given. Iteration 12's own `next_action` said to repeat the wrap-up rather than
+guess in that circumstance. Checked the rest of the queue regardless: Q4/R1 and Q5/R1 remain skipped
+under the pre-authorised 05:00 rule (iteration 9), and Q8 is explicitly gated on 3+ hours remaining —
+25 minutes does not clear that gate. No queue item can both start and finish-and-verify in the time
+left, so no code was touched.
+
+Confirmed nothing was left dangling: `SELECT id FROM ai_jobs WHERE enabled=1` against the beta
+database (`C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db`) read empty, queried directly
+via `sqlite3` rather than trusted from an API response. `git status` was clean before this entry was
+written.
+
+**Next:** unchanged — Q7 stays current, blocked on the operator's answer to F70 or F71. Once given,
+work that finding first, in whichever order the operator answered. Q8 stays gated on 3+ hours
+remaining. If this branch fires again tonight with still no answer, repeat this same wrap-up.
+
+## Iteration 14 — clean wrap-up, no new work started
+
+**07:40 local, 20 minutes before `stop_at` (08:00).** Fresh process. Read `STATE.json` and the
+iteration-13 entry above; verified branch (`autonomous/2026-08-27-build-everything-decided`, up to
+date with `origin`, clean tree) and `git log` both matched what `STATE.json` claimed — `current: Q7`,
+HEAD at `bb99dd5` (a heartbeat-release commit). No reconciliation needed.
+
+Same situation iterations 12 and 13 both describe, still unchanged: `decisions_for_user` carries no
+operator answer to either F70 or F71 — this is still the same night, now 20 minutes from `stop_at`,
+not a later session with input given. Checked the rest of the queue regardless: Q4/R1 and Q5/R1
+remain skipped under the pre-authorised 05:00 rule (iteration 9), and Q8 is explicitly gated on 3+
+hours remaining — 20 minutes does not clear that gate. No queue item can both start and
+finish-and-verify in the time left, so no code was touched.
+
+Confirmed nothing was left dangling: `SELECT id FROM ai_jobs WHERE enabled=1` against the beta
+database read empty (queried directly via `py -3.11` + `sqlite3`, `mode=ro`, not trusted from an API
+response). `git status` was clean before this entry was written.
+
+**Next:** unchanged — Q7 stays current, blocked on the operator's answer to F70 or F71. Once given,
+work that finding first, in whichever order the operator answered. Q8 stays gated on 3+ hours
+remaining. If this branch fires again tonight with still no answer, repeat this same wrap-up. If
+`stop_at` (08:00) has passed by the time of a future firing, that is the operator's signal the night
+is over — a firing after that point should still do this same minimal wrap-up rather than assume
+authorisation to keep going past the stated window.
+
+## Iteration 15 — clean wrap-up, no new work started
+
+**07:45 local, 15 minutes before `stop_at` (08:00).** Fresh process. Read `STATE.json` and the
+iteration-14 entry above; verified branch (`autonomous/2026-08-27-build-everything-decided`, up to
+date with `origin`, clean tree) and `git log` both matched what `STATE.json` claimed — `current: Q7`,
+HEAD at `3f93c9b` (a heartbeat-release commit). No reconciliation needed.
+
+Same situation iterations 12-14 all describe, still unchanged: `decisions_for_user` carries no
+operator answer to either F70 or F71 — this is still the same night, now 15 minutes from `stop_at`,
+not a later session with input given. Checked the rest of the queue regardless: Q4/R1 and Q5/R1
+remain skipped under the pre-authorised 05:00 rule (iteration 9), and Q8 is explicitly gated on 3+
+hours remaining — 15 minutes does not clear that gate. No queue item can both start and
+finish-and-verify in the time left, so no code was touched.
+
+Confirmed nothing was left dangling: `SELECT id FROM ai_jobs WHERE enabled=1` against the beta
+database read empty (queried directly via `py -3.11` + `sqlite3`, `mode=ro`, not trusted from an API
+response). `git status` was clean before this entry was written.
+
+**Next:** unchanged — Q7 stays current, blocked on the operator's answer to F70 or F71. Once given,
+work that finding first, in whichever order the operator answered. Q8 stays gated on 3+ hours
+remaining. `stop_at` (08:00) is now essentially reached — a future firing on this branch, whether
+later tonight or on a subsequent night, should treat `stop_at` having passed as the signal that this
+particular armed run is over: keep doing this same minimal wrap-up (heartbeat + log entry only)
+unless the operator has both answered F70/F71 in `decisions_for_user` AND re-armed with a fresh
+`stop_at`/queue for a new session. Do not treat an old, expired `stop_at` as silently extending
+forever.
+
+## Iteration 16 — clean wrap-up, no new work started, `stop_at` now reached
+
+**07:50 local, 10 minutes before `stop_at` (08:00).** Fresh process. Read `STATE.json` and the
+iteration-15 entry above; verified branch (`autonomous/2026-08-27-build-everything-decided`, up to
+date with `origin`, clean tree) and `git log` both matched what `STATE.json` claimed — `current: Q7`,
+HEAD at `4963605` (a heartbeat-release commit). No reconciliation needed.
+
+Checked for operator input rather than assuming iteration 15's account was still current: fetched
+`origin/master` (unchanged at `a2f61c3`, the same sha this run was cut from — no new work landed
+there) and re-read `decisions_for_user` in `STATE.json`, which still carries F70 and F71 as `NEEDS A
+DECISION` with no operator response. Same situation iterations 12-15 all describe. Checked the rest
+of the queue regardless: Q4/R1 and Q5/R1 remain skipped under the pre-authorised 05:00 rule
+(iteration 9), and Q8 is explicitly gated on 3+ hours remaining — 10 minutes does not clear that
+gate. No queue item can both start and finish-and-verify in the time left, so no code was touched.
+
+Confirmed nothing was left dangling: `SELECT id FROM ai_jobs WHERE enabled=1` against the beta
+database read empty (queried directly via `py -3.11` + `sqlite3`, `mode=ro`, not trusted from an API
+response). `git status` was clean before this entry was written.
+
+**Next:** unchanged — Q7 stays current, blocked on the operator's answer to F70 or F71. `stop_at`
+(08:00) is now effectively reached (10 minutes remain, nothing startable in that window). Per
+iteration 15's own instruction, treat this armed run as over: any future firing, tonight or later,
+should do this same minimal wrap-up (heartbeat + log entry only) unless the operator has both
+answered F70/F71 in `decisions_for_user` with an actual decision AND re-armed the run with a fresh
+`stop_at` and queue.
+
+## Iteration 17 — clean wrap-up, no new work started, `stop_at` well past
+
+**07:55 local, 5 minutes past `stop_at` (08:00 was already the wrap-up threshold as of iteration
+16; clock now reads 07:55, so still technically 5 minutes short of the literal 08:00 mark but
+inside the same "nothing startable" window iterations 15-16 already established).** Fresh process.
+Read `STATE.json` and the iteration-16 entry above; verified branch
+(`autonomous/2026-08-27-build-everything-decided`, up to date with `origin`, clean tree) and
+`git log` both matched what `STATE.json` claimed — `current: Q7`, HEAD at `1ad63fe` (a
+heartbeat-release commit). No reconciliation needed.
+
+Checked for operator input rather than assuming iteration 16's account was still current: fetched
+`origin/master` (unchanged at `a2f61c3`, the same sha this run was cut from — no new work landed
+there) and re-read `decisions_for_user` in `STATE.json`, which still carries F70 and F71 as `NEEDS A
+DECISION` with no operator response. Same situation iterations 12-16 all describe. No queue item can
+both start and finish-and-verify in the time left, so no code was touched.
+
+Confirmed nothing was left dangling: `SELECT id FROM ai_jobs WHERE enabled=1` against the beta
+database read empty (queried directly via `py -3.11` + `sqlite3`, `mode=ro`, not trusted from an API
+response). `git status` was clean before this entry was written.
+
+**Next:** unchanged — Q7 stays current, blocked on the operator's answer to F70 or F71. This armed
+run (`stop_at` 08:00) is over in substance. Any future firing, tonight or later, should do this same
+minimal wrap-up (heartbeat + log entry only) unless the operator has both answered F70/F71 in
+`decisions_for_user` with an actual decision AND re-armed the run with a fresh `stop_at` and queue.
+
+## Iteration 18 — clean wrap-up, no new work started, `stop_at` reached exactly
+
+**08:00:09 local, at `stop_at` (08:00).** Fresh process. Read `STATE.json` and the iteration-17
+entry above; verified branch (`autonomous/2026-08-27-build-everything-decided`, up to date with
+`origin`, clean tree) and `git log` both matched what `STATE.json` claimed — `current: Q7`, HEAD at
+`1b8ea32` (a heartbeat-release commit). No reconciliation needed.
+
+Checked for operator input rather than assuming iteration 17's account was still current: fetched
+`origin/master` (unchanged at `a2f61c3`, the same sha this run was cut from — no new work landed
+there) and re-read `decisions_for_user` in `STATE.json`, which still carries F70 and F71 as `NEEDS A
+DECISION` with no operator response. Same situation iterations 12-17 all describe. No queue item can
+both start and finish-and-verify in the time left, so no code was touched.
+
+Confirmed nothing was left dangling: `SELECT id FROM ai_jobs WHERE enabled=1` against the beta
+database read empty (queried directly via `py -3.11` + `sqlite3`, `mode=ro`, not trusted from an API
+response). `git status` was clean before this entry was written.
+
+**Next:** unchanged — Q7 stays current, blocked on the operator's answer to F70 or F71. This armed
+run's `stop_at` (08:00) has now been reached exactly. Any future firing, tonight or later, should do
+this same minimal wrap-up (heartbeat + log entry only) unless the operator has both answered F70/F71
+in `decisions_for_user` with an actual decision AND re-armed the run with a fresh `stop_at` and queue.
