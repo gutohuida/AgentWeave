@@ -458,3 +458,113 @@ valid), so unlike Q1's three-round changes, nothing here gets an R2/R3 pass to c
 missed. The Risk-section figures were spot-checked for the headline number only, not fully
 reproduced; if task 6.1's baseline disagrees sharply with `9/19`/`45/55`, that is new information, not
 a contradiction of anything checked here.
+
+---
+
+## Iteration 6 — Q2-IMPL-A: every-run-knows-its-task groups 1-2, finished and verified (2026-08-27T04:03:52+01:00)
+
+**Reconciliation.** Fresh process. `git log` matched `STATE.json` (HEAD at `c0e4cba`, the heartbeat
+release after iteration 5), but the tree was **dirty**: a prior, uncredited firing had already
+written the group 1-2 implementation and its tests (`turn_scheduler.py`, `agent_trigger.py`,
+`run_task_binding.py`, `scheduler.py`, `test_scheduler.py`, `test_agent_trigger.py`, and a new
+`test_turn_scheduler.py`) but never ran a single test, updated `tasks.md`, committed, or logged —
+`iteration` in `STATE.json` already read `6` with a `last_heartbeat` *older* than iteration 5's own
+log timestamp, meaning that firing started, wrote code, and died before reaching any of the verify
+steps this driver requires. Read every diff against `tasks.md` before running anything: group 1's
+`_entry_kind` narrowing in `turn_scheduler.py`, the mixed-batch refusal in `agent_trigger.py`'s
+`_review_task_from_entries`, and the docstring update in `run_task_binding.py` all matched the
+design exactly; group 2's two `task_id=` lines in `scheduler.py` matched too. The code was sound —
+what was missing was ever running it.
+
+**First real run of the new tests hung the process, not merely failed it.**
+`pytest hub/tests/test_turn_scheduler.py tests/test_agent_trigger.py tests/test_scheduler.py -q`
+sat at zero CPU progress for 10+ minutes (measured twice with a `Monitor` polling loop: identical
+CPU-seconds across 100 seconds of wall time). Localised with `asyncio.all_tasks()` +
+`task.print_stack()` dumped from a watchdog task inside the hung test itself (`faulthandler`'s
+thread-level dump showed only "sitting in the event loop", not useful; the asyncio task stack was)
+to `_execute_run`'s read loop, `await loop.run_in_executor(None, pty.read)`, never returning.
+Root cause, confirmed by instrumenting `spawn.call_count` and `read.call_count` at the hang: a
+turn ending with queued entries self-continues **unconditionally** (`agent_trigger.py`'s own
+comment, "a turn ending with queued entries starts the next turn without waiting for operator
+input") — so completing the review turn in test 1.1 immediately triggered a second, real spawn for
+the deferred work entry, reusing the *same* `MagicMock` session object whose two-item
+`read.side_effect` was already exhausted by the first turn. The third `pty.read()` call raised
+`StopIteration`, and `asyncio.Future.set_exception` explicitly refuses to accept `StopIteration`
+(a documented PEP-479-era guard) — so `run_in_executor`'s wrapping callback itself raised trying to
+report the failure, the future was never resolved, and the `await` hung forever. This is a **test
+bug, not a product bug**: fixed by giving `spawn`'s mock a fresh session per call
+(`side_effect=lambda *a, **k: _completed_session(...)`) rather than a shared `return_value`.
+
+**The self-continuation discovery also invalidated the original tests' assertions, not just their
+mocks.** Tests 1.1 and 1.3 (written by the crashed prior firing) asserted that a deferred entry
+stays `queued` after `_drain()` — false once self-continuation is accounted for: by the time
+`_drain()` returns, the deferred entry has almost always already been picked up as a turn of its
+own, exactly as `design.md` says ("the deferred entry rides the next turn") — just faster than
+whoever wrote the tests assumed, since "the next turn" turns out to mean "immediately", not "on a
+manually retriggered `schedule_agent()` call". Rewrote both to pin what mutation 1.6 actually
+protects: two **separate, un-mixed** turns (verified via `spawn.call_count` and per-call prompt
+content), not a queue-state snapshot. 1.3 was redesigned around the literal risk text ("a review
+that keeps arriving first could starve the work entry") using two reviews ahead of one work entry,
+rather than the original's now-redundant explicit second `schedule_agent()` call. Test 1.2 needed no
+behavioural fix — its self-continued review retry genuinely fails cleanly against the real,
+unmocked `prepare_review_turn` — but got an explanatory comment so a future reader does not
+generalise its shape incorrectly. Test 1.5 was missing a `session/sync` registration step before
+`bind_runner`, 404ing before it ever exercised the refusal under test — added the step every sibling
+test in the file already uses. Full detail, including the exact commands and numbers, is in
+`tasks.md` under 1.1-1.5 and 1.9 rather than restated here.
+
+**Mutation checks 1.9 and 2.8 run for real** (the crashed firing had not attempted them). All
+predicted failures fired exactly as predicted, with one exception recorded rather than
+smoothed over: 2.8's "setting both fields fails 2.2" was first tried against the **second** staging
+path (`scheduler.py`'s `_stage_selection`, ~line 2621, matching the task text's line-number hint) and
+did **not** fail — test 2.2's fixture actually staffs its reviewer through the **primary** path.
+Reapplying the identical mutation to the primary path failed as predicted. Both `task_id=` lines are
+still correct and both still have direct-or-indirect coverage, but the second path's own
+never-both invariant has no dedicated mutation-verified test — flagged in `tasks.md` as a
+follow-up rather than built tonight, since Q2-IMPL-A's scope is groups 1-2 only. Every mutation was
+applied and reverted with `Edit`, and verified against `git diff --stat` after each revert.
+
+**One self-inflicted near-miss, recorded so it is not repeated**: mid-mutation-testing, I ran
+`git checkout -- hub/hub/turn_scheduler.py` intending to undo my *own* mutation edit, and instead
+reverted the entire file to `HEAD` — discarding the crashed prior firing's real group-1
+implementation along with my mutation, since `git checkout --` restores from the last *commit*, not
+from "one edit ago." Caught immediately by `git diff --stat` reading empty where it should have
+read `+15/-1`. Reconstructed the file by hand from the diff already read earlier in this same
+conversation turn and re-verified against the full test file before continuing; no work was
+actually lost, but only because the diff was still in context to reconstruct from. Do not use
+`git checkout --` to undo a mutation-testing edit on a file with real uncommitted content — use
+`Edit` to apply the exact inverse text instead, the same way every other mutation in this session
+was reverted.
+
+**Full-suite ripple, found by running the whole thing rather than trusting the touched-file
+scope.** `pytest hub/tests/ -q`: 3 pre-existing, untouched-by-this-change tests failed with the
+identical shape (`assert 'in_progress' == 'assigned'`) —
+`test_flow_chain_end_to_end.py::test_the_chain_runs_a_review_and_then_b_with_no_operator_action`,
+`test_flow_fires_a_review_turn.py::test_an_unstaffable_review_does_not_stop_the_flow_doing_other_work`,
+`test_flow_width.py::test_three_startable_tasks_and_one_agent_start_one_and_touch_nothing_else`.
+Cause: `run_task_binding.bind_run_to_task` is a pre-existing mechanism, previously reachable only by
+direct-`task_id` operator triggers, that advances a bound task past `assigned` to `in_progress` the
+moment a run starts on it. Group 2 is the first thing that stages `task_id` on a job/flow-fired
+entry, so this mechanism now reaches that path too — these three tests had encoded the old gap as a
+permanent guarantee. Fixed all three assertions with an inline note; each test's own actual point is
+unchanged. Full suite after: `3208 passed, 84 skipped, 1 xpassed` (3205 + 3 fixed; 84/1 both matching
+the pre-existing baseline — nothing else moved). Also ran, all clean: `ruff check src/ hub/ tests/`,
+`black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`,
+`pytest tests/ -q` (CLI suite), `npx openspec validate every-run-knows-its-task --strict`. Confirmed
+`ai_jobs WHERE enabled=1` is `0` on the beta trial database before committing.
+
+**Committed** (`d23b9c6`): the 11 explicit paths (never `-A`) — the four implementation files, six
+test files, and `tasks.md` with 1.1-1.9 and 2.1-2.8 checked and their actual measured results
+recorded inline, including the two findings above that did not fail as predicted.
+
+**Next: Q2-IMPL-B** — groups 3-5 (the owned predicate for "was this a live flow's own work turn",
+the derived severity replacing the hardcoded `warn`, and `POLICY_FLOW`/migration 0094).
+
+*What a reviewer should distrust about this entry*: the corrected tests (1.1, 1.3) were authored by
+the same process that found the self-continuation behaviour, with no independent second reading —
+if the "two separate, un-mixed turns" framing itself misses something design.md actually requires,
+nothing here would have caught it. The full-suite ripple fix touched three tests outside this
+change's own listed scope; that is a judgement call (a green suite is required to commit; leaving
+them red or reverting group 2 both seemed worse), not something `tasks.md` explicitly authorised in
+advance — recorded here and in `tasks.md` so the operator can see the reasoning rather than just the
+diff.
