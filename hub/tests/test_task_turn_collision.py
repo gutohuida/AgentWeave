@@ -430,7 +430,12 @@ async def test_a_collision_leaves_the_entry_queued_and_delivers_it_when_the_task
         await session.commit()
 
     for _ in range(DELIVERY_ATTEMPT_LIMIT + 1):
-        result = await schedule_agent("proj-test", CHALLENGER)
+        # `which` is patched here for the same reason as every other schedule in this file. On a
+        # machine with no `claude` on PATH the turn is refused for *that* reason instead, and that
+        # refusal is terminal — so the collision this test is about never gets to fire. CI is such
+        # a machine, which is how this passed locally and failed there.
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            result = await schedule_agent("proj-test", CHALLENGER)
         assert result.terminal_failure is False
         assert HOLDER in (result.waiting_reason or "")
 
