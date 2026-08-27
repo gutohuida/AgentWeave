@@ -3589,3 +3589,116 @@ finding — deliberately not resolved, so the row is still there to inspect; `ta
 `completed`, evidence of the `review_unstaffed` cascade), two agents, one archived job/loop, three
 real commits on the seed repo's `agentweave/flowauthor` branch. No further cleanup performed, so a
 future session can inspect the exact rows this finding cites.
+
+## F71 (A) — operator-recorded evidence footprints the operator's own checkout, not the commit the operator named, and a downstream review silently gets the wrong tree
+
+**Driven 2026-08-27, iteration 11 (Q7), continuing to exercise the verdict/approval/integration
+path Q6 explicitly did not reach — using the same live project, `proj-bad259c0c9f2`.** Built the
+part of the chain Q6 was missing (a spec document with one requirement, `FR-1`, approved and
+adopted onto the board as `task-7f49caae3c6d`) so evidence could be recorded against something real,
+then recorded evidence as the operator via `PUT .../documents/.../content` and
+`POST /projects/{id}/project/spec/evidence` — the same operator-facing route the Hub UI itself
+calls (`hub/hub/api/v1/spec.py:812`, distinct from the agent-facing `POST /spec/evidence` in
+`agent_actions.py` that a run authenticates against — the two are separate routers under separate
+prefixes, not two callers of the same code path).
+
+**What was recorded.** `flowreviewer`'s real, already-existing fix for the seeded
+`apply_percent_discount` float-equality bug sits, uncommitted-to-master, as commit `bd03e4d3` on
+`agentweave/flowreviewer` (an auto-snapshot per `worktrees.snapshot_worktree`, confirmed by
+`git diff master agentweave/flowreviewer -- cart.py`). The operator recorded evidence for `FR-1`
+against `task-7f49caae3c6d` with `locator: bd03e4d3eec894c82159e51ed01ed3dc874287a0` — naming the
+fix commit explicitly, in the one field that exists to say which commit is being described.
+
+**The footprint that was actually captured names a different commit — the wrong one.**
+`requirement_evidence.record` (`hub/hub/requirement_evidence.py:95`) never reads `locator` to decide
+what to footprint. It calls `footprint_root(workspace, actor.kind, actor.name)`
+(`requirement_evidence.py:220`), and for `actor.kind == "operator"` that function unconditionally
+returns `workspace.root` — the *project's own* checkout, on whatever branch the project happens to
+be sitting on, regardless of what the operator's `locator` says. Queried directly against the
+`evidence_footprints` table for the row this drive created (`ev-9d22a691db10`):
+
+```
+commit_sha: 052632357cb2edaf6fbbb99dd93a1b85fb04724f   (the ORIGINAL SEED commit — bug still present)
+branch:     master
+reachable_from_main: 1
+```
+
+not `bd03e4d3...`, the commit the operator named. `052632357` is `drive-q6-2026-08-27`'s very first
+commit — "seed cart module with deliberate uncovered defects" — the state *before* any fix, sitting
+on `master` because the operator's own checkout of this throwaway project had never been advanced
+past it.
+
+**Confirmed mechanically, not inferred: this is what a review turn would actually be handed.**
+Called `requirement_evidence.commit_for_task_review(session, "task-7f49caae3c6d")` directly against
+the live database (the same function `agent_trigger`'s review-turn wiring calls to decide what to
+check out):
+
+```
+resolved: True
+commit_sha: 052632357cb2edaf6fbbb99dd93a1b85fb04724f
+branch: master
+refusal: None
+```
+
+A reviewer given this task is hand-checked-out to the buggy pre-fix code, silently, with `resolved:
+True` and no refusal — the exact code path that refuses cleanly when there is *no* commit
+(`commit_for_task_review`'s two named refusal reasons, both absent here) does not distinguish "no
+commit" from "the wrong commit, footprinted with total confidence." `reachable_from_main: 1` compounds
+it: `task_integration.integration_targets` (per this same module's own docstring on
+`restamp_run_footprints`) merges on exactly this field, so an operator who approved evidence footprinted
+this way would have the Hub believe the fix is *already on `master`* — it is not; `master` still
+carries the float-equality bug, confirmed directly (`git show master:cart.py`, `discounted == 0.0`
+present, no `math.isclose`).
+
+**The direction of the failure is not fixed, and neither is safe.** In this drive the wrong-footprint
+commit happened to *predate* the fix — the failure reads as "reviewer sees stale, unfixed code,"
+recoverable once the reviewer notices the diff is empty of the described change. The opposite is also
+reachable with the identical mechanism: an operator recording evidence while their own checkout
+happens to be sitting on *any* commit that is not the one they are describing — including one further
+ahead, containing unrelated later work — would footprint *that* instead, with the same unearned
+`resolved: True` / possible `reachable_from_main: True`. Nothing about `record`'s code path validates
+the named `locator` against the captured footprint, or even warns when the two commits differ.
+
+**Why A, not B.** `footprint_root`'s own docstring states the assumption this breaks: "The operator
+keeps the project directory, and that is right rather than merely convenient: it is their own
+checkout, and **if they are on a feature branch that is where they observed the thing.**" That
+premise is only true when the operator's own checkout *is* the work being described — true for the
+scenario the docstring was written against (2026-08-13, operator recording their own observation of
+their own tree), false for this one: an operator recording evidence *about a separate agent
+worktree's branch*, which is the ordinary shape of reviewing multi-agent work from outside a running
+turn (exactly what this drive, and any real operator watching a loop from the dashboard, would do).
+The `locator` field exists, is populated correctly, is silently ignored, and the resulting evidence
+carries `review_state: accepted` (operator evidence self-accepts, `requirement_evidence.py:151`) —
+so this is not a pending claim awaiting scrutiny; it is evidence already treated as decided, footprinted
+against a commit nobody named and nobody chose.
+
+**A second, smaller finding surfaced by the same drive: the record-evidence response never reports
+the footprint it just captured.** `POST /project/spec/evidence`'s handler
+(`hub/hub/api/v1/spec.py:838`) returns `_evidence_view(evidence)` — no `footprint=` argument — while
+every *other* caller of `_evidence_view` in the same file (`spec.py:805`, `:867`, `:898`) passes one.
+The API response for the call this drive made read `"footprint": null`, which looks exactly like "no
+footprint was captured" — the honest, refusal-shaped outcome — when in fact a footprint row was
+written to `evidence_footprints` in the same transaction, just naming the wrong commit (above). A
+caller who trusted the response over the database would draw the opposite conclusion from either
+direction: believing evidence was captured with no footprint at all (false — one exists), or, had the
+footprint been correct, having no way to confirm what commit was actually captured without a direct
+database read. Not independently severity-rated; recorded as part of F71 because it is what let this
+finding's own root cause go unnoticed at the API layer during this drive — the response gave no
+signal that anything had gone differently from what was asked for.
+
+**Not fixed this iteration**, consistent with the standing discipline (drive records, a separate pass
+fixes) and with how little of `stop_at` remained when this was found. Plausible remedies, none
+picked: (1) `record` compares the captured footprint's commit against a `locator` that parses as a
+commit-ish and refuses or warns on mismatch; (2) for `actor.kind == "operator"`, resolve the footprint
+root from the *named* commit/branch when `locator` identifies one, falling back to `workspace.root`
+only when it does not; (3) surface the footprint (and a mismatch, if any) in the record-evidence
+response so a human operator has a chance to notice before deciding anything downstream. Left as a
+decision for the operator, alongside F70, rather than guessed at here.
+
+**Left behind in `proj-bad259c0c9f2`:** one new spec document (`spec/changes/russet-kirin/spec.html`,
+approved, one requirement `FR-1`), one throwaway sibling document from an earlier attempt in the same
+session (`spec/changes/lilac-chimera/spec.html`, left at `exploring` — abandoned mid-draft when its
+requirement key collided with the one actually used; harmless, not cleaned up, so the git history of
+this drive stays honest about the false start), one task (`task-7f49caae3c6d`, `under_review`,
+assignee `flowreviewer`, carrying the mis-footprinted evidence `ev-9d22a691db10`) left live and
+unresolved as inspectable evidence for this finding, the same discipline F70's rows already follow.
