@@ -2213,6 +2213,35 @@ return shape is wrong (a dict rather than the `json.dumps(...)` string the real
 an invalid result` on **every** tool call, with the approver **logged as called**. That is a
 different signature from F52, where nothing is logged at all. Do not confuse the two.
 
+**Axis 1 tested the same evening, live, and it does NOT reproduce either.** A full real turn:
+isolated Hub on 8011 started from source on this branch (migrated to `0096`), its own throwaway
+database, a fresh throwaway project `proj-a1736a6a596b` at `C:\Users\huida\Documents\aw-f52`,
+default seeded `claude` runner pinned to Haiku, agent `builder`, triggered through
+`POST /projects/{id}/agent/trigger` with an instruction to run `git --version`, `git add -A` and
+`git commit`. So the **real `mcp_server.py`** answered, with a real run credential, a real Hub to
+report to, and the real `AW_*` environment - none of which any harness had ever included.
+
+**The turn committed.** `.agentweave/worktrees/builder` carries `c8d0fb1 f52: fix is_low_stock` on
+top of `cb35c0e initial`, working tree clean. No refusal, and the isolated per-agent worktree was
+provisioned and used exactly as designed.
+
+So every axis this finding ever named is now eliminated, including the one left as most likely.
+**F52 does not reproduce on current code with Claude Code 2.1.238.** That is not the same as
+"fixed": nothing was changed to fix it, and it was observed twice, live, on two separate drives.
+The honest reading is that its trigger was in something that has since moved - the CLI build, the
+machine's settings, or Hub code that has changed a great deal since 2026-08-26 - and the record
+cannot say which, because an allow is unobservable.
+
+Which is the argument for (d) restated as a measurement problem rather than a convenience: this
+finding cost two drives and three investigations, and the reason it could never be pinned is that
+**the product keeps no positive evidence that its own approver ran.** Until it does, the next
+occurrence will be equally unfalsifiable.
+
+One incidental observation, not chased: while the run was live the Hub's own API stopped answering
+`GET /projects/{id}/runs` for minutes at a time (two client calls timed out, at 3 and 10 minutes,
+against an instance that answered instantly before the run and whose log shows nothing). Not filed
+as a finding because it was not driven deliberately or reproduced.
+
 **Harness:** `testbed/scratch/f52_context_repro.py` and `f52_stub_approver.py` — gitignored, as
 `testbed/` is meant to be. Rebuild rather than restore if needed; the earlier
 `f52_pty_repro.py` was not kept either.
