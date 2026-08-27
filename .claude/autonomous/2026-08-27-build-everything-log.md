@@ -200,3 +200,61 @@ would pass regardless of the code).
 *What a reviewer should distrust about this entry*: the SSE-broadcast fix was designed and written
 into the artifacts by the same round that found it, with no independent second check yet — exactly
 what R3 exists to catch, same as iteration 1's own caveat about itself.
+
+---
+
+## Iteration 3 — Q1-R3: second independent pass over `reachable-by-a-human` (found nothing to fix)
+
+Four specific checks, as `next_action` set them, plus the standing citation/order/falsifiability
+sweep. All were run against the live code and a live query, not against R1/R2's own account of
+either.
+
+1. **Does `{info, warn, error, debug}` cover every value actually in the database?** Queried the
+   trial Hub's live `event_logs` table directly (`beta` profile, read-only connection, not the
+   design's claim): `info` (2996 rows), `warn` (108), `warning` (3). No `error` or `debug` rows exist
+   yet, and no fifth spelling does either. `warning` is exactly the one value the fallback exists to
+   catch — confirms the enumerated set, doesn't just fail to contradict it.
+
+2. **Does anything besides `run_divergence.py:613` and `push_log`'s broadcast read or re-emit a
+   severity string outside `persist_event`'s own write?** Grepped every `severity=` call site (21
+   internal callers, all pass literal `"info"`/`"warn"`/`"error"` except the one bad spelling) and
+   every place a response or broadcast payload sets a `"severity"` key. Found exactly two:
+   `logs.py:94` (`push_log`'s broadcast, already the subject of task 1.7) and `events.py:53`
+   (`GET /events/history`, reading `r.severity` off an already-persisted, already-normalised row —
+   not an independent write path, nothing to fix). No third site exists.
+
+3. **Are tasks 1.1–1.10 executable in the stated order?** Yes: 1.1/1.2 are tests against
+   not-yet-written normalisation (red until 1.3), 1.5 exercises 1.3 through `POST /logs`, 1.6 is a
+   test against the not-yet-written broadcast fix (red until 1.7), 1.8 is the first point every
+   preceding test can be green together, 1.9/1.10 revert-and-confirm each implementation task in
+   turn. A stranger following the list in order hits no forward reference to code that doesn't exist
+   yet at that step.
+
+4. **Does the runner `Select` need a guard forcing a runner when `generate` is selected, or does the
+   backend already refuse `generate` + no runner?** Read `update_project_settings`
+   (`projects.py:485-496`): the cross-project check only runs `if runner_id` truthy — a null
+   `conversation_title_runner_id` is accepted unconditionally, in any mode. Then read
+   `_resolve_runner` (`conversation_titles.py:148-165`): when the project's
+   `conversation_title_runner_id` is unset, titling falls back to the triggering conversation's own
+   agent's bound runner. So `generate` + no project-level runner isn't a validation gap the design
+   missed — it's a working, meaningful configuration (per-agent runner) that task 2.3's "None" option
+   already accounts for correctly. Worth recording because it's a stronger claim than the design
+   currently makes (design only says the backend "already validates" the pair; it doesn't say `None`
+   is itself a real fallback, not just a tolerated absence) — but not a defect, so the artifacts were
+   left as they are rather than padding them with a claim the tasks don't depend on.
+
+**Also re-swept, unchanged from R2 and still correct**: every file:line citation in `proposal.md`,
+`design.md`, `tasks.md` against the current code (`utils.py:25,31,49`; `ProjectSettingsPanel.tsx`'s
+existing Checkpoint runner/model rows at `:243-272`, confirmed byte-identical to R2's citation); both
+spec deltas' scenarios are falsifiable (each names a real WHEN a real caller triggers and a real THEN
+against a real column, broadcast payload, or rendered control); `debug`'s "reserved but unwritten"
+claim confirmed directly in `EventRow.tsx:41` and `ActivityLog.tsx:31,41`.
+
+**Verdict: nothing to fix.** No artifact edit this round. `npx openspec validate reachable-by-a-human
+--strict` re-run anyway (not skipped just because nothing changed) — passes. Next: Q1-IMPL, working
+the tasks.md the three rounds produced.
+
+*What a reviewer should distrust about this entry*: a round that finds nothing carries weaker
+evidence than one that catches something, precisely because a clean pass and a lazy pass look
+identical from outside. The four numbered checks above are the falsifiable record of what was
+actually queried and read this round, not a claim to take on faith.

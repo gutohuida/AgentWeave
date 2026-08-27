@@ -9,8 +9,8 @@
   "started_at": "2026-08-27T00:30:00+01:00",
   "stop_at": "2026-08-27T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 3,
-  "last_heartbeat": "2026-08-27T00:29:06+01:00",
+  "iteration": 4,
+  "last_heartbeat": "2026-08-27T01:11:29+01:00",
   "green_at_arming": "CI run 33022066377 on master: ALL 8 matrix cells green - ui-test, hub-test, and test x {ubuntu, windows, macos} x {3.11, 3.12}. This is the first time this code has ever been through Linux, macOS or Python 3.12; it had only ever run on Windows/3.11 locally. AW_CHECK_UI_BUNDLE=1 test_ui_build_stamp.py also green after the stamp was re-recorded. You are starting from a genuinely green tree - any red is yours.",
   "log_file": ".claude/autonomous/2026-08-27-build-everything-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
@@ -52,7 +52,7 @@
     {
       "id": "Q1-R3",
       "title": "reachable-by-a-human - round 3: compare again, fix again",
-      "status": "open",
+      "status": "done",
       "detail": "A second independent pass, looking for what round 2 did not. Round 2 tends to catch wrong citations; round 3 is for claims that are TRUE BUT INCOMPLETE, tasks that cannot actually be executed in the order given, scenarios that would pass no matter what the code did, and missing mutation checks. Ask specifically: does the enumerated severity set cover every value now in the database (info, warn, warning, error, debug)? Does exposing conversation_title_mode need the runner-selection field (conversation_title_runner_id, migration 0037) exposed with it, or does it work without? Does anything ALREADY write severity='warning' other than run_divergence.py:613? Fix, re-validate --strict, and record what this round caught that round 2 missed."
     },
     {
@@ -176,8 +176,8 @@
       "detail": "Work the tasks.md the three rounds produced. Mutation checks by name."
     }
   ],
-  "current": "Q1-R3",
-  "next_action": "Q1-R3: a second independent pass over openspec/changes/reachable-by-a-human/, looking for what Q1-R2 did not catch. Q1-R2 found and fixed one real gap (push_log's SSE broadcast reading raw body.severity instead of persist_event's normalised return) plus confirmed every file:line citation exact. For R3 ask specifically: does the enumerated severity set {info,warn,error,debug} cover every value now actually in the database (info, warn, warning, error, debug - re-check via a live query, not the design's claim)? Does anything else besides run_divergence.py:613 and push_log's broadcast ever read or re-emit a severity string outside persist_event's own write (e.g. any other SSE broadcast built from a caller's raw severity)? Are tasks 1.1-1.10 executable in the stated order (tests before their implementation task, mutation checks after)? Does the conversation-title row's runner Select need a 'None' option guarded against generate mode requiring a runner, or does the backend already refuse that combination - check PUT /projects/{id}/settings for whether conversation_title_mode='generate' with a null runner_id is accepted or refused, since the design does not say. Fix what's wrong IN the artifacts, then re-run `npx openspec validate reachable-by-a-human --strict`. Write down what this round caught, even if nothing - enumerate what was checked either way.",
+  "current": "Q1-IMPL",
+  "next_action": "Q1-IMPL: work openspec/changes/reachable-by-a-human/tasks.md in order (all three rounds are done; Q1-R3 found nothing to fix, recorded in the log with its four checks). Section 1 (severity normalisation, tasks 1.1-1.10) touches hub/hub/utils.py (persist_event), hub/hub/run_divergence.py:613, and hub/hub/api/v1/logs.py (push_log) plus their tests in hub/tests/ - follow the test-before-impl order the tasks are numbered in, and do NOT skip mutation checks 1.9/1.10 (revert the fix, confirm the named test fails, restore). Section 2 (conversation-title settings control, tasks 2.1-2.5) touches hub/ui/src/components/environment/ProjectSettingsPanel.tsx and hub/ui/src/__tests__/projectSettingsPanel.test.tsx - do NOT gate the runner Select's visibility on mode==='generate' (design rejected that; match the Checkpoint runner precedent's unconditional visibility), and do include a 'None' option (confirmed meaningful: falls back to the conversation's own agent's bound runner, not just tolerated by validation). Section 3 is the build+sweep: npm run build, py -3.11 scripts/refresh_ui_bundle.py (commit hub/ui/src and hub/hub/static/ui together), full hub pytest suite, ruff/black/mypy, npm run lint, npx openspec validate reachable-by-a-human --strict. This closes Q1 entirely - after it, advance to Q2-R1 (every-run-knows-its-task's one verification round), noting Q2-R1's own instruction to check whether Q1 moved run_divergence.py's severity emission and update design D6 if so (Q1-IMPL keeps severity='warn' at run_divergence.py:613 exactly as R1-R3 decided, so D6 should not need changing, but confirm rather than assume).",
   "decisions_for_user": [
     "THE 05:00 RULE, pre-authorised: the operator asked for the e2e-loop test explicitly, and the queue is now long enough that it may not be reached. If it is past 05:00 local and Q6 has not started, SKIP any change that has not started and go straight to Q6 and Q7. Do not abandon a change already part-built - finish or revert it first, never leave one half-landed. Rationale: an e2e drive of what was built is worth more than one more unproven change, and the operator's own ordering put the drive after the building precisely so it would test real work.",
     "SCOPE WARNING, stated so the morning is not a surprise: the operator's round discipline (three rounds per unproposed change, one for the proposed one) turns three changes into twelve queue items before their implementations. This is deliberate and is a quality decision, not an oversight - but the full queue almost certainly does not fit in one night. It is ordered so that stopping anywhere leaves complete work behind rather than a row of half-written proposals. If little got built, that is the discipline working as asked, not the loop failing.",
