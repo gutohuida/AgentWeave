@@ -782,3 +782,174 @@ during groups 1-2's own iteration — if that iteration's own count differs, tru
 its own log entry over this reconstruction. The 17-minute hub-suite runtime was not re-measured in
 isolation to confirm the "concurrent load" explanation; it is a plausible account, not a verified
 one.
+
+## Iteration 9 — Q3: close task 4.7, remove agent-fallback, archive one-answer-to-what-is-happening (2026-08-27T06:25:39+01:00)
+
+**Reconciliation.** Fresh process, as always. `STATE.json` claimed `iteration: 9`, `current: Q3`,
+committed tip `c50f093` (a released heartbeat). `git log` matched exactly — no commit ahead that
+`STATE.json` didn't know about, unlike iteration 8's start. But `git status` was not clean: a prior
+firing (never logged, presumably crashed or ran out of turn before writing this entry) had already
+done essentially all of Q3's real work, uncommitted. Read every diff in full before touching
+anything, per the standing rule against `git checkout --` discarding uncommitted content:
+- `hub/hub/task_attribution.py`: `agent_fallback` parameter removed from `attribute`, along with
+  `LiveRuns.agents_without_task` and the `live_runs` query's agent column. `working` now reads
+  `live.task_ids` alone.
+- `hub/tests/test_task_attribution.py` and `hub/tests/test_board_agent_role.py`: both previously-
+  pinned fallback behaviours rewritten to assert the corrected (`held`, not `working`) outcome —
+  `test_a_run_without_a_task_id_still_reads_as_working` renamed to
+  `test_a_run_without_a_task_id_no_longer_reads_as_working`, and
+  `test_an_agent_mid_turn_elsewhere_does_not_make_a_second_task_read_as_worked` collapsed from a
+  two-call before/after comparison to the single corrected assertion.
+- `openspec/changes/one-answer-to-what-is-happening/` already `git mv`d (staged) to
+  `openspec/changes/archive/2026-08-27-one-answer-to-what-is-happening/`, with task 4.7 marked
+  `[x]` and a `CLOSED 2026-08-27` note recording the mutation check
+  (`running = True` unconditionally → 5 named tests failed as predicted, reverted with `Edit`).
+- `openspec/specs/agent-flows/spec.md`, `agent-loops/spec.md`, `run-task-binding/spec.md`: purely
+  additive deltas already folded in (`openspec-sync-specs` already run) — confirmed with
+  `git diff --stat`, 203 insertions, 0 deletions across the three.
+
+Nothing was lost and nothing needed redoing — this iteration's job became **verify independently,
+then commit**, exactly the posture the standing rules ask for when inheriting uncommitted work.
+
+**Verification performed fresh, not trusted from the working tree's own notes.**
+`pytest hub/tests/test_task_attribution.py hub/tests/test_board_agent_role.py hub/tests/test_jobs.py
+-q`: `79 passed, 1 skipped` — matches the inherited note exactly. Full hub suite
+(`pytest hub/tests/ -q`, backgrounded via `Monitor` while other checks ran): `3227 passed, 84
+skipped, 1 xpassed` in 1263s (21m03s) — identical pass/skip/xpass counts to iteration 8's own
+post-Q2-IMPL-C baseline, confirming zero ripple from removing the fallback anywhere else in the
+suite. CLI suite (`pytest tests/ -q`): `440 passed, 3 skipped`, untouched. `ruff check src/ hub/
+tests/`: clean. `black --check --target-version py311` on the three touched Python files: clean.
+`npx openspec validate --all --strict`: `43 passed, 0 failed` (`one-answer-to-what-is-happening` no
+longer appears — correctly archived; `every-run-knows-its-task` and `reachable-by-a-human` still
+appear as open changes, correctly — Q3 only archives the one change it names). Confirmed
+`SELECT id FROM ai_jobs WHERE enabled=1` empty on the beta database per the standing rule (this
+iteration never touched the trial Hub — pass-through check).
+
+**Committed** (`12b648e`), explicit paths only: the three Python files, the archive rename plus its
+further-modified `tasks.md`, and the three synced spec files.
+
+**The 05:00 rule, invoked.** It is `06:47` local at the point of this decision — well past the
+`05:00` threshold in `decisions_for_user`, and neither `Q4` (`a-dead-thing-holds-nothing`) nor `Q5`
+(a separate review capacity) has a single artifact written. Per the pre-authorised rule: skip both
+entirely rather than start a proposal round that cannot reach implementation before `stop_at`
+(`08:00`), and go straight to `Q6` (the e2e-loop drive) and `Q7` (fixing what it finds). All eight
+`Q4-*`/`Q5-*` queue items marked `skipped` below with this rationale, not attempted. `Q8` was
+already gated on "3+ hours remain" and there are roughly 70 minutes left, so it stays untouched and
+ungated-in — no decision needed there, the gate itself already covers it.
+
+**Next: Q6** — e2e-loop full test against a fresh throwaway project outside the repository. Given
+the time remaining before `stop_at`, the next iteration should size its scope to what can be driven
+and recorded honestly in the time left, per the standing operator preference for "record what you
+could verify" over silently claiming more coverage than was actually driven.
+
+*What a reviewer should distrust about this entry*: this iteration verified the inherited diff was
+internally consistent and green, but did not independently re-derive the design decision to remove
+`agent_fallback` from first principles — that judgement (and D8's own reasoning) belongs to
+whichever firing actually wrote the diff, which crashed before logging itself. If that firing's
+reasoning was flawed, this entry's "verified" only means "verified against its own stated intent,"
+not "independently re-litigated."
+
+---
+
+## Iteration 10 — Q6: e2e-loop drive against a fresh throwaway project (2026-08-27T06:55:01+01:00)
+
+**Reconciliation.** Fresh process. `git log` matched `STATE.json` exactly (HEAD at `e91dbaf`, the
+release heartbeat after iteration 9) and the tree was clean. `current: Q6`, ~65 minutes remained
+before `stop_at` (08:00).
+
+**Hub restarted before touching anything.** The running trial Hub (PID `14352`) had started
+`04:45:45`, after group 3-5's commit but **before** Q3's `12b648e` (agent-fallback removal,
+`06:47:59`) — stale by roughly one commit's worth of backend behaviour. Stopped it and restarted
+onto the current branch tip with the documented `hub/`-rooted, `DATABASE_URL`-explicit command;
+confirmed `/health` and, more importantly, the **project list** (5 projects, matching the note in
+`STATE.json`), not just health — per this run's own recorded dead end about a Hub silently serving a
+stale database while reporting healthy.
+
+**Built a genuinely fresh throwaway project, not a reused one.** `C:\Users\huida\Documents\
+drive-q6-2026-08-27`, git-initialised, seeded with `cart.py`/`test_cart.py` on the `ledger`/
+`inventory` pattern: three real defects, five green tests that exercise none of them (phantom
+zero-quantity row left by `remove_item`; a mutable-default comment on `add_item` that turned out to
+be **wrong** — the code was already the safe idiom, caught before it wasted a task; `float == 0.0`
+in `apply_percent_discount`). Registered via `e2e.py setup drive-q6-2026-08-27` (its `PROJECTS`
+root already matched, no `--dir` flag needed once the directory naming was aligned) →
+`proj-bad259c0c9f2`.
+
+**First real friction, and a dead end from a prior iteration paid off immediately.** `e2e.py agent`
+always self-registers (`contact_mode: poll`, `self_registered: true`), and iteration 8 had already
+recorded that a self-registered agent 409s out of `POST /jobs/{id}/run`. Archived the two
+self-registered agents `e2e.py` created and rebuilt them as Hub-managed via `POST /agents`
+(`self_registered: false`) reusing the same runners/charters: `flowauthor`
+(claude/claude-haiku-4-5-20251001, Developer) and `flowreviewer` (codex/gpt-5.4-mini, Code
+Reviewer — the charter substring match needed the display name `"Code Reviewer"`, not the JSON key
+`code_reviewer`; caught by reading the charter list rather than assuming the mismatch was fine).
+
+**A real Loop job, created and fired for real — no simulation.** `POST /projects/{id}/jobs` with
+`initial_tasks` (creates the task and the loop's queue atomically, no spec document required) and
+`purpose`/`stop_when_queue_empties` (the loop opt-in). `POST /jobs/{id}/run` to fire on demand
+rather than wait on cron. **D1/D2's binding confirmed from zero**, reading `task_transitions`
+directly: `pending -> assigned` (`actor_kind=operator`), `assigned -> in_progress` (`actor_kind=run`,
+`run_id` populated) — the exact shape `every-run-knows-its-task` groups 1-2 built, reproduced on a
+database with no `ledger-stress` history to inherit correctness from. `flowauthor` did real work:
+`git log` on the seed repo shows a real commit (`f523937`) with a correct fix and a genuine
+regression test, not a transcript claim taken on faith.
+
+**A self-inflicted contamination exposed a real, previously-unrecorded defect.** To test review
+staffing without waiting on cron, `PATCH /tasks/{id}` moved the completed task straight to
+`under_review` — legitimate (`task_transitions.py` marks the transition `_BOTH`) — without also
+reassigning it away from its own author. That single call permanently wedged `scheduler.py`'s
+`WITH_REVIEWER_LOOP_TASK_STATUSES` branch (`~1214-1232`): it trusts `under_review` status alone to
+mean "a reviewer already holds this," never checking the assignee actually differs from whoever
+completed the task. The stuck task sat silently "in flight" for the rest of the drive — no error, no
+`review_unstaffed`, `POST /jobs/{id}/run`'s own `409` text reading "nothing is wrong." **It
+compounds**: `_agents_that_are_free` also counted the stuck assignee as busy, so when a second real
+task needed a reviewer, the one eligible agent read as unavailable and `review_unstaffed` fired for
+a task that should have been staffable — the one contaminated row silently cost the whole project's
+review capacity, not just its own resolution. Written up in full as **F70 (severity A)** in
+`scripts/drive/FINDINGS.md`, including the exact code, the exact event rows, and a recommended fix
+shape — but **not fixed this iteration**: the write-up's own conclusion is that the remedy (check
+`assignee != author` in the scheduler branch, refuse the raw transition upstream, or something else)
+is a design question for the operator, so it went to `decisions_for_user` rather than being guessed
+at, per the standing discipline this queue item itself states.
+
+**The un-contaminated sibling path held, recorded for contrast.** A second task, authored by
+`flowauthor`, correctly triggered `resolve_reviewer` excluding the author and staffing the free
+`flowreviewer` — reassignment and status flip together, exactly the invariant the stuck row's own
+scheduler comment describes and exactly the path that row skipped. D3/D4's staffing ladder working
+correctly, live, immediately adjacent to the one row where it silently didn't — the kind of
+side-by-side evidence F69's own log entry also valued.
+
+**Verdict/approval/integration not reached — a known gate, not a new one.** Triggering the staffed
+reviewer directly returned "no recorded evidence, so there is no commit to review": this drive's
+tasks were never linked to a spec document, so `record_evidence` had nowhere to attach, and the task
+briefings never told the agent to call it. This reproduces already-recorded F65 rather than finding
+something new — recorded in F70's write-up as confirmation, not claimed as fresh.
+
+**Cleanup, before anything else.** Job archived (`enabled: false`); `SELECT id FROM ai_jobs WHERE
+enabled=1` confirmed empty project-wide, per the standing rule. Task rows deliberately **not**
+resolved — `task-2529a21e8c49` (the stuck row), `task-13c9638e7e30` (staffed-but-undelivered),
+`task-684f8b08e0e0` (the `review_unstaffed` cascade's victim) all left live in
+`proj-bad259c0c9f2` as inspectable evidence for F70, the same discipline `ledger-stress` and
+`drive-2026-08-26` have followed all along.
+
+**Honest scope note.** ~65 minutes were actually available against the original Q6 detail's ask for
+a full firing→work→binding→review→verdict→approval→integration sweep. What was driven is real and
+verified independently (database rows read directly, not trusted from API responses or transcripts;
+a real `git log` checked, not a claimed commit taken on faith) but stops short of verdict/approval/
+integration. `STATE.json`'s own `next_action` for this iteration pre-authorised sizing the drive to
+what could be honestly completed rather than claiming the full sweep — this entry is that sizing,
+stated plainly rather than padded.
+
+**Next: Q7** — F70 is the only finding from this drive and needs the operator's answer before a fix
+is attempted; see `decisions_for_user`. With time remaining before `stop_at`, the better use of it
+is likely more driving (the operator asked for a full sweep and one finding is thin for a night's
+worth of queue), not guessing at F70's remedy.
+
+*What a reviewer should distrust about this entry*: F70 was found via a deliberately self-inflicted
+contamination (a raw operator `PATCH`), not organic use — but the contamination itself is a
+legitimate, unremarkable API call available to any real caller, and the scheduler's blind trust in
+status alone is real regardless of how the status was reached. The "compounds across the whole
+project" claim rests on one observed `review_unstaffed` event with a task genuinely eligible by every
+other criterion; it was not independently re-verified by, say, temporarily un-wedging the stuck row
+and confirming staffing then succeeds — that would have used remaining time better spent recording
+the finding than proving it twice. The charter/agent-setup friction (self-registered vs Hub-managed)
+was resolved by an already-recorded dead end, not discovered fresh — credit belongs to iteration 8.
