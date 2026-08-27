@@ -193,7 +193,7 @@ existing `"warning"` rows) — both still correctly out of scope, no code change
 Migration Plan's "no migration needed" claim — confirmed both fields already exist as columns with
 no pending Alembic revision under `hub/hub/migrations/versions/` naming them.
 
-Committed `<pending>`. Next: Q1-R3 — a second independent pass for what this round did not catch
+Committed `2fecfe5`. Next: Q1-R3 — a second independent pass for what this round did not catch
 (claims that are true but incomplete, tasks that cannot execute in the stated order, scenarios that
 would pass regardless of the code).
 
