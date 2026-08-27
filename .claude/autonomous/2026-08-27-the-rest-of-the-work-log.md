@@ -1620,3 +1620,98 @@ The spec delta for D8 (`specs/operator-agent-creation/spec.md`) already reads as
 including the sentence "An agent that works in the project's shared checkout rather than an isolated
 one SHALL NOT be refused", which is a broader and more accurate statement of the exemption set than
 tasks.md 4.13's three-item list. Where the two disagree, the delta is right.
+
+---
+
+## Iteration 12 — 2026-08-27 16:12 → F58-IMPL phase 5, and the ordering nobody could have observed
+
+**Unit of work.** `next_action`'s phase 5 — release the task's checkout when the task is finished
+(design D5), tasks 5.1 through 5.7 of
+`openspec/changes/2026-08-27-work-is-isolated-per-task/tasks.md`. All seven are ticked; the change
+stands at **43/69**, up from 36.
+
+Branch and `git log` matched STATE.json on arrival (`bce0bcd`, tree clean). Nothing to reconcile.
+
+### What now happens
+
+`task_transition_service.release_task_workspace` runs inside `apply_transition`, after
+`integrate_task`, for both terminal statuses (`approved`, `rejected`). It removes
+`.agentweave/tasks/<id>` and **never** the branch, writing a `task_worktree_released` event with the
+branch, whether there was an uncommitted change, the snapshot commit if one was made, and the
+commits the branch carries beyond the primary checkout's HEAD — `warn` when there are unmerged ones,
+`info` otherwise, the same severity rule `session_sync.py` already uses for a per-agent release.
+
+Two scoping decisions are in the code rather than in this entry, both with the reasoning beside
+them: a **grandfathered** task (`workspace_scheme == 'agent'`) returns before touching anything,
+because the checkout its turns used belongs to the *agent* and outlives every task on it; and every
+failure is swallowed, logged, and recorded as `task_worktree_release_failed`, because approval is a
+judgement that the work was good and a `git` exit code is not grounds to reverse a human judgement.
+That is integration's existing rule, restated for the same reason.
+
+`persist_event(..., commit=False)` in both places. This runs inside `apply_transition`, whose
+caller commits; the default would land the transition row early, ahead of the contract the module
+states of itself.
+
+### The test that would not have discriminated what it claimed to
+
+Task 5.2 asks for a test that "release happens **after** `integrate_task`: the integration row for
+the approval records `merged`, and the merged commit is the evidence commit rather than a snapshot
+made during release." Written literally, **that test passes under both orderings** — and finding
+that out is the most useful thing this phase produced.
+
+`integration_targets` resolves the commit from the newest accepted evidence *footprint*, a database
+row. It does not read a working directory and it does not read the branch tip. So a release that ran
+first, snapshotting a dirty tree onto `agentweave/task/<id>` and advancing that branch, would leave
+the merged sha **exactly the same**: still the evidence commit, because that is the only thing
+integration ever looks up. The assertion as written observes nothing about order.
+
+So the test observes the order directly instead. `worktrees.release_task_worktree` is wrapped in a
+spy that records what `main` carried *at the moment release was called*; the assertion is that the
+evidence commit was already there. Under the reversed order it is not, and the test fails. The
+docstring says all of this, because a future reader who simplifies the spy away would be restoring
+a test that proves nothing while appearing to prove the thing in its own name.
+
+Worth naming plainly: **D5's ordering argument is still right, and it is defensive rather than
+load-bearing today.** The design says reversing it "makes it depend on timing" — true, and the
+mechanism by which it would bite is a future change that resolves the integration target from the
+branch rather than from the footprint, which is precisely the F58 shape. The order costs nothing and
+removes a way for that change to be silently wrong.
+
+### The eight tests, and what each is for
+
+`hub/tests/test_task_release.py`, new file.
+
+| Test | Task | What fails if it goes |
+|---|---|---|
+| `…removes_its_checkout_and_keeps_the_branch` | 5.1 | the whole of D5 on the ordinary path |
+| `…rejected_task_is_released_too_and_keeps_its_branch` | 5.3 | rejected tasks leak a directory each, forever |
+| `…uncommitted_change_is_snapshotted_onto_the_branch_before_release` | 5.1 | approving a task destroys a turn's unfinished edit |
+| `test_release_happens_after_integration` | 5.2 | the ordering, observed as above |
+| `…reopened_task_is_re_provisioned_with_its_prior_work` | 5.4 | a revision request becomes "start over from the integration base" |
+| `test_review_still_resolves_and_checks_out_after_release` | 5.5 | a reviewer cannot see work whose author's checkout is gone |
+| `…release_that_raises_is_recorded_and_the_transition_stands` | 5.7 | a `git` failure reverses an approval |
+| `…grandfathered_task_has_no_checkout_to_release` | (D4 boundary) | release takes a workspace away from an agent still using it |
+
+The grandfathering test provisions a task checkout anyway and then asserts it **survives**, so it
+pins that the *scheme* decides rather than what happens to exist on disk. A test that merely
+asserted absence would pass with the scoping removed.
+
+### Two things the fixtures made me measure rather than assume
+
+- **`commit_for_task_review` keys on `RequirementEvidence.task_id`**, not on the requirement the
+  task serves. A run bound to a task sets it; the bare `Run` row these tests use does not, so 5.5
+  links the evidence to the task explicitly and says why in a comment. Without that the function
+  returns its "no recorded evidence" refusal and the test would have looked like a release defect.
+- **`worktrees.GitCommandError(args, returncode, stderr)`** takes the git argv as a list, not a
+  message. A one-string construction raises `TypeError` at the point it is supposed to be
+  simulating a git failure — which is how 5.7 first failed.
+
+### Not done here, deliberately
+
+**Task 8.3** — the mutation check for this phase (remove the release call, confirm 5.1 fails) — is a
+phase 8 task and stays open. It is named here so the next iteration does not have to rediscover that
+phase 5 has an outstanding proof.
+
+**Phase 6's task 6.5 is still the live falsehood** flagged in iterations 10 and 11:
+`api/v1/agents.py:1160` tells an isolated agent it is on `agentweave/<agent>`, which has been false
+for every task-bound turn since 4B. Nothing in phase 5 touches it. Phase 6 remains not optional.

@@ -303,22 +303,22 @@ Read 4.14's implementation note before changing where the guard sits.
 
 ## 5. Release when the task is finished (D5)
 
-- [ ] 5.1 Add a test asserting that approving a task removes its checkout directory and **keeps** its
+- [x] 5.1 Add a test asserting that approving a task removes its checkout directory and **keeps** its
   branch and every commit on it.
-- [ ] 5.2 Add a test asserting release happens **after** `integrate_task`: the integration row for
+- [x] 5.2 Add a test asserting release happens **after** `integrate_task`: the integration row for
   the approval records `merged`, and the merged commit is the evidence commit rather than a snapshot
   made during release.
-- [ ] 5.3 Add a test asserting a task rejected from `under_review` also has its checkout released and
+- [x] 5.3 Add a test asserting a task rejected from `under_review` also has its checkout released and
   its branch kept.
-- [ ] 5.4 Add a test asserting a reopened task (`approved -> revision_needed -> in_progress`,
+- [x] 5.4 Add a test asserting a reopened task (`approved -> revision_needed -> in_progress`,
   `task_transitions.py:145-150`) is re-provisioned with its prior work present, because the branch
   survived.
-- [ ] 5.5 Add a test asserting the review path still works after release: `commit_for_task_review`
+- [x] 5.5 Add a test asserting the review path still works after release: `commit_for_task_review`
   (`requirement_evidence.py:653`) resolves and `ensure_review_checkout` checks the commit out.
-- [ ] 5.6 Implement release in `hub/hub/task_transition_service.py`, after the `integrate_task` call
+- [x] 5.6 Implement release in `hub/hub/task_transition_service.py`, after the `integrate_task` call
   at `:434-435`, for both terminal statuses. It must never fail the transition — same rule as
   integration (`hub/tests/test_task_integration.py:14`).
-- [ ] 5.7 Add a test asserting a release that raises is swallowed and recorded, and the transition
+- [x] 5.7 Add a test asserting a release that raises is swallowed and recorded, and the transition
   still stands.
 
 ## 6. Surfaces that assume one workspace per agent (D6, D7)
