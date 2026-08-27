@@ -36,6 +36,7 @@ from hub.db.models import Run, Task
 from hub.run_task_binding import TaskBindingError
 
 _REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
+_REAL_ENSURE_TASK_WORKTREE = worktrees.ensure_task_worktree
 
 #: A task id no fixture creates. Named rather than inlined so a reader can see at a glance that
 #: every test below is asking the same question of a different code path.
@@ -260,18 +261,28 @@ async def test_a_missing_task_outranks_an_unresolvable_review_target(
 async def test_a_real_task_still_binds_and_the_turn_still_gets_its_workspace(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
 ):
-    """The move is a reordering, not a new gate: a task that *does* exist changes nothing.
+    """The move is a reordering, not a new gate: a task that *does* exist is still bound and still
+    gets a workspace.
 
     Without this the five tests above are all satisfied by a `resolve_bound_task` that refused
     everything, which is the failure mode a precedence suite is most exposed to.
+
+    **Updated in phase 4B, and the id is the reason.** This test used to name `task-real` and assert
+    the *agent's* worktree. Once the binding decides the workspace (design D3) a bound turn runs in
+    the task's own checkout — but `task-real` is not a shape `validate_task_id` accepts, so it
+    would have gone on passing while quietly exercising the unmintable-id fallback instead of the
+    ordinary bound path. A valid id and the task workspace is what this test now claims.
     """
     repo = _init_repo(tmp_path / "repo")
     await bind_project_workspace(repo)
     monkeypatch.setattr(worktrees, "resolve_agent_workspace", _REAL_RESOLVE_AGENT_WORKSPACE)
+    monkeypatch.setattr(worktrees, "ensure_task_worktree", _REAL_ENSURE_TASK_WORKTREE)
     await _agent(app, auth_headers, bind_runner, "writer")
     conversation_id = await _conversation("writer")
     async with async_session_factory() as session:
-        session.add(Task(id="task-real", project_id="proj-test", title="Real", status="pending"))
+        session.add(
+            Task(id="task-99aabb00", project_id="proj-test", title="Real", status="pending")
+        )
         await session.commit()
 
     captured = {}
@@ -289,11 +300,11 @@ async def test_a_real_task_still_binds_and_the_turn_still_gets_its_workspace(
                     message="work on it",
                     conversation_id=conversation_id,
                     session=session,
-                    task_id="task-real",
+                    task_id="task-99aabb00",
                 )
 
     async with async_session_factory() as session:
         run = (await session.execute(select(Run))).scalars().first()
         assert run is not None
-        assert run.task_id == "task-real"
-    assert worktrees.worktree_path(repo, "writer").is_dir()
+        assert run.task_id == "task-99aabb00"
+    assert worktrees.task_worktree_path(repo, "task-99aabb00").is_dir()

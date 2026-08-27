@@ -635,6 +635,53 @@ def resolve_agent_workspace(repo_root: Path, agent: str, config: Dict[str, Any])
     return ensure_worktree(repo_root, agent)
 
 
+def resolve_turn_workspace(
+    repo_root: Path,
+    agent: str,
+    config: Dict[str, Any],
+    *,
+    task_id: Optional[str] = None,
+    base: Optional[str] = None,
+    prerequisites: Sequence[str] = (),
+) -> Path:
+    """Return the directory a spawned process should use as its cwd, for *this turn* (design D3).
+
+    The workspace is keyed by what the turn is **about**, not by who is running it: a turn bound to
+    a task executes in that task's own checkout, and a turn bound to nothing executes in the
+    agent's, exactly as every turn did before per-task isolation. The per-agent workspace is not
+    legacy — it is the workspace for work that is not a task, which is a permanent category
+    (`db/models.py`: "unbound is legitimate" of `Run.task_id`).
+
+    **`resolve_agent_workspace` is still the only implementation of the unbound answer.** This
+    function delegates to it rather than restating it, which is what keeps "read-only agents share
+    the project checkout" and "a project that is not a repository has no isolation to offer" from
+    acquiring a second, divergent copy. The two guards below are read as *which scheme applies*,
+    and both send the turn to that single implementation:
+
+    - a read-only agent shares the project checkout whether or not it is bound to a task
+      (`is_writing_agent` keeps precedence, task 4.7): a task checkout it may not write to would be
+      an empty gesture, and reviewing agents legitimately read the project directory;
+    - a project directory that is not a git repository still runs the turn in place rather than
+      refusing it (task 4.8) — there is no isolation on offer for a task any more than for an
+      agent, and refusing would be a total outage on a shape this product supports.
+
+    `base` and `prerequisites` are **plain values**, resolved by the Hub layer and passed in: this
+    module is independent of the DB/session layer by design (see the module docstring). A task id
+    with no base is a programming error rather than a fallback, and says so — silently substituting
+    `HEAD` would cut the branch from wherever the operator's checkout happened to be sitting, which
+    is precisely the option D1 rejected.
+    """
+    if task_id is None or not is_writing_agent(config) or not is_git_repo(repo_root):
+        return resolve_agent_workspace(repo_root, agent, config)
+    if base is None:
+        raise ValueError(f"a task workspace for {task_id} needs a base to be cut from")
+    # `resolve_agent_workspace` seeds these on the path above, and states why it does it there
+    # rather than only at registration. The task path is the same funnel and needs the same
+    # seeding, before there is anything to ignore.
+    seed_repo_excludes(repo_root)
+    return ensure_task_worktree(repo_root, task_id, base, prerequisites)
+
+
 def _has_uncommitted_changes(worktree: Path) -> bool:
     result = _run_git(worktree, "status", "--porcelain")
     return bool(result.stdout.strip())

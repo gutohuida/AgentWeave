@@ -128,15 +128,47 @@ no record. 2.5's test now pins the commit count at three, and dropping `--no-ff`
 
 ## 4. Choosing the workspace from the binding (D1, D3, D4)
 
-- [ ] 4.1 Add a test asserting a writing turn **bound to a task** executes in
+**Measured during phase 4B, and it added a third route to the per-agent workspace that nobody had
+named.** `validate_task_id` (phase 2) accepts `task-` followed by hex, which is what `short_id`
+mints — but nothing in the schema enforces that, and the resolver had no answer for a row that
+arrived another way. The two available answers are "refuse every turn on this task" and "run it
+where it ran before"; the second is chosen, because the first is an outage on data the Hub cannot
+repair and the second is precisely what grandfathering already means. It is logged, since unlike an
+unbound turn or a stamped one it is not a shape the product expects. Measured, not hypothetical:
+this suite alone contains hundreds of task rows with ids of that shape, and one of them was already
+sitting in `test_task_resolved_before_workspace.py`.
+
+**Three harness changes this phase forced, each recorded because each is a way the suite could have
+gone green while proving nothing.** (1) `conftest.py`'s autouse `_no_real_worktree_provision` now
+stubs `ensure_task_worktree` as well — stubbed at *that* function rather than at
+`resolve_turn_workspace`, so a test restoring the real `resolve_agent_workspace` still sees the real
+precedence and only the git commands are defaulted away. (2) `test_task_worktrees.py` takes
+`ensure_task_worktree` by named import, the treatment `test_worktrees.py` already documents for
+`resolve_agent_workspace`; without it that whole file tested the stub. (3)
+`test_task_resolved_before_workspace.py`'s closing test named `task-real` and asserted the *agent's*
+worktree — after this phase it would have gone on passing while exercising the unmintable-id
+fallback instead of the ordinary bound path, so it now names a valid id and asserts the task
+checkout.
+
+**Three routes to the same answer, and `TurnWorkspace` collapses them deliberately.** Unbound,
+grandfathered, and unmintable all produce `task_id=None`; the caller has no decision left to make
+between them, and giving it three values to distinguish would invite a fourth behaviour.
+
+**What phase 4B did *not* do, and it matters for reading the boxes below.** 4.5 and 4.11 were phase
+4A. 4.12–4.16 — the D8 one-turn-per-task refusal, its exemptions, its transient flag and the flow
+scheduler's counterpart — are phase 4C and remain unticked. A task bound to two agents at once is
+therefore still unrefused today, and now that both would get the *same* checkout rather than each
+their own, that is a sharper hazard than it was before this phase, not a milder one.
+
+- [x] 4.1 Add a test asserting a writing turn **bound to a task** executes in
   `.agentweave/tasks/<task_id>` on `agentweave/task/<task_id>`.
-- [ ] 4.2 Add a test asserting a writing turn **with no bound task** executes in
+- [x] 4.2 Add a test asserting a writing turn **with no bound task** executes in
   `.agentweave/worktrees/<agent>` on `agentweave/<agent>`, unchanged from today.
-- [ ] 4.3 Add a test asserting a follow-up turn that names no task, in a conversation already bound
+- [x] 4.3 Add a test asserting a follow-up turn that names no task, in a conversation already bound
   to one, resolves to the **task** workspace — the conversation binding
   (`binding_for_conversation`, `run_task_binding.py:388`) is what stops two schemes coexisting by
   accident.
-- [ ] 4.4 Add a test for grandfathering (D4, **corrected in review**): a task stamped
+- [x] 4.4 Add a test for grandfathering (D4, **corrected in review**): a task stamped
   `workspace_scheme = 'agent'` resolves to the **per-agent** workspace and no task branch is created
   for it, while an unstamped task gets a task workspace. The stamp is read, never recomputed.
 - [x] 4.5 Add a migration test asserting the stamp is applied to exactly the tasks that had at least
@@ -146,23 +178,41 @@ no record. 2.5's test now pins the commit count at three, and dropping `--no-ff`
   `None` for a clean tree (`worktrees.py:457-458`), so an agent that commits its own work records
   `NULL` and its task would have been restarted from the integration base with its own history
   missing. Assert that case by name.
-- [ ] 4.6 Add a test asserting the base is `Project.main_branch` when set, and the project
-  checkout's `HEAD` when it is not.
-- [ ] 4.7 Add a test asserting a read-only agent (`config["read_only"]`) still shares the project
+- [x] 4.6 Add a test asserting the base is `Project.main_branch` when set, and the project
+  checkout's `HEAD` when it is not. **Design D1 says "set *and resolves*", and this task
+  named only "set" — a third test covers the half the task text dropped: a `main_branch` naming a
+  ref the repository does not have (renamed branch, relocated project) falls back to `HEAD` rather
+  than failing the `worktree add` and refusing the turn.
+- [x] 4.7 Add a test asserting a read-only agent (`config["read_only"]`) still shares the project
   checkout, bound task or not — `is_writing_agent` (`worktrees.py:167`) keeps precedence.
-- [ ] 4.8 Add a test asserting a project directory that is not a git repository still runs the turn
+- [x] 4.8 Add a test asserting a project directory that is not a git repository still runs the turn
   in the project directory rather than refusing it, bound task or not.
-- [ ] 4.9 Implement the resolver — `worktrees.resolve_turn_workspace(repo_root, agent, config,
+- [x] 4.9 Implement the resolver — `worktrees.resolve_turn_workspace(repo_root, agent, config,
   task=None, base=None, prerequisites=())` or an equivalent seam — and call it from
   `agent_trigger.py` in place of `resolve_agent_workspace` at `:535`. Keep
   `resolve_agent_workspace` as the unbound path so its existing behaviour has one implementation.
-- [ ] 4.10 Implement the grandfathering read and the prerequisite/base resolution in the Hub layer
-  (session-aware), passing plain values into `worktrees`. **Confirmed in R3:** the prerequisite
+  **Implemented as `task_id=` rather than `task=`**, because `worktrees` does not read the database
+  and must not start taking ORM objects. It *delegates* to `resolve_agent_workspace` for all three
+  shared-checkout answers rather than restating any of them, so "read-only agents share the project
+  checkout" and "a project that is not a repository has no isolation to offer" still have exactly
+  one implementation each — which is what tasks 4.7 and 4.8 are protecting. `base=None` with a task
+  id raises rather than substituting `HEAD`: silently cutting from wherever the operator's checkout
+  is sitting is the option D1 rejected by name.
+- [x] 4.10 Implement the grandfathering read and the prerequisite/base resolution in the Hub layer
+  (session-aware), passing plain values into `worktrees`. **In its own module,
+  `hub/hub/task_workspace.py`**, rather than as another hundred lines of `agent_trigger`: each of
+  the three values it produces has a rule behind it worth testing on its own. **Confirmed in R3:** the prerequisite
   commits come from `task_integration.integration_targets(session, task)` (`:142`) — already exactly
   this query (newest *accepted* `git` footprint, one per branch, `paths` footprints contributing
   nothing), already async and session-bound, and returning a `list[Target]`. Call it per direct
   prerequisite and pass the `commit_sha` values through; do not write a second implementation of
-  "which commit is this task's work", which is the drift this codebase names as a defect source.
+  "which commit is this task's work", which is the drift this codebase names as a defect source. **A test this phase's list did not
+  contain had to be written for it.** Every test 4.1–4.8 names passes against a
+  `_prerequisite_commits` that returns `()` unconditionally, and so does all of phase 2 — which
+  proves only that `ensure_task_worktree` merges what it is *given*. That is the exact shape of F58:
+  a guarantee stated in a docstring with nothing able to fail on it. `test_turn_workspace.py`'s
+  prerequisite test puts the prerequisite's commit on a branch `main` cannot reach and asserts its
+  file is in the dependent task's checkout, and dropping the resolution turns it red.
 - [x] 4.11 Add the `Task.workspace_scheme` column and its stamping migration, guarded for a missing
   table as `0033`/`0034` are, and bump the head assertions in `hub/tests/test_migrations.py` **and**
   `hub/tests/test_project_persistence.py`. The column's default is `'task'`, and `'agent'` is written

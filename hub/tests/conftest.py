@@ -194,6 +194,16 @@ def _no_real_worktree_provision(monkeypatch):
     monkeypatch.setattr(
         worktrees, "ensure_review_checkout", lambda repo_root, agent, sha: repo_root
     )
+    # And a task-bound turn resolves through `ensure_task_worktree` — same hazard again. Stubbed
+    # at that function rather than at `resolve_turn_workspace` deliberately: the resolver is what
+    # decides *which* scheme a turn gets, so a test that restores the real
+    # `resolve_agent_workspace` above still sees the real precedence, and only the git commands are
+    # defaulted away. `test_turn_workspace.py` restores this against a `tmp_path` repository.
+    monkeypatch.setattr(
+        worktrees,
+        "ensure_task_worktree",
+        lambda repo_root, task_id, base, prerequisites=(): repo_root,
+    )
 
 
 @pytest.fixture(autouse=True)

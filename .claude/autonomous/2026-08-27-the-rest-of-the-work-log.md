@@ -1255,3 +1255,173 @@ place the stamp becomes observable.
 
 **Next:** `F58-IMPL` phase 4B — the resolver (4.1–4.4, 4.6–4.10), which is where the column starts
 being read.
+
+---
+
+## Iteration 10 — 2026-08-27 13:55 → F58-IMPL phase 4B, the resolver
+
+**Queue item:** `F58-IMPL`, phase 4B — tasks 4.1, 4.2, 4.3, 4.4, 4.6, 4.7, 4.8, 4.9 and 4.10 of
+`openspec/changes/2026-08-27-work-is-isolated-per-task/tasks.md`, designs D1, D3 and D4. 4C
+(4.12–4.16, the D8 refusal) deliberately untouched, as the queue instructed. No review round owed:
+R2 and R3 both ran for this change.
+
+**What 4B is.** Phase 4A added `Task.workspace_scheme` and nothing read it. This is the phase where
+it is read, and where a turn first executes somewhere other than it used to. Three pieces:
+
+- `worktrees.resolve_turn_workspace(repo_root, agent, config, *, task_id, base, prerequisites)` —
+  the seam. A turn bound to a task runs in `.agentweave/tasks/<id>` on `agentweave/task/<id>`; a
+  turn bound to nothing runs in `.agentweave/worktrees/<agent>` on `agentweave/<agent>`, unchanged.
+- `hub/hub/task_workspace.py` — the session-aware half, turning "this turn is bound to task X" into
+  the three plain values `worktrees` takes, because that module does not read the database.
+- `agent_trigger.py` calls the seam in place of `resolve_agent_workspace`, at what phase 3 left as
+  the position below the relocated `resolve_bound_task`.
+
+### The design decisions this phase actually had to take
+
+**`task_id=`, not `task=`.** The task text offered `task=None`; `worktrees` is independent of the
+DB/session layer by construction and must not start accepting ORM objects, so the seam takes an id.
+
+**It delegates rather than restates.** `resolve_turn_workspace` sends *all three* shared-checkout
+answers back through `resolve_agent_workspace` — unbound, read-only, and not-a-repository — instead
+of reimplementing any of them. That is the whole content of tasks 4.7 and 4.8: the precedences they
+protect keep exactly one implementation each, and the two guards in the new function read as *which
+scheme applies* rather than as a second copy of *what a shared checkout is*.
+
+**`base=None` with a task id raises.** Substituting `HEAD` would cut the branch from wherever the
+operator's checkout happens to be sitting, which is the option D1 rejected by name. A missing base
+is a programming error and says so.
+
+**A third route to the per-agent workspace, which nobody had named.** `validate_task_id` accepts
+`task-` followed by hex — what `short_id` mints — and nothing in the schema enforces it. The
+resolver had no answer for a row that arrived another way. Two answers were available: refuse every
+turn on that task, or run it where it ran before. The second is chosen. The first is an outage on
+data the Hub cannot repair; the second is precisely what grandfathering already means, and it is
+logged because unlike an unbound or a stamped task it is not a shape the product expects to see.
+
+This was **measured, not anticipated**: the Hub suite alone carries hundreds of task rows with ids
+of that shape (`task-9-1-a`, `task-bind-approved`, `task-blk-3`, …), and one of them was sitting in
+`test_task_resolved_before_workspace.py`'s closing test, where it would have kept that test green
+while quietly exercising the fallback instead of the ordinary bound path.
+
+`TurnWorkspace` collapses all three routes to `task_id=None` deliberately — the caller has no
+decision left to make between them.
+
+### The test 4B's own list did not contain
+
+Every test tasks 4.1–4.8 name passes against a `_prerequisite_commits` that returns `()`
+unconditionally. So does the whole of phase 2, which proves only that `ensure_task_worktree` merges
+what it is *given*. That is the exact shape of F58 — a guarantee stated in a docstring with nothing
+able to fail on it — so a test for 4.10's own half was written:
+`test_a_prerequisites_accepted_commits_are_in_the_task_checkout` puts the prerequisite's commit on
+a branch `main` cannot reach, wires up the real `TaskDependency` → `TaskRequirementLink` →
+`RequirementEvidence(accepted)` → `EvidenceFootprint(git)` chain that `integration_targets` reads,
+and asserts the file lands in the *dependent* task's checkout and not in the project checkout.
+
+A second unnamed case was added for D1's "set **and resolves**" half of the base rule, which task
+4.6 shortened to "set": a `main_branch` naming a ref the repository no longer has falls back to
+`HEAD` rather than failing the `worktree add` and refusing the turn.
+
+### Verification
+
+`hub/tests/test_turn_workspace.py`, 11 tests, all observing the **spawned process's `cwd`** rather
+than a return value — the only fact an agent can act on, and the one F58 is about.
+
+**Eight mutations, eight caught by a named test.** Each applied to the source, run, and restored:
+
+| mutation | test that went red |
+|---|---|
+| the binding ignored (always the agent workspace) | 6 tests, incl. `…runs_in_the_tasks_own_checkout` |
+| grandfathering branch removed | `test_a_grandfathered_task_keeps_the_per_agent_checkout` |
+| `is_writing_agent` guard removed | `test_a_read_only_agent_shares_the_project_checkout_…` |
+| `is_git_repo` guard removed | `test_a_project_that_is_not_a_repository_runs_the_turn_in_place` |
+| base always `HEAD` | `test_the_base_is_the_projects_main_branch_when_it_is_set` |
+| base taken unverified | `test_a_main_branch_that_does_not_resolve_falls_back_to_head` |
+| prerequisites dropped | `test_a_prerequisites_accepted_commits_are_in_the_task_checkout` |
+| id validation removed | `test_a_task_id_the_product_could_not_have_minted_…` |
+
+The first mutation initially left `test_the_base_is_head_when_no_main_branch_is_set` green — an
+agent branch is cut from `HEAD` too, so the ref assertion alone did not discriminate the scheme.
+The test now asserts the directory as well, and the docstring says why that assertion is not
+redundant.
+
+### The two failures I did not stage, and what they changed
+
+**Both were the tests, not the behaviour, and both only appeared under load.** That is worth saying
+first, because "it passes alone and fails in the suite" is the shape a real defect also takes, and
+each was chased to a mechanism rather than retried until green.
+
+**Run 1 — the log assertion.** The first full-suite run came back **1 failed / 3291 passed / 84 skipped / 1 xpassed** (18m22s),
+and the failure was the unmintable-id test — which had passed eleven times running on its own. Its
+`caplog.records` was *empty* after three thousand siblings had run. `test_migrations.py:545` already
+records this unreliability and responds by dropping its log assertion; that was not available here,
+because "it is logged rather than silent" is half of the decision this test exists to pin. The
+assertion now patches `task_workspace.logger.warning` directly, which is immune to whatever global
+logging state the suite has accumulated by then, and mutation M8 was re-run against the new form to
+confirm it still goes red. Second full run below.
+
+The *test* was measuring something it could not reliably see, which is the same defect class as a
+test that passes while its guarantee is false — just pointed the other way.
+
+**Run 2 — a race in the harness, and the more interesting of the two.** The second full run came
+back **2 failed / 3290 passed** (19m42s): both two-turn tests, each with `cwd` `None` on the
+*second* turn, and neither had ever failed alone. The cause is in `_turn`, not in the product:
+`trigger_agent_directly` returns as soon as it has scheduled `_execute_run` as a background task,
+and the spawn happens inside that task. `_turn` waited on `agent_trigger._background_runs` — which
+on a loaded machine has not been populated yet at the moment it looks, so the drain finds nothing,
+returns immediately, and reports `None` for a turn that was about to resolve perfectly well.
+
+It now waits for **the fact it returns** — `"cwd" in captured` — before draining and settling. That
+also strengthens the nine single-turn tests, which were relying on the same drain happening to be
+late enough. A green run of those nine was, until this, partly luck.
+
+### Three harness changes, each a way the suite could have gone green proving nothing
+
+1. `conftest.py`'s autouse `_no_real_worktree_provision` now stubs `ensure_task_worktree` too.
+   Stubbed at *that* function rather than at `resolve_turn_workspace` on purpose: a test restoring
+   the real `resolve_agent_workspace` still sees the real precedence, and only the git commands are
+   defaulted away.
+2. `test_task_worktrees.py` takes `ensure_task_worktree` by **named import** — the treatment
+   `test_worktrees.py` already documents for `resolve_agent_workspace`. Without it that entire file
+   (21 tests) silently tested the new stub; all 8 of its provisioning tests went red the first
+   time it ran alongside the new file, which is how this was found rather than argued.
+3. `test_task_resolved_before_workspace.py`'s closing test now names a valid id and asserts the
+   **task** checkout. See the unmintable-id note above for why leaving it alone would have been
+   worse than a failure.
+
+### Suite counts, and the one number that had to be explained
+
+| | |
+|---|---|
+| Hub suite (third run, clean) | **3292 passed, 84 skipped, 1 xpassed, 0 failed** — 18m31s |
+| iteration 9's baseline | 3280 passed / 84 skipped / 1 xpassed |
+| delta | **+12** |
+
+11 of those are `test_turn_workspace.py`. The twelfth is the free parametrised case
+`test_no_console_flash.py::test_every_spawn_reaches_console_suppression` adds for every new Hub
+source file — here `hub/hub/task_workspace.py` — exactly as iteration 9 predicted it would for
+`0095`. Skips unchanged at 84; the lone `xpassed` is still the known `strict=False` fixture defect
+from iteration 7.
+
+- CLI suite: **440 passed, 3 skipped**.
+- `py -3.11 -m ruff check src/ hub/ tests/` → All checks passed.
+  `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` → 501 files unchanged
+  (499 plus `task_workspace.py` and `test_turn_workspace.py`).
+  `py -3.11 -m mypy src/` → Success, 22 source files.
+- `npx openspec validate 2026-08-27-work-is-isolated-per-task --strict` → valid.
+  `npx openspec list` → **30/69 tasks**, up from 21/69: 4.1, 4.2, 4.3, 4.4, 4.6, 4.7, 4.8, 4.9, 4.10.
+- `npm run lint` not run: no file under `hub/ui/` was touched this phase. Task 8.7 owns it.
+- No Hub was started or touched; no job exists to disable. The trial Hub is still on an older
+  revision of this branch and has not seen `0095`.
+
+### Carry into the next iteration — 6.5 is now a live falsehood, not a latent one
+
+`api/v1/agents.py:1160` tells an isolated agent "This is an isolated git worktree on branch
+`agentweave/<agent>`". As of this phase that sentence is **false for every task-bound turn**: the
+agent is on `agentweave/task/<id>`. Task 6.5 owns the fix and phase 6 is not optional for this
+change. Before 4B this was a sentence that would become wrong; after 4B it is wrong. The same
+applies to the line below it ("Other agents work in separate worktrees on their own branches"),
+which stops being true per-agent once a checkout belongs to a task.
+
+That is the strongest reason not to stop this change before phase 6: it would leave the product
+telling agents something untrue about their own workspace, which is the failure class F58 itself
+belongs to.

@@ -15,6 +15,13 @@ import pytest
 
 from hub import worktrees
 
+# Named import (not `ensure_task_worktree(...)`) deliberately, for the reason
+# `test_worktrees.py` records against `resolve_agent_workspace`: conftest's autouse
+# `_no_real_worktree_provision` patches the module *attribute* so no other test shells out to real
+# `git worktree` commands, and a name bound here at collection time is a separate reference to the
+# real function. This file is one of the two that must have the real one.
+from hub.worktrees import ensure_task_worktree
+
 TASK = "task-ab12cd34ef56"
 OTHER = "task-00ff11ee22dd"
 
@@ -125,7 +132,7 @@ def test_a_task_branch_can_never_collide_with_an_agent_branch(repo):
     assert worktrees.worktree_path(repo, collider) != worktrees.task_worktree_path(repo, TASK)
 
     worktrees.ensure_worktree(repo, collider)
-    worktrees.ensure_task_worktree(repo, TASK, base="main")
+    ensure_task_worktree(repo, TASK, base="main")
 
     assert _branch_exists(repo, f"agentweave/{collider}")
     assert _branch_exists(repo, f"agentweave/task/{TASK}")
@@ -139,7 +146,7 @@ def test_a_task_branch_can_never_collide_with_an_agent_branch(repo):
 def test_ensure_task_worktree_creates_a_checkout_at_the_base(repo):
     base_sha = _git(repo, "rev-parse", "main").stdout.strip()
 
-    path = worktrees.ensure_task_worktree(repo, TASK, base="main")
+    path = ensure_task_worktree(repo, TASK, base="main")
 
     assert path == worktrees.task_worktree_path(repo, TASK)
     assert (path / "f.txt").read_text() == "line1\nline2\nline3\n"
@@ -150,10 +157,10 @@ def test_ensure_task_worktree_creates_a_checkout_at_the_base(repo):
 
 
 def test_ensure_task_worktree_is_idempotent(repo):
-    first = worktrees.ensure_task_worktree(repo, TASK, base="main")
+    first = ensure_task_worktree(repo, TASK, base="main")
     (first / "wip.txt").write_text("mid-turn work\n")
 
-    second = worktrees.ensure_task_worktree(repo, TASK, base="main")
+    second = ensure_task_worktree(repo, TASK, base="main")
 
     assert first == second
     assert (second / "wip.txt").read_text() == "mid-turn work\n"
@@ -168,7 +175,7 @@ def test_ensure_task_worktree_cuts_from_the_base_it_is_given_not_from_head(repo)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "side quest")
 
-    path = worktrees.ensure_task_worktree(repo, TASK, base="main")
+    path = ensure_task_worktree(repo, TASK, base="main")
 
     assert not (path / "sidequest.txt").exists()
 
@@ -188,7 +195,7 @@ def test_a_prerequisite_not_reachable_from_the_base_is_merged_in(repo):
         repo, worktrees.task_branch_name(OTHER), "dep.py", "def dep():\n    return 1\n"
     )
 
-    path = worktrees.ensure_task_worktree(repo, TASK, base="main", prerequisites=[prerequisite])
+    path = ensure_task_worktree(repo, TASK, base="main", prerequisites=[prerequisite])
 
     assert (path / "dep.py").read_text() == "def dep():\n    return 1\n"
     assert (
@@ -218,7 +225,7 @@ def test_a_prerequisite_already_reachable_from_the_base_is_not_merged_twice(repo
     prerequisite = _git(repo, "rev-parse", "HEAD").stdout.strip()
     commits_on_main = _count_commits(repo, "main")
 
-    path = worktrees.ensure_task_worktree(repo, TASK, base="main", prerequisites=[prerequisite])
+    path = ensure_task_worktree(repo, TASK, base="main", prerequisites=[prerequisite])
 
     assert (path / "dep.py").exists()
     assert _count_commits(path, "HEAD") == commits_on_main
@@ -236,7 +243,7 @@ def test_a_conflicting_prerequisite_leaves_no_checkout_and_no_branch(repo):
     _git(repo, "commit", "-q", "-m", "main moves too")
 
     with pytest.raises(worktrees.IsolationUnavailableError) as excinfo:
-        worktrees.ensure_task_worktree(repo, TASK, base="main", prerequisites=[prerequisite])
+        ensure_task_worktree(repo, TASK, base="main", prerequisites=[prerequisite])
 
     message = str(excinfo.value)
     assert prerequisite[:12] in message
@@ -256,7 +263,7 @@ def test_a_prerequisite_commit_missing_from_the_repository_says_so(repo):
     missing = "0" * 40
 
     with pytest.raises(worktrees.IsolationUnavailableError) as excinfo:
-        worktrees.ensure_task_worktree(repo, TASK, base="main", prerequisites=[missing])
+        ensure_task_worktree(repo, TASK, base="main", prerequisites=[missing])
 
     message = str(excinfo.value)
     assert missing[:12] in message
@@ -278,7 +285,7 @@ def test_a_task_checkout_left_mid_merge_is_refused_rather_than_handed_over(repo)
     conflicting = _commit_on_new_branch(
         repo, worktrees.task_branch_name(OTHER), "f.txt", "PREREQUISITE\nline2\nline3\n"
     )
-    path = worktrees.ensure_task_worktree(repo, TASK, base="main")
+    path = ensure_task_worktree(repo, TASK, base="main")
     (path / "f.txt").write_text("TASK\nline2\nline3\n")
     _git(path, "add", "-A")
     _git(path, "commit", "-q", "-m", "the task's own work")
@@ -288,14 +295,14 @@ def test_a_task_checkout_left_mid_merge_is_refused_rather_than_handed_over(repo)
     assert _git(path, "rev-parse", "--verify", "MERGE_HEAD").stdout.strip()
 
     with pytest.raises(worktrees.IsolationUnavailableError, match="unfinished merge"):
-        worktrees.ensure_task_worktree(repo, TASK, base="main")
+        ensure_task_worktree(repo, TASK, base="main")
 
 
 # --- 2.9: release --------------------------------------------------------------------------
 
 
 def test_release_task_worktree_snapshots_removes_and_keeps_the_branch(repo):
-    path = worktrees.ensure_task_worktree(repo, TASK, base="main")
+    path = ensure_task_worktree(repo, TASK, base="main")
     (path / "done.py").write_text("finished\n")
     committed = _git(path, "rev-parse", "HEAD").stdout.strip()
 

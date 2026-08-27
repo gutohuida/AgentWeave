@@ -37,6 +37,7 @@ from ... import (
     project_workspace,
     requirement_evidence,
     review_turn,
+    task_workspace,
     worktrees,
 )
 from ...agent_auth import hash_run_token, mint_run_token
@@ -557,8 +558,27 @@ async def trigger_agent_directly(
         effective_work_dir = str(review_context.workspace)
         isolated_workspace = review_context.workspace
     else:
+        # Which workspace this turn is about, not whose turn it is (design D3). A turn bound to a
+        # task executes in that task's own checkout, so approving one task cannot merge another
+        # task's commits along with it (F58); a turn bound to nothing gets the agent's own
+        # workspace, exactly as before. `binding` was resolved above precisely so this line could
+        # ask (D2), and the three values below are resolved in the Hub layer because `worktrees`
+        # does not read the database.
+        turn_workspace = await task_workspace.resolve_turn_workspace_inputs(
+            session,
+            project_id=project_id,
+            repo_root=repo_root,
+            task=binding.task,
+        )
         try:
-            workspace = worktrees.resolve_agent_workspace(repo_root, agent, config)
+            workspace = worktrees.resolve_turn_workspace(
+                repo_root,
+                agent,
+                config,
+                task_id=turn_workspace.task_id,
+                base=turn_workspace.base,
+                prerequisites=turn_workspace.prerequisites,
+            )
         except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
             raise TriggerAgentError(
                 status.HTTP_409_CONFLICT,
