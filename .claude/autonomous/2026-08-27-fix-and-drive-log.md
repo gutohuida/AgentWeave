@@ -214,3 +214,135 @@ loops exist in any project; confirmed by API, not assumed.
 
 **Next:** continue `E2E-1` at the unreached rows — loops/jobs, questions, permissions, dependencies,
 worktrees, accounting, resilience. Do not re-drive rows 1, 2, 3, 5, 9.
+
+
+---
+
+## Iteration 3 — 2026-08-27T23:40:53+01:00
+
+`E2E-1` continued. Branch `autonomous/2026-08-27-fix-and-drive`, matching `STATE.json` at entry
+(`232dffd`). Hub started on this branch's code at `127.0.0.1:8011` against `%TEMP%/f52hub/f52.db`,
+confirmed by the project list rather than `/health`, and restarted onto the fixed code three times
+so every fix below was proven against a live Hub and not only in pytest.
+
+### Rows driven this iteration
+
+| Row | Outcome |
+|---|---|
+| **8 Dependencies** | **driven end to end** — clean, no defects |
+| **17 Integration** | **driven end to end** — the agent's work reached `master` |
+| **13 Questions** | **driven** — ask/park/answer and ask/decline; the timeout path not driven |
+
+Rows 1, 2, 3, 5, 9, 10 were driven in iteration 2 and were not repeated. Still unreached: 6 inbound
+queue (seen in passing, not driven), 11 jobs/loops, 12 flows, 14 permissions, 15 checkpoints,
+16 worktrees, 18 accounting, 19 resilience.
+
+### Row 8 — dependencies. Nothing wrong with it.
+
+An `A -> B -> C` chain, driven through every branch of `dependency_gate`: the gate refuses
+`-> in_progress` and not `-> assigned`, so a whole wave can be routed ahead of time; an unmet
+prerequisite and a `rejected` one are reported separately with different remedies; a cycle is
+refused naming both tasks; a self-dependency is refused; the board reports `gated`,
+`gated_on_rejected` and `running_on_regressed` correctly, including the last one *after* regressing
+an approved prerequisite under a running dependent. Reopening a rejected middle task and
+re-approving it releases the chain. Removing a dependency clears the gate, and removing it twice is
+a stated 404 rather than a silent success.
+
+**Recorded as clean deliberately.** The sweep exists to find defects and this row produced none —
+that is a result, not a failure to look.
+
+### Row 17 — integration. The whole loop closed, for the first time in this sweep.
+
+`task-a0409448ee8e`, carrying the previous iteration's real agent commits, went
+`completed -> under_review -> approved`, and the Hub merged `70474c2` into `master` as `d6735a3`,
+carrying the earlier snapshot `9b2d781` along with it. Verified in the repository rather than from
+the API: `calc.py` and `test_calc.py` are on `master` with the agent's `Decimal`/`ROUND_HALF_UP`
+implementation in them. `integration-preview` refused correctly beforehand — *"no accepted evidence
+names a commit"* — until the evidence was accepted, then reported `will_merge: true` with the target
+named. This is the first end-to-end pass from specification document through requirement, task,
+agent turn, evidence, operator acceptance, approval and merge.
+
+### Three defects, all fixed, each with a test watched to fail
+
+**F78 (A) — the operator cannot clear a task's assignee, and the API reports that they did.**
+`f1d0c6f`. Found *while* driving row 17: F70's guard refused the review move and named two remedies,
+*"Assign a different reviewer, or clear the assignee to review it yourself"*. Following the second
+returned `200 OK` with the author still in the response body, and the same refusal on the next call.
+`TaskUpdate.assignee` is `Optional[str] = None` and the service read it as
+`if body.assignee is not None`, so `null` and *omitted* were the same value. `escalation_agent`,
+eleven lines below it in the same schema, already solves this with `model_fields_set` and says in a
+comment that clearing it *"is a thing the operator must be able to do"*. The pattern was in the
+file, unapplied to the field a hard guard depends on. The undocumented escape that did work —
+`{"assignee": ""}` — wrote an **empty string** into the column, which survives only because every
+reader tests Python truthiness, while four `Task.assignee.isnot(None)` queries would have counted it
+as a live holder. One of them is `_agents_that_are_free`, which is the capacity leak F70 exists for.
+
+**F79 (A) — a task the operator has decided about still takes new runs.** `eba8620`. The headline
+find, and it arrived unlooked-for: seconds after the merge above, a trigger came back with *"an
+older conversation's queued input is being delivered first (run run-acbd6c2138b1)"* — a run I had
+not started, on the task I had just approved. An entry queued at 21:38 while the task was
+`completed` sat through the operator approving it at 21:55 and the merge, and was delivered at
+22:07 bound to approved, merged work — writing `assignee = builder` back onto the card F78's fix had
+just let me clear. **The two findings compose into undoing each other.** Reproduced with no queue
+and no restart: triggering on an approved task was accepted and the board then read `approved` /
+`assignee: author` / `assignee_status: running`.
+
+The rule is not missing — `TERMINAL_FOR_BINDING`'s own docstring states it — it was enforced on
+conversations and on neither of the two other things that can name a task. Fixed with two
+dispositions, both of which `resolve_bound_task` already uses for a task *deleted* since a
+delegation was sent: the operator naming a decided task now is refused `409` at the route; a queued
+entry whose task has since been decided is released beside the conversations, because refusing at
+delivery would make `turn_scheduler` abandon the operator's message after three attempts over a
+decision about something else. `review_task_id` untouched — inspecting decided work is what a
+review is for.
+
+**F80 (B) — `asker_waiting` is computed on one question route and hardcoded on the other four.**
+`0afa915`. `GET /questions` computes it; create, detail, answer and decline returned the ORM row, so
+Pydantic filled it from the schema default `True` — not stale but constant, and the constant means
+*someone is still waiting*. `answer_question` computes the fact for itself twenty lines above the
+return and then contradicts it.
+
+### The method note worth keeping
+
+**F79's refusal was first written where it could never fire.** It went into `resolve_bound_task`'s
+explicit-`task_id` branch, where it read naturally and passed a unit test. `POST /agent/trigger`
+does not run a turn — it queues an entry — so the task always arrives there as a *delegation*, and
+`trigger_agent_directly`'s only caller never passes `task_id` at all. Only the live drive caught it:
+the trigger still returned `200`. The refusal moved to the route, and its tests were rewritten over
+HTTP for exactly that reason.
+
+That is the third instance in two iterations. Iteration 2's carry-forward predicted this shape — *"a
+guard that is present, tested, and unreachable"* — and this one was authored and caught inside a
+single sitting. **The passing pytest is not the evidence; the live call is.**
+
+F80's fix made the same class of mistake in the other direction: applied mechanically to all four
+`return question` statements, it also hit `ask_question_for_actor`, a shared helper whose caller
+reads `conversation_id` off the row it returns. The suite caught that one.
+
+### Verification
+
+- F78: 3 tests, 2 watched to fail; both mutation directions checked.
+- F79: 7 tests, 4 watched to fail; every guard mutation-checked individually — dropping the
+  `state == "queued"` filter, also clearing `review_task_id`, and widening the band to include
+  `under_review` each fail a named test.
+- F80: 5 tests, 3 watched to fail; hardcoding the field `False` instead fails the two guard tests,
+  so the fix cannot have merely inverted the constant.
+- Suites: 1049, then 1223, then 1625 passed across the task/binding/trigger/scheduler/review/agent
+  selection, plus 430 on the combined F78/F79/F80 surface and 102 question tests. ruff, black and
+  mypy clean.
+- **Live**, against a Hub restarted on the fixed code each time: `assignee: null` clears and a
+  priority-only PATCH leaves the holder alone; the trigger on an approved task returns `409` while
+  the same call on an `under_review` task returns `200` and starts a run; queueing an entry against
+  a task and then approving it leaves the entry with `task_id: None`; the list and detail routes now
+  agree on `asker_waiting`.
+
+### State left behind
+
+`proj-46b602c1f3cb` keeps everything worth keeping: a document, an approved and **merged** task, a
+second task (`task-72457167c198`, `calc.discount`) completed through a real `ask_user` round trip
+whose answer visibly shaped the code, the `DEP-A/B/C` chain in assorted states, accepted evidence,
+and one answered and one declined question. No job and no loop exists in either project — confirmed
+by the API, not assumed. Tree clean, three commits pushed.
+
+**Next:** row 14 permissions, row 11 jobs/loops (disable in the same iteration), row 6 inbound
+queue, row 12 flows.
