@@ -568,3 +568,107 @@ recorded in `design.md` under "What R3 caught" rather than left in my head. **Im
 next.**
 
 **Next:** `F58-IMPL` phase 1 — make the suite able to tell the implementations apart.
+
+## Iteration 5 — F58-IMPL phase 1: the test that was supposed to fail passed, and why
+
+**11:07–11:2x, 2026-08-27.** Branch `autonomous/2026-08-27-the-rest-of-the-work` at `db57cf5`,
+matching STATE.json. Phase 1 of `openspec/changes/2026-08-27-work-is-isolated-per-task/tasks.md`,
+tasks 1.1–1.3, and nothing else. Test-only by design: no production code was touched.
+
+### The finding: the fixture phase 1 specified does not discriminate
+
+Task 1.3 says 1.1 must **fail** against unmodified production code, and that a 1.1 which passes
+means the fixture does not build the case. Written exactly as 1.1 specified — `earlier` on
+`agentweave/task/<other-task-id>`, `demonstrated` on this task's own branch **cut from `main`**,
+both names spelled out in the test — **it passes.** Measured, not reasoned:
+
+```
+py -3.11 -m pytest hub/tests/test_task_integration.py -q -k another_tasks_commits
+1 passed, 25 deselected, 5 warnings in 1.57s
+```
+
+The reason is structural rather than a fixture slip. Two branches cut from `main` by hand are
+separable *whatever the product does*, because nothing in `task_integration.py` looks at how the
+branch was made: `integration_targets` reads the footprint's recorded `commit_sha`, and
+`commits_riding_along` is `git rev-list main..<sha>`. If the test decides that `earlier` is not in
+`demonstrated`'s ancestry, then it is not, today and after the change alike. That is precisely what
+the phase preamble complains about — "the shape of the branch is decided by the *test*, not by the
+product" — and R1 wrote a fixture that changes *which* shape the test decides without removing the
+test's authority to decide it. Inverting the assertion alone is red for the wrong reason; hardcoding
+the new branch names is **green for the wrong reason**, which is worse, because a vacuous green is
+silent.
+
+### What 1.1 is instead, and why that is red for the right reason
+
+Per 1.3's own instruction — fix the fixture, do not weaken the assertion — both branch names now
+come from the product:
+
+```python
+earlier = commit_on_branch(tmp_path, worktrees.task_branch_name(other), "unrelated.py", "wip\n")
+git(tmp_path, "checkout", "-q", "main")
+demonstrated = commit_on_branch(tmp_path, worktrees.task_branch_name(task), "done.py", "ok\n")
+```
+
+Observed failure text, verbatim, against unmodified production code:
+
+```
+>       earlier = commit_on_branch(tmp_path, worktrees.task_branch_name(other), "unrelated.py", "wip\n")
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'hub.worktrees' has no attribute 'task_branch_name'
+
+hub\tests\test_task_integration.py:362: AttributeError
+```
+
+This is red because **the product cannot say where a task's work goes** — which is the defect F58
+names, at the level phase 1 can reach. It goes green at task 2.3, which implements
+`task_branch_name`. It does not, and this phase does not claim it does, discriminate *provisioning*:
+that a turn bound to a task is actually given that branch is phases 3 and 7's, and no test in this
+file can reach it because this file never triggers an agent. Recorded in `tasks.md` above phase 1
+rather than left in this log, so an implementer reading only the change sees it.
+
+### 1.2, and the one assertion the task did not name
+
+`test_later_commits_on_the_branch_are_not_merged` gains the earlier-commit case its docstring
+already described: `groundwork.py` committed on this task's own branch *before* the evidence commit,
+asserted to land. That is the case option (b) — squashing the evidence commit's diff — would break,
+and nothing covered it. It passes today, as 1.3 predicted.
+
+One assertion had to move that 1.2 did not name. The test asserted `rode_along_commits == []` under
+the comment "a branch with exactly one commit ahead of main has nothing to ride along", which stops
+being true the moment a groundwork commit exists: `rev-list main..demonstrated` now yields it. It is
+`== [earlier]` now — the groundwork lands **and** the record still says which commit was the
+reviewed one. A strengthening (it pins that the two facts stay separate), and flagged in `tasks.md`
+rather than made quietly.
+
+The old name `test_rode_along_commits_names_what_actually_landed` survives in the new docstring, in
+the exploration, and in `FINDINGS.md:2672`; the docstring says it is the inversion of that test, so
+the history reads without a rename hunt.
+
+### Verification
+
+- `py -3.11 -m pytest hub/tests/test_task_integration.py -q` → **25 passed, 1 failed** in 29.77s.
+  The one failure is `test_another_tasks_commits_do_not_ride_along`, intended, with the text above.
+  No other test in the file moved — 25 is the whole rest of it.
+- The hardcoded-name variant was run as a controlled comparison and reverted from a backup, not
+  edited back by hand; `grep -c worktrees.task_branch_name` = 2 confirms the restore.
+- `py -3.11 -m ruff check src/ hub/ tests/` → All checks passed.
+  `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` → 495 files unchanged.
+  (`ruff` is not on PATH in Git Bash here; `py -3.11 -m ruff` is.)
+- `npx openspec validate 2026-08-27-work-is-isolated-per-task --strict` → valid.
+  `npx openspec list` → 3/69 tasks.
+- No Hub was started or touched; no job exists to disable. `green_at_arming` otherwise stands.
+
+### Two reconciliations
+
+- **Queue statuses were stale.** STATE.json still had `F58-R2` as `current` and `F58-R3` as
+  `open`, though both ran (iterations 3 and 4, commits `c29616d` and `90a6e76`). Both are `done`
+  now, with the discrepancy recorded in their `outcome` rather than silently overwritten. The
+  `next_action` text, not the queue, is what has been steering this run.
+- **An interactive session committed on this branch mid-iteration.** `e90be76`
+  (`docs(handoff): 0093`) landed at 11:10:31, between the iteration-5 claim and this commit. It is
+  documentation only and touched nothing this iteration did; staging explicit paths is what kept the
+  two apart.
+
+**Next:** `F58-IMPL` phase 2 — task workspace paths, names and provisioning (tasks 2.1–2.9). 2.3 is
+what turns this iteration's red green, and phase 2 should confirm that transition explicitly rather
+than only running its own new tests.
