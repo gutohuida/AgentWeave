@@ -3466,3 +3466,126 @@ the batching test (`task-c0bd47157c19` uncommitted-evidence and unreviewed, `tas
 fully reviewed and approved), and the job's own original task now operator-approved
 (`task-e6b05093`). No further cleanup performed, consistent with how this project's other drive
 evidence has always been left in place.
+
+## F70 (A) — an operator can move a task to `under_review` without staffing a reviewer, and the flow reads that forever as a healthy review in progress — silently removing the stuck agent from every future review too
+
+**Driven 2026-08-27, iteration 10 (Q6), against a genuinely fresh project — `proj-bad259c0c9f2`
+(`drive-q6-2026-08-27`), created this iteration, outside the repository, registered via
+`e2e.py setup`.** Two Hub-managed agents created via `POST /agents` (`self_registered: false`,
+required — `e2e.py agent` always self-registers, and a self-registered agent 409s out of
+`POST /jobs/{id}/run`, per this run's own earlier-recorded dead end): `flowauthor`
+(claude/claude-haiku-4-5-20251001) and `flowreviewer` (codex/gpt-5.4-mini). A Loop job
+(`job-fca8e5d32f63` / `loop-413d32f3e189`) was created with `initial_tasks`, targeting a small
+seeded module (`cart.py`, three real deliberately-uncovered defects modelled on the
+`drive-2026-08-26` pattern) committed to a real git repo with `main_branch: master`.
+
+**First confirmed, cleanly: D1/D2's binding, live on a brand-new database row set.**
+Firing the loop staged `task-2529a21e8c49` (`pending -> assigned`, `actor_kind=operator`) and its
+run bound immediately (`assigned -> in_progress`, `actor_kind=run`, `run_id` populated) —
+`task_transitions` rows read exactly as `every-run-knows-its-task` designed, reproduced from zero
+with no inherited state from `ledger-stress`. The agent did real work: `git log` on the seed repo
+shows a real commit (`f523937`) with a correct fix and a new regression test.
+
+**Then a self-inflicted step exposed a real gap.** To test review staffing without waiting on a
+cron, the completed task was moved directly from `completed` to `under_review` via
+`PATCH /tasks/{id}` — a legitimate operator action (`task_transitions.py`'s transition table marks
+`under_review` `_BOTH`, reachable by operator or agent) — **without also reassigning it away from
+its own author.** `flowauthor` stayed the assignee.
+
+From that single PATCH, the loop's scheduler permanently misread the task as a staffed review:
+
+```python
+# hub/hub/scheduler.py:530-535
+#: The statuses meaning a reviewer already holds the task, claimable by nobody (finding F45).
+#:
+#: A firing that staffs a review moves the task here in the same commit that queues the turn --
+#: `_enter_selected_task` -- which is what takes it out of `REVIEWABLE_LOOP_TASK_STATUSES` and
+#: stops the next tick offering the same finished work to the same reviewer again.
+WITH_REVIEWER_LOOP_TASK_STATUSES: tuple = tuple(sorted(WITH_REVIEWER_STATUSES))
+```
+
+and, in the walk itself (`scheduler.py:1214-1232`):
+
+```python
+if task.status in WITH_REVIEWER_LOOP_TASK_STATUSES:
+    # A reviewer already holds this (finding F45). ...
+    if task.assignee:
+        in_flight.append((task.id, task.assignee))
+    continue
+```
+
+The comment's own invariant — "a firing that staffs a review moves the task here **in the same
+commit** that queues the turn" — is true of every path the scheduler itself uses, and false of this
+one. Nothing checks that `task.assignee` actually differs from whoever completed the task; the
+branch fires on status alone. The task (`task-2529a21e8c49`) sat `under_review`/`assignee=flowauthor`
+for the rest of the drive — three more loop firings, ~10 minutes — with no error, no
+`review_unstaffed` event, no operator-visible signal of any kind. `POST /jobs/{id}/run` reported
+`409 "already being worked... nothing is wrong"`, which is the correct sentence for a real review in
+flight and a false one for this.
+
+**It compounds: the stuck assignee stops being recruitable as a reviewer for *other* tasks too.**
+`_agents_that_are_free` (the pool `resolve_reviewer` draws from) excludes an agent "holding active
+work" — and `flowauthor` was still, by construction, holding `task-2529a21e8c49`. When a second real
+task (`task-684f8b08e0e0`, authored by `flowreviewer`) reached `completed` and needed a reviewer,
+`resolve_reviewer` excluded `flowreviewer` (the author) and should have offered `flowauthor` — idle,
+bound, on the roster — but `flowauthor` read as unavailable, and the walk emitted `review_unstaffed`
+instead:
+
+```
+{"event_type": "review_unstaffed", "agent": "flowauthor", "task_id": "task-684f8b08e0e0",
+ "reason": "could not staff this step: no agent is free to take it. Every agent on the roster is
+ either running a turn, already holding active work, or is the one that completed this task and so
+ may not review it."}
+```
+
+On a two-agent roster that message is a full stop: with `flowauthor` wrongly counted as busy and
+`flowreviewer` excluded as the task's own author, **zero** agents were ever eligible, permanently,
+until an operator manually resolves the original stuck task. The one contaminated PATCH did not just
+strand its own task — it silently reduced the loop's reviewer pool by one agent for every task after
+it, with the exact same "nothing is wrong" silence as the first-order bug.
+
+**Why A, not B.** Nothing crashes and every individual event is truthful about the narrow question it
+answers (`review_unstaffed`'s own reason text is accurate). The failure is structural: an ordinary,
+sanctioned, one-line API call — moving a task to `under_review` without also handing it to someone —
+degrades the flow's future capacity with no error and no event naming the actual cause, and the
+`409`'s own text ("nothing is wrong") actively asserts health. An operator would have no way to
+connect a later `review_unstaffed` on an unrelated task back to this one stale row without reading
+`task_transitions` by hand, which is exactly what this drive had to do.
+
+**Recommended fix, in the shape of the file's own comment:** the `WITH_REVIEWER_LOOP_TASK_STATUSES`
+branch should not trust status alone — it should also confirm `task.assignee` is not the agent that
+completed the task (`_agent_that_completed`, already computed a few lines below for the sibling
+branch). A task that reaches `under_review` with its own author still assigned is not "a reviewer
+already holds this"; it is exactly the case `resolve_reviewer`'s `exclude={author}` exists to refuse,
+reached by a different door. Whether that should instead be prevented further upstream — refusing the
+plain `completed -> under_review` transition itself unless the assignee changes in the same call —
+is a design question for the operator; this finding is about the scheduler's silent misreading, not
+a recommendation on which layer should close it.
+
+**Also reproduced, and held correctly, in the same drive:** once a *second* task reached `completed`
+authored by a different agent (`task-13c9638e7e30`, authored by `flowauthor`), the *un*-contaminated
+path worked exactly as designed — `resolve_reviewer` excluded `flowauthor`, picked the free
+`flowreviewer`, staged the review (`assignee` reassigned, status flipped, in the same commit, per the
+comment above) and queued a real review turn. This is `every-run-knows-its-task` D3/D4's staffing
+ladder working correctly, live, from zero, immediately adjacent to the one row where it couldn't —
+recorded because a finding about one path breaking is stronger evidence next to a record that its
+sibling held.
+
+**What the drive did not reach, and why — not a defect, a gate working as designed.** The staged
+review turn for `task-13c9638e7e30` never delivered: triggering `flowreviewer` directly returned
+`"task-13c9638e7e30 has no recorded evidence, so there is no commit to review"` —
+this project's tasks were never linked to a spec document/requirement, so `record_evidence` had
+nowhere to attach, and this drive's task descriptions never told the agent to call it (only "commit
+your change"). This reproduces F65's already-recorded behaviour (a review refused for missing
+evidence stays queued) rather than finding something new, and is recorded here as confirmation, not
+as a fresh defect. Verdict, approval and integration were consequently not reached this iteration —
+left for a future drive that either wires a spec document through first or seeds `record_evidence`
+calls into the task briefing.
+
+**Left behind in `proj-bad259c0c9f2`** (job archived, `ai_jobs WHERE enabled=1` confirmed empty
+project-wide): three tasks (`task-2529a21e8c49` stuck `under_review` as durable evidence of this
+finding — deliberately not resolved, so the row is still there to inspect; `task-13c9638e7e30`
+`under_review`/staffed but undelivered, evidence of the F65 reproduction; `task-684f8b08e0e0`
+`completed`, evidence of the `review_unstaffed` cascade), two agents, one archived job/loop, three
+real commits on the seed repo's `agentweave/flowauthor` branch. No further cleanup performed, so a
+future session can inspect the exact rows this finding cites.
