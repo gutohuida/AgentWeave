@@ -192,21 +192,29 @@ async def runs_to_cover(db, conversation_id: str, anchor: Optional[Checkpoint]) 
     return runs
 
 
-def _files_from_runs(runs: List[Run], worktree: Optional[Path]) -> List[str]:
+def _files_from_runs(runs: List[Run], repo_root: Optional[Path]) -> List[str]:
     """Every path the covered turns committed, deduplicated.
 
     Reads the per-run auto-snapshot SHAs. Before those were recorded (`Run.snapshot_commit_sha`,
     migration 0043) there was nothing to read, so a conversation whose turns predate it reports
     no changed files rather than a plausible guess.
+
+    **The project repo root, not the workspace a run used — task 6.6, and the reason is measured.**
+    Linked worktrees share one object database, so `git show` from the repo root reads a commit
+    made in any of them, *including one whose checkout has since been removed*. Resolving each
+    run to the checkout it ran in would therefore be strictly worse under per-task isolation: a
+    task checkout is released when the task is approved (design D5), so exactly the runs belonging
+    to finished work — the ones a checkpoint most wants to describe — would resolve to a directory
+    that no longer exists and report nothing. One root that always exists answers for every run.
     """
-    if worktree is None or not worktree.exists():
+    if repo_root is None or not repo_root.exists():
         return []
     paths: set = set()
     for run in runs:
         if not run.snapshot_commit_sha:
             continue
         try:
-            paths.update(worktrees.files_changed_in(worktree, run.snapshot_commit_sha))
+            paths.update(worktrees.files_changed_in(repo_root, run.snapshot_commit_sha))
         except worktrees.GitCommandError:
             logger.warning(
                 "could not read files for snapshot %s", run.snapshot_commit_sha, exc_info=True
@@ -331,7 +339,7 @@ async def compute_envelope(
     db,
     conversation: Conversation,
     *,
-    worktree: Optional[Path] = None,
+    repo_root: Optional[Path] = None,
     anchor: Optional[Checkpoint] = None,
     loop: Optional[Loop] = None,
 ) -> CheckpointEnvelope:
@@ -344,7 +352,7 @@ async def compute_envelope(
     """
     runs = await runs_to_cover(db, conversation.id, anchor)
     return CheckpointEnvelope(
-        files_changed=_files_from_runs(runs, worktree),
+        files_changed=_files_from_runs(runs, repo_root),
         tasks=(
             await _tasks_for_loop(db, loop.id)
             if loop is not None
@@ -358,22 +366,6 @@ async def compute_envelope(
         covers_from_run_id=runs[0].id if runs else None,
         covers_through_run_id=runs[-1].id if runs else None,
     )
-
-
-def agent_worktree(repo_root: Optional[Path], agent: str) -> Optional[Path]:
-    """Where the agent's commits live, without provisioning anything.
-
-    `worktree_path` is a pure path computation; `ensure_worktree` would create one. Computing a
-    checkpoint must never have the side effect of building a workspace for an agent that never
-    ran.
-    """
-    if repo_root is None:
-        return None
-    try:
-        return worktrees.worktree_path(repo_root, agent)
-    except Exception:  # noqa: BLE001 — an unusable path is "no files", never a failed checkpoint
-        logger.debug("could not resolve worktree for %r", agent, exc_info=True)
-        return None
 
 
 async def create_checkpoint(

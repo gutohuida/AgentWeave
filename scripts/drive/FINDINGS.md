@@ -3785,3 +3785,50 @@ asserts deterministically in its own subject.
 (`task-2529a21e8c49`, `task-7f49caae3c6d`, `ev-9d22a691db10`) are untouched. They are a throwaway
 project's evidence for what the defects looked like, and the fixes were verified against tests rather
 than by mutating them.
+
+---
+
+## F72 — every checkpoint ever produced reported no changed files (severity A, fixed 2026-08-27)
+
+**Found while implementing task 6.6 of `2026-08-27-work-is-isolated-per-task`**, which asked only
+that `checkpoints.agent_worktree` become task-aware. It was not wired at all.
+
+**The chain, each link verified by grep rather than inferred:**
+
+* `checkpoints.agent_worktree` had **zero callers** anywhere in the repository.
+* `compute_envelope(worktree=...)` was reached only from `generate_checkpoint`, whose `worktree`
+  parameter defaulted to `None`.
+* **All three** `generate_checkpoint` call sites — `api/v1/checkpoints.py`, `checkpoint_handover.py`,
+  `checkpoint_trigger.py` — omitted it.
+* `_files_from_runs` returns `[]` immediately when its worktree is `None`.
+
+So `files_changed` — a field `conversation-checkpoint` requires the Hub to compute precisely because
+a model asked for it would invent one — was **empty in every checkpoint the product has ever
+produced**, and a successor reading a checkpoint was told the conversation had touched nothing.
+
+**Why the suite could not see it.** The existing tests pass a path straight into `compute_envelope`,
+which is the production path's *last* step. They proved the computation and observed nothing about
+the wiring. The same shape as iteration 13's finding one phase earlier: **a renderer test and a
+wiring test are different tests.** Under a mutation that reverts the fix, all 24 of those tests stay
+green and only the two new ones fail — which is the defect's own signature.
+
+**Fixed by removing the way to forget**, not by adding the argument at three call sites: the
+repository is resolved inside `generate_checkpoint`, which always has a conversation. A caller
+cannot omit an argument that no longer exists. `agent_worktree` is deleted rather than repaired.
+
+**The repository root, not the workspace each turn ran in — and this is the part measured rather
+than argued.** Linked worktrees share one object database, so `git show` from the root reads a
+commit made in any of them, *including one whose checkout has since been removed*. Proved in a
+throwaway repository: a commit made in a task checkout is still readable from the root after
+`git worktree remove`. That inverts the obvious design — per-run resolution would report nothing for
+exactly the finished work a checkpoint most wants to describe, because a task checkout is released
+when the task is approved (design D5).
+
+**Pre-existing, not caused by per-task isolation** — but isolation would have made it worse in a way
+that hid it further: once turns run in `agentweave/task/<id>`, even the wired-up agent-name
+resolution would have pointed at the wrong directory.
+
+Covered now by a `conversation-checkpoint` delta in that change, with scenarios for the ordinary
+case, the released-checkout case, and the unresolvable-project case (which still yields a
+checkpoint, carrying no file list — a checkpoint that does not exist is worse than one that reports
+nothing).

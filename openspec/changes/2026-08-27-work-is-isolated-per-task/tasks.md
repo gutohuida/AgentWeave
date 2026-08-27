@@ -353,7 +353,7 @@ Read 4.14's implementation note before changing where the guard sits.
   agents work in separate worktrees on their own branches … they cannot see yours" — true per agent,
   and no longer true as written once a checkout belongs to a task rather than to whoever is holding
   it.
-- [ ] 6.6 Add a test asserting `checkpoints.agent_worktree` (`checkpoints.py:363`) resolves a
+- [x] 6.6 Add a test asserting `checkpoints.agent_worktree` (`checkpoints.py:363`) resolves a
   checkpoint's paths against the workspace the run actually used, and still returns `None` rather
   than raising for an agent that never ran.
 - [x] 6.7 Change `snapshot_worktree`'s commit message (`worktrees.py:472`) to name the task when

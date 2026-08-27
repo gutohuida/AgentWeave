@@ -25,11 +25,13 @@ envelope on the way out.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from . import project_workspace
 from .checkpoint_access import build_citations
 from .checkpoints import (
     CheckpointEnvelope,
@@ -439,6 +441,25 @@ def format_notes(note: CheckpointNote) -> str:
     return "\n\n".join(parts)
 
 
+async def _repo_root_for(db, conversation: Conversation) -> Optional[Path]:
+    """This conversation's project directory, or None if it cannot be resolved.
+
+    Best-effort, matching everything else this module computes: a project whose workspace is
+    unavailable yields a checkpoint with no file list, never a failed checkpoint. That is the same
+    rule `_files_from_runs` already follows for a commit that cannot be read.
+    """
+    try:
+        workspace = await project_workspace.resolve_project_workspace(db, conversation.project_id)
+    except project_workspace.ProjectWorkspaceError:
+        logger.debug(
+            "no project workspace for conversation %s; checkpoint reports no files",
+            conversation.id,
+            exc_info=True,
+        )
+        return None
+    return workspace.root
+
+
 async def generate_checkpoint(
     db,
     conversation: Conversation,
@@ -448,7 +469,6 @@ async def generate_checkpoint(
     model: Optional[str] = None,
     runner_id: Optional[str] = None,
     notes: Optional[str] = None,
-    worktree=None,
     probe: bool = True,
     visibility: str = "private",
 ) -> Checkpoint:
@@ -458,10 +478,19 @@ async def generate_checkpoint(
     computed half. That inversion — the Hub authoritative, the model contributing — is the whole
     change: the previous design made the agent authoritative and the Hub hopeful, and it was
     observed producing nothing while reporting success.
+
+    **The repository is resolved here, not passed in — task 6.6.** It used to be a `worktree`
+    parameter defaulting to `None`, and all three callers omitted it, so `files_changed` was empty
+    in every checkpoint this product has ever produced. The unit tests passed a worktree straight
+    into `compute_envelope` and so could not see it. Resolving in the one place that always has a
+    conversation removes the way to forget: a caller cannot omit an argument that no longer exists.
     """
     anchor = await latest_checkpoint(db, conversation.id)
     loop = await loop_for_conversation(db, conversation.id)
-    envelope = await compute_envelope(db, conversation, worktree=worktree, anchor=anchor, loop=loop)
+    repo_root = await _repo_root_for(db, conversation)
+    envelope = await compute_envelope(
+        db, conversation, repo_root=repo_root, anchor=anchor, loop=loop
+    )
     transcript = await _transcript_since(db, conversation, anchor)
     covered_runs = await runs_to_cover(db, conversation.id, anchor)
 

@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
+from hub.checkpoint_generation import generate_checkpoint
 from hub.checkpoints import (
     LOOP_TASK_SCOPE_NOTE,
     TASK_SCOPE_NOTE,
@@ -36,7 +37,17 @@ from hub.db.models import (
     Run,
     Task,
 )
-from hub.worktrees import files_changed_in, snapshot_worktree
+from hub.worker import WorkerResult
+
+# Named imports, for the reason `test_task_worktrees.py` states: conftest's autouse
+# `_no_real_worktree_provision` stubs these module attributes, and a name bound at collection
+# time is a separate reference to the real function.
+from hub.worktrees import (
+    ensure_task_worktree,
+    files_changed_in,
+    release_task_worktree,
+    snapshot_worktree,
+)
 
 PROJECT = "proj-test"
 AGENT = "claude-1"
@@ -272,7 +283,7 @@ async def test_files_changed_is_the_union_over_the_covered_turns(app, tmp_path):
         # A turn that changed nothing commits nothing, so it carries no sha.
         await _run(db, "run-c", sha=None)
 
-        envelope = await compute_envelope(db, conversation, worktree=Path(repo))
+        envelope = await compute_envelope(db, conversation, repo_root=Path(repo))
 
     assert envelope.files_changed == ["one.txt", "two.txt"]
     assert envelope.covers_from_run_id == "run-a"
@@ -292,7 +303,7 @@ async def test_turns_predating_the_snapshot_column_report_no_files_rather_than_a
     async with async_session_factory() as db:
         conversation = await _conversation(db)
         await _run(db, "run-old", sha=None)
-        envelope = await compute_envelope(db, conversation, worktree=None)
+        envelope = await compute_envelope(db, conversation, repo_root=None)
 
     assert envelope.files_changed == []
 
@@ -675,3 +686,132 @@ async def test_an_unknown_trigger_is_refused_by_the_database(app):
         )
         with pytest.raises(IntegrityError):
             await db.commit()
+
+
+def _stub_worker(monkeypatch):
+    """Make the generator's model call produce nothing, without disturbing git.
+
+    The checkpoint then comes back `unwritten`, carrying the computed envelope and no body —
+    which is exactly what these tests read.
+
+    `run_worker` is replaced rather than `subprocess.run`, which is how `test_checkpoint_notes.py`
+    stubs it. That works there because those tests have no repository; here the envelope is
+    computed by shelling out to `git`, and a global `subprocess.run` stub answers those calls
+    too — the first cut of this helper did exactly that and reported the worker's fake stdout as
+    the list of changed files.
+    """
+
+    async def fake_worker(**kwargs):
+        return WorkerResult(outcome="unparseable", parsed=None)
+
+    monkeypatch.setattr("hub.checkpoint_generation.run_worker", fake_worker)
+
+
+# --- the wiring, which is a different test from the computation (task 6.6) --------------------
+
+
+@pytest.mark.asyncio
+async def test_a_generated_checkpoint_reports_the_files_its_turns_changed(
+    app, tmp_path, bind_project_workspace, monkeypatch
+):
+    """Task 6.6, and the defect it uncovered.
+
+    `compute_envelope` took a `worktree` argument, `generate_checkpoint` defaulted it to `None`,
+    and all three of its callers omitted it — so `files_changed` was empty in every checkpoint
+    this product actually produced. The tests above could not see it because they pass the path
+    straight into `compute_envelope`, which is the production path's *last* step, not its first.
+
+    So this one goes through `generate_checkpoint`, supplies no path at all, and asserts on what
+    comes back. Nothing but real wiring can make it pass.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "t@t")
+    _git(repo, "config", "user.name", "t")
+    (repo / "wired.txt").write_text("1")
+    sha = snapshot_worktree(repo, AGENT)
+    await bind_project_workspace(repo)
+
+    # The generator calls a model; this test is about the computed half, which is produced before
+    # and independently of it. Unparseable worker output yields an `unwritten` checkpoint that
+    # still carries the envelope — the property being relied on, not worked around — and the
+    # subprocess is stubbed the way `test_checkpoint_notes.py` already stubs it.
+    _stub_worker(monkeypatch)
+
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        await _run(db, "run-a", sha=sha)
+        checkpoint = await generate_checkpoint(
+            db, conversation, trigger="operator", cli="claude", probe=False
+        )
+
+    assert checkpoint.files_changed == ["wired.txt"]
+
+
+@pytest.mark.asyncio
+async def test_a_commit_from_a_released_task_checkout_is_still_reported(
+    app, tmp_path, bind_project_workspace, monkeypatch
+):
+    """Why the repo root, and not the workspace each run used.
+
+    Linked worktrees share one object database, so the root can read a commit made in any of
+    them — including one whose checkout has since been removed. That matters because a task's
+    checkout is released when the task is approved (design D5): resolving per-run would report
+    nothing for exactly the finished work a checkpoint most wants to describe.
+
+    Measured here rather than argued: the commit is made in a real task checkout, the checkout is
+    then released, and the checkpoint still names the file.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@t")
+    _git(repo, "config", "user.name", "t")
+    (repo / "base.txt").write_text("base")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+    # This file's `_git` returns None; the sha is needed, so read it directly.
+    base = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+    task_id = "task-aa11bb22cc33"
+    checkout = ensure_task_worktree(repo, task_id, base, ())
+    (checkout / "in_the_task.txt").write_text("work")
+    sha = snapshot_worktree(checkout, AGENT)
+    release_task_worktree(repo, task_id)
+    assert not checkout.exists()
+
+    await bind_project_workspace(repo)
+
+    _stub_worker(monkeypatch)
+
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        await _run(db, "run-a", sha=sha)
+        checkpoint = await generate_checkpoint(
+            db, conversation, trigger="operator", cli="claude", probe=False
+        )
+
+    assert checkpoint.files_changed == ["in_the_task.txt"]
+
+
+@pytest.mark.asyncio
+async def test_an_unresolvable_project_yields_a_checkpoint_with_no_files_not_a_failure(
+    app, monkeypatch
+):
+    """Best-effort, like everything else this module computes. A project whose workspace cannot
+    be resolved produces a checkpoint carrying no file list — never no checkpoint."""
+
+    _stub_worker(monkeypatch)
+
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        await _run(db, "run-a", sha=None)
+        checkpoint = await generate_checkpoint(
+            db, conversation, trigger="operator", cli="claude", probe=False
+        )
+
+    assert checkpoint is not None
+    assert checkpoint.files_changed == []
