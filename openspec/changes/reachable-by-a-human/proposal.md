@@ -30,9 +30,17 @@ able to set it without direct database access.
 - `persist_event` normalises `severity` against an enumerated set (`info`, `warn`, `error`,
   `debug`) before writing, so a call site (or an external `POST /logs` caller) cannot introduce a
   spelling the operator's views do not recognise. An unrecognised value is mapped to a defined
-  fallback rather than written verbatim.
+  fallback rather than written verbatim. `persist_event` returns the normalised value.
 - `run_divergence.py:613` is corrected to `severity="warn"` — the instance the normalisation above
   also closes as a class.
+- `POST /logs` (`hub/hub/api/v1/logs.py`'s `push_log`) uses `persist_event`'s returned, normalised
+  severity in the SSE broadcast payload it builds afterwards, instead of the raw `body.severity` it
+  builds that payload from today. Found during Q1-R2 (compare-to-code): the broadcast dict at
+  `logs.py:87-96` is built independently of the write and reads `body.severity` again, so an
+  out-of-vocabulary severity would still reach a live `ActivityLog` subscriber over SSE
+  unnormalised even after the persisted row is fixed — only a later fetch of history (`GET
+  /events/history`, `GET /logs`) would see the corrected value. Closing only the write path would
+  leave the live path open, the same class of bug this change exists to close.
 - `ProjectSettingsPanel.tsx` gains a "Conversation titles" row exposing `conversation_title_mode`
   (`truncate` / `generate`) and, when generation is selected, `conversation_title_runner_id` —
   modelled on the panel's existing "Checkpoint runner" / "Checkpoint model" rows. No backend change
@@ -56,8 +64,9 @@ able to set it without direct database access.
 
 ## Impact
 
-- `hub/hub/utils.py` (`persist_event`) — add normalisation.
+- `hub/hub/utils.py` (`persist_event`) — add normalisation, return the normalised value.
 - `hub/hub/run_divergence.py:613` — fix the one known bad spelling.
+- `hub/hub/api/v1/logs.py` (`push_log`) — broadcast the normalised severity, not `body.severity`.
 - `hub/ui/src/components/environment/ProjectSettingsPanel.tsx` — add the settings row.
 - `hub/ui/src/__tests__/projectSettingsPanel.test.tsx` — currently fixtures
   `conversation_title_mode`/`conversation_title_runner_id` with no control exercising them; extend

@@ -93,6 +93,21 @@ row it is modelled on outweighs a marginal reduction in visible controls.
 and validates both fields (including the cross-project runner-id check). Confirmed by reading
 `projects.py:446-496` — this is a pure UI-reachability fix.
 
+**`persist_event` returns the normalised severity, and `push_log` broadcasts that return value
+instead of `body.severity`.** Found comparing this design to the code (Q1-R2): `push_log`
+(`logs.py:71-97`) calls `persist_event` at `:79-86` and separately builds an SSE broadcast dict at
+`:87-96` that reads `body.severity` again, independently of what was just written. Normalising only
+inside `persist_event` fixes the persisted row and anything read back through `GET /events/history`
+or `GET /logs`, but a live `ActivityLog` subscriber gets its events from the SSE broadcast
+(`useSSE.ts`'s `dispatchEvent`, fed by the `log_event` frame), not from a history fetch — so an
+out-of-vocabulary `POST /logs` severity would still arrive at the operator's screen unnormalised,
+exactly the failure this change exists to close, just moved from the persisted copy to the live one.
+Alternative considered: normalise inside `push_log` a second time before building the broadcast dict
+— rejected, since it duplicates the enumerated set and its fallback in a second place, which is the
+"one place every writer passes through" principle this change already rejected once (see the
+persist-vs-API-boundary decision above). Returning the value `persist_event` already computed keeps
+the normalisation logic in the one function that owns it.
+
 ## Risks / Trade-offs
 
 - [Risk] Mapping an unrecognised severity to `"warn"` could surprise a future caller that

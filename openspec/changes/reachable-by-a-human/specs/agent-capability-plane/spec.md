@@ -5,7 +5,8 @@
 Events persisted for the operator's attention SHALL use the severity vocabulary the operator's views
 filter and style by. The persistence layer SHALL enforce this by normalising any severity value
 against an enumerated set before writing, rather than relying on every caller to pass an already-
-correct value.
+correct value. Any live notification of the same event, such as a real-time broadcast to connected
+views, SHALL carry the same normalised value, not the caller's original string.
 
 A severity that no view recognises is worse than none: the row renders unmarked and is hidden by the
 filter intended to reveal it, so the events most needing attention are the ones least likely to be
@@ -27,3 +28,10 @@ seen.
 
 - **WHEN** an event is submitted through an API that accepts a caller-supplied severity string
 - **THEN** the same normalisation applies as for events persisted from within the system
+
+#### Scenario: A live broadcast matches the persisted value
+
+- **WHEN** an event with a severity outside the enumerated set is submitted through an API that both
+  persists the event and broadcasts it to connected views in real time
+- **THEN** the severity carried by the broadcast is the same normalised value that was written, not
+  the caller's original string

@@ -5,12 +5,12 @@
   "permission_mode": "unattended-full-access",
   "branch": "autonomous/2026-08-27-build-everything-decided",
   "parent_branch": "master",
-  "parent_sha": "bf04ad845f5f56d4574aae6ac4c4498c8a673b2d",
-  "started_at": null,
+  "parent_sha": "a2f61c3409f006f13f7c56f8b11b32518082e45b",
+  "started_at": "2026-08-27T00:30:00+01:00",
   "stop_at": "2026-08-27T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 0,
-  "last_heartbeat": null,
+  "iteration": 3,
+  "last_heartbeat": "2026-08-27T01:15:00+01:00",
   "green_at_arming": "CI run 33022066377 on master: ALL 8 matrix cells green - ui-test, hub-test, and test x {ubuntu, windows, macos} x {3.11, 3.12}. This is the first time this code has ever been through Linux, macOS or Python 3.12; it had only ever run on Windows/3.11 locally. AW_CHECK_UI_BUNDLE=1 test_ui_build_stamp.py also green after the stamp was re-recorded. You are starting from a genuinely green tree - any red is yours.",
   "log_file": ".claude/autonomous/2026-08-27-build-everything-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
@@ -40,13 +40,13 @@
     {
       "id": "Q1-R1",
       "title": "reachable-by-a-human - round 1: explore the code, then propose",
-      "status": "open",
+      "status": "done",
       "detail": "FIRST in the queue because F68 must land before Q2's group 4 begins deriving severities. EXPLORE THE CODE BEFORE PROPOSING - read these paths yourself rather than trusting the exploration's account of them: hub/hub/utils.py persist_event (~25); hub/hub/run_divergence.py:613 (the severity='warning' call); every other persist_event call site and the set of severity strings actually in use; hub/ui/src/components/activity/EventRow.tsx (SEVERITY_CHIP ~37, SEVERITY_BORDER ~44); hub/ui/src/components/activity/ActivityLog.tsx (SEVERITY_FILTERS ~31, the filter ~163); hub/hub/api/v1/events.py:42; hub/hub/conversation_titles.py (generate_conversation_title ~168, maybe_generate_title ~227); hub/hub/api/v1/projects.py:87; hub/hub/db/models.py:96; hub/ui/src/api/projects.ts:88; hub/ui/src/components/environment/ProjectSettingsPanel.tsx; and hub/ui/src/__tests__/projectSettingsPanel.test.tsx. THEN run openspec-propose for `reachable-by-a-human`. The two behaviours and the reasons for them are in openspec/explorations/2026-08-26-what-is-still-unanswered.md ('A new finding' and Decisions #5) - use them as design input, but every factual claim in your artifacts must come from the code you just read. Decided already, do not re-litigate: normalise severity in persist_event against an ENUMERATED set (fixing only line 613 is rejected - it closes the instance, not the class), and expose conversation_title_mode rather than titling 'by agent and role' (withdrawn: CLAUDE.md forbids recreating role-derived API/UI fields)."
     },
     {
       "id": "Q1-R2",
       "title": "reachable-by-a-human - round 2: compare to the code, fix the change",
-      "status": "open",
+      "status": "done",
       "detail": "Method for a review round: go claim by claim, not file by file. For EVERY file:line citation in proposal.md, design.md and tasks.md, open that line and confirm it says what the artifact claims. For every sentence of the form 'today the code does X', verify X against the code rather than against the exploration. For every task, confirm the function, file and line it names exist and that a stranger could execute it. For every scenario, confirm it is falsifiable - that it could actually fail. Fix what is wrong IN the artifacts. Then re-run `npx openspec validate <change> --strict`. Write down what you found: a round that corrects three citations is worth more than one that reports success, and the corrections are the record of how far the exploration drifted from the code. Target: openspec/changes/reachable-by-a-human/."
     },
     {
@@ -176,8 +176,8 @@
       "detail": "Work the tasks.md the three rounds produced. Mutation checks by name."
     }
   ],
-  "current": "Q1-R1",
-  "next_action": "Cut branch autonomous/2026-08-27-build-everything-decided from master at bf04ad845f5f56d4574aae6ac4c4498c8a673b2d. Then start Q1-R1: EXPLORE the code paths that item names - persist_event, run_divergence.py:613, both UI severity maps, ActivityLog's filter list, events.py:42, conversation_titles.py, and ProjectSettingsPanel.tsx - and only then run openspec-propose for `reachable-by-a-human`. Read the ROUND DISCIPLINE in method_reminders before you start: this change gets three rounds before any code is written, and each round is its own commit.",
+  "current": "Q1-R3",
+  "next_action": "Q1-R3: a second independent pass over openspec/changes/reachable-by-a-human/, looking for what Q1-R2 did not catch. Q1-R2 found and fixed one real gap (push_log's SSE broadcast reading raw body.severity instead of persist_event's normalised return) plus confirmed every file:line citation exact. For R3 ask specifically: does the enumerated severity set {info,warn,error,debug} cover every value now actually in the database (info, warn, warning, error, debug - re-check via a live query, not the design's claim)? Does anything else besides run_divergence.py:613 and push_log's broadcast ever read or re-emit a severity string outside persist_event's own write (e.g. any other SSE broadcast built from a caller's raw severity)? Are tasks 1.1-1.10 executable in the stated order (tests before their implementation task, mutation checks after)? Does the conversation-title row's runner Select need a 'None' option guarded against generate mode requiring a runner, or does the backend already refuse that combination - check PUT /projects/{id}/settings for whether conversation_title_mode='generate' with a null runner_id is accepted or refused, since the design does not say. Fix what's wrong IN the artifacts, then re-run `npx openspec validate reachable-by-a-human --strict`. Write down what this round caught, even if nothing - enumerate what was checked either way.",
   "decisions_for_user": [
     "THE 05:00 RULE, pre-authorised: the operator asked for the e2e-loop test explicitly, and the queue is now long enough that it may not be reached. If it is past 05:00 local and Q6 has not started, SKIP any change that has not started and go straight to Q6 and Q7. Do not abandon a change already part-built - finish or revert it first, never leave one half-landed. Rationale: an e2e drive of what was built is worth more than one more unproven change, and the operator's own ordering put the drive after the building precisely so it would test real work.",
     "SCOPE WARNING, stated so the morning is not a surprise: the operator's round discipline (three rounds per unproposed change, one for the proposed one) turns three changes into twelve queue items before their implementations. This is deliberate and is a quality decision, not an oversight - but the full queue almost certainly does not fit in one night. It is ordered so that stopping anywhere leaves complete work behind rather than a row of half-written proposals. If little got built, that is the discipline working as asked, not the loop failing.",

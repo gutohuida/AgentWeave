@@ -9,11 +9,21 @@
   `{"info", "warn", "error", "debug"}` to `"warn"` before constructing the `EventLog` row.
 - [ ] 1.4 Change `hub/hub/run_divergence.py:613` from `severity="warning"` to `severity="warn"`.
 - [ ] 1.5 Add a test that posts to `POST /logs` with an out-of-vocabulary `severity` in the body and
-  asserts the persisted/broadcast severity is normalised the same way as an internal call site.
-- [ ] 1.6 Run the new and existing tests covering `persist_event`, `run_divergence.py`, and
+  asserts the persisted severity is normalised.
+- [ ] 1.6 Add a test asserting `push_log`'s SSE broadcast (`sse_manager.broadcast` payload, not just
+  the persisted row) carries the normalised severity for the same out-of-vocabulary request — found
+  in Q1-R2: the broadcast dict in `logs.py:87-96` reads `body.severity` independently of the write
+  and would otherwise still ship the raw spelling to a live subscriber.
+- [ ] 1.7 Implement: change `persist_event`'s return type from `None` to `str` and `return
+  normalised_severity`; update `push_log` to capture that return value and use it (not
+  `body.severity`) when building the broadcast payload.
+- [ ] 1.8 Run the new and existing tests covering `persist_event`, `run_divergence.py`, and
   `POST /logs`; confirm green.
-- [ ] 1.7 Mutation check: temporarily revert 1.3's normalisation (or comment out the mapping) and
+- [ ] 1.9 Mutation check: temporarily revert 1.3's normalisation (or comment out the mapping) and
   confirm test 1.1 fails. Record whether it failed as predicted, then restore the fix.
+- [ ] 1.10 Mutation check: temporarily revert 1.7's broadcast fix (leave `push_log` reading
+  `body.severity` for the broadcast) and confirm test 1.6 fails. Record whether it failed as
+  predicted, then restore the fix.
 
 ## 2. Conversation-title settings control
 
