@@ -176,7 +176,6 @@ async def test_three_startable_tasks_and_one_agent_start_one_and_touch_nothing_e
     async with async_session_factory() as db:
         fresh_job = await db.get(AIJob, job.id)
         await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
-
     async with async_session_factory() as db:
         rows = {
             t.id: (t.status, t.assignee)
@@ -194,10 +193,22 @@ async def test_three_startable_tasks_and_one_agent_start_one_and_touch_nothing_e
             .all()
         )
 
-    # `every-run-knows-its-task` D1/D2: the staged entry now carries `task_id`, so the run it
-    # starts binds and advances the claim past `assigned` to `in_progress` — the two untouched
-    # tasks, never claimed at all, are exactly where this test's own point still lives.
-    assert rows["task-width-one-a"] == ("in_progress", OWNER)
+    # **What the firing itself decides, and nothing downstream of it.** Since
+    # `every-run-knows-its-task` D1/D2 the staged entry carries `task_id`, so the run it starts
+    # binds and advances this claim past `assigned` to `in_progress` — but that happens in the
+    # background task the firing kicked off, not in the firing. Naming either status here is a coin
+    # toss: the same commit read `in_progress` on Windows and `assigned` on Linux CI. Awaiting the
+    # spawn would settle it and cost 40 seconds of real launch attempt for a property this file does
+    # not own; `test_run_task_binding.py` asserts the advance deterministically, in its own subject.
+    #
+    # What is race-free is the widening decision, which is all 5.2 is about: this task was claimed
+    # by this agent, and the other two were not touched at all.
+    started_status, started_assignee = rows["task-width-one-a"]
+    assert started_assignee == OWNER
+    assert started_status in (
+        "assigned",
+        "in_progress",
+    ), f"the claimed task must be claimed, not left pending; got {started_status!r}"
     assert rows["task-width-one-b"] == ("pending", None)
     assert rows["task-width-one-c"] == ("pending", None)
     assert len(entries) == 1
