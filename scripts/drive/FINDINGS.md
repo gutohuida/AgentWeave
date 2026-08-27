@@ -4507,3 +4507,156 @@ checked: restoring `is not None` fails the two F78 tests, and making the write u
 **Verified live**, not only in pytest: against a Hub restarted on the fixed code, `{"assignee":
 null}` cleared to `None`, a priority-only PATCH left the holder alone, and `{"assignee": "   "}`
 normalised to `None`.
+
+---
+
+## F79 — a task the operator has decided about still takes new runs
+
+**Status:** fixed — see the commit that adds `hub/tests/test_a_decided_task_takes_no_new_work.py`
+
+**Severity: A.** An agent is put to work on approved, merged work; the board reports it as running
+on that work; and the operator's own release of the card is silently reversed.
+
+**How it was found.** Not by looking for it. Immediately after driving row 17 to a successful merge,
+a new trigger came back with `waiting_reason: "an older conversation's queued input is being
+delivered first (run run-acbd6c2138b1)"` — a run I had not started, on a task I had just approved.
+
+Reconstructed from the database:
+
+| time (UTC) | what happened |
+|---|---|
+| 21:38:05 | `entry-5cea5e58d1f0` queued for `builder`, `task_id = task-a0409448ee8e` — legal, the task was `completed` |
+| 21:55:12 | operator: `completed -> under_review` |
+| 21:55:40 | operator: `under_review -> approved`; integration merges `70474c2` into `master` |
+| 22:06 | operator clears the assignee (F78's remedy) |
+| 22:07:11 | the Hub restarts and delivers the 29-minute-old entry: `run-acbd6c2138b1`, bound to the **approved, merged** task, and `assignee` is written back to `builder` |
+
+The restart only widened the window. Turns serialise per agent, so an entry waiting behind another
+turn while the operator approves the task is an ordinary occurrence, not a crash-recovery edge.
+
+**Reproduced on demand, with no queue and no restart:**
+
+```
+PATCH /tasks/task-4ec8342f93ed {"assignee": null}     -> 200  (status: approved)
+POST  /agent/trigger {"agent":"author","task_id":"task-4ec8342f93ed"}  -> 200, run started
+GET   /tasks/task-4ec8342f93ed
+  -> {"status": "approved", "assignee": "author", "assignee_status": "running"}
+```
+
+The board now says an agent is actively working a task whose code is already on `master`.
+
+**Cause, and why it is the interesting kind.** The rule is not missing. It is written down, in
+`run_task_binding.py`, in the docstring of the constant that names the band:
+
+> Statuses at which a conversation's binding releases itself. Work that has been approved or
+> abandoned is finished being worked on, and a thread that kept attributing turns to it would put
+> stalled markers on a task the operator has already decided about (design D7).
+
+Three things can name the task a turn works on. `release_conversations_bound_to` enforced the rule
+on **one** of them:
+
+| what names the task | covered before? |
+|---|---|
+| `Conversation.task_id` — the thread is already about it | **yes** |
+| `InboundQueueEntry.task_id` — a turn queued earlier | no |
+| `TriggerAgentRequest.task_id` — the operator naming it now | no |
+
+`bind_run_to_task` then does the damage it is designed to do — *"Only where the task does not
+already name someone else"* — which is exactly the case after the operator clears the assignee.
+F78's remedy and F79 compose into undoing each other.
+
+**Fix — two dispositions, because two different things are speaking.** The distinction is not
+invented here; `resolve_bound_task` already draws it for a task that has been *deleted* since a
+delegation was sent.
+
+* **The operator naming a decided task now** is refused, `409`, at `POST /agent/trigger`, while
+  they are reading the response: *"Task X is 'approved', which is a decision the operator has
+  already made about it… Move it to 'revision_needed' to reopen it, or start the turn without
+  naming a task."*
+* **A queued entry whose task has since been decided** is *released*, not refused — beside the
+  conversations, at the moment of the decision. Refusing at delivery would be actively wrong:
+  `turn_scheduler` treats a non-transient refusal as grounds to abandon the entry after three
+  attempts, so the operator's message would be discarded because of a decision taken about
+  something else. The turn runs; only the claim that it is work on that task is dropped.
+
+`release_conversations_bound_to` is now reached through `release_bindings_to`, so a fourth surface
+acquiring a binding has one function to be added to rather than a call site to be remembered at.
+
+**`review_task_id` is untouched.** Inspecting decided work is what a review is *for*, and clearing
+it would restore the hole `every-run-knows-its-task` D3 closed — review runs with a NULL `task_id`,
+and `under_review -> approved` transitions that no run records having caused.
+
+**One thing this nearly got wrong, and it is the lesson the carry-forward predicted.** The refusal
+was first written into `resolve_bound_task`'s explicit-`task_id` branch, where it read naturally and
+passed a unit test. It could never have fired: `POST /agent/trigger` does not run a turn, it queues
+an entry, so the task always arrives at that function as a *delegation* — and the only caller of
+`trigger_agent_directly` (`turn_scheduler`) never passes `task_id` at all. The live drive caught it:
+the trigger still returned `200`. The refusal moved to the route, and its tests were rewritten to go
+over HTTP for exactly that reason. **A guard that is present, tested and unreachable is this
+codebase's dominant failure mode** — F74, F41 and F38 are prior instances, and this one was authored
+and caught inside a single sitting.
+
+**Verification.** Seven tests, four watched to fail against the defect. Every guard mutation-checked
+individually: dropping the `state == "queued"` filter fails the history test; also clearing
+`review_task_id` fails the review test; widening the band to include `under_review` fails the
+boundary test. Live-verified against a Hub restarted on the fixed code — the trigger on the approved
+task now returns `409`, the same call on an `under_review` task still returns `200` and starts a
+run, and the exact live sequence that produced the defect (queue an entry against a task, then
+approve it) leaves the entry with `task_id: None`.
+
+---
+
+## F80 — `asker_waiting` is computed on one question route and hardcoded on the other four
+
+**Status:** fixed — see the commit that adds `hub/tests/test_asker_waiting_is_the_same_on_every_route.py`
+
+**Severity: B.** A wrong surface, on the one field whose whole job is to say whether answering this
+question will reach anybody.
+
+**How it was found.** Driving row 13. After declining a question whose asking run had already ended,
+the same row read two different ways depending on which route asked:
+
+```
+GET  /questions                  -> [(q-a06..., asker_waiting: false), (q-d44..., asker_waiting: false)]
+GET  /questions/q-a06ae761e397   ->   asker_waiting: true      (answered, run ended)
+GET  /questions/q-d44e523b0d3d   ->   asker_waiting: true      (DECLINED, run ended)
+```
+
+**Cause.** `GET /questions` passes its rows through `_with_asker_state`, which resolves the asking
+run in one bulk query. The other four routes returning a `QuestionResponse` — create, detail,
+answer, decline — returned the ORM row, so Pydantic filled the field from the schema default,
+`asker_waiting: bool = True`. The field was not stale on those routes; it was a **constant**, and
+the constant is the answer meaning *someone is still waiting*.
+
+**The sharpest instance is `answer_question`.** It computes this exact fact for itself —
+
+```python
+asker_still_waiting = question.blocking and not await _asking_run_has_ended(session, question)
+```
+
+— to decide whether to queue the answer as a turn, and then returns a body asserting the opposite.
+The truth was already in the function, twenty lines above the return.
+
+**Why B and not A.** No shipped surface acts on it: the dashboard reads the list and discards the
+mutation bodies, invalidating and refetching instead. It is wrong to every other client, including
+an agent reading the API, and it points the operator the wrong way — toward answering a question
+that `release_block_for_question`'s F60 guard may then refuse for the very reason this field exists
+to report.
+
+**Fix.** `_with_asker_state_one`, built on the existing `_asking_run_has_ended` rather than a second
+copy of the rule, applied at the four routes.
+`test_the_list_and_the_detail_route_agree` pins the bulk path and the single-row path to each other,
+which is what keeps two computations of one fact from drifting.
+
+**One thing the suite caught that the fix got wrong first.** Applied to all four `return question`
+statements mechanically, the change also hit `ask_question_for_actor` — a *helper*, not a route,
+shared with the agent-facing path, whose caller reads `conversation_id` off the row it returns.
+`test_conversation_attention.py::test_a_question_created_through_the_api_records_its_conversation`
+failed on `QuestionResponse` not carrying that field. The conversion belongs at the route; the
+helper still returns the row.
+
+**Verification.** Five tests, three watched to fail against the defect. Mutation-checked: hardcoding
+the field to `False` instead fails the two tests that assert a live asker and an unrecorded asker are
+still presumed waiting — so the fix cannot have simply inverted the constant. All 102 question tests
+pass.
+

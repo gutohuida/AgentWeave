@@ -215,13 +215,17 @@ async def ask_question(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
-    return await ask_question_for_actor(
+    # Converted here rather than inside the helper: `ask_question_for_actor` is shared with the
+    # agent-facing path, which reads `conversation_id` off the row it returns and would break on a
+    # response model that does not carry it. The route is what owes the caller `asker_waiting`.
+    question = await ask_question_for_actor(
         body,
         project_id=project_id,
         from_agent=body.from_agent,
         created_by_run_id=None,
         session=session,
     )
+    return await _with_asker_state_one(session, question)
 
 
 @router.get("", response_model=List[QuestionResponse])
@@ -266,6 +270,24 @@ async def _with_asker_state(session: AsyncSession, rows: List[Question]) -> List
     return responses
 
 
+async def _with_asker_state_one(session: AsyncSession, question: Question) -> QuestionResponse:
+    """The same field for a single row, for every route that returns one (F80).
+
+    Four routes returned the ORM row directly, so Pydantic filled `asker_waiting` from its schema
+    default — and that default is `True`, the answer meaning *someone is still waiting*. The field
+    was not stale on those routes, it was a constant, and it was the constant that sends an operator
+    to answer a question nobody is listening for.
+
+    Built on `_asking_run_has_ended` rather than on a second copy of the rule. That leaves two
+    computations of one fact in this module — this one and `_with_asker_state`'s bulk query, which
+    exists because the panel re-reads a whole page on every SSE tick — and
+    `test_the_list_and_the_detail_route_agree` is what stops them drifting apart.
+    """
+    response = QuestionResponse.model_validate(question, from_attributes=True)
+    response.asker_waiting = not await _asking_run_has_ended(session, question)
+    return response
+
+
 @router.get("/{question_id}", response_model=QuestionResponse)
 async def get_question(
     question_id: str,
@@ -276,7 +298,7 @@ async def get_question(
     question = await session.get(Question, question_id)
     if question is None or question.project_id != project_id:
         raise HTTPException(status_code=404, detail="Question not found")
-    return question
+    return await _with_asker_state_one(session, question)
 
 
 @router.patch("/{question_id}", response_model=QuestionResponse)
@@ -375,7 +397,7 @@ async def answer_question(
         from ...turn_scheduler import schedule_agent
 
         await schedule_agent(project_id, from_agent)
-    return question
+    return await _with_asker_state_one(session, question)
 
 
 @router.post("/{question_id}/decline", response_model=QuestionResponse)
@@ -481,4 +503,4 @@ async def decline_question(
 
         await schedule_agent(project_id, from_agent)
 
-    return question
+    return await _with_asker_state_one(session, question)
