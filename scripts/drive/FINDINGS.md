@@ -3412,3 +3412,57 @@ introduced the same way tomorrow. The enumeration is what makes it a mechanism i
 
 Adjacent to `every-run-knows-its-task` D6, which derives divergence severity rather than hardcoding
 it; that change should not land a new severity string without this normalisation existing.
+
+## F69 — `every-run-knows-its-task` groups 1-5 driven live, all five behaviours held (not a defect — the record the group asked for)
+
+Driven 2026-08-27, iteration 8, group 6 of `every-run-knows-its-task`, against `proj-18e5d4e0`
+(ledger-stress) restarted onto this branch (migration `0093 -> 0094` ran clean on startup;
+`GET /api/v1/projects` confirmed all 5 expected projects, `proj-5e960453` untouched).
+
+**What held, measured against the real database, not a fixture:**
+
+- **D1/D2, the binding.** Firing the project's pre-existing "Ledger flow" job produced the first
+  job-origin queue entry in this database's history to carry `task_id`. The bound run drove
+  `assigned -> in_progress` with `actor_kind='run'` and no operator or agent action —
+  `run_task_binding.bind_run_to_task`, previously reachable only from direct operator triggers, now
+  reachable from a flow firing.
+- **D6, derived severity.** A flow work turn that ended without moving its task produced a
+  `run_diverged` event at `severity='info'`, not the old hardcoded `warn` — confirmed by reading the
+  `event_logs` row directly, not by trusting the API's default view.
+- **D6, resolution.** Completing the same task on the flow's next tick fired
+  `run_divergence_resolved` naming `{"task_id": ..., "count": 2}` — and the count included a second,
+  unrelated divergence from 2026-08-24 that had never been resolved before this change existed to
+  resolve it.
+- **D7, the flow régime.** A task set to `divergence_policy='retry'`, worked by a flow that made no
+  change, recorded `policy_applied='flow'` in `run_divergences` — not `retry` — and nothing
+  auto-spawned afterward. The suppression named in the design fired exactly once, on exactly the
+  condition it names.
+- **D3/F66, the batching.** Two entries queued for one agent (`critic`) back-to-back, one carrying
+  `review_task_id` and one carrying `task_id`: the immediately-spawned turn carried only the review
+  entry, the work entry sat `state='queued'`, and it was delivered in the very next turn with no
+  further operator action — the exact "rides the next turn" behaviour `tasks.md` 1.1/1.3 pin at unit
+  level, reproduced against a real scheduler tick.
+
+**Delta, the actual point of the drive:** job-origin entries carrying `task_id` went from **0/61**
+to **8/71** (2 of the 10 new job-origin entries are review-staffing entries, which carry
+`review_task_id` instead by design, not a miss). Runtime `→ in_progress` transitions went from
+**20** to **28**, +8 — a 1:1 match to the 8 newly-bound job-origin work entries. The boundary
+`design.md` measured as structurally unreachable (0 of 61) now applies exactly where the change
+intended it to.
+
+**Incidental, not caused by this change:** the drive hit a real, pre-existing staffing stall —
+`scheduler.py:1050`'s `unresolved` rung — on a task whose declared reviewer had ended up being the
+same agent that did the work. Resolving it the way an operator would (approving the task directly,
+since "reviewing it yourself... is the way forward" is the ladder's own stated remedy) is itself
+confirmation that the terminal rung's documented escape hatch works under real, un-staged
+conditions, not a fixture built to exercise it. Recorded here rather than opened as its own finding
+because nothing about it was surprising once read — it is the ladder behaving as designed.
+
+**Left behind in `proj-18e5d4e0`** (job disabled, `ai_jobs WHERE enabled=1` confirmed zero; no
+run or queue entry alive at the end): four new tasks — one probe left deliberately `in_progress`
+with an unresolved surfaced divergence as durable evidence of the `retry` scenario above
+(`task-4928038eba7e`), two real trivial commits used to construct a genuinely reviewable task for
+the batching test (`task-c0bd47157c19` uncommitted-evidence and unreviewed, `task-60d1d8183feb`
+fully reviewed and approved), and the job's own original task now operator-approved
+(`task-e6b05093`). No further cleanup performed, consistent with how this project's other drive
+evidence has always been left in place.
