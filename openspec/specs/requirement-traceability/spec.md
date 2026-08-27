@@ -262,6 +262,22 @@ a repository, the changed paths and a content hash of each. Both SHALL be suppor
 project without a repository is a supported first-class case and would otherwise be permanently
 unverifiable.
 
+**Which tree is described is decided by what the recorder named, not by where they are standing.**
+An agent's footprint SHALL be taken from its own working checkout, whose content is the work in
+progress and which a later re-stamp corrects once that work is committed. An operator's footprint
+SHALL be taken from the commit their locator names where it names one, and from their own checkout
+otherwise; where a named commit is not present in the repository the recording SHALL be refused
+rather than footprinted against the checkout. A locator counts as naming a commit only when it is a
+bare git object name — a locator is otherwise a path, and reading paths as revisions would be a
+guess with a refusal attached to it.
+
+A footprint that silently describes a tree other than the one named is worse than absent evidence,
+because review and integration both act on it: a review turn is checked out to the footprinted
+commit, and integration merges on whether that commit is reachable from the main branch.
+
+Where a footprint is captured, the response to the recording SHALL report it, so the recorder can
+see which tree their evidence was attached to at the moment they can still correct it.
+
 A later change to a linked footprint, with no new requirement revision and no explicit resolution,
 SHALL raise a drift candidate.
 
@@ -285,6 +301,34 @@ Overlap between a footprint and a later change is a candidate signal, not proof 
 - **WHEN** evidence is recorded in a project that is not a git repository
 - **THEN** the footprint names the changed paths and a content hash of each
 - **AND** a later change to one of them raises a drift candidate
+
+#### Scenario: The footprint describes the commit the recorder named
+
+- **WHEN** an operator records evidence whose locator names a commit in the project's repository
+- **THEN** the footprint names that commit, its tree, and whether it is reachable from the main
+  branch
+- **AND** it does not name the commit the operator's own checkout is on
+
+#### Scenario: A locator naming an absent commit is refused
+
+- **WHEN** an operator records evidence whose locator names a commit the repository does not have
+- **THEN** the request is refused
+- **AND** no evidence and no footprint are recorded
+
+#### Scenario: A locator that is not a commit leaves the footprint alone
+
+- **WHEN** an operator records evidence whose locator is a path rather than a git object name
+- **THEN** the footprint is taken from the operator's own checkout
+
+#### Scenario: An agent's locator does not move its footprint
+
+- **WHEN** an agent records evidence whose locator names a commit
+- **THEN** the footprint is still taken from the agent's own working checkout
+
+#### Scenario: Recording evidence reports the footprint it captured
+
+- **WHEN** evidence is recorded and a footprint is captured for it
+- **THEN** the response describing that evidence reports the footprint
 
 #### Scenario: Drift never rewrites the document
 

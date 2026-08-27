@@ -28,6 +28,7 @@ unrecoverable after the fact.
 from __future__ import annotations
 
 import hashlib
+import re
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -111,6 +112,9 @@ async def record(
 
     The footprint is read *before* the row is created, because it is half of what says whether this
     piece has already been recorded — see `duplicate_of`.
+
+    **An operator whose `locator` names a commit is footprinted at that commit** (finding F71), not
+    at whatever their checkout is sitting on. See `_take_footprint`.
     """
     if requirement.state != "active":
         raise EvidenceRefusedError(
@@ -120,7 +124,7 @@ async def record(
 
     taken: Optional[Footprint] = None
     if workspace is not None:
-        taken = read_footprint(footprint_root(workspace, actor.kind, actor.name or ""))
+        taken = _take_footprint(workspace, actor, locator)
         already = await duplicate_of(
             session, requirement, task_id=task_id, commit_sha=taken.commit_sha
         )
@@ -215,6 +219,52 @@ async def duplicate_of(
         .limit(1)
     )
     return result.scalars().first()
+
+
+def _take_footprint(workspace: ProjectWorkspace, actor: Actor, locator: str) -> Footprint:
+    """The footprint this evidence should carry, given who is recording it and what they named.
+
+    **Finding F71, found live 2026-08-27.** An operator recorded evidence whose `locator` was the
+    full sha of the commit carrying the fix, and the footprint captured their own checkout's `HEAD`
+    instead — an unrelated earlier commit, still carrying the bug. Nothing refused and nothing
+    warned: `commit_for_task_review` then returned that commit with `resolved: True`, so a review
+    turn would have been checked out to the pre-fix tree with total, unearned confidence, and
+    `reachable_from_main: 1` would have told `task_integration` the fix was already on `master`. The
+    error runs the other way just as easily — a checkout *ahead* of the described work footprints a
+    fix as demonstrated when it is not.
+
+    So a named commit wins over the checkout, because it is the operator's own explicit statement of
+    which tree the evidence is about, and the checkout was only ever a fallback for when nothing
+    said otherwise. `footprint_root`'s docstring makes that fallback's reasoning explicit — *"if
+    they are on a feature branch that is where they observed the thing"* — and a locator naming a
+    commit is strictly better information than that inference.
+
+    **Refuses rather than falling back** when the locator names a commit this repository does not
+    have. Falling back to `HEAD` there would reproduce F71 exactly, in the one case where the
+    operator has said most clearly what they meant; and a footprint that silently describes a
+    different tree than the one named is worse than no evidence at all, because the review path
+    trusts it.
+
+    **Operators only.** An agent's footprint is deliberately its worktree's `HEAD`, uncommitted work
+    and all, and `restamp_run_footprints` corrects it once the commit exists — a locator-named
+    commit would fight that mechanism rather than improve it.
+    """
+    root = footprint_root(workspace, actor.kind, actor.name or "")
+    named = locator_commit(locator) if actor.kind == "operator" else None
+    if named is None:
+        return read_footprint(root)
+
+    resolved = _git(root, "rev-parse", "--verify", f"{named}^{{commit}}")
+    if resolved is None:
+        raise EvidenceRefusedError(
+            f"this evidence names commit {named} as its locator, and that commit is not in this "
+            f"project's repository. Recording it would footprint the checkout's own HEAD instead, "
+            f"which describes a different tree than the one named — and a review of this task "
+            f"would then be handed that tree as though it were the work. Fetch or push the commit "
+            f"first, or name something other than a commit in the locator.",
+            code="locator_commit_unknown",
+        )
+    return read_footprint(root, at=resolved)
 
 
 def footprint_root(workspace: ProjectWorkspace, actor_kind: str, actor: str) -> Path:
@@ -327,7 +377,7 @@ def tree_entries(root: Path, ref: str) -> Optional[Dict[str, str]]:
     return entries
 
 
-def read_footprint(root: Path) -> Footprint:
+def read_footprint(root: Path, *, at: Optional[str] = None) -> Footprint:
     """The footprint of a workspace, by whichever of the two shapes applies.
 
     A project without a repository is a supported first-class case
@@ -338,19 +388,62 @@ def read_footprint(root: Path) -> Footprint:
     Note `entries` is the *whole* tree, not the changed paths the model documents. That mismatch is
     real and pre-existing: it means one unrelated commit on the compared ref drifts every requirement
     at once. Fixing it is a separate change, deliberately, so that it cannot mask this one.
+
+    `at` describes a commit the caller *named* rather than the one the checkout happens to be
+    sitting on (finding F71). It must already be resolved — `record` verifies it and refuses rather
+    than falling back, because a silent fallback to `HEAD` is the whole defect.
     """
-    commit = _git(root, "rev-parse", "HEAD")
+    commit = _git(root, "rev-parse", at or "HEAD")
     if commit:
-        branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD") or ""
+        branch = (
+            _branch_at(root, commit)
+            if at
+            else (_git(root, "rev-parse", "--abbrev-ref", "HEAD") or "")
+        )
         return Footprint(
             kind="git",
             commit_sha=commit,
             branch=branch,
-            entries=tree_entries(root, "HEAD") or {},
+            entries=tree_entries(root, commit) or {},
             reachable_from_main=is_reachable_from_main(root, commit),
         )
 
+    if at:
+        # A named commit in a directory with no repository at all. Nothing can be said about it, and
+        # a path-hash footprint of the working tree would describe something else entirely.
+        return Footprint(kind="paths", entries={}, reachable_from_main=None)
+
     return Footprint(kind="paths", entries=hash_tree(root), reachable_from_main=None)
+
+
+#: A locator that is a bare git object name, and nothing else. Deliberately narrow: `locator` is a
+#: free-form field that usually holds a *path* (`evidence_locator_exists` resolves it as one), so
+#: anything looser would start reading file names as revisions. A branch name is not accepted for
+#: exactly that reason — `cart.py` and `feature/x` are both plausible paths, and guessing which is
+#: meant is the kind of judgement this product does not make on the operator's behalf.
+_COMMIT_ISH = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+def locator_commit(locator: str) -> Optional[str]:
+    """The commit *locator* names, or `None` when it names something that is not a commit."""
+    candidate = (locator or "").strip()
+    return candidate if _COMMIT_ISH.match(candidate) else None
+
+
+def _branch_at(root: Path, commit: str) -> str:
+    """The local branch whose tip is exactly *commit*, or `""` when that is not one branch.
+
+    Only an exact tip counts. A commit in the middle of a branch's history belongs to every branch
+    that descends from it, and picking one would put a guess into the field
+    `task_integration.integration_targets` groups by. `""` is already this module's word for "names
+    no line of work" — `evidence_drift` skips such a footprint rather than treating it as drift —
+    so the unknown case has an established, honest meaning rather than a new one.
+    """
+    listed = _git(root, "branch", "--format=%(refname:short)", "--points-at", commit)
+    if not listed:
+        return ""
+    names = [line.strip() for line in listed.splitlines() if line.strip()]
+    return names[0] if len(names) == 1 else ""
 
 
 # The names a project's main line of work goes by, in the order they are tried. Nothing here guesses

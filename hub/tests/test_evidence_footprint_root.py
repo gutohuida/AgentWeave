@@ -728,3 +728,163 @@ async def test_a_registered_project_is_seeded_without_ever_registering_again(
 
     assert ".agentweave/context/" in excludes_of(repo)
     assert git(workspace, "status", "--porcelain").stdout.strip() == ""
+
+
+# ---------------------------------------------------------------------------
+# Finding F71 — the operator's locator outranks the operator's checkout
+# ---------------------------------------------------------------------------
+#
+# Found live 2026-08-27. An operator recorded evidence whose `locator` was the full sha of the
+# commit carrying `flowreviewer`'s fix, sitting on that agent's branch; their own checkout was still
+# on the pre-fix seed commit on `master`. The footprint captured the seed commit, and
+# `commit_for_task_review` then returned it with `resolved: True` and no refusal — so a review turn
+# would have been checked out to the buggy tree with total confidence, and `reachable_from_main: 1`
+# would have told `task_integration` the fix was already shipped. It was not.
+#
+# `test_operator_evidence_is_footprinted_from_the_project_root` above is deliberately left alone: the
+# checkout remains the right answer when the operator names nothing, which is most of the time. What
+# changed is that an explicit commit is no longer ignored.
+
+
+@pytest.mark.asyncio
+async def test_operator_evidence_naming_a_commit_is_footprinted_at_that_commit(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """F71 exactly, in the shape it was found: the named commit is on another branch entirely."""
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+    fix = commit_in(worktree, "cart.py", "import math\n")
+
+    assert fix != head_of(
+        repo
+    ), "the named commit must not be the checkout's, or this proves nothing"
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        OPERATOR_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "the fix is in this commit", "locator": fix},
+        headers=auth_headers,
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    footprint = await only_footprint()
+    assert footprint.commit_sha == fix, "the footprint names the commit the operator named"
+    assert footprint.commit_sha != head_of(repo), "and not the operator's own checkout"
+    assert "cart.py" in (footprint.entries or {}), "the tree is the named commit's tree"
+    assert footprint.reachable_from_main is False, (
+        "the whole harm of F71: an unmerged fix read as already on master, and integration "
+        "merges on exactly this field"
+    )
+    assert (
+        footprint.branch == "agentweave/builder"
+    ), "the branch whose tip is that commit -- what integration would target"
+
+
+@pytest.mark.asyncio
+async def test_the_recording_response_reports_the_footprint(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """The second half of F71, and the cheaper half.
+
+    This handler was the only `_evidence_view` call site in `spec.py` that passed no footprint, so
+    the response said `footprint: null` even when one was captured — at the exact moment the
+    operator is looking and a wrong commit would cost nothing to notice.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        OPERATOR_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "I looked at it myself"},
+        headers=auth_headers,
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    footprint = recorded.json()["footprint"]
+    assert footprint is not None, "a captured footprint must not be reported as null"
+    assert footprint["commit_sha"] == head_of(repo)
+    assert footprint["branch"] == "master"
+    assert footprint["reachable_from_main"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_locator_naming_an_unknown_commit_is_refused(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """Refused, not quietly footprinted at HEAD — falling back is F71 reproduced.
+
+    The operator has said most clearly what they mean here, and the one thing worse than not
+    knowing which tree the evidence describes is confidently recording a different one.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        OPERATOR_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "over there", "locator": "0" * 40},
+        headers=auth_headers,
+    )
+
+    assert recorded.status_code == 409, recorded.text
+    assert recorded.json()["detail"]["code"] == "locator_commit_unknown"
+
+    async with async_session_factory() as session:
+        from sqlalchemy import select as _select
+
+        assert (await session.execute(_select(EvidenceFootprint))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_a_locator_that_is_a_path_still_footprints_the_checkout(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """`locator` usually holds a *path*, and a path is not a revision.
+
+    `evidence_locator_exists` resolves it as one, so reading file names as commit-ishes would be a
+    guess with a refusal attached. Only a bare git object name counts.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        OPERATOR_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "see the file", "locator": "README.md"},
+        headers=auth_headers,
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    footprint = await only_footprint()
+    assert footprint.commit_sha == head_of(repo)
+
+
+@pytest.mark.asyncio
+async def test_an_agents_locator_does_not_move_its_footprint(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """Operators only, and this is the reason stated as a test.
+
+    An agent's footprint is deliberately its worktree's HEAD, uncommitted work and all, and
+    `restamp_run_footprints` corrects it once the Hub commits the turn. Letting a locator move it
+    would fight that mechanism rather than improve it — the agent's *own* work is precisely what is
+    not yet in any commit it could name.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+    agent_commit = commit_in(worktree, "feature.py", "print('hi')\n")
+    base = head_of(repo)
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE,
+        json={"identifier": "FR-1", "summary": "ran the tests", "locator": base},
+        headers=builder,
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    footprint = await only_footprint()
+    assert footprint.commit_sha == agent_commit, "the worktree's HEAD, not the locator's commit"

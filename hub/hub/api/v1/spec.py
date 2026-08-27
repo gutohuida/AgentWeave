@@ -835,7 +835,13 @@ async def record_evidence(
             status_code=409, detail={"message": str(exc), "code": exc.code}
         ) from exc
     await session.commit()
-    return _evidence_view(evidence)
+    # **With its footprint** (finding F71). Every sibling call site in this file passes one; this
+    # handler did not, so the response read `footprint: null` even when a footprint *was* captured —
+    # and this is the one moment the operator is looking. The field exists precisely so a reader can
+    # tell whether the evidence describes the work they think it does, as this view's own comment on
+    # it says; withholding it here hid a wrong commit at the only point where noticing was cheap.
+    prints = await _footprints_for(session, [evidence.id])
+    return _evidence_view(evidence, prints.get(evidence.id))
 
 
 @router.get("/spec/evidence")

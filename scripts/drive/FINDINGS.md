@@ -3702,3 +3702,86 @@ requirement key collided with the one actually used; harmless, not cleaned up, s
 this drive stays honest about the false start), one task (`task-7f49caae3c6d`, `under_review`,
 assignee `flowreviewer`, carrying the mis-footprinted evidence `ev-9d22a691db10`) left live and
 unresolved as inspectable evidence for this finding, the same discipline F70's rows already follow.
+
+---
+
+### Fixed, 2026-08-27 — F70 and F71, both remedies chosen by the operator
+
+Both findings were left undecided by the overnight run, which correctly refused to pick between
+three plausible remedies each. The operator chose on the morning of 2026-08-27, and both fixes
+landed the same session with tests that were verified to fail without them.
+
+**F70 — fixed in two halves, because either alone leaves a real gap.**
+
+The operator chose *"refuse at the transition, plus a scheduler guard"* over either half on its own.
+
+* `task_transition_service._guard_reviewer_is_not_the_author` refuses `-> under_review` while the
+  task still names the agent recorded as completing it, so no new wedged row can be created. It
+  **binds the operator too**, unlike its sibling `_guard_author_is_not_reviewer`, and that is the
+  substantive difference between them: the sibling is about *authority* — who may sign off work,
+  where a single-operator project must be able to approve its own — while this one is about the
+  *state the move produces*, which is a false claim about the world no matter who writes it. Two
+  cases permit deliberately: no assignee (nobody is claimed to hold it, so nothing wedges — this is
+  the operator taking the task off the board to read it themselves), and no recorded completer (the
+  refuse-to-offer/permit-to-act asymmetry `task_is_claimable_by` already documents at length).
+* `scheduler`'s `WITH_REVIEWER_LOOP_TASK_STATUSES` branch now detects a task whose named reviewer
+  *is* its author and routes it back through the reviewer ladder instead of recording it as
+  in flight. Rows wedged before the guard existed therefore recover rather than staying stuck
+  forever behind a guard that arrived too late to help them. Deliberately **not** a fall-through to
+  the ordinary-work arm: that arm would find the author in `assignee` and re-staff the review as
+  implementation, which is F10 arriving by the new route that branch's own comment warns about.
+
+**Two ordering changes came out of building it, and both are load-bearing rather than incidental.**
+`_enter_selected_task` transitioned to `under_review` *before* writing the reviewer into `assignee`,
+so the new guard read the author and refused the flow's own correct staffing — the fix would have
+broken every review the product staffs while passing a guard test suite that only came in through
+the operator's door. `update_task_for_actor` had the same shape: it applied `status` before
+`assignee`, so a single `PATCH {status: "under_review", assignee: "critic"}` — precisely the remedy
+the refusal names — was refused on the strength of an assignee that same request was about to
+replace. Both now write the assignee first. `test_review_divergence.py`'s
+`_review_run_that_said_nothing` fixture, whose docstring claims it builds a review "the way the
+product builds one", tracked the old order and was corrected with it; that claim is true again.
+
+**F71 — fixed as (2) + (3), with (1)'s refusal folded in.**
+
+The operator chose *"resolve from the locator, refuse on failure, and surface it"*.
+
+* `requirement_evidence._take_footprint` reads the footprint at the commit an operator's `locator`
+  **names**, not at whatever their checkout is sitting on. The checkout was only ever a fallback for
+  when nothing said otherwise — `footprint_root`'s own docstring makes that inference explicit — and
+  an explicitly named commit is strictly better information than an inference.
+* A locator naming a commit this repository does not have is **refused** (409,
+  `locator_commit_unknown`) rather than quietly footprinted at `HEAD`. Falling back there would
+  reproduce F71 exactly, in the one case where the operator has said most clearly what they meant.
+* `locator_commit` is deliberately narrow — a bare git object name (`^[0-9a-f]{7,40}$`) and nothing
+  else. `locator` usually holds a *path* (`evidence_locator_exists` resolves it as one), so anything
+  looser would start reading file names as revisions. **A branch name is not accepted** for the same
+  reason: `cart.py` and `feature/x` are both plausible paths, and guessing which was meant is the
+  kind of judgement this product does not make on the operator's behalf.
+* `_branch_at` names the branch only when exactly one local branch's tip *is* that commit. A commit
+  mid-history belongs to every branch descending from it, and picking one would put a guess into the
+  field `task_integration.integration_targets` groups by. `""` is already this module's word for
+  "names no line of work", so the unknown case has an established, honest meaning.
+* **Operators only.** An agent's footprint is deliberately its worktree's `HEAD`, uncommitted work
+  and all, with `restamp_run_footprints` correcting it once the Hub commits the turn — a
+  locator-named commit would fight that mechanism rather than improve it.
+* The second, smaller half: `POST .../project/spec/evidence` now passes `footprint=` to
+  `_evidence_view`, as every sibling call site in `spec.py` already did. The response said
+  `footprint: null` even when a footprint *was* captured, at the exact moment the operator is
+  looking and a wrong commit would have cost nothing to notice.
+
+**A separate defect surfaced while verifying this work, and is fixed here too.** CI on `master`
+failed on `test_flow_width.py::test_three_startable_tasks_and_one_agent_start_one_and_touch_nothing_else`
+after the overnight commits were cherry-picked — the same commit that passes on Windows. Iteration
+5's change to that test had asserted `("in_progress", OWNER)` on the strength of D1/D2's new
+`task_id` on the staged entry, but that advance happens in the **background task the firing kicked
+off**, not in the firing: whichever status such an assertion names, it is a coin toss. It now asserts
+what the firing itself decides — this task claimed by this agent, the other two untouched — which is
+all 5.2 was ever about. Awaiting the spawn instead was tried and rejected: it settles the race and
+costs 40 seconds of real launch attempt per run for a property `test_run_task_binding.py` already
+asserts deterministically in its own subject.
+
+**Left live in `proj-bad259c0c9f2`:** the inspectable rows both findings' write-ups describe
+(`task-2529a21e8c49`, `task-7f49caae3c6d`, `ev-9d22a691db10`) are untouched. They are a throwaway
+project's evidence for what the defects looked like, and the fixes were verified against tests rather
+than by mutating them.
