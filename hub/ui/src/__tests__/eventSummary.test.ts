@@ -90,4 +90,35 @@ describe('summaryForEvent', () => {
       })
     ).toBe("reviewer's held message was continued from hop 7")
   })
+
+  // A context reading is one of the most frequent rows in a live timeline, and every field it
+  // carries (`percent`, `context_tokens`, `limit_tokens`, `model`) is one the default branch does
+  // not look at — so each one rendered as the bare string `context_warning`, twice over, with the
+  // measurement nowhere. Observed live during two separate drive sessions before it was filed.
+  it('renders the measurement a context reading carries, not its own event name', () => {
+    expect(
+      summaryForEvent('context_warning', {
+        agent: 'coder',
+        percent: 62.5,
+        context_tokens: 125000,
+        limit_tokens: 200000,
+        model: 'gpt-5.4-mini',
+        observed_at: 1756000000,
+      })
+    ).toBe('coder is at 62.5% of its context window, 125000 of 200000 tokens (gpt-5.4-mini)')
+  })
+
+  // A Claude sample whose model the catalog does not declare keeps `percent`/`limit_tokens` null
+  // (`resolve_usage_limit` invents nothing) — the count it does carry is still worth reading.
+  it('reports the raw token count when a context reading has no percentage', () => {
+    expect(
+      summaryForEvent('context_warning', { agent: 'builder', context_tokens: 48123, model: 'claude-x' })
+    ).toBe('builder has used 48123 context tokens (claude-x)')
+  })
+
+  it('names the agent even when a context reading carries no measurement at all', () => {
+    expect(summaryForEvent('context_warning', { agent: 'builder' })).toBe(
+      'builder: a context reading with no measurement'
+    )
+  })
 })

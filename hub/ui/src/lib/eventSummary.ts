@@ -25,6 +25,25 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     case 'queue_entry_abandoned': return `${data.agent ?? 'an agent'} never received a message — ${String(data.reason ?? `delivery failed ${data.attempts ?? 'several'} times`)}`
     case 'queue_agent_paused': return `${data.agent ?? 'an agent'} is paused: ${String(data.reason ?? 'the workspace is unavailable')}`
     case 'queue_entry_released': return `${data.agent ?? 'an agent'}'s held message was continued from hop ${data.released_from_depth}`
+    // A context reading carries its whole meaning in `percent`/`context_tokens`/`limit_tokens`,
+    // and the default branch looks at none of them — so the most frequent row in a live timeline
+    // rendered as the bare string `context_warning`, with the measurement nowhere. Nothing is
+    // invented here either: a sample whose model the catalog does not declare keeps a null
+    // `percent` (see `resolve_usage_limit`), and reports the raw count it does have.
+    case 'context_warning': {
+      const who = String(data.agent ?? 'an agent')
+      const model = typeof data.model === 'string' && data.model ? ` (${data.model})` : ''
+      if (typeof data.percent === 'number') {
+        const of = typeof data.context_tokens === 'number' && typeof data.limit_tokens === 'number'
+          ? `, ${data.context_tokens} of ${data.limit_tokens} tokens`
+          : ''
+        return `${who} is at ${data.percent}% of its context window${of}${model}`
+      }
+      if (typeof data.context_tokens === 'number') {
+        return `${who} has used ${data.context_tokens} context tokens${model}`
+      }
+      return `${who}: a context reading with no measurement${model}`
+    }
     case 'agent_heartbeat': return `${data.agent} [${data.status}]${data.message ? ` — ${data.message}` : ''}`
     // Both of these carry the only detail worth reading in a field the default branch does not
     // look at, so without a case they render as their own event name twice over.

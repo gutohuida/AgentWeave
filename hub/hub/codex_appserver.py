@@ -1123,9 +1123,16 @@ async def run_turn(
                 # would only report the same failure twice.
                 reported_mcp_failures.add(params.get("name"))
                 await on_event(map_mcp_server_failure(params, own_server_name=own_server_name))
-            # Anything else (a non-failed mcpServer/startupStatus/updated, thread/status/changed,
-            # account/rateLimits/updated, item/agentMessage/delta, remoteControl/status/changed,
-            # serverRequest/resolved) carries no timeline-relevant content for this pass.
+            # Anything else carries no timeline-relevant content for this pass. The list is
+            # MEASURED, not remembered (2026-08-28, CLI 0.146.0, one turn that planned, wrote a
+            # file and ran a command): thread/started, thread/status/changed,
+            # thread/tokenUsage/updated, turn/started, turn/diff/updated,
+            # item/agentMessage/delta, item/commandExecution/outputDelta,
+            # account/rateLimits/updated, remoteControl/status/changed, and a non-failed
+            # mcpServer/startupStatus/updated. `turn/diff/updated` was absent from the version of
+            # this list written from memory, and neither delta notification is a parity gap --
+            # `exec` does not stream partial text either, so both transports show a message when
+            # it completes.
 
         return TurnOutcome(
             thread_id=thread_id,
