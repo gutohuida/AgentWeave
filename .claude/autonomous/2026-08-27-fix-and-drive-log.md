@@ -1282,6 +1282,11 @@ Now an error event naming the server, the provider's message, and — for the Hu
 what it costs. The turn is deliberately not failed; that is the operator's call, and they can only
 make it if they are told. Once per server per turn, because every startup transition arrives twice.
 
+One more measurement, because the diagnosis deserved it: `codex exec --json`, given the same bogus
+value, emits `thread.started · turn.started · error · turn.failed`. `turn.failed` is **exec's**
+vocabulary and `runner_parsing` handles it correctly — the app-server branch is that name
+transplanted across a transport that does not use it.
+
 ### F102 (B) — sweeping the class on purpose this time
 
 Two dead branches found by accident is a class. `map_item_to_events` carried one for

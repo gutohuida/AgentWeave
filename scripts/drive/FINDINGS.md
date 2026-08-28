@@ -6143,6 +6143,12 @@ in the schema as *"Only populated when the Turn's status is failed."* The live p
 `willRetry: false`, both also ignored. **`turn/completed` means the turn ended, not that it
 succeeded.**
 
+Where the dead name came from is measurable too: `codex exec --json`, given the same bogus value,
+emits `thread.started · turn.started · error · turn.failed`. `turn.failed` is **exec's** vocabulary,
+and `runner_parsing.parse_codex_line` handles it correctly. The app-server branch is that name
+transplanted across a transport that does not use it — the same transplant as F102's `todoList`,
+which is `exec`'s `todo_list` in camelCase.
+
 ### Blast radius
 
 Every provider-side failure on the app-server transport — the default for every Codex agent an
