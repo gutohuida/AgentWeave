@@ -15,8 +15,10 @@ run and their findings are folded back into `proposal.md` / `design.md` / the de
 
 ## 2. Staff the task at dispatch
 
-- [ ] 2.1 In `trigger_agent_directly`, immediately after `prepare_review_turn` succeeds, resolve the
-      task and call `_enter_selected_task(session, task, agent=agent, is_review=True)`.
+- [ ] 2.1 In `trigger_agent_directly`, **before** `prepare_review_turn` (D10 — a refused request must
+      leave no checkout behind), resolve the task and call
+      `_enter_selected_task(session, task, agent=agent, is_review=True)`. Tasks 2.2b and 2.2c run
+      ahead of it; 2.2 wraps it.
 - [ ] 2.2 Catch `TransitionRefusedError` around it and re-raise as
       `TriggerAgentError(status.HTTP_403_FORBIDDEN, str(exc))`, so the operator meets the guard's own
       sentence. Do not restate the message.
@@ -30,7 +32,10 @@ run and their findings are folded back into `proposal.md` / `design.md` / the de
       `_do_fire_job` that a flow has already written its reviewer into `assignee` and committed
       before the turn is scheduled, so this refusal cannot fire on the flow path.
 - [ ] 2.3 Confirm the staging joins the dispatch's existing transaction and is committed with it —
-      no separate commit, no partial write where a task is staffed and no run exists.
+      no separate commit, no partial write where a task is staffed and no run exists. Verify by
+      reading that `task_transition_service.py` contains no `commit()` and no `flush()`, which is
+      what makes staffing-before-provisioning safe: a later refusal abandons the transaction and the
+      staffing never becomes durable.
 - [ ] 2.4 Confirm the refusal in 2.2 happens before any process is spawned, by reading the order of
       operations in `trigger_agent_directly`. Note where the spawn actually occurs.
 
@@ -56,9 +61,14 @@ run and their findings are folded back into `proposal.md` / `design.md` / the de
       demonstrates the task being taken from the agent working it.
 - [ ] 3.6 **A review held by another reviewer is refused.** Assert the refusal names the holder and
       that the holder is unchanged.
-- [ ] 3.7 **Binding still moves nothing.** The `run-task-binding` scenario added by this change:
+- [ ] 3.7 **A refused review leaves no checkout and an untouched task.** For each of the three
+      refusals, assert no worktree or checkout exists for the reviewer or the task afterwards, and
+      that status and assignee are unchanged. Include the case where `prepare_review_turn` itself
+      refuses *after* the staffing was staged — the task must not be left in review. This is the
+      scenario whose absence let rounds 1 and 2 breach `run-task-binding`.
+- [ ] 3.8 **Binding still moves nothing.** The `run-task-binding` scenario added by this change:
       staffing precedes binding, and resolving the binding changes neither status nor assignee.
-- [ ] 3.8 Mutation-check every guard added or relied on in phase 2, and record each mutation with
+- [ ] 3.9 Mutation-check every guard added or relied on in phase 2, and record each mutation with
       the test that caught it. A mutation that nothing catches is a missing test, not a passing one.
 
 ## 4. Drive it

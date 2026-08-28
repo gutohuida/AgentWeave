@@ -28,6 +28,10 @@ reviewer. Replacing that holder is a handover, and a handover that travels no tr
 task's recorded history unable to explain who holds it or why it changed. The refusal SHALL name the
 current holder.
 
+A refused review SHALL leave nothing provisioned. The refusal SHALL be raised before the reviewer's
+checkout is created, not compensated for afterwards, and the task SHALL be left exactly as the
+refusal found it.
+
 Staffing SHALL NOT be performed when the request to review is recorded. It SHALL be performed when
 the turn is dispatched, so that a request that is never delivered leaves no task held by a reviewer
 that never ran.
@@ -73,6 +77,12 @@ that never ran.
 - **WHEN** a review is requested for a task already under review and held by a different reviewer
 - **THEN** the request is refused, naming the current holder
 - **AND** the task's holder is unchanged
+
+#### Scenario: A refused review leaves no checkout behind
+
+- **WHEN** a review is requested and refused for any reason
+- **THEN** no checkout has been created for the reviewer or the named task
+- **AND** the task's status and holder are as they were before the request
 
 #### Scenario: A request that is never delivered leaves the task untouched
 

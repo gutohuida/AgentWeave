@@ -62,8 +62,12 @@ budget refuses delivery — which is precisely the wedge `_guard_reviewer_is_not
 prevent, reintroduced one layer up. The comment on `new_entry` already states the general form of
 this: anything held only at queue time is gone by the time the turn exists.
 
-Beside `prepare_review_turn` is the moment *this turn is a review of task X* becomes true, for both
-paths, and it is inside the same transaction as the rest of the dispatch.
+The dispatch is the moment *this turn is a review of task X* becomes true, for both paths, and it is
+inside the same transaction as the rest of the dispatch.
+
+**Round 3 corrected where in the dispatch.** Round 1 and round 2 both said "beside
+`prepare_review_turn`", meaning after it. That is wrong — see D10. Staffing and every refusal it can
+raise go *before* the checkout is provisioned.
 
 *Rejected: staff in the route handler.* Above.
 *Rejected: staff after the spawn.* F70. The guard refuses `-> under_review` while the assignee is
@@ -192,6 +196,29 @@ on the equality branch.
 explicit recorded steps (reassign, then dispatch). Making it reachable in one unrecorded step trades
 a legible history for a keystroke.
 
+### D10. Every refusal precedes the checkout, and the staffing is staged rather than committed
+
+**Found in round 3, against a requirement this repository shipped four days ago.** `run-task-binding`
+already states: *"Where the turn names a task that does not exist in the project, the refusal SHALL
+be raised before any checkout is provisioned. A request that is going to be refused SHALL NOT leave
+a workspace behind."* Rounds 1 and 2 placed the staffing — and therefore all three of its refusals —
+*after* `prepare_review_turn`, which provisions exactly that checkout. The change would have been in
+breach of a live requirement in the same capability it edits.
+
+So the order is: resolve the task, refuse on status (D8), refuse on holder (D9), staff — which is
+where the author refusal (D5) surfaces — and only then `prepare_review_turn`.
+
+**What makes that ordering safe is that `apply_transition` never commits.** There is no `commit()`
+and no `flush()` anywhere in `task_transition_service.py`; it stages. The staffing therefore joins
+the dispatch's transaction as pending state, and any refusal raised later — including
+`ReviewTurnRefused` from the provisioning that now follows it — abandons the transaction before the
+commit, so a task is never left staffed for a review that was refused. Staffing before provisioning
+costs nothing precisely because the write is not durable until the dispatch says so.
+
+*Rejected: keep the staffing after provisioning and clean the checkout up on refusal.* A
+compensating delete is a second thing to get right, and the requirement asks for the workspace never
+to exist rather than to be removed afterwards.
+
 ## Risks / Trade-offs
 
 - **The meaning of `POST /agent/trigger {"review_task_id"}` changes**: it now takes ownership of the
@@ -221,6 +248,17 @@ dispatch path whose current outcome is a dead end.
   be presentation logic keyed on a number rather than on meaning.
 
 ## Review passes
+
+**Round 3 — what does this collide with, and could a wrong implementation still pass?** Two results,
+and both were about the change's relationship to things outside itself rather than to the code it
+edits. D10 is a live requirement in one of the two capabilities this change modifies, shipped by
+F58 on 2026-08-27, which rounds 1 and 2 both walked straight into: refusing after the checkout is
+provisioned leaves a workspace behind for a request that was refused. And the second is the reason
+that survived two rounds — **the delta as written could be satisfied completely by an implementation
+that does exactly that**, because none of its scenarios said anything about what a refusal leaves
+behind. A scenario now does. The general lesson is worth more than the fix: scenarios that only
+describe the success path constrain nothing about the failure path, and every refusal this change
+adds is a failure path.
 
 **Round 2 — compare every claim to the code.** Four results. Two decisions were added that the
 proposal did not have (D8, D9), one of which would otherwise have shipped a defect worse than the
