@@ -7197,7 +7197,9 @@ entry-f202b1e9d3ec     message 5    queued        0
 happened is that the operator sent two more messages: every `POST /agent/trigger` calls
 `schedule_agent`, which selects the oldest conversation's entries and, on a non-transient refusal,
 increments `delivery_attempts` on each of them (`turn_scheduler.py:191`). Three *messages* consume
-the three *delivery attempts*.
+the three *delivery attempts* — and so does anything else that schedules the agent, including the
+Continue button below and `redrain_queued_agents`, which runs at the end of every turn in the
+project.
 
 Elapsed time is not involved. This took under two seconds.
 
@@ -7213,6 +7215,31 @@ Elapsed time is not involved. This took under two seconds.
   `waiting_reason` had become `"delivery failed 1 time; 2 attempts left"`, the retry counter having
   taken the reason's place.
 - **The trigger is ordinary use.** Not a retry storm, not a loop — a person typing twice more.
+
+### The product's own suggested remedy is what destroys it
+
+The conversation view offers a button for exactly this situation:
+
+> **Continue** — *`<agent>` has work waiting — start it without sending a message.*
+
+It calls `POST /conversations/{id}/continue`, which reaches `schedule_agent` like everything else.
+Measured (`scripts/drive/t_continue_burns_attempts.py`), one queued message, no other activity:
+
+```
+after queueing:      state='queued'     attempts=1
+Continue click 1:    started=False  ->  state='queued'     attempts=2
+Continue click 2:    started=False  ->  state='withdrawn'  attempts=3
+      abandoned_reason: delivery failed 3 times (…); the Hub stopped retrying
+Continue click 3:    started=False  ->  state='withdrawn'  attempts=3
+```
+
+**Two clicks.** Every one answered `200`. Every one reported `started: false` and nothing else — no
+indication that clicking again is destructive, and no sign afterwards that the click is what did
+it. An operator who cannot see why their message is not moving, and presses the button the product
+put there to move it, deletes it.
+
+That is what settles the severity. It is not an edge case reachable by unusual API use; it is the
+single most likely thing a person does next.
 
 ### And the operator is told the false thing, not just the database
 
