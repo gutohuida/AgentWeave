@@ -4,16 +4,20 @@
 
 ### Requirement: A delivery attempt is counted only where a delivery was attempted
 
-The system SHALL count a delivery attempt against queued input only where that input was carried by
-a run, or where the turn was refused for a reason about what the input asked for.
+The system SHALL NOT count a delivery attempt against queued input where nothing was delivered and
+the reason nothing was delivered prevents the agent from running at all.
 
-Input refused because the environment the agent would run in is not ready SHALL NOT have a delivery
+Input refused for a reason that prevents the agent from running **at all** SHALL NOT have a delivery
 attempt counted against it, and SHALL NOT be given up on for that reason. No delivery was attempted:
-the refusal was raised before anything carried it anywhere, and the environment is agent-wide, so no
-other input is waiting behind this one that could have run in its place. Counting it means the
-operator's own activity — sending another message, or asking the system to start the work already
-waiting — consumes the allowance that exists to detect repeated failure, and destroys input that
-nothing ever tried to deliver.
+the refusal was raised before anything carried it anywhere, and while the reason holds no other
+input for that agent could have run in its place either, so giving up on this input buys nothing.
+Counting it means the operator's own activity — sending another message, or asking the system to
+start the work already waiting — consumes the allowance that exists to detect repeated failure, and
+destroys input that nothing ever tried to deliver.
+
+This SHALL NOT extend to a refusal that prevents only this input from being delivered. Where other
+queued input could have run, the input at the head of the queue is in the way, and the system SHALL
+go on counting its attempts and SHALL still give up on it at the limit.
 
 Where the system gives up on input, the reason it records SHALL describe what actually happened to
 that input. Input that was never carried anywhere has not failed to be delivered.
@@ -49,3 +53,10 @@ that input. Input that was never carried anywhere has not failed to be delivered
 - **WHEN** a turn is refused because of what the queued input asked for
 - **THEN** a delivery attempt is counted against that input
 - **AND** the existing limit still applies to it
+
+#### Scenario: A refusal that blocks only this input still counts
+
+- **WHEN** a turn is refused for a reason that would not prevent the agent's other queued input from
+  being delivered
+- **THEN** a delivery attempt is counted against that input
+- **AND** the existing limit still applies to it, so it cannot hold the queue indefinitely

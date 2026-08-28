@@ -59,25 +59,31 @@ goes:
 > a refusal raised here … repeats identically forever, and every entry queued behind it starves
 > along with it … so a permanently wrong entry stops wedging the whole queue.
 
-That is true of a refusal about **what was asked** — a review target with no evidence, a name on no
-roster. It is exactly wrong for a refusal about **the environment**, where the entry is supposed to
-wait for a repair and the product has promised to keep it.
+That is true wherever the refused entry is **in the way of other input** — a review target with no
+evidence, a name on no roster, a task checkout that cannot be prepared. It is exactly wrong where
+the refusal stops the agent running at all, because then there is nothing behind the entry that
+giving up on it would release.
 
-### The distinction did not exist until yesterday
+### Round 2 changed the gate
 
-Until `2026-08-28-a-refused-request-says-so`, that line had no way to tell those apart:
-`transient` answers a different question (does this clear on its own, without anybody doing
-anything). `TriggerAgentError.request_level`, added for F108, is the classification this line has
-been missing.
+Round 1 proposed reusing F108's `request_level` — count unless the refusal is about the environment.
+**Round 2's task 1.2 falsified the reasoning behind that**, and the design is narrower as a result.
+The counter is not asking F108's question (*will this caller ever be satisfied*) but a different
+one: **does this refusal block only this entry, or the whole agent?** The two axes are independent,
+and `:756` — "could not prepare isolated worktree" — is environment-level *and* entry-specific,
+because the workspace is the **task's**, not the agent's. Stopping the count there would reintroduce
+exactly the starvation F56 added it to prevent. See design D3a.
 
 ## What changes
 
-1. `schedule_agent`'s refusal branch counts a delivery attempt **only when the refusal is
-   request-level** — the same way it already declines to count for a transient one.
-2. An environment-level refusal therefore leaves `delivery_attempts` where it was, and can never
-   abandon the entry. The entry keeps waiting, with its reason stated, until the environment is
-   repaired or the operator withdraws it.
-3. Nothing about `return_run_entries` changes. An entry a run actually carried and lost still counts
+1. `schedule_agent`'s refusal branch counts a delivery attempt **except where the refusal is known
+   to block the whole agent** — the same way it already declines to count for a transient one.
+2. Exactly three raise sites are marked agent-wide: **no runner is bound** (`:461`), **the bound
+   runner's CLI is not on PATH** (`:507`), and **the bound runner's row no longer exists** (`:480`).
+   While any of them holds, no entry for that agent can be delivered, so dropping the head entry
+   buys nobody a turn.
+3. Every other refusal keeps counting exactly as it does today, including `:756`.
+4. Nothing about `return_run_entries` changes. An entry a run actually carried and lost still counts
    its attempt and is still abandoned at the limit.
 
 ## What does not change
@@ -85,6 +91,9 @@ been missing.
 - **The abandonment mechanism itself**, its limit, its event, and its recorded reason.
 - **`return_run_entries`.** The counter that means what it says keeps meaning it.
 - **Transient refusals.** Already uncounted; unaffected.
+- **Every entry-specific refusal.** A review target in the wrong state, a `work_dir` the project
+  does not contain, a task checkout that could not be prepared: all keep counting and keep being
+  abandoned at the limit, because there really is other input behind them that could run.
 - **What is refused.** This change moves no guard and adds none.
 - **`POST /agent/trigger`'s answers.** F108 decides those; this decides only what happens to the
   entry afterwards.

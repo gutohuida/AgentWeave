@@ -34,7 +34,12 @@ The list contains no environment-level example, which is the tell: the case this
 not the case F56 was looking at. It arrived under the same branch because, at the time, there was
 nothing at that line able to tell the two apart.
 
-## D3. Nothing starves behind an environment-level refusal
+## D3. Nothing starves behind an agent-wide refusal
+
+**Superseded in part by D3a — read that first.** Round 1 wrote this section about *environment-level*
+refusals and it is true only of the *agent-wide* ones. The reasoning below is kept because it is the
+reasoning D3a narrows, and because it is still exactly right for the three sites the revised gate
+marks.
 
 The starvation argument does not carry over, and this is the load-bearing claim of the change.
 
@@ -53,6 +58,67 @@ This is also why transient refusals already decline to count (design D8 of
 entirely, so nothing is starving behind it either. **The rule this change lands on is not new — it
 is the rule that already governs the transient branch, applied to the other population that shares
 its shape.**
+
+## D3a. Round 2 falsified D3, and the gate is not `request_level`
+
+Task 1.2 asked whether every refusal this change stops counting is agent-wide, so that nothing
+starves behind the entry it protects. **Two of them are not, and one is not reachably decidable at
+all.**
+
+**`:756` — "Could not prepare isolated worktree".** The workspace this fails to prepare comes from
+`task_workspace.resolve_turn_workspace_inputs(session, …, task=binding.task)`. It is the **task's**
+checkout, not the agent's, whenever the turn is bound to a task; the agent's own workspace is only
+what an *unbound* turn gets. So this refusal is entry-specific exactly when the entry names a task —
+and the same raise site is agent-wide when it does not. **A static per-site flag cannot express
+it.**
+
+**And the starvation it would cause is real, not theoretical.** `schedule_agent` takes
+`controlling = next(entry for entry in entries if entry.hop_depth <= hop_budget)` — the *oldest*
+eligible entry — and builds `selected` from that entry's conversation. If the oldest entry's task
+checkout cannot be prepared, every tick picks the same entry, refuses identically, and no other
+conversation ever gets a turn. Stop counting there and F56's exact scenario returns, in the one
+place it genuinely applies.
+
+**`:441` — "Conversation is unavailable"** is entry-specific too, though it is not reachable from
+this path: `schedule_agent` resolves the conversation itself at `:78-85` and passes its id, so
+`get_open_conversation` inside the trigger re-reads the row it was just handed, in the same session.
+Recorded because "unreachable" is a claim with a history of being wrong here, and because a future
+caller reaching it would hit the same starvation.
+
+### What the counter's axis actually is
+
+F108's axis is *will this caller ever be satisfied* — that is what decides whether the operator is
+told **no**. The counter is answering a different question: **does this refusal block only this
+entry, or the whole agent?** Those are independent, and round 1 conflated them:
+
+| | agent-wide | entry-specific |
+|---|---|---|
+| **request-level** | `:452` no such agent, `:474` archived, `:499` no adapter | `:626` `:643` `:657` `:670` review target, `:684` `work_dir`, `:337` `:351` batching |
+| **environment-level** | `:461` no runner, `:507` CLI missing, `:480` runner row gone | `:756` when the turn names a task |
+
+Both rows contain both columns. Reusing `request_level` would have stopped counting the whole
+bottom row — including `:756`, the one place starvation is real.
+
+### The revised gate: mark agent-wide, conservatively
+
+The counter skips **only** where the refusal is known to block the entire agent, and every other
+refusal keeps counting exactly as it does today. Marked, and nothing else:
+
+- `:461` no runner is bound
+- `:507` the bound runner's CLI is not on PATH
+- `:480` the bound runner's row no longer exists
+
+All three are properties of the agent's own configuration: while one holds, *no* entry for that
+agent can be delivered, so dropping the head entry buys nobody a turn. All three are the sites the
+F114 measurement actually went through.
+
+`:756` and everything else stay as they are. That is a smaller change than round 1 proposed, it
+fixes the whole of what was measured, and it cannot reintroduce starvation — because the only sites
+it touches are ones where nothing was able to run anyway.
+
+**Round 1 reached a defensible conclusion through an argument that was wrong about a case it never
+checked.** The correction was cheap only because task 1.2 named the check instead of asserting the
+result.
 
 ## D4. The strongest objection, stated rather than answered away
 
@@ -104,7 +170,7 @@ action, where this change removes an increment.
 
 ## D7. Blast radius
 
-The condition change is one line. What it can move is any test that reaches
+**Revised by D3a.** The condition change is one line at the counter plus three marked raise sites. What it can move is any test that reaches
 `DELIVERY_ATTEMPT_LIMIT` **through the refusal path** rather than through a failed run —
 `test_delivery_attempts.py` and `test_runner_binding_redrain.py` are the two to read first, and
 `tasks.md` group 1 makes enumerating them a task rather than a hope.
