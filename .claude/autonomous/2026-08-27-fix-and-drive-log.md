@@ -1333,3 +1333,92 @@ notification no CLI sends. No amount of suite-running finds that. Only the proto
 
 Three dead branches, all inside the same 200 lines, all written against a remembered protocol
 rather than a checked one.
+
+## Iteration 11 — 2026-08-28 07:06 → 07:1x — the ranked-first vein was empty, and the row beside it was not
+
+Fifty minutes to `stop_at`, so one sized unit: take `next_action`'s first and cheapest item to a
+verdict, and ship the one defect that had been observed twice and filed nowhere.
+
+### The ranked-first item, answered no (F104)
+
+Iteration 10 ranked this at the top: `map_item_to_events` handles seven of `ThreadItem`'s eighteen
+variants, so ten render nothing — ten ways for an agent to do work the operator cannot see, in the
+same file and the same shape as F100/F101/F102. It also said, correctly, **do not file one without
+driving it**.
+
+Driven, from the generated schema outward:
+
+| | |
+|---|---|
+| union, measured | `codex app-server generate-json-schema` → 18 variants, exact field lists |
+| handled | 7, plus `userMessage` suppressed on purpose |
+| unhandled | `hookPrompt`, `plan`, `dynamicToolCall`, `collabAgentToolCall`, `subAgentActivity`, `imageView`, `sleep`, `imageGeneration`, `enteredReviewMode`, `exitedReviewMode`, `contextCompaction` |
+| one live turn, told to plan + write a file + run a command | `userMessage`, `reasoning`, `agentMessage`, `fileChange`, `commandExecution` — **zero unhandled types** |
+
+`plan` is in the union, with a `text` field, and still did not arrive as an item: the plan came as
+`turn/plan/updated`, which confirms F102 rather than qualifying it. Filed as F104, **not a defect**,
+in full — including the probe (`scratch/probe_items.py`) — so the next iteration does not re-derive
+the same eleven names and reach the same nothing.
+
+The sweep did leave something behind: the comment at the end of `run_turn`'s loop listing what it
+ignores was written from memory and had no `turn/diff/updated` in it at all. It is now the measured
+list, dated, and it records that neither delta notification is a parity gap — `runner_parsing` does
+not stream partial text on `exec` either, so both transports show a message when it completes.
+
+### The row beside it, which was a defect (F103, fixed f1d7a85)
+
+Carried in `next_action` as item (4)(i): "`context_warning` renders as the bare string
+`context_warning` — confirmed live twice, filed nowhere." True, and not cosmetic. `summaryForEvent`
+guesses at `error`/`message`/`summary`/`title` and falls back to the event type; a context reading
+carries `percent`, `context_tokens`, `limit_tokens`, `model` and none of the four. So the row an
+operator reads to decide whether an agent is about to run out of room printed its own name, twice
+over, with the number nowhere.
+
+It now reads `coder is at 62.5% of its context window, 125000 of 200000 tokens (gpt-5.4-mini)`, and
+degrades honestly: the raw count when the catalog declares no window (`resolve_usage_limit` invents
+no percentage, so neither does this), the agent's name when there is no measurement at all. Three
+tests, each watched failing first and each returning the bare string `context_warning`.
+
+This is the **fourth** event family to need a case for the same reason — `permission_denied` and
+the three `queue_*` kinds got theirs the same way. The default branch is a heuristic over payload
+shapes nobody enumerated, so a new event kind is invisible by default and visible only if someone
+happens to look. Worth a decision at some point: enumerate the kinds, or accept that each new one
+costs a live sighting.
+
+### Verification
+
+| | result |
+|---|---|
+| UI suite, full | **1424 passed** across 139 files (48s) |
+| `hub/tests/test_codex_appserver.py` | 32 passed |
+| `ruff` · `black --check` · `eslint` on the touched files | clean |
+| UI bundle | rebuilt, `refresh_ui_bundle.py` run, `hub/ui/src` and `hub/hub/static/ui` committed together |
+
+The Python change is comment-only, so the 20-minute Hub suite was not spent on it; the file's own
+tests were.
+
+### What this iteration is actually about
+
+**A protocol tells you what can arrive. It never tells you what does.** Iteration 10's rule was
+*check the protocol back, do not remember it*, and it was right — three dead branches came out of
+it. This is its other half. The generated schema is the cheap way to build a candidate list, and it
+built a plausible one: eleven silent branches, ranked first, in the file that had just produced
+three severity-A defects. Two minutes of driving said none of them happen. Counting union members
+is not measuring, and a finding filed from a schema alone would have been eleven wrong ones.
+
+The corollary is where the defect actually was: **a thing seen twice and filed nowhere outranks a
+thing inferred once.** F103 had been observed live in two separate drive sessions and skipped past
+as cosmetic both times. It cost fifteen minutes.
+
+### The lead this leaves, and why it is the opposite kind
+
+Closing F103 raised the question of how many *other* event kinds the default branch swallows, and
+unlike the ThreadItem union this one is the product's own emitters — occurrence is not in doubt,
+only consequence. A crude sweep of `persist_event`/`broadcast` call sites against
+`summaryForEvent`'s cases: **70 candidate kinds, 17 with a case.** The list needs splitting (a
+broadcast-only kind never reaches a timeline, and a payload carrying `message` or `error` renders
+fine through the default branch), but names in it like `agent_action_rejected`,
+`turn_produced_nothing`, `loop_queue_exhausted`, `job_run_failed`, `queue_chain_suspended` and
+`review_unstaffed` are exactly the shape of the four that have already needed a case. That is
+`next_action`.
+
