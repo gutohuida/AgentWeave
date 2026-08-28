@@ -767,3 +767,200 @@ loop creation return a `continuity_warning`. `task-294f3af9448b` (ROW16) is `rej
 checkout gone. `task-1b7af6b595e6` is still the deliberate wedged specimen. All three agents idle.
 
 **Next:** row 18 accounting, row 19 resilience.
+
+---
+
+## Iteration 7 — 2026-08-28 03:51 → 05:0x — rows 18 and 19, the last two
+
+Iteration 6 wrote its log and its four fix commits and died before committing its state file; that
+wrap-up is `eaff101`, carried forward unchanged. The branch was reconciled against `git log` first:
+`c1acd1f` was the head, one commit ahead of what STATE.json's queue entry named.
+
+**E2E-1's row list is now complete.** Rows 18 (accounting) and 19 (resilience) both drove, and both
+produced defects. Five findings, five fixes, every one proved live against a restarted Hub.
+
+### F91 (A) — restarting the Hub spent the operator's message
+
+`643027b`. The sharpest of the five, and the one with the longest reach. Trigger a turn, kill the
+Hub mid-run, restart:
+
+```
+02:54:45  builder -> run-41977e93fb94, entry-24d8b3025c2d delivered, attempts 0
+02:55:06  restart -> run_interrupted, returned_entry_ids: [entry-24d8b3025c2d]
+          GET /queue/builder/status
+          -> "delivery failed 2 times; 1 attempt left"
+```
+
+**Two** attempts for one restart, against a limit of three. Then the entry sat `queued` with every
+agent idle until an unrelated `PATCH /queue/settings` delivered it. Three restarts with a run in
+flight and a message the operator typed is withdrawn with *"the Hub stopped retrying"*.
+
+Only one attempt is legitimate. The second comes from `reconcile_interrupted_runs`, which re-drains
+the agents it repairs — from inside `lifespan()`, which is to say **before the Hub has served a
+single request**. In native mode the callback address is observed from a real connection, so there
+is none yet, and `trigger_agent_directly` refuses with *"retry once the Hub has served at least one
+request."* That refusal was classified terminal, and `schedule_agent` charges terminal refusals a
+delivery attempt.
+
+`TriggerAgentError.transient` is documented as asking *"does this refusal describe a condition that
+clears on its own?"* The refusal's own last sentence is the answer. **The repository had already
+written the sentence that names the defect, twice, about this exact field.**
+
+Fixed in two halves because either alone is insufficient: the refusal is `transient` so nothing is
+charged, and the re-drain is *deferred* — `bound_address.known()` is new, and `main.py`'s
+address-observing middleware drains the parked agents on the first request the Hub serves, the
+precise moment the postponed condition clears. Without the second half this is F90 again: a
+transient refusal records nothing and waits for a tick that does not exist.
+
+Live on the fix, identical experiment: **one** attempt, and the message ran fourteen seconds later
+in `run-64f340ce6161` with no operator action where before it needed one.
+
+### F93 (A) — a runner binary that is present but broken wedges its agent
+
+`a38813e`. Row 19's *corrupt or withhold a runner binary*. `_execute_run` wraps its spawn in
+`except FileNotFoundError` **and nothing else**. A missing binary is one way a spawn fails and not
+the common one on Windows: a corrupt file raises `OSError`, a denied one `PermissionError`,
+pywinpty's own failures neither. All of them escaped the coroutine.
+
+Driven with a 31-byte text file named `claude.exe`, first on the Hub's `PATH` so `shutil.which`
+finds it and launchability passes:
+
+```
+03:08:58  trigger author -> 200, "status": "running"
+03:09:08  trigger author -> 200, "waiting_reason": "agent is already running"
+03:09:33  RUN  running · pid None · ended_at None · error None
+          agents [author running, ...]  ·  turn_usage rows: 0  ·  events: none at all
+```
+
+The row stayed `running` **with no pid**, forever. The trigger guard then refused that agent every
+subsequent turn, and the exception went to asyncio's unretrieved-task handler where nothing reads
+it. The operator's remedy for a broken runner was to bounce the whole product.
+
+`except Exception` — the branch body was already correct for any cause — and `CancelledError` is a
+`BaseException` in 3.8+, so real cancellation still propagates. Live on the fix: `failed` carrying
+the OS's own message, an accounting outcome, `run_failed` broadcast, the entry retried to the cap
+and abandoned with a stated reason, agent idle.
+
+### F92 (B) — a reconciled run is billed to nobody, beside a total that claims completeness
+
+`a38813e`. `usage-accounting`'s first requirement is *"exactly one accounting outcome for every
+Hub-owned run after that run ends"*. Measured:
+
+```
+completed    73   missing 0
+interrupted   3   missing 3     <- all of them, one after 13 minutes of streaming
+aggregate: {"measured_turns": 72, "unavailable_turns": 0}
+```
+
+`unavailable_turns: 0` is not silence. It is a positive claim that nothing is unmeasured, made over
+three turns that are. Two paths ended a run without recording one — reconciliation, and
+`_execute_run`'s catch-all, the last of its five terminal sites without one. Both now record an
+explicitly `unavailable` outcome; reconciliation recovers the runner from the agent's binding and
+records `None` rather than guessing. Live after the fix: **9 unavailable turns**, visible.
+
+### F94 (B) — kill an agent and the product says `exit 4294967295`, again
+
+`18b3856`. Killing a running agent is otherwise handled well — `failed`, a *measured* accounting
+outcome, the entry returned, a retry run that completed. What the operator was told:
+
+```
+GET /agents/reviewer/timeline -> "Run failed (exit 4294967295)"
+```
+
+That is verbatim the loop-8 finding `readable_exit_code` exists for, whose docstring says *"an
+operator seeing it has no reason to connect it to the process they just killed"*. The fix shipped
+into `_transport_failure_fields` and `_runtime_failure_fields` — **both Codex paths**. The pty path,
+the default runner, passes the process's own number into `_broadcast_run_lifecycle`, and the
+timeline summary is derived from that payload. `run.error` is `NULL` beside it, so a ten-digit
+number was the whole explanation.
+
+Rendering now happens **inside `_broadcast_run_lifecycle`** rather than at each caller, which is how
+this path came to miss it. Live: `"Run failed (exit -1)"`, with `runs.exit_code` still raw per D3.
+
+### F95 (A) — a project can be moved exactly until its first turn, and never again
+
+`0266f22`. Row 19's *drive a project whose working directory has moved*. Detection is right:
+`directory_state` flipped to `missing` in seconds and a trigger was refused with a typed error
+naming the path. The repair was not:
+
+```
+POST /relocate -> 422 "project cannot be relocated while a run or worktree mutation is active"
+```
+
+**Nothing was active.** One run has ever existed in `aw-f52` and it is `completed`; its one agent is
+idle. What blocked the move was `.agentweave/worktrees/builder`, left by that completed turn.
+
+`_guard_relocation` refused whenever either checkout root held anything. Task 6.9's observation
+behind it is correct — a linked worktree is held together by two absolute paths and moving the
+project invalidates both — but an agent worktree is **permanent**, so "a checkout exists" is a fact
+about history, not activity. The spec's condition is *"no active run or worktree mutation"*. And
+refusing never un-broke anything: the operator has already moved the directory by the time they
+ask, so all the refusal preserved was a Hub pointing at a path that is gone — with no stated
+remedy, because no control anywhere removes an agent worktree.
+
+Now: gate on active runs, and **repair** — `git worktree repair` over every checkout under
+`worktrees/`, `tasks/` and `reviews/`, on both relocation routes, best-effort. Live:
+
+```
+before  git worktree list -> .../aw-f52/.agentweave/worktrees/builder [prunable]
+        git -C <checkout> status -> fatal: not a git repository
+POST /relocate -> 200, directory_state "available"
+after   git worktree list -> .../aw-f52-moved2/.agentweave/worktrees/builder  (no "prunable")
+        POST /agent/trigger builder -> run-4e266e6f1c74, completed, exit 0
+```
+
+**Two existing tests pinned the defect and were replaced, not deleted.** Both `mkdir`'d the blocking
+state by hand — which is the tell. A test that has to build the blocking state itself has never
+asked how often the product builds it; here the answer was "always, permanently, after the first
+turn".
+
+### What drove clean, and is worth saying so
+
+Row 18's budget half holds exactly as specified. With `token_budget` 1000 against 12.68M measured:
+an operator trigger ran immediately; an agent-origin entry created by `builder` calling
+`send_message` stayed `queued` with `waiting_reason: "token budget exhausted"` and
+`delivery_attempts: 0` — correctly transient, so pausing an agent does not spend its message; and
+clearing the budget to `null` delivered it unprompted. All three spec scenarios.
+
+Killing an agent process recovers correctly in every respect except what it says (F94). Directory
+loss is detected and reported correctly; only the repair was broken (F95).
+
+### The pattern, again, and it is the same one
+
+Iteration 6's carry-forward said: *when a test has to set something up for the code to reach the
+state under test, ask who does that in production.* F95 is that rule catching a test that was not
+merely blind but **actively wrong** — two tests asserting the refusal that is the defect, each
+building `.agentweave/worktrees/writer` by hand because that is what the guard reacts to. Nobody
+asked what else builds it. Every completed turn does.
+
+The second pattern is F91's and F94's, and it is new: **a rule applied at N call sites holds at N-1
+of them.** `readable_exit_code`'s rule was applied at the two Codex builders and missed the Claude
+one; both fixes moved the rule to the join — `_broadcast_run_lifecycle` for rendering,
+`bound_address.known()` for the address question that was spelled out twice and asked nowhere a
+third time.
+
+### Verification
+
+- F91: 3 Hub tests, 2 watched to fail (the deferral, the `transient` classification).
+- F92: 3 Hub tests, 2 watched to fail, including one pinning that a measured outcome is never
+  overwritten by an unavailable one.
+- F93: covered by F92's crash-path test, watched to fail as `assert 'running' == 'failed'` — which
+  is how F93 was found in the first place.
+- F94: 1 Hub test, watched to fail.
+- F95: 3 Hub tests, both halves of the fix mutation-checked separately.
+- CLI **440 passed / 3 skipped**. `ruff`, `black`, `mypy` clean over CI's path lists. No UI change,
+  so no bundle rebuild. Full Hub-suite result recorded below.
+
+### State left behind
+
+`proj-46b602c1f3cb` (aw-e2e1): all three agents idle, `token_budget` back to `null`, 19 jobs and 17
+loops still all disabled, `task-1b7af6b595e6` still the deliberate wedged specimen. The corrupt
+`claude.exe` used for F93 is **deleted** and the Hub restarted without it on `PATH`.
+
+`proj-a1736a6a596b` (aw-f52) now lives at `C:\Users\huida\Documents\aw-f52-moved2`, relocated by the
+product itself as F95's live proof, with its `builder` checkout repaired and a turn completed there.
+It is a throwaway; the path change is deliberate and recorded.
+
+**Full Hub suite, run after every fix in this iteration was in place: 3422 passed / 84 skipped /
+1 xpassed / 0 failed (19m41s).** 3349 at arming, so the 73 additional passes are this run's own
+tests plus iterations 2-6's; nothing regressed.
