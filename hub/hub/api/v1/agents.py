@@ -1971,12 +1971,14 @@ async def patch_agent(
     if "spawn_cmd" in body:
         agent_row.spawn_cmd = body["spawn_cmd"]
 
+    runner_newly_bound = False
     if "runner_id" in body:
         runner_id = body["runner_id"]
         if runner_id is not None:
             runner_row = await session.get(Runner, runner_id)
             if runner_row is None or runner_row.project_id != project_id:
                 raise HTTPException(status_code=404, detail=f"Runner '{runner_id}' not found")
+        runner_newly_bound = runner_id is not None and runner_id != agent_row.runner_id
         agent_row.runner_id = runner_id
 
     if "charter_id" in body:
@@ -2012,6 +2014,23 @@ async def patch_agent(
 
     agent_row.updated = datetime.now(timezone.utc)
     await session.commit()
+
+    if runner_newly_bound:
+        # Binding a runner is the repair the refusal names, so it has to be a redrain site — the
+        # same shape `POST /relocate` already has for "project workspace is unavailable". Without
+        # it, an operator who does exactly what the product told them to do ("No runner is bound
+        # to this agent. Bind one in the Hub UI before it can run.") is left with the message
+        # still queued, and a status that no longer even mentions the runner because the retry
+        # counter has taken the reason's place. Measured live 2026-08-28 (F96): the entry sat
+        # untouched across a rebind and every subsequent poll, and was then delivered by an
+        # unrelated `PUT /settings` — proving it had been deliverable the whole time.
+        #
+        # `schedule_agent` rather than `redrain_queued_agents`: this repair is agent-scoped, and
+        # it is a no-op ("queue is empty") for the overwhelmingly common case of binding a runner
+        # to an agent nobody has written to yet.
+        from ...turn_scheduler import schedule_agent
+
+        await schedule_agent(project_id, name)
 
     return {
         "id": agent_row.id,
