@@ -58,16 +58,29 @@ rounds exist for.
         attempted and fails, so it counts through `return_run_entries` (and it is currently flaky
         for an unrelated reason, F109). **Implementation must confirm this by running them, not by
         citing this list.**
-- [ ] 1.4 **Round 3** — independent second comparison against the code, including round 2's
-      changes. Check specifically against *Repeated delivery failure does not wedge an agent*
-      (`agent-conversation-workspace`), whose sentence about retrying without limit this change
-      walks into deliberately (D4).
-- [ ] 1.5 **Round 3** — verify D4's escape route empirically rather than by argument: read what
-      `GET /queue/{agent}/status` and the conversation view actually show for an entry that has
-      been waiting a long time. If "waiting" is not distinguishable from "stuck" on those surfaces,
-      this change needs the companion D6 describes and should not ship alone.
-- [ ] 1.6 **Round 3** — confirm the delta's requirement is falsifiable by a test that does not
-      restate the implementation.
+- [x] 1.4 **Round 3** — independent second comparison against the code, including round 2's
+      changes. **The requirement does not cover this path**, which neither earlier round noticed:
+      its scoping sentence is about *"a failed run's input"* and *"how many times a queued input has
+      **failed to be delivered**"*, and this change touches only the path where no run existed and
+      nothing was delivered. So the delta is correctly ADDED-only, no `MODIFIED` requirement is
+      needed, and the behaviour F114 complains about turns out never to have been specified at
+      all — `F56` added the second counting site without one. See D4a.
+- [x] 1.5 **Round 3** — verify D4's escape route empirically. **It holds.** Driven on the trial
+      Hub: `GET /queue/{agent}/status` returns `waiting_count`, `waiting_reason` and
+      `delivery_attempts`, and the conversation view states the reason twice more — under the
+      transcript and under the composer. Waiting is distinguishable from stuck.
+      **The limit, recorded rather than glossed:** none of those surfaces shows *how long*, so an
+      entry waiting three weeks renders exactly like one waiting three seconds. That is what D6's
+      rejected alternative would add. And the sentence they all carry is itself wrong for an unbound
+      agent (**F111**), which weakens this evidence in presentation though not in substance.
+- [x] 1.6 **Round 3** — confirm the delta's requirement is falsifiable by a test that does not
+      restate the implementation. **Half of it did restate it.** Three scenarios asserted "no
+      delivery attempt is counted", which names the mechanism rather than anything a person can
+      observe — a test written from them would pass by mirroring the code. Fixed by adding
+      *The input is still there when the agent becomes able to run*, whose observable is the one
+      that actually matters and the one F96 cares about: the operator performs the repair and gets
+      **every** message they sent. The counter scenarios are kept beside it as the mechanism's own
+      check, not as the requirement's only evidence.
 
 ## 2. The counter counts deliveries
 
@@ -89,6 +102,10 @@ rounds exist for.
       cannot be prepared, with other input queued behind it, and assert the queue moves on.
 - [ ] 2.3 Test: the F114 reproduction — five messages to an agent with no runner bound leave five
       entries queued and none withdrawn.
+- [ ] 2.3a Test (round 3, 1.6): the **outcome**, not the counter — send several messages to an
+      agent with no runner, press Continue, then bind a runner, and assert every message is
+      delivered. This is the one a reader can check against the product rather than against the
+      implementation.
 - [ ] 2.4 Test: `POST /conversations/{id}/continue`, pressed repeatedly, does not consume the entry
       it offers to start.
 - [ ] 2.5 Test: a request-level refusal still counts, and still abandons at the limit.

@@ -29,6 +29,14 @@ that input. Input that was never carried anywhere has not failed to be delivered
 - **THEN** no delivery attempt is counted against the earlier input
 - **AND** the earlier input remains queued
 
+#### Scenario: The input is still there when the agent becomes able to run
+
+- **WHEN** input has been waiting for an agent that cannot run at all
+- **AND** the operator has submitted further input and asked the system to start the waiting work
+- **AND** the operator then makes the agent able to run
+- **THEN** every input they submitted is delivered
+- **AND** none of it was discarded while they were making the agent able to run
+
 #### Scenario: Asking the system to start waiting work does not destroy it
 
 - **WHEN** input is waiting for an agent whose environment is not ready

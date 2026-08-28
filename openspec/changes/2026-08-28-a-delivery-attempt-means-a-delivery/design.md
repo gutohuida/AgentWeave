@@ -142,6 +142,59 @@ If that verification fails, the answer is not to keep destroying the input. It i
 needs a companion: something that makes a long-waiting entry visible *as* long-waiting. Recorded as
 an open question rather than smuggled in.
 
+## D4a. Round 3: the sentence D4 worries about does not cover this path
+
+Rounds 1 and 2 both treated *Repeated delivery failure does not wedge an agent* as something this
+change walks into and has to justify. Round 3 read the requirement's own scoping sentence, which
+neither of them quoted:
+
+> The system SHALL return **a failed run's input** to the queue however that run failed, SHALL count
+> how many times **a queued input has failed to be delivered**, and SHALL stop retrying it before it
+> can block an agent indefinitely.
+
+Both halves name a delivery that happened. This change touches only the path where **no run existed
+and nothing was ever delivered** — `turn_scheduler`'s own comment says so. So the behaviour F114
+complains about was never specified at all: `F56` extended the counter to a second site that the
+requirement does not describe, and the requirement has been read ever since as though it authorised
+it.
+
+Three consequences, and the first two make the change *smaller* than rounds 1 and 2 believed:
+
+1. **The delta needs no `MODIFIED` requirement.** It is correctly ADDED-only. Nothing in the
+   capability is being changed; something the capability never covered is being specified for the
+   first time.
+2. **D4's objection is weaker than it was given credit for.** "Retrying without limit is
+   indistinguishable from being stuck" sits inside a requirement about failed runs. It is still
+   worth answering — D4 does — but it is not a contradiction to be argued away.
+3. **It is worth writing down that the requirement and the code disagreed**, because the next reader
+   of `turn_scheduler.py:191` will find no requirement behind it either.
+
+## D4b. Round 3: D4's escape route, verified against the surfaces rather than argued
+
+D4 said the answer to "indistinguishable from being stuck" depends on whether the operator can see
+why, and told round 3 to check the surfaces rather than the paragraph. Checked, on the trial Hub,
+against a real waiting entry:
+
+| Surface | What it showed |
+|---|---|
+| `GET /queue/{agent}/status` | `waiting_count: 1`, `waiting_reason: "Runner CLI 'ui-probe' was not found in PATH."`, `delivery_attempts` |
+| the conversation view, under the transcript | *"1 waiting — Runner CLI 'ui-probe' was not found in PATH."* |
+| the conversation view, under the composer | *"Queued — Runner CLI 'ui-probe' was not found in PATH."* |
+
+So waiting **is** distinguishable from stuck: the reason is stated in three places, and it names the
+repair. The escape route holds.
+
+**One thing it does not show, and this is the honest limit:** *how long*. An entry waiting three
+weeks renders identically to one waiting three seconds. Nothing on these surfaces would tell an
+operator that something has been waiting since a runner was unbound a month ago. That is precisely
+what D6's rejected alternative — surface it as long-waiting rather than count it — would add, and it
+is the reason that alternative is recorded as *possibly the better long-term answer* rather than as
+merely rejected.
+
+(The sentence those surfaces carry is itself wrong for an unbound agent — it names a CLI after the
+agent. That is **F111**, a separate finding, and it makes this evidence weaker in presentation than
+in substance: the operator sees *a* reason in three places, and the reason is misleading.)
+
 ## D5. What the operator loses, honestly
 
 Today an environment-level entry disappears after three schedules, and the operator is told
@@ -186,6 +239,10 @@ easy to misattribute to this change.
 1. **The recorded reason lies about what happened.** `"delivery failed 3 times"` is written by the
    surviving site too, where the failures were refusals rather than deliveries. This change makes it
    fire far less often; it does not make it true.
+0. **`turn_scheduler.py:191` has no requirement behind it** (D4a). The capability's counter
+   requirement is scoped to a failed run's input; the second counting site was added by `F56`
+   without one. This change specifies the half it removes and leaves the half it keeps still
+   unspecified.
 2. **`terminal_failure`'s dishonest defaults**, carried over from
    `2026-08-28-a-refused-request-says-so` and still unfixed: six early returns claim `True` without
    meaning it, and `scheduler.py`'s two flow consumers gate on that flag.
