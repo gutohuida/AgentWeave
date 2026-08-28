@@ -6391,6 +6391,22 @@ the ranking was wrong: the schema diff said "ten silent branches" and the produc
 these happen here". A gap between a protocol's surface and a product's usage is not a defect, and
 counting union members is not measuring.
 
+**The review-turn caveat above is now closed, and the answer is no (measured 2026-08-28,
+iteration 13).** A real codex review turn was driven end to end — `swapper` on `codex`/`gpt-5.4-mini`
+in `aw-e2e1`, `POST /agent/trigger` with `review_task_id=task-a0409448ee8e` (the only task carrying
+evidence that names a commit), `run-eb29661d2cc7`, ~90s, `exit_code: 0`. Its complete event trace is
+`run_triggered`, `run_started`, `queue_entry_delivered`, eleven `context_warning`, two
+`permission_denied`, `run_completed`. **`enteredReviewMode` and `exitedReviewMode` did not arrive,
+and `map_item_to_events` needs no branch for them.**
+
+The reason is worth stating because it retires the expectation rather than merely one test of it:
+**AgentWeave's review turn is an ordinary turn given a review checkout and a reviewing prompt — it is
+not codex's built-in `/review` mode**, which is what emits those two. Nothing in the product's review
+path can produce them, so this is not "not observed yet"; it is not reachable from here.
+
+That leaves `contextCompaction` as the sole item in the ten with an untested route to arriving, and
+it needs a session long enough to compact.
+
 ### What the sweep did find
 
 The comment at the end of `run_turn`'s loop listing the notifications it ignores was written from

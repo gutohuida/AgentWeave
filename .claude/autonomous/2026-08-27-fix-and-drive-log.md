@@ -1501,3 +1501,112 @@ worth double, since it is the one plausible way to make `enteredReviewMode`/`exi
 arrive and so to test F104's own caveat. Also unmeasured: `schedule_agent`'s non-`TriggerAgentError`
 early returns, which record nothing and charge no attempt, so an entry may sit queued forever with
 `waiting_reason` null. This iteration ran out of clock at `stop_at`, not out of leads.
+
+
+---
+
+## Iteration 13 — 2026-08-28T07:35:17+01:00
+
+**The review turn was driven on codex, and it closes F104's caveat with a negative.**
+
+### A correction about the clock, first, because it changed the whole iteration
+
+This firing opened at 07:26 with `stop_at` at 08:00. Sizing the work by *estimated* elapsed time,
+the review turn looked unstartable, and a log entry was written saying so and reverted twenty seconds
+later when the first real `Get-Date` since the start showed **07:30, not the ~07:46 the estimate had
+reached**. Roughly forty minutes of budget had been imagined away.
+
+Worth writing down because it is a method defect, not a one-off: **tool calls here are seconds, and
+an estimate of elapsed time drifts fast and always in the same direction — pessimistic.** The prior
+iterations' habit of stamping every timestamp from PowerShell exists for the heartbeat; it belongs on
+the *sizing decision* too. Measure the clock before deciding something does not fit. This iteration
+nearly dropped its headline item on a number nobody had read.
+
+### What was driven
+
+A real codex review turn, end to end, through the real surface:
+
+- New runner `runner-ea0b631f27d6` (`codex` / `gpt-5.4-mini`) in `aw-e2e1` (`proj-46b602c1f3cb`), and
+  agent `swapper` rebound to it from the haiku runner. **Left bound that way on purpose** — it is the
+  setup the next review-turn drive needs and costs nothing idle.
+- `POST /agent/trigger` with `review_task_id`, which is the fast path: it takes the review task
+  directly rather than needing a loop, a flow and a staffed reviewer rung.
+- Target `task-a0409448ee8e`, the one task in either project carrying `RequirementEvidence` with an
+  `EvidenceFootprint` naming a commit (`70474c2`). Neither protected specimen was touched:
+  `task-1b7af6b595e6` and `task-d64523ce8ada` are as they were.
+
+`run-eb29661d2cc7` ran ~90 seconds and completed, `exit_code: 0`.
+
+Two dead ends on the way, both cheap and both worth knowing: a review turn is **refused without
+evidence naming a commit** (`commit_for_task_review`, `requirement_evidence.py:736` — "Evidence
+naming a commit is what a review turn is given"), so `FLOW-W1` and every other completed-but-
+evidenceless task is not reviewable; and the evidence had to be found by querying the database,
+because `GET /projects/{id}/evidence` is a 404 — the route is not there under that name.
+
+### The answer: no review-mode notifications, and F104's caveat closes
+
+**`enteredReviewMode` and `exitedReviewMode` did not arrive.** The run's full event trace is
+`run_triggered`, `run_started`, `queue_entry_delivered`, eleven `context_warning`s, two
+`permission_denied`, `run_completed`. Nothing else.
+
+That is the expected shape once stated plainly, and stating it is the point: **AgentWeave's review
+turn is an ordinary turn given a review checkout and a reviewing prompt. It is not codex's built-in
+`/review` mode**, which is what emits those notifications. So `map_item_to_events` needs **no** branch
+for them, and F104's one self-filed caveat is answered rather than carried. Four iterations deferred
+this for clock; the measurement took ninety seconds.
+
+### The live confirmation nobody asked for
+
+The two `permission_denied` rows (`severity: warn`, `decided_by: "runtime"`, `tool_name: "Write"`,
+`reason: "command failed; retry without sandbox?"`) looked at first like a defect — a *completed*
+run, exit 0, showing permission denials nobody made. They are not. They are `_on_refusal`
+(`agent_trigger.py:2201`) doing exactly what its docstring says it was built for:
+
+> *"A Codex agent declined by its own sandbox produced nothing at all: not an event, not an SSE
+> frame, not a line in the timeline. Found live — a reviewing agent was refused permission to write
+> its own review file and said so in prose, while the Hub's durable record showed a clean run."*
+
+A reviewing agent, refused permission to write its own review file. **That is precisely the scenario
+this drive reproduced, and this time the durable record shows it.** A prior fix verified under live
+conditions rather than by its own test — which is the kind of evidence a test cannot give.
+
+The empty `detail` on both rows is likewise **not** a gap: `approval_subject`
+(`codex_appserver.py:122`) documents that codex's file-change approval carries only `grantRoot` and
+not the individual paths, verified upstream against `generate-json-schema` for CLI 0.146.0. The code
+is honest about its own coarseness; nothing to file.
+
+### Also checked, and it shrank to nothing
+
+`next_action` item (4) — `schedule_agent`'s non-`TriggerAgentError` early returns record no
+`waiting_reason`, so "an entry may sit queued forever with `waiting_reason` null". True of the
+persistence, **false of the product.** `GET /queue/{agent}/status`
+(`inbound_queue.py:110`) independently re-derives four of the six (`agent is already running`, `hop
+budget exhausted`, `token budget exhausted`, plus a runner probe and a workspace resolve) and reads
+the persisted value only as a fallback beneath them. `queue is empty` is not a wait. That leaves two
+— `conversation is unavailable` and `queued entry has no conversation` — and the reachable one is
+guarded at the front door by `archivable()` (`conversations.py:366`), which refuses to archive a
+conversation holding a queued entry in as many words.
+
+**Not filed**, because neither residue was driven, and filing from the code path is what
+`next_action` said not to do. The lesson is the reusable part: **check the read path before
+persisting anything for a reader.** The absence of a write is a defect only if nobody downstream
+recomputes it — and had this iteration "fixed" it, the fix would have been six assignments
+duplicating logic the read path already has, a second source of truth wearing a closed defect's
+clothes.
+
+Two failed write attempts during that probe were both refused by validation and mutated nothing:
+`PUT /settings {"hop_budget":0}` → 422 (floor is 1), and `POST /messages` with
+`from_agent`/`to_agent` → 422 (the fields are `from`/`to`). The hop-budget floor of 1 is also why the
+probe could not be salvaged: a peer message from a hop-0 agent arrives at depth 1, which `1 <= 1`
+admits, so it starts instead of waiting.
+
+### State left behind
+
+No job or loop was enabled at any point. `aw-e2e2` is untouched. In `aw-e2e1`: one new codex runner,
+`swapper` bound to it, and one completed review run and conversation. Both specimens intact.
+
+### Where this leaves the queue
+
+`stop_at` is 08:00 and this is the last firing inside it. F104's caveat is closed. Still untouched
+and carried: the Codex angle's `ask_user`, the "Ask me" posture on codex, a killed codex process, a
+checkpoint. Plus the two narrow `schedule_agent` residues, each needing a drive rather than a read.
