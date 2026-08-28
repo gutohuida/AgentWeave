@@ -6554,10 +6554,11 @@ UI passes the right name, so it is not filed as a defect; it belongs with the AP
 `method_reminders`. Note also that the answer route is `PATCH /questions/{id}` — `POST
 /questions/{id}/answer` is a 405, and only `/decline` is a POST sub-route.
 
-## F107 (B) — the Codex approval card names a *category*, never the action: the operator approves "a command" without seeing which
+## F107 (B) — the Codex file-change approval card names a *category*, never the action: the operator approves "a file change" without seeing which file
 
-**Status:** open (driven live 2026-08-28 07:52–07:54, CLI 0.146.0, `gpt-5.4-mini`, agent `swapper`
-in `proj-46b602c1f3cb`)
+**Status:** fixed `ddb965a` (found live 2026-08-28 07:52–07:54, fixed and re-driven 08:12–08:14,
+CLI 0.146.0, `gpt-5.4-mini`, agent `swapper` in `proj-46b602c1f3cb`). The section below is kept as
+written; two of its claims are wrong and are corrected at the end rather than edited away.
 
 The "Ask me" posture **works on Codex** — that half is a negative, and it is traced below. The
 defect is what the card the operator answers actually contains.
@@ -6623,3 +6624,78 @@ is precisely the request whose *scope* the operator cannot currently see.
 **The fix is narrow:** carry the approval request's `params` onto `PermissionRequest.tool_input`
 where `decide_approval` builds the row, and keep `_CODEX_APPROVAL_LABELS` as the human summary line
 above it. Not attempted here — the run's `stop_at` is 08:00 and this was found at 07:55.
+
+### Fixed 2026-08-28, `ddb965a` — and two of the claims above are wrong
+
+Fixed, but not by the fix the section proposed, and the section overstates the defect in two
+places. Both corrections were forced by reading the protocol rather than the transcript, so they
+are recorded here rather than quietly not-done.
+
+**Correction 1 — command approvals were never affected.** The headline sentence ("`ls` and
+`rm -rf ~` are the same card") is false. `CommandExecutionRequestApprovalParams` carries `command`
+and `cwd`; `approval_subject` already captured both; and `PermissionRequestCard.describe()` already
+rendered them. The drive that produced this finding raised a **file change**, and the section
+generalised from it to a method it never exercised. Re-driven live today at 08:12 with the same
+agent and posture: `perm-185f063ad551` arrived as `"tool_name": "a command"` with the entire
+PowerShell invocation and its cwd in `tool_input`. The Codex-side loss was real but narrower than
+written.
+
+**Correction 2 — the proposed fix would not have worked.** "Carry the approval request's `params`
+onto `tool_input`" is exactly what `approval_subject` already does, and it is not enough, because
+the paths are **not in the params**. Verified against `codex app-server generate-json-schema` at
+CLI 0.146.0: `FileChangeRequestApprovalParams` has exactly `itemId`, `startedAtMs`, `threadId`,
+`turnId`, `grantRoot` and `reason`. Copying the whole params map would have added three protocol
+identifiers to the card and still left the operator without a filename — a fix that passes its
+test and cannot do the thing, which is this repository's dominant failure mode and would have been
+another instance of it.
+
+**What the paths are actually in, and why this is fixable at all.** The `fileChange`
+*item* — `FileChangeThreadItem.changes[].path` — and the approval names that item by `itemId`.
+The item arrives **first**: on the 07:52 drive the `tool_use` mapped from `item/started` was
+persisted at `06:53:14.339` and the permission request created at `06:53:14.352`, thirteen
+milliseconds later. Measured from the drive Hub's own database, not assumed from the protocol
+being sequential. So `run_turn` now keeps this turn's items by id and `approval_subject` resolves
+`itemId` back to the item it names.
+
+Paths only, not the diffs the item also carries — the card is one line read under a run's timeout,
+and a patch body pasted into it buries the filenames it exists to show; the diff is already in the
+timeline's `tool_use` for the same item. Where nothing resolves, `paths` is **absent** rather than
+empty, so the card falls through to `grantRoot`/`reason` exactly as before instead of claiming the
+patch touches no files. The refusal record (`_on_refusal`) had the same blind spot and now prefers
+`paths` over the coarser `grantRoot`.
+
+**Considered and deliberately not done: deciding the "Workspace only" posture per-path.**
+`decide_approval` refuses a file change by `_within(grantRoot, workspace)`, and `grantRoot` is
+usually null, so that posture declines every file-change approval it sees. The newly-available
+paths would let it decide on the real target instead — and that is a *loosening* of a boundary,
+not a display repair. It is also probably not a defect: that posture starts
+`workspace-write`/`on-request`, so an in-workspace write raises no approval at all, and one that
+does raise is an escalation whose scope is genuinely unstated — "an unknown boundary is not an
+open one" is the right answer there. Recorded so the next session does not redo this analysis;
+if the operator wants it changed it is a decision, not a fix.
+
+**Live proof, 2026-08-28 08:12–08:14**, trial Hub on 8011 restarted from source on the fixed code
+and confirmed by its **project list**, not `/health`. The first trigger produced a *command*
+approval (correction 1's evidence); denying it made the agent give up rather than fall back, so a
+second trigger forbade the shell explicitly. That raised `perm-c2dbaab3b89e`:
+
+```
+{"grantRoot": null, "reason": null,
+ "paths": ["C:\\Users\\huida\\Documents\\aw-e2e1\\.agentweave\\worktrees\\swapper\\f107-probe.txt"]}
+```
+
+— where last night's `perm-d053068ab1de` had the first two keys and nothing else. Allowed at
+08:14; the run completed `exit_code 0`; and **`f107-probe.txt` exists containing
+`CARDNAMESTHEFILE`**. That last clause is the load-bearing one, per iteration 14's rule: the card
+named a file, and the file the card named is the one that appeared.
+
+**Mutation-checked, six, each caught by the test that names it:** dropping the item recording
+(4 of 5 wiring tests fail); resolving by recency instead of by id (only the multi-item test fails,
+which is what that test is for); emitting `paths` when empty; carrying the diffs into the card;
+removing the UI branch (4 card tests); and letting an empty list bury the `grantRoot` fallback.
+
+**State left behind:** in `aw-e2e1`, runs `run-08961a9a5b8f` (denied, gave up) and
+`run-91ce8b8961e7` (allowed, completed), conversations `conv-077915d9ea0e` and `conv-4b9c19ba8322`,
+permission requests `perm-185f063ad551` (denied) and `perm-c2dbaab3b89e` (allowed), and
+`f107-probe.txt` in swapper's worktree. No job or loop was touched, so none was left enabled. The
+Hub on 8011 is left running on this branch's code; 8000 and 8010 were never contacted.
