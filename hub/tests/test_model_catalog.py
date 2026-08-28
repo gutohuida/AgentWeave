@@ -6,6 +6,7 @@ from hub.model_catalog import (
     get_provider,
     model_context_window,
     render_control_args,
+    render_control_config,
     validate_overrides,
 )
 from hub.runner_commands import SUPPORTED_RUNNERS
@@ -118,6 +119,31 @@ class TestRenderControlArgs:
             "--effort",
             "high",
         ]
+
+
+class TestRenderControlConfig:
+    """F99 — the same declarations, rendered as the `config` map app-server takes instead of
+    the argv it does not read."""
+
+    def test_codex_effort_renders_as_a_config_key(self):
+        assert render_control_config("codex", {"effort": "high"}) == {
+            "model_reasoning_effort": "high"
+        }
+
+    def test_a_flag_style_control_renders_nothing(self):
+        # Claude's effort is a flag, not a config override — and Claude has no app-server
+        # transport at all. Only `style="config"` belongs in this map.
+        assert render_control_config("claude", {"effort": "high"}) == {}
+
+    def test_codex_permission_mode_renders_nothing(self):
+        # ApplySpec(style="none") — it reaches the runtime as a thread policy, not a config key.
+        assert render_control_config("codex", {"permission_mode": "manual"}) == {}
+
+    def test_model_and_unknown_controls_are_skipped(self):
+        assert render_control_config("codex", {"model": "gpt-5.6-sol", "verbosity": "high"}) == {}
+
+    def test_an_unknown_provider_renders_nothing(self):
+        assert render_control_config("gemini", {"effort": "high"}) == {}
 
 
 class TestProviderLookup:

@@ -355,7 +355,197 @@ class TestRunTurnServerRequests:
         assert fake.sent_responses == [(0, {"decision": "accept"})]
 
 
+class TestRunTurnConfigOverrides:
+    """F99 — config-style controls reach `thread/start`.
+
+    Codex's Effort control renders to `-c model_reasoning_effort=<value>` in the argv
+    `build_command` produces, and app-server ignores argv entirely: it takes the same overrides
+    as `thread/start`'s `config` object. Measured live 2026-08-28 against CLI 0.146.0 — a bogus
+    value passed this way is rejected by the provider exactly as `codex exec -c` is, and a valid
+    one is written to the rollout's `turn_context` as `"effort": "xhigh"`. So the map is honoured,
+    and these assert the Hub actually fills it.
+    """
+
+    @pytest.mark.asyncio
+    async def test_config_overrides_reach_thread_start(self, monkeypatch):
+        fake = _FakeSession(
+            responses={
+                "initialize": {},
+                "thread/start": THREAD_START_RESULT,
+                "turn/start": TURN_START_RESULT,
+            },
+            notifications=[
+                {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+            ],
+        )
+        _patch_spawn(monkeypatch, fake)
+
+        await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=None,
+            config_overrides={"model_reasoning_effort": "xhigh"},
+            on_event=_noop,
+        )
+
+        start_params = next(p for m, p in fake.sent_requests if m == "thread/start")
+        assert start_params["config"]["model_reasoning_effort"] == "xhigh"
+
+    @pytest.mark.asyncio
+    async def test_config_overrides_and_mcp_server_share_one_config(self, monkeypatch):
+        """The two inputs to `config` are unrelated and must not evict each other — the map used
+        to be built only `if mcp_command`, which is the shape that dropped every control."""
+        fake = _FakeSession(
+            responses={
+                "initialize": {},
+                "thread/start": THREAD_START_RESULT,
+                "turn/start": TURN_START_RESULT,
+            },
+            notifications=[
+                {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+            ],
+        )
+        _patch_spawn(monkeypatch, fake)
+
+        await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=["python", "mcp_server.py"],
+            config_overrides={"model_reasoning_effort": "high"},
+            on_event=_noop,
+        )
+
+        config = next(p for m, p in fake.sent_requests if m == "thread/start")["config"]
+        assert config["model_reasoning_effort"] == "high"
+        assert config["mcp_servers"]["agentweave"]["command"] == "python"
+
+    @pytest.mark.asyncio
+    async def test_no_config_key_when_there_is_nothing_to_put_in_it(self, monkeypatch):
+        fake = _FakeSession(
+            responses={
+                "initialize": {},
+                "thread/start": THREAD_START_RESULT,
+                "turn/start": TURN_START_RESULT,
+            },
+            notifications=[
+                {"method": "turn/completed", "params": {"turn": {"status": "completed"}}}
+            ],
+        )
+        _patch_spawn(monkeypatch, fake)
+
+        await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=None,
+            config_overrides={},
+            on_event=_noop,
+        )
+
+        assert "config" not in next(p for m, p in fake.sent_requests if m == "thread/start")
+
+
 class TestRunTurnFailureModes:
+    @pytest.mark.asyncio
+    async def test_turn_completed_with_failed_status_is_a_failure(self, monkeypatch):
+        """F100 — `turn/completed` means the turn ENDED, not that it succeeded.
+
+        CLI 0.146.0's `ServerNotification` schema has no `turn/failed` at all; a provider error
+        arrives as `turn/completed` carrying `turn.status == "failed"` and a `TurnError`. Reading
+        the method name alone reported a 400 as a completed run with zero output and no error.
+        This payload is the live one, captured 2026-08-28.
+        """
+        provider_error = (
+            '{"type": "error", "error": {"type": "invalid_request_error", "message": '
+            '"[ReasoningEffortParam] [reasoning.effort] [invalid_enum_value] Invalid value."}, '
+            '"status": 400}'
+        )
+        fake = _FakeSession(
+            responses={
+                "initialize": {},
+                "thread/start": THREAD_START_RESULT,
+                "turn/start": TURN_START_RESULT,
+            },
+            notifications=[
+                {
+                    "method": "turn/completed",
+                    "params": {
+                        "threadId": "019fd61e-d230-7d61-8d80-5cf5840c94f8",
+                        "turn": {
+                            "id": "t1",
+                            "items": [],
+                            "status": "failed",
+                            "error": {"message": provider_error, "codexErrorInfo": "other"},
+                        },
+                    },
+                }
+            ],
+        )
+        _patch_spawn(monkeypatch, fake)
+
+        events = []
+        outcome = await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=None,
+            on_event=_collector(events),
+        )
+
+        assert outcome.status == "failed"
+        assert "invalid_enum_value" in outcome.error
+        assert [e.kind for e in events] == ["error"]
+
+    @pytest.mark.asyncio
+    async def test_turn_completed_with_interrupted_status_is_not_a_completion(self, monkeypatch):
+        """A turn stopped by something other than this Hub's own `should_interrupt`."""
+        fake = _FakeSession(
+            responses={
+                "initialize": {},
+                "thread/start": THREAD_START_RESULT,
+                "turn/start": TURN_START_RESULT,
+            },
+            notifications=[
+                {
+                    "method": "turn/completed",
+                    "params": {"turn": {"id": "t1", "items": [], "status": "interrupted"}},
+                }
+            ],
+        )
+        _patch_spawn(monkeypatch, fake)
+
+        outcome = await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=None,
+            on_event=_noop,
+        )
+
+        assert outcome.status == "interrupted"
+
     @pytest.mark.asyncio
     async def test_turn_failed_notification_is_reported(self, monkeypatch):
         fake = _FakeSession(

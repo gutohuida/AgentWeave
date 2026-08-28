@@ -15,6 +15,7 @@ from tests.test_agent_trigger import (
     _await_background_run,
     _bind_codex_exec_runner,
     _fake_pty,
+    _fake_run_turn,
 )
 
 
@@ -371,3 +372,42 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
         assert models_seen == ["gpt-5.6-sol", "gpt-5.4-mini"]
     finally:
         sse_manager.unsubscribe(project_id, queue)
+
+
+@pytest.mark.asyncio
+async def test_a_config_style_override_reaches_the_app_server_transport(
+    app, auth_headers, bind_runner
+):
+    """F99 — Effort is rendered into argv, and the app-server transport reads no argv.
+
+    A codex runner with no flags gets app-server (the shape the Add-agent dialog produces), so
+    this is the ordinary case: an operator raising Effort changed nothing at all until the value
+    was passed to `run_turn` separately. `-c model_reasoning_effort=xhigh` in `cmd` is not
+    evidence — nothing on this path ever looks at `cmd`.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"override-appserver": {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("override-appserver", cli="codex")
+
+    fake_run_turn = _fake_run_turn()
+    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            response = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={
+                    "agent": "override-appserver",
+                    "message": "hi",
+                    "session_mode": "new",
+                    "overrides": {"effort": "xhigh"},
+                },
+                headers=auth_headers,
+            )
+            assert response.status_code == 200
+            await _await_background_run()
+
+    kwargs = fake_run_turn.call_args.kwargs
+    assert kwargs["config_overrides"] == {"model_reasoning_effort": "xhigh"}

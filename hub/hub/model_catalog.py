@@ -371,6 +371,41 @@ def validate_overrides(
     return accepted, None
 
 
+def render_control_config(provider: str, overrides: Dict[str, str]) -> Dict[str, str]:
+    """The same `style="config"` controls `render_control_args` renders as `-c KEY=VALUE`, as a
+    key -> value map instead.
+
+    Codex's `app-server` transport has no argv at all — it speaks JSON-RPC, and `thread/start`
+    takes the same configuration overrides as a `config` object. Every config-style control was
+    therefore silently dropped for every Codex agent created through the Add-agent dialog, since
+    app-server is their default transport (F99). This is the second rendering of one declaration,
+    not a second declaration: a control is still added once, to the catalog, and this stays as
+    ignorant of what any control *means* as its argv sibling.
+
+    Skips `"model"` and unknown controls for the same reasons `render_control_args` does, and
+    never rejects — callers validate with `validate_overrides` first.
+    """
+    entry = get_provider(provider)
+    if entry is None:
+        return {}
+    rendered: Dict[str, str] = {}
+    for control_id, value in overrides.items():
+        if control_id == "model":
+            continue
+        control = entry.control(control_id)
+        if control is None:
+            continue
+        selected = next((v for v in control.values if v.id == value), None)
+        spec = (
+            selected.apply if selected is not None and selected.apply is not None else control.apply
+        )
+        if spec.style != "config":
+            continue
+        key, _, rendered_value = spec.template.format(value=value).partition("=")
+        rendered[key] = rendered_value
+    return rendered
+
+
 def render_control_args(provider: str, overrides: Dict[str, str]) -> List[str]:
     """Render already-validated *overrides* into argv, per each control's `ApplySpec`.
 

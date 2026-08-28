@@ -493,11 +493,21 @@ def map_item_to_events(item: Dict[str, Any], *, is_start: bool) -> List[RunEvent
     return []
 
 
-def map_turn_failure(params: Dict[str, Any]) -> RunEvent:
-    """Map a `turn/failed` notification's error to the standard error event."""
-    error = params.get("error") or {}
+def _turn_error_message(carrier: Dict[str, Any]) -> str:
+    """The human-readable message out of anything carrying a `TurnError` under `error`.
+
+    Two shapes carry one: the `Turn` inside a `turn/completed` whose status is `failed`, and a
+    `turn/failed` notification's own params. Both are read here so a failure reported either way
+    reaches `TurnOutcome.error` identically.
+    """
+    error = carrier.get("error") or {}
     message = error.get("message", str(error)) if isinstance(error, dict) else str(error)
-    return error_event(code="codex_turn_failed", message=message or "turn failed")
+    return message or "turn failed"
+
+
+def map_turn_failure(carrier: Dict[str, Any]) -> RunEvent:
+    """Map a failed turn's error to the standard error event. See `_turn_error_message`."""
+    return error_event(code="codex_turn_failed", message=_turn_error_message(carrier))
 
 
 logger = logging.getLogger(__name__)
@@ -828,6 +838,7 @@ async def run_turn(
     resume_thread_id: Optional[str],
     yolo: bool,
     mcp_command: Optional[List[str]],
+    config_overrides: Optional[Dict[str, Any]] = None,
     own_server_name: str = "agentweave",
     on_event: "Callable[[RunEvent], Awaitable[None]]",
     on_usage: "Optional[Callable[[ContextUsageSample], Awaitable[None]]]" = None,
@@ -876,21 +887,27 @@ async def run_turn(
         }
         if model:
             thread_params["model"] = model
+        # `config` is the app-server's `config.toml`-override map, and it carries two unrelated
+        # things: the MCP server this Hub injects, and whatever `-c KEY=VALUE` pairs the run's
+        # controls render (`model_reasoning_effort` today). It used to exist only when there was
+        # an MCP command, which is why every config-style control silently vanished on this
+        # transport -- argv is unused here, so `-c` never reached the provider at all.
+        config: Dict[str, Any] = dict(config_overrides or {})
         if mcp_command:
-            thread_params["config"] = {
-                "mcp_servers": {
-                    own_server_name: mcp_server_config(
-                        mcp_command,
-                        env_vars=[
-                            "AW_RUN_TOKEN",
-                            "AW_AGENT_IDENTITY",
-                            "AW_RUN_ID",
-                            "AW_TURN_DEPTH",
-                            "HUB_URL",
-                        ],
-                    )
-                }
+            config["mcp_servers"] = {
+                own_server_name: mcp_server_config(
+                    mcp_command,
+                    env_vars=[
+                        "AW_RUN_TOKEN",
+                        "AW_AGENT_IDENTITY",
+                        "AW_RUN_ID",
+                        "AW_TURN_DEPTH",
+                        "HUB_URL",
+                    ],
+                )
             }
+        if config:
+            thread_params["config"] = config
 
         if resume_thread_id:
             start_response = await session.request(
@@ -1004,16 +1021,32 @@ async def run_turn(
                 if on_accounting is not None and mapped["accounting"] is not None:
                     await on_accounting(mapped["accounting"])
             elif method == "turn/completed":
-                status = "interrupted" if interrupted else "completed"
+                # `turn/completed` is not "the turn succeeded" — it is "the turn ended", and the
+                # `Turn` it carries says how (`TurnStatus`: completed | interrupted | failed |
+                # inProgress, with `error` "only populated when the Turn's status is failed").
+                # Reading the method name alone reported every provider-side failure — a 400, a
+                # rate limit, an expired credential — as a completed run with no output and no
+                # error at all. Measured live 2026-08-28 against CLI 0.146.0 (F100).
+                turn = params.get("turn") or {}
+                turn_status = turn.get("status")
+                if turn_status == "failed":
+                    await on_event(map_turn_failure(turn))
+                    error = _turn_error_message(turn)
+                    status = "failed"
+                elif interrupted or turn_status == "interrupted":
+                    # Either this Hub asked for the interrupt, or the turn was stopped by
+                    # something else entirely — both are interruptions, not completions.
+                    status = "interrupted"
+                else:
+                    status = "completed"
                 break
             elif method == "turn/failed":
+                # Kept for version drift only: `turn/failed` is absent from the
+                # `ServerNotification` schema of CLI 0.146.0, which has exactly `turn/started`,
+                # `turn/completed` and `turn/moderationMetadata`. The branch above is the live
+                # failure path; this one must never be mistaken for it again.
                 await on_event(map_turn_failure(params))
-                error_obj = params.get("error") or {}
-                error = (
-                    error_obj.get("message", str(error_obj))
-                    if isinstance(error_obj, dict)
-                    else str(error_obj)
-                )
+                error = _turn_error_message(params)
                 status = "failed"
                 break
             # Anything else (mcpServer/startupStatus/updated, thread/status/changed,

@@ -82,6 +82,7 @@ from ...model_catalog import (
     FULL_ACCESS_PERMISSION_MODE,
     PERMISSION_MODE_CONTROL,
     WORKSPACE_PERMISSION_MODE,
+    render_control_config,
     validate_overrides,
 )
 from ...output_recording import record_agent_output, record_context_usage
@@ -108,6 +109,7 @@ from ...runner_commands import (
     SUPPORTED_RUNNERS,
     UnsupportedRunnerError,
     build_command,
+    catalog_provider_for_runner,
 )
 from ...runner_events import AccountingSample
 from ...runner_parsing import (
@@ -912,6 +914,15 @@ async def trigger_agent_directly(
             yolo=yolo,
             mcp_command=mcp_command,
             permission_mode=(control_overrides or {}).get("permission_mode"),
+            # Config-style controls (Codex's Effort) render to `-c KEY=VALUE` in `cmd`, and `cmd`
+            # is unused on the app-server transport — so they reached nothing there until this was
+            # passed separately (F99). Rendered from the same catalog declaration `build_command`
+            # renders above; the app-server path merges it into `thread/start`'s `config`.
+            config_overrides=(
+                render_control_config(catalog_provider_for_runner(runner) or "", control_overrides)
+                if control_overrides
+                else {}
+            ),
         )
     )
     _background_runs.add(task)
@@ -1425,6 +1436,7 @@ async def _execute_run(
     yolo: bool = False,
     mcp_command: Optional[List[str]] = None,
     permission_mode: Optional[str] = None,
+    config_overrides: Optional[Dict[str, str]] = None,
 ) -> None:
     """Background task: spawn, capture output, persist Run/AgentOutput, broadcast SSE.
 
@@ -1437,7 +1449,10 @@ async def _execute_run(
     `_execute_codex_appserver_run` below — since the app-server transport has no PTY/pipe
     subprocess for this function's own read/wait loop to drive; `cli`/`prompt`/`yolo`/
     `mcp_command` are only meaningful for that path (`cmd` was still built for it by the
-    caller, but is unused here — app-server has no argv, it speaks JSON-RPC).
+    caller, but is unused here — app-server has no argv, it speaks JSON-RPC). Anything the
+    caller renders *into* that argv therefore has to arrive here by its own parameter or it
+    reaches nothing: `permission_mode` was rescued by hand, and `config_overrides` — every
+    config-style control, Codex's Effort today — is the rest of that class (F99).
     """
     if use_codex_app_server:
         await _execute_codex_appserver_run(
@@ -1455,6 +1470,7 @@ async def _execute_run(
             env=env,
             worktree=worktree,
             permission_mode=permission_mode,
+            config_overrides=config_overrides,
         )
         return
 
@@ -2086,6 +2102,7 @@ async def _execute_codex_appserver_run(
     env: Optional[Dict[str, str]],
     worktree: Optional[Path],
     permission_mode: Optional[str] = None,
+    config_overrides: Optional[Dict[str, str]] = None,
 ) -> None:
     """Codex `app-server` (task 2.8) counterpart to `_execute_run`'s PTY/pipe read loop above.
 
@@ -2233,6 +2250,7 @@ async def _execute_codex_appserver_run(
                 resume_thread_id=known_session_id,
                 yolo=yolo,
                 mcp_command=mcp_command,
+                config_overrides=config_overrides,
                 on_event=_on_event,
                 on_usage=_on_usage,
                 on_accounting=_on_accounting,

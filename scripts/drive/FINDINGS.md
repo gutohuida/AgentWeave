@@ -28,7 +28,8 @@ false attributions), plus each section's own prose.
 
 `F9 (A-)` is not a defect — it is the merge-on-approval behaviour, recorded because it is the most
 consequential thing the product does. Every other A (`F1 F5 F10 F23 F27 F41 F43 F45 F49 F51 F54 F56
-F57 F58 F70 F71 F72`) is fixed with a commit named in its `**Status:**` line.
+F57 F58 F70 F71 F72 F100`) is fixed with a commit named in its `**Status:**` line — `F100`, filed
+and fixed in one iteration on 2026-08-28, is the newest and was found by a probe aimed at `F99`.
 
 **Open below severity A**, for completeness: `F3` `F15` `F20` `F21` (C/C/C/B, all with the cause
 named), `F42` (C), `F47` (C, deliberately deferred — it needs a third actor kind), `F61` (B, fix
@@ -5985,7 +5986,9 @@ it. Widening it was not the defect and is not the fix.
 
 ## F99 (B) — the Effort control does nothing on the transport Codex agents actually use
 
-**Status:** open (found and measured this iteration, deliberately not fixed — see the last section)
+**Status:** **fixed** — iteration 10, 2026-08-28. The open question below (does `thread/start`
+*honour* `model_reasoning_effort`, or accept and ignore it?) was settled by live measurement
+first; the answer is **honoured**, and the fix is the one this section already sketched.
 
 Found by following F98's seam rather than by driving a second time. F98 was one control that failed
 to cross from the operator's choice into the Codex runtime; this asks what else crosses by the same
@@ -6056,3 +6059,124 @@ The wider lesson is the one to keep: **`_execute_run`'s docstring names the haza
 is unused here" — and the hazard it names is that every control rendered into argv silently
 disappears.** One control was rescued by hand and the class was never swept. Whenever a comment
 says a value is unused on a path, ask what else arrives by that value.
+
+
+### The measurement, 2026-08-28 — honoured, twice over
+
+Two probes against CLI 0.146.0, both driving the Hub's own `run_turn` (raw pipes to
+`codex app-server` hung on this machine at iteration 9; the Hub's client does not, so the probe
+that works is the one that goes through the code being fixed):
+
+| Probe | `config` passed to `thread/start` | Result |
+|---|---|---|
+| **A** — bogus value | `{"model_reasoning_effort": "definitely-not-a-level"}` | The turn is rejected by the provider: *"Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'."*, `status: 400` — **byte-identical to what `codex exec -c model_reasoning_effort=…` gets for the same model** |
+| **B** — control | *(no key)* | Turn completes, one `OK` |
+| **C** — valid value | `{"model_reasoning_effort": "xhigh"}` | Turn completes, and the rollout's `turn_context` records `"effort": "xhigh"` |
+
+C is the positive half and A is the negative one: a value that is refused when wrong and recorded
+when right is not being ignored. `~/.codex/sessions/…/rollout-*.jsonl` — whose path `thread/started`
+reports — is the read-back surface the earlier write-up said it lacked.
+
+### What shipped
+
+`model_catalog.render_control_config(provider, overrides)` — the sibling of `render_control_args`,
+rendering the same `style="config"` declarations as a key → value map instead of `-c KEY=VALUE`
+argv. It is generic: a control is still declared once, in the catalog, and neither renderer knows
+what any control means. `agent_trigger` renders it next to `build_command` and passes it through
+`_execute_run` → `_execute_codex_appserver_run` → `run_turn`, which merges it into `thread/start`'s
+`config` alongside `mcp_servers` — that map is now built whenever *either* input exists, where
+before it existed only `if mcp_command`.
+
+Tests, each watched failing with the fix reverted:
+`test_config_overrides_reach_thread_start`, `test_config_overrides_and_mcp_server_share_one_config`
+(the two inputs must not evict each other), `test_a_config_style_override_reaches_the_app_server_transport`
+(the wiring, through a real `POST /agent/trigger`), and five in `TestRenderControlConfig`.
+
+The catalog still offers four of the provider's seven effort values (`none`, `minimal` and `max`
+are unofferable). That remains a separate, smaller observation — and now that the control works,
+it is worth something rather than moot.
+
+---
+
+## F100 (A) — a Codex turn that fails at the provider is recorded as a completed run with no output
+
+**Status:** **fixed** — iteration 10, 2026-08-28. Found by the F99 probe, not by looking for it.
+
+Probe A above was supposed to produce a loud failure. It produced this instead:
+
+```
+--- A bogus: status=completed error=None stderr='' n_events=0
+```
+
+A turn the provider rejected with a 400 came back as **completed, with no error and zero events**.
+The operator's surface for that run is a run that succeeded and said nothing.
+
+### Why
+
+`run_turn`'s notification loop had two branches:
+
+```python
+elif method == "turn/completed":
+    status = "interrupted" if interrupted else "completed"
+    break
+elif method == "turn/failed":
+    ...
+```
+
+`turn/failed` **does not exist**. `codex app-server generate-json-schema` for CLI 0.146.0 lists
+exactly three turn notifications in `ServerNotification` — `turn/started`, `turn/completed`,
+`turn/moderationMetadata`. The failure branch has never been reachable on this CLI; every test that
+exercised it fed the loop a notification the product cannot receive, so the suite proved a dead
+path worked while the live path could not fail.
+
+The information was there and was read past. `turn/completed` carries a `Turn`, and `Turn.status`
+is a `TurnStatus`: `completed | interrupted | failed | inProgress`. Its `error` field is documented
+in the schema as *"Only populated when the Turn's status is failed."* The live payload had both:
+
+```json
+{"method": "turn/completed", "params": {"turn": {"status": "failed",
+  "error": {"message": "{...[invalid_enum_value]..."status": 400}", "codexErrorInfo": "other"}}}}
+```
+
+— preceded by a `thread/status/changed` to `systemError` and a separate `error` notification with
+`willRetry: false`, both also ignored. **`turn/completed` means the turn ended, not that it
+succeeded.**
+
+### Blast radius
+
+Every provider-side failure on the app-server transport — the default for every Codex agent an
+operator can create — reaches the operator as a silent successful run: a 400 of any kind, an
+expired credential, a rate limit, a context overflow, a moderation refusal. The run finalises
+`completed`, `Run.error` stays NULL, no `error` event is broadcast, the timeline shows nothing, and
+any queue entry it consumed is spent. That is severity A on the plainest reading: the operator acts
+on "it ran and produced nothing" — reruns it, rewrites the prompt, doubts the agent — when the
+truth was a stated, actionable error the Hub already had in hand.
+
+It also explains a shape that has been seen before and blamed elsewhere: a Codex turn that
+"completed instantly with no output".
+
+### The fix
+
+Read `turn.status`. `failed` fails the turn, mapping `Turn.error` through the same
+`map_turn_failure` the dead branch used, so the provider's own message reaches `TurnOutcome.error`
+and an `error` event; `interrupted` — whether this Hub asked for it or not — reports interrupted;
+anything else completes. `_turn_error_message` is shared by both carriers. The `turn/failed` branch
+is kept for version drift with a comment saying it is absent from 0.146.0's schema, so it can never
+again be mistaken for the live failure path.
+
+Tests, both watched failing with the fix reverted:
+`test_turn_completed_with_failed_status_is_a_failure` (payload copied from the live capture) and
+`test_turn_completed_with_interrupted_status_is_not_a_completion`.
+
+### The lesson
+
+**A test can pin a branch the product cannot reach.** `test_turn_failed_notification_is_reported`
+passed for as long as it existed, asserting the Hub reports a failed turn, and the Hub could not
+report a failed turn. Nothing in the suite could have caught it: the fixture supplied the
+impossible input.
+
+What caught it was a probe with a *known* expected outcome — I set a value the provider must
+reject, and the absence of the rejection was the finding. The general form: **when you already know
+what a probe must produce, its silence is evidence.** That is the second time in two iterations
+that a measurement chosen to be able to contradict me did the work, and neither came from reading
+harder. This one came free, riding on a probe aimed at something else entirely.
