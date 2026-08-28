@@ -4,7 +4,7 @@ import { useRunners } from '@/api/runners'
 import { useWorkspacePaths } from '@/api/workspace'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
-import { postJson } from '@/api/client'
+import { ApiError, postJson, readableRefusal } from '@/api/client'
 import { agentColorVars } from '@/lib/agentColors'
 import { useConfigStore } from '@/store/configStore'
 import { Composer } from './Composer'
@@ -106,8 +106,12 @@ export function NewConversationSurface({
       }),
     })
     if (!response.ok) {
-      setError('Could not start the conversation')
-      throw new Error(`Trigger failed with status ${response.status}`)
+      // The Hub's own sentence, where it has one (F108). It refuses a request it will never
+      // honour and says why; 'Could not start the conversation' throws that away and leaves the
+      // operator with a dead composer and no remedy.
+      const refusal = new ApiError(response.status, await response.text())
+      setError(readableRefusal(refusal, 'Could not start the conversation'))
+      throw refusal
     }
     const result = (await response.json()) as { conversation_id: string }
     // Two arguments when there is no document, not a third that happens to be undefined.

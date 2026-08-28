@@ -344,3 +344,48 @@ describe('declaring an exploration before the first message', () => {
     expect(onStarted).toHaveBeenCalledWith('claude', 'conv-fresh')
   })
 })
+
+describe('a refused first message (F108)', () => {
+  beforeEach(() => {
+    cleanup()
+    localStorage.clear()
+    fetchMock.mockReset()
+    useConfigStore.setState({
+      apiKey: 'aw_live_TESTKEY',
+      hubUrl: 'http://hub.test',
+      selectedProjectId: 'proj-a',
+      isConfigured: true,
+      bootstrapState: 'ready',
+    })
+  })
+
+  it('shows the Hub’s own sentence, not that something failed', async () => {
+    // The whole point of answering a refused request with a status code is that a person reads
+    // why. `Could not start the conversation` trades a misleading explanation for none at all,
+    // which is worse than the bug: before this, the operator at least read the reason — filed
+    // under `waiting_reason`, under a flag saying the request had succeeded.
+    const refusal =
+      "Cannot review task task-4f2 as 'claude': that is the agent recorded as completing it."
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ detail: refusal }), { status: 403 }),
+    )
+    renderSurface('claude')
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Review it please' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(refusal))
+  })
+
+  it('falls back to a plain sentence when the refusal carries no detail', async () => {
+    fetchMock.mockResolvedValue(new Response('', { status: 502 }))
+    renderSurface('claude')
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Anything' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Could not start the conversation'),
+    )
+  })
+})
