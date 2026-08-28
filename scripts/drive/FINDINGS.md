@@ -6969,3 +6969,60 @@ passed. Running the build afterwards produced a different JS hash
 `dist/`'s own mtimes and hashes beside the source fingerprint so the stricter assertion can compare
 the two and refuse a `dist/` older than the source. The second is the smaller change and keeps the
 build an explicit step; the first makes the documented sequence impossible to get wrong.
+
+---
+
+## F111 (B) — a self-registered agent with no runner is told to install a binary named after itself
+
+**Status:** **open, and it is the un-fixed half of a finding believed closed.** Found 2026-08-28 by
+driving F108's own fix against the trial Hub.
+
+Registered `unbound-driver` through `POST /agents/register`, bound it nothing, sent it a message:
+
+```
+POST /agent/trigger {"agent": "unbound-driver", "message": "hello"}
+  -> 200 {"status": "queued",
+          "waiting_reason": "Runner CLI 'unbound-driver' was not found in PATH."}
+GET /queue/unbound-driver/status
+  -> {"waiting_count": 1, "waiting_reason": "Runner CLI 'unbound-driver' was not found in PATH."}
+```
+
+There is no runner bound at all. The operator is told to go and install a program named after their
+own agent, and there is no such program and never was.
+
+### It is the case `get_agent_config`'s own comment says it fixed
+
+`launchability.get_agent_config` (`hub/hub/launchability.py:361`) carries this, from 2026-08-25:
+
+> Both patched the *bound* case only, so the **unbound** case — `runner_id IS NULL` — still fell
+> through `RUNNER_CLI["native"] is None` to the agent-name fallback, and reported a missing CLI
+> named after the agent. … all three such agents were reported unlaunchable with
+> `Runner CLI 'architect' was not found in PATH` — a binary named after the agent.
+
+The repair it made is guarded:
+
+```python
+elif not agent_row.self_registered and "runner" not in meta:
+    meta["runner"] = RUNNER_UNBOUND
+```
+
+So a **self-registered** agent with no runner anywhere still takes the fallback — and the very
+sentence the comment quotes as the symptom is what the drive read back, three days later.
+
+### Why it is narrower than it looks, and why it still matters
+
+An operator creating an agent in the Hub UI is unaffected: the UI posts
+`POST /api/v1/projects/{id}/agents`, which sets `self_registered=False` (`api/v1/agents.py:669`).
+`self_registered=True` comes only from `POST /agents/register` — an agent joining itself, and the
+repo's own harnesses. That is exactly the population the 2026-08-25 measurement was taken on, so it
+is reachable, it has been seen live twice now, and the surface it is wrong on is the one an operator
+consults when nothing is happening.
+
+### Not fixed here, because the obvious fix is also wrong
+
+Dropping `self_registered` from the condition would make `probe_agent` answer *"No runner is bound
+to this agent. Bind one in the Hub UI before it can run."* — and for a polling self-registered agent
+that is **also** false. It runs itself; it is not waiting to be bound, and binding a runner is not
+the remedy. Neither existing sentence is true of this agent, which makes this a question about what
+the third sentence should say and which verdict owns it (`collaboration_ready` already draws a
+related line) — a design decision, not a one-line change. Left for a spec loop.
