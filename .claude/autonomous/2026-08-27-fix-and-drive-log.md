@@ -496,3 +496,124 @@ does not retrospectively free this one, and the walk correctly reports it in-fli
 re-staffing it. Tree clean, five commits pushed.
 
 **Next:** row 6 inbound queue, row 12 flows, row 13's timeout half.
+
+## Iteration 5 — 2026-08-28 01:21 → 02:25 (+01:00)
+
+**Rows 6, 12 and row 13's remaining half driven. One defect found and fixed — severity A, and it
+lives in the reporting rather than in the mechanism.** Reconciliation on arrival: STATE, branch and
+`git log` agreed at `2218cdf`, tree clean.
+
+| Row | Outcome |
+|---|---|
+| **6 Inbound queue** | **driven end to end** — batching, delivery cap, ordering, withdraw, hop-budget hold + release + refusal, abandonment after three attempts. One defect (A), in what happens *after* an abandonment. |
+| **12 Flows** | **driven, width included** — one firing staffed two independent tasks onto two agents at once. No defect. |
+| **13 Questions (timeout half)** | **driven** — a blocking `ask_user` timed out, the task parked to `blocked` with its reason, and answering it released the task and resumed the same conversation. No defect. |
+
+Rows still unreached: 15 checkpoints, 16 worktrees, 18 accounting, 19 resilience.
+
+### Row 6 — the queue works. What it says when it gives up does not.
+
+Everything in the mechanism held, and held well:
+
+- **Batching and the cap.** With `turn_delivery_cap=2`, four entries queued behind a running turn
+  were delivered two, then one — and the transcript proves the agent saw both of the first two in
+  one prompt, in arrival order (*"The operator has queued two requests: 1. QUEUED-A… 2. QUEUED-B"*).
+- **Withdraw.** A withdrawn entry was never delivered; withdrawing it twice, and withdrawing a
+  delivered entry, are both a stated `409`.
+- **Hop budget.** With `hop_budget=1`, a two-hop chain held at depth 2 and the status said
+  `hop budget exhausted`. `release` re-based it to 0, recorded `released_from_depth: 2`, and the
+  turn started. Releasing an entry that is *inside* the budget is a `409` that says so and points
+  at the queue status instead.
+- **Abandonment.** A leftover entry at one attempt reached `DELIVERY_ATTEMPT_LIMIT` over two more
+  scheduling attempts and was abandoned with a `queue_entry_abandoned` warn event naming the cause.
+
+**F87 (A) — a message the Hub gives up on disappears, and the record of it says nothing.**
+`46458ae`. What the operator sees the second after the abandonment:
+
+```
+GET /queue/author/status  ->  {"waiting_count": 0, "waiting_reason": null, "delivery_attempts": 0}
+```
+
+Which is precisely what a *successful* delivery leaves behind. Three surfaces and all three silent:
+the conversation (`_queued_entries_for` selects `state == "queued"`, and an abandoned entry is
+`withdrawn`, so the message left the thread it was addressed to); the queue card (`useSSE`'s
+handler says *"The queue card is where that shows"* — and `useQueuedEntries` fetches
+`?state=queued`, so the invalidation that event triggers is the refetch that removes the row); and
+the activity log, the only durable record, where `summaryForEvent` had no case and the default
+branch reads `error/message/summary/title` while the payload's field is `reason` — so the row read
+`queue_entry_abandoned` and nothing else.
+
+The thread keeps it now: a third `delivery_state`, `abandoned`, rendered in place at the timestamp
+it arrived, tagged **not delivered** with the reason and no controls. Keyed on `abandoned_reason`
+rather than on the `withdrawn` state, because an operator's own withdrawal reaches that same state
+and putting one of those back would re-show a message they chose to take away — tested both ways.
+
+### Row 12 — width works, and the first measurement of it was wrong
+
+The first flow ran three independent tasks strictly **serially**, one per firing, all to the job's
+default agent — against `create_flow`'s own docstring, *"Each firing starts every task whose
+prerequisites are met and for which an agent is available, so independent work runs in parallel."*
+
+That looked exactly like this corpus's signature defect and it was not one. Calling `decide_firing`
+directly against the live database rather than inferring from the board:
+
+```
+free []        running set()        selections []
+```
+
+`_agents_that_are_free` excludes an agent holding any task in `LIVE_STATUSES`, and all three agents
+were holding leftovers from earlier iterations — including the deliberately wedged `under_review`
+specimen. Width was bounded by available agents, which is the documented bound working. **The board
+could not have told me that**; one direct call to the decision function could, and did, in one step.
+
+Rejecting the two stale holdings and re-running gave `free ['builder', 'reviewer']` and then the
+real answer, in one firing: `in_progress: 2`, two tasks, two agents, two `JobRun` rows sharing one
+`fired_at` — design D13's shape exactly.
+
+### Row 13 — the timeout half
+
+`question_timeout_seconds = 60` on `builder`, a run bound to a task, one blocking `ask_user`, and
+nobody answering. At 60s the tool gave up, the run ended `completed`, and:
+
+```
+task: blocked   blocked_reason: "Waiting on your answer: Should ROW13 use tabs or spaces?"
+event: task_blocked
+```
+
+Answering it afterwards emitted `task_unblocked`, returned the task to `in_progress`, queued the
+answer as an operator entry and resumed the *same* conversation. The whole round trip holds.
+
+### The method note worth keeping
+
+**When the board disagrees with the docstring, call the decision function, not the API again.**
+Row 12 would have been filed as a severity-A width defect on the evidence the product surfaces
+provide — three independent tasks, three idle-looking agents, four firings, one task each. The
+board reports the *outcome* of `decide_firing`; only `decide_firing` reports its inputs. Six lines
+of async probe against the live database turned a wrong finding into a correct "no defect, and here
+is the bound that produced it".
+
+### Verification
+
+- F87: 3 Hub tests + 6 UI tests, each watched to fail. Four mutations, each failing a named test —
+  including one that **passed** under mutation at first, because the withdraw control is a bare
+  `close` icon and the test looked for text. That is F81's lesson again: a guard no test can see is
+  a guard the next reader deletes. The assertion now keys on the button's `title`.
+- Suites: whole Hub suite **3402 passed / 84 skipped / 1 xpassed / 0 failed in 18m28s (3399 at iteration 4, plus this iteration's three); CLI suite 440 passed / 3 skipped**; UI **1421 passed across 139 files** (1415 at arming,
+  plus this iteration's six); `ruff`, `black` and `mypy` clean over CI's own path lists;
+  `npm run lint` clean. `npm run build` + `refresh_ui_bundle.py`, bundle and stamp committed with
+  the source.
+- **Live**, against a Hub restarted on the fixed code: the entry the Hub dropped at 23:14 is back
+  in `conv-d3d63affa16c`, `delivery_state: "abandoned"`, `hop_budget_exceeded: null`, with its
+  reason — and the operator's own withdrawal from earlier the same iteration is still correctly
+  absent from `conv-b9fc97d600f1`.
+
+### State left behind
+
+`proj-46b602c1f3cb` gains two more jobs (19 total), **every one disabled** — confirmed by the API
+*and* by `apscheduler_jobs`, which is empty. `builder`'s `question_timeout_seconds` was set to 60
+for row 13 and has been **restored to NULL**; leaving it would have timed out a real question in a
+later drive. Two stale `in_progress` tasks (`task-0faf9e6f5222`, `task-467758bf4625`) were moved to
+`rejected` to free their agents, which is why `free` is now non-empty. `task-1b7af6b595e6` is still
+the deliberate wedged `under_review` specimen. Tree clean, two commits pushed.
+
+**Next:** row 15 checkpoints, row 16 worktrees.
