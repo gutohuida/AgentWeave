@@ -6967,10 +6967,31 @@ connections, which changes the transaction semantics under ~3,500 tests at once,
 in less than a full 25-minute suite run per attempt, and can plausibly trade this flake for
 `database is locked`. That is an operator's call, not something to change unattended.
 
-The cheap reproduction is the contribution: a parametrized test that runs the
-`test_spawn_failure_marks_run_failed` scenario 40 times and asserts the entry reaches
-`(3, 'withdrawn')` stalls in ~6 of 40, in about 40 seconds — against a full suite run that surfaced
-it once in two hours.
+The cheap reproduction is the contribution, and there is now a cheaper one still. This selection
+takes about five seconds and fails roughly one run in six:
+
+```
+pytest hub/tests/test_agent_trigger.py -q -k "spawn_failure or unbound_agent or runtime"
+```
+
+Six consecutive runs of it **at commit `84c990e`, before any of 2026-08-28's changes existed**:
+
+```
+1 failed, 3 passed        <- assert 2 == 3   (delivery_attempts)
+4 passed
+4 passed
+4 passed
+4 passed
+4 passed
+```
+
+That is also the attribution: the flake predates the F108 work, so a full-suite run of that branch
+reporting this single failure is reporting this, not a regression. Worth having written down,
+because it is the failure most likely to be misread as a casualty of the next change to touch the
+queue — `2026-08-28-a-delivery-attempt-means-a-delivery` names it in its D7 for exactly that reason.
+
+The earlier reproduction still has a use: a parametrized test running the scenario 40 times, which
+stalls in ~6 of 40 and lets the *state* be inspected rather than only the assertion.
 
 ---
 

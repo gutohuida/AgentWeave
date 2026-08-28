@@ -185,8 +185,11 @@ starts only after round 3. Nothing here is closed by a plan existing.
       The population that must not move was driven in the same pass: an agent with no runner bound
       still answers `200 … queued` and its entry stays at `waiting_count: 1`, so F96's repair still
       has something to deliver.
-- [ ] 6.6 Sync the delta into `openspec/specs/agent-conversation-workspace/spec.md` by hand, then
-      archive with `--skip-specs` and fix the doubled date prefix.
+- [x] 6.6 Sync the delta into `openspec/specs/agent-conversation-workspace/spec.md` by hand, then
+      archive with `--skip-specs` and fix the doubled date prefix. Synced: 4 requirements, 9
+      scenarios, taking the capability to 61 requirements;
+      `npx openspec validate --specs --strict` passes 42/42. Archived, and the doubled prefix
+      renamed as the dead-end note predicted.
 - [x] 6.7 Update `scripts/drive/FINDINGS.md`: F108 closed as a class, **and corrected** — its own
       four examples were already answered, recorded in the finding itself where the next reader
       meets it rather than only in this change's design. The design's two filed items are placed:
