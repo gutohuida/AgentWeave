@@ -266,7 +266,7 @@ no second runtime and no filesystem or git collaboration substrate.
 hub/
 ├── hub/                      # Python package
 │   ├── main.py               # FastAPI app factory + lifespan
-│   ├── mcp_server.py         # Hub-side MCP server (24 @mcp.tool(), 23 agent-callable —
+│   ├── mcp_server.py         # Hub-side MCP server (26 @mcp.tool(), 25 agent-callable —
 │   │                         # approve_tool_call is a harness endpoint, not a capability)
 │   ├── data/charters/        # Starter charter seed documents + manifest
 │   ├── db/                   # SQLAlchemy async models and migrations
