@@ -39,10 +39,10 @@ chosen by the operator and not implemented), `F62` (C), `F65` (C, queued as `Q4-
 **Read this as a floor, not a ceiling.** A short A list measures what *this* corpus of driving has
 found, not what is there. Tonight's sweeps exist to lengthen it.
 
-### Movement against the baseline, as of 2026-08-28 01:00
+### Movement against the baseline, as of 2026-08-28 03:30
 
-The sweeps did lengthen it, which is the point. **Seven severity-A findings have been added since
-the table above was written, six of them fixed the same night:**
+The sweeps did lengthen it, which is the point. **Eleven severity-A findings have been added since
+the table above was written, ten of them fixed the same night:**
 
 | Finding | Iteration | State |
 |---|---|---|
@@ -53,9 +53,23 @@ the table above was written, six of them fixed the same night:**
 | **F83** — a loop created enabled with `initial_tasks` never reaches the scheduler | 4 | fixed `0757be5` |
 | **F84** — an operator who stops a loop stops nothing; it fires for another seventeen minutes | 4 | fixed `0757be5` |
 | **F85** — a loop stages a review it cannot start, wedges the task, and fails on it forever | 4 | fixed `3e07726` |
+| **F87** — a message the Hub gives up on disappears, and the record says nothing | 5 | fixed `46458ae` |
+| **F88** — two grants the operator can confer, and neither had ever done anything | 6 | fixed `a42f978` |
+| **F89** — an automatic checkpoint holds the database lock and kills the turn | 6 | fixed `7cecd71` |
+| **F90** — a turn held back by another agent's turn is never let go again | 6 | fixed `a053553` |
 
 So the open-A list today is **F12, F76**, plus F52's and F60's partial states unchanged. F76 is open
 because its fix shape is a decision, not because nobody has looked at it.
+
+**And one observation that outranks any single row of that table.** F88, F89 and F90 were found in
+one iteration, in three unrelated subsystems, and every one of them was a mechanism this repository
+tests *thoroughly* — against a state the product never produces. F88's access tests pass a
+`visibility` value nothing stores. F89's generation tests spawn with nothing else writing, when in
+production the only thing that reaches that path is a live turn streaming output. F90's collision
+test ends the holder's run with a database write and then performs, by hand, the exact scheduling
+call the product omits. **When a test has to set something up for the code to reach the state under
+test, ask who does that in production.** If the answer is "nothing", that is the defect, not the
+fixture.
 
 ---
 
@@ -5064,7 +5078,7 @@ card created at all**.
 
 ## F87 (A) — a message the Hub gives up on disappears, and the record of it says nothing
 
-**Status:** fixed — see the commit that adds `delivery_state: "abandoned"` to `TimelineEntry`
+**Status:** fixed `46458ae` — adds `delivery_state: "abandoned"` to `TimelineEntry`
 
 **Severity: A.** Input the operator typed is discarded and no surface names it. The queue card
 returns to `0 waiting`, the message vanishes from the conversation it was addressed to, and the
@@ -5163,8 +5177,8 @@ means.
 
 ## F88 (A) — two grants the operator can confer, and neither has ever done anything
 
-**Status:** fixed — the commit that defaults `checkpoints.visibility` to `project`, backfills the
-stored rows in migration `0097`, and adds `list_checkpoints` / `read_checkpoint`
+**Status:** fixed `a42f978` — defaults `checkpoints.visibility` to `project`, backfills the stored
+rows in migration `0097`, and adds `list_checkpoints` / `read_checkpoint`
 
 **Severity: A.** `can_read_checkpoints` and `can_recall` are a documented capability with a
 settings control, a canonical-context paragraph that tells the agent it has them, and a spec
@@ -5244,8 +5258,7 @@ here. `granted` remains unreachable and always was; it implies a grantee list th
 
 ## F89 (A) — turning on automatic checkpointing kills the turn that triggers it
 
-**Status:** fixed — the commit that commits the session before `run_worker` in
-`checkpoint_generation`
+**Status:** fixed `7cecd71` — commits the session before `run_worker` in `checkpoint_generation`
 
 **Severity: A.** The agent's run never finishes. No `run_completed`, no `ended_at`, no exit code;
 the `Run` row sits `running` forever and the agent sits `running` with it, so nothing can be
@@ -5340,7 +5353,7 @@ stands on its own either way.
 
 ## F90 (A) — a turn held back by another agent's turn is never let go again
 
-**Status:** fixed — the commit that re-drains the project's queued agents when a run ends
+**Status:** fixed `a053553` — re-drains the project's queued agents when a run ends
 
 **Severity: A.** The operator's message is accepted, sits in the queue, and never runs. Not
 abandoned, not refused, not reported: `waiting_count: 1`, `waiting_reason: null`,
@@ -5381,12 +5394,19 @@ drain it. Nothing does on a timer… Measured — an entry sat `queued` at one a
 unrelated settings save drove the second."* Same sentence, same route, one agent over.
 
 **The fix.** Every terminal exit of a run — completed, failed, and the spawn that never started, on
-both the exec and the app-server paths — now calls `redrain_queued_agents(project_id)` after
-scheduling its own agent. Project-scoped rather than "the agents waiting on the task this run
-held", deliberately: the invariant is that a run ending frees whatever it was holding, and the task
-checkout is only today's instance of that. Scoping to the task would be correct now and silently
-incomplete for the next hold anyone adds. It costs nothing when nothing is waiting — the query
-returns only agents that actually have a queued entry, and `schedule_agent` refuses a busy one.
+both the exec and the app-server paths — now calls `redrain_queued_agents(project_id)` **instead
+of** `schedule_agent(project_id, agent)`, and unconditionally where two of the five were gated on
+the run having handed entries back. A re-drain is a strict superset: `schedule_agent` answers
+"queue is empty" for an agent with nothing waiting, so the ending run's own entries are still
+picked up. Replacing rather than adding matters — the first version did both and scheduled the
+ending agent twice, which `test_a_pre_spawn_failure_schedules_the_agent` caught by counting the
+calls.
+
+Project-scoped rather than "the agents waiting on the task this run held", deliberately: the
+invariant is that a run ending frees whatever it was holding, and the task checkout is only today's
+instance of that. Scoping to the task would be correct now and silently incomplete for the next
+hold anyone adds. It costs nothing when nothing is waiting — the query returns only agents that
+actually have a queued entry, and `schedule_agent` refuses a busy one.
 
 **The test the suite already had, and what it could not say.**
 `test_a_collision_leaves_the_entry_queued_and_delivers_it_when_the_task_is_free` sets the collision

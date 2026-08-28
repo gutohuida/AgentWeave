@@ -1500,13 +1500,14 @@ async def _execute_run(
         # does on a timer: `redrain_queued_agents` is reachable only from project open, settings
         # save and relocate. Measured — an entry sat `queued` at one attempt until an unrelated
         # settings save drove the second, which is a limit protecting nobody.
-        from ...turn_scheduler import redrain_queued_agents, schedule_agent
+        from ...turn_scheduler import redrain_queued_agents
 
-        if returned:
-            await schedule_agent(project_id, agent)
-        # Unconditional, unlike the line above, and for F90's reason: a spawn that never started
-        # still ends the run, and the run ending is what frees the task checkout an agent parked
-        # by design D8 is waiting on. That agent has nothing to do with `returned`.
+        # A re-drain, not `schedule_agent(project_id, agent)`, and unconditional rather than
+        # gated on `returned` — F90. `redrain_queued_agents` schedules every agent that has an
+        # entry queued, which is a strict superset: `schedule_agent` returns "queue is empty" for
+        # an agent with nothing waiting, so this agent's own entries are still picked up, and so
+        # is the agent parked behind the task checkout this run was holding (design D8). A spawn
+        # that never started still ends the run, and the run ending is what frees that checkout.
         await redrain_queued_agents(project_id)
         return
 
@@ -1810,12 +1811,11 @@ async def _execute_run(
 
         # A turn ending with queued entries starts the next turn without waiting for
         # operator input. The scheduler itself applies the hop budget and drain cap.
-        from ...turn_scheduler import redrain_queued_agents, schedule_agent
+        from ...turn_scheduler import redrain_queued_agents
 
-        await schedule_agent(project_id, agent)
-        # And everyone else who was waiting on something this run was holding (F90).
+        # Every agent with something queued, not just this one (F90).
         #
-        # `schedule_agent` above re-drains *this* agent, which is right for the ordinary case: a
+        # `schedule_agent(project_id, agent)` was here, and it is right for the ordinary case: a
         # turn that ended with its own entries queued starts the next one. It is not enough for a
         # hold that belongs to another agent. A task's checkout admits one writing turn at a time
         # (design D8), and the agent refused by that rule is refused *transiently* — the entry
@@ -1834,6 +1834,10 @@ async def _execute_run(
         # today's instance of that; scoping to the task would be correct now and silently
         # incomplete for the next hold anyone adds. Cheap either way — the query returns only
         # agents that actually have something queued, and `schedule_agent` refuses a busy one.
+        #
+        # A superset of what it replaces rather than an addition to it: `schedule_agent` answers
+        # "queue is empty" for an agent with nothing waiting, so re-draining covers this agent's
+        # own entries too and calling both would schedule it twice.
         await redrain_queued_agents(project_id)
     except (Exception, asyncio.CancelledError) as exc:
         # Every step above this point is inside the same `try` and none of it is wrapped
@@ -1889,15 +1893,13 @@ async def _execute_run(
                     await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
                     await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
         if not already_terminal:
-            from ...turn_scheduler import redrain_queued_agents, schedule_agent
+            from ...turn_scheduler import redrain_queued_agents
 
-            if returned:
-                await schedule_agent(project_id, agent)
-            # Unconditional, unlike the line above. A run that fails releases the task checkout
-            # it held exactly as a run that succeeds does, so an agent parked behind it by design
-            # D8 has to be re-evaluated whether or not *this* run handed anything back. Gating on
-            # `returned` would mean the hold outlives the holder whenever the failing turn had no
-            # queue of its own — which is the ordinary case.
+            # Unconditional, where this was gated on `returned`. A run that fails releases the
+            # task checkout it held exactly as a run that succeeds does, so an agent parked behind
+            # it by design D8 has to be re-evaluated whether or not *this* run handed anything
+            # back. Gating on `returned` would mean the hold outlives the holder whenever the
+            # failing turn had no queue of its own — which is the ordinary case.
             await redrain_queued_agents(project_id)
         if isinstance(exc, asyncio.CancelledError):
             raise
@@ -2222,11 +2224,10 @@ async def _execute_codex_appserver_run(
                     await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
             # See `_execute_run`'s spawn-failure branch: this one `return`s too, so the entries it
             # hands back need the same push.
-            from ...turn_scheduler import redrain_queued_agents, schedule_agent
+            from ...turn_scheduler import redrain_queued_agents
 
-            if returned:
-                await schedule_agent(project_id, agent)
-            # And, unconditionally, everyone this run's task checkout was holding back.
+            # See `_execute_run`'s spawn-failure branch: a re-drain, unconditionally, so this
+            # run's task checkout stops holding anyone back.
             await redrain_queued_agents(project_id)
             return
 
@@ -2362,9 +2363,8 @@ async def _execute_codex_appserver_run(
 
         await maybe_generate_title(project_id=project_id, conversation_id=conversation_id)
 
-        from ...turn_scheduler import redrain_queued_agents, schedule_agent
+        from ...turn_scheduler import redrain_queued_agents
 
-        await schedule_agent(project_id, agent)
         # See `_execute_run`: the same release, for the same reason.
         await redrain_queued_agents(project_id)
     finally:

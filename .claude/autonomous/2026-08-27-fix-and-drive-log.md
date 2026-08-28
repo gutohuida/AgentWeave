@@ -617,3 +617,153 @@ later drive. Two stale `in_progress` tasks (`task-0faf9e6f5222`, `task-467758bf4
 the deliberate wedged `under_review` specimen. Tree clean, two commits pushed.
 
 **Next:** row 15 checkpoints, row 16 worktrees.
+
+---
+
+## Iteration 6 — 2026-08-28 02:22 → 03:30 (+01:00)
+
+**E2E-1, rows 15 and 16. Three severity-A defects, all three fixed, all three proved live — and
+all three of the same kind.** Every one was a mechanism the suite tested thoroughly against a state
+the product never actually produces. That is not three coincidences; it is one blind spot with
+three exits, and it is the headline of this iteration.
+
+### F88 (A) — two grants the operator can confer, and neither had ever done anything
+
+`a42f978`. Row 15 began ordinarily: a real turn on `author`, a real checkpoint
+(`ckpt-d4ba5292443a`, probes passed), a real cutover to a successor that picked the work up and
+carried on. Then the grants:
+
+```
+PATCH /agents/builder -> {"can_read_checkpoints": true, "can_recall": true}
+builder, live turn:      recall("out-e3b591766336")
+  -> 404 No recorded observation by that id is available to you.
+```
+
+`checkpoint_access` computes `capability ∩ visibility`, and `checkpoints.visibility` shipped
+defaulting to `"private"` with **no caller anywhere passing anything else** and no route, tool or
+control able to change one. The visibility side of that intersection has been closed for every
+checkpoint that has ever existed, in every project. Both grants were conferrable and inert, and the
+refusal is deliberately indistinguishable from "no such record", so nothing told the operator.
+
+The repository had already diagnosed this exact shape once, about `can_accept_evidence`, and
+written the sentence down above `GRANT_FIELDS`: *"a capability enforced everywhere and grantable
+nowhere is a refusal of everyone."* Same sentence, one column over.
+
+The fix follows the spec rather than inventing a policy — `conversation-checkpoint` says *"a
+checkpoint MAY additionally restrict itself"*, which makes restriction the exception, not the birth
+state. Default `project`; migration `0097` backfills, because every stored `private` is the absent
+default rather than anybody's decision. Closed-by-default survives: both reader grants still are.
+
+A second half surfaced while fixing the first. `can_read_checkpoints` still granted nothing on its
+own, because no agent-facing tool returns a checkpoint — and the spec's own scenario requires that
+state to exist (*"the checkpoint remains readable"*), the canonical context promised it in as many
+words, and `submit_checkpoint_notes`' docstring tells an agent a reviewer reads its notes. So
+`list_checkpoints(agent=None)` and `read_checkpoint(checkpoint_id)` now exist over the agent-actions
+namespace, identity from the run's minted credential.
+
+### F89 (A) — turning on automatic checkpointing killed the turn that triggered it
+
+`7cecd71`. Continuing row 15 into automatic mode. `reviewer` on `automatic`/`tokens 5000`, asked to
+say one word. It said it, the transcript recorded `Completed`, and four minutes later:
+
+```
+running runs: [('run-cabd138d5be1', 'reviewer', 'conv-738f939e6999')]
+agents:       author idle | builder idle | reviewer running
+events:       run_started ... context_warning ... context_warning(null)   <- nothing after
+```
+
+No `run_completed`, ever. `builder` wedged identically on first try, and *its* checkpoint came out
+`unwritten` with `worker_invocation_id = None` — which is the thread. `_record` opens its own
+session and swallows failures by design, so a `None` there means another connection could not
+write. `checkpoint_trigger.consider` holds its read transaction across `run_worker`, a ~20s CLI
+spawn, and SQLite gives no concurrency to a connection waiting behind one: every other writer times
+out at 5s with `database is locked`, including the live turn's own finalisation.
+
+`run_worker`'s docstring already stated the rule — *"the spawn does not hold a session open across a
+call that can take minutes"* — and passing primitives is not enough if the caller's transaction is
+open around the call. The fix is one `await db.commit()` before the spawn, and the probe renders its
+prompt before committing so it cannot reopen one.
+
+**This also corrected a wrong conclusion of mine.** Before the fix the conversation stayed open
+after its checkpoint, and the obvious reading was that `automatic` can never cut over — `cut_over`
+refuses a run in progress and the trigger fires mid-run. Wrong: generation takes ~20s, an ordinary
+turn ends inside that window, and on the fixed code both conversations archived and handed to
+successors with `origin: "handoff"`. The refusal was the wedge, not the design. What remains
+unmeasured, and is therefore not claimed, is the turn that outlasts its own generation.
+
+### F90 (A) — a turn held back by another agent's turn is never let go again
+
+`a053553`. Row 16, design D8's *"a task's checkout takes one writing turn at a time"*. `builder`
+holding a task, `reviewer` triggered on the same one: refused, correctly, and classified
+**transient** so the entry waits rather than counting towards abandonment. Then builder finished:
+
+```
+t+100s  author idle | builder idle | reviewer idle
+        GET /queue/reviewer/status -> {"waiting_count": 1, "waiting_reason": null,
+                                       "delivery_attempts": 0}
+```
+
+An unrelated `PATCH /queue/settings`, writing the same four values back, delivered it instantly.
+`turn_scheduler`'s comment on the transient branch says the entry *"stays queued, and the next tick
+tries again"* — **there is no tick**, and the run-completion event reschedules only the agent whose
+run it was, which by construction is not the parked one. Every terminal exit of a run now redrains
+the project's queued agents, *instead of* scheduling its own — a re-drain is a strict superset,
+since `schedule_agent` answers "queue is empty" for an agent with nothing waiting. The first
+version did both and `test_a_pre_spawn_failure_schedules_the_agent` caught the double-schedule by
+counting the calls, which is the sort of assertion worth having. Project-scoped on purpose: a run
+ending frees whatever it held, and the task checkout is only today's instance of that.
+
+### The pattern, which is the finding above the findings
+
+Three defects, three suites that could not see them, and the same reason each time:
+
+| | what the test does | what the product does |
+|---|---|---|
+| F88 | passes `visibility="project"` explicitly | stores `private`, always, everywhere |
+| F89 | spawns with nothing else writing | spawns *because* a live turn is streaming |
+| F90 | calls `schedule_agent` for the challenger by hand | never calls it |
+
+F90's is the sharpest: the step the test performs on the product's behalf **is** the step the
+product omits. When a test has to do something for the code to reach the state under test, that
+"something" is the question — ask who does it in production before believing the green.
+
+### Row 16, and one wrong finding avoided
+
+Worktree listing, per-agent workspace, conflicts (a real one detected between `author`'s branch and
+a task branch over `README.md`), the D8 refusal, and removal all hold. Rejecting
+`task-294f3af9448b` removed its checkout, kept its branch, and dropped it from the listing.
+
+The twelve task checkouts sitting on disk are **not** a leak: release fires at `approved`/`rejected`
+and ten of the twelve belong to tasks that never reached either. Two `approved` ones had been
+re-provisioned by later turns bound to them — which F79 has since made a `409`, so that path is
+closed and only the pre-fix residue remains. I was one step from filing this, and the archaeology
+said no.
+
+### Verification
+
+- F88: 7 Hub tests (5 unit + 2 route-level), watched to fail — the default under mutation, the
+  access filter, the status filter, and the `agent` parameter, which **survived its first
+  mutation** and needed the test strengthened to assert that an ungranted caller naming the owner
+  still gets `[]`.
+- F89: 1 Hub test, watched to fail `[True, False] != [False, False]`.
+- F90: 1 Hub test, watched to fail with all five redrain calls removed.
+- Migration `0097`: 2 tests including the guard, watched to fail; head assertions bumped in
+  `test_migrations.py` and `test_project_persistence.py`.
+- Suites: CLI **440 passed / 3 skipped**. `ruff`, `black`, `mypy` clean over CI's path lists.
+  **No UI change this iteration**, so no bundle rebuild. Hub-suite result recorded below.
+- Live, against a Hub restarted on each fix in turn: F88 — `builder` granted lists, reads and
+  recalls `author`'s checkpoint, `reviewer` ungranted gets `[]` and a 404. F89 — both runs
+  `run_completed`, both conversations archived, both successors opened. F90 — the instant `builder`
+  went idle, `reviewer` went `running` and answered.
+
+### State left behind
+
+`proj-46b602c1f3cb`: 19 jobs and 17 loops, **every one disabled**, confirmed by the API and by
+`apscheduler_jobs` being empty. `builder` and `reviewer` had `checkpoint_mode` set to `automatic`
+for row 15 and are **back to NULL**; `builder`'s two grants are **back to false**. The project's
+`checkpoint_runner_id` and `checkpoint_model` are now set to the cheap Haiku runner and left that
+way deliberately — without them no checkpoint can be generated at all, which is what made every
+loop creation return a `continuity_warning`. `task-294f3af9448b` (ROW16) is `rejected` and its
+checkout gone. `task-1b7af6b595e6` is still the deliberate wedged specimen. All three agents idle.
+
+**Next:** row 18 accounting, row 19 resilience.
