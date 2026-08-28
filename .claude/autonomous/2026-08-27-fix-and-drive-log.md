@@ -964,3 +964,150 @@ It is a throwaway; the path change is deliberate and recorded.
 **Full Hub suite, run after every fix in this iteration was in place: 3422 passed / 84 skipped /
 1 xpassed / 0 failed (19m41s).** 3349 at arming, so the 73 additional passes are this run's own
 tests plus iterations 2-6's; nothing regressed.
+
+## Iteration 8 — 2026-08-28 04:46 → 06:0x — E2E-2, sweep #2 at the second-order angle
+
+Branch and `git log` matched STATE.json exactly (`0480f2c`, clean tree), so nothing to reconcile.
+
+E2E-1's row list was complete, so this took `next_action`'s option (a): **a second sweep at a
+different axis.** Iteration 7's carry-forward argued the axis itself — *a path reached only when
+something has already gone wrong is where the defects are* — and this sweep narrowed that to a
+theme sweep #1 never touched: **the operator changed a Hub record underneath a unit of work that
+was already queued.** Not the OS-level failures row 19 drove (a process killed, a binary corrupt, a
+directory moved), but configuration.
+
+Two defects, one A and one B, both fixed, both proved live against a restarted Hub.
+
+### F96 (A) — the product names the remedy, the operator performs it, and nothing happens
+
+An agent with no runner bound is sent a message. Everything about that is handled well: the input
+is queued rather than refused, and the answer states the remedy.
+
+```
+POST /agent/trigger -> 200
+  {"status": "queued",
+   "waiting_reason": "No runner is bound to this agent. Bind one in the Hub UI before it can run."}
+```
+
+The operator binds the runner. Then, for thirty seconds of polling:
+
+```
+PATCH /agents/swapper {"runner_id": "runner-867c59fc4a9e"} -> 200
+  +5s ... +30s   {"waiting_count": 1, "waiting_reason": "delivery failed 1 time; 2 attempts left"}
+```
+
+Nothing moved. And the status stopped mentioning the runner — the retry countdown took the
+reason's place, so the surface the operator watches now describes a delivery problem on an agent
+whose delivery problem they have just fixed. Two more unrelated events and the message is
+withdrawn.
+
+It was deliverable throughout. An unrelated `PUT /settings` delivered it in six seconds.
+
+**Cause.** There is no tick; `turn_scheduler`'s own comment says so. An entry is retried only when
+something calls `schedule_agent` or `redrain_queued_agents`, and the redrain sites are a run
+ending, `POST /projects/open`, `PUT /settings` and `POST /relocate`. Relocation is on that list
+because it is the repair for *"project workspace is unavailable"*. Binding is the repair for *"no
+runner is bound"*, and it was **the only repair route in the product with no redrain behind it.**
+
+That is iteration 7's headline pattern one column over: *a rule applied at N call sites holds at
+N-1 of them.* "The repair is a redrain site" was applied to the workspace refusal and never asked
+of the binding refusal.
+
+**Fix.** `patch_agent` calls `schedule_agent(project_id, name)` after commit when the PATCH
+actually changed the binding to a non-null runner — agent-scoped rather than a project-wide
+redrain, and gated on the binding *changing* because the UI submits the whole agent form and a
+rename must not start a turn as a side effect. Deliberately **not** reclassified as transient:
+"no runner is bound" repeats identically forever until the operator acts, which is the terminal
+bucket's stated criterion and the treatment an archived agent already gets. With the repair
+working, the countdown becomes what it should be — the record of an operator who never came back.
+
+Live on the fix, identical experiment: the rebind delivered the message in the same instant
+(`running: true` on the first poll after the PATCH).
+
+### F97 (B) — the reason a turn is waiting exists, is correct, and never reaches the operator
+
+Two writing agents and one task, which is design D8's whole reason for existing. The refusal is
+right and the entry is correctly unbilled. One second later, on the surface the UI polls:
+
+```
+POST /agent/trigger writer2 -> 200 queued
+  waiting_reason: "writer is already running a turn on task task-d64523ce8ada;
+                   a task's checkout takes one writing turn at a time."
+GET /queue/writer2/status
+  {"waiting_count": 1, "waiting_reason": null, "delivery_attempts": 0}
+```
+
+`AgentTimeline.tsx:341` renders that as the bare words **"1 waiting"** — which is verbatim the
+state `get_queue_status`'s own comment says it exists to prevent: *"leaving the operator with '1
+waiting' and no explanation to reason from."* That comment is true of the two cases it was written
+for, because the route re-derives those itself. Every refusal raised deeper inside the trigger is
+invisible to it, and a transient one has no attempt count to fall back on either, so it says
+nothing at all. A turn correctly waiting its turn is indistinguishable from one that is stuck.
+
+**Fix — record it rather than re-derive it.** `inbound_queue_entries.waiting_reason` (migration
+`0098`), written by `schedule_agent` from the refusal's own `detail` at the moment it parks the
+entry, cleared in `mark_delivered` when the wait ends, read by `get_queue_status` after its live
+checks and before the attempt counter. Restating each refusal's condition in the status route was
+the alternative and is worse: two copies of every refusal, and the *next* one invisible in the same
+way. This is the shape `TriggerAgentError.transient` already chose for itself — ask directly rather
+than derive from each cause. No backfill, for `0043`'s and `0096`'s reason.
+
+Live on the fix, and the whole arc: parked with the sentence visible, `writer`'s run ended, the
+redrain delivered it, `writer2` ran, and the recorded reason cleared.
+
+### What drove clean, and is worth saying so
+
+- **A worktree deleted by hand recovers completely.** Removing `.agentweave/worktrees/writer` and
+  leaving the git admin entry behind (`git worktree list` reporting it `prunable`) — the next
+  trigger rebuilt the checkout and the turn completed and committed.
+- **Runner and charter deletion are correctly refused while bound** (409 naming the agents).
+- **An archived agent cannot accumulate queue entries**: `POST /agent/trigger` refuses before
+  queueing, so `unarchive` needing a redrain is a hole that does not exist.
+- **Archiving a conversation with queued entries is refused**, with `archivable`'s comment giving
+  exactly the stranding argument this sweep found elsewhere.
+
+### A Codex smoke drive, bounded, and what it is a lead for
+
+One turn on `gpt-5.4-mini` in `aw-e2e2`: spawned, ran 40s, `run_completed (exit 0)`, file written,
+context measured from `codex_appserver`. The path works. Two things in its output are **leads, not
+findings** — neither has enough evidence to file:
+
+1. *"`apply_patch` was rejected by the environment, so I'm switching to a direct file write."* The
+   Claude path has no equivalent rejection.
+2. The commit in the checkout is `Auto-snapshot: coder's turn`, not the agent's own — the agent
+   said *"the hub handles committing automatically"*, which is its turn context talking, so this is
+   probably by design rather than a divergence. Compare the Claude turn in the same project, which
+   committed `Add NOTE1.md` itself.
+
+### Verification
+
+- F96: 2 Hub tests (`test_runner_binding_redrain.py`), both mutation-checked separately — the
+  delivery one watched to fail as *"the rebound agent's run never settled within 10.0s: []"*, the
+  gate one watched to fail when `runner_newly_bound` ignores the previous value.
+- F97: 1 Hub test in `test_task_turn_collision.py` plus 2 migration tests. Both halves
+  mutation-checked: recording off gives `assert 'collision-holder' in ((None or ''))`, which is the
+  live symptom exactly; clearing off leaves a delivered entry explaining itself with a wait that is
+  over.
+- Migration head bumped to `0098` in `test_migrations.py` and `test_project_persistence.py`; those
+  two plus `test_task_workspace_scheme.py` run green (90 passed / 1 skipped).
+- `ruff`, `black --target-version py311`, `mypy` clean over CI's exact path lists.
+- No UI change, so no bundle rebuild — the fix reaches the operator through
+  `AgentTimeline.tsx:341`, which already renders `waiting_reason` when it is not null.
+- Full Hub suite: **not completed in this iteration.** The run was still at 40% when the
+  firing ended, and this line originally promised a result "recorded below" that never
+  arrived. Iteration 9 re-ran it from scratch and records the count there; do not read this
+  iteration's fixes as suite-verified on their own.
+
+### State left behind
+
+New throwaway project **`proj-001576b9e2ef` (`aw-e2e2`)** at `C:\Users\huida\Documents\aw-e2e2`, a
+fresh git repo created for this sweep. Agents `writer`, `writer2` (claude-haiku) and `coder`
+(codex, gpt-5.4-mini), all idle; `task-d64523ce8ada` is the D8 collision specimen and its queue is
+empty. No jobs and no loops were created anywhere this iteration.
+
+`proj-46b602c1f3cb` (aw-e2e1) gained agent **`swapper`** — F96's specimen, runner bound, idle, two
+completed turns. Its 19 jobs and 17 loops are still all disabled and `task-1b7af6b595e6` is still
+the deliberate wedged `under_review` specimen.
+
+The Hub on 8011 was restarted once, mid-iteration, onto this branch's code; `0097 -> 0098` ran on
+that start and is visible in `hub11.log`.

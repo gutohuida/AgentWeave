@@ -5725,3 +5725,139 @@ carry-forward pattern in its sharpest form: each `mkdir`s the checkout directory
 that is the state the guard reacts to — and in production the thing that creates it is *any
 completed turn*. A test that has to build the blocking state itself never asks how often the
 product builds it. The answer was "always, permanently, after the first turn".
+
+---
+
+## F96 (A) — the product names the remedy, the operator performs it, and nothing happens
+
+**Status:** fixed (this iteration)
+
+Sweep #2, second-order resilience. An agent whose runner binding is absent — the state a roster
+entry is in before the operator picks a runner for it, and the state one PATCH away at any later
+moment — is sent a message. The Hub handles that part well: it queues the input rather than
+refusing it, and answers with the remedy in words.
+
+```
+PATCH /agents/swapper  {"runner_id": null}          200
+POST  /agent/trigger   {"agent": "swapper", ...}    200
+  {"status": "queued",
+   "waiting_reason": "No runner is bound to this agent. Bind one in the Hub UI before it can run."}
+```
+
+The operator then does exactly that. Thirty seconds of polling later:
+
+```
+PATCH /agents/swapper  {"runner_id": "runner-867c59fc4a9e"}   200
+  +5s   {"waiting_count": 1, "waiting_reason": "delivery failed 1 time; 2 attempts left"}
+  +10s  {"waiting_count": 1, "waiting_reason": "delivery failed 1 time; 2 attempts left"}
+  ...   unchanged through +30s
+```
+
+Two things are wrong there and the second is worse than the first. The message did not move. And
+the status no longer mentions the runner at all — the retry countdown has taken the place of the
+reason, so the surface the operator is watching now describes a *delivery problem* on an agent
+whose delivery problem they have just fixed.
+
+It was deliverable the whole time. An unrelated `PUT /projects/{id}/settings`, sent for no reason
+connected to this agent, delivered it within six seconds and the turn ran:
+
+```
+PUT /settings -> 200
+  +6s  {"waiting_count": 0, "running": true, "delivery_attempts": 0}
+```
+
+**Cause.** Queue delivery has no tick — `turn_scheduler`'s own comment says so. An entry is
+re-attempted only when something calls `schedule_agent` or `redrain_queued_agents`, and the
+redrain sites are: a run ending, `POST /projects/open`, `PUT /projects/{id}/settings`, and
+`POST /projects/{id}/relocate`. Relocation is there precisely because it is the repair for
+*"project workspace is unavailable"*. Binding a runner is the repair for *"no runner is bound"* —
+and it was the one repair route in the product with no redrain behind it.
+
+This is iteration 7's pattern again, one column over: **a rule applied at N call sites holds at
+N-1 of them.** "The repair is a redrain site" was applied to the workspace refusal and never asked
+of the binding refusal.
+
+**Fix.** `patch_agent` calls `schedule_agent(project_id, name)` after commit, when the PATCH
+actually changed the binding to a non-null runner. `schedule_agent` rather than
+`redrain_queued_agents` because this repair is agent-scoped, and gated on the binding *changing*
+because the Hub UI submits the whole agent form — a PATCH carrying the runner the agent already
+has is the ordinary case, and must not start a turn as a side effect of a rename.
+
+**Not** reclassified as transient. "No runner is bound" repeats identically forever until the
+operator acts, which is the terminal bucket's stated criterion and the same treatment an archived
+agent gets. With the repair now delivering, the countdown is what it should be: the record of an
+operator who never came back.
+
+**Tests.** `hub/tests/test_runner_binding_redrain.py`, two of them, both mutation-checked
+separately — one that the rebind delivers, one that a PATCH re-stating the same runner schedules
+nothing. Watched to fail as *"the rebound agent's run never settled within 10.0s: []"*.
+
+Proved live on the fix, same experiment: the rebind delivered the message in the same instant
+(`running: true` on the first poll), where before it sat queued indefinitely.
+
+---
+
+## F97 (B) — the reason a turn is waiting exists, is correct, and never reaches the operator
+
+**Status:** fixed (this iteration)
+
+Two writing agents, one task — an ordinary sequence of clicks, and the exact case design D8 exists
+for. `writer` is running a turn on `task-d64523ce8ada`; the operator starts `writer2` on the same
+task. The refusal is right, the classification is right, and the entry is correctly unbilled:
+
+```
+POST /agent/trigger {"agent": "writer2", "task_id": "task-d64523ce8ada"}
+  200 {"status": "queued",
+       "waiting_reason": "writer is already running a turn on task task-d64523ce8ada;
+                          a task's checkout takes one writing turn at a time."}
+```
+
+One second later, on the surface the UI actually polls:
+
+```
+GET /queue/writer2/status
+  {"waiting_count": 1, "running": false, "waiting_reason": null, "delivery_attempts": 0}
+```
+
+`1 waiting`, no explanation. Which is, verbatim, the state `get_queue_status`'s own comment says
+it exists to prevent:
+
+> a turn can be refused inside the trigger, where the reason was raised and then discarded,
+> leaving the operator with "1 waiting" and no explanation to reason from
+
+That comment is true of the two cases it was written for — a missing CLI, an unavailable workspace
+— because the route re-derives those itself, read-only. Every refusal raised deeper inside
+`trigger_agent_directly` is invisible to it, and a transient one has no delivery-attempt count to
+fall back on either, so it reports nothing at all. The operator cannot tell a turn that is
+correctly waiting its turn from one that is stuck.
+
+**Fix — record it rather than re-derive it.** `inbound_queue_entries.waiting_reason` (migration
+`0098`), written by `schedule_agent` from the refusal's own `detail` at the moment it parks the
+entry, cleared in `mark_delivered` when the wait ends. `get_queue_status` reads it after its live
+checks — which describe the agent *now*, and a repair since the last attempt may already have
+cleared the recorded reason — and before the delivery-attempt counter, for the reason that
+counter's own comment gives.
+
+Restating each refusal's condition in the status route was the alternative and is the worse one:
+two copies of every refusal, and the *next* one invisible in the same way. This is the shape
+`TriggerAgentError.transient` already chose for itself — ask directly rather than derive from each
+cause.
+
+No backfill, for `0043`'s and `0096`'s reason: the column records what a delivery attempt was
+refused with, and for an entry queued before the migration no such record was kept.
+
+**Tests.** `test_the_status_route_reports_the_collision_the_trigger_refused_on` in
+`hub/tests/test_task_turn_collision.py`, plus two migration tests. Both halves mutation-checked:
+stop recording and the assertion fails with `assert 'collision-holder' in ((None or ''))`, which is
+the live symptom exactly; stop clearing and a delivered entry still explains itself with a wait
+that is over.
+
+Proved live on the fix: the same two-agent collision, and the status route now answers with the
+refusal's own sentence and `delivery_attempts: 0`.
+
+**What drove clean in the same sweep, and is worth saying so.** Deleting an agent's worktree
+directory by hand and leaving the git admin entry behind — `git worktree list` reporting it
+`prunable` — is fully recovered from: the next trigger rebuilt the checkout and the turn completed
+and committed. Runner and charter deletion are both correctly refused while bound, and an archived
+agent cannot accumulate queue entries because `POST /agent/trigger` refuses before queueing.
+
