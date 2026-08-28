@@ -106,7 +106,7 @@ step("retry it", "POST", f"/projects/{P}/tasks/{tid}/integrations/retry", expect
 print()
 print("=" * 78)
 bad = [r for r in RESULTS if not r[2]]
-for label, code, ok, detail in bad:
+for label, code, _ok, detail in bad:
     print(f"  UNEXPECTED  {label} -> {code}  {(detail or '')[:120]}")
 print("row 17 held" if not bad else "row 17 has something to look at")
 sys.exit(1 if bad else 0)
