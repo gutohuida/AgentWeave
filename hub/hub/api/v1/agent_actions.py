@@ -13,7 +13,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...agent_auth import AgentActor, get_agent_actor
-from ...checkpoint_access import AccessDeniedError, recall_observation
+from ...checkpoint_access import (
+    AccessDeniedError,
+    read_checkpoint,
+    readable_checkpoints,
+    recall_observation,
+)
 from ...conversations import conversation_id_for_run
 from ...db.engine import get_session
 from ...db.models import CheckpointNote, Question
@@ -382,6 +387,35 @@ async def submit_checkpoint_notes(
         agent=actor.agent,
     )
     return {"id": note.id, "conversation_id": conversation_id, "recorded": True}
+
+
+@router.get("/checkpoints")
+async def list_readable_checkpoints(
+    agent: Optional[str] = None,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """The checkpoints this run's agent may open, newest first.
+
+    Identity from the run's minted credential, like everything else in this namespace, so `agent`
+    narrows the answer and can never widen it.
+    """
+    return await readable_checkpoints(session, actor.agent, actor.project_id, agent=agent)
+
+
+@router.get("/checkpoints/{checkpoint_id}")
+async def get_readable_checkpoint(
+    checkpoint_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """One checkpoint, rendered as a successor receives it, if this agent may read it."""
+    try:
+        return await read_checkpoint(session, actor.agent, actor.project_id, checkpoint_id)
+    except AccessDeniedError as exc:
+        # 404 for the same reason `recall` answers 404: a refusal that is distinguishable from
+        # absence is itself a disclosure that the record exists.
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/recall/{output_id}")

@@ -16,6 +16,8 @@ from hub.checkpoint_access import (
     may_read_checkpoint,
     may_recall,
     participants,
+    read_checkpoint,
+    readable_checkpoints,
     recall_observation,
 )
 from hub.checkpoints import compute_envelope, create_checkpoint
@@ -25,6 +27,7 @@ from hub.db.models import Agent, AgentOutput, Charter, Conversation, Run, Task
 PROJECT = "proj-test"
 OWNER = "claude-1"
 PEER = "haiku-1"
+BODY = "## Objective\n\nsomething"
 
 
 async def _agent(db, name, **grants):
@@ -333,3 +336,194 @@ async def test_grants_are_settable_over_the_api_and_default_closed(app, auth_hea
         row = (await db.execute(select(Agent).where(Agent.name == PEER))).scalars().one()
     assert row.can_read_checkpoints is True
     assert row.can_recall is False
+
+
+# ------------------------------------------------- the visibility the product actually produces
+
+
+@pytest.mark.asyncio
+async def test_a_checkpoint_the_product_makes_is_visible_to_the_project(app):
+    """F88. Every test above hands `create_checkpoint` a visibility; nothing in the product did.
+
+    `visibility` defaulted to `private`, no caller anywhere passed anything else, and there is no
+    route, tool or control that can change one — so the visibility half of `capability ∩
+    visibility` was closed for every checkpoint that has ever existed, and both reader grants were
+    conferrable and inert. Measured live on 2026-08-28: an agent holding `can_read_checkpoints`
+    and `can_recall` was refused a peer's cited observation.
+
+    The default asserted here is the one the spec describes — "a checkpoint MAY additionally
+    restrict itself" makes restriction the exception, not the birth state — and the system stays
+    closed by default because both reader grants still do.
+    """
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        checkpoint = await create_checkpoint(
+            db,
+            conversation,
+            trigger="operator",
+            envelope=await compute_envelope(db, conversation),
+            body=BODY,
+        )
+
+    assert checkpoint.visibility == "project"
+
+
+@pytest.mark.asyncio
+async def test_a_granted_peer_reads_a_checkpoint_nobody_configured(app):
+    """The end-to-end the suite could not see: no explicit visibility anywhere in this test."""
+    async with async_session_factory() as db:
+        await _agent(db, OWNER)
+        await _agent(db, PEER, can_read_checkpoints=True)
+        conversation = await _conversation(db)
+        checkpoint = await create_checkpoint(
+            db,
+            conversation,
+            trigger="operator",
+            envelope=await compute_envelope(db, conversation),
+            body=BODY,
+        )
+
+        listed = await readable_checkpoints(db, PEER, PROJECT)
+        opened = await read_checkpoint(db, PEER, PROJECT, checkpoint.id)
+
+    assert [row["id"] for row in listed] == [checkpoint.id]
+    assert listed[0]["agent"] == OWNER
+    assert listed[0]["yours"] is False
+    assert opened["id"] == checkpoint.id
+    assert "## Objective" in opened["rendered"]
+
+
+@pytest.mark.asyncio
+async def test_an_ungranted_peer_neither_lists_nor_opens_it(app):
+    """And the refusal to open is indistinguishable from an id that does not exist."""
+    async with async_session_factory() as db:
+        await _agent(db, OWNER)
+        await _agent(db, PEER)
+        conversation = await _conversation(db)
+        checkpoint = await _checkpoint(db, conversation, visibility="project")
+
+        assert await readable_checkpoints(db, PEER, PROJECT) == []
+        with pytest.raises(AccessDeniedError) as real_id:
+            await read_checkpoint(db, PEER, PROJECT, checkpoint.id)
+        with pytest.raises(AccessDeniedError) as absent_id:
+            await read_checkpoint(db, PEER, PROJECT, "ckpt-does-not-exist")
+
+    assert str(real_id.value) == str(absent_id.value)
+
+
+@pytest.mark.asyncio
+async def test_an_agent_lists_its_own_checkpoints_without_any_grant(app):
+    """A grant governs peers. An agent's own history was never behind one."""
+    async with async_session_factory() as db:
+        await _agent(db, OWNER)
+        conversation = await _conversation(db)
+        checkpoint = await _checkpoint(db, conversation, visibility="private")
+
+        listed = await readable_checkpoints(db, OWNER, PROJECT)
+        opened = await read_checkpoint(db, OWNER, PROJECT, checkpoint.id)
+
+    assert [row["id"] for row in listed] == [checkpoint.id]
+    assert listed[0]["yours"] is True
+    assert opened["id"] == checkpoint.id
+
+
+@pytest.mark.asyncio
+async def test_the_list_omits_a_checkpoint_with_nothing_to_read(app):
+    """An `unwritten` checkpoint has no body. Offering an id that opens to nothing is a worse
+    answer than not listing it."""
+    async with async_session_factory() as db:
+        await _agent(db, OWNER)
+        conversation = await _conversation(db)
+        unwritten = await create_checkpoint(
+            db,
+            conversation,
+            trigger="operator",
+            envelope=await compute_envelope(db, conversation),
+            body="   ",
+        )
+
+        listed = await readable_checkpoints(db, OWNER, PROJECT)
+
+    assert unwritten.status == "unwritten"
+    assert listed == []
+
+
+@pytest.mark.asyncio
+async def test_the_agent_filter_narrows_and_cannot_widen(app):
+    """`agent` is applied on top of the access check, never instead of it."""
+    async with async_session_factory() as db:
+        await _agent(db, OWNER)
+        await _agent(db, PEER)
+        owners = await _conversation(db, "conv-owner", agent=OWNER)
+        peers = await _conversation(db, "conv-peer", agent=PEER)
+        mine = await _checkpoint(db, peers, visibility="project")
+        theirs = await _checkpoint(db, owners, visibility="project")
+
+        unfiltered = await readable_checkpoints(db, PEER, PROJECT)
+        filtered = await readable_checkpoints(db, PEER, PROJECT, agent=OWNER)
+
+    assert [row["id"] for row in unfiltered] == [mine.id]
+    assert theirs.id not in [row["id"] for row in unfiltered]
+    assert filtered == []
+
+
+# ------------------------------------------------------- the routes an agent actually reaches
+
+
+async def _active_run(run_id: str, agent: str) -> dict:
+    """A live run's minted credential, which is the only identity these routes accept."""
+    from hub.agent_auth import hash_run_token
+
+    token = f"aw_run_{run_id}-secret"
+    async with async_session_factory() as db:
+        db.add(
+            Run(
+                id=run_id,
+                project_id=PROJECT,
+                agent=agent,
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token(token),
+            )
+        )
+        await db.commit()
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.asyncio
+async def test_the_routes_answer_a_granted_peer_and_refuse_an_ungranted_one(app):
+    """F88 end to end over HTTP, with the identity taken from the run's credential.
+
+    `agent` is a filter on top of the access check, so a caller naming a peer it may not read
+    gets an empty list rather than that peer's history.
+    """
+    async with async_session_factory() as db:
+        await _agent(db, OWNER)
+        await _agent(db, PEER, can_read_checkpoints=True)
+        await _agent(db, "outsider")
+        conversation = await _conversation(db)
+        checkpoint = await create_checkpoint(
+            db,
+            conversation,
+            trigger="operator",
+            envelope=await compute_envelope(db, conversation),
+            body=BODY,
+        )
+
+    granted = await _active_run("run-ckpt-peer", PEER)
+    listed = await app.get("/api/v1/agent-actions/checkpoints", headers=granted)
+    assert listed.status_code == 200
+    assert [row["id"] for row in listed.json()] == [checkpoint.id]
+
+    opened = await app.get(f"/api/v1/agent-actions/checkpoints/{checkpoint.id}", headers=granted)
+    assert opened.status_code == 200
+    assert "## Objective" in opened.json()["rendered"]
+
+    ungranted = await _active_run("run-ckpt-outsider", "outsider")
+    assert (await app.get("/api/v1/agent-actions/checkpoints", headers=ungranted)).json() == []
+    # Naming the owner does not become being the owner. Passing `agent` through as the reader's
+    # identity rather than as a filter would hand this caller exactly what it asked to be.
+    named = await app.get(f"/api/v1/agent-actions/checkpoints?agent={OWNER}", headers=ungranted)
+    assert named.json() == []
+    refused = await app.get(f"/api/v1/agent-actions/checkpoints/{checkpoint.id}", headers=ungranted)
+    assert refused.status_code == 404

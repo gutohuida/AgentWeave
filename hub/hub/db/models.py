@@ -1534,7 +1534,19 @@ class Checkpoint(Base):
     agent: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     trigger: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
-    visibility: Mapped[str] = mapped_column(String(16), default="private", nullable=False)
+    # Born `project`, not `private`, and the spec is why: "A checkpoint MAY additionally restrict
+    # itself, in which case access requires both the reader's grant and the checkpoint's own
+    # visibility" (`conversation-checkpoint`). Restriction is the exception a checkpoint opts into,
+    # not the state every checkpoint starts in.
+    #
+    # It shipped as `private`, and because nothing anywhere ever passed a different value, the
+    # intersection `may_read_checkpoint` computes was closed on the visibility side for every
+    # checkpoint that has ever existed. `can_read_checkpoints` and `can_recall` were therefore
+    # grantable and inert: measured live on 2026-08-28, an agent holding both was refused a cited
+    # observation from a peer's checkpoint (F88). The system is still closed by default — both
+    # reader grants default to False — but now the operator's grant is the thing that opens it,
+    # which is what the spec describes.
+    visibility: Mapped[str] = mapped_column(String(16), default="project", nullable=False)
 
     # A **conversation's** chain, not a loop's. `lineage_id` is the first checkpoint's id, carried
     # forward, so "show me this thread" is one indexed read rather than a walk.

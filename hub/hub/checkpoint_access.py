@@ -87,6 +87,103 @@ async def build_citations(db, conversation_id: str, run_ids: Sequence[str]) -> L
     ]
 
 
+async def _reader(db, project_id: str, reader_name: str) -> Optional[Agent]:
+    return (
+        (
+            await db.execute(
+                select(Agent).where(Agent.project_id == project_id, Agent.name == reader_name)
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+
+async def readable_checkpoints(
+    db, reader_name: str, project_id: str, *, agent: Optional[str] = None, limit: int = 20
+) -> List[dict]:
+    """The checkpoints this reader may open, newest first.
+
+    Discovery exists because a grant nobody can spend is the same as no grant. `recall` scopes
+    itself to observations a checkpoint cites, and `read_checkpoint` takes an id — and until this
+    was here, the only checkpoint id an agent ever saw was the one its own cutover handed it. A
+    reviewer told by `submit_checkpoint_notes`'s own docstring that it "reads it too" had no way
+    to find the thing it was supposed to read.
+
+    Filtered by `may_read_checkpoint` rather than by a query predicate, so the one definition of
+    who may read what serves the list and the read alike. `unwritten` and `failed` checkpoints are
+    excluded: neither has a body, and offering an id that opens to nothing is a worse answer than
+    not listing it.
+    """
+    rows = list(
+        (
+            await db.execute(
+                select(Checkpoint)
+                .where(Checkpoint.project_id == project_id, Checkpoint.status == "ready")
+                .order_by(Checkpoint.sequence.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    reader = await _reader(db, project_id, reader_name)
+    out: List[dict] = []
+    for row in rows:
+        if agent is not None and row.agent != agent:
+            continue
+        if not may_read_checkpoint(reader, row):
+            continue
+        out.append(
+            {
+                "id": row.id,
+                "agent": row.agent,
+                "conversation_id": row.conversation_id,
+                "trigger": row.trigger,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "yours": row.agent == reader_name,
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out
+
+
+async def read_checkpoint(db, reader_name: str, project_id: str, checkpoint_id: str) -> dict:
+    """One checkpoint, rendered exactly as a successor receives it, or refuse.
+
+    Refused the same way `recall_observation` refuses, and for the same reason: an id that is out
+    of reach must be indistinguishable from an id that does not exist, or the refusal itself
+    confirms the record.
+    """
+    # Imported here, not at module scope: `checkpoint_generation` imports this module for
+    # `build_citations`, so a top-level import would close the cycle.
+    from .checkpoint_generation import render_checkpoint
+
+    row = (
+        (
+            await db.execute(
+                select(Checkpoint).where(
+                    Checkpoint.id == checkpoint_id, Checkpoint.project_id == project_id
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    reader = await _reader(db, project_id, reader_name)
+    if row is None or not may_read_checkpoint(reader, row):
+        raise AccessDeniedError("No checkpoint by that id is available to you.")
+    return {
+        "id": row.id,
+        "agent": row.agent,
+        "conversation_id": row.conversation_id,
+        "trigger": row.trigger,
+        "status": row.status,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "rendered": render_checkpoint(row),
+    }
+
+
 async def recall_observation(db, reader_name: str, project_id: str, output_id: str) -> dict:
     """Materialise one cited observation exactly, or refuse.
 

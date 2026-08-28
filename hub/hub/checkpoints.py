@@ -379,7 +379,7 @@ async def create_checkpoint(
     worker_invocation_id: Optional[str] = None,
     runner: Optional[str] = None,
     model: Optional[str] = None,
-    visibility: str = "private",
+    visibility: str = "project",
     loop: Optional[Loop] = None,
 ) -> Checkpoint:
     """Persist a checkpoint. The envelope is written whether or not a body exists.

@@ -495,6 +495,34 @@ def submit_checkpoint_notes(
 
 
 @mcp.tool()
+def list_checkpoints(agent: Optional[str] = None) -> List[Dict[str, Any]]:
+    """The checkpoints you may open, newest first — yours, and any peer's you are granted.
+
+    A checkpoint is the summary the Hub writes when a conversation is cut over: what its agent
+    was doing, what it decided, what it ruled out and what it left unfinished. Reading a peer's
+    before you review or continue their work is cheaper and more reliable than re-deriving it,
+    and `agent` narrows the list to one of them.
+
+    Each row carries the id `read_checkpoint` takes. An empty list means there is nothing you may
+    read, which is not the same as nothing existing — access to a peer's history is a grant the
+    operator confers.
+    """
+    query = "?" + urllib.parse.urlencode({"agent": agent}) if agent else ""
+    return _hub_request("GET", f"/checkpoints{query}")
+
+
+@mcp.tool()
+def read_checkpoint(checkpoint_id: str) -> Dict[str, Any]:
+    """One checkpoint in full, exactly as an agent continuing that conversation receives it.
+
+    Use `list_checkpoints` to find the id. A checkpoint you may not read answers not-found,
+    whether or not it exists, so treat not-found on an id you were given as that boundary rather
+    than as a missing record.
+    """
+    return _hub_request("GET", f"/checkpoints/{checkpoint_id}")
+
+
+@mcp.tool()
 def recall(observation_id: str) -> Dict[str, Any]:
     """Retrieve one recorded observation a checkpoint cited, exactly as it was recorded.
 

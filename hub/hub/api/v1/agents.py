@@ -942,6 +942,11 @@ def _tool_surface_lines(*, has_peers: bool = True) -> List[str]:
         "- `decide_evidence(evidence_id, decision, reason)` — accept or reject somebody else's "
         "evidence; `decision` is `accepted` or `rejected`. Only if the operator has granted you "
         "this, and never on evidence you produced yourself.",
+        "- `list_checkpoints(agent=None)` — the conversation summaries you may open: your own, "
+        "and any peer's the operator has granted you. Each row carries the id the next tool takes.",
+        "- `read_checkpoint(checkpoint_id)` — one of those in full, as an agent continuing that "
+        "conversation would receive it. Read a peer's before you review or continue their work "
+        "rather than re-deriving what they already decided.",
         "- `recall(observation_id)` — read back one observation by its identifier. Only if the "
         "operator has granted you this; without it, an observation another agent recorded returns "
         "not-found whether or not it exists. Your own are always yours to read.",
@@ -1443,12 +1448,14 @@ async def _render_hub_agent_context(
         if may_read:
             lines.append(
                 "- You may read your peers' checkpoints — the summaries an agent leaves when its "
-                "conversation is cut over — where those are shared with the project."
+                "conversation is cut over — where those are shared with the project. "
+                "`list_checkpoints()` is how you find them and `read_checkpoint(id)` opens one."
             )
         else:
             lines.append(
-                "- You may read your own checkpoints and no one else's. A peer's is not withheld "
-                "from you by accident, so do not go looking for a way around it."
+                "- You may read your own checkpoints and no one else's: `list_checkpoints()` "
+                "returns yours alone. A peer's is not withheld from you by accident, so do not "
+                "go looking for a way around it."
             )
         if may_recall:
             lines.append(

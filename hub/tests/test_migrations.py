@@ -36,7 +36,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0096"
+HEAD_REVISION = "0097"
 
 
 # ---------------------------------------------------------------------------
@@ -2972,3 +2972,55 @@ def test_migration_0086_is_guarded_when_the_queue_table_does_not_exist(tmp_path)
 
     with sqlite3.connect(db_file) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0086"
+
+
+# 0097 — checkpoints stored under the absent default become project-visible
+
+
+def test_migration_0097_moves_stored_private_checkpoints_to_project(tmp_path) -> None:
+    """F88. Every stored `private` is the absent default, not somebody's decision — nothing in
+    the product could ever set that column — so leaving them would split a project's history at
+    this migration with the older half permanently unreadable."""
+    db_file = tmp_path / "visibility.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _upgrade_to(db_url, "0096")
+
+    with sqlite3.connect(db_file) as conn:
+        # `0044` only creates this table when `projects` and `conversations` are already there,
+        # and a bare alembic run has neither — the model layer builds them. The stored row is
+        # what this migration is about, so the table is stood up here with the columns it needs.
+        conn.execute(
+            "CREATE TABLE checkpoints ("
+            " id VARCHAR(64) PRIMARY KEY, project_id VARCHAR(64), conversation_id VARCHAR(64),"
+            " agent VARCHAR(64), trigger VARCHAR(32), status VARCHAR(16),"
+            " visibility VARCHAR(16), lineage_id VARCHAR(64), body TEXT, created_at DATETIME)"
+        )
+        conn.execute(
+            "INSERT INTO checkpoints "
+            "(id, project_id, conversation_id, agent, trigger, status, visibility, lineage_id, "
+            " body, created_at) "
+            "VALUES ('ckpt-old', 'proj-test', 'conv-1', 'author', 'operator', 'ready', "
+            "        'private', 'ckpt-old', '## Objective', '2026-08-27 12:00:00')"
+        )
+
+    _upgrade_to(db_url, "0097")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute(
+            "SELECT visibility FROM checkpoints WHERE id = 'ckpt-old'"
+        ).fetchone() == ("project",)
+
+
+def test_migration_0097_is_guarded_when_the_checkpoints_table_does_not_exist(tmp_path) -> None:
+    """Upgrades that start from an early revision reach 0097 with only that revision's tables."""
+    db_file = tmp_path / "no_checkpoints_table.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0096')")
+
+    _upgrade_to(db_url, "0097")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0097"
