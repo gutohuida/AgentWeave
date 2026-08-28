@@ -20,6 +20,15 @@ run and their findings are folded back into `proposal.md` / `design.md` / the de
 - [ ] 2.2 Catch `TransitionRefusedError` around it and re-raise as
       `TriggerAgentError(status.HTTP_403_FORBIDDEN, str(exc))`, so the operator meets the guard's own
       sentence. Do not restate the message.
+- [ ] 2.2b Refuse, **before** the staffing, when the named task is in neither a reviewable status
+      nor already under review (D8). The refusal names the status the task is actually in. Read the
+      status sets rather than hard-coding a list — `REVIEWABLE_STATUSES` is `{"completed"}` today and
+      is derived from the lifecycle-band classification, which is where a change to it would come
+      from.
+- [ ] 2.2c Refuse, before the staffing, when the task is already under review and held by a
+      *different* agent (D9). The refusal names the current holder. Confirm by reading
+      `_do_fire_job` that a flow has already written its reviewer into `assignee` and committed
+      before the turn is scheduled, so this refusal cannot fire on the flow path.
 - [ ] 2.3 Confirm the staging joins the dispatch's existing transaction and is committed with it —
       no separate commit, no partial write where a task is staffed and no run exists.
 - [ ] 2.4 Confirm the refusal in 2.2 happens before any process is spawned, by reading the order of
@@ -40,9 +49,16 @@ run and their findings are folded back into `proposal.md` / `design.md` / the de
       turn scheduler declines to deliver (hop budget or token budget) and assert the task's status
       and assignee are untouched. D2 — this is what distinguishes staffing at dispatch from staffing
       at queue time, and without it the two are indistinguishable to the suite.
-- [ ] 3.5 **Binding still moves nothing.** The `run-task-binding` scenario added by this change:
+- [ ] 3.5 **A task that is not awaiting review is refused and keeps its holder.** Dispatch a review
+      against an `in_progress` task that has evidence naming a commit — which is reachable, and is
+      why `commit_for_task_review` is not a sufficient guard. Assert the refusal, that the assignee
+      is untouched, and that no run exists. Without phase 2.2b this test does not merely fail: it
+      demonstrates the task being taken from the agent working it.
+- [ ] 3.6 **A review held by another reviewer is refused.** Assert the refusal names the holder and
+      that the holder is unchanged.
+- [ ] 3.7 **Binding still moves nothing.** The `run-task-binding` scenario added by this change:
       staffing precedes binding, and resolving the binding changes neither status nor assignee.
-- [ ] 3.6 Mutation-check every guard added or relied on in phase 2, and record each mutation with
+- [ ] 3.8 Mutation-check every guard added or relied on in phase 2, and record each mutation with
       the test that caught it. A mutation that nothing catches is a missing test, not a passing one.
 
 ## 4. Drive it
@@ -52,6 +68,8 @@ run and their findings are folded back into `proposal.md` / `design.md` / the de
       operator bookkeeping in between. Record the run, conversation and task identifiers.
 - [ ] 4.2 Drive the refusal live: dispatch the author as its own reviewer and confirm the operator
       sees the 403 and its sentence, and that no run was started.
+- [ ] 4.2b Drive D8 live: dispatch a review against a task the agent is still working, and confirm
+      the operator sees the refusal and the task stays with its worker.
 - [ ] 4.3 Confirm the flow path still works end to end in the same project — one flow-dispatched
       review, unchanged. The idempotency argument is the riskiest part of this change and a unit
       test asserting no extra transition is not the same as watching a flow review complete.

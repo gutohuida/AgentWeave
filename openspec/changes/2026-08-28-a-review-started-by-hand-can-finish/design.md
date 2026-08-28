@@ -76,6 +76,13 @@ cannot be un-started if the staffing then refuses.
 (`finalize_job_run_for_conversation`), and `scheduler.py` imports nothing from `agent_trigger` at
 module scope. So the third caller costs one name on an existing import line and creates no cycle.
 
+**Round 2 established *why* that holds, which is load-bearing and was not obvious.** There is a
+path back — `scheduler` -> `turn_scheduler` -> `agent_trigger` — and it is safe only because both
+of its hops are lazy: `scheduler.py:2025` and `:2567` import `schedule_agent` inside functions, and
+`turn_scheduler.py:57` imports `trigger_agent_directly` inside `schedule_agent`. Hoisting either to
+module scope would close the loop and this import would be the edge that breaks. Stated here so a
+later tidy of those lazy imports meets the reason they are lazy.
+
 *Rejected: move `_enter_selected_task` to a neutral module.* It would be a defensible tidy, but it
 is motion with no defect behind it, and it would touch two callers that are not otherwise part of
 this change. If a cycle ever appears, that is when the move is justified.
@@ -140,6 +147,51 @@ The alternative — unwinding the staffing on a failed spawn — would mean the 
 in the opposite direction, and would make the staffing conditional on an outcome it cannot observe
 from inside the same transaction.
 
+### D8. A task that is not reviewable is refused, before anything is staffed
+
+**Found in round 2, and it would have shipped a defect worse than the one being fixed.**
+
+`_enter_selected_task` writes `task.assignee = agent` *before* its status branch, and that branch
+has no `else`. `REVIEWABLE_STATUSES` is exactly `{"completed"}` and `WITH_REVIEWER_STATUSES` exactly
+`{"under_review"}` — so dispatching a review against a task in any other status reassigns it and
+travels no transition at all.
+
+The flow path cannot reach that state: its reviewer ladder only ever selects tasks that are already
+reviewable. The manual path can, because the operator names the task id directly and the only
+status-adjacent guard on that route — `commit_for_task_review` — asks whether evidence naming a
+commit exists, not what the task's status is. Evidence naming a commit exists on tasks that are
+still `in_progress`, so *"review this task"* aimed at live work would have taken it away from the
+agent doing it, recorded nothing, and still dead-ended, since `in_progress` reaches no review
+outcome either. That is strictly worse than today's behaviour, where at least nothing moves.
+
+So the trigger SHALL refuse, before staffing, when the named task is in neither a reviewable status
+nor already under review. The refusal names the task's actual status.
+
+*Rejected: teaching `_enter_selected_task` to refuse instead.* It is shared with the flow path,
+where the condition is unreachable, so the guard would live where it cannot fire and be tested
+against a state its caller cannot produce — the failure mode this repository keeps finding. The
+refusal belongs on the path that can actually be asked.
+
+### D9. A review already held by a different reviewer is refused, not silently taken
+
+**Also round 2.** The `under_review` branch is the idempotent one, but its idempotency is only
+partial: the unconditional assignee write above it means dispatching a review for a task already
+under review by *someone else* replaces the holder and travels no transition — a handover with
+nothing in the append-only history to explain it, in a capability that requires every accepted
+transition be recorded.
+
+So a manual dispatch naming a task already under review by a different agent is refused, naming the
+current holder and the remedy (reassign the task, or let the review in flight finish).
+
+This does not touch the flow path, including the F70 recovery it depends on. A flow stages the
+reviewer into `assignee` in `_do_fire_job` and commits before the turn is scheduled, so by the time
+the dispatch reaches this check the holder already *is* the dispatched reviewer and the check passes
+on the equality branch.
+
+*Rejected: allow the handover.* It is a defensible operator action, and it is reachable in two
+explicit recorded steps (reassign, then dispatch). Making it reachable in one unrecorded step trades
+a legible history for a keystroke.
+
 ## Risks / Trade-offs
 
 - **The meaning of `POST /agent/trigger {"review_task_id"}` changes**: it now takes ownership of the
@@ -163,5 +215,16 @@ dispatch path whose current outcome is a dead end.
 ## Open Questions
 
 - Should the UI's review action surface the 403 distinctly from the existing "nothing to review"
-  409? Both are conflicts the operator can act on, and both already render as the API's message. Not
-  blocking; noted for the round-2 review.
+  409? Both are conflicts the operator can act on, and both already render as the API's message.
+  **Round 2: not blocking, and no.** All three refusals this change can raise are sentences the
+  operator can act on, and the surface already renders the API's message; a per-status branch would
+  be presentation logic keyed on a number rather than on meaning.
+
+## Review passes
+
+**Round 2 — compare every claim to the code.** Four results. Two decisions were added that the
+proposal did not have (D8, D9), one of which would otherwise have shipped a defect worse than the
+finding being fixed. D3's no-cycle claim was confirmed but for an unstated reason, now stated. One
+claim was confirmed as written: the spawn is `asyncio.create_task` at `agent_trigger.py:892` and
+`prepare_review_turn` sits ~350 lines above it, with no process started in between, so a refusal
+raised beside the staffing genuinely precedes the spawn.

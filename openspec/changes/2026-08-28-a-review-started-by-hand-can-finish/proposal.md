@@ -54,6 +54,12 @@ leaves the reviewer able to record one. That silence is what let the two paths d
   staffing up front is what surfaces it as a stated refusal at trigger time instead of a
   `_guard_reviewer_is_not_the_author` failure inside a turn that has already cost money. The refusal
   keeps the guard's own wording, which already names the two remedies.
+- **Two further refusals, both found by the round-2 review.** A review is refused when the named
+  task is in neither a reviewable status nor already under review — without this, staffing would
+  write a holder onto live work and travel no transition, taking an `in_progress` task away from the
+  agent doing it and still dead-ending. And a review is refused when the task is already under review
+  by a *different* agent, because replacing the holder there travels no transition either and leaves
+  a handover the task's history cannot explain. See `design.md` D8 and D9.
 - **Binding is untouched and stays a read.** Staffing is an act of dispatch, not of binding.
   `task_named_by` keeps meaning what it means, `review_task_id` is still not merged into `task_id`,
   and the existing requirement that binding moves nothing remains literally true — by the time the

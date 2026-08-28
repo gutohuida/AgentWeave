@@ -18,6 +18,16 @@ the one the attempted staffing produced rather than a restatement of it. Refusin
 begun is not sufficient: the cost of the turn has already been paid and the reviewer's conclusion
 has nowhere to go.
 
+A review SHALL be refused where the named task is neither awaiting review nor already under review.
+Staffing records a holder, and recording a holder for work that is not at a point where it can be
+reviewed takes that work from whoever holds it while moving it nowhere. The refusal SHALL name the
+status the task is actually in.
+
+A review SHALL be refused where the named task is already under review and held by a different
+reviewer. Replacing that holder is a handover, and a handover that travels no transition leaves the
+task's recorded history unable to explain who holds it or why it changed. The refusal SHALL name the
+current holder.
+
 Staffing SHALL NOT be performed when the request to review is recorded. It SHALL be performed when
 the turn is dispatched, so that a request that is never delivered leaves no task held by a reviewer
 that never ran.
@@ -50,6 +60,19 @@ that never ran.
 - **THEN** the request is refused
 - **AND** no reviewing turn has been started
 - **AND** the refusal states what would make the request succeed
+
+#### Scenario: A task that is not awaiting review is refused, and keeps its holder
+
+- **WHEN** a review is requested for a task that is being worked rather than awaiting review
+- **THEN** the request is refused, naming the status the task is in
+- **AND** the task's holder is unchanged
+- **AND** no reviewing turn has been started
+
+#### Scenario: A review already held by another reviewer is not silently taken
+
+- **WHEN** a review is requested for a task already under review and held by a different reviewer
+- **THEN** the request is refused, naming the current holder
+- **AND** the task's holder is unchanged
 
 #### Scenario: A request that is never delivered leaves the task untouched
 
