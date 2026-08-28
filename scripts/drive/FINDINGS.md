@@ -6808,7 +6808,9 @@ Hub on 8011 is left running on this branch's code; 8000 and 8010 were never cont
 
 ## F108 (B) — a permanently refused request answers `200 {"success": true}`
 
-**Status:** fixed **for review dispatch** (2026-08-28); **open as a class.**
+**Status:** **closed as a class** (2026-08-28), and **the class was not the one described below.**
+See *What the class actually turned out to be* at the end of this section before trusting the
+paragraph that opens it.
 
 Found by driving F76's own fix, and it is the reason phase 4 exists. Every dispatch-time guard
 behaved exactly as designed, the task was left untouched every time — and the operator could not
@@ -6842,6 +6844,47 @@ of which this change has driven. That is its own change.
 **Three rounds of review did not find this, and the first drive did.** The rounds were reading code;
 the drive was the first time the change was asked a question by an operator. Nothing in three passes
 thought to ask what the HTTP route *returns* when the function it calls raises.
+
+### What the class actually turned out to be
+
+Closed by `2026-08-28-a-refused-request-says-so`, and the change's round 2 found that **the four
+examples above are not the class.** Each was checked against the route rather than taken on trust:
+
+| This section's example | Where it actually lands |
+|---|---|
+| an archived agent | already **409 pre-queue**, `agent_trigger.py:1108` |
+| a task that does not exist | already **409 pre-queue**, `:1173` and `:1199` |
+| a `work_dir` the project does not contain | already **400 pre-queue**, `:1134` |
+| an unimplemented runner | **unreachable** — `Runner.cli` is constrained to `claude`/`codex`, and the test that used to reach the 501 was deleted with a note saying so |
+
+The observation in this finding is correct and was reproduced. The *class* it inferred was written
+without checking the route's own guard list, and the change that fixed it would have shipped with
+none of its named cases able to fire. Recorded here because the next reader of this finding meets
+this paragraph, not the change's design document.
+
+**What is really reachable**, and it is a better reason than the one given here:
+
+1. Conditions with no pre-queue mirror at all — a name that is on no roster (`:452`), `work_dir`
+   combined with a review (`:591`), a turn batching two review targets or mixing kinds
+   (`:337`/`:351`).
+2. **Every hoisted guard is time-of-check/time-of-use.** The pre-queue guards run when the request
+   arrives; the entry is delivered when the agent is next idle, which the queue makes arbitrarily
+   later. Hoisting more guards can never close that, because the gap is time, not coverage. That is
+   the durable justification for the fix.
+
+The fix also had to be narrower than "propagate non-transient refusals", the mechanism this
+section proposes. Non-transient covers refusals about the **environment** — no runner bound, a CLI
+missing from PATH — which the product deliberately queues so that performing the repair delivers
+them (**F96**). Refusing those, and withdrawing their entries, would have deleted F96's fix. The
+gate is a new explicit *request-level* classification instead.
+
+**Driven live after the fix:** `POST /agent/trigger` for a mistyped agent answers `409` with the
+refusal's own sentence and `GET /queue/<agent>/status` reports `waiting_count: 0`; an agent with no
+runner bound still answers `200 … queued` with its entry intact.
+
+**Filed out of this change, not fixed by it:** `terminal_failure`'s dishonest defaults (six early
+returns claim `True` without meaning it, and `scheduler.py`'s two flow consumers gate on that flag),
+and the delivery-attempt accounting that is now **F114**.
 
 ---
 

@@ -187,6 +187,9 @@ starts only after round 3. Nothing here is closed by a plan existing.
       has something to deliver.
 - [ ] 6.6 Sync the delta into `openspec/specs/agent-conversation-workspace/spec.md` by hand, then
       archive with `--skip-specs` and fix the doubled date prefix.
-- [ ] 6.7 Update `scripts/drive/FINDINGS.md`: F108 closed as a class, **and corrected** — its own
-      four examples were already answered, which is worth recording where the next reader of the
-      finding will meet it. File the two items from the design's *Filed, not fixed here*.
+- [x] 6.7 Update `scripts/drive/FINDINGS.md`: F108 closed as a class, **and corrected** — its own
+      four examples were already answered, recorded in the finding itself where the next reader
+      meets it rather than only in this change's design. The design's two filed items are placed:
+      the delivery-attempt one became **F114 (severity A)** with a live measurement, and
+      `terminal_failure`'s dishonest defaults are named in F108's closing paragraph as filed and
+      unfixed. Four further findings came out of the same drive — F109, F110, F111, F112, F113.
