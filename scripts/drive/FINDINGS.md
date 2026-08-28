@@ -6928,3 +6928,44 @@ The cheap reproduction is the contribution: a parametrized test that runs the
 `test_spawn_failure_marks_run_failed` scenario 40 times and asserts the entry reaches
 `(3, 'withdrawn')` stalls in ~6 of 40, in about 40 seconds — against a full suite run that surfaced
 it once in two hours.
+
+---
+
+## F110 (B) — `AW_CHECK_UI_BUNDLE=1` passes on a stale bundle if you skip the build
+
+**Status:** **open.** Found 2026-08-28 by walking into it while shipping F108's UI half.
+
+`CLAUDE.md` describes the guard as: after `npm run build`, run `scripts/refresh_ui_bundle.py`,
+which "copies `dist/` over it, confirms the copy, and records `ui-build-stamp.json`, the
+fingerprint of the source it was built from", and `test_ui_build_stamp.py` "gates the stricter
+bundle-matches-source assertion behind `AW_CHECK_UI_BUNDLE=1`".
+
+Run the refresh script **without** building first and the guard is satisfied anyway:
+
+```
+# three .tsx/.ts files edited, no `npm run build`
+$ py -3.11 scripts/refresh_ui_bundle.py
+Refreshed hub/hub/static/ui and recorded the build stamp.
+$ git status --short hub/hub/static/ui
+ M hub/hub/static/ui/ui-build-stamp.json          <- the JS hash never moved
+$ AW_CHECK_UI_BUNDLE=1 pytest hub/tests/test_ui_build_stamp.py -q
+12 passed
+```
+
+The stamp is written **from the current source**, and the assertion compares the stamp to the
+current source — so the script stamps whatever `dist/` happens to hold as though it were built
+from what is on disk now. The one input neither of them consults is whether `dist/` is older than
+the source it is being certified against.
+
+**Why it matters more than it looks.** This is the guard that exists so `/health` can stop
+reporting `ui_stale`, and the failure it is aimed at — committing a bundle that does not match its
+source — is exactly the failure it will now certify as fine. It also fails in the safe-looking
+direction: everything is green, and the operator is served a UI missing the change whose tests all
+passed. Running the build afterwards produced a different JS hash
+(`index-CCnq-93I.js` → `index-C3KKeU0v.js`), which is how it was caught at all.
+
+**Candidate fixes, none applied here.** Either the script builds (it already shells out for
+`git rev-parse`, so running `npm run build` is not a new kind of dependency), or it records
+`dist/`'s own mtimes and hashes beside the source fingerprint so the stricter assertion can compare
+the two and refuse a `dist/` older than the source. The second is the smaller change and keeps the
+build an explicit step; the first makes the documented sequence impossible to get wrong.
