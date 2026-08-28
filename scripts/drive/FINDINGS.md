@@ -6506,3 +6506,50 @@ Kinds that survive cut 1 but carry no operator-facing detail at all — `agent_c
 name too, and for those that is nearly the whole content. They are noise, not a defect, and adding
 ten more cases to say `agent_created` in different words would be worse than the default. The cut
 is between *a payload whose detail is unread* and *a payload with no detail*.
+
+## F106 (—) — `ask_user` on Codex: drives clean end to end, blocking and resumption both real
+
+**Status:** not a defect (driven live 2026-08-28 07:42–07:43, CLI 0.146.0, `gpt-5.4-mini`)
+
+Filed as a **negative**, because `ask_user` on the Codex transport had been carried as "highest
+value untouched" for four consecutive iterations and would otherwise be re-driven a fifth time.
+Every previous `ask_user` observation in this corpus was on Claude, whose `--permission-prompt-tool`
+and pty transport share nothing with the path Codex takes: Codex runs through
+`codex_appserver.run_turn` over a hidden pipe, so the tool call, the block, and the resumption are
+all a different mechanism reaching the same table. That the Claude path works implied nothing about
+this one.
+
+It works, and the evidence is a per-second trace rather than an inference. Agent `swapper` in
+`aw-e2e1` (`proj-46b602c1f3cb`), bound to `runner-ea0b631f27d6` (`codex` / `gpt-5.4-mini`), was
+triggered with a prompt naming the tool. `agent_outputs` for `run-321da508636a`, in sequence:
+
+| seq | at (local) | kind | content |
+|---|---|---|---|
+| 2 | 07:43:06 | `tool_use` | `Called agentweave.ask_user`, `category: mcp`, one question with both options |
+| — | 07:43:06 | — | `q-984ce6607b78` appears unanswered, `blocking: true`, `batch_size: 1` |
+| — | 07:43:17 | — | operator answers `blue` via `PATCH /questions/{id}` |
+| 3 | 07:43:18 | `tool_result` | `agentweave.ask_user completed`, payload carries `success: true` and the question id |
+| 4 | 07:43:19 | `text` | `blue` |
+
+`runs.status = completed`, `exit_code = 0`, `ended_at` 07:43:19 — **two seconds after the answer**,
+and twelve seconds after the question was raised. So all four properties that matter hold: the tool
+call reaches the Hub from the pipe transport, the run genuinely blocks rather than proceeding on a
+guess, the answer unblocks it within a second, and the answer's *content* reaches the model, which
+is the part a mere status transition would not prove — the agent replied with the word the operator
+chose and not the other option.
+
+**The mechanism that makes this stay closed:** `ask_user` is an MCP tool, and `mcp_server.py` is the
+same standalone process for both runners — the Codex-specific surface ends at how the tool call is
+*transported*, and `codex_appserver` already carries `tool_use`/`tool_result` pairs for every MCP
+call (F102's sweep established that). There is no Codex-side branch in the question path to be
+wrong. Re-drive this only if the transport itself changes.
+
+### One trap, recorded but not filed
+
+`GET /projects/{id}/questions?status=pending` returns **every** question, answered ones included —
+the filter parameter is `answered` (`questions.py:233`), and FastAPI silently discards an
+unrecognised query parameter rather than refusing it. This cost one wrong reading here (an answered
+question from a different agent looked like the pending one). It is stock FastAPI behaviour and the
+UI passes the right name, so it is not filed as a defect; it belongs with the API-shape traps in
+`method_reminders`. Note also that the answer route is `PATCH /questions/{id}` — `POST
+/questions/{id}/answer` is a 405, and only `/decline` is a POST sub-route.

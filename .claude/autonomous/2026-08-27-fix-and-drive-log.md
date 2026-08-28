@@ -1610,3 +1610,80 @@ No job or loop was enabled at any point. `aw-e2e2` is untouched. In `aw-e2e1`: o
 `stop_at` is 08:00 and this is the last firing inside it. F104's caveat is closed. Still untouched
 and carried: the Codex angle's `ask_user`, the "Ask me" posture on codex, a killed codex process, a
 checkpoint. Plus the two narrow `schedule_agent` residues, each needing a drive rather than a read.
+
+---
+
+## Iteration 14 — the clock was wrong again, and `ask_user` on Codex is clean
+
+**2026-08-28, 07:41 → 07:48 (+01:00).** Branch `autonomous/2026-08-27-fix-and-drive`, opening at
+`5371e08`, tree clean, local and `origin` in step.
+
+### The reconciliation this iteration exists because of
+
+Iteration 13's `next_action` opens with **"stop_at (2026-08-28T08:00+01:00) HAS NOW PASSED — iteration
+13 was the last firing inside it"**, and instructs the next process to *confirm with the operator
+before spending*. It had not passed. This process read `Get-Date` as its second command:
+**07:41:53+01:00**, eighteen minutes inside the window. So no confirmation was owed and none was
+sought; this is an ordinary in-window firing.
+
+That is the **same error twice in two iterations, in opposite directions**, and it is worth more
+than the drive below. Iteration 13's own carry_forward records that it estimated its way to "07:46,
+no time for the review turn" and nearly dropped its headline item before reading a clock that said
+07:30 — then, having learned exactly that lesson, wrote its successor a handoff asserting a
+deadline had passed **without reading a clock at the moment it wrote it.** The lesson does not
+survive being learned once, because the failure is not ignorance of the rule; it is that an
+elapsed-time estimate feels like knowledge. The rule that actually works is mechanical and has no
+judgement in it: **`Get-Date` is a tool call costing under a second — stamp it, never infer it, and
+in particular stamp it in the sentence that hands a deadline to someone else.** This iteration also
+caught itself doing it a third time mid-run, saying "~07:45" in prose while the trigger response
+was stamped 07:42:55.
+
+### The unit of work: `ask_user` on the Codex transport
+
+Chosen from `next_action` item (3) as the highest-value untouched item that fits a sixteen-minute
+window. It fit in **twenty-four seconds** of run time.
+
+The Hub was started per `environment.restart_hub` from `hub/`, and confirmed by the project list
+under a Bearer header (`aw-e2e2`, `aw-f52`, `aw-e2e1` all present) rather than `/health`. Agent
+`swapper` in `aw-e2e1` — bound to `runner-ea0b631f27d6`, `codex`/`gpt-5.4-mini`, left in place by
+iteration 13 — was triggered with a prompt naming the tool.
+
+**It works, all four properties, traced per second.** `tool_use` at 07:43:06; the question visible
+and unanswered at 07:43:06; `PATCH .../questions/q-984ce6607b78 {"answer":"blue"}` at 07:43:17;
+`tool_result` carrying `success:true` at 07:43:18; the agent's reply text `blue` at 07:43:19; run
+`completed`, `exit_code 0`. The call crosses the pipe transport, the run genuinely blocks, the
+answer unblocks it inside a second, and — the part a status transition alone would not show — the
+answer's *content* reached the model, which replied with the operator's chosen option and not the
+other one.
+
+Filed as **F106, a negative**, because this had been carried as "highest value untouched" for four
+iterations and would have been re-driven a fifth. Following iteration 13's own lesson, the entry
+names the mechanism that keeps it closed rather than just recording the absence: `ask_user` is an
+MCP tool served by the one standalone `mcp_server.py` shared by both runners, and
+`codex_appserver` already carries `tool_use`/`tool_result` for every MCP call (established by
+F102's sweep) — **there is no Codex-side branch in the question path for a defect to live in.**
+Re-drive only if the transport changes.
+
+### One trap, recorded rather than filed
+
+`GET /projects/{id}/questions?status=pending` returns every question including answered ones. The
+parameter is `answered` (`questions.py:233`) and FastAPI discards an unrecognised query parameter
+silently instead of refusing it — so a wrong filter name reads as "nothing is filtered", and here an
+answered question from a different agent briefly looked like the pending one. Stock framework
+behaviour, and the UI passes the right name, so it is a `method_reminders` entry and not a finding.
+The answer route is likewise `PATCH /questions/{id}`; `POST /questions/{id}/answer` is a 405 and
+`/decline` is the only POST sub-route.
+
+### State left behind
+
+No job or loop enabled at any point — none was touched. `aw-e2e2` and `aw-f52` untouched. In
+`aw-e2e1`: one further completed run (`run-321da508636a`) and conversation
+(`conv-5ee9db79f2a5`), and question `q-984ce6607b78` answered. The Hub on 8011 is left running;
+8000 and 8010 were never contacted.
+
+### Where this leaves the queue
+
+`stop_at` is 08:00 and this firing genuinely is the last one inside it. Untouched and carried, all
+Codex-angle: the **"Ask me" permission posture on codex**, a **killed codex process**, and a
+**checkpoint**. Then the two narrow `schedule_agent` residues, each needing a drive rather than a
+read, and `contextCompaction` as the last of F104's ten without a live negative.
