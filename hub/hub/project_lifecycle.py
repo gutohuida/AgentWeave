@@ -80,9 +80,16 @@ class ProjectLifecycleService:
             if marked_project is not None:
                 if not register_copy_as_new:
                     await self._guard_relocation(marked_project, canonical)
+                    moved = marked_project.path_key != canonical.path_key
                     _observe(marked_project, canonical)
                     await self.session.commit()
                     seed_repo_excludes(canonical.path)
+                    # This is the spec's relocation scenario — "an unavailable project's marked
+                    # directory is opened at a new path" — reached through open, not through the
+                    # relocate route. Guarded on an actual move so an ordinary re-open does not
+                    # pay for two git subprocesses.
+                    if moved:
+                        _repair_checkout_registrations(canonical.path)
                     return marked_project
             elif not register_copy_as_new:
                 project = Project(
@@ -174,8 +181,11 @@ class ProjectLifecycleService:
         if marker is None or marker["project_id"] != project.id:
             raise ProjectIdentityConflict("relocation target does not carry the project marker")
         await self._guard_relocation(project, canonical)
+        moved = project.path_key != canonical.path_key
         _observe(project, canonical)
         await self.session.commit()
+        if moved:
+            _repair_checkout_registrations(canonical.path)
         return project
 
     async def delete(self, project_id: str) -> DeletedProjectSummary:
@@ -237,20 +247,21 @@ class ProjectLifecycleService:
             .select_from(Run)
             .where(Run.project_id == project.id, Run.status == "running")
         )
-        # Both checkout namespaces (task 6.9). A git worktree registration stores an **absolute**
-        # path, so relocating a project with live checkouts of either kind breaks every one of
-        # them — and a project whose only live checkouts are task checkouts would have relocated
-        # cleanly through the agent-only check while doing exactly that damage.
-        checkout_roots = (
-            destination.path / ".agentweave" / "worktrees",
-            destination.path / ".agentweave" / "tasks",
-        )
-        active_worktree_metadata = any(
-            root.is_dir() and any(root.iterdir()) for root in checkout_roots
-        )
-        if active_runs or active_worktree_metadata:
+        # Runs only. This used to also refuse when `.agentweave/worktrees` or `.agentweave/tasks`
+        # held anything at all, on the correct observation (task 6.9) that a git worktree
+        # registration stores an **absolute** path and relocating breaks every one of them. But an
+        # agent worktree is permanent — one ordinary completed turn creates it and nothing removes
+        # it — so "a checkout exists" is a fact about the project's history, not about activity,
+        # and the effect was that a project could be relocated exactly until its first turn and
+        # never again. The spec's own condition is "no active run or worktree mutation"
+        # (`local-project-workspace`, "A project directory is relocated"); this now tests that,
+        # and `_repair_checkout_registrations` fixes the absolute paths instead of refusing over
+        # them. Refusing never un-broke anything anyway: the operator has already moved the
+        # directory by the time they ask, so the only thing the refusal preserved was a Hub
+        # pointing at a path that is gone.
+        if active_runs:
             raise ProjectPathError(
-                "project cannot be relocated while a run or worktree mutation is active",
+                "project cannot be relocated while a run is active",
                 code="project_relocation_active",
             )
 
@@ -328,6 +339,48 @@ def _project_scoped_tables() -> list[Table]:
         for table in reversed(Base.metadata.sorted_tables)
         if table.name != "projects" and "project_id" in table.c
     ]
+
+
+#: Where an agent, task, or review checkout lives inside a project. Relative on purpose — the whole
+#: point is that these move with the project and their *registrations* do not.
+_CHECKOUT_ROOTS = (("worktrees",), ("tasks",), ("reviews",))
+
+
+def _repair_checkout_registrations(root: Path) -> None:
+    """Point every checkout under *root* back at the repository it now lives in.
+
+    A linked git worktree is held together by two absolute paths — the main repo's
+    `.git/worktrees/<name>/gitdir` and the checkout's own `.git` file — and moving a project
+    directory invalidates both, in every checkout it contains. `git worktree repair`, given the
+    checkouts' new paths, rewrites both sides; measured on a real relocated project, a checkout
+    that answered `fatal: not a git repository` was fully usable immediately after.
+
+    Best-effort by design. A project that is not a git repository has nothing to repair, a
+    checkout git cannot place is left alone and reported, and neither is allowed to fail the
+    relocation — the operator has already moved the directory, and refusing to record that is
+    strictly worse than recording it with a checkout still needing attention.
+    """
+    from .worktrees import GitCommandError, _run_git, is_git_repo
+
+    if not is_git_repo(root):
+        return
+    checkouts = [
+        child
+        for segments in _CHECKOUT_ROOTS
+        for parent in [root.joinpath(".agentweave", *segments)]
+        if parent.is_dir()
+        for child in sorted(parent.iterdir())
+        if child.is_dir()
+    ]
+    if not checkouts:
+        return
+    try:
+        _run_git(root, "worktree", "repair", *(str(path) for path in checkouts))
+        _run_git(root, "worktree", "prune", check=False)
+    except (GitCommandError, OSError):
+        logger.warning(
+            "could not repair worktree registrations under %s after relocation", root, exc_info=True
+        )
 
 
 def _observe(project: Project, canonical: CanonicalProjectPath) -> None:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
+from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select
@@ -216,45 +218,98 @@ async def test_active_run_blocks_relocation(app, tmp_path) -> None:
     assert caught.value.code == "project_relocation_active"
 
 
+def _git(repo, *args) -> None:
+    result = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+
+
+def _git_out(repo, *args) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, timeout=30)
+
+
+def _repo_with_agent_checkout(root):
+    """A project that has run exactly one turn: a git repo with one agent worktree under it."""
+    root.mkdir(parents=True, exist_ok=True)
+    _git(root, "init", "-q", "-b", "main")
+    _git(root, "config", "user.email", "test@example.com")
+    _git(root, "config", "user.name", "test")
+    (root / "README.md").write_text("hello")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", "base")
+    checkout = root / ".agentweave" / "worktrees" / "writer"
+    _git(root, "worktree", "add", "-q", "-b", "agentweave/writer", str(checkout), "HEAD")
+    return checkout
+
+
 @pytest.mark.asyncio
-async def test_copied_active_worktree_metadata_blocks_relocation(app, tmp_path) -> None:
-    original = tmp_path / "original"
-    relocated = tmp_path / "relocated"
-    original.mkdir()
-    async with async_session_factory() as session:
-        await ProjectLifecycleService(session).open_existing(original)
-
-    original.rename(relocated)
-    (relocated / ".agentweave" / "worktrees" / "writer").mkdir(parents=True)
-    async with async_session_factory() as session:
-        with pytest.raises(ProjectPathError) as caught:
-            await ProjectLifecycleService(session).open_existing(relocated)
-    assert caught.value.code == "project_relocation_active"
-
-
-@pytest.mark.asyncio
-async def test_copied_task_checkout_blocks_relocation(app, tmp_path) -> None:
-    """Task 6.9. A git worktree registration stores an absolute path, so relocating breaks every
-    live checkout — and since per-task isolation a project's only live checkouts can be task
-    checkouts, which the agent-only guard walked straight past.
-
-    Deliberately creates *no* `.agentweave/worktrees` directory: with one present the test would
-    pass against the unfixed guard and prove nothing.
+async def test_a_project_that_has_run_a_turn_can_still_be_relocated(app, tmp_path) -> None:
+    """F95. Task 6.9's guard refused relocation whenever `.agentweave/worktrees` or
+    `.agentweave/tasks` held anything, on the correct observation that a git worktree registration
+    stores an absolute path. But an agent worktree is permanent -- one ordinary completed turn
+    creates it and nothing removes it -- so the effect was that a project could be relocated
+    exactly until its first turn and never again. The spec's condition is "no active run or
+    worktree mutation" (`local-project-workspace`); existence is not activity.
     """
     original = tmp_path / "original"
     relocated = tmp_path / "relocated"
-    original.mkdir()
+    _repo_with_agent_checkout(original)
+    async with async_session_factory() as session:
+        project = await ProjectLifecycleService(session).open_existing(original)
+        original_id = project.id
+
+    original.rename(relocated)
+    async with async_session_factory() as session:
+        moved = await ProjectLifecycleService(session).open_existing(relocated)
+
+    assert moved.id == original_id
+    assert moved.working_directory == str(relocated.resolve())
+
+
+@pytest.mark.asyncio
+async def test_relocating_repairs_the_checkouts_it_used_to_refuse_over(app, tmp_path) -> None:
+    """The refusal never un-broke anything -- the operator has already moved the directory by the
+    time they ask. Repairing does: `git worktree repair` rewrites both absolute paths that hold a
+    linked worktree together, and the checkout is usable at its new location immediately."""
+    original = tmp_path / "original"
+    relocated = tmp_path / "relocated"
+    _repo_with_agent_checkout(original)
     async with async_session_factory() as session:
         await ProjectLifecycleService(session).open_existing(original)
 
     original.rename(relocated)
-    (relocated / ".agentweave" / "tasks" / "task-ab12cd34ef56").mkdir(parents=True)
-    assert not (relocated / ".agentweave" / "worktrees").exists()
+    moved_checkout = relocated / ".agentweave" / "worktrees" / "writer"
+
+    # Broken before the relocation is recorded: both sides still name the old absolute path.
+    assert _git_out(moved_checkout, "rev-parse", "HEAD").returncode != 0
 
     async with async_session_factory() as session:
-        with pytest.raises(ProjectPathError) as caught:
-            await ProjectLifecycleService(session).open_existing(relocated)
-    assert caught.value.code == "project_relocation_active"
+        await ProjectLifecycleService(session).open_existing(relocated)
+
+    repaired = _git_out(moved_checkout, "rev-parse", "HEAD")
+    assert repaired.returncode == 0, repaired.stderr
+    listing = _git_out(relocated, "worktree", "list")
+    assert "prunable" not in listing.stdout
+    registered = [line.split()[0] for line in listing.stdout.splitlines() if line.strip()]
+    assert any(Path(entry).resolve() == moved_checkout.resolve() for entry in registered)
+
+
+@pytest.mark.asyncio
+async def test_relocating_a_project_that_is_not_a_repo_is_still_fine(app, tmp_path) -> None:
+    """`_repair_checkout_registrations` is best-effort by design: nothing to repair, nothing to
+    fail. A project need not be a git repository at all, and one that is not must still relocate."""
+    original = tmp_path / "original"
+    relocated = tmp_path / "relocated"
+    original.mkdir()
+    (original / ".agentweave" / "worktrees" / "writer").mkdir(parents=True)
+    async with async_session_factory() as session:
+        project = await ProjectLifecycleService(session).open_existing(original)
+        original_id = project.id
+
+    original.rename(relocated)
+    async with async_session_factory() as session:
+        moved = await ProjectLifecycleService(session).open_existing(relocated)
+    assert moved.id == original_id
+    assert moved.working_directory == str(relocated.resolve())
 
 
 @pytest.mark.asyncio

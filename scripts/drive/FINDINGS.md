@@ -5650,3 +5650,78 @@ Rendering now happens **inside `_broadcast_run_lifecycle`**, over `exit_code` an
 
 The general lesson is the one this file keeps re-learning: a rule applied at N call sites is a rule
 that holds at N-1 of them. This one now lives at the join.
+
+---
+
+## F95 (A) — a project can be moved exactly until its first turn, and never again
+
+**Status:** fixed (this iteration)
+
+Row 19, resilience: *drive a project whose working directory has moved*. Everything up to the
+repair is right. Moving `aw-f52` on disk flipped `directory_state` to `missing` within seconds, the
+project stayed visible with its history, and a trigger was refused with a typed error naming the
+path:
+
+```json
+{"code": "project_workspace_missing",
+ "message": "project directory does not exist: C:\\Users\\huida\\Documents\\aw-f52",
+ "directory_state": "missing"}
+```
+
+Then the repair itself:
+
+```
+POST /projects/proj-a1736a6a596b/relocate  {"path": ".../aw-f52-moved"}
+  422 {"code": "project_relocation_active",
+       "message": "project cannot be relocated while a run or worktree mutation is active"}
+```
+
+**Nothing was active.** One run has ever existed in that project and it is `completed`; the single
+agent is `idle`. What blocked the move was `.agentweave/worktrees/builder`, left behind by that one
+completed turn on 2026-08-27.
+
+`_guard_relocation` refused whenever `.agentweave/worktrees` or `.agentweave/tasks` held anything
+at all. The observation behind it (task 6.9) is correct — a linked git worktree is held together by
+two **absolute** paths, the main repo's `.git/worktrees/<name>/gitdir` and the checkout's own
+`.git` file, and moving the project invalidates both. But an agent worktree is **permanent**: one
+ordinary turn creates it and nothing ever removes it. So "a checkout exists" is a fact about the
+project's history, not about activity, and the guard's real meaning was *a project may be moved
+until it has been used, and not afterwards*.
+
+The spec's own condition is narrower than the code's:
+
+> **WHEN** an unavailable project's marked directory is opened at a new path **and it has no active
+> run or worktree mutation** — `local-project-workspace`, "A project directory is relocated"
+
+Existence is not activity. And the refusal never un-broke anything: by the time the operator asks,
+they have already moved the directory. All the refusal preserved was a Hub pointing at a path that
+is gone — and no remedy was stated, because there is no control anywhere that removes an agent
+worktree.
+
+**Fixed by repairing instead of refusing.** The gate is now active runs only. Relocation — through
+both routes, `POST /relocate` and the open-at-a-new-path flow the spec actually describes — calls
+`_repair_checkout_registrations`, which runs `git worktree repair` over every checkout under
+`.agentweave/worktrees`, `/tasks` and `/reviews`, then prunes. Best-effort by design: a project
+that is not a git repository has nothing to repair, a checkout git cannot place is logged and left,
+and neither fails the relocation. Guarded on the path actually changing, so an ordinary re-open
+costs no subprocesses.
+
+**Live, on the fixed code**, against the real moved project:
+
+```
+before   git worktree list -> .../aw-f52-moved/.agentweave/worktrees/builder  [prunable]
+         git -C <checkout> status -> fatal: not a git repository:
+                                     C:/Users/huida/Documents/aw-f52/.git/worktrees/builder
+POST /relocate .../aw-f52-moved2 -> 200, directory_state "available"
+after    git worktree list -> .../aw-f52-moved2/.agentweave/worktrees/builder   (no "prunable")
+         git -C <checkout> log -1 -> c8d0fb1 f52: fix is_low_stock
+POST /agent/trigger builder      -> run-4e266e6f1c74, completed, exit 0
+```
+
+**Two existing tests pinned the defect and were replaced, not deleted.**
+`test_copied_active_worktree_metadata_blocks_relocation` and
+`test_copied_task_checkout_blocks_relocation` both asserted the refusal, and both are the
+carry-forward pattern in its sharpest form: each `mkdir`s the checkout directory by hand, because
+that is the state the guard reacts to — and in production the thing that creates it is *any
+completed turn*. A test that has to build the blocking state itself never asks how often the
+product builds it. The answer was "always, permanently, after the first turn".
