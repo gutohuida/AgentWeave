@@ -254,6 +254,7 @@ class TriggerAgentError(Exception):
         directory_state: Optional[str] = None,
         transient: bool = False,
         request_level: bool = False,
+        agent_wide: bool = False,
     ) -> None:
         self.status_code = status_code
         self.detail = detail
@@ -296,6 +297,30 @@ class TriggerAgentError(Exception):
         #: later stays queued-and-stated until somebody decides otherwise, which is the safe
         #: direction for a flag whose other value discards the operator's input.
         self.request_level = request_level
+        #: Does this refusal stop the agent running **at all**, rather than blocking this input in
+        #: particular?
+        #:
+        #: A third question, and independent of both flags above — not a combination of them.
+        #: `transient` decides whether the condition clears on its own; `request_level` decides
+        #: whether the caller is told *no*; this one decides whether **giving up on the input at
+        #: the head of the queue would let anything else run**.
+        #:
+        #: That is the only question the delivery-attempt counter should be asking (design D3a of
+        #: `2026-08-28-a-delivery-attempt-means-a-delivery`). F56 added counting to the refusal
+        #: path because "a refusal raised here repeats identically forever, and every entry queued
+        #: behind it starves along with it" — true wherever the refused entry is *in the way*, and
+        #: false where the refusal stops the agent entirely, because then there is nothing behind
+        #: it that dropping it would release. Measured live 2026-08-28 (F114): three messages to an
+        #: agent with no runner bound destroyed the first, and two clicks of the Continue button
+        #: destroyed it faster, because each one counted an attempt for a delivery nobody made.
+        #:
+        #: **Marked conservatively, and the two axes really do cross.** `:479` (no such agent) is
+        #: request-level *and* agent-wide; `:756` (the isolated worktree could not be prepared) is
+        #: environment-level *and* entry-specific, because the workspace it failed to prepare is
+        #: the **task's** rather than the agent's. Only refusals that are certainly agent-wide are
+        #: marked, so an unmarked site keeps counting exactly as it does today and no starvation
+        #: can be reintroduced by getting this wrong.
+        self.agent_wide = agent_wide
         super().__init__(detail)
 
 
@@ -489,6 +514,7 @@ async def trigger_agent_directly(
         raise TriggerAgentError(
             status.HTTP_409_CONFLICT,
             probe["reason"] or f"{agent} is not currently launchable.",
+            agent_wide=True,
         )
     if agent_row.lifecycle == "archived":
         # `agent-configuration`'s spec states "nothing runs an archived agent" as the reason a
@@ -507,7 +533,9 @@ async def trigger_agent_directly(
     runner_row = await session.get(Runner, agent_row.runner_id)
     if runner_row is None:
         raise TriggerAgentError(
-            status.HTTP_409_CONFLICT, f"{agent}'s bound runner no longer exists."
+            status.HTTP_409_CONFLICT,
+            f"{agent}'s bound runner no longer exists.",
+            agent_wide=True,
         )
 
     config = await get_agent_config(project_id, agent, session)
@@ -535,7 +563,9 @@ async def trigger_agent_directly(
 
     if not probe["runnable"]:
         raise TriggerAgentError(
-            status.HTTP_409_CONFLICT, probe["reason"] or f"{agent} is not currently launchable."
+            status.HTTP_409_CONFLICT,
+            probe["reason"] or f"{agent} is not currently launchable.",
+            agent_wide=True,
         )
 
     existing = await session.execute(

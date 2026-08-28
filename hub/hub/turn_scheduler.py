@@ -201,7 +201,7 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                         "directory_state": exc.directory_state,
                     },
                 )
-            elif not transient:
+            elif not transient and not getattr(exc, "agent_wide", False):
                 # No `Run` was ever created for this attempt, so `selected` never became
                 # `delivered` and `return_run_entries`'s own abandonment bookkeeping never runs
                 # for it (F56) — a refusal raised here (a review target with no evidence naming a
@@ -209,6 +209,27 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                 # forever, and every entry queued behind it starves along with it. Count the
                 # attempt the same way a spawned-and-failed run's does, and give up on the same
                 # schedule, so a permanently wrong entry stops wedging the whole queue.
+                #
+                # **`and not agent_wide` is F114, and it is the same rule the `transient` half of
+                # this condition already applies.** F56's reasoning holds wherever the refused
+                # entry is *in the way of other input* — which is every example in the list above.
+                # It does not hold where the refusal stops the agent running at all: no runner is
+                # bound, its CLI is not installed, its runner row is gone. Nothing is starving
+                # behind that entry, because nothing for that agent could run either way, so
+                # dropping the head of the queue buys nobody a turn — and it costs the operator
+                # the input the product promised to hold until they performed the repair (F96).
+                #
+                # Measured before this line existed: three messages to an unbound agent destroyed
+                # the first in under two seconds, and two clicks of the Continue button — the
+                # control the conversation view offers for exactly this situation — destroyed it
+                # faster. Every schedule counted an attempt, so the operator's own attempts to
+                # find out why nothing was happening were what consumed the allowance.
+                #
+                # Only refusals that are *certainly* agent-wide carry the flag. A refusal that
+                # blocks one entry keeps counting, including the one that looks environmental and
+                # is not: a task's checkout that could not be prepared is the **task's** workspace,
+                # not the agent's, so other input really could run and the head entry really is in
+                # the way (design D3a).
                 abandoned: list[InboundQueueEntry] = []
                 for entry in selected:
                     entry.delivery_attempts = (entry.delivery_attempts or 0) + 1

@@ -84,41 +84,49 @@ rounds exist for.
 
 ## 2. The counter counts deliveries
 
-- [ ] 2.0 **Revised by round 2 (D3a).** Add an explicit *agent-wide* classification to
+- [x] 2.0 **Revised by round 2 (D3a).** Add an explicit *agent-wide* classification to
       `TriggerAgentError`, defaulting to `False`, documented the way `transient` and
       `request_level` are — including why it is a third question rather than a combination of the
       first two. Mark exactly three sites in `agent_trigger.py`:
-  - [ ] 2.0a `:461` no runner is bound
-  - [ ] 2.0b `:480` the bound runner's row no longer exists
-  - [ ] 2.0c `:507` the bound runner's CLI is not on PATH
+  - [x] 2.0a `:461` no runner is bound
+  - [x] 2.0b `:480` the bound runner's row no longer exists
+  - [x] 2.0c `:507` the bound runner's CLI is not on PATH
       **Nothing else, and `:756` in particular stays unmarked** — see 1.2a.
-- [ ] 2.1 In `schedule_agent`'s `except TriggerAgentError` branch, count a delivery attempt except
+- [x] 2.1 In `schedule_agent`'s `except TriggerAgentError` branch, count a delivery attempt except
       when the refusal is agent-wide. Document the reason at the line, the way the transient branch
       beside it already is.
-- [ ] 2.2 Test: an agent-wide refusal leaves `delivery_attempts` unchanged, however many times the
+- [x] 2.2 Test: an agent-wide refusal leaves `delivery_attempts` unchanged, however many times the
       agent is scheduled.
-- [ ] 2.2a Test: an **entry-specific** refusal still counts and still abandons at the limit — the
+- [x] 2.2a Test: an **entry-specific** refusal still counts and still abandons at the limit — the
       case round 1 would have broken. Use `:756`'s shape: a turn bound to a task whose checkout
       cannot be prepared, with other input queued behind it, and assert the queue moves on.
-- [ ] 2.3 Test: the F114 reproduction — five messages to an agent with no runner bound leave five
+- [x] 2.3 Test: the F114 reproduction — five messages to an agent with no runner bound leave five
       entries queued and none withdrawn.
-- [ ] 2.3a Test (round 3, 1.6): the **outcome**, not the counter — send several messages to an
+- [x] 2.3a Test (round 3, 1.6): the **outcome**, not the counter — send several messages to an
       agent with no runner, press Continue, then bind a runner, and assert every message is
       delivered. This is the one a reader can check against the product rather than against the
       implementation.
-- [ ] 2.4 Test: `POST /conversations/{id}/continue`, pressed repeatedly, does not consume the entry
+- [x] 2.4 Test: `POST /conversations/{id}/continue`, pressed repeatedly, does not consume the entry
       it offers to start.
-- [ ] 2.5 Test: a request-level refusal still counts, and still abandons at the limit.
-- [ ] 2.6 Test: an entry delivered to a run that fails still counts through `return_run_entries`
+- [x] 2.5 Test: a request-level refusal still counts, and still abandons at the limit.
+- [x] 2.6 Test: an entry delivered to a run that fails still counts through `return_run_entries`
       and is unaffected by this change.
-- [ ] 2.7 Mutation-check each: restore the unconditional increment and confirm 2.2–2.4 fail while
-      2.5 and 2.6 pass.
+- [x] 2.7 Mutation-check each. **Three, all caught:** the unconditional increment restored (the
+      pre-F114 code) fails 2.2/2.3/2.4/2.3a while 2.2a and 2.5 keep passing; **round 1's rejected
+      gate** — `request_level` instead of `agent_wide` — fails 2.2a, which is the starvation case
+      round 2 found; and removing `agent_wide=True` from the no-runner raise site fails the
+      end-to-end test.
+- [x] 2.8 **Added during implementation, because 2.2–2.6 could not catch it.** Every one of those
+      constructs `TriggerAgentError` itself, so all six would pass with the three raise sites never
+      marked — the gate tested, wired to nothing.
+      `test_the_real_unbound_agent_path_carries_the_flag` drives the real route with a real unbound
+      agent, five triggers, no patching of the trigger at all.
 
 ## 3. Verification
 
 - [ ] 3.1 Full hub suite **with `claude` stripped from PATH**.
-- [ ] 3.2 CLI suite, UI suite, `ruff` / `black` / `mypy` / `npm run lint` / `tsc --noEmit`.
-- [ ] 3.3 `npx openspec validate --specs --strict`.
+- [x] 3.2 CLI suite, UI suite, `ruff` / `black` / `mypy` / `npm run lint` / `tsc --noEmit`.
+- [x] 3.3 `npx openspec validate --specs --strict`.
 - [ ] 3.4 **Drive it live** against the trial Hub: repeat `scripts/drive/t_queue_attrition.py` and
       `scripts/drive/t_continue_burns_attempts.py`, which are the measurements that produced this
       change, and confirm both now leave the input intact.
