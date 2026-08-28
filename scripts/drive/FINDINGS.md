@@ -6553,3 +6553,73 @@ question from a different agent looked like the pending one). It is stock FastAP
 UI passes the right name, so it is not filed as a defect; it belongs with the API-shape traps in
 `method_reminders`. Note also that the answer route is `PATCH /questions/{id}` — `POST
 /questions/{id}/answer` is a 405, and only `/decline` is a POST sub-route.
+
+## F107 (B) — the Codex approval card names a *category*, never the action: the operator approves "a command" without seeing which
+
+**Status:** open (driven live 2026-08-28 07:52–07:54, CLI 0.146.0, `gpt-5.4-mini`, agent `swapper`
+in `proj-46b602c1f3cb`)
+
+The "Ask me" posture **works on Codex** — that half is a negative, and it is traced below. The
+defect is what the card the operator answers actually contains.
+
+### The posture itself: driven end to end, and it holds
+
+`POST /projects/{id}/agent/trigger` with `overrides: {"permission_mode": "manual"}`, prompt asking
+for a file to be created:
+
+| at (UTC) | what |
+|---|---|
+| 06:52:59 | run `run-5a502a77d545` starts |
+| 06:53:14 | `perm-d053068ab1de` appears, `status: pending` — the run is blocked, 15s in |
+| 06:54:09 | operator answers `POST /permission-requests/perm-d053068ab1de/decide {"allow": true}` → `status: allowed`, `decided_by: operator` |
+| 06:54:14 | run `completed`, `exit_code 0`, five seconds after the decision |
+
+And the content proof, which a status transition alone would not give:
+`.agentweave/worktrees/swapper/ask-me-probe.txt` exists and contains `PROBE`. The approval did not
+merely unblock the run — the **approved action executed**. `manual` maps through `_codex_posture`
+to `OPERATOR_POSTURE`, `decide_approval` raises the request, and the operator's answer reaches the
+thread. Claude's result implied nothing here (`--permission-prompt-tool` vs
+`codex_appserver.decide_approval` are genuinely different mechanisms), so this needed the drive it
+got.
+
+### The defect
+
+The card carries **no description of the action**:
+
+```
+{"id": "perm-d053068ab1de", "agent": "swapper", "run_id": "run-5a502a77d545",
+ "tool_name": "a file change", "tool_use_id": "",
+ "tool_input": {"grantRoot": null, "reason": null}, "status": "pending"}
+```
+
+`tool_name` is not a tool name. It is one of exactly two fixed strings from
+`_CODEX_APPROVAL_LABELS` (`agent_trigger.py:1969`), keyed on the **JSON-RPC method name alone**:
+
+```python
+_CODEX_APPROVAL_LABELS = {
+    "item/commandExecution/requestApproval": "a command",
+    "item/fileChange/requestApproval": "a file change",
+}
+```
+
+The request's `params` — which is where Codex puts the argv for a command and the path/diff for a
+file change — are never carried onto the `PermissionRequest`. `tool_input` holds only
+`grantRoot` and `reason`, both `null` here. So the operator's entire view of a command approval is
+the string **"a command"**: `ls` and `rm -rf ~` are the same card, and no amount of care on the
+operator's part can tell them apart.
+
+That is worse than the equivalent on Claude, where `tool_name` is the real tool and `tool_input`
+the real arguments — so this is a Codex-side loss, not a product-wide limitation. And it defeats the
+posture's own purpose: `manual` exists so a human decides, and a decision made without the action
+in front of you is not a decision. The comment above the map ("the raw method names are protocol,
+not something to put in front of a person deciding in seconds") is right about the *label* and
+silently drops the payload the label was supposed to summarise.
+
+**Severity B rather than A** only because the sandbox still bounds what an approved Codex action
+can reach (F98's mapping work) — the blast radius of a wrongly-approved card is the workspace, not
+the machine. Raise it to A if `grantRoot` escalations ever route through the same card, since that
+is precisely the request whose *scope* the operator cannot currently see.
+
+**The fix is narrow:** carry the approval request's `params` onto `PermissionRequest.tool_input`
+where `decide_approval` builds the row, and keep `_CODEX_APPROVAL_LABELS` as the human summary line
+above it. Not attempted here — the run's `stop_at` is 08:00 and this was found at 07:55.

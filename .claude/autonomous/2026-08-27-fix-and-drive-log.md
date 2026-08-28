@@ -1687,3 +1687,67 @@ No job or loop enabled at any point — none was touched. `aw-e2e2` and `aw-f52`
 Codex-angle: the **"Ask me" permission posture on codex**, a **killed codex process**, and a
 **checkpoint**. Then the two narrow `schedule_agent` residues, each needing a drive rather than a
 read, and `contextCompaction` as the last of F104's ten without a live negative.
+
+---
+
+## Iteration 15 — 2026-08-28 07:51–07:58 +01:00
+
+**Clock, stamped not inferred, in the first tool call of the iteration:** `Get-Date` said
+**07:51:51+01:00**. `stop_at` is 08:00. So iteration 14 was wrong in the same direction iteration
+13 was — it wrote "this firing genuinely is the last one inside it" and there were nine more
+minutes. Third consecutive iteration to mis-hand a deadline to its successor. The rule holds and
+the practice of it is what keeps failing; the only defence that has ever worked is the mechanical
+one, and it worked again here: reading the clock instead of believing the handoff bought this
+iteration its entire existence.
+
+Branch and tree verified against STATE.json first: clean, `4311de2` at head, on
+`autonomous/2026-08-27-fix-and-drive`. Nothing to reconcile.
+
+### The unit of work: the "Ask me" permission posture on Codex
+
+`next_action` item (3), first of the three carried Codex-angle items. Sized to the seven minutes
+that actually remained. The Hub came up on 8011 per `environment.restart_hub` and was confirmed by
+the **project list under a Bearer header** — `aw-e2e2`, `aw-f52`, `aw-e2e1` — not by `/health`.
+
+**The posture works, and the drive proves the action and not just the signal.** Trigger at
+06:52:59Z with `overrides: {"permission_mode": "manual"}`; `perm-d053068ab1de` pending fifteen
+seconds later; allowed at 06:54:09Z; run `completed`/`exit_code 0` at 06:54:14Z. The load-bearing
+evidence, per iteration 14's own lesson — *what would look identical if only the signal were
+delivered?* — is that `.agentweave/worktrees/swapper/ask-me-probe.txt` exists and contains `PROBE`.
+The approved file change actually ran. Claude's `--permission-prompt-tool` result implied nothing
+about `codex_appserver.decide_approval`, so this needed driving, and now it is closed.
+
+### But the drive found a defect, which is the point of the run
+
+**F107 (B, open):** the card the operator answers contains **no description of the action**.
+`tool_name` is one of two fixed strings from `_CODEX_APPROVAL_LABELS`
+(`agent_trigger.py:1969`), keyed on the JSON-RPC *method name* alone — `"a command"` or `"a file
+change"`. The approval request's `params`, which carry the argv for a command and the path for a
+file change, are never copied onto the row; `tool_input` held only `{"grantRoot": null, "reason":
+null}`. So `ls` and `rm -rf ~` present as the identical card. On Claude the same field carries the
+real tool and its real arguments, so this is a Codex-side loss rather than a product limit — and it
+defeats the posture's own purpose, since a decision taken without the action in front of you is not
+a decision. Held at B, not A, only because the sandbox still bounds an approved action to the
+workspace (F98's mapping work); it becomes A the moment `grantRoot` escalations route through this
+same card, because that is exactly the request whose *scope* is invisible. The fix is narrow —
+carry `params` onto `tool_input` where `decide_approval` builds the row, keep the label as the
+human summary above it — and is not attempted here, because it was found at 07:55 with five
+minutes on the clock and a fix without a test is not a fix.
+
+This is also the shape the sweep was arranged to produce: the negative and the defect came out of
+the *same* drive. Confirming that a feature works is how you get close enough to see what it shows
+the operator.
+
+### State left behind
+
+No job or loop touched, so none left enabled. `aw-e2e2` and `aw-f52` untouched. In `aw-e2e1`: run
+`run-5a502a77d545`, conversation `conv-c3cf514829d1`, permission request `perm-d053068ab1de`
+(allowed), and `ask-me-probe.txt` in swapper's worktree. Hub on 8011 left running; 8000 and 8010
+never contacted.
+
+### Where this leaves the run
+
+`stop_at` 08:00 arrives with this entry. Two of the three Codex-angle items remain — a **killed
+codex process** and a **checkpoint** — plus the two `schedule_agent` residues, `contextCompaction`,
+and F107's own fix, which is now the cheapest severity-ranked work on the list because the defect
+is located to a single line and the drive that reproduces it is written down above.
