@@ -1218,3 +1218,101 @@ predicted from the code that Full access would be refused in *all* cases, then w
 one-line finding into the real one, that the same posture behaves oppositely depending on which
 surface set it. Neither correction came from reading harder. Both came from picking a probe whose
 result could contradict me.
+
+
+## Iteration 10 — 2026-08-28 06:16 → 07:0x — one named question, and three defects behind it
+
+Took over at 06:16 on the branch iteration 9 had released cleanly: tree clean, `17b2f59` at HEAD,
+`git log` matching STATE exactly. Nothing to reconcile.
+
+`next_action` named one thing — settle F99's open question, then fix it. That took forty minutes
+and produced **four** findings-file changes, because the probe built to answer the question kept
+answering others.
+
+### F99 — measured, and the answer was yes
+
+The question was whether `thread/start` **honours** `model_reasoning_effort` inside its `config`
+map or merely accepts it, since the map is `additionalProperties: true` and cannot reject an
+unknown key. Iteration 9 left it open rather than build a fix on an assumption, which was right.
+
+The probe that works is the one that goes *through* the code being fixed: iteration 9's raw-pipe
+protocol probe hung on this machine, but the Hub's own `run_turn` drives `codex app-server`
+perfectly well. So the fix's core parameter went in first, then three runs:
+
+| | `config` | result |
+|---|---|---|
+| A | `model_reasoning_effort=definitely-not-a-level` | provider 400, *"Supported values are: 'none', 'minimal', …"* — byte-identical to what `codex exec -c` gets |
+| B | *(none)* | completes, one `OK` |
+| C | `model_reasoning_effort=xhigh` | completes, and the rollout's `turn_context` records `"effort": "xhigh"` |
+
+Refused when wrong, recorded when right. Not ignored. The fix is `render_control_config`, the
+sibling of `render_control_args` — same catalog declarations, rendered as the map app-server reads
+instead of the argv it does not — threaded through to `thread/start`'s `config`, which is now built
+whenever *either* it or `mcp_servers` has content instead of only `if mcp_command`.
+
+### F100 (A) — found by a probe that failed to fail
+
+Probe A was supposed to be loud. It came back `status=completed, error=None, n_events=0`.
+
+`turn/failed` **does not exist**. `codex app-server generate-json-schema` for CLI 0.146.0 lists
+three turn notifications: `turn/started`, `turn/completed`, `turn/moderationMetadata`. Failures
+arrive as `turn/completed` carrying `Turn.status: "failed"` and an `error` the schema documents as
+*"Only populated when the Turn's status is failed."* The loop read the method name and nothing
+else, so **every provider-side failure on the default Codex transport — a 400, a rate limit, an
+expired credential, a context overflow — finalised as a completed run with no output and no
+error**, with its queue entry spent and the operator left to conclude the agent did nothing.
+
+Severity A, and it explains a shape that has been seen and blamed elsewhere: *"the turn completed
+instantly with no output."*
+
+### F101 (A) — asking F100's question one level out
+
+F100 was a status field read past inside a notification the loop handled. So: what does the loop
+not handle at all? Its closing comment enumerated them, dismissing
+`mcpServer/startupStatus/updated` among things that carry *"no timeline-relevant content."* That
+notification's `McpServerStartupState` is `starting | ready | failed | cancelled`.
+
+Driven live with the Hub's own MCP server unable to start: the app-server said exactly why
+(*"handshaking with MCP server failed: connection closed: initialize response"*), the notification
+was dropped, the agent answered "Unavailable" when asked for an AgentWeave tool, and the run
+finalised **completed, `Run.error` NULL**. For that turn the agent could not send a message, record
+evidence, update a task or call `ask_user` — and it looked exactly like an agent that chose not to.
+
+Now an error event naming the server, the provider's message, and — for the Hub's own server —
+what it costs. The turn is deliberately not failed; that is the operator's call, and they can only
+make it if they are told. Once per server per turn, because every startup transition arrives twice.
+
+### F102 (B) — sweeping the class on purpose this time
+
+Two dead branches found by accident is a class. `map_item_to_events` carried one for
+`("todoList", "planUpdate")`; `ThreadItem`'s union has neither and never has — they are camelCase
+guesses at `exec`'s `todo_list`/`plan_update`. Live: the plan arrives as its own
+`turn/plan/updated` notification, so the branch could not have matched even spelled correctly, and
+**every plan a Codex agent made was invisible on the default transport** while the code meant to
+render it sat there looking present. Same `status_event("plan", …)` shape as `exec` now, statuses
+unrendered for that parity, unchanged summaries not repeated.
+
+### Verification
+
+Every fix has a test that was **watched failing with that fix reverted** — nine mutation checks in
+all, each naming the test it broke. Beyond the suite, all four were driven against a **real
+`codex app-server` process and the real provider**, before and after: A/B/C for F99, the
+failing-MCP turn for F101, the plan turn for F102 (`['text','text']` → `['status','text']`).
+
+`ruff` / `black` / `mypy` clean. Targeted files green. Full Hub suite: see the closing note.
+
+### What this iteration is actually about
+
+**When you already know what a probe must produce, its silence is evidence.** F100 cost nothing —
+it fell out of a probe aimed elsewhere, because the expected outcome was known precisely enough
+that its absence was informative. F101 and F102 then came from asking the same question outward
+twice, deliberately.
+
+And the counterpart, which is the harder one: **a test can pin a branch the product cannot reach.**
+`test_turn_failed_notification_is_reported` passed for as long as it existed, asserting the Hub
+reports a failed turn, while the Hub could not report a failed turn — because the fixture fed it a
+notification no CLI sends. No amount of suite-running finds that. Only the protocol does, and
+`codex app-server generate-json-schema` takes seconds.
+
+Three dead branches, all inside the same 200 lines, all written against a remembered protocol
+rather than a checked one.
