@@ -24,7 +24,9 @@ sys.stdout.reconfigure(encoding="utf-8")
 from aw import P, api  # noqa: E402
 
 DB = os.environ.get("AW_DB", r"C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db")
-AGENT = "continue-probe"
+# A fresh agent per run — see `t_queue_attrition.py` for why reusing a name mixes an earlier
+# run's rows into this one's reading.
+AGENT = f"continue-{int(time.time()) % 100000}"
 
 api("POST", f"/projects/{P}/agents/register", {"name": AGENT, "contact_mode": "poll"})
 code, out = api("POST", f"/projects/{P}/agent/trigger",

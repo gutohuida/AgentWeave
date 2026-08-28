@@ -25,7 +25,10 @@ from aw import P, api  # noqa: E402
 DB = os.environ.get(
     "AW_DB", r"C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db"
 )
-AGENT = "attrition-probe"
+# A fresh agent per run, because the rows are read by agent name: re-running against a name a
+# previous run used mixes that run's entries into this one's table, and the earlier run's
+# withdrawn entries are exactly what this script is looking for. Misread once on 2026-08-29.
+AGENT = f"attrition-{int(time.time()) % 100000}"
 
 api("POST", f"/projects/{P}/agents/register", {"name": AGENT, "contact_mode": "poll"})
 print(f"agent {AGENT} registered with no runner bound")

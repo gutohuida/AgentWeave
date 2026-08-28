@@ -127,9 +127,14 @@ rounds exist for.
 - [ ] 3.1 Full hub suite **with `claude` stripped from PATH**.
 - [x] 3.2 CLI suite, UI suite, `ruff` / `black` / `mypy` / `npm run lint` / `tsc --noEmit`.
 - [x] 3.3 `npx openspec validate --specs --strict`.
-- [ ] 3.4 **Drive it live** against the trial Hub: repeat `scripts/drive/t_queue_attrition.py` and
-      `scripts/drive/t_continue_burns_attempts.py`, which are the measurements that produced this
-      change, and confirm both now leave the input intact.
+- [x] 3.4 **Drive it live** against the trial Hub. Both re-measured on the fixed code:
+      five messages to an unbound agent leave **5 queued, 0 withdrawn, 0 attempts** (message 1 used
+      to be destroyed), and three Continue clicks leave the entry queued at 0 attempts (two used to
+      be enough). Both scripts now mint a fresh agent name per run — reusing one mixed the previous
+      run's withdrawn rows into the reading, which was misread once before being caught.
+      **Not driven live: the delivery after the repair.** Binding a runner here spawns a real
+      provider run and no token budget was agreed for the overnight session, so that outcome rests
+      on `test_the_input_survives_until_the_agent_can_run`.
 - [ ] 3.5 Sync the delta into `openspec/specs/agent-conversation-workspace/spec.md`, archive with
       `--skip-specs`, and fix the doubled date prefix.
 - [ ] 3.6 Update `scripts/drive/FINDINGS.md`: F114 closed, with the live re-measurement.

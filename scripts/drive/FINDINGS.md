@@ -7197,10 +7197,10 @@ needs a spec goes through three rounds before a line of it is written.
 
 ## F114 (A) — sending three messages to an agent that cannot launch destroys the first one
 
-**Status:** **open, and it has a fix shape that only became available tonight.** Measured
-2026-08-28 against the trial Hub. F108's round 1 filed this abstractly ("a non-transient refusal
-consuming three delivery attempts on every path"); this is the measurement, and it is worse than
-the abstraction suggested.
+**Status:** **fixed** (2026-08-29) by `2026-08-28-a-delivery-attempt-means-a-delivery`, through
+three rounds and re-measured live. Measured 2026-08-28 against the trial Hub. F108's round 1 filed
+this abstractly ("a non-transient refusal consuming three delivery attempts on every path"); this
+is the measurement, and it was worse than the abstraction suggested.
 
 Five messages to an agent with no runner bound, sent back to back, nothing else happening:
 
@@ -7294,6 +7294,59 @@ A permanently-wrong entry still stops wedging the queue, which is what F56 was p
 waiting for a runner to be bound stops being consumed by the operator's own typing, which is what
 F96 was protecting. The two findings stop pulling against each other.
 
-**Not implemented here.** It changes when the Hub gives up on operator input, which is the most
-consequential thing the queue does, and this repository's rule is that a change needing a spec goes
-through three rounds before a line of it is written. It is the obvious next spec loop.
+**Not implemented when this was filed.** It changes when the Hub gives up on operator input, which
+is the most consequential thing the queue does, and this repository's rule is that a change needing
+a spec goes through three rounds before a line of it is written.
+
+### What the three rounds changed, and why the first shape was wrong
+
+The fix shape above — *reuse `request_level`* — **is not what shipped**, and round 2 is why.
+
+`request_level` answers *will this caller ever be satisfied*. The counter is asking something else:
+*does this refusal block only this entry, or the whole agent?* Those axes cross. `:756` — "could not
+prepare isolated worktree" — is environment-level **and** entry-specific, because the workspace it
+failed to prepare is the **task's**, not the agent's. And `schedule_agent` always builds its turn
+from the oldest eligible entry, so an entry whose checkout can never be prepared sits at the head
+and starves every other conversation. Gating on `request_level` would have stopped counting there
+and reintroduced F56's scenario exactly.
+
+What shipped is a third classification, `TriggerAgentError.agent_wide`, defaulting to `False`, on
+three sites and nothing else: **no runner is bound**, **the bound runner's row is gone**, **the
+bound runner's CLI is not on PATH**. All three are properties of the agent's own binding, so nothing
+is starving behind the entry they protect — which is the same reason the transient branch beside
+them already declines to count.
+
+Round 3 added one more correction, and it made the change smaller: the requirement everyone assumed
+this contradicted — *Repeated delivery failure does not wedge an agent* — is scoped in its own first
+sentence to *"a failed run's input"* and *"how many times a queued input has **failed to be
+delivered**"*. This path has no run and no delivery. **The behaviour F114 complains about was never
+specified at all**; `F56` added the second counting site without a requirement behind it.
+
+### Re-measured live, 2026-08-29
+
+Same two scripts that produced the finding, same trial Hub, after the fix:
+
+```
+$ py -3.11 scripts/drive/t_queue_attrition.py
+  message 1..5 queued
+  entry-abafb836663f  message 1  queued  0
+  entry-63648d89193b  message 2  queued  0
+  entry-92bb8988880d  message 3  queued  0
+  entry-c0594881f6a4  message 4  queued  0
+  entry-42b7143c8cea  message 5  queued  0
+  sent 5, still queued 5, withdrawn 0
+
+$ py -3.11 scripts/drive/t_continue_burns_attempts.py
+  Continue click 1: started=False -> state='queued' attempts=0
+  Continue click 2: started=False -> state='queued' attempts=0
+  Continue click 3: started=False -> state='queued' attempts=0
+  the entry survived three clicks
+```
+
+Before: message 1 withdrawn at three attempts, and two clicks of Continue enough to do it.
+
+**Not re-measured live: the delivery after the repair.** Binding a runner on this machine spawns a
+real provider run, and no token budget was agreed for the overnight session, so the outcome —
+*perform the repair, get every message* — is covered by
+`test_the_input_survives_until_the_agent_can_run` rather than by a live drive. That is the one
+assertion in this finding's closure that rests on a test rather than on the product.
