@@ -140,6 +140,16 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
             )
         except TriggerAgentError as exc:
             workspace_unavailable = getattr(exc, "workspace_unavailable", False)
+            # Written down before the classification is even asked, because it matters in both
+            # branches and for the same reason: this is the only place the refusal's own words
+            # exist. `GET /queue/{agent}/status` re-derives what it can and reported
+            # `waiting_reason: null` for everything it could not — a D8 checkout collision, an
+            # unimplemented runner, a work_dir the project does not contain (F97). Recording it
+            # here is what keeps the status route from having to restate each condition, and what
+            # makes the *next* refusal visible without another edit.
+            for entry in selected:
+                entry.waiting_reason = exc.detail
+            await db.commit()
             # Does this refusal clear on its own? `workspace_unavailable` was the first refusal
             # that did, and it still selects the operator event below, but it is no longer the only
             # one: a turn refused because another agent holds the task's checkout (design D8) waits

@@ -470,6 +470,79 @@ async def test_a_collision_leaves_the_entry_queued_and_delivers_it_when_the_task
         assert entry.state == "delivered"
 
 
+async def test_the_status_route_reports_the_collision_the_trigger_refused_on(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """F97 — the reason has to survive as far as the surface the operator is actually looking at.
+
+    Measured live on 2026-08-28 with two agents and one task. `POST /agent/trigger` answered with
+    the refusal's own sentence; `GET /queue/{agent}/status`, polled one second later, answered
+    `waiting_count: 1, waiting_reason: null`. That route re-derives the reason from questions it
+    can answer itself — is the agent running, is the hop budget spent, is the CLI on PATH, is the
+    workspace there — and a collision with another turn is none of them, so it fell through to the
+    delivery-attempt counter, which for a transient refusal is zero, and reported nothing at all.
+
+    The state under test is exactly the one the test above leaves behind, which is the point: the
+    entry is queued, unbilled and correct, and the operator could not tell that from an entry that
+    is stuck.
+    """
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    await _agent(app, auth_headers, bind_runner, CHALLENGER)
+    conversation_id = await _conversation(CHALLENGER)
+    await _task(HELD_TASK)
+    run_id = await _holding_run(HOLDER, HELD_TASK)
+
+    async with async_session_factory() as session:
+        project = await session.get(Project, "proj-test")
+        project.hop_budget = 6
+        session.add(
+            new_entry(
+                project_id="proj-test",
+                agent=CHALLENGER,
+                origin_type="operator",
+                content="please start this",
+                hop_depth=0,
+                conversation_id=conversation_id,
+                task_id=HELD_TASK,
+            )
+        )
+        await session.commit()
+
+    # `which` patched for this file's usual reason: without it the turn is refused for a missing
+    # CLI instead, and that refusal is both terminal and one the status route can already see.
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        result = await schedule_agent("proj-test", CHALLENGER)
+        assert result.terminal_failure is False
+
+        status = await app.get(
+            f"/api/v1/projects/proj-test/queue/{CHALLENGER}/status", headers=auth_headers
+        )
+    assert status.status_code == 200, status.text
+    body = status.json()
+    assert body["waiting_count"] == 1
+    assert body["delivery_attempts"] == 0
+    assert HOLDER in (body["waiting_reason"] or ""), body["waiting_reason"]
+    assert HELD_TASK in body["waiting_reason"]
+
+    # And the wait ending clears it, so a requeued entry never explains itself with a wait that
+    # is over.
+    await _end_run(run_id)
+
+    def _spawn(cmd, cwd=None, env=None, **rest):
+        raise RuntimeError("stop here: delivery is what clears the reason")
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            await schedule_agent("proj-test", CHALLENGER)
+            while agent_trigger._background_runs:
+                await asyncio.gather(*list(agent_trigger._background_runs), return_exceptions=True)
+
+    async with async_session_factory() as session:
+        entry = (await session.execute(select(InboundQueueEntry))).scalars().one()
+        assert entry.waiting_reason is None
+
+
 # ---------------------------------------------------------------------------
 # 4.16 — the flow scheduler's counterpart
 # ---------------------------------------------------------------------------

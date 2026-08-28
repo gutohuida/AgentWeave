@@ -154,6 +154,10 @@ async def deliver_entries_with_run(
         entry.state = "delivered"
         entry.delivered_in_run_id = run.id
         entry.delivered_at = now
+        # The wait is over, so the reason it was waiting is history. Cleared here rather than
+        # left to age because a delivered entry can come back — `return_run_entries` requeues it
+        # — and a stale explanation of a wait that ended is worse than none (F97).
+        entry.waiting_reason = None
     await db.commit()
     return entries
 

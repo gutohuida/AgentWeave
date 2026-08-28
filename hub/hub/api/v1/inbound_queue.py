@@ -122,6 +122,9 @@ async def get_queue_status(
             InboundQueueEntry.agent == agent,
             InboundQueueEntry.state == "queued",
         )
+        # Arrival order, so "the reason" below is the *controlling* entry's — the one a turn would
+        # start from — rather than whichever row the database happened to hand back first.
+        .order_by(InboundQueueEntry.sequence)
     )
     entries = list(entries_result.scalars().all())
     running = (
@@ -170,6 +173,13 @@ async def get_queue_status(
                     await project_workspace.resolve_project_workspace(session, project_id)
                 except project_workspace.ProjectWorkspaceError as exc:
                     reason = f"project workspace is unavailable: {exc}"
+    if reason is None:
+        # What the last attempt was actually refused with, when none of the read-only questions
+        # above found anything (F97). Below them deliberately: those describe the agent's state
+        # *now*, and this is a record of the last attempt, which a repair since then may already
+        # have cleared. Above the attempt counter for the reason the counter's own comment gives —
+        # every reason explains the wait better than a retry count does.
+        reason = next((entry.waiting_reason for entry in entries if entry.waiting_reason), None)
     attempts = max((entry.delivery_attempts or 0 for entry in entries), default=0)
     if reason is None and attempts:
         # Last, deliberately. Every reason above explains the wait better than a retry count does —

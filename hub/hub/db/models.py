@@ -575,6 +575,20 @@ class InboundQueueEntry(Base):
     #: never be delivered" — deliberately not a fourth state, because the value is CHECK-constrained
     #: and rewriting that on SQLite means rebuilding a table the scheduler's ordering depends on.
     abandoned_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: Why the last delivery attempt did not start a turn, in the words the refusal used. The
+    #: sibling of `abandoned_reason` for an entry that is still going to be tried: that one says
+    #: why the Hub gave up, this one says why it is waiting.
+    #:
+    #: Recorded rather than re-derived, and that is the whole point (F97). `GET /queue/{agent}/
+    #: status` re-asks a handful of read-only questions — is the agent running, is the hop budget
+    #: spent, is the CLI on PATH, is the workspace there — and every refusal raised deeper inside
+    #: the trigger was invisible to it. A turn refused because a peer holds the task's checkout
+    #: (design D8) was reported to the operator as `waiting_count: 1, waiting_reason: null`, one
+    #: second after the trigger response had carried the sentence verbatim. Restating each
+    #: condition in the status route would put two copies of every refusal in the codebase and
+    #: leave the next one invisible again; this way the status route asks what happened instead of
+    #: guessing what might have.
+    waiting_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     message_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     session_mode: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)

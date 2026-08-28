@@ -36,7 +36,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0097"
+HEAD_REVISION = "0098"
 
 
 # ---------------------------------------------------------------------------
@@ -3024,3 +3024,50 @@ def test_migration_0097_is_guarded_when_the_checkpoints_table_does_not_exist(tmp
 
     with sqlite3.connect(db_file) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0097"
+
+
+# ---------------------------------------------------------------------------
+# 0098 — a queued entry records why its last delivery attempt did not start a turn
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0098_adds_waiting_reason_and_leaves_existing_entries_null(tmp_path) -> None:
+    """F97. No backfill: this records what a delivery attempt was refused with, and for an entry
+    queued before the migration no such record was kept — writing one would forge it."""
+    db_file = tmp_path / "waiting_reason.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _upgrade_to(db_url, "0097")
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(inbound_queue_entries)").fetchall()
+        }
+        assert "waiting_reason" not in columns
+        conn.execute(
+            "INSERT INTO inbound_queue_entries "
+            "(id, project_id, agent, origin_type, content, arrived_at, hop_depth, state) "
+            "VALUES ('entry-old', 'proj-test', 'author', 'operator', 'hello', "
+            "        '2026-08-27 12:00:00', 0, 'queued')"
+        )
+
+    _upgrade_to(db_url, "0098")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute(
+            "SELECT waiting_reason FROM inbound_queue_entries WHERE id = 'entry-old'"
+        ).fetchone() == (None,)
+
+
+def test_migration_0098_is_guarded_when_the_queue_table_does_not_exist(tmp_path) -> None:
+    """Upgrades that start from an early revision reach 0098 with only that revision's tables."""
+    db_file = tmp_path / "no_queue_table.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0097')")
+
+    _upgrade_to(db_url, "0098")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0098"
