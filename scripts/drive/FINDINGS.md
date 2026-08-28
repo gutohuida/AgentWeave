@@ -7117,3 +7117,67 @@ than either of the other two.
 
 Choosing between those is the operator's call, and by this repository's own rule a change that
 needs a spec goes through three rounds before a line of it is written.
+
+---
+
+## F114 (A) — sending three messages to an agent that cannot launch destroys the first one
+
+**Status:** **open, and it has a fix shape that only became available tonight.** Measured
+2026-08-28 against the trial Hub. F108's round 1 filed this abstractly ("a non-transient refusal
+consuming three delivery attempts on every path"); this is the measurement, and it is worse than
+the abstraction suggested.
+
+Five messages to an agent with no runner bound, sent back to back, nothing else happening:
+
+```
+entry                  content      state       att  abandoned_reason
+entry-aeef00996fce     message 1    withdrawn     3  delivery failed 3 times (Runner CLI '…' was not found…)
+entry-2e1f5501377e     message 2    queued        2
+entry-f6cb62ebf395     message 3    queued        0
+entry-20c7fe2918f9     message 4    queued        0
+entry-f202b1e9d3ec     message 5    queued        0
+```
+
+**Message 1 is gone, and no run was ever attempted for it.** Its recorded reason —
+*"delivery failed 3 times"* — describes three deliveries that never happened. What actually
+happened is that the operator sent two more messages: every `POST /agent/trigger` calls
+`schedule_agent`, which selects the oldest conversation's entries and, on a non-transient refusal,
+increments `delivery_attempts` on each of them (`turn_scheduler.py:191`). Three *messages* consume
+the three *delivery attempts*.
+
+Elapsed time is not involved. This took under two seconds.
+
+### Why it is severity A
+
+- **The operator's input is destroyed**, silently as far as the composer is concerned — every
+  trigger answered `200 … "queued"`.
+- **The stated reason is false.** An operator reading "delivery failed 3 times" will go looking for
+  three failures, and there are none.
+- **It undercuts F96 exactly.** F96 exists so that binding a runner delivers the message queued
+  while none was bound. An operator who sends a few messages before getting round to the binding
+  has already lost the first ones. F96's own live log shows the same mechanism from the other side:
+  `waiting_reason` had become `"delivery failed 1 time; 2 attempts left"`, the retry counter having
+  taken the reason's place.
+- **The trigger is ordinary use.** Not a retry storm, not a loop — a person typing twice more.
+
+### The fix shape, and why it was not available until tonight
+
+`F56` added the counting for a stated reason: a refusal raised before any run exists "repeats
+identically forever, and every entry queued behind it starves along with it". That reasoning is
+sound — **for a refusal about what was asked.** It is exactly wrong for a refusal about the
+environment, where the entry is *supposed* to wait for a repair and the product has promised to
+keep it.
+
+Until tonight there was no way to tell those apart at that line. F108 introduced
+`TriggerAgentError.request_level` for the operator's route, and the same flag answers this:
+
+> count a delivery attempt only when the refusal is **request-level**; leave the counter alone for
+> an environment-level refusal, exactly as it is already left alone for a transient one.
+
+A permanently-wrong entry still stops wedging the queue, which is what F56 was protecting. An entry
+waiting for a runner to be bound stops being consumed by the operator's own typing, which is what
+F96 was protecting. The two findings stop pulling against each other.
+
+**Not implemented here.** It changes when the Hub gives up on operator input, which is the most
+consequential thing the queue does, and this repository's rule is that a change needing a spec goes
+through three rounds before a line of it is written. It is the obvious next spec loop.
