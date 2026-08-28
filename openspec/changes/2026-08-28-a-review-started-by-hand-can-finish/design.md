@@ -129,10 +129,21 @@ completer). Attempting the staffing *is* the check.
 that the task's status and assignee are unchanged when a run binds to a task under review. Read
 carelessly, this change appears to violate it.
 
-It does not, and the reason is an ordering: staffing happens at dispatch, strictly before the
-binding is resolved and read. By the time binding observes the task, it is already `under_review`
-with its reviewer, and binding still changes nothing. The requirement is about what *binding* does,
-not about what the task's status was on arrival.
+It does not — but **not for the reason this section originally gave, which was backwards.** It
+claimed staffing happens strictly before the binding is resolved. The opposite is true:
+`resolve_bound_task` runs at `agent_trigger.py:561` and the staffing at `:650`. The binding is
+resolved **first**.
+
+Which makes the requirement satisfied more simply than the wrong version argued. Resolving the
+binding is a read — F58's own requirement says exactly that — so it observes the task as it stood
+before the review was staffed and changes nothing. The staffing that follows in the same dispatch is
+an act of dispatch, not of binding.
+
+Kept as a record of how it went wrong, because the failure is more instructive than the fix: the
+error survived three review rounds, the implementation, and the live drive. Every one of those asked
+whether the *behaviour* was right — and it always was — and none re-derived the call order the
+argument rested on. It was caught at the very end by the one task that had been renumbered out of
+the tick list, and so had to be looked at again rather than recalled.
 
 But a requirement that is only true once you know the call order is a requirement that will be
 misread, and the next person to touch this will either weaken the binding rule or refuse the

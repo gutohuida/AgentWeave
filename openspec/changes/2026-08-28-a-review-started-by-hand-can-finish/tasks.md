@@ -66,8 +66,8 @@ run and their findings are folded back into `proposal.md` / `design.md` / the de
       that status and assignee are unchanged. Include the case where `prepare_review_turn` itself
       refuses *after* the staffing was staged — the task must not be left in review. This is the
       scenario whose absence let rounds 1 and 2 breach `run-task-binding`. — **done, and the first attempt was inadequate.** Conftest stubs the checkout to a no-op returning the repo root, so there is no artefact on disk to look for and moving the staffing below the provisioning left every other test passing. `prepare_review_turn` itself is now the witness: a spy asserts it is never called for any of the three refusals (parametrised). This is round 3's own lesson landing again — the success-path assertions constrained nothing about the failure path.
-- [ ] 3.8 **Binding still moves nothing.** The `run-task-binding` scenario added by this change:
-      staffing precedes binding, and resolving the binding changes neither status nor assignee.
+- [x] 3.8 **Binding still moves nothing.** The `run-task-binding` scenario added by this change:
+      staffing precedes binding, and resolving the binding changes neither status nor assignee. — **done, and it found that D6's argument was backwards.** The design claimed staffing precedes the binding; `resolve_bound_task` runs at `agent_trigger.py:561` and the staffing at `:650`, so the binding is resolved first. The behaviour was right either way, which is why three review rounds, the implementation and the live drive all missed it. The requirement and both copies of the spec are corrected, and the test spies on `resolve_bound_task` so what binding observed is asserted rather than recalled.
 - [x] 3.9 Mutation-check every guard added or relied on in phase 2, and record each mutation with
       the test that caught it. A mutation that nothing catches is a missing test, not a passing one.
 
@@ -101,9 +101,10 @@ Not investigated here; it is not this change's defect and guessing at it would b
 
 ## 5. Close
  — **done.**
-- [ ] 5.1 `py -3.11 -m pytest hub/tests/ -q` and `py -3.11 -m pytest tests/ -q` green.
-- [ ] 5.2 `ruff` / `black --target-version py311` / `mypy src/` / `npm run lint` clean over the paths
-      CI covers.
-- [ ] 5.3 `npx openspec validate 2026-08-28-a-review-started-by-hand-can-finish --strict`.
-- [ ] 5.4 Sync and archive. Note that the CLI's sync replaces whole requirement blocks, so the
+- [x] 5.1 `py -3.11 -m pytest hub/tests/ -q` and `py -3.11 -m pytest tests/ -q` green. — **done.** Hub 3488 passed / 84 skipped / 1 xpassed / 0 failed (21m01s); CLI 440 passed / 3 skipped.
+- [x] 5.2 `ruff` / `black --target-version py311` / `mypy src/` / `npm run lint` clean over the paths
+      CI covers. — **done.** ruff, black --target-version py311, mypy src/, npm run lint all clean over the CI paths.
+- [x] 5.3 `npx openspec validate 2026-08-28-a-review-started-by-hand-can-finish --strict`. — **done**, valid.
+- [x] 5.4 Sync and archive. Note that the CLI's sync replaces whole requirement blocks, so the
       `MODIFIED` requirement in `run-task-binding` needs checking by hand afterwards.
+ — **done, synced by hand** as the note warned. The MODIFIED block in run-task-binding was a full restatement, so the swap was a pure addition with nothing lost (verified by diff); the ADDED requirement was appended to task-lifecycle-governance. `openspec validate --specs --strict` → 42 passed, 0 failed.

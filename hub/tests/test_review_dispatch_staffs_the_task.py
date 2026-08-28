@@ -467,3 +467,46 @@ async def test_a_dispatchable_review_is_not_refused_by_the_route(
 
     async with async_session_factory() as db:
         assert await _snapshot(db, task.id) == ("under_review", REVIEWER)
+
+
+async def test_the_binding_is_resolved_before_the_review_is_staffed_and_moves_nothing(
+    app, auth_headers, bind_runner, tmp_path
+):
+    """`run-task-binding`: binding a review moves nothing — and the ordering the design first got
+    backwards.
+
+    The change's own design claimed staffing happens *before* the binding is resolved, and argued
+    the requirement was satisfied on that basis. It is the other way round: `resolve_bound_task`
+    runs at `agent_trigger.py:561`, the staffing at `:650`. The behaviour was right either way,
+    which is exactly why three review rounds and a live drive all missed it — so the order is
+    asserted here rather than recalled, and this test is what makes the corrected requirement
+    true rather than merely plausible.
+
+    `resolve_bound_task` is the witness: what it saw is what binding observed.
+    """
+    _init_repo(tmp_path)
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    async with async_session_factory() as db:
+        task = await _task_completed_by_author(db, suffix="order")
+        await _evidence_naming_a_commit(db, task.id, suffix="order")
+
+    seen = []
+    real = agent_trigger.resolve_bound_task
+
+    async def _spy(session, **kwargs):
+        async with async_session_factory() as fresh:
+            seen.append(await _snapshot(fresh, task.id))
+        return await real(session, **kwargs)
+
+    with patch.object(agent_trigger, "resolve_bound_task", _spy):
+        async with async_session_factory() as db:
+            await _dispatch_review(db, reviewer=REVIEWER, task_id=task.id, suffix="order")
+
+    assert seen, "the binding was never resolved"
+    assert seen[0] == ("completed", None), (
+        f"binding observed {seen[0]} — it must run before the staffing, and must not have "
+        f"caused it"
+    )
+
+    async with async_session_factory() as db:
+        assert await _snapshot(db, task.id) == ("under_review", REVIEWER)

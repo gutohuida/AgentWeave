@@ -17,11 +17,11 @@ questions, and a single value answering both would make an entry's two purposes 
 Binding a review SHALL NOT move the task. The transitions available to a run from a task under
 review do not include starting it, so binding records the association and changes no status.
 
-This SHALL NOT be read as forbidding the dispatch that precedes the binding from moving the task.
-Staffing a review — recording its reviewer as the task's holder and moving the task into review — is
-an act of dispatch, and it happens before the binding is resolved. By the time the binding is read,
-the task is already in review and already held by its reviewer, and binding still changes neither.
-The rule constrains what binding does, not what the task's status was when binding observed it.
+This SHALL NOT be read as forbidding the dispatch from moving the task. The binding is resolved
+first, and resolving it is a read: it observes the task as it stood before the review was staffed,
+and changes nothing. The staffing that follows in the same dispatch — recording the reviewer as the
+task's holder and moving the task into review — is an act of dispatch, not of binding. The rule
+constrains what binding does, not what else the dispatch does after it.
 
 Where a turn delivers both an item of work and a review, the binding SHALL be determined
 deterministically by the same ordering already used to select among several items naming a task.
@@ -38,11 +38,12 @@ deterministically by the same ordering already used to select among several item
 - **THEN** the task's status is unchanged
 - **AND** the task's assignee is unchanged
 
-#### Scenario: Staffing precedes binding, and binding still moves nothing
+#### Scenario: The binding is resolved before the review is staffed, and moves nothing
 
 - **WHEN** a review turn is dispatched for a task that its reviewer does not yet hold
-- **THEN** the task is held by that reviewer and in review before the binding is resolved
-- **AND** resolving the binding changes neither the task's status nor its assignee
+- **THEN** the binding is resolved while the task is still unstaffed
+- **AND** resolving it changes neither the task's status nor its assignee
+- **AND** the task is held by that reviewer and in review before the turn begins
 
 #### Scenario: A review turn is subject to the run boundary
 
