@@ -82,7 +82,7 @@ async def _loop_with_task(db, *, suffix):
 async def _completed_by(db, task, agent):
     """Walk the task to `completed` through the transition machine, as `agent`.
 
-    Never constructed directly: `_agent_that_completed` reads the history, so a row built at
+    Never constructed directly: `agent_that_completed` reads the history, so a row built at
     `completed` would leave the author unknown and the reviewer ladder would decline to staff
     anybody — the test would pass while proving nothing.
     """

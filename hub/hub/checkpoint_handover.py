@@ -88,7 +88,7 @@ async def _task_this_run_completed(db, run: Run) -> Optional[str]:
     measurement on the live database killed it before it shipped: of the ten runs that had recorded
     a `completed` transition, **six carried `run.task_id = NULL`**. The binding column is not a
     reliable record of what a run finished; the append-only table is, which is the same reason
-    `_agent_that_completed` gives for not reading `Task.updated_by_run_id`.
+    `agent_that_completed` gives for not reading `Task.updated_by_run_id`.
     """
     return (
         await db.execute(

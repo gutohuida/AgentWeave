@@ -44,7 +44,7 @@ REVIEWER = "critic"
 async def _completed_task(session, task_id: str, *, by: str | None, assignee: str | None) -> Task:
     """A task at `completed`, attributed to *by* through the machine rather than written directly.
 
-    Attribution has to be real: `_agent_that_completed` reads `TaskTransition`, so a task
+    Attribution has to be real: `agent_that_completed` reads `TaskTransition`, so a task
     constructed straight at `completed` has no author and the guard would permit it for a reason
     that has nothing to do with what is being tested. `by=None` is that case, on purpose.
     """

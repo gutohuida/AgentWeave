@@ -389,15 +389,15 @@ async def _answer_failed_review(
 
     `task.escalation_agent` is deliberately not consulted on either branch. It would be a *second*
     reviewer resolution, and D6's problem — an escalation target that authored the work is a
-    guaranteed 403 from `_agent_that_completed` — cannot arise here at all, because the resolver
+    guaranteed 403 from `agent_that_completed` — cannot arise here at all, because the resolver
     already excludes the author by construction.
     """
     # Local imports, matching `scheduler._task_is_claimable_by`'s own call of
-    # `_agent_that_completed`: this module is imported by the trigger path that `scheduler` also
+    # `agent_that_completed`: this module is imported by the trigger path that `scheduler` also
     # reaches, and the module docstring's line about keeping the deciding half free of the spawning
     # half is what these keep true.
     from .scheduler import resolve_reviewer
-    from .task_transition_service import _agent_that_completed
+    from .task_transition_service import agent_that_completed
 
     if await _review_was_declared(session, run, task):
         return (
@@ -409,7 +409,7 @@ async def _answer_failed_review(
             f"reviewer, reviewing it yourself, or asking this one again is the way forward.",
         )
 
-    author = await _agent_that_completed(session, task.id)
+    author = await agent_that_completed(session, task.id)
     barred = await _reviewers_that_gave_no_verdict(session, task)
     barred.add(run.agent)
     if author:

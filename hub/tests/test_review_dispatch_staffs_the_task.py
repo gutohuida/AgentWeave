@@ -83,7 +83,7 @@ async def _roster(app, auth_headers, bind_runner, *names):
 async def _task_completed_by_author(db, *, suffix, status="completed"):
     """A task walked to *status* by AUTHOR, never constructed there.
 
-    `_agent_that_completed` reads the transition history, so a task assembled directly at
+    `agent_that_completed` reads the transition history, so a task assembled directly at
     `completed` has no recorded author and the guard this file exercises cannot fire — the test
     would pass while proving nothing.
     """
@@ -379,3 +379,91 @@ async def test_a_review_refused_by_the_provisioning_leaves_the_task_unstaffed(
             await _snapshot(db, task.id) == before
         ), "staged staffing must not survive a refusal raised after it"
         assert (await db.execute(select(Run.id))).first() is None
+
+
+# ---------------------------------------------------------------------------
+# What the operator actually sees over HTTP (D11, found by driving it)
+# ---------------------------------------------------------------------------
+
+
+async def _post_review(app, auth_headers, agent, task_id):
+    return await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={"agent": agent, "message": f"review {task_id}", "review_task_id": task_id},
+        headers=auth_headers,
+    )
+
+
+async def test_the_operator_gets_a_refusal_not_an_acknowledgement(app, auth_headers, bind_runner):
+    """Driven live 2026-08-28, and the drive is the only reason this is known.
+
+    The dispatch-time guards are correct and leave the task untouched, but `turn_scheduler` catches
+    `TriggerAgentError` and records it as the entry's `waiting_reason` — so the route answered
+    `200 {"success": true, "status": "queued"}` with the refusal's own sentence in a field named
+    for something else. An operator who asked for a review that can never happen was told it
+    succeeded. Every assertion here is on the *status code*, because the sentence was already
+    right and the sentence was not the problem.
+    """
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER, OTHER)
+    async with async_session_factory() as db:
+        task = await _task_completed_by_author(db, suffix="http-author")
+        await _evidence_naming_a_commit(db, task.id, suffix="http-author")
+
+    response = await _post_review(app, auth_headers, AUTHOR, task.id)
+    assert response.status_code == 403, response.json()
+    assert "recorded as completing it" in response.json()["detail"]
+
+    async with async_session_factory() as db:
+        assert await _snapshot(db, task.id) == ("completed", None)
+
+
+async def test_the_operator_is_refused_at_once_for_a_task_not_awaiting_review(
+    app, auth_headers, bind_runner
+):
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    async with async_session_factory() as db:
+        task = await _task_completed_by_author(db, suffix="http-live", status="in_progress")
+        await _evidence_naming_a_commit(db, task.id, suffix="http-live")
+
+    response = await _post_review(app, auth_headers, REVIEWER, task.id)
+    assert response.status_code == 409, response.json()
+    assert "in_progress" in response.json()["detail"]
+
+    async with async_session_factory() as db:
+        assert await _snapshot(db, task.id) == ("in_progress", AUTHOR)
+
+
+async def test_the_operator_is_refused_at_once_for_a_review_someone_else_holds(
+    app, auth_headers, bind_runner
+):
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER, OTHER)
+    async with async_session_factory() as db:
+        task = await _task_completed_by_author(db, suffix="http-held")
+        await _evidence_naming_a_commit(db, task.id, suffix="http-held")
+        await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await db.commit()
+
+    response = await _post_review(app, auth_headers, OTHER, task.id)
+    assert response.status_code == 409, response.json()
+    assert REVIEWER in response.json()["detail"]
+
+    async with async_session_factory() as db:
+        assert await _snapshot(db, task.id) == ("under_review", REVIEWER)
+
+
+async def test_a_dispatchable_review_is_not_refused_by_the_route(
+    app, auth_headers, bind_runner, tmp_path
+):
+    """The guard must refuse the three cases and nothing else — a route check that refused a
+    legitimate review would close the path this change exists to open."""
+    _init_repo(tmp_path)
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    async with async_session_factory() as db:
+        task = await _task_completed_by_author(db, suffix="http-ok")
+        await _evidence_naming_a_commit(db, task.id, suffix="http-ok")
+
+    response = await _post_review(app, auth_headers, REVIEWER, task.id)
+    assert response.status_code == 200, response.json()
+
+    async with async_session_factory() as db:
+        assert await _snapshot(db, task.id) == ("under_review", REVIEWER)

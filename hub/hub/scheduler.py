@@ -544,7 +544,7 @@ async def task_is_claimable_by(session: AsyncSession, task: Task, agent: str) ->
     except the agent recorded as completing it, which is the whole review mechanism -- no handoff
     message, no review task row, nothing asked of the finishing agent that could be omitted.
 
-    **`_agent_that_completed` is called rather than reimplemented, and that is the correctness
+    **`agent_that_completed` is called rather than reimplemented, and that is the correctness
     property rather than tidiness.** It is the same determination `_guard_author_is_not_reviewer`
     reads for `-> approved`/`rejected`/`revision_needed`, so a task this function offers an agent
     can never be one that agent is then refused for approving. Two implementations of "who finished
@@ -577,9 +577,9 @@ async def task_is_claimable_by(session: AsyncSession, task: Task, agent: str) ->
         return True
     if task.status not in REVIEWABLE_LOOP_TASK_STATUSES:
         return False
-    from .task_transition_service import _agent_that_completed
+    from .task_transition_service import agent_that_completed
 
-    completed_by = await _agent_that_completed(session, task.id)
+    completed_by = await agent_that_completed(session, task.id)
     if completed_by is None:
         return False
     return completed_by != agent
@@ -1204,7 +1204,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     agent's job is to fill it, and whether a *drained* queue should stop firing at all is
     `_loop_stop_reason`'s question, asked earlier and separately.
     """
-    from .task_transition_service import _agent_that_completed
+    from .task_transition_service import agent_that_completed
 
     gated: "list[tuple[Task, dependency_gate.DependencyRefusal]]" = []
     unstaffed: "list[tuple[str, str]]" = []
@@ -1270,7 +1270,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             # new route this branch's own comment warns about. `wedged_review` carries the decision
             # past that arm to the ladder, which excludes the author by construction.
             if task.assignee:
-                wedged_author = await _agent_that_completed(session, task.id)
+                wedged_author = await agent_that_completed(session, task.id)
                 if wedged_author is not None and wedged_author == task.assignee:
                     wedged_review = True
                 else:
@@ -1354,7 +1354,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         # Finished work. **The ladder decides, always** — not "the job's agent if it happens to be
         # eligible". A declared reviewer that resolves outranks the job's own agent, or the
         # declaration would be advisory; and D4 is the one statement of who reviews.
-        author = await _agent_that_completed(session, task.id)
+        author = await agent_that_completed(session, task.id)
         if author is None:
             # Unattributable, and therefore offered to nobody — see `task_is_claimable_by` for why
             # this is the safe direction. Not `unstaffed` either: nothing is waiting on staffing, the

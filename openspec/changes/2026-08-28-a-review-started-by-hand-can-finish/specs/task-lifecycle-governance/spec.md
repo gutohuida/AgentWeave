@@ -28,6 +28,11 @@ reviewer. Replacing that holder is a handover, and a handover that travels no tr
 task's recorded history unable to explain who holds it or why it changed. The refusal SHALL name the
 current holder.
 
+A refusal SHALL reach the requester as a refusal. Where a review is requested through an interface
+that reports success or failure, that interface SHALL report the refusal, and SHALL NOT report the
+request as accepted with the refusal carried as a reason for waiting. A request that can never
+succeed is not a request that is waiting.
+
 A refused review SHALL leave nothing provisioned. The refusal SHALL be raised before the reviewer's
 checkout is created, not compensated for afterwards, and the task SHALL be left exactly as the
 refusal found it.
@@ -77,6 +82,13 @@ that never ran.
 - **WHEN** a review is requested for a task already under review and held by a different reviewer
 - **THEN** the request is refused, naming the current holder
 - **AND** the task's holder is unchanged
+
+#### Scenario: A refusal is reported as a refusal, not as acceptance
+
+- **WHEN** the operator requests a review that cannot be dispatched
+- **THEN** the response reports the request as refused, with the reason
+- **AND** the request is not reported as accepted or as awaiting anything
+- **AND** no queued work remains that would retry it
 
 #### Scenario: A refused review leaves no checkout behind
 

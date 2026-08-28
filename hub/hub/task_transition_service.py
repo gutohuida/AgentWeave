@@ -119,7 +119,7 @@ class RunNotBoundError(TransitionRefusedError):
     http_status = 403
 
 
-async def _agent_that_completed(session: AsyncSession, task_id: str) -> Optional[str]:
+async def agent_that_completed(session: AsyncSession, task_id: str) -> Optional[str]:
     """The **agent** responsible for the most recent move of this task into `completed`.
 
     Agent, not run. The first version of this compared `run_id`, and live use on 2026-08-10 walked
@@ -164,7 +164,7 @@ async def _guard_author_is_not_reviewer(
     """
     if actor.is_operator or to_status not in _REVIEW_OUTCOMES:
         return
-    completing_agent = await _agent_that_completed(session, task.id)
+    completing_agent = await agent_that_completed(session, task.id)
     if completing_agent is not None and completing_agent == actor.agent:
         raise ActorNotPermittedError(
             f"Cannot move task {task.id} to {to_status!r}: agent {actor.agent!r} recorded the "
@@ -216,7 +216,7 @@ async def _guard_reviewer_is_not_the_author(
     """
     if to_status != "under_review" or not task.assignee:
         return
-    completing_agent = await _agent_that_completed(session, task.id)
+    completing_agent = await agent_that_completed(session, task.id)
     if completing_agent is not None and completing_agent == task.assignee:
         raise ActorNotPermittedError(
             f"Cannot move task {task.id} to 'under_review': it is still assigned to "

@@ -87,7 +87,7 @@ async def _completed_by_the_author(
     """A task the author genuinely moved to `completed`, then a reviewer was staffed onto.
 
     The completion goes through `apply_transition` with a run actor rather than being written
-    directly, because `_agent_that_completed` reads the transition history — and that history is
+    directly, because `agent_that_completed` reads the transition history — and that history is
     what bars the author from reviewing its own work. A fixture that set `status` by hand would
     leave the author eligible and quietly test a different product.
     """
@@ -395,13 +395,13 @@ async def test_a_second_failure_with_nobody_left_surfaces(
         assert job.enabled is True, "surfacing does not stop the flow"
 
 
-async def test_the_agent_that_completed_the_work_is_never_restaffed_as_its_reviewer(
+async def test_theagent_that_completed_the_work_is_never_restaffed_as_its_reviewer(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path
 ):
     """2.7, the half that is new. The first-resolution half is `test_reviewer_ladder.py`'s.
 
     `AUTHOR` is on the roster, free, and alphabetically ahead of nobody that matters — and is still
-    not chosen, because `_agent_that_completed` bars it from recording a verdict and a review it
+    not chosen, because `agent_that_completed` bars it from recording a verdict and a review it
     could not deliver is a 403 discovered one step later."""
     await bind_project_workspace(_init_repo(tmp_path / "repo"))
     await _roster(app, auth_headers, bind_runner, AUTHOR, "critic")

@@ -8,7 +8,7 @@ row whose own completion would need reviewing, nothing asked of the author at al
 Hub offers an agent and the set that agent is permitted to sign off are the same set. Two
 implementations of "who finished this" would be free to drift apart into a loop that fires an agent
 at work it is structurally unable to approve — forever, since the refusal changes nothing about the
-queue. So `task_is_claimable_by` calls `_agent_that_completed`, the same determination
+queue. So `task_is_claimable_by` calls `agent_that_completed`, the same determination
 `_guard_author_is_not_reviewer` reads, and `test_every_offered_task_can_be_carried_to_a_review_outcome`
 below asserts the property directly rather than inferring it from the cases either side of it.
 """
@@ -67,7 +67,7 @@ async def _completed_by(db, task, agent):
     """Walk a task to `completed` *through the transition machine*, as `agent`.
 
     Constructing the row at `completed` directly is what most of the older loop tests do, and it is
-    exactly wrong here: it leaves no `TaskTransition`, so `_agent_that_completed` answers `None` and
+    exactly wrong here: it leaves no `TaskTransition`, so `agent_that_completed` answers `None` and
     every one of these tests would pass for the wrong reason. The history row is the fact under
     test.
     """
@@ -98,7 +98,7 @@ async def test_a_completed_task_is_offered_to_an_agent_that_did_not_complete_it(
         assert [t.id for t in claimed] == [task.id]
 
 
-async def test_a_completed_task_is_not_offered_to_the_agent_that_completed_it(app):
+async def test_a_completed_task_is_not_offered_to_theagent_that_completed_it(app):
     """The author cannot take its own finished work back, and the queue reads as having nothing
     for it — which is the same answer it gave before this group existed, and is what keeps a
     single-agent loop's behaviour unchanged by the widening."""

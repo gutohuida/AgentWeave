@@ -447,7 +447,7 @@ async def checkpoint_by_task_author(
     briefed the wrong author's work.
 
     Resolved through the transition history rather than through `Task.updated_by_run_id`, for the
-    reason `_agent_that_completed` gives about that column: it is a single mutable field that the
+    reason `agent_that_completed` gives about that column: it is a single mutable field that the
     next write overwrites, and being unable to answer this question is why the append-only table
     exists. By `sequence` and not `created_at`, likewise — transitions staged in one flush share a
     timestamp, and after a revision cycle an earlier completion by another run is exactly what must

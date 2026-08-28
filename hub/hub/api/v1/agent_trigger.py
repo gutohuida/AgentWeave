@@ -62,7 +62,7 @@ from ...conversations import (
     new_conversation,
 )
 from ...db.engine import async_session_factory, get_session
-from ...db.models import Agent, Conversation, PermissionRequest, Project, Run, Runner
+from ...db.models import Agent, Conversation, PermissionRequest, Project, Run, Runner, Task
 from ...inbound_queue import (
     abandoned_for_run,
     deliver_entries_with_run,
@@ -354,6 +354,50 @@ async def _review_task_from_entries(
             f"{', '.join(work_task_ids)}; a turn admits entries of one kind only",
         )
     return review_task_id
+
+
+async def review_dispatch_refusal(
+    session: AsyncSession, task: "Task", *, reviewer: str
+) -> "Optional[Tuple[int, str]]":
+    """Why *reviewer* may not be dispatched to review *task*, or `None`.
+
+    The read-only half of what `enter_selected_task` would refuse, so the operator's route can
+    answer immediately instead of queueing an entry whose turn will never start. Stated here once
+    and called from both places rather than written twice: the dispatch is still the authority --
+    the flow path never passes through the route -- and this must not drift from it.
+
+    Design D8, D9 and D5, in the order they become knowable.
+    """
+    # Imported here, not at module scope: this module is imported back by `task_transitions`'s
+    # neighbours, and the service imports nothing from the API layer.
+    from ...task_transition_service import agent_that_completed
+
+    if task.status not in (REVIEWABLE_LOOP_TASK_STATUSES + WITH_REVIEWER_LOOP_TASK_STATUSES):
+        return (
+            status.HTTP_409_CONFLICT,
+            f"Task {task.id} is {task.status!r}, which is not a status a review starts from. "
+            f"A review begins from work that is awaiting one. Staffing a reviewer onto this task "
+            f"would take it from whoever holds it and move it nowhere.",
+        )
+    if (
+        task.status in WITH_REVIEWER_LOOP_TASK_STATUSES
+        and task.assignee
+        and task.assignee != reviewer
+    ):
+        return (
+            status.HTTP_409_CONFLICT,
+            f"Task {task.id} is already under review by {task.assignee!r}. Reassign the task if "
+            f"{reviewer!r} should take it over, or let the review in flight finish.",
+        )
+    completing_agent = await agent_that_completed(session, task.id)
+    if completing_agent is not None and completing_agent == reviewer:
+        return (
+            status.HTTP_403_FORBIDDEN,
+            f"Cannot review task {task.id} as {reviewer!r}: that is the agent recorded as "
+            f"completing it, so the review would claim its own author is reviewing it. Dispatch a "
+            f"different reviewer, or clear the assignee to review it yourself.",
+        )
+    return None
 
 
 async def trigger_agent_directly(
@@ -1152,10 +1196,24 @@ async def trigger_agent(
         # Same reasoning, and one refusal more: a task with no evidence naming a commit cannot be
         # reviewed at all, and the operator should learn that here rather than by watching a run
         # start and immediately fail.
-        await resolve_task_for_project(session, body.review_task_id, project_id)
+        review_target = await resolve_task_for_project(session, body.review_task_id, project_id)
         target = await requirement_evidence.commit_for_task_review(session, body.review_task_id)
         if not target.resolved:
             raise HTTPException(status_code=409, detail=target.refusal)
+        # The same three questions `trigger_agent_directly` asks before it staffs the review,
+        # asked again here so the operator gets an answer instead of an acknowledgement.
+        #
+        # **Found by driving it** (design D11). The dispatch-time refusals are correct and the
+        # task is left untouched, but `turn_scheduler` catches `TriggerAgentError` and records it
+        # as the entry's `waiting_reason`, so `POST /agent/trigger` answered
+        # `200 {"success": true, "status": "queued"}` with the refusal's own sentence buried in a
+        # field named for something else. An operator who asks for a review that can never happen
+        # is told it succeeded. Duplicated rather than moved: the flow path reaches
+        # `trigger_agent_directly` without passing through this route, so the checks below are the
+        # operator's answer and the ones there remain the authority.
+        refusal = await review_dispatch_refusal(session, review_target, reviewer=body.agent)
+        if refusal is not None:
+            raise HTTPException(status_code=refusal[0], detail=refusal[1])
 
     if body.overrides:
         agent_row_result = await session.execute(

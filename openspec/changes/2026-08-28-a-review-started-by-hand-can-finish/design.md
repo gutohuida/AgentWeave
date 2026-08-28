@@ -219,6 +219,47 @@ costs nothing precisely because the write is not durable until the dispatch says
 compensating delete is a second thing to get right, and the requirement asks for the workspace never
 to exist rather than to be removed afterwards.
 
+### D11. The operator is refused, not acknowledged — and the check is duplicated to do it
+
+**Found by driving it, after three rounds of review had passed the change as finished.** The
+dispatch-time guards are correct and leave the task untouched, but `turn_scheduler` catches
+`TriggerAgentError` and records it as the queue entry's `waiting_reason`. So over HTTP the operator
+got:
+
+```
+200 {"success": true, "status": "queued",
+     "waiting_reason": "Cannot move task … to 'under_review': it is still assigned to 'builder' …"}
+```
+
+The refusal's own sentence, correct and complete, delivered in a field named for something else,
+under a flag that says the opposite. An operator who asks for a review that can *never* happen is
+told it succeeded, and the entry sits queued being retried until the abandonment counter gives up
+on it. Two such entries were left stranded by the drive that found this, which is what made it
+visible.
+
+So `POST /agent/trigger` asks the same three questions before it queues anything, and refuses with
+a real status code. `review_dispatch_refusal` states them once and both callers use it.
+
+**Duplicated deliberately, not moved.** The flow path reaches `trigger_agent_directly` without
+passing through this route, so the dispatch-time checks remain the authority and the route's are
+the operator's answer. This is the shape the route already used for `commit_for_task_review`, which
+is likewise checked at the route *and* inside `prepare_review_turn` — so this change follows the
+product's existing convention rather than inventing one.
+
+`agent_that_completed` loses its leading underscore in the process. It was already imported across
+module boundaries by `run_divergence`, `scheduler` and `checkpoints`; the private name had not been
+private for some time.
+
+*Rejected: make `turn_scheduler` propagate non-transient refusals instead.* It would fix the whole
+class rather than this instance, which is genuinely more attractive — and it changes the behaviour
+of every existing refusal on that path (archived agent, nonexistent task, unimplemented runner) in
+one edit, none of which this change has driven. That is a change of its own, and it is filed as one
+rather than smuggled in here.
+
+*Rejected: leave it, since the sentence does reach the operator.* It reaches a field the UI shows
+for *waiting*, on a response whose `success` is `true`. A refusal that presents as a queue delay is
+not a refusal.
+
 ## Risks / Trade-offs
 
 - **The meaning of `POST /agent/trigger {"review_task_id"}` changes**: it now takes ownership of the
@@ -248,6 +289,13 @@ dispatch path whose current outcome is a dead end.
   be presentation logic keyed on a number rather than on meaning.
 
 ## Review passes
+
+**Phase 4, the live drive — and it found what three rounds of review did not.** The reviews were
+reading; the drive was the first time the change was *asked a question by an operator*. Every
+dispatch-time guard behaved exactly as designed and the operator still could not tell a refusal
+from a success, because nothing in three rounds had asked what `POST /agent/trigger` actually
+returns when `trigger_agent_directly` raises. See D11. The staffing itself — the finding — worked
+on the first live attempt.
 
 **Round 3 — what does this collide with, and could a wrong implementation still pass?** Two results,
 and both were about the change's relationship to things outside itself rather than to the code it

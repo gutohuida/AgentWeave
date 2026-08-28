@@ -72,7 +72,7 @@ async def _loop_with_completed_task(db, *, suffix):
     db.add(task)
     await db.commit()
 
-    # Walked, never constructed at `completed`: `_agent_that_completed` reads the history, and a
+    # Walked, never constructed at `completed`: `agent_that_completed` reads the history, and a
     # task with no author is declined by the ladder for a different reason entirely — the test
     # would pass while proving nothing.
     actor = run_actor(run_id=f"run-{AUTHOR}-{task.id}", agent=AUTHOR)

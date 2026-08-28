@@ -67,6 +67,12 @@ because its fix shape is a decision, not because nobody has looked at it.
 turned out to have been fixed on 2026-08-24 (see its row above and its own section). One remaining
 severity A, and it is waiting on a product decision.
 
+**Revised again, later on 2026-08-28: the open severity-A list is empty.** F76's shape was decided
+by the operator, specified through three review rounds, implemented and driven live. Driving it
+produced one new finding — **F108 (B)**, a permanently refused request answering
+`200 {"success": true}` — fixed for review dispatch and open as a class. An empty A list measures
+this corpus of driving, not the product; the next sweep is what lengthens it again.
+
 **And one observation that outranks any single row of that table.** F88, F89 and F90 were found in
 one iteration, in three unrelated subsystems, and every one of them was a mechanism this repository
 tests *thoroughly* — against a state the product never produces. F88's access tests pass a
@@ -4449,7 +4455,10 @@ the test passes against the defect.
 
 ## F76 — a review turn dispatched by hand dead-ends: the reviewer cannot record its verdict anywhere
 
-**Status:** open — filed, not fixed. The fix shape is an operator decision (see below).
+**Status:** **fixed** — operator chose the shape 2026-08-28 ("staff it, and refuse up front when
+staffing would be illegal"), specified through three review rounds as
+`openspec/changes/2026-08-28-a-review-started-by-hand-can-finish`, implemented and driven live the
+same day. See the closing section.
 
 **Severity: A.** The operator starts a review through the product's own mechanism, pays for a full
 turn, and the verdict exists only in the chat transcript.
@@ -4492,6 +4501,57 @@ than guess — see `decisions_for_user`.
 
 **Cost, since severity is ranked by that:** one full review turn (~3 minutes of Haiku, real
 tokens) producing an approved verdict that reached no durable record.
+
+### Fixed 2026-08-28 — and the drive found something three rounds of review did not
+
+**The fix.** `trigger_agent_directly` is the single point both dispatch paths converge on
+(`turn_scheduler.py:125` is its only caller), so the repair is one idempotent call to the statement
+that already existed: `enter_selected_task`, which the flow path has used since F45. A third
+caller, not a second copy. `_enter_selected_task` lost its underscore in the process — two test
+modules already imported the private name across a module boundary, and a caller in production code
+made it a lie.
+
+**Ordering turned out to be the whole design.** Round 3 caught that placing the staffing beside
+`prepare_review_turn` — which both earlier rounds had written — would breach a requirement F58 had
+shipped four days earlier: *a request that is going to be refused SHALL NOT leave a workspace
+behind*. Every refusal now precedes the checkout. That is free because `apply_transition` neither
+commits nor flushes, so the staffing is pending state until the dispatch commits and any later
+refusal abandons it.
+
+**Two guards that were not in the original proposal**, both from the round-2 read of the code, both
+reachable only from this path because the flow's reviewer ladder cannot produce their states:
+
+* a task that is **neither awaiting review nor already in review** is refused — `enter_selected_task`
+  writes the assignee *before* its status branch and that branch has no `else`, so staffing an
+  `in_progress` task would take it from the agent working it and travel no transition. The route's
+  only other check asks whether evidence names a commit, which is true of tasks still in progress;
+* a task **already under review by a different agent** is refused — replacing the holder there also
+  travels no transition, leaving a handover the append-only history cannot explain.
+
+**The drive that closed this also opened one.** See **F108** at the end of this file: every one of
+these refusals reached the operator as `200 {"success": true, "status": "queued"}` until it was
+fixed, which three rounds of review had not noticed and the first live drive did.
+
+### Driven live, 2026-08-28, `aw-e2e1` (`proj-46b602c1f3cb`), Hub on 8011 from source
+
+| | |
+|---|---|
+| **The finding** | `task-c351c35eb718` dispatched to `reviewer` **by hand**: task read `under_review` held by `reviewer` immediately, and the reviewer recorded its verdict (`revision_needed`) **through the task itself**. Driven twice, either side of F108's fix. |
+| **Author as its own reviewer** | `HTTP 403` — *"that is the agent recorded as completing it"*. Was a `200 "success": true` before F108. |
+| **Not awaiting review** | `HTTP 409` against `task-a0409448ee8e`, which is `approved` *and* carries evidence naming a commit — the combination that makes the evidence check insufficient. Names `'approved'`. |
+| **Held by another reviewer** | `HTTP 409` naming `'reviewer'`, task untouched, driven while a real review was in flight. |
+
+Twelve mutations across the two halves, every one caught by the test that names it — including the
+one that mattered, *moving* the staffing below the provisioning, whose first attempt was wrong
+(it deleted the staffing instead of relocating it, so it was an earlier mutation wearing a second
+label and proved nothing about ordering).
+
+**State left behind:** in `aw-e2e1`, `task-c351c35eb718` sits `revision_needed` held by `reviewer`,
+with `review-probe.md` committed in its own checkout; runs `run-a14e93734abc`, `run-151c6dd85bc6`,
+`run-f3fac5f1383b` and the reviewer's first turn; the two stranded queue entries F108 created were
+deleted. No job or loop was touched, so none was left enabled. 8000 and 8010 were never contacted.
+
+
 
 ---
 
@@ -6743,3 +6803,42 @@ removing the UI branch (4 card tests); and letting an empty list bury the `grant
 permission requests `perm-185f063ad551` (denied) and `perm-c2dbaab3b89e` (allowed), and
 `f107-probe.txt` in swapper's worktree. No job or loop was touched, so none was left enabled. The
 Hub on 8011 is left running on this branch's code; 8000 and 8010 were never contacted.
+
+---
+
+## F108 (B) — a permanently refused request answers `200 {"success": true}`
+
+**Status:** fixed **for review dispatch** (2026-08-28); **open as a class.**
+
+Found by driving F76's own fix, and it is the reason phase 4 exists. Every dispatch-time guard
+behaved exactly as designed, the task was left untouched every time — and the operator could not
+tell a refusal from a success:
+
+```
+POST /agent/trigger {"agent": "builder", "review_task_id": "task-c351c35eb718"}
+  -> 200 {"success": true, "status": "queued",
+          "waiting_reason": "Cannot move task ... to 'under_review': it is still assigned to
+                             'builder', the agent recorded as completing it, ..."}
+```
+
+The refusal's own sentence, correct and complete, delivered in a field named for *waiting*, under a
+flag saying the opposite. `turn_scheduler` catches `TriggerAgentError` and records it as the queue
+entry's `waiting_reason` (deliberately — it is what keeps `GET /queue/{agent}/status` able to
+explain itself), so a request that can never succeed presents as one that is merely queued. It then
+retries until the abandonment counter gives up. **Two entries were left stranded in `aw-e2e1` by the
+drive that found this**, which is what made it visible at all.
+
+Fixed for this route by asking the same three questions before anything is queued, via
+`review_dispatch_refusal`, shared with the dispatch so the two cannot drift. Duplicated rather than
+moved, because the flow path never passes through the route — and this is the shape the route
+already used for `commit_for_task_review`, which is likewise checked in both places.
+
+**Open as a class**, and deliberately not fixed here: every *other* refusal on that path still
+answers the same way — an archived agent, a task that does not exist, an unimplemented runner, a
+`work_dir` the project does not contain. Making `turn_scheduler` propagate non-transient refusals
+would fix all of them in one edit, and would change the behaviour of every one of those paths, none
+of which this change has driven. That is its own change.
+
+**Three rounds of review did not find this, and the first drive did.** The rounds were reading code;
+the drive was the first time the change was asked a question by an operator. Nothing in three passes
+thought to ask what the HTTP route *returns* when the function it calls raises.

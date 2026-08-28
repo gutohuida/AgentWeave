@@ -204,7 +204,7 @@ BAND_AWAITING_PERSON = "awaiting_person"
 #: claim this?" with a yes or a no, and this one answers "not by the agent that finished it". An
 #: agent may not approve its own work, so the author cannot take it back -- but anybody else can,
 #: and that is the entire review mechanism. `REVIEWABLE_STATUSES` is the set; `scheduler`'s
-#: `task_is_claimable_by` is the question, and it asks `_agent_that_completed` rather than a second
+#: `task_is_claimable_by` is the question, and it asks `agent_that_completed` rather than a second
 #: implementation of the same determination, so a task the Hub offers an agent is never one that
 #: agent would then be refused for approving.
 BAND_AWAITING_HANDOFF = "awaiting_handoff"

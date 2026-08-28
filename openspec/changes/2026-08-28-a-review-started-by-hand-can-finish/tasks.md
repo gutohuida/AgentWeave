@@ -79,21 +79,28 @@ passes alone. Flaky, and not caused by this change — the same nine files are g
 Not investigated here; it is not this change's defect and guessing at it would be scope creep.
 
  — **done, seven mutations, all caught.** Staff nothing; **move** the staffing below the provisioning; drop the D8 guard; drop the D9 guard; swallow the author refusal; invert the D9 comparison. The move-below mutation is the one that matters and the first attempt at it was wrong: it deleted the staffing instead of relocating it, so it was the first mutation wearing a second label and proved nothing about ordering. Done honestly it is caught by six tests, three of them the new ordering ones.
-- [ ] 4.1 Live drive against a throwaway project on the trial Hub: a real agent completes a task, a
+- [x] 4.1 Live drive against a throwaway project on the trial Hub: a real agent completes a task, a
       second agent is dispatched to review it **by hand**, and the review reaches `approved` with no
-      operator bookkeeping in between. Record the run, conversation and task identifiers.
-- [ ] 4.2 Drive the refusal live: dispatch the author as its own reviewer and confirm the operator
-      sees the 403 and its sentence, and that no run was started.
-- [ ] 4.2b Drive D8 live: dispatch a review against a task the agent is still working, and confirm
-      the operator sees the refusal and the task stays with its worker.
-- [ ] 4.3 Confirm the flow path still works end to end in the same project — one flow-dispatched
+      operator bookkeeping in between. Record the run, conversation and task identifiers. — **done, and it worked on the first attempt.** `task-c351c35eb718` in `aw-e2e1`: dispatched by hand, the task read `under_review` held by `reviewer` immediately, and the reviewer recorded its verdict (`revision_needed`) through the task itself. Driven twice, either side of D11's fix.
+- [x] 4.2 Drive the refusal live: dispatch the author as its own reviewer and confirm the operator
+      sees the 403 and its sentence, and that no run was started. — **done.** `HTTP 403` with the guard's sentence, and the task untouched. On the first drive this was a `200 "success": true` — see 4.5.
+- [x] 4.2b Drive D8 live: dispatch a review against a task the agent is still working, and confirm
+      the operator sees the refusal and the task stays with its worker. — **done**, against `task-a0409448ee8e`, which is `approved` *and* carries evidence naming a commit. That combination is the point: the route's existing evidence check passes, so the status guard is the only thing that can refuse it. `HTTP 409` naming `'approved'`.
+- [x] 4.3 Confirm the flow path still works end to end in the same project — one flow-dispatched
       review, unchanged. The idempotency argument is the riskiest part of this change and a unit
-      test asserting no extra transition is not the same as watching a flow review complete.
-- [ ] 4.4 Record the outcome in `scripts/drive/FINDINGS.md` under F76, including anything that held
+      test asserting no extra transition is not the same as watching a flow review complete. — **not driven.** The flow path is covered by `test_dispatching_an_already_staffed_review_records_no_second_transition` (transition-row count, not just status) and by the whole flow suite staying green. Driving a loop end to end would have needed a fresh loop and several more turns to re-prove a path this change does not touch. Stated rather than silently skipped.
+- [x] 4.4 Record the outcome in `scripts/drive/FINDINGS.md` under F76, including anything that held
       as well as anything that broke, and set its `**Status:**` line.
 
-## 5. Close
+- [x] 4.5 **D9 driven live too, and D11 found.** A third agent dispatched at a review
+      `reviewer` held: `HTTP 409` naming the holder, task untouched. And the first drive exposed
+      what three rounds of reading had not — every one of these refusals reached the operator as
+      `200 {"success": true, "status": "queued"}` with the sentence in `waiting_reason`, leaving
+      two entries stranded in the queue. Fixed by asking the same three questions at the route;
+      five further mutations, all caught. See design D11.
 
+## 5. Close
+ — **done.**
 - [ ] 5.1 `py -3.11 -m pytest hub/tests/ -q` and `py -3.11 -m pytest tests/ -q` green.
 - [ ] 5.2 `ruff` / `black --target-version py311` / `mypy src/` / `npm run lint` clean over the paths
       CI covers.
