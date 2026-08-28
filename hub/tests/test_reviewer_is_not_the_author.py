@@ -16,7 +16,7 @@ The fix is in two halves and both are tested here, because either alone leaves a
   stuck forever behind a guard that arrived too late to help them.
 
 `test_a_flow_staffing_its_own_review_is_not_refused` is the regression the first half needs most.
-`_enter_selected_task` used to transition *before* writing the assignee, which means the new guard
+`enter_selected_task` used to transition *before* writing the assignee, which means the new guard
 read the author and refused the flow's own correct staffing — the fix would have broken every
 review the product staffs, and passed a test suite that only ever exercised the operator's door.
 """
@@ -186,7 +186,7 @@ async def test_a_flow_staffing_its_own_review_is_not_refused(
 ):
     """The regression the guard needs most.
 
-    `_enter_selected_task` transitions to `under_review` and writes the reviewer into `assignee`.
+    `enter_selected_task` transitions to `under_review` and writes the reviewer into `assignee`.
     In the original order the transition ran first, so the guard saw the *author* still sitting in
     `assignee` and refused — breaking every review the flow staffs, while the guard's own unit
     tests (which come in through the operator's door with the assignee already set) all passed.
@@ -284,7 +284,7 @@ async def test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accept
     `update_task_for_actor` applied `status` before `assignee`, so a PATCH carrying both was refused
     on the strength of an assignee that same request was about to replace — and the operator had to
     discover that two calls were needed. The fields are now applied in the order the guard reads
-    them, which is the same ordering fix `_enter_selected_task` needed.
+    them, which is the same ordering fix `enter_selected_task` needed.
     """
     async with async_session_factory() as session:
         await _completed_task(session, "task-f70-patch", by=AUTHOR, assignee=AUTHOR)

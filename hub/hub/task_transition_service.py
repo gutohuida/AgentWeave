@@ -205,7 +205,7 @@ async def _guard_reviewer_is_not_the_author(
       blocked every move it could not attribute would stop legitimate work over a missing history
       row, and a task completed before the transition table existed has no completer to compare.
 
-    The flow's own path satisfies this by construction — `_enter_selected_task` writes the
+    The flow's own path satisfies this by construction — `enter_selected_task` writes the
     reviewer into `assignee` before it transitions, which it must, or the flow would refuse itself
     here on every review it staffs.
 

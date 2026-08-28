@@ -34,8 +34,8 @@ from hub.scheduler import (
     DECISION_CLAIM,
     REVIEWABLE_LOOP_TASK_STATUSES,
     WITH_REVIEWER_LOOP_TASK_STATUSES,
-    _enter_selected_task,
     decide_firing,
+    enter_selected_task,
 )
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import TRANSITIONS, run_actor
@@ -135,7 +135,7 @@ async def test_entering_a_review_moves_the_task_out_of_the_pool(app):
     async with async_session_factory() as db:
         _job, _loop, task = await _loop_with_task(db, suffix="enter")
         await _completed_by(db, task, AUTHOR)
-        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await db.commit()
 
     async with async_session_factory() as db:
@@ -145,11 +145,11 @@ async def test_entering_a_review_moves_the_task_out_of_the_pool(app):
 
 
 async def test_entering_ordinary_work_is_unchanged(app):
-    """The other half of `_enter_selected_task` must keep behaving exactly as it did — this is the
+    """The other half of `enter_selected_task` must keep behaving exactly as it did — this is the
     path every non-flow loop in the product takes."""
     async with async_session_factory() as db:
         _job, _loop, task = await _loop_with_task(db, suffix="ordinary")
-        await _enter_selected_task(db, task, agent=AUTHOR, is_review=False)
+        await enter_selected_task(db, task, agent=AUTHOR, is_review=False)
         await db.commit()
 
     async with async_session_factory() as db:
@@ -165,8 +165,8 @@ async def test_entering_a_review_twice_is_not_an_illegal_transition(app):
     async with async_session_factory() as db:
         _job, _loop, task = await _loop_with_task(db, suffix="twice")
         await _completed_by(db, task, AUTHOR)
-        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
-        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await db.commit()
 
     async with async_session_factory() as db:
@@ -195,7 +195,7 @@ async def test_a_review_in_flight_is_not_staffed_again(app, auth_headers, bind_r
             (task.id, REVIEWER, True)
         ], "the ladder should staff the non-author for the review"
 
-        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await db.commit()
 
     async with async_session_factory() as db:
@@ -211,7 +211,7 @@ async def test_a_review_in_flight_still_appears_on_the_board(app, auth_headers, 
     async with async_session_factory() as db:
         job, loop, task = await _loop_with_task(db, suffix="board")
         await _completed_by(db, task, AUTHOR)
-        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await db.commit()
 
     async with async_session_factory() as db:
@@ -232,7 +232,7 @@ async def test_a_review_in_flight_is_never_restaffed_as_ordinary_work(
     async with async_session_factory() as db:
         job, loop, task = await _loop_with_task(db, suffix="notordinary")
         await _completed_by(db, task, AUTHOR)
-        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await db.commit()
 
     async with async_session_factory() as db:
@@ -246,7 +246,7 @@ async def test_the_author_still_cannot_be_staffed_for_its_own_review(
     app, auth_headers, bind_runner
 ):
     await _roster(app, auth_headers, bind_runner, AUTHOR)
-    """Unchanged by this fix, and asserted here because `_enter_selected_task` now writes an
+    """Unchanged by this fix, and asserted here because `enter_selected_task` now writes an
     assignee onto finished work — which must not become a route back to the author."""
     async with async_session_factory() as db:
         job, loop, task = await _loop_with_task(db, suffix="author")

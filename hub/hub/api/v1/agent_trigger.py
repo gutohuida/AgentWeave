@@ -96,6 +96,7 @@ from ...pty_runner import (
 )
 from ...run_divergence import evaluate_run_end, record_response_run
 from ...run_task_binding import (
+    TaskBindingError,
     bind_run_to_task,
     decided_task_refusal,
     rebind_conversation,
@@ -117,9 +118,15 @@ from ...runner_parsing import (
     parse_codex_line,
     read_codex_rollout_accounting,
 )
-from ...scheduler import finalize_job_run_for_conversation
+from ...scheduler import (
+    REVIEWABLE_LOOP_TASK_STATUSES,
+    WITH_REVIEWER_LOOP_TASK_STATUSES,
+    enter_selected_task,
+    finalize_job_run_for_conversation,
+)
 from ...spec_manifest import SpecPathError, validate_spec_path
 from ...sse import sse_manager
+from ...task_transition_service import TransitionRefusedError
 from ...usage_accounting import record_turn_usage
 from ...utils import persist_event, short_id
 
@@ -542,6 +549,69 @@ async def trigger_agent_directly(
                 "work_dir cannot be combined with a review turn: a review turn's workspace is the "
                 "checkout of the commit under review.",
             )
+        # **Staffing the review, and every refusal it can raise, before the checkout exists.**
+        #
+        # Finding F76: this path provisioned the reviewer's detached checkout and staffed nothing,
+        # so the reviewer did the work and then met four correct refusals with no exit between
+        # them -- it could not move the task (still assigned to its author), record evidence, or
+        # report. The flow path has staffed since F45; the same statement is called here, so one
+        # operation stops having two behaviours.
+        #
+        # Before `prepare_review_turn`, not after (design D10): `run-task-binding` requires that a
+        # request which is going to be refused leaves no workspace behind. Free to do here because
+        # `apply_transition` neither commits nor flushes -- the staffing joins this dispatch's
+        # transaction as pending state, so a refusal below (including `ReviewTurnRefused` from the
+        # provisioning that now follows) abandons it and the task is never left staffed for a
+        # review that did not happen.
+        try:
+            review_task = await resolve_task_for_project(session, review_task_id, project_id)
+        except TaskBindingError as exc:
+            raise TriggerAgentError(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+        # Design D8, and the reason this guard is here rather than inside `enter_selected_task`:
+        # that function writes the assignee *before* its status branch, and the branch has no
+        # `else`. So staffing a task that is neither awaiting review nor already in review would
+        # reassign it and travel no transition -- taking live work from the agent doing it and
+        # moving it nowhere. The flow path cannot reach that (its ladder only selects reviewable
+        # tasks), so a guard inside the shared function would sit where it could never fire. The
+        # operator names a task id directly, and the only other check on this route asks whether
+        # evidence names a commit, which is true of tasks that are still `in_progress`.
+        if review_task.status not in (
+            REVIEWABLE_LOOP_TASK_STATUSES + WITH_REVIEWER_LOOP_TASK_STATUSES
+        ):
+            raise TriggerAgentError(
+                status.HTTP_409_CONFLICT,
+                f"Task {review_task.id} is {review_task.status!r}, which is not a status a review "
+                f"starts from. A review begins from work that is awaiting one. Staffing a reviewer "
+                f"onto this task would take it from whoever holds it and move it nowhere.",
+            )
+        # Design D9. The `under_review` branch below is idempotent in its *status* but not in its
+        # assignee, which is written unconditionally -- so dispatching a review for a task already
+        # held by someone else would replace the holder and travel no transition, leaving a
+        # handover this task's append-only history could not explain. Cannot fire on the flow path:
+        # a flow writes its reviewer into `assignee` and commits before the turn is scheduled, so
+        # the holder already is the dispatched reviewer by the time this runs.
+        if (
+            review_task.status in WITH_REVIEWER_LOOP_TASK_STATUSES
+            and review_task.assignee
+            and review_task.assignee != agent
+        ):
+            raise TriggerAgentError(
+                status.HTTP_409_CONFLICT,
+                f"Task {review_task.id} is already under review by {review_task.assignee!r}. "
+                f"Reassign the task if {agent!r} should take it over, or let the review in flight "
+                f"finish.",
+            )
+        try:
+            await enter_selected_task(session, review_task, agent=agent, is_review=True)
+        except TransitionRefusedError as exc:
+            # The guard's own sentence, not a restatement of it: it already names both remedies and
+            # the cost of doing nothing, and the operator meets the same words here as they would
+            # attempting the transition directly. This is the case where the named reviewer is the
+            # task's own author -- `enter_selected_task` writes the assignee first, so what
+            # `_guard_reviewer_is_not_the_author` compares against is the reviewer being dispatched.
+            raise TriggerAgentError(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+
         try:
             review_context = await review_turn.prepare_review_turn(
                 session,

@@ -2,7 +2,7 @@
 
 Measured live on the trial Hub, 2026-08-28. A loop claimed a task, the agent worked it and moved it
 to `completed` **without recording evidence**, and the next firing selected it for review. The
-selection is staged before the turn is dispatched, so `_enter_selected_task` moved the task
+selection is staged before the turn is dispatched, so `enter_selected_task` moved the task
 `completed -> under_review` and wrote a reviewer into `assignee`, and *then* the trigger refused:
 
     task task-1b7af6b595e6 has no recorded evidence, so there is no commit to review.

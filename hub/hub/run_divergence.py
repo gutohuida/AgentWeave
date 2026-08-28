@@ -424,7 +424,7 @@ async def _answer_failed_review(
 
     previous_assignee = task.assignee
     # Reassigned for the same reason escalation reassigns: leaving the assignee pointing at the
-    # agent that gave no verdict would make the board disagree with reality. `_enter_selected_task`
+    # agent that gave no verdict would make the board disagree with reality. `enter_selected_task`
     # writes the reviewer into `assignee` on the flow path too, so this is the same statement that
     # path makes, not a new one. The previous assignee is on the record, so it is reversible.
     task.assignee = choice.agent

@@ -531,7 +531,7 @@ REVIEWABLE_LOOP_TASK_STATUSES: tuple = tuple(sorted(REVIEWABLE_STATUSES))
 #: The statuses meaning a reviewer already holds the task, claimable by nobody (finding F45).
 #:
 #: A firing that staffs a review moves the task here in the same commit that queues the turn --
-#: `_enter_selected_task` -- which is what takes it out of `REVIEWABLE_LOOP_TASK_STATUSES` and
+#: `enter_selected_task` -- which is what takes it out of `REVIEWABLE_LOOP_TASK_STATUSES` and
 #: stops the next tick offering the same finished work to the same reviewer again.
 WITH_REVIEWER_LOOP_TASK_STATUSES: tuple = tuple(sorted(WITH_REVIEWER_STATUSES))
 
@@ -725,10 +725,18 @@ async def _first_startable_candidate(
     return None, gated
 
 
-async def _enter_selected_task(
+async def enter_selected_task(
     session: AsyncSession, task: Task, *, agent: str, is_review: bool
 ) -> None:
     """Move *task* into the status its selection implies, and record who holds it.
+
+    **What dispatching a review does to a task, stated once.** Three callers: this module's
+    `_do_fire_job` and `_stage_selection`, which stage a flow's own selection, and
+    `agent_trigger.trigger_agent_directly`, which staffs a review the operator started by hand
+    (finding F76). Public, and named without a leading underscore, because that third caller lives
+    in another module: a review dispatched by hand used to provision the reviewer's checkout and
+    staff nothing, so the reviewer could not move the task, and the repair was to give this
+    statement a third caller rather than a second copy.
 
     The two halves are symmetric and only one of them existed until finding F45:
 
@@ -1359,7 +1367,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         # Asked with the function the trigger itself uses, not a reimplementation of the rule, so
         # the gate and the refusal cannot come to different answers. Measured live: a loop claimed
         # a task, the agent completed it *without recording evidence*, and the next firing selected
-        # it for review. `_enter_selected_task` moved it `completed -> under_review` and named a
+        # it for review. `enter_selected_task` moved it `completed -> under_review` and named a
         # reviewer, and only then did the trigger refuse — leaving the task wedged with a reviewer
         # who never ran, and the firing recorded `failed`. Every firing after that repeated it.
         #
@@ -2305,7 +2313,7 @@ class JobScheduler:
                         logger.info(f"Job {job.id} fire skipped: {stall_reason}")
                         return False
                 if claimed_task is not None:
-                    # Entering the task is `_enter_selected_task`'s single statement, shared with
+                    # Entering the task is `enter_selected_task`'s single statement, shared with
                     # `_stage_selection` (finding F45): `pending -> assigned` for ordinary work,
                     # `completed -> under_review` for a review, and the assignee either way.
                     #
@@ -2314,7 +2322,7 @@ class JobScheduler:
                     # assignee (design D12 step 1), so the value written back is the one already
                     # there. It used to be `default_agent` unconditionally, which under width
                     # silently reassigned another agent's running task to the job's own.
-                    await _enter_selected_task(
+                    await enter_selected_task(
                         session,
                         claimed_task,
                         agent=selection.agent,
@@ -2670,9 +2678,9 @@ class JobScheduler:
         """
         from .inbound_queue import new_entry
 
-        # Shared with `_do_fire_job`'s primary path — see `_enter_selected_task` for why the review
+        # Shared with `_do_fire_job`'s primary path — see `enter_selected_task` for why the review
         # half cannot live in only one of the two (finding F45).
-        await _enter_selected_task(session, task, agent=agent, is_review=is_review)
+        await enter_selected_task(session, task, agent=agent, is_review=is_review)
 
         conversation = new_conversation(project_id=job.project_id, agent=agent, origin="job")
         session.add(conversation)

@@ -27,7 +27,7 @@ from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
 from hub.db.models import AIJob, Loop, Run, Task
-from hub.scheduler import JobScheduler, _enter_selected_task
+from hub.scheduler import JobScheduler, enter_selected_task
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import run_actor
 
@@ -143,7 +143,7 @@ async def test_a_task_being_reviewed_reads_as_working_not_next(app, auth_headers
     async with async_session_factory() as db:
         job, _loop, task = await _flow(db, suffix="working")
         await _completed_by(db, task, AUTHOR)
-        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await _running_turn(db, task, REVIEWER)
         await db.commit()
 
@@ -200,7 +200,7 @@ async def test_a_review_nobody_is_running_reads_as_held_not_working(app, auth_he
     async with async_session_factory() as db:
         job, _loop, task = await _flow(db, suffix="held")
         await _completed_by(db, task, AUTHOR)
-        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await db.commit()
 
     res = await app.get("/api/v1/projects/proj-test/jobs", headers=auth_headers)
@@ -226,7 +226,7 @@ async def test_a_run_without_a_task_id_no_longer_reads_as_working(app, auth_head
     async with async_session_factory() as db:
         job, _loop, task = await _flow(db, suffix="notaskid")
         await _completed_by(db, task, AUTHOR)
-        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await _running_turn(db, task, REVIEWER, with_task_id=False)
         await db.commit()
 
@@ -250,7 +250,7 @@ async def test_a_terminal_run_does_not_keep_a_review_reading_as_working(
     async with async_session_factory() as db:
         job, _loop, task = await _flow(db, suffix="terminal")
         await _completed_by(db, task, AUTHOR)
-        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         run = await _running_turn(db, task, REVIEWER)
         run.status = "failed"
         await db.commit()
@@ -280,7 +280,7 @@ async def test_running_a_loop_whose_work_is_all_in_flight_is_not_a_failure(
     async with async_session_factory() as db:
         job, _loop, task = await _flow(db, suffix="inflight")
         await _completed_by(db, task, AUTHOR)
-        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await db.commit()
 
     res = await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
@@ -301,7 +301,7 @@ async def test_no_job_run_row_is_written_for_a_declined_firing(
     async with async_session_factory() as db:
         job, _loop, task = await _flow(db, suffix="norow")
         await _completed_by(db, task, AUTHOR)
-        await _enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await db.commit()
 
     async with async_session_factory() as db:

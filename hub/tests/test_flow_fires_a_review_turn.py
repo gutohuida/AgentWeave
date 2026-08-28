@@ -421,7 +421,7 @@ async def test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn
     test used to require that the firing *dispatched* the doomed review anyway — that a queued
     entry existed naming the task — on the reasoning that the operator should see what was
     attempted. Driving a real loop on 2026-08-28 showed what that costs. The selection is staged
-    before the turn is dispatched, so `_enter_selected_task` had already moved the task
+    before the turn is dispatched, so `enter_selected_task` had already moved the task
     `completed -> under_review` and written a reviewer into `assignee` by the time the refusal
     happened. The task was left wedged with a reviewer who never ran, and every subsequent firing
     repeated it, once a minute, each one recorded `failed`. See
