@@ -130,6 +130,34 @@ new, ask the operator — do not silently pick. Never carry one change in both.
 **Never mark a task complete on the strength of a plan existing.** Only real, verified
 implementation closes a task.
 
+### The round discipline — explore/propose → review → review, then implement
+
+Any change that needs a spec goes through **three rounds before a line is implemented**, and the
+operator calls this a **"spec loop"** — when they say *"do a spec loop"*, this is the whole
+instruction and nothing needs clarifying.
+
+- **Round 1** explores the codebase and writes the proposal.
+- **Rounds 2 and 3** each *independently* compare the proposal against the actual code and fix the
+  proposal. Not a re-read of round 1's reasoning — a fresh comparison against what the code does.
+- A change that is **already** proposed gets one verification round instead of three.
+
+**Why the cost is the point.** This repository's dominant failure mode is a fix that passes its
+tests and cannot fire in production, and a proposal that reads plausibly but does not match the
+code is how you get one. The sharper variant, learned 2026-08-28: **an argument can be wrong while
+everything it argues about is right** — reviews that check outcomes will not find that, only a
+round that re-derives the argument will. The discipline has found a real defect on five consecutive
+outings; twice on 2026-08-28 alone, once when round 3 caught rounds 1 and 2 both breaching a
+requirement that had shipped four days earlier.
+
+**Do not collapse the rounds to save time.** When queueing work — especially for an autonomous run
+— expand each unproposed change into four items (R1, R2, R3, IMPL) rather than one, and order the
+queue so stopping anywhere leaves complete changes rather than half-written proposals.
+
+**Three rounds are not a substitute for driving it.** On 2026-08-28 all three rounds read the code
+and none of them thought to ask what the HTTP route *returns* when the function it calls raises;
+the first live drive found it in one request (`F108`). Rounds check the argument, a drive checks
+the product.
+
 The Hub-owned spec flow is simultaneously the thing you are using and the thing you are building.
 When it frustrates you, that is a finding — record it rather than working around it. That is the
 entire point of the migration.
