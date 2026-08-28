@@ -6842,3 +6842,89 @@ of which this change has driven. That is its own change.
 **Three rounds of review did not find this, and the first drive did.** The rounds were reading code;
 the drive was the first time the change was asked a question by an operator. Nothing in three passes
 thought to ask what the HTTP route *returns* when the function it calls raises.
+
+---
+
+## F109 (B) — the hub suite runs every session on one database connection, and the retry chain stalls because of it
+
+**Status:** **diagnosed, not fixed.** Filed 2026-08-28 while implementing F108. This is the
+"unexplained flake" carried from handoff 0096 — it now has a reproduction and a mechanism, and it
+is *probably* a harness artefact rather than a product defect. Probably is not good enough to close
+it, and not good enough to change the harness on either.
+
+### What happens
+
+`test_agent_trigger.py::test_spawn_failure_marks_run_failed` fails intermittently on
+`assert entries[0].delivery_attempts == DELIVERY_ATTEMPT_LIMIT` with `2 == 3`. Handoff 0096 recorded
+it as needing full-suite state and not reproducing in isolation. It does reproduce in isolation —
+about **one attempt in seven** — when the same scenario is run 40 times in one parametrized test.
+
+The state it stalls in is the alarming part, and it is the same shape as an outage
+`_execute_run`'s own comment says was worth a `CancelledError` handler to prevent:
+
+| | |
+|---|---|
+| the `Run` row | `status='running'`, `ended_at=NULL`, `error=NULL` — **forever** |
+| the queue entry | `state='queued'`, `delivery_attempts=2` — never retried, never abandoned |
+| every later `schedule_agent` for that agent | `"agent is already running"` |
+
+An agent in that state accepts input and never runs again, with nothing anywhere a human would see.
+
+### The mechanism, as far as it was measured
+
+Traced with a `before_update` mapper listener on `Run`, a spy on `schedule_agent` recording the
+running-run set and its caller, and two probes inside `_execute_run`'s spawn-failure branch:
+
+```
+execute-begin   R2
+failbranch      R2 run_found=True status=running      <- R2 writes failed, commits
+schedule->STARTED R2   running=[]                     <- the failed write is visible here
+execute-end     R1
+failbranch-postcommit R2 about to redrain
+schedule->agent is already running  running=[R2]      <- R2 is running again
+```
+
+**No ORM update and no Core `update(Run)` sets the row back to `running`** — the listener saw the
+`-> failed` writes and nothing after them, and `grep "update(Run)"` over `hub/hub` is empty. The
+state is produced by transaction interleaving, not by application logic.
+
+And the interleaving is available because **the suite gives every session the same database
+connection.** `TEST_DATABASE_URL` is `sqlite+aiosqlite:///:memory:`, and SQLAlchemy forces
+`StaticPool` for that URL — measured, not assumed:
+
+```
+$ DATABASE_URL=sqlite+aiosqlite:///:memory: python -c "...; print(type(engine.pool).__name__)"
+StaticPool
+```
+
+Production resolves to `AsyncAdaptedQueuePool`, one connection per session. So in the suite a
+background run task's `commit()` and a request session's transaction are the *same* SQLite
+transaction, and `async with async_session_factory()` exiting can revert work another session
+believes it committed. In production it cannot.
+
+### Why it is not closed
+
+Two things are unproven, and both matter:
+
+1. **That production is safe.** The argument is structural (per-session connections) and was not
+   demonstrated. The obvious demonstration — point the suite at a database with real per-connection
+   isolation and see the stall vanish — was attempted and is void: `conftest.assert_engine_is_disposable`
+   refuses any URL that is not literally `:memory:`, and SQLAlchemy chose `StaticPool` for
+   `file:...?mode=memory&cache=shared` anyway. A real check needs an explicit `poolclass` override.
+2. **That no other test is green for this reason.** The same interleaving is available to every
+   test that lets a background run task commit while a request session is open — which is most of
+   the ones that call `_await_background_run()`. Two cells in `25469ac` were already found to be
+   green for reasons unrelated to what they claimed; this is a third mechanism for that, and it has
+   not been swept for.
+
+### What to do about it
+
+Not fixed here deliberately: the candidate fix is giving the suite genuinely independent
+connections, which changes the transaction semantics under ~3,500 tests at once, cannot be verified
+in less than a full 25-minute suite run per attempt, and can plausibly trade this flake for
+`database is locked`. That is an operator's call, not something to change unattended.
+
+The cheap reproduction is the contribution: a parametrized test that runs the
+`test_spawn_failure_marks_run_failed` scenario 40 times and asserts the entry reaches
+`(3, 'withdrawn')` stalls in ~6 of 40, in about 40 seconds — against a full suite run that surfaced
+it once in two hours.
