@@ -8,7 +8,7 @@
   "parent_sha": "bbe00a7",
   "stop_at": "2026-08-28T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 13,
+  "iteration": 14,
   "log_file": ".claude/autonomous/2026-08-27-fix-and-drive-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "exploration_file": "openspec/explorations/2026-08-26-what-is-still-unanswered.md",
@@ -143,5 +143,5 @@
   ],
   "carry_forward": "Iteration 13 drove the review turn that had been deferred four iterations for clock, and it took ninety seconds. Four things worth carrying. (1) MEASURE THE CLOCK BEFORE DECIDING SOMETHING DOES NOT FIT. This iteration opened at 07:26 against an 08:00 stop, estimated its way to '07:46, no time for the review turn', wrote a log entry saying so, and then read an actual Get-Date: 07:30. Forty minutes had been imagined away and the headline item was nearly dropped on a number nobody had read. Tool calls here are seconds; elapsed-time estimates drift fast and always pessimistic. The habit of stamping every timestamp from PowerShell exists for the heartbeat -- it belongs on the SIZING DECISION too. (2) A NEGATIVE THAT RETIRES THE EXPECTATION BEATS ONE THAT RECORDS AN ABSENCE. F104 said 'a review turn SHOULD produce enteredReviewMode'. It does not -- and the useful half is WHY: AgentWeave's review turn is an ordinary turn on a review checkout, not codex's built-in /review mode, which is the thing that emits those. That closes the branch permanently instead of leaving 'not observed yet'. When filing a negative, find the mechanism that makes it unreachable, or it will be re-driven. (3) CHECK THE READ PATH BEFORE PERSISTING ANYTHING FOR A READER. schedule_agent's six early returns persist no waiting_reason and it looked like F97 one column over. The status route re-derives four of the six independently, and the reachable case of a fifth is guarded at the front door by archivable(). The 'fix' would have been six assignments duplicating logic the read path already has -- a second source of truth wearing a closed defect's clothes. The absence of a write is a defect only if nobody downstream recomputes it. (4) A LIVE DRIVE CAN CONFIRM A PRIOR FIX IN A WAY ITS OWN TEST CANNOT. The review turn was refused a Write twice by codex's sandbox and both refusals reached the timeline as permission_denied/warn/decided_by=runtime. That is _on_refusal doing exactly what its docstring was written for -- 'a reviewing agent was refused permission to write its own review file... while the Hub's durable record showed a clean run' -- reproduced live, by accident, on the very scenario it names. Reading the docstring is what stopped it being filed as a defect.",
   "started_at": "2026-08-27T22:05:00+01:00",
-  "last_heartbeat": "2026-08-28T06:56:29+01:00"
+  "last_heartbeat": "2026-08-28T07:42:14+01:00"
 }
