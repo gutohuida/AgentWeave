@@ -28,8 +28,9 @@ false attributions), plus each section's own prose.
 
 `F9 (A-)` is not a defect — it is the merge-on-approval behaviour, recorded because it is the most
 consequential thing the product does. Every other A (`F1 F5 F10 F23 F27 F41 F43 F45 F49 F51 F54 F56
-F57 F58 F70 F71 F72 F100`) is fixed with a commit named in its `**Status:**` line — `F100`, filed
-and fixed in one iteration on 2026-08-28, is the newest and was found by a probe aimed at `F99`.
+F57 F58 F70 F71 F72 F100 F101`) is fixed with a commit named in its `**Status:**` line — `F100`
+and `F101`, both filed and fixed on 2026-08-28, are the newest, and each was found by a probe
+aimed at the finding before it.
 
 **Open below severity A**, for completeness: `F3` `F15` `F20` `F21` (C/C/C/B, all with the cause
 named), `F42` (C), `F47` (C, deliberately deferred — it needs a third actor kind), `F61` (B, fix
@@ -6180,3 +6181,89 @@ reject, and the absence of the rejection was the finding. The general form: **wh
 what a probe must produce, its silence is evidence.** That is the second time in two iterations
 that a measurement chosen to be able to contradict me did the work, and neither came from reading
 harder. This one came free, riding on a probe aimed at something else entirely.
+
+
+---
+
+## F101 (A) — the Hub's own MCP server can fail to start and the turn says nothing
+
+**Status:** **fixed** — iteration 10, 2026-08-28. Third finding of the iteration, and the second
+found by a probe aimed at something else: F100 taught that `run_turn`'s notification loop drops
+statuses it does not read, so the next question was *what else does it drop*.
+
+The loop ended with this comment:
+
+> *Anything else (`mcpServer/startupStatus/updated`, `thread/status/changed`,
+> `account/rateLimits/updated`, `item/agentMessage/delta`, `remoteControl/status/changed`,
+> `serverRequest/resolved`) carries no timeline-relevant content for this pass.*
+
+`mcpServer/startupStatus/updated` carries `McpServerStartupState` — `starting | ready | failed |
+cancelled` — plus `error` and `failureReason`. One of those four states is the most
+timeline-relevant thing that can happen to a turn.
+
+### Measured live, 2026-08-28
+
+A turn driven through the Hub's own `run_turn` with `mcp_command` pointed at a script that does
+not exist, asking the agent to use an AgentWeave tool:
+
+```
+{"name": "agentweave", "status": "starting", ...}
+{"name": "agentweave", "status": "cancelled", ...}
+{"name": "agentweave", "status": "failed",
+ "error": "MCP client for `agentweave` failed to start: MCP startup failed: handshaking with
+           MCP server failed: connection closed: initialize response"}
+```
+
+```
+status: completed   error: None
+agent's final word: "Unavailable"
+```
+
+The Hub's own collaboration server failed to start, said exactly why, and **the run finalised
+`completed` with `Run.error` NULL and no error event anywhere.** The agent held no AgentWeave tools
+at all for that turn: it could not send a message, record evidence, update a task, or call
+`ask_user`. To the operator it is a turn that ran fine and simply did not record anything —
+indistinguishable from an agent that chose not to.
+
+### Why it matters more than the probe's artificial cause
+
+The path is `[sys.executable, <hub>/mcp_server.py]`, so a missing file is not the realistic
+trigger. These are: `mcp_server.py` raising on import (it may import **only** stdlib + fastmcp —
+a rule that exists precisely because that import is fragile), fastmcp absent from the interpreter
+the Hub happens to be running under, a handshake that times out under load, or the
+`reauthenticationRequired` failure reason the schema declares. Every one of them produces a
+turn that looks successful and quietly cannot touch any collaboration state.
+
+It is also a ready explanation for a whole class of past confusion — *"the agent completed the turn
+but nothing was recorded"* — which has been blamed on prompts, on charters, and on the model.
+
+### The fix
+
+`status == "failed"` maps to an error event on the timeline, naming the server and the provider's
+own message. The Hub's own server says what it costs — *"no messages, evidence, task updates or
+questions"* — because that is the operator's actual consequence; any other server (`codex_apps`,
+or anything in the operator's Codex config) is reported plainly, since it costs this Hub nothing.
+
+Two deliberate limits, both tested:
+
+- **The turn is not failed.** A model with no tools may still be useful, and that judgement is the
+  operator's — but they can only make it if they are told.
+- **Reported once per server per turn.** Measured live: the app-server repeats every startup
+  transition, so an undeduplicated report tells the operator the same thing twice. `cancelled` is
+  not reported at all — a failing server passes through it on the way to `failed`.
+
+Tests: four in `TestRunTurnMcpStartupFailure`, each watched failing with its guard broken; and the
+live probe re-driven after the fix, which now emits exactly one error event carrying the provider's
+own sentence.
+
+### The lesson, which is the same one twice
+
+**A comment enumerating what a loop ignores is a list of unread evidence, not a proof of
+irrelevance.** F100 was a status field read past inside a notification the loop handled; F101 is a
+whole notification the loop declined to handle, dismissed in prose. In both cases the product had
+the operator's answer in hand and threw it away, and in both cases the finding took one probe with
+a known expected outcome.
+
+Iteration 9 said *"the code keeps naming its own hazard in a comment and then not sweeping the
+class."* That is now three consecutive iterations where the comment was right there. Sweep the
+class, always: **when a comment says a thing is ignored, enumerate what arrives that way.**

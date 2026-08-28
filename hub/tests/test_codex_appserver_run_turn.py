@@ -459,6 +459,116 @@ class TestRunTurnConfigOverrides:
         assert "config" not in next(p for m, p in fake.sent_requests if m == "thread/start")
 
 
+class TestRunTurnMcpStartupFailure:
+    """F101 — the Hub's own MCP server failing to start is the loudest thing that can happen
+    to a turn, and it used to be the quietest.
+
+    Live capture, 2026-08-28: `mcpServer/startupStatus/updated` reported
+    `status: "failed"` with *"MCP client for `agentweave` failed to start: … connection closed:
+    initialize response"*, the notification was dropped, the agent answered "Unavailable" when
+    asked for an AgentWeave tool, and the run finalised `completed` with `Run.error` NULL. An
+    agent with no collaboration surface — no messages, evidence, task updates or questions —
+    looked exactly like an agent that had simply done nothing.
+    """
+
+    @staticmethod
+    def _fake(notifications):
+        return _FakeSession(
+            responses={
+                "initialize": {},
+                "thread/start": THREAD_START_RESULT,
+                "turn/start": TURN_START_RESULT,
+            },
+            notifications=[
+                *notifications,
+                {"method": "turn/completed", "params": {"turn": {"status": "completed"}}},
+            ],
+        )
+
+    @staticmethod
+    def _startup(name, status, error=None):
+        return {
+            "method": "mcpServer/startupStatus/updated",
+            "params": {"name": name, "status": status, "error": error},
+        }
+
+    async def _drive(self, monkeypatch, notifications):
+        fake = self._fake(notifications)
+        _patch_spawn(monkeypatch, fake)
+        events = []
+        outcome = await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=["python", "mcp_server.py"],
+            on_event=_collector(events),
+        )
+        return outcome, events
+
+    @pytest.mark.asyncio
+    async def test_own_server_failing_to_start_is_reported_and_names_the_consequence(
+        self, monkeypatch
+    ):
+        outcome, events = await self._drive(
+            monkeypatch,
+            [
+                self._startup("agentweave", "starting"),
+                self._startup(
+                    "agentweave",
+                    "failed",
+                    "MCP client for `agentweave` failed to start: connection closed",
+                ),
+            ],
+        )
+
+        assert [e.kind for e in events] == ["error"]
+        assert events[0].payload["code"] == "codex_mcp_server_failed"
+        assert "no AgentWeave tools" in events[0].content
+        assert "connection closed" in events[0].content
+        # Not a turn failure: a model with no tools may still be useful, and that is the
+        # operator's call to make — but only if they are told.
+        assert outcome.status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_a_repeated_failure_notification_is_reported_once(self, monkeypatch):
+        """The app-server repeats every startup transition; measured live, twice each."""
+        failure = self._startup("agentweave", "failed", "connection closed")
+        _, events = await self._drive(monkeypatch, [failure, failure])
+
+        assert len(events) == 1
+
+    @pytest.mark.asyncio
+    async def test_starting_ready_and_cancelled_are_not_reported(self, monkeypatch):
+        """`cancelled` is on the path a failing server takes to `failed` — reporting it would
+        report the same failure twice under two names."""
+        _, events = await self._drive(
+            monkeypatch,
+            [
+                self._startup("agentweave", "starting"),
+                self._startup("agentweave", "cancelled"),
+                self._startup("agentweave", "ready"),
+            ],
+        )
+
+        assert events == []
+
+    @pytest.mark.asyncio
+    async def test_another_servers_failure_is_reported_without_claiming_this_turn_is_toolless(
+        self, monkeypatch
+    ):
+        """`codex_apps` and anything else in the operator's own Codex config: worth saying,
+        but it costs this Hub's collaboration surface nothing."""
+        _, events = await self._drive(monkeypatch, [self._startup("codex_apps", "failed", "boom")])
+
+        assert len(events) == 1
+        assert "codex_apps" in events[0].content
+        assert "no AgentWeave tools" not in events[0].content
+
+
 class TestRunTurnFailureModes:
     @pytest.mark.asyncio
     async def test_turn_completed_with_failed_status_is_a_failure(self, monkeypatch):

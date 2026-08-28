@@ -493,6 +493,28 @@ def map_item_to_events(item: Dict[str, Any], *, is_start: bool) -> List[RunEvent
     return []
 
 
+def map_mcp_server_failure(params: Dict[str, Any], *, own_server_name: str) -> RunEvent:
+    """Map a failed `mcpServer/startupStatus/updated` to the standard error event.
+
+    Names which server it was, because the consequence differs entirely: the Hub's own server
+    failing means this turn has no collaboration surface, while another one failing is the
+    operator's own Codex configuration and costs this Hub nothing.
+    """
+    name = params.get("name") or "unknown"
+    detail = params.get("error") or "no reason given"
+    reason = params.get("failureReason")
+    if reason:
+        detail = f"{detail} ({reason})"
+    if name == own_server_name:
+        message = (
+            f"The AgentWeave MCP server ({name}) failed to start, so this turn had no "
+            f"AgentWeave tools -- no messages, evidence, task updates or questions: {detail}"
+        )
+    else:
+        message = f"MCP server {name!r} failed to start: {detail}"
+    return error_event(code="codex_mcp_server_failed", message=message)
+
+
 def _turn_error_message(carrier: Dict[str, Any]) -> str:
     """The human-readable message out of anything carrying a `TurnError` under `error`.
 
@@ -932,6 +954,10 @@ async def run_turn(
         deadline = asyncio.get_running_loop().time() + turn_timeout
         status = "failed"
         error: Optional[str] = None
+        # The app-server repeats each startup-status transition -- measured live, every
+        # `starting`, `ready` and `failed` arrived twice -- so one failing server would
+        # otherwise tell the operator the same thing twice. Reported once per server per turn.
+        reported_mcp_failures: set = set()
 
         while True:
             if should_interrupt is not None and should_interrupt() and not interrupted:
@@ -1049,7 +1075,29 @@ async def run_turn(
                 error = _turn_error_message(params)
                 status = "failed"
                 break
-            # Anything else (mcpServer/startupStatus/updated, thread/status/changed,
+            elif (
+                method == "mcpServer/startupStatus/updated"
+                and params.get("status") == "failed"
+                and params.get("name") not in reported_mcp_failures
+            ):
+                # `McpServerStartupState` is starting | ready | failed | cancelled, and this
+                # notification used to be dropped wholesale as carrying "no timeline-relevant
+                # content". For the Hub's own server that is exactly backwards: if `agentweave`
+                # fails to start, the agent holds no collaboration tools at all -- it cannot send
+                # a message, record evidence, complete a task or ask a question -- and the turn
+                # otherwise runs, completes, and reports nothing wrong (F101, measured live
+                # 2026-08-28: the agent answered "Unavailable" and the run finalised `completed`
+                # with `Run.error` NULL).
+                #
+                # The turn is not failed over it. A model with no tools can still be useful, and
+                # the operator is the one to decide -- but they can only decide if they are told,
+                # so this reaches the timeline as an error rather than being inferred later from
+                # a turn that mysteriously recorded nothing. `cancelled` is deliberately not
+                # reported: a failing server passes through it on its way to `failed`, so it
+                # would only report the same failure twice.
+                reported_mcp_failures.add(params.get("name"))
+                await on_event(map_mcp_server_failure(params, own_server_name=own_server_name))
+            # Anything else (a non-failed mcpServer/startupStatus/updated, thread/status/changed,
             # account/rateLimits/updated, item/agentMessage/delta, remoteControl/status/changed,
             # serverRequest/resolved) carries no timeline-relevant content for this pass.
 
