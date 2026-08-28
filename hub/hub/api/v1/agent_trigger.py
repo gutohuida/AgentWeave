@@ -1466,7 +1466,15 @@ async def _execute_run(
                     dimensions=STRUCTURED_OUTPUT_DIMENSIONS,
                 ),
             )
-    except FileNotFoundError as exc:
+    # Was `except FileNotFoundError`, which is one way a spawn fails out of many. A corrupt or
+    # non-executable runner binary raises `OSError` (`[WinError 193] %1 is not a valid Win32
+    # application`), a denied one `PermissionError`, and pywinpty's own failures neither — and
+    # every one of those escaped this coroutine entirely. The `Run` row stayed `running` forever,
+    # so `POST /agent/trigger`'s "already has a run in progress" guard refused that agent every
+    # subsequent turn, and the exception went to asyncio's unretrieved-task handler where nothing
+    # reads it. The recovery was to restart the Hub. `except Exception` does not catch
+    # `CancelledError`, which is a `BaseException` in 3.8+, so real cancellation still propagates.
+    except Exception as exc:  # noqa: BLE001 — a spawn that fails any way at all still ends the run
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
             if run:
@@ -1882,6 +1890,20 @@ async def _execute_run(
                 run.error = str(exc)
                 run.ended_at = datetime.now(timezone.utc)
                 await expire_pending_for_run(db, run_id)
+                # The last of `_execute_run`'s five terminal sites to record one, and the only one
+                # reached without knowing whether the turn produced telemetry — so `sample=None`,
+                # an explicitly unavailable outcome, for the same reason the `FileNotFoundError`
+                # branch above records one for a run that never spawned at all. Idempotent: a turn
+                # that had already parsed its result recorded a measured outcome, and
+                # `record_turn_usage` returns that existing row rather than overwriting it.
+                await record_turn_usage(
+                    db,
+                    run_id=run_id,
+                    project_id=project_id,
+                    agent=agent,
+                    runner=runner,
+                    sample=None,
+                )
                 # Design D13, task A4.3 — same as `_execute_run`'s other finalize sites.
                 await finalize_job_run_for_conversation(db, conversation_id, "failed")
                 returned = await return_run_entries(db, run_id)

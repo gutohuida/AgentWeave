@@ -1158,6 +1158,50 @@ async def test_nonzero_exit_broadcasts_run_failed_not_run_completed(app, auth_he
 
 
 @pytest.mark.asyncio
+async def test_an_unexpectedly_failed_run_still_gets_an_accounting_outcome(
+    app, auth_headers, bind_runner
+):
+    """F92. `_execute_run` has five terminal sites and this one — the catch-all for an error
+    nothing anticipated — was the only one that ended a run without recording an accounting
+    outcome. The spec asks for "exactly one accounting outcome for every Hub-owned run after that
+    run ends", not for the runs whose ending we predicted. `RuntimeError` rather than
+    `FileNotFoundError` on purpose: the latter has its own branch, which already recorded one."""
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"unexpected-boom": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("unexpected-boom", cli="claude")
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn",
+        MagicMock(side_effect=RuntimeError("something nobody wrote a branch for")),
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "unexpected-boom", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            run_id = resp.json()["run_id"]
+            await _await_background_run()
+
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run, TurnUsage
+
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        assert run.status == "failed"
+        usage = (await db.execute(select(TurnUsage).where(TurnUsage.run_id == run_id))).scalar_one()
+        assert usage.status == "unavailable"
+        assert usage.total_tokens is None
+
+
+@pytest.mark.asyncio
 async def test_spawn_failure_broadcasts_run_failed_event(app, auth_headers, bind_runner):
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",

@@ -12,19 +12,39 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import select
 
 from . import bound_address
 from .db.engine import async_session_factory
-from .db.models import JobRun, Run
+from .db.models import Agent, JobRun, Run, Runner
 from .inbound_queue import abandoned_for_run, return_run_entries
 from .permission_requests import expire_pending_for_run
 from .pty_runner import pid_alive
 from .sse import sse_manager
+from .usage_accounting import record_turn_usage
 from .utils import persist_event
 
 logger = logging.getLogger(__name__)
+
+
+async def _runner_cli_for_agent(db, project_id: str, agent: str) -> Optional[str]:
+    """Which CLI this agent's turns run on, or `None` if that can no longer be said.
+
+    `Run` does not carry the runner, so a crashed run's is recovered from the agent's binding.
+    That is the same answer for every case this reconciles except one an operator has to have
+    caused deliberately — rebinding the agent between the crash and the restart — and `None` is
+    honest for an agent since unbound or removed. The accounting outcome does not depend on it:
+    `runner` is nullable, and an outcome recorded without a runner name is still an outcome.
+    """
+    row = await db.execute(
+        select(Runner.cli)
+        .select_from(Agent)
+        .join(Runner, Runner.id == Agent.runner_id)
+        .where(Agent.project_id == project_id, Agent.name == agent)
+    )
+    return row.scalars().first()
 
 
 async def reconcile_interrupted_runs() -> int:
@@ -49,6 +69,21 @@ async def reconcile_interrupted_runs() -> int:
             # decision was on screen leaves a row nobody will ever poll again, and without this
             # the card outlives not just its run but the Hub process that served it.
             await expire_pending_for_run(db, run.id)
+            # `usage-accounting`: "exactly one accounting outcome for every Hub-owned run after
+            # that run ends", and an unavailable one "MUST NOT represent missing values as zero".
+            # This run has ended. Its tokens were spent — one of the three specimens that found
+            # this had been streaming for thirteen minutes — and the process that could have read
+            # the telemetry died with it, so `unavailable` is the true outcome, not absence.
+            # Absence was worse than a wrong number: the aggregate reported `unavailable_turns: 0`,
+            # which is a positive claim that nothing is unmeasured.
+            await record_turn_usage(
+                db,
+                run_id=run.id,
+                project_id=run.project_id,
+                agent=run.agent,
+                runner=await _runner_cli_for_agent(db, run.project_id, run.agent),
+                sample=None,
+            )
             returned_entry_ids = await return_run_entries(db, run.id)
             agents_to_schedule.add((run.project_id, run.agent))
             # A crash is a run boundary too, and a bound run that died holding its task is exactly

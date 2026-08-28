@@ -11,9 +11,10 @@ import os
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, JobRun, Run
+from hub.db.models import AIJob, JobRun, Run, TurnUsage
 from hub.inbound_queue import deliver_entries_with_run, new_entry, queued_entries
 from hub.run_reconciliation import (
     drain_deferred_schedules,
@@ -22,6 +23,7 @@ from hub.run_reconciliation import (
     reconcile_stale_job_runs,
 )
 from hub.sse import sse_manager
+from hub.usage_accounting import accounting_snapshot
 
 
 async def _make_job(db, *, suffix, agent="recon-job-agent"):
@@ -364,3 +366,87 @@ async def test_reconciliation_redrains_immediately_when_the_address_is_known(app
 async def test_draining_deferred_schedules_is_idempotent(app):
     assert await drain_deferred_schedules() == 0
     assert has_deferred_schedules() is False
+
+
+# --- F92: a run the Hub reconciles still has to have an accounting outcome ----------------------
+#
+# `usage-accounting`: "exactly one accounting outcome for every Hub-owned run after that run ends",
+# and an unavailable one "MUST NOT represent missing values as zero". An interrupted run had none
+# at all, which is worse than a wrong number — `accounting_snapshot` reported `unavailable_turns: 0`
+# beside it, a positive claim that nothing in the project is unmeasured.
+
+
+@pytest.mark.asyncio
+async def test_an_interrupted_run_gets_an_unavailable_accounting_outcome(app):
+    async with async_session_factory() as db:
+        db.add(
+            Run(
+                id="run-recon-usage",
+                project_id="proj-test",
+                agent="recon-usage",
+                status="running",
+                pid=None,
+            )
+        )
+        await db.commit()
+
+    await reconcile_interrupted_runs()
+
+    async with async_session_factory() as db:
+        row = (
+            await db.execute(select(TurnUsage).where(TurnUsage.run_id == "run-recon-usage"))
+        ).scalar_one()
+        assert row.status == "unavailable"
+        assert row.agent == "recon-usage"
+        # Not zero. A dead process's tokens are unknown, and the schema's own CHECK is what stops
+        # "unavailable" ever carrying a number; this asserts the recorded row honours it.
+        assert row.total_tokens is None
+        assert row.input_tokens is None
+        assert row.output_tokens is None
+
+    # The project aggregate now counts it, which is the whole point: the operator can see that
+    # their total is incomplete rather than being told it is complete.
+    async with async_session_factory() as db:
+        snapshot = await accounting_snapshot(db, "proj-test")
+    assert snapshot["project"]["unavailable_turns"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_reconciling_an_already_accounted_run_does_not_double_count(app):
+    """A crash between "measured outcome written" and "run row committed" is real: the outcome
+    and the status are two writes. Reconciliation must not overwrite a measured turn with an
+    unavailable one, and `record_turn_usage` returning the existing row is what guarantees it."""
+    async with async_session_factory() as db:
+        db.add(
+            Run(
+                id="run-recon-measured",
+                project_id="proj-test",
+                agent="recon-measured",
+                status="running",
+                pid=None,
+            )
+        )
+        db.add(
+            TurnUsage(
+                id="usage-recon-measured",
+                run_id="run-recon-measured",
+                project_id="proj-test",
+                agent="recon-measured",
+                status="measured",
+                runner="claude",
+                total_tokens=1234,
+            )
+        )
+        await db.commit()
+
+    await reconcile_interrupted_runs()
+
+    async with async_session_factory() as db:
+        rows = (
+            (await db.execute(select(TurnUsage).where(TurnUsage.run_id == "run-recon-measured")))
+            .scalars()
+            .all()
+        )
+        assert len(rows) == 1
+        assert rows[0].status == "measured"
+        assert rows[0].total_tokens == 1234

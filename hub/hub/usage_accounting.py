@@ -18,7 +18,10 @@ async def record_turn_usage(
     run_id: str,
     project_id: str,
     agent: str,
-    runner: str,
+    # Optional because the two paths that end a run without ever parsing its output — a crash the
+    # next Hub start reconciles, and an unhandled error mid-turn — may have no runner name to give.
+    # An outcome recorded without one is still an outcome; refusing to record it was the defect.
+    runner: Optional[str],
     sample: Optional[AccountingSample],
 ) -> TurnUsage:
     """Add one accounting outcome for a run, returning the existing row on retry.

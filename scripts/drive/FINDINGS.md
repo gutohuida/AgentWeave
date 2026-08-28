@@ -5501,3 +5501,112 @@ plus 125 passing across the eight touched files. Live, on the fixed code, the id
 
 One attempt instead of two, and the message ran fourteen seconds later with no operator action
 where before it needed one.
+
+---
+
+## F92 (B) — a run the Hub reconciles is billed to nobody, beside a total that says it is complete
+
+**Status:** fixed (this iteration)
+
+Row 18, accounting. `usage-accounting`'s first requirement is *"exactly one accounting outcome for
+every Hub-owned run after that run ends"*, and an unavailable one *"MUST NOT represent missing
+values as zero"*. Measured in `aw-e2e1` before the fix:
+
+```
+runs by status, joined against turn_usage
+  completed    73   missing 0
+  interrupted   3   missing 3      <- all of them
+```
+
+Three runs ended with no accounting outcome of either kind. One had been streaming for **thirteen
+minutes** before a Hub bounce killed it. And the aggregate the operator reads said:
+
+```
+{"measured_turns": 72, "unavailable_turns": 0, ...}
+```
+
+`unavailable_turns: 0` is not silence — it is a positive claim that nothing in this project is
+unmeasured, made over three turns that are. That is worse than a wrong number, because a wrong
+number invites a second look.
+
+Two paths ended a run without recording one. `reconcile_interrupted_runs` never did, and
+`_execute_run`'s catch-all handler — the last of its five terminal sites — never did either; the
+other four all call `record_turn_usage(sample=None)`, and the `FileNotFoundError` branch even
+carries the rule in a comment about a sibling concern: *"the rule is 'a terminal run leaves nothing
+pending', not 'the paths where we expect some'."*
+
+Both now record an explicitly **unavailable** outcome. `Run` carries no runner, so reconciliation
+recovers it from the agent's binding (`_runner_cli_for_agent`) and records `None` rather than a
+guess when the agent has since been unbound. `record_turn_usage` was already idempotent — it
+returns the existing row — so a crash between "measured outcome written" and "run row committed"
+cannot have a measured turn overwritten by an unavailable one; that is pinned by its own test.
+
+**Live, after the fix**, the same project reports `{"measured_turns": 74, "unavailable_turns": 9}`.
+Nine turns the operator can now see are unaccounted for, where the surface previously said none
+were.
+
+**The rest of row 18 is clean, and was driven rather than read.** With `token_budget` set to 1000
+against 12.68M of measured usage: an operator trigger started a run immediately
+(`"status": "running"`, no waiting reason); an agent-origin entry created by `builder` calling
+`send_message` stayed `queued` with `waiting_reason: "token budget exhausted"` and
+`delivery_attempts: 0` — the refusal is correctly transient, so pausing an agent does not spend its
+message; and clearing the budget to `null` delivered it unprompted. All three of the spec's
+scenarios for *"a project token budget pauses autonomy but not the operator"* hold as written.
+
+**Not fixed, and recorded as a question for the operator:** `worker_invocations` — the checkpoint
+and probe spawns — are real model calls made on the operator's behalf and appear on **no aggregate
+surface and in no budget**. `aw-e2e1` has 14 of them costing 297,475 `usd_micros`, about 9% on top
+of the 3,175,674 the accounting API reports, and the only read path anywhere is one checkpoint's
+own detail. `WorkerInvocation`'s docstring calls the table *"the whole accounting surface for such
+calls"*, which is true of where it is written and not of where it is read. Whether that cost joins
+the project total, sits beside it, or counts against `token_budget` is a decision about what a
+budget means, not a repair — see `decisions_for_user`.
+
+---
+
+## F93 (A) — a runner binary that is present but broken wedges its agent until the Hub is restarted
+
+**Status:** fixed (this iteration)
+
+Row 19, resilience: *corrupt or withhold a runner binary*. `_execute_run` wraps its spawn in
+`except FileNotFoundError` and nothing else. A missing binary is one way a spawn fails; it is not
+the common one on Windows. A corrupt or non-executable file raises `OSError` (`[WinError 193] %1 is
+not a valid Win32 application`), a denied one `PermissionError`, and `pywinpty`'s own failures
+neither. **Every one of those escaped the coroutine entirely.**
+
+Driven live in `aw-e2e1` — a 31-byte text file named `claude.exe`, first on the Hub's `PATH`, so
+`shutil.which` finds it and launchability passes:
+
+```
+03:08:58  POST /agent/trigger author  -> 200, run-91015150a198, "status": "running"
+03:09:08  POST /agent/trigger author  -> 200, "waiting_reason": "agent is already running"
+03:09:33  RUN   status running · pid None · ended_at None · error None
+          agents  [author running, builder idle, reviewer idle]
+          turn_usage rows for the run: 0
+          events: nothing. No run_failed, no queue_entry_abandoned, nothing.
+```
+
+The row stayed `running` **with no pid**, forever. The agent card read `running`. `POST
+/agent/trigger`'s "already has a run in progress" guard then refused that agent every subsequent
+turn, so the operator's next message queued behind a run that had never started. The exception went
+to asyncio's unretrieved-task handler, where nothing reads it. The only recovery was restarting the
+Hub — which is to say the operator's remedy for a broken runner was to bounce the whole product.
+
+The fix is `except Exception`, which the branch body was already correct for: it marks the run
+failed with the OS's own message, records the accounting outcome, returns the input to the queue,
+broadcasts `run_failed`, and re-drains. `CancelledError` is a `BaseException` in 3.8+, so real
+cancellation still propagates.
+
+**Live, on the fixed code, identical setup:**
+
+```
+run-1cb2dff1bbc5  status failed · ended_at set
+  error: "This version of %1 is not compatible with the version of Windows you're running..."
+  turn_usage: unavailable, runner claude
+events: run_failed (carrying that error), queue_entry_abandoned (attempts 3, reason stated)
+agents: [author idle, builder idle, reviewer idle]
+```
+
+The retry-to-abandonment is the designed behaviour for a spawn that fails identically every time
+([F56]'s shape) and the operator is told about it three ways. Before the fix they were told nothing
+and lost the agent.
