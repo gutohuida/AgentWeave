@@ -5610,3 +5610,43 @@ agents: [author idle, builder idle, reviewer idle]
 The retry-to-abandonment is the designed behaviour for a spawn that fails identically every time
 ([F56]'s shape) and the operator is told about it three ways. Before the fix they were told nothing
 and lost the agent.
+
+---
+
+## F94 (B) — kill an agent and the product tells you `exit 4294967295`, again
+
+**Status:** fixed (this iteration)
+
+Row 19, resilience: *kill an agent process*. Everything about the recovery is right — the run went
+`failed`, a **measured** accounting outcome was recorded (35,742 tokens; the result event had
+already been parsed), the entry went back to the queue, and a retry run completed. What the
+operator was told about it was not:
+
+```
+GET /agents/reviewer/timeline
+  "Run failed (exit 4294967295)"
+```
+
+That number is `0xFFFFFFFF`, Windows' `-1` read unsigned. It is verbatim the loop-8 finding that
+`readable_exit_code` exists for, whose own docstring says *"an operator seeing it has no reason to
+connect it to the process they just killed — measured on 2026-08-14"*. The fix shipped, with a test
+named `test_the_payload_renders_the_exit_code_rather_than_shipping_it_raw` asserting finding L9-1's
+rule that **a broadcast payload is a display surface**.
+
+It shipped into `_transport_failure_fields` and `_runtime_failure_fields` — both of which are
+**Codex** paths. The pty path, which is to say the Claude path, which is to say the default runner,
+calls `_broadcast_run_lifecycle(..., exit_code=exit_code)` with the process's own number. The
+summary an operator reads is derived from that payload (`agents.py::_run_lifecycle_summary`), so
+one raw value reached every surface. The `run.error` beside it is `NULL` for a killed process, so
+the ten-digit number was the entire explanation on offer.
+
+Rendering now happens **inside `_broadcast_run_lifecycle`**, over `exit_code` and
+`runtime_exit_code`, rather than at each caller — which is precisely how this path came to miss it.
+`readable_exit_code` is idempotent, so the two callers that already rendered are unaffected, and
+`Run.exit_code` in the database stays raw, as design D3 requires.
+
+**Live, on the fixed code:** killed a running `builder` at pid 23260 →
+`"Run failed (exit -1)"`, with `runs.exit_code` still `4294967295` in the database.
+
+The general lesson is the one this file keeps re-learning: a rule applied at N call sites is a rule
+that holds at N-1 of them. This one now lives at the join.

@@ -8,7 +8,13 @@ The tests here go through real behaviour rather than importing a constant and co
 itself — that is the only failure mode a reporting change has.
 """
 
+import json
+
+import pytest
+from sqlalchemy import select
+
 from hub.codex_appserver import AppServerError, TurnOutcome, readable_exit_code
+from hub.db.models import EventLog
 
 # ---------------------------------------------------------------------------
 # B2/B3 — one death, one exit code, readable
@@ -123,6 +129,62 @@ def test_the_payload_renders_the_exit_code_rather_than_shipping_it_raw():
         AppServerError("app-server process ended", exit_code=4294967295), None
     )
     assert fields["exit_code"] == -1
+
+
+@pytest.mark.asyncio
+async def test_the_lifecycle_broadcast_renders_a_forced_terminations_exit_code(app):
+    """F94. The two `_*_failure_fields` builders render, and the Claude path does not use either
+    — it passes `exit_code=exit_code` straight from the process. Measured live on 2026-08-28 by
+    killing a running agent: the timeline read `Run failed (exit 4294967295)`, which is verbatim
+    the sentence loop 8 filed and fixed for the Codex path only. Rendering now happens in
+    `_broadcast_run_lifecycle`, so a caller cannot forget it."""
+    from hub.api.v1.agent_trigger import _broadcast_run_lifecycle
+    from hub.db.engine import async_session_factory
+    from hub.sse import sse_manager
+
+    queue = sse_manager.subscribe("proj-test")
+    async with async_session_factory() as db:
+        await _broadcast_run_lifecycle(
+            db,
+            "proj-test",
+            "run_failed",
+            agent="kill-render",
+            run_id="run-kill-render",
+            exit_code=4294967295,
+        )
+        await db.commit()
+
+    seen = []
+    while True:
+        try:
+            item = queue.get_nowait()
+        except Exception:  # asyncio.QueueEmpty
+            break
+        seen.append((item.event, json.loads(item.data)))
+
+    failed = [d for t, d in seen if t == "run_failed" and d["run_id"] == "run-kill-render"]
+    assert len(failed) == 1
+    assert failed[0]["exit_code"] == -1
+
+    # The persisted event is the same surface the timeline summary reads, so it must agree.
+    async with async_session_factory() as db:
+        stored = (
+            (
+                await db.execute(
+                    select(EventLog)
+                    .where(EventLog.event_type == "run_failed")
+                    .order_by(EventLog.id.desc())
+                )
+            )
+            .scalars()
+            .first()
+        )
+        assert stored.data["exit_code"] == -1
+
+    # And the summary an operator actually reads.
+    from hub.api.v1.agents import _run_lifecycle_summary
+
+    assert _run_lifecycle_summary("run_failed", {"exit_code": -1}) == "Run failed (exit -1)"
 
 
 def test_a_completed_run_reports_no_runtime_failure_fields():

@@ -1385,6 +1385,15 @@ async def _broadcast_run_lifecycle(
     """
     assert event_type in _RUN_LIFECYCLE_EVENTS
     payload = {"agent": agent, "run_id": run_id, **fields}
+    # L9-1's rule — "a broadcast payload is a display surface" — applied here rather than at each
+    # caller, which is how the pty path came to miss it: `_transport_failure_fields` and
+    # `_runtime_failure_fields` render, and the Claude path passes `exit_code=exit_code` straight
+    # from the process. Killing an agent then told the operator `Run failed (exit 4294967295)`,
+    # which is the exact sentence loop 8 filed. `readable_exit_code` is idempotent, so the two
+    # callers that already render are unaffected. `Run.exit_code` in the database stays raw (D3).
+    for key in ("exit_code", "runtime_exit_code"):
+        if key in payload:
+            payload[key] = readable_exit_code(payload[key])
     await persist_event(
         db,
         project_id,
