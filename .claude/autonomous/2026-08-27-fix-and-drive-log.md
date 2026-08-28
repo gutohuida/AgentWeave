@@ -1304,7 +1304,19 @@ all, each naming the test it broke. Beyond the suite, all four were driven again
 `codex app-server` process and the real provider**, before and after: A/B/C for F99, the
 failing-MCP turn for F101, the plan turn for F102 (`['text','text']` → `['status','text']`).
 
-`ruff` / `black` / `mypy` clean. Targeted files green. Full Hub suite: see the closing note.
+Suites, all run and all watched to the end this time — the full Hub suite **twice**, because the
+first was started before F101 and F102 existed and a suite that predates the code it is supposed to
+gate proves nothing about it:
+
+| | result |
+|---|---|
+| Hub suite, F99 + F100 code (06:25–06:45) | **3463 passed**, 84 skipped, 1 xpassed, 0 failed (19m39s) |
+| Hub suite, final tree with F101 + F102 (06:45–07:05) | **3470 passed**, 84 skipped, 1 xpassed, 0 failed (19m54s) |
+| CLI suite | 440 passed, 3 skipped |
+| `ruff check src/ hub/ tests/` · `black --check` · `mypy src/` · `npm run lint` | all clean |
+
+The seven-test difference between the two Hub runs is exactly this iteration's new tests: three for
+F102's plan handling and four for F101's MCP-startup reporting.
 
 ### What this iteration is actually about
 
