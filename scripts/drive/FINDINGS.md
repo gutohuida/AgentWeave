@@ -22,7 +22,7 @@ false attributions), plus each section's own prose.
 
 | Finding | State | Where it stands |
 |---|---|---|
-| **F12** — `stop_when_queue_empties` waits for a human, and burns a firing a minute meanwhile | **open**, no commit anywhere references it | The idling is correct; the defect is that idle firings evict the record of real work from the 100-`JobRun` window. Queued 2026-08-27 as `F12-SPEC` / `F12-IMPL`. |
+| **F12** — `stop_when_queue_empties` waits for a human, and burns a firing a minute meanwhile | ~~open~~ **fixed** `5237ec5` — **this row was wrong** | The eviction was fixed 2026-08-24 under its own design vocabulary, so the grep-over-commit-messages method used to build this table could not see it and reported it as untouched. The idling that remains was always correct. See F12's own correction. |
 | **F52** — the "workspace" posture never sees a git command | **partially fixed** `68459ea`; the rest does not reproduce | The operator-visibility half shipped. Every axis of the underlying refusal is eliminated (`0cda570` disproved its central inference — `record_permission_decision` persists only refusals — and `57eb92b` drove a full live turn that committed). Out of scope: a new git refusal is a **new** finding. |
 | **F60** — an unanswered `ask_user` that resolves itself leaves the task reading `completed` | **partially fixed** `033ec4c` | The guard refusing an answer whose asking run has ended was already shipped before F60 was filed. The remaining half is **parked for F14**, whose fix shape is the operator's undecided call. |
 
@@ -62,6 +62,10 @@ the table above was written, ten of them fixed the same night:**
 
 So the open-A list today is **F12, F76**, plus F52's and F60's partial states unchanged. F76 is open
 because its fix shape is a decision, not because nobody has looked at it.
+
+**Revised 2026-08-28: the open-A list is F76 alone.** F12 was verified rather than trusted and
+turned out to have been fixed on 2026-08-24 (see its row above and its own section). One remaining
+severity A, and it is waiting on a product decision.
 
 **And one observation that outranks any single row of that table.** F88, F89 and F90 were found in
 one iteration, in three unrelated subsystems, and every one of them was a mechanism this repository
@@ -377,7 +381,10 @@ right while the count beside them is wrong.
 
 ## F12 (A) — `stop_when_queue_empties` waits for a human, and burns a firing a minute meanwhile
 
-**Status:** open (no commit references it) — queued as F12-SPEC/F12-IMPL, 2026-08-27
+**Status:** the severity-A half is **fixed** `5237ec5` (2026-08-24), which never named this
+finding — see the correction at the end of this section. The residual is by design. Was recorded
+as "open (no commit references it)" and queued as F12-SPEC/F12-IMPL on 2026-08-27; that status was
+wrong, and how it got that way is worth more than the correction.
 
 **Confirmed live.** "Empty" is defined by `TERMINAL_FOR_BINDING = ("approved", "rejected")`
 (`scheduler.py:91`). A loop whose agent has *finished every task* is therefore not empty: the tasks
@@ -394,6 +401,43 @@ But the consequence is not bounded:
 - `_prune_job_history` keeps the most recent **100** JobRuns. At one skip per minute, **the record
   of the four firings that did real work is deleted after 100 minutes**, leaving a history of
   nothing but skips. The evidence of what the loop achieved is destroyed by the loop's own idling.
+
+### Corrected 2026-08-28: the second bullet was fixed on 2026-08-24, four days before it was ranked open
+
+**The bullet above — the half that made this severity A — does not happen any more.** A
+*continuing* stall now counts in place instead of appending: `_stall_run_to_increment`
+(`scheduler.py`) matches this firing's stall against the job's most recent `JobRun` and, when that
+row is itself a stall with an unchanged reason, increments its `tick_count` and discards the row
+this firing built. `fired_at` deliberately stays at the first refusal, so the row reads "this stall
+began then and has been re-checked N times" and genuine firings sort above it rather than being
+pushed out. So 480 overnight refusals occupy **one** row, not 480, and evict nothing.
+
+Shipped as `5237ec5`, *"a continuing stall counts in place instead of appending a row"*
+(2026-08-24 16:44), under `loop-notices-and-reacts` design D6 — which is why nothing found it: the
+commit solves this finding without ever naming it. Covered by `test_loop_stall_ticks_in_place.py`,
+six tests, green on 2026-08-28; `test_a_long_stall_does_not_bury_the_firings_that_did_work` is this
+bullet almost word for word, asserting that twenty refusals between two real records leave both
+records present and adjacent.
+
+**Why the baseline got it wrong, which is the part worth keeping.** The `BASELINE` task sourced
+every `**Status:**` line from `git log --all --grep`/`-S` restricted to commits at or after the one
+that first wrote the section. That method can only find a fix that *names* the finding. A fix that
+solves the problem under its own design vocabulary is invisible to it and gets reported as
+`open (no commit references it)` — which reads as "nobody has looked at this" and is a stronger
+claim than the evidence supports. F12 was filed 2026-08-23 and fixed 2026-08-24, the next day.
+**A grep over commit messages measures what was written down, not what is true.** Any status line
+in this file sourced that way carries the same risk, and the cheap check is the one that settled
+this: find the mechanism in the code, then run the test that names it.
+
+**What remains, and why it is not a defect.** The loop still fires once a minute against a stalled
+queue, so ~480 firings a night still happen. That is the idling itself, which this finding always
+said was correct (`_loop_stall_reason` argues that stopping would be unrecoverable) and which the
+run's own pre-authorisation ruled out changing. Each such firing is now one cheap query that
+increments a counter. The operator-facing consequence — a history of nothing but skips — is gone,
+and what replaced it is arguably better than silence: a single row stating when the stall began and
+how many times it has been re-checked.
+
+**No decision needed on this finding. It is closed.**
 
 ## F13 (B) — Re-enabling a finished loop is accepted, useless, and leaves a contradictory state
 
