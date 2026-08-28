@@ -6267,3 +6267,62 @@ a known expected outcome.
 Iteration 9 said *"the code keeps naming its own hazard in a comment and then not sweeping the
 class."* That is now three consecutive iterations where the comment was right there. Sweep the
 class, always: **when a comment says a thing is ignored, enumerate what arrives that way.**
+
+
+---
+
+## F102 (B) — the agent's plan is invisible on the transport every Codex agent uses
+
+**Status:** **fixed** — iteration 10, 2026-08-28. Fourth of the iteration, and found by sweeping
+F100's class deliberately rather than by another accident: *what else does this loop pin a name
+for that the CLI does not send?*
+
+`map_item_to_events` ended with:
+
+```python
+if item_type in ("todoList", "planUpdate"):
+    ...
+    return [status_event("plan", summary=summary)]
+```
+
+`ThreadItem`'s type union in CLI 0.146.0 is `agentMessage · collabAgentToolCall ·
+commandExecution · contextCompaction · dynamicToolCall · enteredReviewMode · exitedReviewMode ·
+fileChange · hookPrompt · imageGeneration · imageView · mcpToolCall · plan · reasoning · sleep ·
+subAgentActivity · userMessage · webSearch`. Neither `todoList` nor `planUpdate` is in it, and
+never has been — they are camelCase guesses at `exec`'s `todo_list` / `plan_update`, which are
+that transport's item names.
+
+### Measured live, 2026-08-28
+
+A codex turn asked to record a plan:
+
+```
+turn/plan/updated {"plan": [{"step": "Lint the Python project…", "status": "pending"},
+                            {"step": "Run the test suite…", "status": "pending"},
+                            {"step": "Update documentation…", "status": "pending"}]}
+event kinds emitted by the Hub: ['text', 'text']
+```
+
+The plan arrives as **its own notification**, not as an item — so the item branch could not have
+matched even had it been spelled right. Every plan a Codex agent makes was dropped, on the default
+transport, while the code meant to render it sat there looking present. `exec` shows plans; the
+transport an operator actually gets does not. After the fix, the same probe: `['status', 'text']`.
+
+### The fix
+
+`turn/plan/updated` → `map_plan_update` → the same `status_event("plan", summary="step; step")`
+`exec` produces, because one timeline shape across both transports is task 2.5's stated goal. Step
+statuses (`pending | inProgress | completed`) are deliberately not rendered, for that parity —
+which makes a re-send that only moves a status carry nothing new, so an unchanged summary is not
+repeated at the operator. The dead item branch is deleted, and a comment where it stood says where
+plans actually come from, so it cannot be re-added as a guess.
+
+Three tests, each watched failing with its guard broken.
+
+### The lesson
+
+Third dead branch in one iteration (`turn/failed`, `todoList`, and the `mcpServer` notification
+dismissed in prose), all in the same 200 lines. **Code written against a protocol needs the
+protocol checked back, not remembered** — `codex app-server generate-json-schema` takes seconds and
+would have caught all three, at any point, for free. It is now the first thing to reach for when
+touching this file.

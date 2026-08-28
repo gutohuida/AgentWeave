@@ -459,6 +459,100 @@ class TestRunTurnConfigOverrides:
         assert "config" not in next(p for m, p in fake.sent_requests if m == "thread/start")
 
 
+class TestRunTurnPlanUpdates:
+    """F102 — the agent's plan reaches the timeline on the app-server transport.
+
+    Captured live 2026-08-28: a codex turn asked for a plan emits
+    `turn/plan/updated` with `{"plan": [{"step": ..., "status": "pending"}, ...]}` — a
+    notification, not an item. `map_item_to_events` carried a branch for `("todoList",
+    "planUpdate")` item types that `ThreadItem` has never had, so the plan was invisible on the
+    default transport while the code meant to show it looked present. Same dead-branch shape as
+    F100's `turn/failed`, found by sweeping the same class.
+    """
+
+    @staticmethod
+    async def _drive(monkeypatch, notifications):
+        fake = _FakeSession(
+            responses={
+                "initialize": {},
+                "thread/start": THREAD_START_RESULT,
+                "turn/start": TURN_START_RESULT,
+            },
+            notifications=[
+                *notifications,
+                {"method": "turn/completed", "params": {"turn": {"status": "completed"}}},
+            ],
+        )
+        _patch_spawn(monkeypatch, fake)
+        events = []
+        await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=None,
+            on_event=_collector(events),
+        )
+        return events
+
+    @staticmethod
+    def _plan(*steps):
+        return {
+            "method": "turn/plan/updated",
+            "params": {
+                "threadId": "t",
+                "turnId": "u",
+                "explanation": None,
+                "plan": [{"step": step, "status": status} for step, status in steps],
+            },
+        }
+
+    @pytest.mark.asyncio
+    async def test_a_plan_notification_becomes_a_plan_status_event(self, monkeypatch):
+        events = await self._drive(
+            monkeypatch,
+            [self._plan(("Lint the project", "pending"), ("Run the tests", "pending"))],
+        )
+
+        assert [e.kind for e in events] == ["status"]
+        assert events[0].payload["phase"] == "plan"
+        # Same summary shape `exec`'s todo_list items produce (task 2.5: one timeline, two
+        # transports) — steps joined, statuses not rendered.
+        assert events[0].content == "Lint the project; Run the tests"
+
+    @pytest.mark.asyncio
+    async def test_a_plan_whose_only_change_is_a_step_status_is_not_repeated(self, monkeypatch):
+        """Statuses are not part of the summary, so a re-send that only moves one carries
+        nothing new — and a plan is re-sent on every step transition."""
+        events = await self._drive(
+            monkeypatch,
+            [
+                self._plan(("Lint the project", "pending"), ("Run the tests", "pending")),
+                self._plan(("Lint the project", "completed"), ("Run the tests", "inProgress")),
+            ],
+        )
+
+        assert len(events) == 1
+
+    @pytest.mark.asyncio
+    async def test_a_genuinely_changed_plan_is_reported_again(self, monkeypatch):
+        events = await self._drive(
+            monkeypatch,
+            [
+                self._plan(("Lint the project", "pending")),
+                self._plan(("Lint the project", "completed"), ("Ship it", "pending")),
+            ],
+        )
+
+        assert [e.content for e in events] == [
+            "Lint the project",
+            "Lint the project; Ship it",
+        ]
+
+
 class TestRunTurnMcpStartupFailure:
     """F101 — the Hub's own MCP server failing to start is the loudest thing that can happen
     to a turn, and it used to be the quietest.

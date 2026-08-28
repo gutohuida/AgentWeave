@@ -477,20 +477,31 @@ def map_item_to_events(item: Dict[str, Any], *, is_start: bool) -> List[RunEvent
             ]
         return [tool_result_event(tool="web_search", output=query, call_id=call_id)]
 
-    if item_type in ("todoList", "planUpdate"):
-        if is_start:
-            return []
-        entries = item.get("items") or item.get("plan") or []
-        summary = (
-            "; ".join(
-                str(entry.get("text", entry)) if isinstance(entry, dict) else str(entry)
-                for entry in entries
-            )
-            or "plan updated"
-        )
-        return [status_event("plan", summary=summary)]
-
+    # There is no plan *item* branch here on purpose. This function used to carry one for
+    # `("todoList", "planUpdate")`, which `ThreadItem` has never had: under app-server the plan
+    # arrives as its own `turn/plan/updated` notification, handled in `run_turn`'s loop via
+    # `map_plan_update` (F102). `exec`'s item-shaped plan stays in `runner_parsing`, where it
+    # belongs.
     return []
+
+
+def map_plan_update(params: Dict[str, Any]) -> RunEvent:
+    """Map a `turn/plan/updated` notification to the same plan status event `exec` produces.
+
+    The two transports are meant to produce one timeline shape (task 2.5), and `exec`'s
+    `todo_list`/`plan_update` items render as `status_event("plan", summary="step; step")`.
+    Step statuses (`pending | inProgress | completed`) are deliberately not rendered here, for
+    that parity — which also means two updates that differ only by a status produce an identical
+    summary, and `run_turn` emits the second one not at all.
+    """
+    steps = params.get("plan") or []
+    summary = (
+        "; ".join(
+            str(step.get("step", step)) if isinstance(step, dict) else str(step) for step in steps
+        )
+        or "plan updated"
+    )
+    return status_event("plan", summary=summary)
 
 
 def map_mcp_server_failure(params: Dict[str, Any], *, own_server_name: str) -> RunEvent:
@@ -958,6 +969,10 @@ async def run_turn(
         # `starting`, `ready` and `failed` arrived twice -- so one failing server would
         # otherwise tell the operator the same thing twice. Reported once per server per turn.
         reported_mcp_failures: set = set()
+        #: The last plan rendered this turn. A plan is re-sent whenever any step's status moves,
+        #: and statuses are not part of the rendered summary (see `map_plan_update`), so an
+        #: unchanged summary carries nothing new and is not repeated at the operator.
+        last_plan_summary: Optional[str] = None
 
         while True:
             if should_interrupt is not None and should_interrupt() and not interrupted:
@@ -1075,6 +1090,17 @@ async def run_turn(
                 error = _turn_error_message(params)
                 status = "failed"
                 break
+            elif method == "turn/plan/updated":
+                # The agent's plan. It reaches the timeline on `exec` as a `todo_list`/
+                # `plan_update` *item*; under app-server it is a notification of its own, and
+                # `map_item_to_events` still carried a branch for `("todoList", "planUpdate")`
+                # item types no CLI sends -- so the plan was invisible on the default transport
+                # while the code that was supposed to show it looked present (F102). Same dead
+                # -branch shape as F100's `turn/failed`.
+                plan_event = map_plan_update(params)
+                if plan_event.content != last_plan_summary:
+                    last_plan_summary = plan_event.content
+                    await on_event(plan_event)
             elif (
                 method == "mcpServer/startupStatus/updated"
                 and params.get("status") == "failed"
