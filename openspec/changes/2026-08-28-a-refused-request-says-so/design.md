@@ -181,6 +181,80 @@ named failure mode — a check that is tested, correct, and cannot fire — so t
 refreshes the row (`await session.refresh(entry)`) before deciding, and a test asserts the refresh
 by having the scheduler withdraw through a genuinely separate session.
 
+## D12. Round 3: the withdrawal has to be announced, or the operator sees both answers
+
+Round 3 followed D5 out to the UI. The route commits its entry at `:1260` and **broadcasts
+`queue_entry_queued`** at `:1268-1269` before it ever calls `schedule_agent`. So by the time the
+refusal comes back, every connected client has already been told the input is queued and has
+invalidated its queue query on the strength of it (`useSSE.ts:489-493`).
+
+Withdraw the row without saying so and the operator gets an error dialog *and* a queue card reading
+`waiting_count: 1` for an entry that no longer exists — the two halves of the product disagreeing,
+which is the same complaint F108 makes, moved one surface over.
+
+The event to send already exists and the UI already handles it: **`queue_entry_withdrawn`**, emitted
+today only by the operator's explicit `DELETE` on a queue entry (`api/v1/inbound_queue.py:271-272`)
+and switched on in `useSSE.ts:491`. The refusal path emits the same kind with the same payload
+shape. Nothing new is invented, and no client changes.
+
+Deliberately **not** `queue_entry_abandoned`: that one means *the Hub gave up after trying*, it
+carries an attempt count and a run id, and `useSSE` gives it its own operator-visible treatment
+(`:440`). This entry was never delivered and nobody gave up on it — the request it belonged to was
+answered.
+
+## D13. Round 3: two of round 2's marked sites cannot be reached, and one changes F96-shaped behaviour
+
+Round 2's marking list (`tasks.md` 2.0) was itself unreviewed. Round 3 re-derived it.
+
+**`:474` (the agent is archived) is unreachable through the queue, and should be marked anyway.**
+`agent_lifecycle.archivable` refuses to archive an agent that has queued entries
+(`agent_lifecycle.py:46-59`), and the route refuses an archived agent pre-queue at `:1108`. Between
+them, no entry can be sitting in the queue for an agent that is archived by the time
+`schedule_agent` runs. Marking it costs nothing and is honest about intent — but **no test may
+claim to exercise it through the route**, because such a test would have to construct a state the
+product forbids, and would then be green for a reason unrelated to what it claims. `:499` and `:874`
+(unimplemented runner) are the same: `Runner.cli` is schema-constrained to `claude`/`codex`, so
+neither is reachable through the API at all.
+
+**`:452` (the agent is not in this project) genuinely changes behaviour of the F96 shape, and that
+is the decision.** There is no redrain when an agent is *created*; there is one when a runner is
+*bound* (`agents.py:2026`). So today, an operator who triggers a mistyped name, then creates that
+agent and binds it a runner, has their original input delivered. Refusing at the route ends that.
+
+It is still right, and the distinction from F96 is not "how hard the repair is" but **whether the
+input has an addressee**:
+
+- *No runner is bound* — the agent exists, the operator's intent is unambiguous, the input is for
+  **that** agent, and the Hub is holding it for a component the operator is about to attach.
+- *No such agent* — the input is addressed to a string. The Hub cannot tell a typo from an agent the
+  operator is about to create, and the failure mode of guessing is the worse one: an agent created
+  later that happens to reuse the name receives input meant for something else entirely, exactly
+  the name-reuse hazard `:474`'s own comment already cites from D15.
+
+The raise site's wording leads with the same reading — *"Create it in the Hub UI, **or correct the
+name**"* — and its measured example is a scheduled job repeating the mistake every five minutes.
+Recorded here as a deliberate reversal rather than left to be discovered.
+
+## D14. Round 3: the delta must say the withdrawn input names no run
+
+`agent-conversation-workspace` already requires (*Repeated delivery failure does not wedge an
+agent*) that "an input the system has given up on SHALL still name the run that was carrying it, so
+the operator can find what happened to their message."
+
+Nothing carried this input. `schedule_agent`'s refusal branch already says so in its own comment —
+*"No `Run` was ever created for this attempt"* (`turn_scheduler.py:182`) — and already broadcasts
+`run_id: None` for the abandonment it does at the attempt limit (`:208`). So the shipped code
+already sits outside that sentence for every refusal raised before a spawn; this change does not
+create the gap, it walks into it.
+
+**No contradiction, and the delta says so explicitly** rather than leaving a reader to reconcile
+them. The existing requirement governs *returned* input — input a run carried and gave back — and
+its attempt limit is a **ceiling on retries, not a floor**: "stop retrying it before it can block an
+agent indefinitely". Withdrawing at the first request-level refusal is inside that ceiling, not
+against it. The one clause that reads as a floor — "Returning an input to the queue SHALL cause the
+system to attempt its delivery again without requiring any further operator action" — is scoped to
+input that was returned, and this input was never delivered to return.
+
 ## Filed, not fixed here
 
 1. **`terminal_failure`'s defaults are dishonest.** Five early returns claim `True` without meaning

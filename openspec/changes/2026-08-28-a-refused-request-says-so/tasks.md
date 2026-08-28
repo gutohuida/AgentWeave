@@ -38,17 +38,26 @@ starts only after round 3. Nothing here is closed by a plan existing.
       a concurrent re-drain must complete first, and its `Run` must also have left `running` or the
       route's call returns `"agent is already running"` at `:65`. D2 rewritten to rest on
       construction instead.
-- [ ] 1.4 **Round 3** — independent second comparison against the code, including whatever round 2
-      changed. Check specifically that the new requirements do not contradict *Repeated delivery
-      failure does not wedge an agent* (`agent-conversation-workspace`, line 1213), which requires
-      returned input to be retried to a limit — D5 withdraws an entry before that limit.
-- [ ] 1.5 **Round 3** — confirm the delta's four requirements are each falsifiable by a test that
-      does not restate the implementation.
-- [ ] 1.6 **Round 3** — audit round 2's own new claim, the one nothing has yet re-derived: that
-      each site marked in 2.0 is genuinely request-level and each site left unmarked is genuinely
-      environment-level. `:452` ("is not an agent in this project") is the one round 2 flagged as
-      arguable; `:817` (canonical context could not be written) is the one it left unmarked with
-      the least evidence.
+- [x] 1.4 **Round 3** — independent second comparison against the code, including whatever round 2
+      changed. **No contradiction with *Repeated delivery failure does not wedge an agent*** — that
+      requirement governs input a run *returned*, and its attempt limit is a ceiling ("stop retrying
+      it before it can block an agent indefinitely"), not a floor. The one clause that reads as a
+      floor is scoped to returned input, and this input was never delivered to return. **One real
+      gap found and closed in the delta:** that requirement also says given-up input must name the
+      run that carried it, and nothing carried this input — recorded rather than left to be
+      reconciled by a reader (D14).
+- [x] 1.5 **Round 3** — confirm the delta's requirements are each falsifiable by a test that does
+      not restate the implementation. They are: each names an observable the caller or the operator
+      can read — the answer's status and sentence, whether the queue still holds the input, which
+      event arrives, what the UI displays — and none names `ScheduleResult`, `TriggerAgentError` or
+      a flag. Two scenarios were added because round 3's own findings introduced new observables.
+- [x] 1.6 **Round 3** — audit round 2's marking list. **Three corrections, all in D13:**
+      `:474` (archived agent) is unreachable through the queue — `agent_lifecycle.archivable`
+      refuses to archive an agent holding queued entries — so it is marked but **must not get a
+      test claiming to exercise it**; `:499`/`:874` are likewise unreachable through the API;
+      and `:452` is confirmed request-level but **does** reverse F96-shaped behaviour, deliberately,
+      because input addressed to a name that is on no roster has no addressee. `:817` reviewed and
+      left unmarked: an `OSError` writing the context file is the environment, not the request.
 
 ## 2. The refusal is carried out of the scheduler
 
@@ -99,7 +108,9 @@ starts only after round 3. Nothing here is closed by a plan existing.
       because another reviewer took the task while the entry waited (the TOCTOU population).
       It answers with a non-2xx carrying the refusal's sentence.
 - [ ] 3.5 Test: a mistyped agent name (`:452`) answers with its own status, since the route has no
-      pre-queue mirror for it.
+      pre-queue mirror for it. **Round 3:** this is the one marked site with a reachable,
+      route-driven test. `:474`, `:499` and `:874` are marked but unreachable (D13) — do not write
+      tests that construct states the product forbids in order to reach them.
 - [ ] 3.6 Test: a refusal raised while building a turn for another conversation answers `200`, does
       not carry the foreign sentence, and says the input is waiting behind other input.
 - [ ] 3.7 Test: a concurrent drain that empties the queue answers `200 … "queued"` (D2's race).
@@ -116,6 +127,13 @@ starts only after round 3. Nothing here is closed by a plan existing.
 - [ ] 4.3 Test: after a refused request, the entry is not queued and its recorded reason names the
       refusal.
 - [ ] 4.4 Test: no `queue_entry_abandoned` event arrives later for an entry this path withdrew.
+- [ ] 4.4a **New in round 3 (D12).** Broadcast and persist `queue_entry_withdrawn` for the entry
+      this path withdraws — the same kind and payload shape `api/v1/inbound_queue.py:271-272`
+      already emits, which `useSSE.ts:491` already handles. Without it the operator holds an error
+      and a queue card still counting the input, because `queue_entry_queued` was already broadcast
+      at `:1268` before the refusal was known.
+- [ ] 4.4b Test: the refused request emits `queue_entry_withdrawn` and does **not** emit
+      `queue_entry_abandoned`.
 - [ ] 4.5 Test (D11): with `schedule_agent` withdrawing through its own session, the route still
       sees the withdrawal. Mutation-check it by removing the refresh — the test must fail.
 - [ ] 4.6 Test: an environment-level refusal leaves the entry queued, so F96's repair still

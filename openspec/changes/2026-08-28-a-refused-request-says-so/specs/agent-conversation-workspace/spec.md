@@ -91,6 +91,16 @@ This SHALL NOT extend to input refused because the environment is not ready. Tha
 and keeps its existing delivery-attempt bookkeeping, because the repair that makes it deliverable is
 exactly what the operator has been told to perform.
 
+Input withdrawn this way SHALL NOT be reported as input the system gave up on after trying. Nothing
+carried it — no turn was ever started for it — so there is no run for it to name and no attempt
+count to report. The operator was told synchronously; a later report that the system stopped trying
+would describe an effort that never happened.
+
+Where the system has already told the operator that input is queued, and then withdraws it in the
+same request, it SHALL report the withdrawal. An operator holding both an error and a queue that
+still counts the input is being told two different things about one request, which is the same
+failure this behaviour exists to remove.
+
 #### Scenario: The queue agrees with the answer the operator was given
 
 - **WHEN** a request is answered with a refusal about what that request asked for
@@ -101,6 +111,13 @@ exactly what the operator has been told to perform.
 
 - **WHEN** a request is answered as accepted because the environment the agent would run in is not ready
 - **THEN** the input that request submitted remains queued for delivery
+
+#### Scenario: The withdrawal is reported, and not as an abandonment
+
+- **WHEN** a request is answered with a refusal about what that request asked for
+- **AND** the system had already reported that request's input as queued
+- **THEN** the system reports that the input has been withdrawn
+- **AND** it does not report that it gave up on the input after failed delivery attempts
 
 ### Requirement: The operator reads why a submission was refused
 
