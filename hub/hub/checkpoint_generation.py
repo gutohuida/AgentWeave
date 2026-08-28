@@ -470,7 +470,7 @@ async def generate_checkpoint(
     runner_id: Optional[str] = None,
     notes: Optional[str] = None,
     probe: bool = True,
-    visibility: str = "private",
+    visibility: str = "project",
 ) -> Checkpoint:
     """Produce a checkpoint for *conversation*. Always returns a record.
 
@@ -498,6 +498,23 @@ async def generate_checkpoint(
     note = None if notes is not None else await pending_notes(db, conversation.id)
     if note is not None:
         notes = format_notes(note)
+
+    # Let go of the transaction before spawning, and this is not a tidiness point — it is the
+    # whole of F89. Everything above is reads, and on SQLite a read transaction holds a SHARED
+    # lock that no other connection can write past. `run_worker` then blocks for ~20s on a CLI,
+    # every other connection's write waits out the 5s busy timeout and raises `database is
+    # locked`, and the live turn that triggered this checkpoint dies mid-stream without ever
+    # finalising — measured twice on 2026-08-28, both runs left `running` forever with no
+    # `run_completed`, and the checkpoint's own `WorkerInvocation` lost to the same lock.
+    #
+    # `run_worker`'s docstring already states the rule this restores: "Callers pass primitives
+    # rather than a `Runner` row so the spawn does not hold a session open across a call that can
+    # take minutes." Passing primitives is not enough on its own if the caller's own transaction
+    # is still open around it.
+    #
+    # `expire_on_commit=False` on the session factory, so `conversation`, `anchor` and `loop` stay
+    # usable below rather than re-loading on next access.
+    await db.commit()
 
     result = await run_worker(
         project_id=conversation.project_id,
@@ -582,10 +599,16 @@ async def probe_checkpoint(
     direction — the very thing this change removes, a status that reports something other than
     what it names.
     """
+    # Rendered first and committed second, for F89's reason again: rendering reads the row, and
+    # doing it inside the `run_worker` call would open a transaction that then stays open across
+    # the spawn. The caller has already committed; this keeps that true for callers who have not.
+    prompt = _PROBE_PROMPT.format(rendered=render_checkpoint(checkpoint))
+    await db.commit()
+
     result = await run_worker(
         project_id=checkpoint.project_id,
         kind="checkpoint_probe",
-        prompt=_PROBE_PROMPT.format(rendered=render_checkpoint(checkpoint)),
+        prompt=prompt,
         prompt_version=PROBE_PROMPT_VERSION,
         output_model=ProbeAnswers,
         cli=cli,

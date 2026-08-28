@@ -612,3 +612,54 @@ async def test_a_reader_given_only_the_checkpoint_can_answer_the_probe(app, monk
     assert "I added the column" not in seen_by_probe["prompt"]
     # And the artifact carried an executable first step, which is what a successor starts from.
     assert "Run pytest hub/tests/." in checkpoint.body
+
+
+# --------------------------------------------------------------- F89: no lock across a spawn
+
+
+@pytest.mark.asyncio
+async def test_neither_spawn_happens_inside_an_open_transaction(app, monkeypatch):
+    """F89. Generation and its probe are ~20s CLI spawns, and SQLite gives no concurrency to a
+    connection that is waiting behind another one's transaction.
+
+    Held open, the caller's read transaction blocks every other connection for the whole spawn:
+    the 5s busy timeout expires and writes raise `database is locked`. Measured live on
+    2026-08-28 — two automatic checkpoints, two live turns left `running` forever with no
+    `run_completed` event, and the checkpoint's own `WorkerInvocation` lost, because `_record`
+    opens its own session and its "accounting must not take the work down with it" handler
+    swallowed the lock error and returned None.
+
+    Asserted at the spawn rather than by racing a second writer, so the property is checked
+    exactly where it has to hold and the test does not depend on the test database's locking mode.
+    """
+    seen = []
+
+    async def watchful_run_worker(**kwargs):
+        seen.append((kwargs["kind"], db.in_transaction()))
+        return await real_run_worker(**kwargs)
+
+    from hub import checkpoint_generation
+
+    real_run_worker = checkpoint_generation.run_worker
+    monkeypatch.setattr(checkpoint_generation, "run_worker", watchful_run_worker)
+
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        db.add(Run(id="run-1", project_id=PROJECT, agent=AGENT, conversation_id="conv-1"))
+        await db.commit()
+
+        _patch_cli(
+            monkeypatch,
+            [
+                _claude_stdout(GOOD_BODY),
+                _claude_stdout(
+                    {"files_changed": [], "task_ids": [], "unanswered_question_ids": []}
+                ),
+            ],
+        )
+        await generate_checkpoint(
+            db, conversation, trigger="operator", cli="claude", model="claude-haiku-4-5-20251001"
+        )
+
+    assert [kind for kind, _ in seen] == ["checkpoint", "checkpoint_probe"]
+    assert [open_transaction for _, open_transaction in seen] == [False, False]

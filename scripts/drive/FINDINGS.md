@@ -5158,3 +5158,180 @@ about `queued`, so `0 waiting` remains what the card says after an abandonment. 
 and the activity log now both carry the fact, which is where an operator looks for a *message*;
 making the card carry a count of dropped input is a separate question about what that number
 means.
+
+---
+
+## F88 (A) — two grants the operator can confer, and neither has ever done anything
+
+**Status:** fixed — the commit that defaults `checkpoints.visibility` to `project`, backfills the
+stored rows in migration `0097`, and adds `list_checkpoints` / `read_checkpoint`
+
+**Severity: A.** `can_read_checkpoints` and `can_recall` are a documented capability with a
+settings control, a canonical-context paragraph that tells the agent it has them, and a spec
+requirement. Turning both on changed nothing whatsoever. An operator who grants a reviewer access
+to its author's history gets a reviewer that is refused everything, with a not-found the product
+deliberately makes indistinguishable from "there is no such record" — so the operator has no way
+to tell the grant failed, and the agent is told to read the refusal as an absence.
+
+**How it was found.** Driving row 15 of the matrix, checkpoints. A real turn on `author`,
+`POST /conversations/{id}/checkpoint`, a real generated checkpoint (`ckpt-d4ba5292443a`, probes
+passed) citing one observation, `out-e3b591766336`. Then `builder`, granted both:
+
+```
+PATCH /agents/builder  ->  {"can_read_checkpoints": true, "can_recall": true}
+
+builder, live turn:  recall("out-e3b591766336")
+  ->  Hub rejected GET /recall/out-e3b591766336 (404):
+      No recorded observation by that id is available to you.
+```
+
+**The cause is one absent default, and the whole shape is in `checkpoint_access.py`'s own
+docstring.** Effective access is `capability ∩ visibility`. `may_read_checkpoint` returns True for
+a peer only when `checkpoint.visibility in ("project", "granted")` — and `visibility` shipped
+defaulting to `"private"` with **no caller anywhere passing anything else**: not the operator's
+"take a checkpoint now" route, not the threshold trigger, not the handover path. There is no route,
+no MCP tool and no UI control that can change one. So the visibility side of that intersection has
+been closed for every checkpoint that has ever existed, in every project, and `may_recall` — which
+requires `may_read_checkpoint` — was unreachable for a peer by construction.
+
+**Why the suite did not see it.** `hub/tests/test_checkpoint_access.py` is thorough and every one
+of its peer-access tests passes `visibility="project"` **explicitly** to its `_checkpoint` helper.
+The access rules are correct and well tested; what was never tested is the value the product
+actually stores. This is the same failure the repository had already diagnosed once and written
+down, in `api/v1/agents.py` above `GRANT_FIELDS`, about `can_accept_evidence`: *"The column and its
+migration have existed since 0068. Nothing could set it — no schema, no route, no control — so
+`requirement_evidence.may_accept` refused every agent in every project, and a capability enforced
+everywhere and grantable nowhere is a refusal of everyone."* Same sentence, one column over.
+
+**The fix follows the spec rather than inventing a policy.** `conversation-checkpoint` says *"A
+checkpoint MAY additionally restrict itself, in which case access requires both the reader's grant
+and the checkpoint's own visibility"* — restriction is an exception a checkpoint opts into, not the
+state every checkpoint is born in. So the default becomes `project`, and migration `0097` moves the
+stored rows: every stored `private` is the absent default rather than anybody's decision, and
+leaving them would split a project's history at the migration with the older half permanently
+unreadable. **The system stays closed by default** — both reader grants still default to False, and
+this changes nothing about them.
+
+**A second half, found while fixing the first.** With visibility corrected, `can_read_checkpoints`
+still granted nothing on its own: the agent surface had no tool that returns a checkpoint, only
+`recall`, which reaches *observations* a checkpoint cites. The spec's own scenario requires the
+other state to exist — *"the observation request is refused **and the checkpoint remains
+readable**"* — and the canonical context promised it in as many words: *"You may read your peers'
+checkpoints."* `submit_checkpoint_notes`' docstring assumes it too, telling an agent its notes are
+read by *"a reviewer of what you just finished"*. Nothing gave that reviewer a way to find or open
+one. So `list_checkpoints(agent=None)` and `read_checkpoint(checkpoint_id)` now exist, over
+`GET /agent-actions/checkpoints` and `/checkpoints/{id}`, identity taken from the run's minted
+credential like everything else in that namespace — `agent` narrows the list and can never widen
+it, and an id out of reach answers 404 for the same disclosure reason `recall` does.
+
+**Proved live against a Hub restarted on the fixed code**, same project, same checkpoint:
+
+```
+builder   (granted)   list_checkpoints  -> 1 row, agent "author", yours: false
+                      read_checkpoint   -> "Create a CSV schema documentation file with ..."
+                      recall            -> "Done. The `id` column should be indexed because ..."
+
+reviewer  (ungranted) list_checkpoints  -> 0 rows
+                      read_checkpoint   -> 404 No checkpoint by that id is available to you.
+```
+
+**Left for the operator.** `private` is now a value nothing produces, in the other direction: there
+is still no way to restrict one checkpoint. That is a `MAY` in the spec and a real capability
+question — a per-checkpoint control, an agent-level default, or neither — and it is not guessed at
+here. `granted` remains unreachable and always was; it implies a grantee list that no table holds.
+
+---
+
+## F89 (A) — turning on automatic checkpointing kills the turn that triggers it
+
+**Status:** fixed — the commit that commits the session before `run_worker` in
+`checkpoint_generation`
+
+**Severity: A.** The agent's run never finishes. No `run_completed`, no `ended_at`, no exit code;
+the `Run` row sits `running` forever and the agent sits `running` with it, so nothing can be
+scheduled onto it again. The transcript shows the turn finished normally — the agent said its piece
+and stopped — and every product surface says it is still going. Reproduced twice, on two different
+agents, first time each.
+
+**How it was found.** Driving row 15 of the matrix. Automatic mode needs a threshold a cheap turn
+will cross, so `reviewer` was put on `automatic` with `tokens/5000` and asked to say one word:
+
+```
+PATCH /agents/reviewer  {"checkpoint_mode":"automatic","checkpoint_threshold_mode":"tokens",
+                         "checkpoint_threshold_value":5000}
+trigger reviewer: "Say the single word ACKNOWLEDGED and stop."
+```
+
+The agent said ACKNOWLEDGED and the transcript recorded `Completed`. Four minutes later:
+
+```
+running runs: [('run-cabd138d5be1', 'reviewer', 'conv-738f939e6999', '01:42:57')]
+agents:       author idle | builder idle | reviewer running
+events:       run_started ... context_warning ... context_warning(null)   <- and nothing after
+```
+
+No `run_completed` event was ever written. `builder`, configured the same way and given the same
+one-word turn, wedged identically — and its checkpoint came out `unwritten` with
+`worker_invocation_id = None`, which is the thread that leads to the cause.
+
+**The cause is a lock held across a CLI spawn.** `checkpoint_trigger.consider` opens a session,
+and `generate_checkpoint(db, …)` uses it for every read — the anchor, the loop, the envelope, the
+transcript, the pending notes — and then calls `run_worker` **with that transaction still open**.
+`run_worker` is a real `claude` spawn, measured at ~20s. SQLite gives no concurrency to a
+connection waiting behind another one's transaction: for those twenty seconds every other
+connection's write waits out the 5s busy timeout and then raises `database is locked`.
+
+`_record`, which writes the `WorkerInvocation`, opens its own session and is wrapped in
+*"accounting must not take the work down with it"* — so it swallowed the lock error and returned
+`None`. That is the `worker_invocation_id = None` above, and it is the visible corner of what was
+happening to every other writer at the same moment, including the live turn's own output recording
+and its finalisation.
+
+`run_worker`'s docstring already states the rule that was broken: *"Callers pass primitives rather
+than a `Runner` row so the spawn does not hold a session open across a call that can take
+minutes."* Passing primitives is not enough if the caller's own transaction is open around the
+call.
+
+**The fix is one commit, in the literal sense.** Everything before the spawn is reads, so
+`generate_checkpoint` commits before calling `run_worker`, ending the transaction and releasing the
+lock for the spawn's duration. `expire_on_commit=False` on the session factory, so the objects
+loaded above stay usable. `probe_checkpoint` renders its prompt first and commits second, for the
+same reason — rendering inside the call argument would reopen a transaction across the second
+spawn.
+
+**The test asserts the property at the spawn**, not by racing a writer: `run_worker` is wrapped and
+`db.in_transaction()` recorded at each of the two calls. Watched to fail with the commit removed —
+`[True, False]` against `[False, False]`, the generation spawn holding the lock and the probe not,
+which is exactly the asymmetry the live evidence showed.
+
+**Why the suite could not see it.** The same reason as [F88] one file over: the tests drive
+`generate_checkpoint` on a session with nothing else contending for the database, so a transaction
+held across a stubbed, instantaneous spawn costs nothing and is invisible. The defect only exists
+when a second connection is trying to write — which, in production, is every single time, because
+the only thing that triggers this path is a live turn streaming output.
+
+**Proved live against a Hub restarted on the fixed code**, same project, same configuration.
+`builder` under `automatic` with `tokens/5000`, twice:
+
+```
+run_started -> context_warning -> run_completed        (both runs, both times)
+conv-f8277f71ddb7  archived  ->  conv-83decbbd4a7c  origin "handoff"
+conv-a01a34fb6975  archived  ->  conv-5a90f69aee1d  origin "handoff"
+```
+
+Which corrected a wrong conclusion on the way. Before the fix, the checkpoint was generated and
+the conversation stayed open, and the obvious reading was that `automatic` can never cut over —
+`cut_over` refuses a conversation whose run is in progress, and the trigger fires from a mid-run
+reading. That reading was wrong: generation takes ~20s, an ordinary turn ends inside that window,
+and once the run is no longer wedged the cutover happens. **The refusal was the wedge, not the
+design.** What is *not* measured, and is therefore not claimed here, is the turn that outlasts its
+own checkpoint generation — that one should meet the refusal, and nothing retries it afterwards
+because the next reading is short-circuited by `_nothing_new_since_last_checkpoint`. Left for the
+next sweep to measure rather than asserted from the code.
+
+**Left for the operator, and not guessed at.** The engine opens SQLite with neither WAL nor an
+explicit `busy_timeout` (`db/engine.py`: `connect_args` carries only `check_same_thread`). WAL
+would make readers stop blocking writers at all and would have made this defect a slowdown instead
+of a wedge. It is also a deployment-visible change — extra `-wal`/`-shm` files, and it does not
+work over a network filesystem — so it is a decision rather than a repair, and the repair above
+stands on its own either way.
