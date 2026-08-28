@@ -387,11 +387,19 @@ async def test_a_review_refused_by_the_provisioning_leaves_the_task_unstaffed(
 
 
 async def _post_review(app, auth_headers, agent, task_id):
-    return await app.post(
-        "/api/v1/projects/proj-test/agent/trigger",
-        json={"agent": agent, "message": f"review {task_id}", "review_task_id": task_id},
-        headers=auth_headers,
-    )
+    # `which` is patched for the same reason the direct-dispatch helper above patches it, and it
+    # matters to exactly one caller: the success-path test. The route's three guards all run before
+    # launchability, so a refusal test reaches its assertion either way — but a *dispatchable*
+    # review then goes on to `trigger_agent_directly`, whose launchability check sits at
+    # `agent_trigger.py:505`, ahead of the staffing at `:650`. On a machine with no `claude` on
+    # PATH the turn is refused there for that reason, the task is never staffed, and the test reads
+    # `("completed", None)`. CI is such a machine.
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        return await app.post(
+            "/api/v1/projects/proj-test/agent/trigger",
+            json={"agent": agent, "message": f"review {task_id}", "review_task_id": task_id},
+            headers=auth_headers,
+        )
 
 
 async def test_the_operator_gets_a_refusal_not_an_acknowledgement(app, auth_headers, bind_runner):

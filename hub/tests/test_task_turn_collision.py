@@ -448,6 +448,24 @@ async def test_a_collision_leaves_the_entry_queued_and_delivers_it_when_the_task
     await _end_run(run_id)
 
     captured = {}
+    # Delivery is observed *as it happens*, not read back afterwards, and that distinction is the
+    # whole reason this block looks like it does. `_spawn` below raises, so the run this schedule
+    # starts ends `failed`, and `return_run_entries` puts the entry straight back — correctly: a
+    # run that died carrying input must not swallow it. Reading `entry.state` after the background
+    # run has finished therefore says nothing about the delivery this test set up. It used to pass
+    # anyway, because the *re-drain* that follows a run ending delivered the entry a second time
+    # and left `delivered` behind — an outcome produced by a second delivery, asserted by a test
+    # whose own docstring says "never re-queued by anybody", and true only on a machine where the
+    # re-drain could get as far as a spawn. On a machine with no `claude` on PATH the second
+    # delivery is refused for that reason instead and the entry reads `queued`, which is how this
+    # cell turned CI red while passing here.
+    deliveries = []
+    real_deliver = agent_trigger.deliver_entries_with_run
+
+    async def _record_delivery(db, **kwargs):
+        entries = await real_deliver(db, **kwargs)
+        deliveries.append([(entry.id, entry.delivery_attempts or 0) for entry in entries])
+        return entries
 
     def _spawn(cmd, cwd=None, env=None, **rest):
         captured["cwd"] = cwd
@@ -455,19 +473,25 @@ async def test_a_collision_leaves_the_entry_queued_and_delivers_it_when_the_task
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn):  # noqa: SIM117
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
-            result = await schedule_agent("proj-test", CHALLENGER)
-    for _ in range(1000):
-        if "cwd" in captured:
-            break
-        await asyncio.sleep(0.01)
-    while agent_trigger._background_runs:
-        await asyncio.gather(*list(agent_trigger._background_runs), return_exceptions=True)
+            with patch("hub.api.v1.agent_trigger.deliver_entries_with_run", _record_delivery):
+                result = await schedule_agent("proj-test", CHALLENGER)
+                for _ in range(1000):
+                    if "cwd" in captured:
+                        break
+                    await asyncio.sleep(0.01)
+                while agent_trigger._background_runs:
+                    await asyncio.gather(
+                        *list(agent_trigger._background_runs), return_exceptions=True
+                    )
 
     assert result.waiting_reason is None
     assert captured.get("cwd") is not None
+    # The entry the collision refused was handed to this turn, and the `0` is the load-bearing
+    # half: `delivery_attempts` is incremented only by `return_run_entries`, so a zero at the
+    # moment of delivery is the assertion that nothing put this entry back to get here.
     async with async_session_factory() as session:
         entry = (await session.execute(select(InboundQueueEntry))).scalars().one()
-        assert entry.state == "delivered"
+        assert deliveries[0] == [(entry.id, 0)]
 
 
 async def test_the_status_route_reports_the_collision_the_trigger_refused_on(
