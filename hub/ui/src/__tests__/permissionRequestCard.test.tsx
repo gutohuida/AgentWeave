@@ -140,6 +140,87 @@ describe('permission request card — codex shapes', () => {
     )
     expect(screen.getByText(/the provider sent none/)).toBeInTheDocument()
   })
+
+  // F107: the operator used to approve the literal string "a file change" with nothing under it.
+  // Codex's approval request carries no paths, but the item it names does, and the Hub now
+  // resolves them onto `paths`.
+  it('names the file a codex file-change approval is actually about', () => {
+    render(
+      <PermissionRequestCard
+        requests={[
+          request({
+            tool_name: 'a file change',
+            tool_input: { grantRoot: null, reason: null, paths: ['C:/work/ask-me-probe.txt'] },
+          }),
+        ]}
+        agent="haiku-1"
+      />
+    )
+    expect(screen.getByText('C:/work/ask-me-probe.txt')).toBeInTheDocument()
+  })
+
+  it('names every file of a small patch, because one approval covers all of them', () => {
+    render(
+      <PermissionRequestCard
+        requests={[
+          request({
+            tool_name: 'a file change',
+            tool_input: { grantRoot: null, paths: ['a.py', 'b.py', 'c.py'] },
+          }),
+        ]}
+        agent="haiku-1"
+      />
+    )
+    expect(screen.getByText('a.py, b.py, c.py')).toBeInTheDocument()
+  })
+
+  it('counts the tail of a large patch rather than wrapping the whole list', () => {
+    // The operator is deciding under the run's timeout. Four filenames and a count is readable;
+    // twenty wrapped paths is a wall they will skim past, which is how a card stops being a
+    // decision.
+    render(
+      <PermissionRequestCard
+        requests={[
+          request({
+            tool_name: 'a file change',
+            tool_input: { paths: ['a.py', 'b.py', 'c.py', 'd.py', 'e.py'] },
+          }),
+        ]}
+        agent="haiku-1"
+      />
+    )
+    expect(screen.getByText('a.py, b.py, c.py and 2 more')).toBeInTheDocument()
+  })
+
+  it('prefers the resolved files over the coarser root the request asked to be granted', () => {
+    render(
+      <PermissionRequestCard
+        requests={[
+          request({
+            tool_name: 'a file change',
+            tool_input: { grantRoot: 'C:/work', paths: ['C:/work/src/main.py'] },
+          }),
+        ]}
+        agent="haiku-1"
+      />
+    )
+    expect(screen.getByText('C:/work/src/main.py')).toBeInTheDocument()
+    expect(screen.queryByText('C:/work')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the root when nothing resolved the item', () => {
+    // The Hub omits `paths` rather than sending an empty one, so an unresolved approval reads
+    // exactly as it did before F107 instead of claiming the patch touches no files.
+    render(
+      <PermissionRequestCard
+        requests={[
+          request({ tool_name: 'a file change', tool_input: { grantRoot: 'C:/work', paths: [] } }),
+        ]}
+        agent="haiku-1"
+      />
+    )
+    expect(screen.getByText('C:/work')).toBeInTheDocument()
+  })
 })
 
 describe('a request the run stopped waiting on', () => {

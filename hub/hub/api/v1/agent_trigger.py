@@ -2208,7 +2208,12 @@ async def _execute_codex_appserver_run(
             review file and said so in prose, while the Hub's durable record showed a clean run.
             """
             reason = subject.get("reason") or ""
-            detail = subject.get("command") or subject.get("grantRoot") or ""
+            # `paths` before `grantRoot`: a refused file change now names the files it wanted
+            # (F107), and the root it asked to be granted is the coarser fallback for the case
+            # where the turn never saw the item.
+            detail = (
+                subject.get("command") or subject.get("paths") or subject.get("grantRoot") or ""
+            )
             async with async_session_factory() as db:
                 await persist_event(
                     db,

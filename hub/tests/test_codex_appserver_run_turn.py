@@ -1025,6 +1025,190 @@ class TestRunTurnReportsRefusals:
         assert fake.sent_responses == [(0, {"decision": "decline"})]
 
 
+class TestFileChangeApprovalNamesTheFiles:
+    """F107: the operator's card said "a file change" and nothing else.
+
+    Codex's `item/fileChange/requestApproval` genuinely carries no paths -- verified against
+    `codex app-server generate-json-schema` at CLI 0.146.0, whose `FileChangeRequestApprovalParams`
+    has only `itemId`, `startedAtMs`, `threadId`, `turnId`, `grantRoot` and `reason`. But the
+    `fileChange` *item* the approval names does carry them, and it arrives first: on the live drive
+    of 2026-08-28 07:52 the item was persisted at 06:53:14.339 and the request created at
+    06:53:14.352. So the Hub already holds the filenames when it builds the card.
+
+    These cover the wiring rather than the shape -- `test_permission_approver.py` covers the shape.
+    The turn loop is where a refactor would quietly stop recording items, and then the card would
+    go back to naming a category with no test noticing.
+    """
+
+    ITEM_ID = "item-9c1"
+    APPROVAL_METHOD = "item/fileChange/requestApproval"
+
+    @staticmethod
+    def _item(item_id, changes):
+        return {
+            "method": "item/started",
+            "params": {"item": {"id": item_id, "type": "fileChange", "changes": changes}},
+        }
+
+    @classmethod
+    def _session(cls, notifications):
+        return _FakeSession(
+            responses={
+                "initialize": {},
+                "thread/start": THREAD_START_RESULT,
+                "turn/start": TURN_START_RESULT,
+            },
+            notifications=[
+                *notifications,
+                {"method": "turn/completed", "params": {"turn": {"status": "completed"}}},
+            ],
+        )
+
+    async def _ask(self, monkeypatch, notifications, **kwargs):
+        """Run a turn under the operator posture and return every subject it put on a card."""
+        fake = self._session(notifications)
+        _patch_spawn(monkeypatch, fake)
+        asked = []
+
+        async def _request_approval(method, subject):
+            asked.append((method, subject))
+            return True
+
+        await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=None,
+            on_event=_noop,
+            posture="operator",
+            request_approval=_request_approval,
+            **kwargs,
+        )
+        return fake, asked
+
+    @pytest.mark.asyncio
+    async def test_the_card_names_the_file_the_approval_refers_to(self, monkeypatch):
+        """The defect itself: `rm -rf ~` and a README edit used to render the same card."""
+        _, asked = await self._ask(
+            monkeypatch,
+            [
+                self._item(
+                    self.ITEM_ID,
+                    [{"path": "/workspace/ask-me-probe.txt", "kind": {"type": "add"}, "diff": "P"}],
+                ),
+                {
+                    "id": 0,
+                    "method": self.APPROVAL_METHOD,
+                    "params": {"itemId": self.ITEM_ID, "grantRoot": None, "reason": None},
+                },
+            ],
+        )
+
+        assert len(asked) == 1
+        assert asked[0][1]["paths"] == ["/workspace/ask-me-probe.txt"]
+
+    @pytest.mark.asyncio
+    async def test_every_file_in_a_multi_file_patch_is_named(self, monkeypatch):
+        """One approval covers the whole patch, so a card naming one of its files under-reports."""
+        _, asked = await self._ask(
+            monkeypatch,
+            [
+                self._item(
+                    self.ITEM_ID,
+                    [
+                        {"path": "a.py", "kind": {"type": "add"}, "diff": ""},
+                        {"path": "b.py", "kind": {"type": "delete"}, "diff": ""},
+                    ],
+                ),
+                {
+                    "id": 0,
+                    "method": self.APPROVAL_METHOD,
+                    "params": {"itemId": self.ITEM_ID, "grantRoot": None, "reason": None},
+                },
+            ],
+        )
+
+        assert asked[0][1]["paths"] == ["a.py", "b.py"]
+
+    @pytest.mark.asyncio
+    async def test_the_right_item_is_named_when_the_turn_has_seen_several(self, monkeypatch):
+        """Resolution is by id, not by recency -- a turn patches more than one file per turn."""
+        _, asked = await self._ask(
+            monkeypatch,
+            [
+                self._item("item-other", [{"path": "wrong.py", "kind": {}, "diff": ""}]),
+                self._item(self.ITEM_ID, [{"path": "right.py", "kind": {}, "diff": ""}]),
+                self._item("item-later", [{"path": "also-wrong.py", "kind": {}, "diff": ""}]),
+                {
+                    "id": 0,
+                    "method": self.APPROVAL_METHOD,
+                    "params": {"itemId": self.ITEM_ID, "grantRoot": None, "reason": None},
+                },
+            ],
+        )
+
+        assert asked[0][1]["paths"] == ["right.py"]
+
+    @pytest.mark.asyncio
+    async def test_an_unresolvable_item_falls_back_rather_than_inventing_a_path(self, monkeypatch):
+        """The ordering held live, but a card that guessed would be worse than one that admits it.
+
+        `paths` is absent rather than empty, so the UI falls through to `grantRoot`/`reason`
+        exactly as it did before F107 instead of rendering an empty list as "no files".
+        """
+        _, asked = await self._ask(
+            monkeypatch,
+            [
+                {
+                    "id": 0,
+                    "method": self.APPROVAL_METHOD,
+                    "params": {"itemId": "never-seen", "grantRoot": "/w", "reason": "edit"},
+                },
+            ],
+        )
+
+        assert asked[0][1] == {"grantRoot": "/w", "reason": "edit"}
+
+    @pytest.mark.asyncio
+    async def test_a_refusal_the_runtime_decided_names_the_files_too(self, monkeypatch):
+        """The refusal record had the same blind spot: it named a root, or nothing at all."""
+        fake = self._session(
+            [
+                self._item(self.ITEM_ID, [{"path": "/outside/x.py", "kind": {}, "diff": ""}]),
+                {
+                    "id": 0,
+                    "method": self.APPROVAL_METHOD,
+                    "params": {"itemId": self.ITEM_ID, "grantRoot": None, "reason": None},
+                },
+            ]
+        )
+        _patch_spawn(monkeypatch, fake)
+        refusals = []
+
+        async def _on_refusal(method, subject):
+            refusals.append((method, subject))
+
+        await run_turn(
+            cli="codex",
+            cwd="/workspace",
+            env=None,
+            prompt="hi",
+            model=None,
+            resume_thread_id=None,
+            yolo=False,
+            mcp_command=None,
+            on_event=_noop,
+            on_refusal=_on_refusal,
+        )
+
+        assert fake.sent_responses == [(0, {"decision": "decline"})]
+        assert refusals[0][1]["paths"] == ["/outside/x.py"]
+
+
 class TestApprovalLabel:
     def test_the_refused_action_reads_as_a_thing(self):
         """The timeline renders "{agent} refused {tool_name}"."""

@@ -119,14 +119,28 @@ _YOLO_PERMISSIONS_GRANT: Dict[str, Any] = {
 }
 
 
-def approval_subject(method: str, params: Dict[str, Any]) -> Dict[str, Any]:
+def approval_subject(
+    method: str, params: Dict[str, Any], item: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """What a sandbox approval is asking about, in the shape the operator card renders.
 
     Codex's two sandbox approvals carry different evidence, and the difference is real rather
     than incidental. A command approval names the command, its cwd, and Codex's own reason. A
-    file-change approval names only the root it wants granted — the individual paths are not in
-    the request (verified against `codex app-server generate-json-schema`, CLI 0.146.0), so a
-    workspace check on this method is necessarily coarser than Claude's per-path one.
+    file-change approval names only the root it wants granted — the individual paths are genuinely
+    absent from the request (re-verified against `codex app-server generate-json-schema`, CLI
+    0.146.0: `FileChangeRequestApprovalParams` has exactly `itemId`, `startedAtMs`, `threadId`,
+    `turnId`, `grantRoot`, `reason`), so a workspace check on this method is necessarily coarser
+    than Claude's per-path one.
+
+    *item* is the thread item the approval's `itemId` refers to, when the turn loop has already
+    seen it. That is what closes F107. The paths are not in the approval, but they are in the
+    `fileChange` item — `FileChangeThreadItem.changes[].path` — and `item/started` for that item
+    arrives **before** the approval request that refers to it: measured on the 2026-08-28 07:52
+    drive, the item was persisted at `06:53:14.339` and the permission request created at
+    `06:53:14.352`, thirteen milliseconds later. So the Hub already holds the filenames when it
+    builds the card, and used to throw them away — leaving the operator approving the literal
+    string "a file change" with nothing under it. Absent or unmatched, this falls back to exactly
+    the previous shape rather than inventing a path.
     """
     if method == COMMAND_APPROVAL_METHOD:
         cwd = params.get("cwd")
@@ -135,7 +149,33 @@ def approval_subject(method: str, params: Dict[str, Any]) -> Dict[str, Any]:
             "cwd": cwd if isinstance(cwd, str) else (cwd or {}).get("value"),
             "reason": params.get("reason"),
         }
-    return {"grantRoot": params.get("grantRoot"), "reason": params.get("reason")}
+    subject: Dict[str, Any] = {
+        "grantRoot": params.get("grantRoot"),
+        "reason": params.get("reason"),
+    }
+    paths = _changed_paths(item)
+    if paths:
+        subject["paths"] = paths
+    return subject
+
+
+def _changed_paths(item: Optional[Dict[str, Any]]) -> List[str]:
+    """The files a `fileChange` item touches, in the order Codex listed them.
+
+    Paths only, not the diffs the item also carries: the card is one line the operator reads
+    under a run's timeout, and a patch body pasted into it would bury the filenames it exists to
+    show. The diff is already in the timeline's `tool_use` event for the same item.
+    """
+    if not isinstance(item, dict):
+        return []
+    changes = item.get("changes")
+    if not isinstance(changes, list):
+        return []
+    return [
+        change["path"]
+        for change in changes
+        if isinstance(change, dict) and isinstance(change.get("path"), str) and change["path"]
+    ]
 
 
 #: What a refused request is called where the operator reads it.
@@ -973,6 +1013,10 @@ async def run_turn(
         #: and statuses are not part of the rendered summary (see `map_plan_update`), so an
         #: unchanged summary carries nothing new and is not repeated at the operator.
         last_plan_summary: Optional[str] = None
+        #: Every thread item this turn has seen, by its id, so an approval that names only an
+        #: `itemId` can be resolved back to what the item actually says (F107). Kept per turn
+        #: and discarded with it; ids are only unique within a thread.
+        items_by_id: Dict[str, Dict[str, Any]] = {}
 
         while True:
             if should_interrupt is not None and should_interrupt() and not interrupted:
@@ -1029,7 +1073,11 @@ async def run_turn(
                     # still gets an answer (implications.md 2: silence is a deadlock).
                     allowed = False
                     if request_approval is not None:
-                        subject = approval_subject(method, msg.get("params") or {})
+                        subject = approval_subject(
+                            method,
+                            msg.get("params") or {},
+                            items_by_id.get(str((msg.get("params") or {}).get("itemId") or "")),
+                        )
                         allowed = await request_approval(method, subject)
                     decision = {"decision": "accept" if allowed else "decline"}
                 # Report a refusal this runtime decided by itself. `decide_approval` stays pure --
@@ -1046,13 +1094,23 @@ async def run_turn(
                     and isinstance(decision, dict)
                     and decision.get("decision") == "decline"
                 ):
-                    await on_refusal(method, approval_subject(method, msg.get("params") or {}))
+                    await on_refusal(
+                        method,
+                        approval_subject(
+                            method,
+                            msg.get("params") or {},
+                            items_by_id.get(str((msg.get("params") or {}).get("itemId") or "")),
+                        ),
+                    )
                 await session.respond(msg_id, decision)
                 continue
 
             params = msg.get("params") or {}
             if method in ("item/started", "item/completed"):
                 item = params.get("item") or {}
+                item_id = item.get("id")
+                if isinstance(item_id, str) and item_id:
+                    items_by_id[item_id] = item
                 for event in map_item_to_events(item, is_start=(method == "item/started")):
                     await on_event(event)
             elif method == "thread/tokenUsage/updated":

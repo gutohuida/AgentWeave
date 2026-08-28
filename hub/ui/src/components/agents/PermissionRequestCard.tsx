@@ -24,8 +24,16 @@ function describe(request: PermissionRequest): string {
   if (typeof path === 'string' && path) return path
   const command = input.command
   if (typeof command === 'string' && command) return command
-  // Codex's file-change approvals carry only the root they want granted; the individual paths
-  // are not in the request, so this is the most specific thing there is to show.
+  // Codex's file-change approvals carry no paths of their own, but the Hub resolves the item they
+  // refer to and puts its filenames here (F107). Named individually up to three; beyond that the
+  // count is what a person reads in the seconds they have, not a wrapped list.
+  const paths = input.paths
+  if (Array.isArray(paths)) {
+    const named = paths.filter((p): p is string => typeof p === 'string' && p.length > 0)
+    if (named.length > 3) return `${named.slice(0, 3).join(', ')} and ${named.length - 3} more`
+    if (named.length > 0) return named.join(', ')
+  }
+  // Nothing resolved the item, so the root it asked to be granted is the most specific thing left.
   const grantRoot = input.grantRoot
   if (typeof grantRoot === 'string' && grantRoot) return grantRoot
   const cwd = input.cwd

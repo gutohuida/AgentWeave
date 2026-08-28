@@ -578,9 +578,31 @@ def test_codex_approval_subject_carries_what_the_operator_needs():
     )
     assert command == {"command": "rm -rf x", "cwd": "/w", "reason": "cleanup"}
 
-    # File-change approvals carry no per-file paths; grantRoot is all there is.
+    # File-change approvals carry no per-file paths of their own; grantRoot is all the *request*
+    # has. Unresolved, the subject is exactly what it always was.
     change = approval_subject(FILE_CHANGE_APPROVAL_METHOD, {"grantRoot": "/w", "reason": "edit"})
     assert change == {"grantRoot": "/w", "reason": "edit"}
+
+    # But the item the approval names does carry them, and F107 is that the Hub held the item and
+    # showed the operator the string "a file change" anyway.
+    named = approval_subject(
+        FILE_CHANGE_APPROVAL_METHOD,
+        {"itemId": "item-1", "grantRoot": None, "reason": None},
+        {
+            "id": "item-1",
+            "type": "fileChange",
+            "changes": [{"path": "a.py", "diff": "a patch body"}],
+        },
+    )
+    assert named == {"grantRoot": None, "reason": None, "paths": ["a.py"]}
+
+    # Paths, not diffs. The card is one line read under a run's timeout; a patch body pasted into
+    # it buries the filenames it exists to show, and the diff is already in the timeline.
+    assert "diff" not in json.dumps(named)
+
+    # A malformed item is not a path. Nothing here may raise: this runs while a turn is blocked.
+    for junk in (None, {}, {"changes": "not-a-list"}, {"changes": [{"path": 1}, {}, None]}):
+        assert "paths" not in approval_subject(FILE_CHANGE_APPROVAL_METHOD, {}, junk)
 
 
 def test_codex_posture_mapping():
