@@ -6890,10 +6890,10 @@ and the delivery-attempt accounting that is now **F114**.
 
 ## F109 (B) — the hub suite runs every session on one database connection, and the retry chain stalls because of it
 
-**Status:** **diagnosed, not fixed.** Filed 2026-08-28 while implementing F108. This is the
-"unexplained flake" carried from handoff 0096 — it now has a reproduction and a mechanism, and it
-is *probably* a harness artefact rather than a product defect. Probably is not good enough to close
-it, and not good enough to change the harness on either.
+**Status:** **mechanism proven, three fixes measured, none applied.** Filed 2026-08-28 while
+implementing F108 and upgraded the same night. This is the "unexplained flake" carried from handoff
+0096. It is a harness artefact, **demonstrated rather than argued**, and the fix is real but is not
+a drop-in — see *What was measured* below.
 
 ### What happens
 
@@ -6945,20 +6945,61 @@ background run task's `commit()` and a request session's transaction are the *sa
 transaction, and `async with async_session_factory()` exiting can revert work another session
 believes it committed. In production it cannot.
 
-### Why it is not closed
+### Proven, 2026-08-29
 
-Two things are unproven, and both matter:
+The first pass of this finding said the mechanism was *probably* transaction interleaving on a
+shared connection. It is, and here it is. A listener on `before_cursor_execute` / `begin` / `commit`
+/ `rollback`, logging the **raw DBAPI connection** behind each event:
 
-1. **That production is safe.** The argument is structural (per-session connections) and was not
-   demonstrated. The obvious demonstration — point the suite at a database with real per-connection
-   isolation and see the stall vanish — was attempted and is void: `conftest.assert_engine_is_disposable`
-   refuses any URL that is not literally `:memory:`, and SQLAlchemy chose `StaticPool` for
-   `file:...?mode=memory&cache=shared` anyway. A real check needs an explicit `poolclass` override.
-2. **That no other test is green for this reason.** The same interleaving is available to every
-   test that lets a background run task commit while a request session is open — which is most of
-   the ones that call `_await_background_run()`. Two cells in `25469ac` were already found to be
-   green for reasons unrelated to what they claimed; this is a third mechanism for that, and it has
-   not been swept for.
+```
+conn#3840 >>> BEGIN                                        (session A)
+conn#3840 SELECT runs.id AS runs_id, …                     (session A)
+conn#3840 >>> BEGIN                                        (session B, same connection)
+conn#3840 UPDATE runs SET status=?, error=?, ended_at=?     (session B marks the run failed)
+conn#3840 <<< COMMIT                                       (session B)
+conn#3840 <<< ROLLBACK   <--                               (session A closes)
+conn#3840 SELECT job_runs.…
+conn#3840 UPDATE inbound_queue_entries SET delivery_attempts=?
+conn#3840 <<< COMMIT
+```
+
+**Every statement in the whole trace is on one connection.** Two `AsyncSession`s each believe they
+own a transaction; SQLite has exactly one per connection. One session's `COMMIT` ends the other's
+transaction, and one session's closing `ROLLBACK` discards work the other believes it committed —
+which is how the run ends up `running` with no `error` and no `ended_at`, forever.
+
+**The trap that nearly hid it:** logging `id(conn.connection)` shows *different* ids per session,
+because that names a per-checkout `_ConnectionFairy` wrapper rather than the connection. Read
+naively it looks like proof of isolation. `driver_connection` is the one to log.
+
+### What was measured, and why none of it was applied
+
+Three configurations, each run against the reproduction:
+
+| Configuration | Result |
+|---|---|
+| `NullPool` + `file:…?mode=memory&cache=shared` | **Dies.** `no such table: projects` — a shared-cache in-memory database exists only while a connection to it is open, and `NullPool` closes each one when it is done. |
+| the same, plus a keep-alive connection held for the process lifetime | **Three of four tests in the reproduction fail**, and not the flaky one — different failures, in the mocked-spawn tests, with the mocked `FileNotFoundError` escaping instead of being handled. |
+| `NullPool` + a **file-backed** SQLite database | **The flake disappears.** 12/12 probe runs clean and 6/6 of the flaky selection, against ~1 in 6 today. But the suite runs roughly **four times slower** — 2% of the suite in the time the current configuration takes for 8% — and a full run was stopped rather than completed. |
+
+So a fix exists and is reachable, and it is **not** a one-line switch: the fastest isolated variant
+breaks tests for a second reason, and the variant that works costs a multiple of the suite's runtime
+on every run and every CI job. That is a change with its own design question, its own verification,
+and a cost the operator should weigh — not something to flip unattended at 01:00.
+
+### Still not swept for
+
+The same interleaving is available to **every** test that lets a background run task commit while a
+request session is open — most of the ones that call `_await_background_run()`. Two cells in
+`25469ac` were already found green for reasons unrelated to what they claimed; this is a third
+mechanism for that, and nothing has looked for others.
+
+### What it costs today
+
+The flaky test fails about **one full-suite run in two** in practice (both full runs on the night of
+2026-08-28 hit it), and roughly **one in six** for the five-second selection. Merging this branch
+therefore has a material chance of a red CI run for a reason that has nothing to do with the
+branch.
 
 ### What to do about it
 
