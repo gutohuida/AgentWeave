@@ -42,7 +42,12 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from .model_catalog import WORKSPACE_PERMISSION_MODE, render_control_args
+from .model_catalog import (
+    FULL_ACCESS_PERMISSION_MODE,
+    PERMISSION_MODE_CONTROL,
+    WORKSPACE_PERMISSION_MODE,
+    render_control_args,
+)
 
 SUPPORTED_RUNNERS = ("claude", "claude_proxy", "native", "codex")
 
@@ -149,6 +154,8 @@ def build_command(
             context_file=context_file,
             session_id=session_id,
             yolo=yolo,
+            full_access=(control_overrides or {}).get(PERMISSION_MODE_CONTROL)
+            == FULL_ACCESS_PERMISSION_MODE,
             mcp_command=mcp_command,
             extra_flags=extra_flags,
             control_args=control_args,
@@ -270,11 +277,22 @@ def _build_codex_command(
     context_file: Optional[Path],
     session_id: Optional[str],
     yolo: bool,
+    full_access: bool = False,
     mcp_command: Optional[List[str]] = None,
     extra_flags: Optional[List[str]] = None,
     control_args: Optional[List[str]] = None,
     restrict_spec_writes: bool = False,
 ) -> List[str]:
+    """Build a `codex exec` invocation.
+
+    `full_access` is the "Full access" posture, read from the operator's `permission_mode` rather
+    than from `yolo`. Codex's catalog control renders nothing to argv (`ApplySpec(style="none")`),
+    because on the app-server transport the posture is carried in the thread's own policy — so
+    without this, the *only* thing that could reach the sandbox flag below was `yolo`, and `yolo`
+    is written by one surface: setting an agent's default posture. The same posture chosen for a
+    single turn through the composer left this branch selecting `workspace-write`, silently.
+    Same defect as the app-server transport's, in the transport beside it.
+    """
     cmd = [cli, "exec"]
     cmd += ["--json", "--skip-git-repo-check"]
     if mcp_command:
@@ -303,7 +321,7 @@ def _build_codex_command(
         # contradictory command line, so under this restriction `yolo` is not consulted at all
         # (F4/design D6, round 2 — the restriction holds unconditionally, on both runners).
         cmd += ["--sandbox", "read-only"]
-    elif yolo:
+    elif yolo or full_access:
         cmd += ["--dangerously-bypass-approvals-and-sandbox"]
     else:
         cmd += ["--sandbox", "workspace-write"]

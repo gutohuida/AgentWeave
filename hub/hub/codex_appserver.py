@@ -36,7 +36,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Deque, Dict, List, Optional
 
-from .model_catalog import WORKSPACE_PERMISSION_MODE
+from .model_catalog import FULL_ACCESS_PERMISSION_MODE, WORKSPACE_PERMISSION_MODE
 from .pty_runner import resolve_executable
 from .runner_commands import OPERATOR_POSTURE
 from .runner_events import (
@@ -107,9 +107,10 @@ ASK_OPERATOR: Dict[str, Any] = {"decision": "__ask_operator__"}
 # installed CLI's own schema (`codex app-server generate-json-schema`), not assumed.
 _FAILED_ITEM_STATUSES = ("failed", "declined")
 
-# Full-access grant used only when `yolo` is set and Codex still asks (defensive: thread/start
-# should already select a policy that avoids this under yolo, but every request must still get
-# an answer per implications.md §2 — "silence becomes a deadlock").
+# Full-access grant, used when the run is under the "Full access" posture (or its older `yolo`
+# spelling) and Codex still asks (defensive: thread/start should already select a policy that
+# avoids this, but every request must still get an answer per implications.md §2 — "silence
+# becomes a deadlock").
 _YOLO_PERMISSIONS_GRANT: Dict[str, Any] = {
     "fileSystem": {
         "entries": [{"access": "write", "path": {"type": "special", "value": {"kind": "root"}}}]
@@ -183,12 +184,19 @@ def _thread_policy(*, yolo: bool, posture: Optional[str]) -> "tuple[str, str]":
     (`AskForApproval`: untrusted | on-request | never; `SandboxMode`: read-only | workspace-write |
     danger-full-access), so effectively every effectful action becomes a request the operator
     answers. The other postures keep the pairing they already had.
+
+    The "Full access" branch below was unreachable until 2026-08-28: `_codex_posture` mapped that
+    posture to `None`, so a thread reached this function indistinguishable from the default one
+    and got `workspace-write`. `yolo` covered it for an agent-*default* posture only, because
+    setting that reconciles the legacy flag — so the same choice behaved one way from the agent
+    dialog and the opposite way from the composer. `yolo` is now the older spelling of this
+    posture rather than the only one that works.
     """
     if yolo and posture is None:
         return "danger-full-access", "never"
     if posture == OPERATOR_POSTURE:
         return "read-only", "untrusted"
-    if posture == "bypassPermissions":
+    if posture == FULL_ACCESS_PERMISSION_MODE:
         return "danger-full-access", "never"
     return "workspace-write", "on-request"
 
@@ -233,10 +241,19 @@ def decide_approval(
             subject = approval_subject(method, params)
             inside = _within(subject.get("cwd") or subject.get("grantRoot"), workspace)
             return {"decision": "accept"} if inside else {"decision": "decline"}
+        # "Full access" accepts, on its own terms rather than on `yolo`'s. A thread under this
+        # posture starts `danger-full-access`/`never` and should raise nothing at all, so this is
+        # the defensive half of the same rule the thread policy states — and it must not be left
+        # to `yolo`, which only the agent-default route sets. The ordering the operator was
+        # offered has to hold: whatever "Workspace only" accepts, "Full access" accepts too.
+        if posture == FULL_ACCESS_PERMISSION_MODE:
+            return {"decision": "accept"}
         return {"decision": "accept"} if yolo else {"decision": "decline"}
 
     if method == PERMISSIONS_APPROVAL_METHOD:
-        return {"permissions": dict(_YOLO_PERMISSIONS_GRANT)} if yolo else {"permissions": {}}
+        if yolo or posture == FULL_ACCESS_PERMISSION_MODE:
+            return {"permissions": dict(_YOLO_PERMISSIONS_GRANT)}
+        return {"permissions": {}}
 
     # Unrecognised server->client request: deny-and-continue rather than hang or approve
     # something this Hub has never seen the shape of.

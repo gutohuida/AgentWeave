@@ -41,7 +41,11 @@ from ...db.models import (
 )
 from ...inbound_queue import new_entry
 from ...launchability import get_agent_config, probe_agent
-from ...model_catalog import get_provider, permission_mode_values
+from ...model_catalog import (
+    FULL_ACCESS_PERMISSION_MODE,
+    get_provider,
+    permission_mode_values,
+)
 from ...output_recording import record_agent_output, record_context_usage
 from ...review_turn import ReviewContext
 from ...schemas.agents import (
@@ -1840,12 +1844,6 @@ def _validated_description(value: object) -> Optional[str]:
             detail=f"description must be at most {MAX_DESCRIPTION_CHARS} characters",
         )
     return trimmed
-
-
-# The posture that means "no restraint" — the one value that has to stay reconciled with the
-# legacy `config["yolo"]` flag, because that flag is what `runner_commands` and `codex_appserver`
-# already read and what the collaboration-readiness check already tests.
-FULL_ACCESS_PERMISSION_MODE = "bypassPermissions"
 
 
 def _validated_permission_mode(value: object) -> Optional[str]:

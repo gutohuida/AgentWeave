@@ -5861,3 +5861,122 @@ directory by hand and leaving the git admin entry behind — `git worktree list`
 and committed. Runner and charter deletion are both correctly refused while bound, and an archived
 agent cannot accumulate queue entries because `POST /agent/trigger` refuses before queueing.
 
+---
+
+## F98 (A) — "Full access" is the *least* permissive posture a Codex agent can be given
+
+**Status:** fixed (this iteration)
+
+Sweep #2, the Codex angle. Every finding in this corpus before it was found on the Claude path.
+
+The Permissions control offers four postures, and both providers declare the same four with the
+same labels on purpose — the catalog says so in as many words: *"an operator should not have to
+learn two vocabularies for the same choice."* They read as an ordering, narrowest to widest:
+
+| Label | id |
+|---|---|
+| Ask me | `manual` |
+| Workspace only | `workspace` |
+| Edit files | `acceptEdits` *(the default)* |
+| Full access | `bypassPermissions` |
+
+On the Codex path the last one was not wider than the third. It was not even equal to it. It was
+`None` — and `None` is the value that means *the operator chose nothing*.
+
+### Measured live, on one agent, on the same command, twice
+
+`coder` (`gpt-5.4-mini`, app-server transport) in `aw-e2e2`, asked to run one shell command
+writing to a path outside its worktree. Posture set to **Full access** both times, through the
+two surfaces that can set it.
+
+```
+agent default = bypassPermissions            per-run override = bypassPermissions
+                                             (agent default acceptEdits)
+"Succeeded."                                 "Refused: writing to
+C:\...\aw-e2e2\OUTSIDE_WS.txt written        C:\...\aw-e2e2\OUTSIDE_WS.txt was
+                                             denied by the sandbox."
+```
+
+Same posture. Same agent. Same command. Opposite outcomes. And the surface that *failed* is the
+composer's Permissions pill — the one an operator actually uses to say "just this turn, let it
+off the leash".
+
+The second run is not merely narrower than Full access should be. It is narrower than **Workspace
+only**, which was measured in the same session accepting an escalated command purely because it
+ran from inside the workspace. An operator moving the control one notch *wider* got a strictly
+smaller grant.
+
+### Why one worked
+
+`_codex_posture` (`agent_trigger.py:1958`) translated the operator's posture into what the Codex
+runtime understands, and it knew three of the four:
+
+```python
+if permission_mode == "manual":                  return OPERATOR_POSTURE
+if permission_mode == WORKSPACE_PERMISSION_MODE: return WORKSPACE_PERMISSION_MODE
+return None                                      # <- "bypassPermissions" landed here
+```
+
+Downstream, `None` is indistinguishable from "no posture chosen":
+
+- `_thread_policy` returned `workspace-write` / `on-request` — the default pair — so Codex's own
+  sandbox refused the write before any approval was raised. (Codex's sandbox *is* enforced on
+  Windows; measured separately with `codex exec --sandbox read-only`, which denied the same write
+  with `UnauthorizedAccessException`. The earlier probes that appeared to escape were writing into
+  the system temp directory, which `workspace-write` grants by default.)
+- `decide_approval` fell through to `{"decision": "accept"} if yolo else {"decision": "decline"}`,
+  so any approval Codex *did* raise was declined.
+
+`_thread_policy` had a branch for exactly this posture — `if posture == "bypassPermissions":
+return "danger-full-access", "never"` — written when the postures were designed, and unreachable
+from the day it was written, because the only function that could produce that string threw it
+away.
+
+What hid it for so long is the legacy `config["yolo"]` flag. `_apply_default_permission_mode`
+(`agents.py`) reconciles it whenever an agent's **default** posture is set — `"yolo": posture ==
+FULL_ACCESS_PERMISSION_MODE` — and `yolo` reaches `_thread_policy` by a route of its own
+(`if yolo and posture is None`). So the agent-default surface worked, by accident, through the
+older spelling. Nothing writes `yolo` for a per-run override, and there is no reason it should:
+`yolo` is a two-valued flag and the posture has four values.
+
+### The same hole in the transport beside it
+
+Found by asking the carry-forward's own question — *a rule applied at N call sites holds at N-1 of
+them; go count them* — rather than by driving it a second time.
+
+`_build_codex_command` (the `codex exec` transport, selected by a runner carrying
+`--no-app-server`) chooses between `--dangerously-bypass-approvals-and-sandbox` and
+`--sandbox workspace-write` from `yolo` alone. The catalog's Codex `permission_mode` control
+renders nothing to argv on purpose — `ApplySpec(style="none")`, because app-server carries the
+posture in its thread policy instead — so on that transport too, the only thing that could ever
+reach the sandbox flag was the flag one surface writes. Identical defect, identical cause, and it
+would have survived a fix aimed only at where the defect was seen.
+
+### The fix
+
+`FULL_ACCESS_PERMISSION_MODE` moves from `api/v1/agents.py` — whose only interest in it is
+reconciling `yolo` — to `model_catalog.py`, beside `WORKSPACE_PERMISSION_MODE` and the postures it
+has to stay ordered against. `_codex_posture` passes it through; `_thread_policy`'s existing
+branch becomes reachable; `decide_approval` accepts on the posture's own terms rather than on
+`yolo`'s, for both sandbox approvals and the permissions request; and `_build_codex_command` takes
+`full_access` and stops asking `yolo` alone.
+
+`acceptEdits` deliberately still maps to `None`. It *is* the default posture, and the default pair
+already produces its Codex meaning: edit freely inside the workspace, refuse an escalation out of
+it. Widening it was not the defect and is not the fix.
+
+### Verification
+
+- `hub/tests/test_codex_posture_ordering.py`, 24 tests, written as an **ordering** rather than as
+  four independent rows, because the defect was not one wrong row — it was that the widest posture
+  had become narrower than the middle one while keeping the label "Full access". The thread-policy
+  tests reach `_thread_policy` **through `_codex_posture`**, never by passing the constant in by
+  hand: a test that called it directly with the string would have passed against the defect for
+  the whole time the branch was unreachable.
+- Three separate mutation checks, each watched to fail: restoring the `_codex_posture` drop (12
+  failures), removing `decide_approval`'s full-access branch with the mapping left intact (6), and
+  returning the exec transport to `yolo`-only (1). Three guards, three independent failures.
+- Proved live end to end against a Hub restarted onto the fixed code: the per-run-override run
+  that was refused now writes the file, with the agent's default still `acceptEdits` and
+  `config` still `{"yolo": false}` — and a "Workspace only" override on the same command is still
+  refused, so the ordering holds in both directions rather than everything having been widened.

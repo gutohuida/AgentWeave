@@ -133,6 +133,18 @@ def _enum(*ids: str) -> Tuple[ControlValue, ...]:
 # `manual` in stored overrides and in `_build_claude_command`.
 WORKSPACE_PERMISSION_MODE = "workspace"
 
+# The `permission_mode` value meaning "no restraint" — Claude's own spelling, which Codex adopts
+# so an operator does not learn two vocabularies for one choice.
+#
+# It lives here, beside the posture it has to stay ordered against, rather than beside the one
+# thing that happened to need it first. It was defined in `api/v1/agents.py`, whose only interest
+# in it is reconciling the legacy `config["yolo"]` flag when the *agent default* is set — so the
+# Codex transport, which decides a thread's sandbox from the posture, could not see it and fell
+# through to the default. That made "Full access" strictly *less* permissive than "Workspace
+# only" whenever the posture arrived by any route that does not write `yolo`, which is every
+# per-run override the composer sends.
+FULL_ACCESS_PERMISSION_MODE = "bypassPermissions"
+
 CATALOG: Dict[str, ProviderDescriptor] = {
     "claude": ProviderDescriptor(
         provider="claude",

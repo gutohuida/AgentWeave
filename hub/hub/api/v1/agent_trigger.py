@@ -79,6 +79,7 @@ from ...launchability import (
     spec_turn_notice,
 )
 from ...model_catalog import (
+    FULL_ACCESS_PERMISSION_MODE,
     PERMISSION_MODE_CONTROL,
     WORKSPACE_PERMISSION_MODE,
     validate_overrides,
@@ -1960,11 +1961,27 @@ def _codex_posture(permission_mode: Optional[str]) -> Optional[str]:
 
     "manual" is the operator-answered posture for both providers; the value differs only
     because Claude's spelling is its CLI's own.
+
+    Every posture that changes a Codex decision has to survive this mapping. "Full access" used
+    to fall through to `None`, and `None` is the *default* posture — so a thread the operator had
+    put under full access started `workspace-write`/`on-request` and declined every approval it
+    then raised, which is strictly less than "Workspace only" grants. It only ever appeared to
+    work because setting an agent's *default* posture also writes the legacy `config["yolo"]`
+    flag, and `yolo` reaches `_thread_policy` by its own route; the composer's per-run override
+    writes no such flag, so the same choice made there did the opposite. Measured live on both
+    surfaces, 2026-08-28: the agent-default run wrote outside its worktree, the per-run-override
+    run was refused by the sandbox.
+
+    `acceptEdits` stays mapped to `None` deliberately. It *is* the default posture, and its
+    Codex meaning — edit freely inside the workspace, refuse an escalation out of it — is what
+    the default pair already produces.
     """
     if permission_mode == "manual":
         return OPERATOR_POSTURE
     if permission_mode == WORKSPACE_PERMISSION_MODE:
         return WORKSPACE_PERMISSION_MODE
+    if permission_mode == FULL_ACCESS_PERMISSION_MODE:
+        return FULL_ACCESS_PERMISSION_MODE
     return None
 
 
