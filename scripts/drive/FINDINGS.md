@@ -7026,3 +7026,45 @@ that is **also** false. It runs itself; it is not waiting to be bound, and bindi
 the remedy. Neither existing sentence is true of this agent, which makes this a question about what
 the third sentence should say and which verdict owns it (`collaboration_ready` already draws a
 related line) — a design decision, not a one-line change. Left for a spec loop.
+
+---
+
+## F112 (B) — creating a document with an unrecognised `kind` answers `500 Internal Server Error`
+
+**Status:** **fixed** the same night (2026-08-28). Found by the full-surface sweep.
+
+```
+POST /projects/{id}/project/documents {"title":"Sweep C","kind":"change"}
+  -> 500  Internal Server Error
+POST /projects/{id}/project/documents {"title":"Sweep D","kind":"banana"}
+  -> 500  Internal Server Error
+```
+
+`"change"` is not a contrived input. The Hub mints document paths under `spec/changes/…` and
+reports the default kind as `"change-spec"`, so `"change"` is exactly what a caller guesses — and
+the guess produces the least useful response the surface can give: no status worth branching on, no
+sentence, nothing naming the four values that would have worked.
+
+The valid set is `SPEC_KINDS = ("baseline", "system-map", "roadmap", "change-spec", "capability")`,
+enforced by a CHECK constraint (`ck_spec_documents_kind`). `spec_lifecycle.create_document` wrote
+`kind` straight through, so an unrecognised value reached the flush and surfaced as an unhandled
+`IntegrityError`.
+
+**The same function already guards the column beside it, and says why.** Its `phase` check carries
+this comment:
+
+> Stated here too so the refusal names the problem rather than surfacing as an IntegrityError from
+> the flush below.
+
+That reasoning was never applied to `kind`. This is the argument-versus-code gap the round
+discipline exists for, sitting inside one function: the principle is written down, correct, and
+applied to one of two adjacent columns.
+
+**Reachable by agents, not only operators.** `create_spec_document` is an MCP tool, and it reaches
+the same function. An agent that guesses the kind gets a 500 and has no way to learn the valid set —
+the refusal is its only feedback and it carries nothing.
+
+**Fixed** by mirroring the `phase` guard: `PhaseError(code="unknown_kind")` whose message names
+every valid kind, which the route already maps to `409 {"message", "code"}`. Test
+`test_an_unrecognised_document_kind_is_refused_and_names_the_kinds`; mutation-checked by removing
+the guard.

@@ -121,6 +121,36 @@ async def test_an_unsafe_document_path_is_refused(app, auth_headers, tmp_path):
     assert response.status_code == 400
 
 
+@pytest.mark.asyncio
+async def test_an_unrecognised_document_kind_is_refused_and_names_the_kinds(
+    app, auth_headers, tmp_path
+):
+    """F112, found by driving the surface: `kind` carries a CHECK constraint and nothing in Python
+    checked it, so an unrecognised value reached the flush and came back as an unhandled
+    `IntegrityError` — `500 Internal Server Error`, with nothing in it to act on.
+
+    `"change"` is the input that produced it, and it is the likely one rather than a contrived one:
+    the path a document is minted at reads `spec/changes/…` and the default kind is reported as
+    `"change-spec"`, so it is exactly what a caller guesses. `create_document` already guards
+    `phase` for this reason, in its own words — "so the refusal names the problem rather than
+    surfacing as an IntegrityError from the flush below" — and the column beside it had no guard.
+    """
+    response = await app.post(
+        f"{BASE}/documents",
+        json={"path": PATH, "title": "Demo", "kind": "change"},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert detail["code"] == "unknown_kind"
+    assert "change" in detail["message"]
+    # The refused caller's only feedback is this sentence, so it has to carry the way out.
+    assert "change-spec" in detail["message"]
+    assert "capability" in detail["message"]
+    assert not (tmp_path / PATH).exists(), "a refused creation writes no document"
+
+
 # ---------------------------------------------------------------------------
 # Submitting
 # ---------------------------------------------------------------------------
