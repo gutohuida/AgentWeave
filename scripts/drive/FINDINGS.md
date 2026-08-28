@@ -7038,7 +7038,8 @@ stalls in ~6 of 40 and lets the *state* be inspected rather than only the assert
 
 ## F110 (B) — `AW_CHECK_UI_BUNDLE=1` passes on a stale bundle if you skip the build
 
-**Status:** **open.** Found 2026-08-28 by walking into it while shipping F108's UI half.
+**Status:** **fixed** (2026-08-29). Found 2026-08-28 by walking into it while shipping F108's UI
+half — the script certified a bundle whose hash had not moved, and twelve tests agreed.
 
 `CLAUDE.md` describes the guard as: after `npm run build`, run `scripts/refresh_ui_bundle.py`,
 which "copies `dist/` over it, confirms the copy, and records `ui-build-stamp.json`, the
@@ -7069,11 +7070,26 @@ direction: everything is green, and the operator is served a UI missing the chan
 passed. Running the build afterwards produced a different JS hash
 (`index-CCnq-93I.js` → `index-C3KKeU0v.js`), which is how it was caught at all.
 
-**Candidate fixes, none applied here.** Either the script builds (it already shells out for
-`git rev-parse`, so running `npm run build` is not a new kind of dependency), or it records
-`dist/`'s own mtimes and hashes beside the source fingerprint so the stricter assertion can compare
-the two and refuse a `dist/` older than the source. The second is the smaller change and keeps the
-build an explicit step; the first makes the documented sequence impossible to get wrong.
+**Fixed by the second of the two candidates**, which keeps the build an explicit step:
+`refresh_ui_bundle.stale_build()` refuses when the newest file under `hub/ui/src` is newer than
+everything in `hub/ui/dist`. A build reads all of the source and writes all of the output, so a
+source file newer than the whole bundle means the build never saw it. The refusal names the file
+that moved and the command to run.
+
+The stamp itself is excluded from the comparison. It is written into the copy *after* the build, so
+counting it as build output would make every run look fresh — which is the failure this guard exists
+to prevent, reintroduced by the guard.
+
+Driven both ways before committing: with `dist/` current the script runs normally; after
+`touch hub/ui/src/api/client.ts` it exits 1 with *"hub/ui/dist is older than
+hub/ui/src/api/client.ts, so it cannot have been built from the source that is here now."* Test
+`test_ui_build_stamp.py::test_the_refresh_script_refuses_a_dist_older_than_the_source`,
+mutation-checked by disabling the guard.
+
+**The other candidate is still open**: having the script run the build itself would make the
+documented sequence impossible to get wrong, where this only makes getting it wrong loud. It was
+not taken because it turns a copy step into a build step, which changes what `make ui` means — a
+decision rather than a repair.
 
 ---
 

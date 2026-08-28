@@ -20,6 +20,7 @@ it did, so an installation carrying no assertion is not thereby declared current
 import json
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -295,3 +296,53 @@ def test_the_fingerprint_is_blind_to_working_tree_line_endings(checkout):
         "a line-ending-only difference git normalises away is not a source change, "
         "and must not report the bundle stale"
     )
+
+
+def test_the_refresh_script_refuses_a_dist_older_than_the_source():
+    """F110: the stamp certified whatever `dist/` happened to hold.
+
+    The stamp is written from the *current* source and
+    `test_the_committed_bundle_was_built_from_the_committed_source` compares the stamp to the
+    *current* source — so running the refresh script without building first satisfied every check
+    over a bundle whose hash had not moved. Measured 2026-08-28: three edited `.tsx`/`.ts` files, no
+    `npm run build`, twelve passing tests, a stale bundle certified as fresh.
+
+    The one input neither the stamp nor the assertion consulted was whether `dist/` is older than
+    the source it is being certified against. The script consults it now, and this is that check.
+    """
+    import importlib.util
+    import time
+
+    spec = importlib.util.spec_from_file_location(
+        "refresh_ui_bundle",
+        Path(__file__).resolve().parents[2] / "scripts" / "refresh_ui_bundle.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    with tempfile.TemporaryDirectory() as raw:
+        root = Path(raw)
+        src, dist = root / "src", root / "dist"
+        (src / "api").mkdir(parents=True)
+        dist.mkdir()
+        module.UI_SRC, module.UI_DIST, module.REPO_ROOT = src, dist, root
+
+        # Built after the source was written: nothing to complain about.
+        (src / "api" / "client.ts").write_text("export const a = 1", encoding="utf-8")
+        time.sleep(0.02)
+        (dist / "index.js").write_text("bundled", encoding="utf-8")
+        assert module.stale_build() is None
+
+        # Source edited afterwards, and no rebuild. This is the whole finding.
+        time.sleep(0.02)
+        (src / "api" / "client.ts").write_text("export const a = 2", encoding="utf-8")
+        refusal = module.stale_build()
+        assert refusal is not None, "a dist older than the source was accepted"
+        assert "client.ts" in refusal, "the refusal names the file that moved"
+        assert "npm run build" in refusal, "and the remedy"
+
+        # The stamp lives inside the copy and is written *after* the build, so counting it as build
+        # output would make every run look fresh — the exact failure this guard exists to prevent.
+        time.sleep(0.02)
+        (dist / module.UI_BUILD_STAMP_NAME).write_text("{}", encoding="utf-8")
+        assert module.stale_build() is not None, "the stamp must not count as build output"
