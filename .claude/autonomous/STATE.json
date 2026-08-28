@@ -8,7 +8,7 @@
   "parent_sha": "bbe00a7",
   "stop_at": "2026-08-28T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 12,
+  "iteration": 13,
   "log_file": ".claude/autonomous/2026-08-27-fix-and-drive-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "exploration_file": "openspec/explorations/2026-08-26-what-is-still-unanswered.md",
@@ -143,5 +143,5 @@
   ],
   "carry_forward": "Iteration 12 took the sweep iteration 11 left and it paid: F105, ten persisted event kinds that rendered as their own bare name, fixed in 40 minutes. Four things worth carrying. (1) A RAW SWEEP COUNT IS NOT A DEFECT COUNT, and narrowing it is the work. '70 candidates, 17 handled' would have been 53 wrong findings. Two cuts got it to ten: does the kind reach a timeline at all (summaryForEvent has exactly two call sites, both reading event_logs -- so only PERSISTED kinds count, not everything broadcast), and does the default branch already render it (a payload naming its detail `error` does). State the cut in the finding, and TEST the thing you deliberately did not fix, so a later sweep cannot 'fix' it and count that. (2) EXTRACT THE CALL EXPRESSION, DO NOT GREP THE STRING. Parsing the balanced parens at each `persist_event(` gave 54 exact event_type literals and their payload keys; a grep would have missed the sites whose payload is built in a variable several lines above (loop_stopped, review_unstaffed, run_interrupted -- three of the ten). `next_action` said do not infer the fields, and it was right. (3) THE FAILURE ROWS ARE WHERE TO LOOK FIRST. The ten that survived were almost exactly the severity=warn/error emitters -- which is the same set an operator scans a timeline FOR. When sweeping any presentation layer, rank by the severity the emitter declares; it is free and it sorted this list correctly. (4) THE SIXTH INSTANCE OF A FIX IS A DESIGN QUESTION, AND IT IS STILL NOT YOURS TO ANSWER. Iteration 11 said this about the fifth; it was true, and the sixth arrived one iteration later. The enumeration-versus-heuristic choice is now in decisions_for_user with its cost stated. Ship the sixth fix, file the question, do not build the redesign.",
   "started_at": "2026-08-27T22:05:00+01:00",
-  "last_heartbeat": "2026-08-28T06:42:26+01:00"
+  "last_heartbeat": "2026-08-28T07:27:14+01:00"
 }
