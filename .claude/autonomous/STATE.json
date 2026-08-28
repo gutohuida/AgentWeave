@@ -8,7 +8,7 @@
   "parent_sha": "bbe00a7",
   "stop_at": "2026-08-28T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 4,
+  "iteration": 5,
   "log_file": ".claude/autonomous/2026-08-27-fix-and-drive-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "exploration_file": "openspec/explorations/2026-08-26-what-is-still-unanswered.md",
@@ -134,5 +134,5 @@
   ],
   "carry_forward": "Iteration 4 drove rows 14 and 11 and fixed SIX defects, three severity A, each with tests watched to fail, every guard mutation-checked, and every one proven live against a restarted Hub. Five things worth carrying. (1) THE SILENT-SUCCESS CLASS IS THE RICHEST SEAM IN THIS CODEBASE. F83 and F84 are the same story from opposite ends: a loop that reports itself armed and never fires, and a loop that reports itself stopped and fires twelve more times. Both returned 200. Both had a row saying the right thing. Neither was findable from the API alone - F83 took reading apscheduler_jobs against ai_jobs, and F84 took waiting seventeen minutes and counting. ASK OF EVERY CONTROL SURFACE: did the thing it reports actually happen, in the subsystem that would have to carry it out? (2) A PARTIAL COPY OF A PROCEDURE IS THIS CODEBASE'S SIGNATURE DEFECT, now four iterations running. F82: a summary block hand-assembled where every other route computes it. F84: an ending that sets two of four facts. Both files contain a comment asserting the invariant that the second copy breaks. WHEN YOU FIND A PROCEDURE, COUNT ITS CALL SITES AND DIFF THEM - the docstring will often state the rule that the other site does not keep. (3) MUTATION-CHECK ACROSS LAYERS, NOT JUST WITHIN ONE. Clearing job.enabled without unregistering from APScheduler passed every row-reading test, because a row-reading test cannot see a stale registration. The guard needed a test at the layer the guard acts on. (4) A FAILING EXISTING TEST IS A CLAIM TO ADJUDICATE. F85 required changing a test that deliberately demanded the old behaviour; the live drive priced that behaviour at a wedged task and a failure a minute, so the premise changed and the reason went into the test's own docstring. Four other failures were fixture gaps. Do not route around a red test and do not assume it is wrong. (5) DRIVE LONG ENOUGH TO SEE THE SECOND FIRING. F85 and F86 were both invisible on firing one and obvious on firing two - and F86 was found only while waiting on F85's proof. Environment notes that still hold: the API wants 'Authorization: Bearer'; spec routes are at /projects/{id}/project/... with a doubled segment; InboundQueueEntry's primary key is sequence; GET /events is the SSE stream and will hang a poll - use GET /events/history, whose rows key the event type as 'type', not 'event_type'.",
   "started_at": "2026-08-27T22:05:00+01:00",
-  "last_heartbeat": "2026-08-28T00:38:19+01:00"
+  "last_heartbeat": "2026-08-28T01:22:11+01:00"
 }
