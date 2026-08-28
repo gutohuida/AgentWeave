@@ -1571,6 +1571,13 @@ async def test_trigger_directly_refuses_when_no_address_is_known(
 
     assert excinfo.value.status_code == 409
     assert "HUB_URL" in excinfo.value.detail
+    # F91. The refusal's own last sentence — "retry once the Hub has served at least one
+    # request" — is a description of a condition that clears on its own, which is exactly what
+    # `transient` means (see `TriggerAgentError.transient`). Left False, `schedule_agent` charged
+    # a delivery attempt for it, and the startup re-drain in `run_reconciliation` runs before any
+    # request has been served, so every Hub restart with a run in flight spent one of the
+    # operator's three attempts on a condition that had already passed.
+    assert excinfo.value.transient is True
 
 
 @pytest.mark.asyncio

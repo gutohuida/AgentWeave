@@ -1,5 +1,6 @@
 """FastAPI application factory + lifespan."""
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -16,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, bound_address, instance_identity
+from . import __version__, bound_address, instance_identity, run_reconciliation
 from .api.v1 import v1_router
 from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
@@ -391,6 +392,12 @@ def create_app() -> FastAPI:
         server = request.scope.get("server")
         if server:
             bound_address.observe(server[0], server[1])
+            # Startup reconciliation cannot re-drain the agents it repairs, because it runs in
+            # `lifespan()` and a run has nowhere to call back to until the line above has run at
+            # least once. This is that moment. Fire-and-forget: a queue drain is not this
+            # request's business and must never delay or fail it.
+            if run_reconciliation.has_deferred_schedules():
+                asyncio.create_task(run_reconciliation.drain_deferred_schedules())
         return await call_next(request)
 
     # One handler rather than a try/except at each of the four call sites — the two task routes

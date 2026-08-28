@@ -16,6 +16,7 @@ request in flight.
 
 from __future__ import annotations
 
+import os
 from typing import Optional, Tuple
 
 _bound_address: Optional[Tuple[str, int]] = None
@@ -28,3 +29,19 @@ def observe(host: str, port: int) -> None:
 
 def get() -> Optional[Tuple[str, int]]:
     return _bound_address
+
+
+def known() -> bool:
+    """Can a spawned run be told where to call back?
+
+    Either half is sufficient and they are not interchangeable: an explicit `HUB_URL` is
+    configuration the Hub was given, and an observed address is fact it measured. `agent_trigger`
+    prefers the first and falls back to the second, so anything asking *whether* a run can be
+    spawned at all has to ask about both — which is why this lives here rather than being spelled
+    out at each call site. It was spelled out at two of them, and a third (the startup re-drain in
+    `run_reconciliation`) did not ask at all.
+
+    Reads the observed half through `get()` rather than the global directly, so that the several
+    tests which patch `get` to describe a Hub with no observed address keep describing one.
+    """
+    return bool(os.environ.get("HUB_URL")) or get() is not None

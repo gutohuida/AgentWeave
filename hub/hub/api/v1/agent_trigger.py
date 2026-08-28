@@ -798,6 +798,13 @@ async def trigger_agent_directly(
                 "in the Hub's environment and no bound address has been observed from an "
                 "incoming connection yet. Set HUB_URL explicitly, or retry once the Hub "
                 "has served at least one request.",
+                # The refusal's own last sentence is the classification: it clears the moment a
+                # request arrives. Left terminal, `schedule_agent` counted a delivery attempt for
+                # every agent the startup re-drain touched — and that re-drain runs in `lifespan`,
+                # before any request has been served, so it could not have succeeded. Three
+                # restarts with a run in flight and the operator's message was withdrawn with
+                # "the Hub stopped retrying", for a condition that had already stopped.
+                transient=True,
             )
         # The agent is always spawned as a local subprocess of the Hub (native mode);
         # only the observed *port* corrects the defect (settings.aw_port can silently

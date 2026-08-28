@@ -2,7 +2,6 @@
 
 import asyncio
 import contextlib
-import os
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Literal, Optional, Tuple, get_args
@@ -190,7 +189,7 @@ async def get_agents_launchability(
     # `trigger_agent_directly` itself requires before it will start any run at all (see
     # its own HUB_URL / bound_address.get() check) — a Hub-instance-wide fact, checked
     # once rather than per agent.
-    hub_address_known = bool(os.environ.get("HUB_URL")) or bound_address.get() is not None
+    hub_address_known = bound_address.known()
 
     results = {}
     for name in session_agents_meta:

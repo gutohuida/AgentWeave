@@ -8,13 +8,19 @@ same way a real Hub restart would invoke it from `main.py`.
 
 import json
 import os
+from unittest.mock import patch
 
 import pytest
 
 from hub.db.engine import async_session_factory
 from hub.db.models import AIJob, JobRun, Run
 from hub.inbound_queue import deliver_entries_with_run, new_entry, queued_entries
-from hub.run_reconciliation import reconcile_interrupted_runs, reconcile_stale_job_runs
+from hub.run_reconciliation import (
+    drain_deferred_schedules,
+    has_deferred_schedules,
+    reconcile_interrupted_runs,
+    reconcile_stale_job_runs,
+)
 from hub.sse import sse_manager
 
 
@@ -266,3 +272,95 @@ async def test_reconciling_stale_job_runs_twice_is_idempotent(app, auth_headers)
     await reconcile_stale_job_runs()
     second_pass = await reconcile_stale_job_runs()
     assert second_pass == 0
+
+
+# --- F91: the startup re-drain cannot run at startup -------------------------------------------
+#
+# `reconcile_interrupted_runs` is called from `lifespan()`, which is to say before the Hub has
+# served a single request — so in native mode `bound_address` is still empty and every spawn its
+# re-drain attempts is refused for want of a callback address. Two things had to be true for the
+# operator's message to survive that, and neither was: the refusal has to be classified transient
+# (pinned in test_agent_trigger.py), and *something* has to retry once the address is known.
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_defers_its_redrain_when_no_address_is_known(app, monkeypatch):
+    monkeypatch.delenv("HUB_URL", raising=False)
+    async with async_session_factory() as db:
+        entry = new_entry(
+            project_id="proj-test",
+            agent="recon-defer",
+            origin_type="operator",
+            content="deferred",
+            hop_depth=0,
+        )
+        db.add(entry)
+        await db.commit()
+        await deliver_entries_with_run(
+            db,
+            project_id="proj-test",
+            agent="recon-defer",
+            entry_ids=[entry.id],
+            run=Run(
+                id="run-recon-defer",
+                project_id="proj-test",
+                agent="recon-defer",
+                status="running",
+                pid=None,
+                turn_depth=0,
+            ),
+        )
+
+    scheduled = []
+
+    async def _record(project_id, agent):
+        scheduled.append((project_id, agent))
+
+    with patch("hub.turn_scheduler.schedule_agent", _record):
+        with patch("hub.bound_address.get", return_value=None):
+            assert await reconcile_interrupted_runs() >= 1
+            # Not scheduled into a refusal it cannot survive...
+            assert ("proj-test", "recon-defer") not in scheduled
+            assert has_deferred_schedules() is True
+
+        # ...and run for real the moment the address is known, which in production is the first
+        # request the Hub serves (`main.py`'s address-observing middleware).
+        assert await drain_deferred_schedules() >= 1
+
+    assert ("proj-test", "recon-defer") in scheduled
+    assert has_deferred_schedules() is False
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_redrains_immediately_when_the_address_is_known(app, monkeypatch):
+    monkeypatch.delenv("HUB_URL", raising=False)
+    async with async_session_factory() as db:
+        db.add(
+            Run(
+                id="run-recon-nodefer",
+                project_id="proj-test",
+                agent="recon-nodefer",
+                status="running",
+                pid=None,
+            )
+        )
+        await db.commit()
+
+    scheduled = []
+
+    async def _record(project_id, agent):
+        scheduled.append((project_id, agent))
+
+    with patch("hub.turn_scheduler.schedule_agent", _record):
+        with patch("hub.bound_address.get", return_value=("127.0.0.1", 8010)):
+            assert await reconcile_interrupted_runs() >= 1
+
+    assert ("proj-test", "recon-nodefer") in scheduled
+    # Nothing was postponed, so the first request has no queue work to pick up.
+    assert has_deferred_schedules() is False
+
+
+@pytest.mark.asyncio
+async def test_draining_deferred_schedules_is_idempotent(app):
+    assert await drain_deferred_schedules() == 0
+    assert has_deferred_schedules() is False

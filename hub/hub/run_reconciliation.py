@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
+from . import bound_address
 from .db.engine import async_session_factory
 from .db.models import JobRun, Run
 from .inbound_queue import abandoned_for_run, return_run_entries
@@ -92,11 +93,62 @@ async def reconcile_interrupted_runs() -> int:
         logger.warning(
             "Reconciled %d orphaned run(s) to status=interrupted on Hub start", reconciled
         )
-        from .turn_scheduler import schedule_agent
-
-        for project_id, agent in agents_to_schedule:
-            await schedule_agent(project_id, agent)
+        await _schedule_or_defer(agents_to_schedule)
     return reconciled
+
+
+#: Agents whose post-reconciliation re-drain could not run yet, keyed `(project_id, agent)`.
+#: Drained once by `drain_deferred_schedules`, from the first request the Hub serves.
+_deferred_schedules: set[tuple[str, str]] = set()
+
+
+async def _schedule_or_defer(agents: set[tuple[str, str]]) -> None:
+    """Re-drain the reconciled agents now, or as soon as the Hub knows its own address.
+
+    `reconcile_interrupted_runs` runs inside `lifespan()`, which is to say **before the Hub has
+    served a single request** — so in native mode `bound_address` is still empty and every spawn
+    this would attempt is refused for want of a callback address. Scheduling into that refusal was
+    not merely useless: `schedule_agent` charged each one a delivery attempt, so restarting a Hub
+    with a run in flight moved the operator's own message a third of the way to being withdrawn.
+
+    The refusal is now `transient`, so nothing is charged for it — but a transient refusal records
+    nothing and waits for a later tick, and there is no later tick on this path. This supplies one.
+    """
+    if bound_address.known():
+        await _schedule_now(agents)
+        return
+    _deferred_schedules.update(agents)
+
+
+async def _schedule_now(agents: set[tuple[str, str]]) -> None:
+    from .turn_scheduler import schedule_agent
+
+    for project_id, agent in sorted(agents):
+        await schedule_agent(project_id, agent)
+
+
+def has_deferred_schedules() -> bool:
+    """Cheap enough to ask on every request, which is where it is asked."""
+    return bool(_deferred_schedules)
+
+
+async def drain_deferred_schedules() -> int:
+    """Run the re-drain that Hub startup had to postpone. Returns how many agents it covered.
+
+    Called from the address-observing middleware on the first request, which is the exact moment
+    the postponed condition clears. Idempotent and self-emptying: the set is taken before the
+    first `await`, so a burst of concurrent first requests cannot schedule the same agent twice.
+    """
+    global _deferred_schedules
+    if not _deferred_schedules:
+        return 0
+    pending, _deferred_schedules = _deferred_schedules, set()
+    logger.warning(
+        "Draining %d deferred post-reconciliation schedule(s) now the Hub's address is known",
+        len(pending),
+    )
+    await _schedule_now(pending)
+    return len(pending)
 
 
 async def reconcile_stale_job_runs() -> int:

@@ -5433,3 +5433,71 @@ went `running` and answered.
 `waiting_reason: null`. The reason exists — the trigger response carried it verbatim — but nothing
 persists it onto the entry, so the durable surface an operator would consult a minute later says
 only that something is waiting. That is [F87]'s shape again, and it is a separate change.
+
+---
+
+## F91 (A) — restarting the Hub spends the operator's message, for a condition that had already passed
+
+**Status:** fixed (this iteration)
+
+Row 19, resilience. Trigger a turn, kill the Hub while it runs, restart it. Measured live in
+`aw-e2e1`, twice, before the fix:
+
+```
+02:54:45  trigger builder      -> run-41977e93fb94, entry-24d8b3025c2d delivered, attempts 0
+02:54:5x  kill -9 the Hub
+02:55:06  restart              -> run_interrupted, returned_entry_ids: [entry-24d8b3025c2d]
+02:55:0x  GET /queue/builder/status
+          {"waiting_count": 1, "waiting_reason": "delivery failed 2 times; 1 attempt left",
+           "delivery_attempts": 2}
+```
+
+**Two** attempts for one restart, and then the entry sat `queued` with every agent idle until an
+unrelated `PATCH /queue/settings` delivered it. `DELIVERY_ATTEMPT_LIMIT` is 3. Three restarts with
+a run in flight and the operator's message is withdrawn with *"delivery failed 3 times; the Hub
+stopped retrying"* — a message they typed, gone, because they updated the Hub.
+
+Only one of those two attempts is legitimate. `return_run_entries` charges one because the run
+really did die. The second comes from `reconcile_interrupted_runs`, which finishes by re-draining
+the agents it repaired — and it runs inside `lifespan()`, **before the Hub has served a single
+request**. In native mode the callback address is observed from a real connection
+(`bound_address.py` exists precisely so it is fact rather than configuration), so at that moment
+there is none, and `trigger_agent_directly` refuses with:
+
+> Cannot determine the Hub's own address for this run … **retry once the Hub has served at least
+> one request.**
+
+That refusal was classified terminal. `turn_scheduler`'s own comment explains what terminal means —
+a refusal that *"repeats identically forever"* — and `TriggerAgentError.transient` is documented as
+asking *"does this refusal describe a condition that clears on its own?"* The refusal's own last
+sentence is the answer. The repository had already written the sentence that names the defect, in
+two places, about this exact field.
+
+**Fixed in two halves, because either alone is insufficient.**
+
+1. The refusal is now `transient=True`, so nothing is charged for it. But a transient refusal
+   records nothing and waits for a later tick — and on this path there is no later tick, which is
+   [F90] exactly.
+2. So the startup re-drain is **deferred** rather than attempted: `reconcile_interrupted_runs` asks
+   the new `bound_address.known()` and, when the answer is no, parks the agents it repaired.
+   `main.py`'s address-observing middleware drains them on the first request the Hub serves — the
+   precise moment the postponed condition clears. Fire-and-forget, so a queue drain can never
+   delay or fail an operator's request.
+
+`bound_address.known()` also replaces the hand-spelled `bool(os.environ.get("HUB_URL")) or
+bound_address.get() is not None` in `agents.py`. Two call sites spelled it out and a third did not
+ask at all; one function now holds it.
+
+**Verified.** Two Hub tests watched to fail (the deferral, and the `transient` classification),
+plus 125 passing across the eight touched files. Live, on the fixed code, the identical experiment:
+
+```
+03:02:52  trigger reviewer     -> run-f45cd63e3b11, entry-478bafdc055f, attempts 0
+03:03:0x  kill -9 the Hub
+03:03:11  restart              -> run_interrupted, attempts 1
+03:03:25  entry-478bafdc055f delivered in run-64f340ce6161, unprompted
+03:03:32  run-64f340ce6161 completed
+```
+
+One attempt instead of two, and the message ran fourteen seconds later with no operator action
+where before it needed one.
