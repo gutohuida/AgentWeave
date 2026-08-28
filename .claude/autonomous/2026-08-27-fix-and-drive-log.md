@@ -1111,3 +1111,110 @@ the deliberate wedged `under_review` specimen.
 
 The Hub on 8011 was restarted once, mid-iteration, onto this branch's code; `0097 -> 0098` ran on
 that start and is visible in `hub11.log`.
+
+---
+
+## Iteration 9 — 2026-08-28 05:41 → 07:0x — E2E-2 at the Codex angle
+
+Took over at 05:41 on a 27.6-minute-stale heartbeat. Iteration 8 had committed both of its fixes
+(`db184f0`, `270687a`) and then died waiting on the full Hub suite, leaving its log entry, its two
+finding write-ups and its state file uncommitted. Carried those forward as `ac686bc` with one
+correction: the entry promised a suite result *"recorded below"* that never arrived — the run was
+at 40% when the firing ended — so that line now says so, and this iteration re-ran the suite from
+scratch on the final code.
+
+### One defect, severity A, and it is the Codex angle paying out immediately
+
+**F98 — "Full access" was the *least* permissive posture a Codex agent could be given.**
+
+The Permissions control offers four postures and both providers declare the same four with the
+same labels, deliberately, so that an operator does not learn two vocabularies. They read as an
+ordering. On the Codex path the widest one, `bypassPermissions`, was mapped to `None` — and `None`
+is the value that means *the operator chose nothing*. So a thread the operator had put under full
+access started `workspace-write`/`on-request` and declined every approval it then raised, which is
+strictly less than **Workspace only** grants.
+
+Measured on one agent, one command, both surfaces that can set a posture:
+
+- agent default = Full access → **wrote** the file outside its worktree;
+- per-run override = Full access, same agent, same command → **"Refused: denied by the sandbox."**
+
+The per-run override is the composer's Permissions pill — the surface an operator actually uses to
+say *just this turn, let it off the leash*.
+
+`_thread_policy` had a branch for exactly this posture and it had been unreachable since the day
+it was written, because the only function that could produce that string threw it away. What hid
+it is the legacy `config["yolo"]` flag: setting an agent's *default* posture reconciles it, and
+`yolo` reaches `_thread_policy` by a route of its own — so one surface worked by accident, through
+the older spelling, while the other did the opposite.
+
+Then the same hole in the transport beside it, found by asking the carry-forward's own question
+rather than by driving it twice: `_build_codex_command` chooses its sandbox flag from `yolo` alone,
+and the Codex `permission_mode` control renders nothing to argv on purpose, so on `codex exec` too
+the only thing that could reach the sandbox flag was the flag one surface writes.
+
+The fix moves `FULL_ACCESS_PERMISSION_MODE` out of `api/v1/agents.py` — whose only interest in it
+is reconciling `yolo` — into `model_catalog.py`, beside the postures it has to stay ordered
+against, and makes all four decision sites read the posture rather than the flag. `acceptEdits`
+still maps to `None` on purpose: it *is* the default, and the default pair already produces its
+Codex meaning.
+
+### A second defect on the same seam, filed open on purpose
+
+**F99 (B) — the Effort control does nothing on the transport Codex agents actually use.**
+
+Found by following F98's seam rather than by driving again: F98 was one control that failed to
+cross from the operator's choice into the Codex runtime, so what else crosses by that route?
+Nothing does. Codex declares exactly two controls, and the other one — Effort — renders to argv,
+which `_execute_run`'s own docstring says is unused on app-server: *"`cmd` was still built for it
+by the caller, but is unused here — app-server has no argv, it speaks JSON-RPC."* app-server is the
+default transport and the only one an Add-agent dialog can produce, so raising Effort to `xhigh`
+changes nothing, with no accidental second route the way `yolo` was for F98. `permission_mode`
+reached that function explicitly because somebody once noticed; the class was never swept.
+
+Filed **open**, not fixed, and the reason is the discipline rather than the clock: I measured that
+`model_reasoning_effort` is the right key and that `ThreadStartParams.config` is a free-form
+override map, but *not* that `thread/start` honours the key rather than accepting and ignoring it —
+and a map with `additionalProperties: true` cannot reject an unknown key, so schema acceptance
+proves nothing. Building the fix on that would be exactly the plausible-looking repair this corpus
+keeps catching. It is the next iteration's first item, with the missing measurement named.
+
+### Things that drove clean, recorded as such
+
+- **Codex's sandbox is genuinely enforced on Windows.** Measured directly rather than assumed —
+  `codex exec --sandbox read-only` denied a write with `UnauthorizedAccessException`. This matters
+  because three earlier probes appeared to escape the sandbox and did not: they wrote into the
+  system temp directory, which `workspace-write` grants as a writable root by default. Had I
+  filed on the first reading I would have filed a defect that does not exist.
+- **`on_refusal` does reach the operator.** A refusal `decide_approval` decides by itself persists
+  a `permission_denied` event and broadcasts it. The Codex path is not silent about refusals; it
+  was silent about *this* one only because the sandbox refused before any approval was raised.
+- **"Workspace only" is still narrower after the fix**, proved live on the same command, so the
+  ordering holds in both directions rather than everything having been widened.
+
+### Verification
+
+- `hub/tests/test_codex_posture_ordering.py`, 24 tests. Three separate mutation checks, each
+  watched to fail: the `_codex_posture` drop restored (12 failures), `decide_approval`'s
+  full-access branch removed with the mapping intact (6), the exec transport returned to
+  `yolo`-only (1).
+- The thread-policy tests reach `_thread_policy` **through `_codex_posture`**. A test that passed
+  the constant in by hand would have passed against the defect for the entire time the branch was
+  unreachable — which is the trap the branch itself fell into.
+- Live end to end against a Hub restarted onto the fixed code.
+- CLI suite: 440 passed / 3 skipped. `ruff`, `black --target-version py311`, `mypy` clean over
+  CI's exact path lists. No migration, no UI change.
+- **Full Hub suite: 3452 passed / 84 skipped / 1 xpassed / 0 failed** (19m39s), run from
+  scratch on the final tree — which also settles iteration 8's unverified fixes, since its own
+  run died at 40%.
+
+### The method note worth carrying
+
+**Two of my first three live readings were wrong, and measuring rather than reasoning is what
+caught both.** I concluded "Codex's sandbox is unenforced on Windows" from three successful
+out-of-workspace writes; the writes were to `%TEMP%`, which `workspace-write` grants. And I
+predicted from the code that Full access would be refused in *all* cases, then watched it succeed
+— which is what exposed `yolo` as a second, hidden route into the same decision and turned a
+one-line finding into the real one, that the same posture behaves oppositely depending on which
+surface set it. Neither correction came from reading harder. Both came from picking a probe whose
+result could contradict me.

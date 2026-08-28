@@ -5980,3 +5980,79 @@ it. Widening it was not the defect and is not the fix.
   that was refused now writes the file, with the agent's default still `acceptEdits` and
   `config` still `{"yolo": false}` — and a "Workspace only" override on the same command is still
   refused, so the ordering holds in both directions rather than everything having been widened.
+
+---
+
+## F99 (B) — the Effort control does nothing on the transport Codex agents actually use
+
+**Status:** open (found and measured this iteration, deliberately not fixed — see the last section)
+
+Found by following F98's seam rather than by driving a second time. F98 was one control that failed
+to cross from the operator's choice into the Codex runtime; this asks what else crosses by the same
+route, and the answer is: nothing else does, because there is no route.
+
+The catalog declares two controls for Codex. `permission_mode` (F98's) renders nothing to argv on
+purpose. The other is **Effort**:
+
+```python
+ControlDescriptor(
+    id="effort", label="Effort", kind="enum",
+    values=_enum("low", "medium", "high", "xhigh"), default="medium",
+    apply=ApplySpec(style="config", template="model_reasoning_effort={value}"),
+)
+```
+
+`style="config"` means `render_control_args` turns it into `-c model_reasoning_effort=high` in the
+argv `build_command` produces. That works on `codex exec`. It cannot work on `app-server`, and
+`_execute_run` says so itself, in its own docstring:
+
+> *`cmd` was still built for it by the caller, but is unused here — app-server has no argv, it
+> speaks JSON-RPC.*
+
+app-server is the **default** transport for every Codex agent (`uses_app_server` returns true
+unless the runner carries `--no-app-server`), and every Codex agent an operator can create through
+the Add-agent dialog sets no flags. So for the ordinary case, an operator raising Effort to `xhigh`
+changes nothing at all — and unlike F98, there is not even an accidental second route: nothing
+resembling `yolo` exists for this control.
+
+`permission_mode` is the only control passed to `_execute_codex_appserver_run` explicitly, and it
+was passed there *because* somebody noticed the argv did not carry it. The same noticing never
+happened for `effort`.
+
+### What is measured, and what is not
+
+Measured:
+
+- `model_reasoning_effort` is the correct key, it reaches the provider, and it is validated —
+  `codex exec -c model_reasoning_effort=definitely-not-a-level` prints
+  `reasoning effort: definitely-not-a-level` in its header and the API rejects the turn with
+  *"Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'."*
+  (CLI 0.146.0.)
+- `ThreadStartParams.config` is `{"type": ["object","null"], "additionalProperties": true}` —
+  a free-form config-override map, per `codex app-server generate-json-schema --out`. It is the
+  same map the Hub already uses successfully for `mcp_servers`, which is itself a `config.toml`
+  key, so the config-map-equals-config.toml-overrides mapping is established by working code in
+  this repository rather than assumed.
+- The catalog offers Codex four effort values where the provider accepts seven. `none`, `minimal`
+  and `max` are simply not offerable today. That is a smaller, separate observation and not the
+  defect.
+
+Not measured, and the reason this is filed open rather than fixed: whether `thread/start` actually
+*honours* `model_reasoning_effort` inside `config`, as opposed to accepting and ignoring it. A
+free-form map with `additionalProperties: true` will not reject an unknown key, so schema
+acceptance proves nothing on its own. The check that would settle it is a live turn under
+`app-server` with the key set, reading the effort back off the thread — and a fix built on the
+untested assumption would be exactly the kind of plausible-looking repair this corpus keeps
+finding.
+
+### The fix, when it is taken
+
+Thread the value from `control_overrides` through `_execute_run` → `_execute_codex_appserver_run`
+→ `run_turn`, and merge it into the `config` dict `thread_params` already builds — which today is
+constructed only `if mcp_command`, so it needs to exist whenever either input is present. Prove
+the honouring first, then write the guard.
+
+The wider lesson is the one to keep: **`_execute_run`'s docstring names the hazard exactly — "cmd
+is unused here" — and the hazard it names is that every control rendered into argv silently
+disappears.** One control was rescued by hand and the class was never swept. Whenever a comment
+says a value is unused on a path, ask what else arrives by that value.
