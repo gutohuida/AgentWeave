@@ -227,6 +227,21 @@ async def test_triggering_a_run_on_a_task_under_review_is_not_refused(app, auth_
         await _task(session, "task-f79-open", status="under_review")
         await session.commit()
 
+    # `builder` has to exist on the roster for this test to be about what it says (F108).
+    #
+    # It used to pass without this, and for a reason unrelated to task bands: the route answered
+    # `200 {"status": "queued"}` to *every* refusal the dispatch raised, including "there is no
+    # such agent". So the assertion below was satisfied whether the band boundary held or not —
+    # it could not distinguish the guard it names from a typo. Registering the agent (and binding
+    # it no runner, so nothing spawns) makes the 200 mean what the docstring claims: the request
+    # got past the band check and was queued.
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"builder": {}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
     response = await app.post(
         "/api/v1/projects/proj-test/agent/trigger",
         json={"agent": "builder", "message": "ACK", "task_id": "task-f79-open"},
