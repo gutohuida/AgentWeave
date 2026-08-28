@@ -6332,3 +6332,77 @@ dismissed in prose), all in the same 200 lines. **Code written against a protoco
 protocol checked back, not remembered** — `codex app-server generate-json-schema` takes seconds and
 would have caught all three, at any point, for free. It is now the first thing to reach for when
 touching this file.
+
+## F103 (B) — every context reading in the timeline rendered as the words `context_warning`
+
+**Status:** fixed f1d7a85
+
+Observed twice, live, in two separate drive sessions before it was filed — and skipped past both
+times as cosmetic, which it is not: `context_warning` is the row an operator reads to decide
+whether an agent is about to run out of room.
+
+`summaryForEvent`'s default branch picks the first of `error`/`message`/`summary`/`title` a payload
+carries, and returns the event *type* when it has none. A context reading carries `agent`,
+`percent`, `context_tokens`, `limit_tokens`, `model`, `session_id`, `conversation_id` and
+`observed_at` — none of the four. So the Activity log and the Logs view both printed the literal
+string `context_warning`, next to a label already reading "context_warning", with the measurement
+nowhere on screen. The value it exists to show was the one thing it did not show.
+
+This is the fourth event family to land here (`permission_denied` and the three `queue_*` kinds got
+their cases the same way), and the default branch's four-field guess is why: it is a heuristic over
+payload shapes nobody enumerated, so a new event kind is invisible by default and visible only if
+someone notices. Every kind that has ever needed a case needed it because its payload names its
+detail something else.
+
+### The fix
+
+A `context_warning` case that reads what the reading actually holds:
+
+- `coder is at 62.5% of its context window, 125000 of 200000 tokens (gpt-5.4-mini)`
+- `builder has used 48123 context tokens (claude-x)` — no percentage, because `resolve_usage_limit`
+  invents none for a model the catalog does not declare, and the raw count is still worth reading
+- `builder: a context reading with no measurement` — names the agent rather than the event
+
+Three tests, all three watched failing first, each returning the bare string `context_warning`.
+
+## F104 (—) — ThreadItem's eleven unhandled variants: swept live, none of them occur
+
+**Status:** not a defect (measured 2026-08-28, CLI 0.146.0)
+
+Filed as a **negative** result so nobody spends another iteration on it. `map_item_to_events`
+handles seven of `ThreadItem`'s eighteen variants and explicitly suppresses an eighth
+(`userMessage`), leaving ten that render nothing: `hookPrompt`, `plan`, `dynamicToolCall`,
+`collabAgentToolCall`, `subAgentActivity`, `imageView`, `sleep`, `imageGeneration`,
+`enteredReviewMode`, `exitedReviewMode`, `contextCompaction`. On paper that is ten ways for an
+agent to do work the operator cannot see — the same shape as F100/F101/F102, in the same file, and
+the obvious next place to look after them.
+
+It is empty on evidence. One live turn through the Hub's own `run_turn`
+(`.claude/autonomous/scratch/probe_items.py`, tracing every notification rather than a chosen few)
+was asked to record a plan, write a file and run a command — three of the likeliest triggers — and
+delivered exactly `userMessage`, `reasoning`, `agentMessage`, `fileChange`, `commandExecution`.
+**Zero unhandled item types.** `plan` exists in the union with a `text` field, and still did not
+arrive as an item: the plan came as `turn/plan/updated`, confirming F102's finding rather than
+qualifying it.
+
+That does not prove the ten are unreachable — a review turn should produce
+`enteredReviewMode`/`exitedReviewMode`, and a long enough session `contextCompaction`. It proves
+the ranking was wrong: the schema diff said "ten silent branches" and the product said "none of
+these happen here". A gap between a protocol's surface and a product's usage is not a defect, and
+counting union members is not measuring.
+
+### What the sweep did find
+
+The comment at the end of `run_turn`'s loop listing the notifications it ignores was written from
+memory and was missing `turn/diff/updated` entirely. It is now the measured list, with the
+measurement dated. Two of its entries were checked rather than assumed: neither
+`item/agentMessage/delta` nor `item/commandExecution/outputDelta` is a transport-parity gap,
+because `runner_parsing` does not stream partial text on `exec` either — both transports show a
+message when it completes.
+
+### The lesson
+
+Iteration 10's rule was *check the protocol back, do not remember it*. This is its other half: a
+protocol you have checked back tells you what **can** arrive, never what **does**. The generated
+schema is the cheap way to build a candidate list; only driving the product ranks it. The one probe
+that cost two minutes here would have saved eleven speculative findings.
