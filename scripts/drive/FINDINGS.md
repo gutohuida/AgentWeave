@@ -7018,6 +7018,17 @@ repo's own harnesses. That is exactly the population the 2026-08-25 measurement 
 is reachable, it has been seen live twice now, and the surface it is wrong on is the one an operator
 consults when nothing is happening.
 
+### It is on the operator's main screen, three times in one view
+
+Filed above from the API. Driven through the dashboard the same night, the same wrong sentence
+appears three times in a single screenshot of the conversation view — in the message's
+not-delivered badge, in the queue line beneath the transcript (*"1 waiting — Runner CLI 'ui-probe'
+was not found in PATH."*), and under the composer (*"Queued — Runner CLI 'ui-probe' was not found
+in PATH."*).
+
+That is not a corner of an API response. It is the surface an operator reads when they are working
+out why nothing is happening, and every line of it points at a program that does not exist.
+
 ### Not fixed here, because the obvious fix is also wrong
 
 Dropping `self_registered` from the condition would make `probe_agent` answer *"No runner is bound
@@ -7159,6 +7170,20 @@ Elapsed time is not involved. This took under two seconds.
   `waiting_reason` had become `"delivery failed 1 time; 2 attempts left"`, the retry counter having
   taken the reason's place.
 - **The trigger is ordinary use.** Not a retry storm, not a loop — a person typing twice more.
+
+### And the operator is told the false thing, not just the database
+
+Driven through the dashboard the same night (`scripts/drive/t_ui_refusal.py`, Playwright against
+the trial Hub), the conversation view renders the message with a red badge:
+
+```
+NOT DELIVERED   delivery failed 3 times (Runner CLI 'ui-probe' was not found in PATH.);
+                the Hub stopped retrying
+```
+
+So this is not a database detail an operator would have to go looking for. The claim that delivery
+was attempted three times and abandoned is stated on the main conversation surface, above the
+message it destroyed, and it is false.
 
 ### The fix shape, and why it was not available until tonight
 
