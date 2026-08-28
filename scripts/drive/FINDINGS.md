@@ -39,6 +39,24 @@ chosen by the operator and not implemented), `F62` (C), `F65` (C, queued as `Q4-
 **Read this as a floor, not a ceiling.** A short A list measures what *this* corpus of driving has
 found, not what is there. Tonight's sweeps exist to lengthen it.
 
+### Movement against the baseline, as of 2026-08-28 01:00
+
+The sweeps did lengthen it, which is the point. **Seven severity-A findings have been added since
+the table above was written, six of them fixed the same night:**
+
+| Finding | Iteration | State |
+|---|---|---|
+| **F74** — a task's own evidence rejected as a duplicate of itself | 2 | fixed |
+| **F76** — a review started by hand provisions the reviewer and never staffs the task | 2 | **open** — three repairs are live and the choice is the operator's |
+| **F78** — the operator cannot clear a task's assignee, and the API reports that they did | 3 | fixed `f1d0c6f` |
+| **F79** — a task the operator has decided about still takes new runs | 3 | fixed `eba8620` |
+| **F83** — a loop created enabled with `initial_tasks` never reaches the scheduler | 4 | fixed `0757be5` |
+| **F84** — an operator who stops a loop stops nothing; it fires for another seventeen minutes | 4 | fixed `0757be5` |
+| **F85** — a loop stages a review it cannot start, wedges the task, and fails on it forever | 4 | fixed `3e07726` |
+
+So the open-A list today is **F12, F76**, plus F52's and F60's partial states unchanged. F76 is open
+because its fix shape is a decision, not because nobody has looked at it.
+
 ---
 
 ## F1 (A) — One cron string, three different answers; the one on screen is wrong
@@ -5016,6 +5034,16 @@ because the JobRun says `completed`.
 
 The asymmetry is that only the *permissive* extreme was considered. The blocking extreme fails the
 same test and was not.
+
+**This failure had already been seen once, at the neighbouring boundary, and written down.**
+`checkpoint_cutover.py` carries the comment *"An inherited `{"permission_mode": "manual"}` is what
+failed run-9058966b"* — the same symptom, diagnosed correctly, and answered there by deciding that
+a handoff must not silently change posture mid-lineage, which is right for a handoff. Nobody
+followed the `manual` back to where it entered. It entered at `inherit_runtime_overrides`, from an
+interactive conversation, into a turn started by a schedule.
+
+A loop lineage cannot now acquire `manual` by inheritance at all, so the cutover boundary needs no
+change: with the source closed, there is nothing for it to carry.
 
 **The fix.** `manual` is withheld from a conversation whose `origin` is `job` — dropped, not
 replaced, exactly as `bypassPermissions` is, so the agent's own `default_permission_mode` and then

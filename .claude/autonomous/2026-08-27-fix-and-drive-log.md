@@ -346,3 +346,153 @@ by the API, not assumed. Tree clean, three commits pushed.
 
 **Next:** row 14 permissions, row 11 jobs/loops (disable in the same iteration), row 6 inbound
 queue, row 12 flows.
+
+---
+
+## Iteration 4 — 2026-08-27 23:46 → 2026-08-28 01:00 (+01:00)
+
+**Rows 14 and 11 driven. Six defects found, six fixed — three of them severity A, and one of the
+three was found by accident while proving another.** Every fix carries tests that were watched to
+fail, every guard was mutation-checked individually, and every one was proven against a Hub
+restarted on the fixed code.
+
+| Row | Outcome |
+|---|---|
+| **14 Permissions** | **driven end to end** — allow, deny, expire, dismiss, re-decide. One defect (C). |
+| **11 Jobs & loops** | **driven end to end** — create, seed, arm, fire, claim, work, stop, disable. Five defects. |
+
+Rows still unreached: 6 inbound queue, 12 flows, 15 checkpoints, 16 worktrees, 18 accounting,
+19 resilience, and row 13's timeout half.
+
+### Row 14 — permissions. It works, and the record of it does not.
+
+A manual-posture run put a `Write` to the operator; approving it wrote the file, denying it did not,
+and letting one expire produced *"no operator answered within 20s"* and an expired card the operator
+can dismiss. Re-deciding a decided card is a stated `409`. All correct.
+
+**F81 (C) — one refusal, two rows.** `f59e293`. Pressing Deny once left two identical
+`permission_denied` events a second apart, same `tool_use_id`: `decide_permission_request` records
+the operator's decision, and the run then reports the same decision back through
+`record_permission_decision`, which exists for refusals the *harness* makes. Two warn rows for one
+refusal reads exactly like an agent that tried twice. Fixed on the Hub rather than in the reporter —
+the card is the join — because the reporter is the process that may import only stdlib and fastmcp,
+and because F79 already paid for putting a guard where the intent is legible rather than where the
+traffic arrives.
+
+### Row 11 — jobs and loops. Five defects, three of them severity A.
+
+The happy path does work: a loop fired on its cron, claimed its task, the agent worked it, and the
+board's `agent_capacity` walked `next -> held -> working` correctly while the busy guard held off a
+second firing for the six minutes the turn took. Nearly everything around that path was broken.
+
+**F82 (B) — a loop reports the queue the same call just seeded.** `afb9884`. `POST /jobs` with
+`initial_tasks` returned `"queue": {}, "current_tasks": []` for a loop that had a pending task in it
+one call later. Two independent causes: the block was hand-assembled with literals, *and* it was
+assembled above the loop that creates the tasks. `_batch_loop_summaries` is what every other route
+answers this with — and `loops.py`'s own header says of a neighbouring field that every route gets
+it "from the same query, so no second implementation can drift from this one." `create_job` was the
+surface that sentence had not reached.
+
+**F83 (A) — a loop created enabled with `initial_tasks` never reaches the scheduler.** `0757be5`.
+This took the longest to see, because everything reported success. `enabled: true`, a `next_run`,
+`enabled = 1` in the row — and no firing, ever. Bisected to one variable: the same loop *without*
+`initial_tasks` registered fine.
+
+APScheduler's job store is a separate synchronous engine on the same SQLite file, and `create_job`
+handed the job over while its own session still held a transaction, so the store's insert failed
+with `database is locked`. Then three layers of silence: `add_job` caught it and returned `False`,
+`create_job` did not read the return, and the whole block sat in
+`except Exception: pass  # Scheduler might not be initialized yet`. One helper now commits before
+the handoff and logs a refusal instead of swallowing it.
+
+**F84 (A) — an operator who stops a loop stops nothing.** `0757be5`. The headline find. I stopped a
+loop the way the API offers, got `200` with `ending_state: "stopped"`, and watched it fire **twelve
+more times over the next seventeen minutes**, once a minute, every one a real agent turn recorded
+`completed`. A loop ends two ways and both must leave four facts; the scheduler set all four, the
+operator's route set two, and the two it omitted were *when* it stopped and *the stopping*.
+`hub/hub/loop_ending.py` now states an ending once.
+
+Its quieter half: `stopped_at` was left NULL, so the two refusals that quote it both printed *"at an
+unknown time"* about an ending the Hub had performed a minute earlier.
+
+**F85 (A) — a loop stages a review it cannot start, wedges the task, and fails on it forever.**
+`3e07726`. Found by watching the happy path continue. Firing two, on a task the agent had completed
+without recording evidence:
+
+```
+history [('failed', '23:14:00'), ('completed', '23:07:00')]
+error_summary: task ... has no recorded evidence, so there is no commit to review.
+task afterwards: under_review, assignee: author     (it was completed a minute earlier)
+```
+
+The selection is staged before the turn is dispatched, so the status move and the reviewer
+assignment are already committed when the trigger refuses. The task is then wedged in `under_review`
+naming an agent that never ran — F70's shape, reached by a new route, which costs the project that
+agent for every *other* task too — and the next firing repeats it. **The word "evidence" did not
+appear in `scheduler.py` at all**: the ladder answered *who* reviews, and nothing answered *whether
+there is anything to review*.
+
+The walk now asks `commit_for_task_review`, the same function the trigger refuses with, and reports
+an unreviewable task as `unstaffed` with the reason — which F64 already raised onto the loop card,
+where a queued entry and a failed `JobRun` never appeared.
+
+**F86 (B) — an unattended loop inherits "ask me first" from a conversation hours old.** `25ea74c`.
+Not looked for: while waiting on F85's live proof, the probe loop fired and then did nothing for
+eight minutes, opening permission cards and timing them out one at a time — `Edit`, `Bash`,
+`PowerShell`, each *"no operator answered within 120s"* — and then recorded itself `completed`
+having been refused everything it tried. My own interactive row-14 drive two hours earlier had set
+`manual` on a builder conversation, and `inherit_runtime_overrides` carried it into a scheduled
+firing. That function withholds exactly one posture, `bypassPermissions`, and its comment gives the
+reason: reaching runs started by a peer or a job *"by a route the operator cannot see, is not what
+choosing it meant."* Only the permissive extreme had been considered; the blocking one fails the
+same test and is worse unattended.
+
+### Two method notes worth keeping
+
+**One test's premise was changed, deliberately, and it is the most consequential decision of the
+iteration.** `test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn` *required* the
+firing to dispatch a doomed review, so the operator could see what was attempted. That is a
+defensible position argued in the test's own docstring — and driving it priced it: a wedged task, an
+agent lost from the pool, and a failure every minute. The test now asserts the stronger property
+(nothing dispatched, nothing mutated) and records in its docstring why it changed. Four other tests
+that failed were fixture gaps and now record evidence through a shared helper. **A failing existing
+test is a claim to be adjudicated, not an obstacle to route around** — and the adjudication belongs
+in the test file, where the next person meets it.
+
+**The mutation check earned its keep twice, in opposite directions.** F81's empty-`tool_use_id`
+guard passed every mutation at first: the test had not built the card the guard defends against, so
+the guard was invisible and would have been deleted by the next reader as dead code. And F84's
+scheduler handoff — clearing `job.enabled` without telling APScheduler — passed the entire
+row-reading suite, because a row-level test cannot see a stale registration. That was the original
+bug wearing a different coat, one layer out, and only a mutation found it.
+
+### Verification
+
+- F81: 4 tests, all four guards mutation-checked individually.
+- F82: 2 tests; both the literal block and the wrong ordering fail the seeded test.
+- F83: 6 tests asserting `session.in_transaction()` at handoff — the fact that decides whether the
+  store can write, not "was the scheduler called", which it always was.
+- F84: 8 tests across two files; four mutations, each failing a named test.
+- F85: 5 new tests, 3 dispositions mutation-checked; 5 existing tests adjudicated.
+- F86: 5 tests; both scoping mutations fail a named test.
+- Suites: 587 passed across loop/job/firing/review/flow/board/claimability; 260 loop+job; 33
+  agent-actions; 14 override-inheritance. Then the **whole Hub suite: 3399 passed, 84 skipped,
+  1 xpassed, 0 failed** in 18m33s — up from 3349 at arming, the 50 being the tests iterations 2-4
+  added. CLI suite 440 passed / 3 skipped. ruff, black and mypy clean over CI's own path lists.
+  No UI or CLI source changed this iteration, so no bundle rebuild was needed.
+- **Live**, against a Hub restarted on the fixed code each time: one `permission_denied` row per
+  refusal; a seeded loop reporting `{"pending": 2}` on creation; `live-fix-seeded` present in
+  `apscheduler_jobs` immediately; a stop returning `enabled: false` with a real `stopped_at` and an
+  empty scheduler store; an evidence-less task left `completed` with the firing recorded `skipped`
+  and repeated skips coalescing into `tick_count` rather than one row a minute; and two job
+  conversations carrying `runtime_overrides: null` with no permission card raised at all.
+
+### State left behind
+
+`proj-46b602c1f3cb` gains seventeen jobs, **every one disabled** — confirmed by the API *and* by
+reading `apscheduler_jobs`, which is empty. `task-1b7af6b595e6` is left wedged in `under_review`
+from before F85's fix and is a useful specimen: the fix stops new rows arriving in that state but
+does not retrospectively free this one, and the walk correctly reports it in-flight rather than
+re-staffing it. Tree clean, five commits pushed.
+
+**Next:** row 6 inbound queue, row 12 flows, row 13's timeout half.
