@@ -1500,10 +1500,14 @@ async def _execute_run(
         # does on a timer: `redrain_queued_agents` is reachable only from project open, settings
         # save and relocate. Measured — an entry sat `queued` at one attempt until an unrelated
         # settings save drove the second, which is a limit protecting nobody.
-        if returned:
-            from ...turn_scheduler import schedule_agent
+        from ...turn_scheduler import redrain_queued_agents, schedule_agent
 
+        if returned:
             await schedule_agent(project_id, agent)
+        # Unconditional, unlike the line above, and for F90's reason: a spawn that never started
+        # still ends the run, and the run ending is what frees the task checkout an agent parked
+        # by design D8 is waiting on. That agent has nothing to do with `returned`.
+        await redrain_queued_agents(project_id)
         return
 
     _active_ptys[run_id] = pty
@@ -1806,9 +1810,31 @@ async def _execute_run(
 
         # A turn ending with queued entries starts the next turn without waiting for
         # operator input. The scheduler itself applies the hop budget and drain cap.
-        from ...turn_scheduler import schedule_agent
+        from ...turn_scheduler import redrain_queued_agents, schedule_agent
 
         await schedule_agent(project_id, agent)
+        # And everyone else who was waiting on something this run was holding (F90).
+        #
+        # `schedule_agent` above re-drains *this* agent, which is right for the ordinary case: a
+        # turn that ended with its own entries queued starts the next one. It is not enough for a
+        # hold that belongs to another agent. A task's checkout admits one writing turn at a time
+        # (design D8), and the agent refused by that rule is refused *transiently* — the entry
+        # keeps its delivery attempts, stays `queued`, and `turn_scheduler` says "the next tick
+        # tries again". There is no tick. `redrain_queued_agents` is reachable from project open,
+        # settings save and relocate, and from nowhere else, so the entry waited on an unrelated
+        # operator action.
+        #
+        # Measured on 2026-08-28: `builder` held a task, `reviewer`'s turn on the same task was
+        # parked, `builder` finished, and four minutes later every agent was idle with the entry
+        # still `queued` at zero attempts and `waiting_reason: null`. A settings save delivered it
+        # instantly.
+        #
+        # Project-scoped rather than "agents waiting on the task this run held", deliberately. The
+        # invariant is that a run ending frees whatever it held, and the task checkout is only
+        # today's instance of that; scoping to the task would be correct now and silently
+        # incomplete for the next hold anyone adds. Cheap either way — the query returns only
+        # agents that actually have something queued, and `schedule_agent` refuses a busy one.
+        await redrain_queued_agents(project_id)
     except (Exception, asyncio.CancelledError) as exc:
         # Every step above this point is inside the same `try` and none of it is wrapped
         # individually — so an exception anywhere between the spawn succeeding and this turn's
@@ -1862,10 +1888,17 @@ async def _execute_run(
                     payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
                     await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
                     await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
-        if not already_terminal and returned:
-            from ...turn_scheduler import schedule_agent
+        if not already_terminal:
+            from ...turn_scheduler import redrain_queued_agents, schedule_agent
 
-            await schedule_agent(project_id, agent)
+            if returned:
+                await schedule_agent(project_id, agent)
+            # Unconditional, unlike the line above. A run that fails releases the task checkout
+            # it held exactly as a run that succeeds does, so an agent parked behind it by design
+            # D8 has to be re-evaluated whether or not *this* run handed anything back. Gating on
+            # `returned` would mean the hold outlives the holder whenever the failing turn had no
+            # queue of its own — which is the ordinary case.
+            await redrain_queued_agents(project_id)
         if isinstance(exc, asyncio.CancelledError):
             raise
     finally:
@@ -2189,10 +2222,12 @@ async def _execute_codex_appserver_run(
                     await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
             # See `_execute_run`'s spawn-failure branch: this one `return`s too, so the entries it
             # hands back need the same push.
-            if returned:
-                from ...turn_scheduler import schedule_agent
+            from ...turn_scheduler import redrain_queued_agents, schedule_agent
 
+            if returned:
                 await schedule_agent(project_id, agent)
+            # And, unconditionally, everyone this run's task checkout was holding back.
+            await redrain_queued_agents(project_id)
             return
 
         snapshot_sha: Optional[str] = None
@@ -2327,9 +2362,11 @@ async def _execute_codex_appserver_run(
 
         await maybe_generate_title(project_id=project_id, conversation_id=conversation_id)
 
-        from ...turn_scheduler import schedule_agent
+        from ...turn_scheduler import redrain_queued_agents, schedule_agent
 
         await schedule_agent(project_id, agent)
+        # See `_execute_run`: the same release, for the same reason.
+        await redrain_queued_agents(project_id)
     finally:
         _active_app_server_runs.discard(run_id)
         _stop_requested.discard(run_id)

@@ -533,3 +533,110 @@ async def test_a_flow_records_a_task_another_agents_turn_holds_instead_of_droppi
 
     assert [(task_id, agent) for task_id, agent in decision._cannot_staff] == [(HELD_TASK, HOLDER)]
     assert decision.selections == ()
+
+
+# ---------------------------------------------------------------------------
+# F90 — the hold ends when the holder does, without waiting for something else
+# ---------------------------------------------------------------------------
+
+
+async def test_a_run_ending_redrains_the_agents_it_was_holding_back(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """F90. `schedule_agent` at the end of a run re-drains *that* agent, and D8 parks a **different**
+    one.
+
+    A challenger refused by the one-writer rule is refused transiently: the entry keeps its
+    delivery attempts, stays `queued`, and `turn_scheduler` says "the next tick tries again". There
+    is no tick. `redrain_queued_agents` is reachable from project open, settings save and relocate
+    and from nowhere else, so the entry waited for an unrelated operator action.
+
+    Measured live on 2026-08-28 in `aw-e2e1`: `builder` held a task, `reviewer`'s turn on the same
+    task was parked, `builder` finished, and four minutes later every agent was idle with the entry
+    still `queued`, `delivery_attempts` 0 and `waiting_reason: null`. Saving unrelated queue
+    settings delivered it instantly.
+
+    **Nothing here calls `schedule_agent` for the challenger**, which is the whole assertion, and it
+    is what `test_a_collision_leaves_the_entry_queued_and_delivers_it_when_the_task_is_free` cannot
+    say: that test ends the holder's run with a database write and then schedules the challenger by
+    hand, so it proves the entry *can* be delivered once the task is free and not that anything
+    delivers it. Here the holder takes a real turn and the run ends through `_execute_run`.
+    """
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    # Both in one sync: `_agent` posts the whole roster, so a second call would unregister the
+    # first agent.
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {HOLDER: {"runner": "claude"}, CHALLENGER: {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200, sync.text
+    await bind_runner(HOLDER, cli="claude")
+    await bind_runner(CHALLENGER, cli="claude")
+    holder_conversation = await _conversation(HOLDER)
+    challenger_conversation = await _conversation(CHALLENGER)
+    await _task(HELD_TASK)
+
+    # Parked, not merely queued: written straight to the queue so nothing has scheduled it, which
+    # is the state a transient D8 refusal leaves behind.
+    async with async_session_factory() as session:
+        project = await session.get(Project, "proj-test")
+        project.hop_budget = 6
+        session.add(
+            new_entry(
+                project_id="proj-test",
+                agent=CHALLENGER,
+                origin_type="operator",
+                content="my turn on this task",
+                hop_depth=0,
+                conversation_id=challenger_conversation,
+                task_id=HELD_TASK,
+            )
+        )
+        await session.commit()
+
+    def _spawn(cmd, cwd=None, env=None, **rest):
+        # `FileNotFoundError`, not the `RuntimeError` the other harnesses in this file raise. That
+        # one escapes `_execute_run` entirely — the spawn sits above its `try` — so the run is
+        # never finalised and the very moment under test never arrives. This is the "the CLI is
+        # not on PATH" branch, which ends the run properly.
+        raise FileNotFoundError("claude")
+
+    async def _challenger_run():
+        async with async_session_factory() as session:
+            return (
+                (await session.execute(select(Run).where(Run.agent == CHALLENGER)))
+                .scalars()
+                .first()
+            )
+
+    async with async_session_factory() as session:
+        with patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn):  # noqa: SIM117
+            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+                await trigger_agent_directly(
+                    project_id="proj-test",
+                    agent=HOLDER,
+                    message="I have this task",
+                    conversation_id=holder_conversation,
+                    session=session,
+                    task_id=HELD_TASK,
+                )
+                # The holder's turn, then whatever its ending starts. Drained repeatedly because
+                # the challenger's run is created inside the holder's, so one pass over the set
+                # that existed at the first look would miss it.
+                for _ in range(400):
+                    if agent_trigger._background_runs:
+                        await asyncio.gather(
+                            *list(agent_trigger._background_runs), return_exceptions=True
+                        )
+                    if await _challenger_run() is not None:
+                        break
+                    await asyncio.sleep(0.01)
+
+    run = await _challenger_run()
+    assert run is not None, (
+        "the challenger never got a turn after the holder's run ended; nothing on the "
+        "run-completion path re-drains an agent other than the one whose run it was"
+    )
+    assert run.task_id == HELD_TASK

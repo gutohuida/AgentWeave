@@ -5335,3 +5335,81 @@ would make readers stop blocking writers at all and would have made this defect 
 of a wedge. It is also a deployment-visible change — extra `-wal`/`-shm` files, and it does not
 work over a network filesystem — so it is a decision rather than a repair, and the repair above
 stands on its own either way.
+
+---
+
+## F90 (A) — a turn held back by another agent's turn is never let go again
+
+**Status:** fixed — the commit that re-drains the project's queued agents when a run ends
+
+**Severity: A.** The operator's message is accepted, sits in the queue, and never runs. Not
+abandoned, not refused, not reported: `waiting_count: 1`, `waiting_reason: null`,
+`delivery_attempts: 0`, every agent idle, and nothing in the product will ever pick it up. It ends
+when the operator happens to do something unrelated — open the project, save settings, relocate the
+workspace — which is the only place `redrain_queued_agents` is reachable from.
+
+**How it was found.** Driving row 16 of the matrix, per-task worktrees, and specifically design
+D8's *"a task's checkout takes one writing turn at a time"*. Two agents, one task:
+
+```
+trigger builder,  task_id=task-294f3af9448b, "sleep 90 then append a line"   -> running
+trigger reviewer, task_id=task-294f3af9448b, "do nothing"                    -> queued
+```
+
+The refusal is exactly right, and classified exactly right: **transient**, so the entry keeps its
+delivery attempts rather than counting one towards abandonment. Then builder finished, and:
+
+```
+t+100s   author idle | builder idle | reviewer idle
+         GET /queue/reviewer/status -> {"waiting_count": 1, "waiting_reason": null,
+                                        "delivery_attempts": 0}
+```
+
+Four minutes of that. Then an unrelated `PATCH /queue/settings` — changing nothing, saving the same
+four values back — delivered it instantly, because that route calls `redrain_queued_agents`.
+
+**The cause is a wake-up that was never wired.** `turn_scheduler`'s own comment on the transient
+branch says the entry *"stays `queued`, and the next tick tries again."* **There is no tick.**
+Scheduling is entirely event-driven, and the event that should free this entry — the holder's run
+ending — calls `schedule_agent(project_id, agent)` for the agent whose run it was. The agent that
+was parked is a different one, by construction: D8 refuses a *second* agent on a task the first is
+holding.
+
+The product has already met this shape once and written it down, six hundred lines above the fix,
+on the spawn-failure branch: *"without this an entry handed back here waits for something else to
+drain it. Nothing does on a timer… Measured — an entry sat `queued` at one attempt until an
+unrelated settings save drove the second."* Same sentence, same route, one agent over.
+
+**The fix.** Every terminal exit of a run — completed, failed, and the spawn that never started, on
+both the exec and the app-server paths — now calls `redrain_queued_agents(project_id)` after
+scheduling its own agent. Project-scoped rather than "the agents waiting on the task this run
+held", deliberately: the invariant is that a run ending frees whatever it was holding, and the task
+checkout is only today's instance of that. Scoping to the task would be correct now and silently
+incomplete for the next hold anyone adds. It costs nothing when nothing is waiting — the query
+returns only agents that actually have a queued entry, and `schedule_agent` refuses a busy one.
+
+**The test the suite already had, and what it could not say.**
+`test_a_collision_leaves_the_entry_queued_and_delivers_it_when_the_task_is_free` sets the collision
+up correctly, ends the holder's run **with a database write**, and then **calls `schedule_agent`
+for the challenger by hand**. So it proves the entry *can* be delivered once the task is free —
+which was never in doubt — and not that anything delivers it. The step it performs on the product's
+behalf is the exact step the product omits. Third instance tonight of the same class: [F88]'s
+access tests pass a `visibility` nothing produces, [F89]'s generation tests spawn with no second
+writer contending, and this one schedules the turn itself.
+
+The new test takes a **real** holder turn and lets it end through `_execute_run`, then asserts a
+`Run` row exists for the challenger — nothing in it schedules that agent. Watched to fail with the
+five new calls removed. Two harness notes that cost a round each: this file's other tests raise
+`RuntimeError` from the patched spawn, which escapes `_execute_run` entirely (the spawn sits above
+its `try`) so the run is never finalised and the moment under test never arrives — `FileNotFoundError`
+is the branch that ends a run properly. And `_agent` posts the whole roster through session sync, so
+registering two agents takes one call, not two.
+
+**Proved live against a Hub restarted on the fixed code**, same two agents, same task: the trigger
+answered `queued` with the holder named as the reason, and the instant builder went idle reviewer
+went `running` and answered.
+
+**What this does not fix.** While the entry is parked, `GET /queue/{agent}/status` still reports
+`waiting_reason: null`. The reason exists — the trigger response carried it verbatim — but nothing
+persists it onto the entry, so the durable surface an operator would consult a minute later says
+only that something is waiting. That is [F87]'s shape again, and it is a separate change.
