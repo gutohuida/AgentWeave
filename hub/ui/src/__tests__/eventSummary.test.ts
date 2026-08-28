@@ -121,4 +121,142 @@ describe('summaryForEvent', () => {
       'builder: a context reading with no measurement'
     )
   })
+
+  // The failure family, F105. Every kind below is written to `event_logs` by the Hub's own code —
+  // so it certainly reaches this timeline — and every one of them names its detail something the
+  // default branch does not look at (`reason`, `error_summary`, `run_exit_status`), not `error`
+  // or `message`. Each therefore rendered as its own event name and nothing else: an operator
+  // scanning a red row learned only that a red row existed. Swept out of the emitters rather
+  // than found one at a time, which is how the previous five families were each discovered.
+  it('renders why a scheduled job failed, not the words job_run_failed', () => {
+    expect(
+      summaryForEvent('job_run_failed', {
+        job_id: 'job-1',
+        job_name: 'nightly review',
+        agent: 'reviewer',
+        trigger: 'schedule',
+        run_id: 'run-9',
+        error_summary: 'runner claude exited 1',
+      })
+    ).toBe('"nightly review" failed for reviewer: runner claude exited 1')
+  })
+
+  it('names the job even when a failure carries no summary', () => {
+    expect(summaryForEvent('job_run_failed', { job_id: 'job-1', agent: 'reviewer' })).toBe(
+      'job-1 failed for reviewer'
+    )
+  })
+
+  it('renders which action the Hub refused and why', () => {
+    expect(
+      summaryForEvent('agent_action_rejected', {
+        endpoint: 'POST /messages',
+        reason: 'unknown_recipient',
+        recipient: 'nobody',
+      })
+    ).toBe('POST /messages refused: unknown_recipient (nobody)')
+  })
+
+  it('renders a refusal that names no recipient', () => {
+    expect(
+      summaryForEvent('agent_action_rejected', { endpoint: 'POST /messages', reason: 'archived_agent' })
+    ).toBe('POST /messages refused: archived_agent')
+  })
+
+  it('says which document a turn produced nothing against', () => {
+    expect(
+      summaryForEvent('turn_produced_nothing', {
+        run_id: 'run-3',
+        agent: 'coder',
+        spec_document: 'spec/changes/x.md',
+        document_phase: 'proposed',
+        run_exit_status: 'completed',
+      })
+    ).toBe('coder ended (completed) without changing spec/changes/x.md')
+  })
+
+  it('says which review could not be staffed and why', () => {
+    expect(
+      summaryForEvent('review_unstaffed', {
+        job_id: 'job-2',
+        job_name: 'loop',
+        loop_id: 'loop-1',
+        task_id: 'task-7',
+        reason: 'no eligible reviewer',
+      })
+    ).toBe('no agent could review task-7: no eligible reviewer')
+  })
+
+  it('says why a loop stopped', () => {
+    expect(
+      summaryForEvent('loop_stopped', { job_id: 'job-2', loop_id: 'loop-1', reason: 'queue_drained' })
+    ).toBe('loop loop-1 stopped: queue_drained')
+  })
+
+  it('says a loop ran out of queued work', () => {
+    expect(
+      summaryForEvent('loop_queue_exhausted', {
+        job_id: 'job-2',
+        loop_id: 'loop-1',
+        pending_request: null,
+      })
+    ).toBe('loop loop-1 has no queued work left')
+  })
+
+  it('says why a firing was skipped', () => {
+    expect(
+      summaryForEvent('job_run_skipped', {
+        job_id: 'job-2',
+        job_name: 'nightly review',
+        agent: 'reviewer',
+        reason: 'agent_busy',
+      })
+    ).toBe('"nightly review" skipped: agent_busy')
+  })
+
+  it('says what a crashed run was holding', () => {
+    expect(
+      summaryForEvent('run_interrupted', {
+        agent: 'coder',
+        run_id: 'run-4',
+        pid: 1234,
+        returned_entry_ids: ['e-1'],
+        abandoned_entry_ids: ['e-2', 'e-3'],
+      })
+    ).toBe("coder's run was interrupted — 1 message requeued, 2 dropped")
+  })
+
+  it('names the hop budget a suspended chain hit', () => {
+    expect(
+      summaryForEvent('queue_chain_suspended', {
+        entry_id: 'entry-9',
+        agent: 'reviewer',
+        hop_depth: 6,
+        hop_budget: 5,
+      })
+    ).toBe('reviewer: chain suspended at hop 6 of a 5-hop budget')
+  })
+
+  it('says which worktree could not be released and why', () => {
+    expect(
+      summaryForEvent('task_worktree_release_failed', {
+        task_id: 'task-7',
+        reason: 'directory is locked',
+      })
+    ).toBe('task-7: worktree not released — directory is locked')
+  })
+
+  // The cut that keeps this finding honest: a kind whose payload does name its detail `error`
+  // already renders through the default branch, and does not need a case. Asserted so a later
+  // sweep does not add one for it and call that a fix.
+  it('leaves a kind that already carries `error` to the default branch', () => {
+    expect(
+      summaryForEvent('conversation_binding_conflict', {
+        agent: 'coder',
+        run_id: 'run-1',
+        conversation_id: 'conv-1',
+        error: 'run is already bound to conv-2',
+      })
+    ).toBe('run is already bound to conv-2')
+  })
 })

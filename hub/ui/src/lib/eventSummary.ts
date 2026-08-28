@@ -44,6 +44,55 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
       }
       return `${who}: a context reading with no measurement${model}`
     }
+    // F105, the failure family. Swept out of the Hub's own `persist_event` call sites rather than
+    // found one row at a time — which is how the five families before it were each discovered, and
+    // the reason that method is not good enough. Every kind below is written to `event_logs`, so it
+    // certainly reaches this timeline, and every one names its detail `reason`, `error_summary` or
+    // `run_exit_status` — never `error` or `message`, the only two names the default branch knows.
+    // Each rendered as its own event name and nothing else, so an operator scanning a red row
+    // learned that a red row existed and had to go elsewhere to learn anything more.
+    //
+    // Kinds whose payload already carries `error` (`conversation_binding_conflict`) are
+    // deliberately NOT here: the default branch renders them correctly as it stands.
+    case 'job_run_failed': {
+      const job = data.job_name ? `"${data.job_name}"` : String(data.job_id ?? 'a job')
+      const who = data.agent ? ` for ${data.agent}` : ''
+      return `${job} failed${who}${data.error_summary ? `: ${data.error_summary}` : ''}`
+    }
+    case 'job_run_skipped': {
+      const job = data.job_name ? `"${data.job_name}"` : String(data.job_id ?? 'a job')
+      return `${job} skipped${data.reason ? `: ${data.reason}` : ''}`
+    }
+    case 'agent_action_rejected': {
+      const where = String(data.endpoint ?? 'an action')
+      const target = data.recipient ? ` (${data.recipient})` : ''
+      return `${where} refused${data.reason ? `: ${data.reason}` : ''}${target}`
+    }
+    // Deliberately not worded like `run_diverged`: that one is about a task nobody moved, this one
+    // about a document nobody changed, and an operator reading a timeline should not have to tell
+    // two identically-worded rows apart.
+    case 'turn_produced_nothing': {
+      const status = data.run_exit_status ? ` (${data.run_exit_status})` : ''
+      const doc = data.spec_document ? ` ${data.spec_document}` : ' anything'
+      return `${data.agent ?? 'an agent'} ended${status} without changing${doc}`
+    }
+    case 'review_unstaffed':
+      return `no agent could review ${data.task_id ?? 'a task'}${data.reason ? `: ${data.reason}` : ''}`
+    case 'loop_stopped':
+      return `loop ${data.loop_id ?? data.job_id} stopped${data.reason ? `: ${data.reason}` : ''}`
+    case 'loop_queue_exhausted':
+      return `loop ${data.loop_id ?? data.job_id} has no queued work left`
+    // The counts are the whole point: an operator wants to know whether a crash dropped anything,
+    // and `abandoned_entry_ids` is the list nothing will ever pick up again.
+    case 'run_interrupted': {
+      const requeued = Array.isArray(data.returned_entry_ids) ? data.returned_entry_ids.length : 0
+      const dropped = Array.isArray(data.abandoned_entry_ids) ? data.abandoned_entry_ids.length : 0
+      return `${data.agent ?? 'an agent'}'s run was interrupted — ${requeued} message${requeued === 1 ? '' : 's'} requeued, ${dropped} dropped`
+    }
+    case 'queue_chain_suspended':
+      return `${data.agent ?? 'an agent'}: chain suspended at hop ${data.hop_depth} of a ${data.hop_budget}-hop budget`
+    case 'task_worktree_release_failed':
+      return `${data.task_id ?? 'a task'}: worktree not released${data.reason ? ` — ${data.reason}` : ''}`
     case 'agent_heartbeat': return `${data.agent} [${data.status}]${data.message ? ` — ${data.message}` : ''}`
     // Both of these carry the only detail worth reading in a field the default branch does not
     // look at, so without a case they render as their own event name twice over.

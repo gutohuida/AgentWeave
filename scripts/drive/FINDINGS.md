@@ -6406,3 +6406,87 @@ Iteration 10's rule was *check the protocol back, do not remember it*. This is i
 protocol you have checked back tells you what **can** arrive, never what **does**. The generated
 schema is the cheap way to build a candidate list; only driving the product ranks it. The one probe
 that cost two minutes here would have saved eleven speculative findings.
+
+## F105 (B) — the failure family: ten persisted event kinds render as their own bare name
+
+**Status:** fixed (this commit)
+
+The sixth family to need a hand-written case in `summaryForEvent`, and the first found by sweeping
+the emitters instead of by someone happening to see a row. `permission_denied`, the three `queue_*`
+kinds and `context_warning` (F103) were each discovered live, one at a time, over four sessions.
+That method was the defect underneath the defect, so this pass enumerated the Hub's own
+`persist_event` call sites and asked which of them the default branch can render at all.
+
+### How the list was narrowed, because 53 unhandled kinds is not 53 defects
+
+Two cuts, both taken before anything was filed:
+
+1. **Does it reach a timeline?** `summaryForEvent` is called from `EventRow.tsx` and `LogLine.tsx`,
+   both of which read `event_logs`. A kind only ever broadcast over SSE reaches neither. So the
+   candidate set is the `persist_event`/`record_event` call sites — 54 distinct `event_type`
+   literals — not the wider set of things the Hub emits.
+2. **Does the default branch already render it?** It picks the first of
+   `error`/`message`/`summary`/`title` the payload carries. `conversation_binding_conflict` names
+   its detail `error` and renders correctly today; it is deliberately **not** fixed here, and a
+   test asserts it still falls through, so a later sweep does not "fix" it and count that.
+
+What survives both cuts is a persisted kind whose payload names its detail something else — which
+is precisely how each of the five earlier families earned its case. Ten of them, and they are not a
+random ten: they are almost exactly the `severity="warn"`/`"error"` rows.
+
+| Kind | Emitter | Detail it carries | Rendered as |
+|---|---|---|---|
+| `job_run_failed` | `scheduler.py:2487`, `api/v1/jobs.py:84` | `error_summary`, `job_name` | `job_run_failed` |
+| `job_run_skipped` | `scheduler.py:2106/2141/2290` | `reason` | `job_run_skipped` |
+| `agent_action_rejected` | `api/v1/messages.py` ×4 | `endpoint`, `reason`, `recipient` | `agent_action_rejected` |
+| `turn_produced_nothing` | `run_divergence.py:652` | `spec_document`, `run_exit_status` | `turn_produced_nothing` |
+| `review_unstaffed` | `scheduler.py:1679` | `task_id`, `reason` | `review_unstaffed` |
+| `loop_stopped` | `scheduler.py:2160` | `reason` | `loop_stopped` |
+| `loop_queue_exhausted` | `scheduler.py:2181` | `loop_id` | `loop_queue_exhausted` |
+| `run_interrupted` | `run_reconciliation.py:109` | `returned_entry_ids`, `abandoned_entry_ids` | `run_interrupted` |
+| `queue_chain_suspended` | `api/v1/messages.py:295` | `hop_depth`, `hop_budget` | `queue_chain_suspended` |
+| `task_worktree_release_failed` | `task_transition_service.py:494` | `reason` | `task_worktree_release_failed` |
+
+`job_run_failed` is the one that costs most. It is written at `severity="error"`, so it is the red
+row an operator scans for, and it carries `error_summary` — a field whose entire purpose is to say
+why — one name away from being read. The operator saw a red row saying `job_run_failed` and had to
+go to the job's run history to learn anything at all. `run_interrupted` is the same shape for a
+crash: `abandoned_entry_ids` is the list of messages nothing will ever pick up again, and its
+length was not on screen.
+
+`review_unstaffed`'s own docstring says it exists so "an operator watching the app should learn this
+without going to look for it". It rendered as the word `review_unstaffed`.
+
+### The fix
+
+Ten cases, each reading the field its emitter actually sets — verified in the emitter, not inferred:
+
+- `"nightly review" failed for reviewer: runner claude exited 1`
+- `POST /messages refused: unknown_recipient (nobody)`
+- `coder ended (completed) without changing spec/changes/x.md` — deliberately not worded like
+  `run_diverged`, which is about a task nobody moved rather than a document nobody changed
+- `no agent could review task-7: no eligible reviewer`
+- `coder's run was interrupted — 1 message requeued, 2 dropped`
+- `reviewer: chain suspended at hop 6 of a 5-hop budget`
+
+Thirteen tests. Twelve were watched failing first, each returning the bare event name; the
+thirteenth is the `conversation_binding_conflict` control, which passed before and after.
+
+### The design question this raises, for the operator
+
+Six families have now needed the same fix for the same reason, and the sixth was found only because
+someone went looking on purpose. The default branch is a heuristic over payload shapes nobody
+enumerated: a new event kind is invisible by default and visible only if a human notices. The
+alternative is an enumeration — a declared summary per persisted `event_type`, with a test that
+fails when an emitter introduces a kind the map does not know. That is a real cost (every new event
+kind acquires a required second edit) and it is the operator's call, so it is recorded in
+`decisions_for_user` rather than built. What is not in doubt is that finding these by eye has now
+failed six times.
+
+### What was NOT filed
+
+Kinds that survive cut 1 but carry no operator-facing detail at all — `agent_created`,
+`job_created`, `project_adopted`, `queue_entry_queued` (12 sites) and friends — render as their own
+name too, and for those that is nearly the whole content. They are noise, not a defect, and adding
+ten more cases to say `agent_created` in different words would be worse than the default. The cut
+is between *a payload whose detail is unread* and *a payload with no detail*.
