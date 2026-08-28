@@ -26,11 +26,34 @@ from .utils import persist_event
 _agent_locks: Dict[Tuple[str, str], asyncio.Lock] = {}
 
 
+@dataclass(frozen=True)
+class TurnRefusal:
+    """A refusal about what a request asked for, carried out to the caller that asked it.
+
+    Exists so a caller can answer *no* instead of *queued* (F108). Its **presence** is the
+    classification, which is why it is a separate object rather than another boolean beside
+    `terminal_failure`: that flag defaults to `True` and six early returns below take the default
+    without meaning it, so a caller gating on it would report a working request as failed. Nothing
+    but the refusal branch can construct one of these, so no early return can produce a false
+    positive however its defaults are written.
+
+    `entry_ids` is what makes it attributable. `schedule_agent` builds its turn from the oldest
+    eligible entry across the agent's *whole* queue, so a refusal frequently belongs to a
+    conversation the current caller never mentioned; without the ids, answering *no* to whoever
+    happened to arrive would report a refusal about somebody else's input.
+    """
+
+    status_code: int
+    detail: str
+    entry_ids: Tuple[str, ...]
+
+
 @dataclass
 class ScheduleResult:
     response: Optional[object] = None
     waiting_reason: Optional[str] = None
     terminal_failure: bool = True
+    refusal: Optional[TurnRefusal] = None
 
 
 def _lock_for(project_id: str, agent: str) -> asyncio.Lock:
@@ -224,9 +247,24 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
             # "agent is already running" above without an event, because a queue waiting its turn
             # is the system working. The entry keeps `delivery_attempts` at whatever it was, stays
             # `queued`, and the next tick tries again.
+            # Carried out only when the refusal is about what was asked (design D10). A
+            # non-transient refusal about the *environment* — no runner bound, the CLI missing
+            # from PATH — is why the queue exists: the entry waits, the operator performs the
+            # repair, and binding a runner delivers it (F96). Answering those as failures would
+            # discard input the Hub promised to keep.
+            refusal = (
+                TurnRefusal(
+                    status_code=exc.status_code,
+                    detail=exc.detail,
+                    entry_ids=tuple(entry.id for entry in selected),
+                )
+                if getattr(exc, "request_level", False) and not transient
+                else None
+            )
             return ScheduleResult(
                 waiting_reason=exc.detail,
                 terminal_failure=not transient,
+                refusal=refusal,
             )
         return ScheduleResult(response=response, terminal_failure=False)
 

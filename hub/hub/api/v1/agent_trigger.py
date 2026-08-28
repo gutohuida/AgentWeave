@@ -68,6 +68,7 @@ from ...inbound_queue import (
     deliver_entries_with_run,
     new_entry,
     return_run_entries,
+    withdraw_refused_entry,
 )
 from ...launchability import (
     access_path_notice,
@@ -252,6 +253,7 @@ class TriggerAgentError(Exception):
         workspace_unavailable: bool = False,
         directory_state: Optional[str] = None,
         transient: bool = False,
+        request_level: bool = False,
     ) -> None:
         self.status_code = status_code
         self.detail = detail
@@ -271,6 +273,29 @@ class TriggerAgentError(Exception):
         #: was the first of them and keeps its own name because it *also* selects an operator
         #: event; it implies this flag rather than duplicating it.
         self.transient = transient or workspace_unavailable
+        #: Is this refusal about **what was asked**, rather than about the environment the agent
+        #: would have run in?
+        #:
+        #: A second, independent question from `transient`, and deliberately not its negation.
+        #: `transient` asks whether the condition clears on its own, which decides whether a
+        #: delivery attempt is counted. This one asks whether waiting could ever help, which
+        #: decides whether the caller who submitted the input is told *no* instead of *queued*.
+        #:
+        #: The non-transient population splits, and the split is the whole point (design D10 of
+        #: `2026-08-28-a-refused-request-says-so`). *No runner is bound*, *the runner's CLI is not
+        #: on PATH*, *the worktree could not be prepared* are all about the environment: the
+        #: product queues that input on purpose so that performing the repair delivers it, which
+        #: is what F96 exists to guarantee. Refusing those would delete input the Hub has promised
+        #: to keep. *This task is already under review*, *the reviewer is its own author*,
+        #: *there is no such agent* are about the request: no repair to the environment makes the
+        #: answer different, so the operator should be told now rather than acknowledged and left
+        #: waiting for something that will never happen (F108).
+        #:
+        #: Defaults to `False`, so an unmarked raise site keeps behaving exactly as it did. The
+        #: behaviour change is the set of sites that opt in, and nothing else — a raise site added
+        #: later stays queued-and-stated until somebody decides otherwise, which is the safe
+        #: direction for a flag whose other value discards the operator's input.
+        self.request_level = request_level
         super().__init__(detail)
 
 
@@ -338,6 +363,7 @@ async def _review_task_from_entries(
             status.HTTP_409_CONFLICT,
             "this turn batches requests to review more than one task "
             f"({', '.join(sorted(named))}); a review turn has one workspace and one subject",
+            request_level=True,
         )
     review_task_id = named.pop()
     # A "work entry" here means one asserting `task_id` with no `review_task_id` beside it — the
@@ -352,6 +378,7 @@ async def _review_task_from_entries(
             status.HTTP_409_CONFLICT,
             f"this turn batches a request to review {review_task_id} together with work on "
             f"{', '.join(work_task_ids)}; a turn admits entries of one kind only",
+            request_level=True,
         )
     return review_task_id
 
@@ -429,7 +456,7 @@ async def trigger_agent_directly(
     try:
         worktrees.validate_agent_name(agent)
     except ValueError as exc:
-        raise TriggerAgentError(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        raise TriggerAgentError(status.HTTP_400_BAD_REQUEST, str(exc), request_level=True) from exc
 
     conversation = await get_open_conversation(
         session,
@@ -454,6 +481,7 @@ async def trigger_agent_directly(
             f"{agent} is not an agent in this project, so there is nothing to trigger. "
             f"Create it in the Hub UI, or correct the name — if a scheduled job names it, that "
             f"job will keep failing until the name is fixed.",
+            request_level=True,
         )
     if agent_row.runner_id is None:
         config = await get_agent_config(project_id, agent, session)
@@ -474,6 +502,7 @@ async def trigger_agent_directly(
         raise TriggerAgentError(
             status.HTTP_409_CONFLICT,
             f"{agent} is archived and cannot be triggered. Unarchive it first.",
+            request_level=True,
         )
     runner_row = await session.get(Runner, agent_row.runner_id)
     if runner_row is None:
@@ -501,6 +530,7 @@ async def trigger_agent_directly(
             f"Direct spawn for runner {runner!r} is not implemented yet "
             f"(supported: {', '.join(SUPPORTED_RUNNERS)}). "
             "This runner has no Hub-owned execution adapter.",
+            request_level=True,
         )
 
     if not probe["runnable"]:
@@ -592,6 +622,7 @@ async def trigger_agent_directly(
                 status.HTTP_400_BAD_REQUEST,
                 "work_dir cannot be combined with a review turn: a review turn's workspace is the "
                 "checkout of the commit under review.",
+                request_level=True,
             )
         # **Staffing the review, and every refusal it can raise, before the checkout exists.**
         #
@@ -610,7 +641,7 @@ async def trigger_agent_directly(
         try:
             review_task = await resolve_task_for_project(session, review_task_id, project_id)
         except TaskBindingError as exc:
-            raise TriggerAgentError(status.HTTP_409_CONFLICT, str(exc)) from exc
+            raise TriggerAgentError(status.HTTP_409_CONFLICT, str(exc), request_level=True) from exc
 
         # Design D8, and the reason this guard is here rather than inside `enter_selected_task`:
         # that function writes the assignee *before* its status branch, and the branch has no
@@ -628,6 +659,7 @@ async def trigger_agent_directly(
                 f"Task {review_task.id} is {review_task.status!r}, which is not a status a review "
                 f"starts from. A review begins from work that is awaiting one. Staffing a reviewer "
                 f"onto this task would take it from whoever holds it and move it nowhere.",
+                request_level=True,
             )
         # Design D9. The `under_review` branch below is idempotent in its *status* but not in its
         # assignee, which is written unconditionally -- so dispatching a review for a task already
@@ -645,6 +677,7 @@ async def trigger_agent_directly(
                 f"Task {review_task.id} is already under review by {review_task.assignee!r}. "
                 f"Reassign the task if {agent!r} should take it over, or let the review in flight "
                 f"finish.",
+                request_level=True,
             )
         try:
             await enter_selected_task(session, review_task, agent=agent, is_review=True)
@@ -654,7 +687,9 @@ async def trigger_agent_directly(
             # attempting the transition directly. This is the case where the named reviewer is the
             # task's own author -- `enter_selected_task` writes the assignee first, so what
             # `_guard_reviewer_is_not_the_author` compares against is the reviewer being dispatched.
-            raise TriggerAgentError(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+            raise TriggerAgentError(
+                status.HTTP_403_FORBIDDEN, str(exc), request_level=True
+            ) from exc
 
         try:
             review_context = await review_turn.prepare_review_turn(
@@ -667,12 +702,13 @@ async def trigger_agent_directly(
         except review_turn.ReviewTurnRefused as exc:
             # Task 3.4. The reason comes from the resolver unchanged, so the operator reads why
             # there is nothing to review rather than that something failed.
-            raise TriggerAgentError(status.HTTP_409_CONFLICT, str(exc)) from exc
+            raise TriggerAgentError(status.HTTP_409_CONFLICT, str(exc), request_level=True) from exc
 
     if work_dir and worktrees.is_writing_agent(config) and project_is_repo:
         raise TriggerAgentError(
             status.HTTP_400_BAD_REQUEST,
             "work_dir cannot override workspace isolation for a writing agent",
+            request_level=True,
         )
     if work_dir:
         # Task 3.3: work_dir is resolved as a project-relative path, never an absolute
@@ -682,7 +718,9 @@ async def trigger_agent_directly(
             effective_work_dir = str(workspace_root.resolve_relative(work_dir))
         except project_workspace.ProjectPathError as exc:
             raise TriggerAgentError(
-                status.HTTP_400_BAD_REQUEST, f"Invalid work_dir: {exc}"
+                status.HTTP_400_BAD_REQUEST,
+                f"Invalid work_dir: {exc}",
+                request_level=True,
             ) from exc
         isolated_workspace: Optional[Path] = None
         # Not isolated, so the renderer never reads it; named on every branch so mypy sees one
@@ -871,7 +909,9 @@ async def trigger_agent_directly(
             control_overrides=control_overrides,
         )
     except UnsupportedRunnerError as exc:
-        raise TriggerAgentError(status.HTTP_501_NOT_IMPLEMENTED, str(exc)) from exc
+        raise TriggerAgentError(
+            status.HTTP_501_NOT_IMPLEMENTED, str(exc), request_level=True
+        ) from exc
 
     run_id = f"run-{short_id()}"
     run_token = mint_run_token()
@@ -1283,12 +1323,53 @@ async def trigger_agent(
         response = scheduled.response
         response.queue_entry_id = entry.id
         return response
+    refusal = scheduled.refusal
+    if refusal is not None and entry.id in refusal.entry_ids:
+        # F108: this request asked for something the Hub will never do, and until now it was told
+        # `200 {"success": true, "status": "queued"}` with the refusal's own sentence delivered in
+        # a field named for waiting. The refusal carries its own status because the Hub has already
+        # distinguished these correctly — 403 for reviewing your own work, 409 for a target in the
+        # wrong state — and flattening them here would discard that.
+        #
+        # Only when the refusal names *this* entry. `schedule_agent` builds its turn from the
+        # oldest eligible entry across the whole queue, so the refusal frequently belongs to
+        # another conversation; answering it to whoever happened to arrive would report a refusal
+        # about input this caller never submitted and cannot act on.
+        if await withdraw_refused_entry(session, project_id, entry.id, refusal.detail):
+            # The queue has to agree with the answer, and the operator has to be told it does.
+            # `queue_entry_queued` was already broadcast a few lines above, so a silent withdrawal
+            # leaves them holding an error *and* a queue card still counting the input — the same
+            # disagreement this whole change removes, moved one surface over (design D12).
+            #
+            # `queue_entry_withdrawn`, not `queue_entry_abandoned`: that one means the Hub gave up
+            # after trying, carries an attempt count and a run id, and gets its own operator-facing
+            # treatment. Nothing was ever tried here and nobody gave up — the request was answered.
+            withdrawn_payload = {"entry_id": entry.id, "agent": body.agent}
+            await persist_event(
+                session,
+                project_id,
+                "queue_entry_withdrawn",
+                withdrawn_payload,
+                agent=body.agent,
+            )
+            await sse_manager.broadcast(project_id, "queue_entry_withdrawn", withdrawn_payload)
+        raise HTTPException(status_code=refusal.status_code, detail=refusal.detail)
     waiting_reason = scheduled.waiting_reason
     if scheduled.response is not None:
         waiting_reason = (
             "an older conversation's queued input is being delivered first "
             f"(run {scheduled.response.run_id})"
         )
+    elif refusal is not None:
+        # A refusal that names other entries describes a conversation this caller did not ask
+        # about, cannot act on, and may not be entitled to read. Say what is true of *this* input
+        # instead — the same treatment the success path above already gives the same mismatch.
+        #
+        # Only reachable for a request-level refusal, and that is why this branch is safe. An
+        # environment-level one produces no `refusal` at all and keeps stating its own sentence
+        # here, which is right: "no runner is bound to this agent" is true of the agent, not of
+        # one conversation, so every caller waiting on that agent needs to read it.
+        waiting_reason = "queued behind other input for this agent"
     return TriggerAgentResponse(
         success=True,
         message=f"Input queued for {body.agent}.",
