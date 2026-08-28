@@ -107,6 +107,100 @@ describe('AgentTimeline', () => {
     expect(screen.getByText('not delivered yet')).toBeInTheDocument()
   })
 
+  it('keeps a message the Hub gave up on in the thread, with the reason it was dropped', () => {
+    // F87. This entry used to be filtered out of the timeline entirely, so a dropped message and
+    // a delivered one left the conversation looking identical.
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'ab1',
+            kind: 'operator_input',
+            content: 'the message nobody ever received',
+            delivery_state: 'abandoned',
+            abandoned_reason: 'delivery failed 3 times; the Hub stopped retrying',
+            run_id: undefined,
+          }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText('not delivered')).toBeInTheDocument()
+    expect(screen.getByText('delivery failed 3 times; the Hub stopped retrying')).toBeInTheDocument()
+    expect(screen.getByText('the message nobody ever received')).toBeInTheDocument()
+    expect(screen.queryByText('queued')).not.toBeInTheDocument()
+  })
+
+  it('offers no withdraw or continue on a message the Hub gave up on', () => {
+    // Both endpoints refuse a row that is no longer `queued`, so either control would be an offer
+    // to be told no.
+    const onWithdraw = vi.fn()
+    const onRelease = vi.fn()
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'ab2',
+            kind: 'inbound_peer',
+            participant: 'codex',
+            content: 'dropped peer message',
+            delivery_state: 'abandoned',
+            abandoned_reason: 'delivery failed 3 times; the Hub stopped retrying',
+            hop_budget_exceeded: null,
+            run_id: undefined,
+          }),
+        ]}
+        roster={[agent, peer]}
+        timelineEvents={[]}
+        isRunning={false}
+        onWithdraw={onWithdraw}
+        onRelease={onRelease}
+      />,
+    )
+    expect(screen.getByText('not delivered')).toBeInTheDocument()
+    // Asserted by the controls' own titles, not by their glyphs: the withdraw control is a bare
+    // `close` icon, so a test that looked for text would have passed with the button present.
+    expect(screen.queryByTitle(/withdraw/i)).not.toBeInTheDocument()
+    expect(screen.queryByTitle(/never delivered/i)).not.toBeInTheDocument()
+    expect(screen.queryByText('Continue')).not.toBeInTheDocument()
+    expect(screen.queryByText('Discard')).not.toBeInTheDocument()
+  })
+
+  it('offers no continue on an abandoned entry even when it is over the hop budget', () => {
+    // The backend reports `hop_budget_exceeded: null` for an abandoned entry precisely so this
+    // cannot happen — asserted here anyway, because the component must not depend on it. Without
+    // it, an entry that was over budget when the Hub gave up would still draw Continue, and
+    // `release_entry` refuses any row that is no longer `queued`.
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'ab3',
+            kind: 'inbound_peer',
+            participant: 'codex',
+            content: 'dropped while over budget',
+            delivery_state: 'abandoned',
+            abandoned_reason: 'delivery failed 3 times; the Hub stopped retrying',
+            hop_budget_exceeded: true,
+            run_id: undefined,
+          }),
+        ]}
+        roster={[agent, peer]}
+        timelineEvents={[]}
+        isRunning={false}
+        onWithdraw={vi.fn()}
+        onRelease={vi.fn()}
+      />,
+    )
+    expect(screen.queryByText('Continue')).not.toBeInTheDocument()
+    expect(screen.queryByText('Discard')).not.toBeInTheDocument()
+  })
+
   it('explains a hop-budget-suspended chain and offers to continue it', () => {
     const onDeliverNow = vi.fn()
     render(

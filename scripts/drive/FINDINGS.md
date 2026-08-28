@@ -5060,3 +5060,101 @@ sitting at the top of the builder's history. Two firings, both `completed` in ab
 their conversations carrying `runtime_overrides: null` instead of `manual`, and **no new permission
 card created at all**.
 
+---
+
+## F87 (A) — a message the Hub gives up on disappears, and the record of it says nothing
+
+**Status:** fixed — see the commit that adds `delivery_state: "abandoned"` to `TimelineEntry`
+
+**Severity: A.** Input the operator typed is discarded and no surface names it. The queue card
+returns to `0 waiting`, the message vanishes from the conversation it was addressed to, and the
+one durable record renders as the bare string `queue_entry_abandoned`. A dropped message and a
+delivered one leave the product looking identical.
+
+**How it was found.** Driving row 6 of the matrix, the inbound queue. The trial project had one
+entry left `queued` at one delivery attempt from an earlier iteration. Two settings saves later
+(a `PATCH /queue/settings` calls `schedule_agent` for every queued agent) it reached
+`DELIVERY_ATTEMPT_LIMIT` and the Hub gave up, correctly and by design:
+
+```
+entry-241e4cf5e6d8  state: withdrawn  delivery_attempts: 3
+abandoned_reason: "delivery failed 3 times (task task-1b7af6b595e6 has no recorded evidence, so
+                   there is no commit to review...); the Hub stopped retrying"
+event: queue_entry_abandoned  severity: warn
+```
+
+The abandonment machinery is right. What follows it is not. Immediately afterwards:
+
+```
+GET /queue/author/status  ->  {"waiting_count": 0, "waiting_reason": null, "delivery_attempts": 0}
+```
+
+Which is exactly what a *successful* delivery leaves behind.
+
+**Three surfaces, and all three were silent.**
+
+1. **The conversation.** `_queued_entries_for` selected `state == "queued"`, and an abandoned
+   entry is `withdrawn`. So the message the operator was watching wait simply left the thread. It
+   is the place they will look, and it was the one place guaranteed not to have it.
+
+2. **The queue card.** `useSSE`'s handler for `queue_entry_abandoned` invalidates
+   `['project', pid, 'queue', agent]`, and its comment states the intent exactly — *"The Hub
+   stopped trying to deliver something. The queue card is where that shows."* The card cannot show
+   it. `useQueuedEntries` fetches `?state=queued`, so the refetch the event triggers is the
+   refetch that removes the row; and `useQueueStatus` returns `0 waiting`, which hides the
+   indicator entirely (`AgentTimeline` renders it only `when waiting_count > 0`). The invalidation
+   works perfectly and produces a *cleaner* screen.
+
+3. **The activity log.** The only durable record, and `summaryForEvent` had no case for it. Its
+   default branch reads `data.error ?? data.message ?? data.summary ?? data.title`; the payload's
+   field is `reason`. So the summary equalled the type, `EventRow` suppresses a summary that
+   equals the type, and the row read `queue_entry_abandoned` with a warn chip and nothing else —
+   no reason, no agent, no content, no conversation. `queue_agent_paused` (`reason`) and
+   `queue_entry_released` (`released_from_depth`) are in the same state for the same reason. This
+   is the failure that file's own comment describes two cases above, about `permission_denied`:
+   *"these carry the only detail worth reading in a field the default branch does not look at, so
+   without a case they render as their own event name twice over."*
+
+**One defect or a design gap?** One defect, arrived at from three directions — and the third time
+this corpus has found *a comment asserting an invariant that a second site does not keep*
+(cf. F82, F84). Every part of giving up on an entry is implemented and correct; nothing that
+reports it was.
+
+**The fix.** The thread keeps it. `_queued_entries_for` now also selects entries the Hub abandoned,
+`TimelineEntry` gains a third `delivery_state` — `abandoned` — and an `abandoned_reason`, and the
+timeline renders it in place, at the timestamp it arrived, tagged `not delivered` in red with the
+reason beside it and no controls (both the withdraw and the release endpoints refuse a row that is
+no longer `queued`, so either would be an offer to be told no). `summaryForEvent` gains the three
+queue cases.
+
+Keyed on `abandoned_reason` rather than on `state == "withdrawn"`, because an operator withdrawal
+reaches the same state: putting one of *those* back would re-show a message they chose to take
+away. Tested both ways.
+
+**Live proof**, against a Hub restarted on the fixed code — the same entry, in the same
+conversation, at its original position in the thread:
+
+```
+GET /agent/author/chat/conv-d3d63affa16c
+{"id": "entry-241e4cf5e6d8", "kind": "operator_input", "delivery_state": "abandoned",
+ "hop_budget_exceeded": null, "timestamp": "2026-08-27T23:14:00Z",
+ "abandoned_reason": "delivery failed 3 times (...); the Hub stopped retrying"}
+```
+
+and the operator's own withdrawal from earlier the same iteration (`entry-9cf685b52ae8`, withdrawn
+while queued) is still correctly absent from `conv-b9fc97d600f1`.
+
+**Verification.** 3 Hub tests + 3 UI tests + 3 event-summary tests, each watched to fail first.
+Four mutations, each failing a named test: dropping the `abandoned_reason` condition brings the
+operator's withdrawal back; dropping `or abandoned` from `hop_budget_exceeded` re-offers Continue;
+collapsing `delivery_state` to two values loses the state; and dropping `!abandoned` from `actions`
+re-draws the controls. That last one initially passed under mutation — the test asserted the
+absence of the *glyph* and the withdraw control is a bare `close` icon — which is F81's lesson
+again: a guard no test can see is a guard the next reader deletes. The assertion now keys on the
+button's `title`.
+
+**What this does not fix, and is not claiming to.** The queue card's own two hooks still ask only
+about `queued`, so `0 waiting` remains what the card says after an abandonment. The conversation
+and the activity log now both carry the fact, which is where an operator looks for a *message*;
+making the card carry a count of dropped input is a separate question about what that number
+means.

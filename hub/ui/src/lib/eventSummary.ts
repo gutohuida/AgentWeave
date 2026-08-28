@@ -17,6 +17,14 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
       return `${source}${String(data.question ?? 'waiting for an operator answer').slice(0, 80)}`
     }
     case 'question_answered': return `question ${data.id} answered`
+    // The queue family. All three carry their only readable detail in a field the default branch
+    // does not look at (`reason`, `released_from_depth`), so without a case each rendered as its
+    // own event name and nothing else — the same failure `permission_denied` above is a case for.
+    // `queue_entry_abandoned` is the one that costs something: it is the durable record that an
+    // operator's or an agent's input was dropped, and it was the only record.
+    case 'queue_entry_abandoned': return `${data.agent ?? 'an agent'} never received a message — ${String(data.reason ?? `delivery failed ${data.attempts ?? 'several'} times`)}`
+    case 'queue_agent_paused': return `${data.agent ?? 'an agent'} is paused: ${String(data.reason ?? 'the workspace is unavailable')}`
+    case 'queue_entry_released': return `${data.agent ?? 'an agent'}'s held message was continued from hop ${data.released_from_depth}`
     case 'agent_heartbeat': return `${data.agent} [${data.status}]${data.message ? ` — ${data.message}` : ''}`
     // Both of these carry the only detail worth reading in a field the default branch does not
     // look at, so without a case they render as their own event name twice over.

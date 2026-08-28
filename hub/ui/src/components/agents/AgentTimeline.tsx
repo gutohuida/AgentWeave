@@ -780,20 +780,42 @@ function MessageEntry({
       {time}
     </time>
   )
+  // The Hub stopped trying to deliver this one. It arrives in the same `pending` group a waiting
+  // entry does — `delivery_state !== 'delivered'` is what puts it there — but it is the opposite
+  // fact: nothing is going to happen to it. Before this it was filtered out of the thread
+  // entirely, so a dropped message and a delivered one looked the same here (F87).
+  const abandoned = entry.delivery_state === 'abandoned'
   const wrapperStyle: React.CSSProperties = { opacity: queued ? 0.55 : 1 }
   const queuedTag = queued && (
-    <span
-      className="inline-flex items-center h-[18px] px-[.4rem] rounded text-[10.5px] font-semibold uppercase tracking-wide"
-      style={{ background: 'var(--accent)', color: 'var(--text-3)' }}
-    >
-      queued
+    <span className="inline-flex items-center gap-[.35rem]">
+      <span
+        className="inline-flex items-center h-[18px] px-[.4rem] rounded text-[10.5px] font-semibold uppercase tracking-wide"
+        style={
+          abandoned
+            ? { background: 'color-mix(in oklab, var(--red) 16%, transparent)', color: 'var(--red)' }
+            : { background: 'var(--accent)', color: 'var(--text-3)' }
+        }
+      >
+        {abandoned ? 'not delivered' : 'queued'}
+      </span>
+      {/* The reason, in the header row every shape below renders, rather than under the content
+          each of them renders differently. Without it the chip states that something was lost and
+          not what to do about it — and the reason names the remedy ("no commit to review", "the
+          workspace is unavailable") in every case the Hub gives up for. */}
+      {abandoned && entry.abandoned_reason && (
+        <span className="font-normal text-[11px]" style={{ color: 'var(--text-3)' }}>
+          {entry.abandoned_reason}
+        </span>
+      )}
     </span>
   )
   // Continue only where the hop budget is what is holding the entry. Elsewhere the entry is
   // waiting for something a re-base would not fix — an agent already running, a missing CLI —
   // and the endpoint refuses, so offering the button there would be an offer to be told no.
   const held = queued && entry.hop_budget_exceeded === true
-  const actions = queued && (onWithdraw || onRelease) && (
+  // Nothing to withdraw and nothing to continue: both endpoints refuse a row that is no longer
+  // `queued`, so every control here would be an offer to be told no.
+  const actions = queued && !abandoned && (onWithdraw || onRelease) && (
     <span className="inline-flex items-center gap-[.35rem]">
       {held && onRelease && (
         <button

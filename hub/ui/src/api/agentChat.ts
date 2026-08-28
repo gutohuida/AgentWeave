@@ -23,7 +23,9 @@ export interface TimelineEntry {
   kind: TimelineEntryKind
   content: string
   timestamp: string
-  delivery_state: 'delivered' | 'queued'
+  /** `abandoned` means the Hub stopped trying to deliver it — the input is gone, and this is
+   *  the only thing that says so. See `agent_chat.py`'s `TimelineEntry`. */
+  delivery_state: 'delivered' | 'queued' | 'abandoned'
   /** The *other* agent's name — set for inbound_peer/outbound_peer only. */
   participant?: string | null
   /** outbound_peer only. Nullable — required by `send_message` going forward, but the column
@@ -37,6 +39,8 @@ export interface TimelineEntry {
   /** operator_input/inbound_peer only. */
   hop_depth?: number | null
   hop_budget_exceeded?: boolean | null
+  /** Why the Hub gave up. Set only with `delivery_state === 'abandoned'`. */
+  abandoned_reason?: string | null
 }
 
 export interface ChatHistoryResponse {

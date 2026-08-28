@@ -115,6 +115,17 @@ async def _add_queue_entry(
         await session.commit()
 
 
+async def _entry(session, entry_id: str) -> InboundQueueEntry:
+    """`InboundQueueEntry`'s primary key is `sequence`, not `id` — `session.get` by id is a
+    silent `None`."""
+    from sqlalchemy import select
+
+    result = await session.execute(
+        select(InboundQueueEntry).where(InboundQueueEntry.id == entry_id)
+    )
+    return result.scalar_one()
+
+
 async def _add_output(
     project_id: str,
     *,
@@ -189,7 +200,11 @@ async def _add_outbound_message(
 
 
 def _by_id(entries: list[dict], entry_id: str) -> dict:
-    return next(e for e in entries if e["id"] == entry_id)
+    # `next(...)` with no default raises `StopIteration`, which inside an async test surfaces as
+    # "coroutine raised StopIteration" and names neither the id nor the entries that were there.
+    match = next((e for e in entries if e["id"] == entry_id), None)
+    assert match is not None, f"{entry_id} absent; got {[e['id'] for e in entries]}"
+    return match
 
 
 # ---------------------------------------------------------------------------
@@ -551,3 +566,106 @@ async def test_entries_sorted_by_timestamp_with_queue_appended_last(app, auth_he
     # Queued entries are appended after every delivered one.
     assert entries[-1]["id"] == "entry-t10-pending"
     assert entries[-1]["delivery_state"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_an_entry_the_hub_gave_up_on_stays_in_its_conversation(app, auth_headers):
+    """F87. An abandoned entry used to vanish from the thread it was addressed to.
+
+    `return_run_entries` and `schedule_agent` both give up on an entry after
+    `DELIVERY_ATTEMPT_LIMIT` failures by marking it `withdrawn` with an `abandoned_reason`. The
+    timeline selected `state == "queued"` only, so the operator's message disappeared from the
+    conversation and `waiting_count` returned to zero — the same picture a successful delivery
+    leaves. The input is gone either way; only one of the two says so.
+    """
+    project_id = await _project_id(app, auth_headers)
+    agent = "agent_t20"
+    await _add_queue_entry(
+        project_id,
+        entry_id="entry-t20-abandoned",
+        agent=agent,
+        origin_type="operator",
+        content="the message nobody ever received",
+        conversation_id="sess-t20",
+    )
+    async with async_session_factory() as session:
+        entry = await _entry(session, "entry-t20-abandoned")
+        entry.state = "withdrawn"
+        entry.withdrawn_at = datetime.now(timezone.utc)
+        entry.delivery_attempts = 3
+        entry.abandoned_reason = "delivery failed 3 times; the Hub stopped retrying"
+        await session.commit()
+
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-t20", headers=auth_headers
+    )
+    entry = _by_id(resp.json()["entries"], "entry-t20-abandoned")
+    assert entry["delivery_state"] == "abandoned"
+    assert entry["abandoned_reason"] == "delivery failed 3 times; the Hub stopped retrying"
+    assert entry["content"] == "the message nobody ever received"
+
+
+@pytest.mark.asyncio
+async def test_an_abandoned_entry_offers_no_continue(app, auth_headers):
+    """`hop_budget_exceeded` decides whether the timeline offers Continue, and a re-base cannot
+    deliver an entry the Hub has already stopped retrying — the release endpoint refuses a
+    `withdrawn` row outright. Reported `None` so the control is never drawn, exactly as it is for
+    a delivered entry.
+    """
+    project_id = await _project_id(app, auth_headers)
+    agent = "agent_t21"
+    async with async_session_factory() as session:
+        project = await session.get(Project, project_id)
+        hop_budget = project.hop_budget
+    await _add_queue_entry(
+        project_id,
+        entry_id="entry-t21-abandoned",
+        agent=agent,
+        origin_type="agent",
+        origin_agent="chain_source",
+        content="over budget and abandoned",
+        hop_depth=hop_budget + 1,
+        conversation_id="sess-t21",
+    )
+    async with async_session_factory() as session:
+        entry = await _entry(session, "entry-t21-abandoned")
+        entry.state = "withdrawn"
+        entry.withdrawn_at = datetime.now(timezone.utc)
+        entry.abandoned_reason = "delivery failed 3 times; the Hub stopped retrying"
+        await session.commit()
+
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-t21", headers=auth_headers
+    )
+    entry = _by_id(resp.json()["entries"], "entry-t21-abandoned")
+    assert entry["delivery_state"] == "abandoned"
+    assert entry["hop_budget_exceeded"] is None
+
+
+@pytest.mark.asyncio
+async def test_an_entry_the_operator_withdrew_does_not_come_back(app, auth_headers):
+    """The other half of the same widening, and the reason it keys on `abandoned_reason` rather
+    than on `state == "withdrawn"`. An operator withdrawal produces the same state; putting it
+    back in the thread would re-show a message they chose to take away.
+    """
+    project_id = await _project_id(app, auth_headers)
+    agent = "agent_t22"
+    await _add_queue_entry(
+        project_id,
+        entry_id="entry-t22-withdrawn",
+        agent=agent,
+        origin_type="operator",
+        content="the operator changed their mind",
+        conversation_id="sess-t22",
+    )
+    async with async_session_factory() as session:
+        entry = await _entry(session, "entry-t22-withdrawn")
+        entry.state = "withdrawn"
+        entry.withdrawn_at = datetime.now(timezone.utc)
+        await session.commit()
+
+    resp = await app.get(
+        f"/api/v1/projects/proj-test/agent/{agent}/chat/sess-t22", headers=auth_headers
+    )
+    ids = [entry["id"] for entry in resp.json()["entries"]]
+    assert "entry-t22-withdrawn" not in ids

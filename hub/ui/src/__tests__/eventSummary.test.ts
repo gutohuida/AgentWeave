@@ -56,4 +56,38 @@ describe('summaryForEvent', () => {
       '3 open divergences on task-1 resolved'
     )
   })
+  // F87. Every one of these carries its only readable detail in a field the default branch does
+  // not look at, so before this they rendered as their own event name and nothing else — and
+  // `queue_entry_abandoned` is the *only* durable record that an input was dropped.
+  it('says what was lost when the Hub gives up on a queued message', () => {
+    expect(
+      summaryForEvent('queue_entry_abandoned', {
+        entry_id: 'entry-1',
+        agent: 'builder',
+        run_id: null,
+        attempts: 3,
+        reason: 'delivery failed 3 times; the Hub stopped retrying',
+      })
+    ).toBe('builder never received a message — delivery failed 3 times; the Hub stopped retrying')
+  })
+
+  it('names the agent and the cause when a queue is paused', () => {
+    expect(
+      summaryForEvent('queue_agent_paused', {
+        agent: 'author',
+        reason: 'project workspace is unavailable: directory is missing',
+        directory_state: 'missing',
+      })
+    ).toBe('author is paused: project workspace is unavailable: directory is missing')
+  })
+
+  it('records the depth a held chain was continued from', () => {
+    expect(
+      summaryForEvent('queue_entry_released', {
+        entry_id: 'entry-2',
+        agent: 'reviewer',
+        released_from_depth: 7,
+      })
+    ).toBe("reviewer's held message was continued from hop 7")
+  })
 })

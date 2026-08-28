@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
@@ -62,7 +62,11 @@ class TimelineEntry(BaseModel):
     kind: TimelineEntryKind
     content: str
     timestamp: datetime
-    delivery_state: Literal["delivered", "queued"] = "delivered"
+    #: `abandoned` is the third state because the input is gone and only this says so: the Hub
+    #: gave up delivering it (`inbound_queue.DELIVERY_ATTEMPT_LIMIT`) and marked the row
+    #: `withdrawn`, which a queued-only timeline dropped from the thread entirely — leaving a
+    #: dropped message and a delivered one looking identical to the operator (F87).
+    delivery_state: Literal["delivered", "queued", "abandoned"] = "delivered"
     # The *other* agent's name — set for inbound_peer/outbound_peer only.
     participant: Optional[str] = None
     # outbound_peer only. Nullable — `subject` is required by `send_message` going forward, but
@@ -78,6 +82,10 @@ class TimelineEntry(BaseModel):
     # operator_input/inbound_peer only.
     hop_depth: Optional[int] = None
     hop_budget_exceeded: Optional[bool] = None
+    #: Why the Hub stopped trying, verbatim from the row. Set only with
+    #: `delivery_state == "abandoned"` — an operator withdrawal reaches the same `withdrawn`
+    #: state and carries no reason, which is what distinguishes the two.
+    abandoned_reason: Optional[str] = None
 
 
 ConversationAttention = Literal["running", "waiting", "idle"]
@@ -174,19 +182,30 @@ def _queue_entry_to_timeline(
     kind: TimelineEntryKind = (
         "operator_input" if entry.origin_type in ("operator", "job") else "inbound_peer"
     )
+    # Read from the row rather than taken as a second argument: `delivered` says which query
+    # produced this entry, and abandonment is a property of the entry itself. Two callers pass
+    # `delivered=False` and only rows carrying a reason are abandoned, so there is nothing for a
+    # caller to get wrong.
+    abandoned = not delivered and entry.abandoned_reason is not None
     return TimelineEntry(
         id=entry.id,
         kind=kind,
         content=entry.content,
+        # `arrived_at`, not `withdrawn_at`, for an abandoned entry: it keeps the place in the
+        # thread where the operator last saw it waiting, which is where they will look for it.
         timestamp=entry.delivered_at if delivered and entry.delivered_at else entry.arrived_at,
-        delivery_state="delivered" if delivered else "queued",
+        delivery_state=("delivered" if delivered else "abandoned" if abandoned else "queued"),
         participant=entry.origin_agent,
         run_id=entry.delivered_in_run_id,
         sequence=entry.sequence,
         hop_depth=entry.hop_depth,
+        # `None` when abandoned, for the same reason it is `None` when delivered: this flag is
+        # what draws the Continue control, and `release_entry` refuses a row that is no longer
+        # `queued`. Offering it would be an offer to be told no.
         hop_budget_exceeded=(
-            None if delivered or hop_budget is None else entry.hop_depth > hop_budget
+            None if delivered or abandoned or hop_budget is None else entry.hop_depth > hop_budget
         ),
+        abandoned_reason=entry.abandoned_reason if abandoned else None,
     )
 
 
@@ -226,12 +245,28 @@ async def _queued_entries_for(
     hop_budget: Optional[int],
     conversation_id: Optional[str] = None,
 ) -> List[TimelineEntry]:
-    """Every entry still waiting for delivery, regardless of session — it belongs to
-    whichever turn drains it next, so it cannot be scoped to a past session."""
+    """Every entry still waiting for delivery, plus every entry the Hub gave up on.
+
+    The waiting ones belong to whichever turn drains them next, so they cannot be scoped to a
+    past session. The abandoned ones belong to nothing — that is the point of showing them
+    (F87): `state == "queued"` alone removed a message the Hub dropped from the only place the
+    operator would look for it, and `waiting_count` returned to zero at the same moment, so a
+    dropped input and a delivered one left the conversation looking identical.
+
+    Keyed on `abandoned_reason` rather than on `state == "withdrawn"`, because an operator
+    withdrawal reaches that same state. Putting one of those back would re-show a message they
+    chose to take away.
+    """
     predicates = [
         InboundQueueEntry.project_id == project_id,
         InboundQueueEntry.agent == agent,
-        InboundQueueEntry.state == "queued",
+        or_(
+            InboundQueueEntry.state == "queued",
+            and_(
+                InboundQueueEntry.state == "withdrawn",
+                InboundQueueEntry.abandoned_reason.is_not(None),
+            ),
+        ),
     ]
     if conversation_id is not None:
         predicates.append(InboundQueueEntry.conversation_id == conversation_id)
