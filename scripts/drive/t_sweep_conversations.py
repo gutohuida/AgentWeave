@@ -104,6 +104,6 @@ REMEDY = ("try", "use ", "first", "instead", "bind", "create", "reassign", "unar
           "one of", "already", "reopen", "close", "cannot", "stop it")
 print()
 print("4xx refusals whose message names no remedy:")
-for row, label, code, ok, detail in RESULTS:
+for row, label, code, _ok, detail in RESULTS:
     if detail and 400 <= code < 500 and not any(w in detail.lower() for w in REMEDY):
         print(f"  [{row}] {code} {label}: {detail[:170]}")

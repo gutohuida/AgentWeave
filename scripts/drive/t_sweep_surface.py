@@ -1,12 +1,14 @@
 """Full-surface sweep: everything reachable without spending an agent turn.
 
-Rows 1-4, 7, 8, 9, 10, 13 and 18 of the e2e-loop coverage matrix, plus the cross-cutting question
+Rows 1-4, 7, 8, 13 and 18 of the e2e-loop coverage matrix, plus the cross-cutting question
 the skill puts above all of them — **is every refusal legible?** A gate that refuses correctly and
 says only "forbidden" is a defect, because the refused party's only feedback is that string.
 
 Routes are taken from the running Hub's own `/openapi.json`, not guessed. The first pass of this
-script guessed six of them wrong and reported five false 404s; the guesses are kept below as
-`shadow` probes precisely because one of them turned out to say something interesting.
+script guessed six of them and reported five false 404s — worth stating, because a sweep that
+reports its own wrong turns as product defects is worse than no sweep. The one guess kept is the
+`SHADOW` probe below, because a path one segment short of a real one turned out to say something
+misleading.
 
 Run: AW_PROJECT=<proj> AW_KEY=<key> py -3.11 scripts/drive/t_sweep_surface.py
 """
@@ -131,27 +133,11 @@ if aid and bid:
           {"status": "in_progress"})
 
 print()
+# ROW 9 lives in `t_sweep_spec.py`, against the routes the Hub actually publishes
+# (`/projects/{id}/project/documents`, with `path` and `to` as query parameters). It was
+# probed here first against guessed paths, which produced five false 404s and no information.
 print("=" * 78)
-print("ROW 9 — the spec flow, operator side")
-print("=" * 78)
-probe(9, "list documents", "GET", f"/projects/{P}/spec/documents", expect=200)
-code, doc = probe(9, "create a document", "POST", f"/projects/{P}/spec/documents",
-                  {"title": "Sweep specification"}, expect=(200, 201))
-path = doc.get("path") if isinstance(doc, dict) else None
-print(f"      document path: {path}")
-if path:
-    probe(9, "propose from an exploration that was never closed", "POST",
-          f"/projects/{P}/spec/documents/phase",
-          {"path": path, "phase": "proposed", "reason": "sweep"})
-    probe(9, "approve it straight from exploring", "POST",
-          f"/projects/{P}/spec/documents/phase",
-          {"path": path, "phase": "approved", "reason": "sweep"})
-    probe(9, "move it to a phase that does not exist", "POST",
-          f"/projects/{P}/spec/documents/phase",
-          {"path": path, "phase": "banana", "reason": "sweep"})
-    probe(9, "read coverage", "GET", f"/projects/{P}/spec/coverage?path={path}")
-
-print()
+print("ROW 9 — see t_sweep_spec.py")
 print("=" * 78)
 print("ROW 13 — questions")
 print("=" * 78)
@@ -176,7 +162,7 @@ print("SUMMARY")
 print("=" * 78)
 unexpected = [r for r in RESULTS if not r[3]]
 print(f"unexpected statuses: {len(unexpected)}")
-for row, label, code, ok, detail in unexpected:
+for row, label, code, _ok, detail in unexpected:
     print(f"  [{row}] {label} -> {code}  {(detail or '')[:120]}")
 
 REMEDY = ("try", "use ", "first", "instead", "bind", "create", "reassign", "unarchive", "correct",
@@ -184,7 +170,7 @@ REMEDY = ("try", "use ", "first", "instead", "bind", "create", "reassign", "unar
           "cannot depend on itself", "already", "reopen", "close")
 print()
 print("4xx refusals whose message names no remedy:")
-for row, label, code, ok, detail in RESULTS:
+for row, label, code, _ok, detail in RESULTS:
     if detail and 400 <= code < 500 and not any(w in detail.lower() for w in REMEDY):
         print(f"  [{row}] {code} {label}")
         print(f"        {detail[:200]}")

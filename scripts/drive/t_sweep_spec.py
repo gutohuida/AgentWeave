@@ -137,14 +137,14 @@ print("SUMMARY")
 print("=" * 78)
 unexpected = [r for r in RESULTS if not r[3]]
 print(f"unexpected statuses: {len(unexpected)}")
-for row, label, code, ok, detail in unexpected:
+for row, label, code, _ok, detail in unexpected:
     print(f"  [{row}] {label} -> {code}  {(detail or '')[:140]}")
 
 ACCEPTED_BUT_SHOULD_REFUSE = ("does not exist", "never closed", "straight from", "second time",
                               "invalid", "capability's phase")
 print()
 print("Gates that ACCEPTED something (2xx) where a refusal was the expected answer:")
-for row, label, code, ok, detail in RESULTS:
+for row, label, code, _ok, _detail in RESULTS:
     if 200 <= code < 300 and any(w in label for w in ACCEPTED_BUT_SHOULD_REFUSE):
         print(f"  [{row}] {code} {label}")
 
@@ -153,6 +153,6 @@ REMEDY = ("try", "use ", "first", "instead", "bind", "create", "reassign", "unar
           "one of", "already", "reopen", "close", "cannot")
 print()
 print("4xx refusals whose message names no remedy:")
-for row, label, code, ok, detail in RESULTS:
+for row, label, code, _ok, detail in RESULTS:
     if detail and 400 <= code < 500 and not any(w in detail.lower() for w in REMEDY):
         print(f"  [{row}] {code} {label}: {detail[:160]}")
