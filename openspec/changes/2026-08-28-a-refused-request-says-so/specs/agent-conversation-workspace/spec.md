@@ -2,11 +2,11 @@
 
 ## ADDED Requirements
 
-### Requirement: A request refused for good is answered as refused
+### Requirement: A request refused for what it asked is answered as refused
 
-A request that submits input to an agent SHALL be answered as a failure, carrying the refused
+A request submitting input to an agent SHALL be answered as a failure, carrying the refused
 condition's own status and its own sentence, where the system determines while handling it that the
-input cannot be delivered for a reason that cannot clear on its own.
+input cannot be delivered because of what the request asked for.
 
 It SHALL NOT answer such a request as accepted. An acknowledgement that carries the refusal inside
 a field named for waiting, under a flag saying the request succeeded, tells the operator the
@@ -18,17 +18,30 @@ system distinguishes — a request forbidden to this agent, a target in the wron
 no implementation — remain distinguishable to the caller. A single flattened status would discard
 distinctions the system has already made correctly.
 
-A refusal that cannot clear on its own SHALL be distinguished from one that can. Input waiting for a
-turn in flight, a queue another request has already drained, or a budget that will reset is not a
-failure, and answering those as failures would report working behaviour as broken.
+A refusal about **what was asked** SHALL be distinguished from a refusal about **the environment the
+agent would run in**. The system deliberately accepts and holds input that cannot be delivered yet
+because the environment is not ready — no runner is bound, the bound runner's program is not
+installed, an isolated workspace could not be prepared — precisely so that repairing the environment
+delivers it. Answering those as failures would discard input the system has promised to keep, and
+would report as broken the behaviour that makes the repair worth performing. Input waiting for a turn
+in flight, a queue another request has already drained, or a budget that will reset is likewise not
+a failure.
 
-#### Scenario: A permanently refused submission answers with the refusal
+#### Scenario: A submission refused for what it asked answers with the refusal
 
 - **WHEN** an operator submits input to an agent
-- **AND** the system determines the input cannot be delivered for a reason that cannot clear on its own
+- **AND** the system determines the input cannot be delivered because of what the request asked for
 - **THEN** the request is answered as a failure
 - **AND** the answer carries the refused condition's own status
 - **AND** the answer carries the refusal's own sentence
+
+#### Scenario: A submission refused because the environment is not ready is still accepted
+
+- **WHEN** an operator submits input to an agent
+- **AND** delivery is refused because the environment the agent would run in is not ready
+- **THEN** the request is answered as accepted
+- **AND** the answer states the refusal's own sentence as what the input is waiting for
+- **AND** the input remains queued, so that repairing the environment delivers it
 
 #### Scenario: A submission that merely has to wait is still accepted
 
@@ -64,21 +77,30 @@ is waiting behind other input rather than repeating a refusal about it.
 - **AND** the answer states that the input is waiting behind other input
 - **AND** the answer does not carry the other conversation's refusal
 
-### Requirement: Input refused for good does not stay queued for retry
+### Requirement: Input refused for what it asked does not stay queued for retry
 
-Input SHALL NOT remain queued for further delivery attempts where the request that submitted it
-has been answered with a refusal that cannot clear on its own.
+Input SHALL NOT remain queued for further delivery attempts where the request that submitted it has
+been answered with a refusal about what that request asked for.
 
-Retrying is pointless where the system has already determined the reason cannot clear, and it is
+Retrying is pointless where nothing about the environment changing would alter the answer, and it is
 worse than pointless once the operator has been told synchronously that the request failed: the
 input goes on working behind them, and the report that the system gave up arrives later for a
 request that already reported failure.
 
+This SHALL NOT extend to input refused because the environment is not ready. That input stays queued
+and keeps its existing delivery-attempt bookkeeping, because the repair that makes it deliverable is
+exactly what the operator has been told to perform.
+
 #### Scenario: The queue agrees with the answer the operator was given
 
-- **WHEN** a request is answered with a refusal that cannot clear on its own
+- **WHEN** a request is answered with a refusal about what that request asked for
 - **THEN** the input that request submitted is no longer queued for delivery
 - **AND** the record of why it will not be delivered names the refusal
+
+#### Scenario: Input awaiting a repairable environment is still queued
+
+- **WHEN** a request is answered as accepted because the environment the agent would run in is not ready
+- **THEN** the input that request submitted remains queued for delivery
 
 ### Requirement: The operator reads why a submission was refused
 

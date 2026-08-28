@@ -15,20 +15,32 @@ and the data was elsewhere.
 ## D2. Presence of a refusal object, not reinterpretation of `terminal_failure`
 
 The naive route-side test — `if scheduled.terminal_failure: raise` — is wrong, because
-`terminal_failure` **defaults to `True`** (`turn_scheduler.py:33`) and five early returns take the
-default without meaning it: `"queue is empty"`, `"hop budget exhausted"`, `"queued entry has no
-conversation"`, `"conversation is unavailable"`, `"token budget exhausted"`.
+`terminal_failure` **defaults to `True`** (`turn_scheduler.py:33`) and **six early-return sites,
+carrying five distinct reasons**, take the default without meaning it: `"queue is empty"` (`:70`),
+`"hop budget exhausted"` (`:73` **and** `:108` — two sites, one sentence), `"queued entry has no
+conversation"` (`:77`), `"conversation is unavailable"` (`:85`), `"token budget exhausted"`
+(`:115`). Only `"agent is already running"` (`:66`) passes `terminal_failure=False` explicitly.
 
-`"queue is empty"` is the one that would ship a defect. The route commits its entry at `:1260` and
-calls `schedule_agent` at `:1273`; `redrain_queued_agents` runs at the end of every turn, so a
-re-drain in that window delivers the entry and the scheduler then truthfully reports an empty queue.
-A route gating on `terminal_failure` would answer *failed* to a request that worked.
+**Round 2 correction to round 1's evidence.** Round 1 argued this from `"queue is empty"` being
+"genuinely reachable" after the route's own commit. Re-derived from the code, that is *reachable
+but only as a race*, and narrower than round 1 implied: `schedule_agent` holds a per-agent
+`asyncio.Lock` (`_lock_for`, `:59`), so a concurrent `redrain_queued_agents` cannot interleave with
+this call — it must complete first. If it delivered this entry it also created a `Run`, and the
+route's own call then hits the `Run.status == "running"` check at `:65` and returns *"agent is
+already running"* with `terminal_failure=False`. For `"queue is empty"` to be what the route sees,
+that run must also have **finished** inside the window. Real, but a race.
+
+The argument does not need it. What makes D2 correct is **construction, not reachability**: the
+refusal carrier is written in exactly one place, so no early return can produce one, whatever the
+defaults happen to say. Round 1 reached the right design through an argument weaker than the design
+itself — recorded here because this repository's stated failure mode is an argument that is wrong
+about something that is right.
 
 So `ScheduleResult` gains an optional `refusal` field, populated **only** in the
-`except TriggerAgentError` branch and **only** when the error is non-transient. Its presence is the
-classification. The five early returns cannot set it, so the defaulted-`True` trap cannot fire —
-by construction rather than by a list of exclusions that the next early return would have to be
-added to.
+`except TriggerAgentError` branch and **only** when the error says its refusal is about the request
+(D10 — round 1 wrote "non-transient" here, which is too wide). Its presence is the classification.
+No early return can set it, so the defaulted-`True` trap cannot fire — by construction rather than
+by a list of exclusions that the next early return would have to be added to.
 
 `terminal_failure` is left exactly as it is. Rewriting the defaults would change what
 `scheduler.py`'s two flow consumers do, and this change has driven none of that.
@@ -59,9 +71,15 @@ same conditions.
 
 ## D5. The entry does not stay in the queue after the operator has been told
 
-`transient=False` means the scheduler has classified the refusal as one that cannot clear on its
-own. Retrying it is pointless by construction — F108's own observation, that the request "retries
-until the abandonment counter gives up", is the waste being removed.
+A request-level refusal (D10) is one that no amount of waiting and no change to the environment
+makes deliverable, because what is wrong is what was asked. Retrying it is pointless by
+construction — F108's own observation, that the request "retries until the abandonment counter
+gives up", is the waste being removed.
+
+**Round 2 narrowed this.** Round 1 wrote `transient=False` here, which would have withdrawn the
+entry for *environment-level* refusals too — and that is precisely the entry F96 proved must
+survive (`test_runner_binding_redrain.py`: bind the runner, the queued entry is delivered). See
+D10.
 
 Once this request answers with an error, its entry is withdrawn with a reason naming the refusal, so
 the synchronous answer and the queue agree. Without this the operator gets an error *and* the entry
@@ -109,6 +127,59 @@ test that asserts today's `200` — `test_archived_send_refusal.py`,
 Those assertions change deliberately, and **R2 must enumerate them before implementation** rather
 than discovering them as failures: a test that flips from `200` to `409` without anyone deciding it
 should is how a behaviour change hides inside a green suite.
+
+## D10. The gate is *request-level*, not *non-transient* — round 2's finding
+
+Round 1 gated the refusal on `not transient`. Round 2 read every `TriggerAgentError` raise site
+(25 of them, in `agent_trigger.py`) and every existing test that asserts today's `200`, and that
+gate is **too wide**. `transient` answers one question — *does this clear on its own, so should a
+delivery attempt be counted?* The route is asking a different one — *will this input ever be
+delivered?* — and the non-transient population splits in two:
+
+| | Examples | What the product does today, deliberately |
+|---|---|---|
+| **Environment-level** | no runner bound (`:461`), the bound runner's CLI is not on PATH (`:507`), the bound runner row is gone (`:480`), the worktree could not be prepared (`:756`), the canonical context could not be written (`:817`) | Queues the entry and states the remedy, **so that performing the remedy delivers it** |
+| **Request-level** | the agent is not in this project (`:452`), the agent is archived (`:474`), the runner has no adapter (`:499`), the review target is in the wrong status (`:626`) / already under review (`:643`) / authored by the reviewer (`:657`) / has nothing to review (`:670`), an invalid `work_dir` (`:684`), a turn batching two reviews (`:337`) or mixing kinds (`:351`) | Nothing about the environment changing makes the answer different |
+
+Both columns are `transient=False`. Round 1's gate would have refused the first column and, via D5,
+**withdrawn its entry** — reversing two shipped decisions that have tests naming them:
+
+- `test_agent_trigger.py::test_unbound_agent_accumulates_queue_with_visible_reason`, whose docstring
+  states the behaviour as a decision: *"it queues with a stated reason **rather than failing the
+  request outright**"*.
+- **F96** (`test_runner_binding_redrain.py`) exists solely so that binding a runner delivers the
+  entry queued while none was bound. Withdrawing that entry deletes the finding's own fix.
+- `test_runtime_diagnostics.py::test_agent_trigger_reports_missing_cli_directly` asserts
+  `200 … "not found in PATH"` for the same reason.
+
+And F108's own four examples — an archived agent, a task that does not exist, an unimplemented
+runner, a `work_dir` the project does not contain — are **all** in the second column. The finding
+never asked for the first.
+
+**So the classification is asked directly, the way `transient` already is.** `TriggerAgentError`
+gains a second, independent flag meaning *this refusal is about the request, not the environment*,
+defaulting to `False`. The two flags answer two different questions and are not opposites: a
+refusal may be neither, and none may be both.
+
+Defaulting to `False` is what makes D9's blast radius small and deliberate rather than large and
+discovered: **no existing test changes unless a raise site is explicitly marked.** The behaviour
+change is then exactly the set of sites this change decides to mark — the list in `tasks.md`
+group 2 — and nothing else.
+
+## D11. The route's entry object is stale by the time the refusal comes back
+
+`async_session_factory` is built with **`expire_on_commit=False`** (`hub/hub/db/engine.py:40`), and
+`schedule_agent` opens a session of its own (`turn_scheduler.py:59`) rather than reusing the
+route's. So when the refusal branch stamps `waiting_reason`, increments `delivery_attempts`, and
+possibly sets `state = "withdrawn"` at the attempt limit, **none of it is visible on the route's
+in-memory `entry`** — which still reads `state="queued"`, `delivery_attempts=0`.
+
+This is load-bearing for D5's idempotence (`tasks.md` 4.2). A route that tolerates an
+already-withdrawn entry by reading `entry.state` will read `"queued"` in production every time,
+while passing any test whose fake scheduler shares the route's session. That is this repository's
+named failure mode — a check that is tested, correct, and cannot fire — so the implementation
+refreshes the row (`await session.refresh(entry)`) before deciding, and a test asserts the refresh
+by having the scheduler withdraw through a genuinely separate session.
 
 ## Filed, not fixed here
 
