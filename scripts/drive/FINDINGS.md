@@ -7068,3 +7068,52 @@ the refusal is its only feedback and it carries nothing.
 every valid kind, which the route already maps to `409 {"message", "code"}`. Test
 `test_an_unrecognised_document_kind_is_refused_and_names_the_kinds`; mutation-checked by removing
 the guard.
+
+---
+
+## F113 (B) — `propose` promises "every check that refuses it" and omits one of them
+
+**Status:** **open.** Found 2026-08-28 by the full-surface sweep. The fix changes a status code, so
+it is a decision rather than a repair.
+
+`POST /project/documents/propose` has two blockers and reports them through two different channels:
+
+| Blocker | How it comes back |
+|---|---|
+| the payload is incomplete (`spec_completeness.check`) | **`200`** with a `blocking` array — one entry per check, each naming what to do |
+| the exploration has not been closed (`spec_lifecycle.transition`, `:332`) | **`409 {"code": "explore_not_closed"}`** |
+
+The second is **never in the first's list.** Driven live:
+
+```
+POST …/documents/propose            -> 200  blocking: [no_requirements, non_goals_empty]
+   phase afterwards: exploring, explore_closed=false      <- the closure blocked it too, unlisted
+POST …/documents/close-exploration  -> 200  explore_closed=true
+POST …/documents/propose            -> 200  blocking: [no_requirements, non_goals_empty]
+```
+
+So an operator holding an incomplete document with an open exploration is told two things block the
+proposal. Three do. They fix the two, propose again, and meet the third — a round trip caused only
+by the list omitting one of its own members.
+
+**The route states the contract it breaks**, which is what makes this a B rather than friction:
+
+> *Move a document to `proposed`, or report every check that refuses it.* — the route docstring
+
+It is also asymmetric in the other direction. The *same* situation — "this cannot be proposed yet,
+and here is why" — arrives as `200` with a list when the payload is incomplete and as `409` when it
+is complete but the exploration is open. A client cannot write one branch for "not yet".
+
+### Why it is not fixed here
+
+The clean fix is for `spec_service.propose` to compute the closure blocker as a finding and put it
+in `blocking` with the others, leaving `transition()` as the authority behind it. That makes the
+list honest and gives clients one shape — and it turns today's `409 explore_not_closed` from this
+route into a `200` with a blocker, which is a behaviour change with tests naming it.
+
+The additive alternative — add the closure finding only when the list is already non-empty — keeps
+every status code and makes the list complete exactly when it exists, which is a worse contract
+than either of the other two.
+
+Choosing between those is the operator's call, and by this repository's own rule a change that
+needs a spec goes through three rounds before a line of it is written.
