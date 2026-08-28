@@ -1422,3 +1422,82 @@ fine through the default branch), but names in it like `agent_action_rejected`,
 `review_unstaffed` are exactly the shape of the four that have already needed a case. That is
 `next_action`.
 
+---
+
+## Iteration 12 — the lead paid, and the method behind it is now the finding (2026-08-28 07:21 +0100)
+
+`next_action` was the sweep iteration 11 left: `summaryForEvent`'s default branch against the Hub's
+own emitters. It was the opposite kind of lead to F104 — these are the product's own
+`persist_event` call sites, so occurrence is certain and only consequence was open. It paid.
+
+### The two cuts, taken before anything was filed
+
+The raw sweep said "70 candidate kinds, 17 with a case". That number is not 53 defects, and the
+whole value of this iteration was refusing to file it as one.
+
+1. **Does it reach a timeline?** `summaryForEvent` has exactly two call sites, `EventRow.tsx` and
+   `LogLine.tsx`, and both read `event_logs`. So the candidate set is what `persist_event` and
+   `record_event` are actually called with — **54 distinct `event_type` literals**, extracted by
+   parsing the balanced call expression at each site rather than by grepping strings. A kind only
+   broadcast over SSE was cut.
+2. **Does the default branch already render it?** It reads the first of
+   `error`/`message`/`summary`/`title`. `conversation_binding_conflict` names its detail `error`
+   and renders correctly today. It is deliberately **not** fixed, and a thirteenth test asserts it
+   still falls through — so a later sweep cannot "fix" it and count that as a repair.
+
+**Ten kinds survived both cuts**, and they were not a random ten: they are almost exactly the rows
+written at `severity="warn"` or `"error"`. The failure family. Every payload was read in its
+emitter before a case was written — `next_action` said do not infer the fields, and two of them
+(`loop_stopped`, `review_unstaffed`) build their payload in a variable several lines above the
+call, where a guess would have been wrong.
+
+### What it cost the operator
+
+`job_run_failed` is the one that matters. `severity="error"`, so it is the red row an operator
+scans for; it carries `error_summary`, a field whose entire purpose is to say why; and it rendered
+as the string `job_run_failed`, with the reason one field name away. `run_interrupted` is the same
+shape for a crash — `abandoned_entry_ids` is the list of messages nothing will ever pick up again,
+and its length was not on screen. `review_unstaffed`'s own docstring says it exists so "an operator
+watching the app should learn this without going to look for it"; it rendered as the word
+`review_unstaffed`.
+
+### Verification
+
+| | |
+|---|---|
+| Tests | 13 added to `eventSummary.test.ts`; **12 watched failing first**, each returning the bare event name, one control passing before and after |
+| UI suite | 139 files, **1437 passed**, 0 failed |
+| eslint | clean |
+| UI bundle | rebuilt, `refresh_ui_bundle.py` run, `hub/ui/src` and `hub/hub/static/ui` committed together |
+
+No Python changed, so the 20-minute Hub suite was not spent on it.
+
+### The finding under the finding
+
+Six families have now needed a hand-written case in this one `switch`, for the same reason, and the
+first five were each found by a human happening to look at a row. That is not a run of bad luck —
+the default branch is a heuristic over payload shapes nobody enumerated, so **a new event kind is
+invisible by default and visible only if someone notices.** The alternative is an enumeration: a
+declared summary per persisted `event_type`, with a test that fails when an emitter adds a kind the
+map does not know. It has a real cost (every new event kind acquires a required second edit) and it
+is a design choice, so it is in `decisions_for_user` and was not built.
+
+What is not in doubt: finding these by eye has failed six times, and the sweep that found ten at
+once took forty minutes.
+
+### What was deliberately not filed
+
+Persisted kinds with no operator-facing detail at all — `agent_created`, `job_created`,
+`project_adopted`, `queue_entry_queued` (12 sites). They render as their own name, and for those
+that is nearly the whole content. Ten more cases restating `agent_created` in different words would
+be worse than the default. The cut is between *a payload whose detail is unread* and *a payload
+with no detail*, and stating that cut is what keeps F105 from being padding.
+
+### Where this leaves the queue
+
+Unchanged and still untouched, all of it now several iterations old: the Codex angle's `ask_user`,
+the "Ask me" posture on codex, a killed codex process, a checkpoint, and **a review turn** — still
+worth double, since it is the one plausible way to make `enteredReviewMode`/`exitedReviewMode`
+arrive and so to test F104's own caveat. Also unmeasured: `schedule_agent`'s non-`TriggerAgentError`
+early returns, which record nothing and charge no attempt, so an entry may sit queued forever with
+`waiting_reason` null. This iteration ran out of clock at `stop_at`, not out of leads.

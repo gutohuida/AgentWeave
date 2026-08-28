@@ -6409,7 +6409,7 @@ that cost two minutes here would have saved eleven speculative findings.
 
 ## F105 (B) — the failure family: ten persisted event kinds render as their own bare name
 
-**Status:** fixed (this commit)
+**Status:** fixed 5d9638c
 
 The sixth family to need a hand-written case in `summaryForEvent`, and the first found by sweeping
 the emitters instead of by someone happening to see a row. `permission_denied`, the three `queue_*`
