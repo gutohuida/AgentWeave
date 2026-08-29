@@ -99,14 +99,28 @@ asked "did my conversation's work begin". Those differ exactly in the case that 
 `started` is therefore not a side effect of the fix; it *is* the fix. The alternative — a second
 boolean beside the first — leaves the misleading one in place for any client that reads it.
 
-### D3 — `checkpoint_cutover.py:138` is corrected in the same change
+### D3 — `checkpoint_cutover.py:138` is corrected in the same change, and the gap is the silent branch
 
-The auto-continue after a cutover logs `"successor %s did not start immediately: %s"` against
-`successor.id` for a `waiting_reason` `schedule_agent` may have produced about a different
-conversation (`checkpoint_cutover.py:131-145`). Log-only: no operator-facing claim, no response
-field. Corrected here rather than deferred because it is the same rule, two lines, and the fourth
-scenario of the new requirement covers diagnostics for exactly this reason. Deferring it would leave
-the rule true of the API and false of the log the moment somebody reads it.
+Round 2 recorded this as a misattributed reason. Round 3 re-read the branch and the more important
+half is the other one (`checkpoint_cutover.py:136-145`):
+
+```python
+result = await schedule_agent(predecessor.project_id, predecessor.agent)
+if result.waiting_reason:
+    logger.info("successor %s did not start immediately: %s", successor.id, result.waiting_reason)
+```
+
+When a turn started **for another conversation**, `waiting_reason` is `None`, the branch is skipped,
+and **nothing is recorded at all** — while the successor the cutover just created did not start. The
+misattributed reason in the truthy branch is the lesser fault: there, at least, "did not start
+immediately" is true of the successor. So the fix is not only to name the right conversation but to
+record the case that currently produces silence.
+
+It is log-only: `cutover_to_successor` returns `checkpoint_id`, `conversation_id`,
+`successor_conversation_id`, `queue_entry_id` and `agent` (`checkpoints.py:305-312`) and reports no
+auto-continue outcome, and no shipped requirement governs `auto_continue` — verified by searching
+`openspec/specs/` for it, which returns nothing. That absence is why the new requirement's
+diagnostic scenario is the only thing covering this path, and why it is worth having.
 
 ### D4 — The UI states waiting, and names what ran
 
@@ -143,6 +157,13 @@ question, not smuggled in.
   and say why." → Expected; flip them here and record that the fix, not a regression, turned them.
 - **The waiting answer is indistinguishable from "queue is empty" if worded loosely.** → The reason
   must name the other input, not merely say "waiting".
+- **"Waiting behind other input" is false when the addressed conversation queued nothing.** Round 3
+  found that rounds 1 and 2 had collapsed two cases into one: a mismatch where the addressed
+  conversation *has* input, and a mismatch where it has none — which is **F131's own reproduction**,
+  reachable by API even though the UI button gates it out. Telling that caller their input is
+  waiting reports a queue position that does not exist. → Two distinct reasons, and a scenario for
+  each. The mismatch branch must ask whether the addressed conversation has queued input rather
+  than assuming it does.
 
 ## Migration Plan
 

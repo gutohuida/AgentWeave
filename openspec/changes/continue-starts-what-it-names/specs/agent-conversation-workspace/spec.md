@@ -16,6 +16,11 @@ to ask again.
 The response SHALL identify the conversation whose input the turn actually carried, so that a
 request answered as waiting can be acted on rather than only retried.
 
+Where the named conversation had no input queued at all, the answer SHALL say that rather than that
+its input is waiting. "Waiting behind other input" describes input the system is holding; saying it
+of a conversation that submitted none reports a queue position that does not exist, and directs the
+caller to wait for a delivery that will never arrive.
+
 Reporting SHALL NOT be corrected by changing which input is selected. The turn is the agent's and
 its input is taken in arrival order; selecting a later input because a request names its
 conversation would let that request overtake input that arrived first, and would leave a quiet
@@ -34,6 +39,14 @@ conversation waiting for as long as a busy one is asked about.
 - **AND** the answer states that the named conversation's input is waiting behind other input
 - **AND** the answer identifies the conversation whose input the turn carried
 - **AND** the named conversation's input remains queued
+
+#### Scenario: The named conversation had nothing queued
+
+- **WHEN** a request names a conversation that has no input queued
+- **AND** the started turn carried another conversation's input
+- **THEN** the request is not answered as started
+- **AND** the answer states that the named conversation had nothing queued
+- **AND** the answer does not state that its input is waiting behind other input
 
 #### Scenario: No turn started
 

@@ -73,10 +73,11 @@ that matters.
 - `started` comes to mean what the caller asked about: the **addressed** conversation's input
   started. It is derived by comparing the started conversation to the addressed one, the same
   comparison `agent_trigger.py:1353` already makes.
-- When the agent's turn went to a different conversation, the response says the addressed
-  conversation's input is **waiting behind other input** — `started: false` with a stated reason —
-  rather than claiming a start. This is the answer the shipped requirement already prescribes for
-  the refusal direction.
+- When the agent's turn went to a different conversation, the response says so with `started: false`
+  and one of **two** stated reasons, not one: the addressed conversation's input is **waiting behind
+  other input**, or it **had nothing queued**. The first is the answer the shipped requirement
+  prescribes for the refusal direction. The second is F131's own reproduction, and telling that
+  caller their input is waiting would report a queue position that does not exist.
 - The started conversation's identifier is returned as its own field, so the caller can see what did
   run instead of inferring it.
 - The Continue control reports the three cases distinctly: continuing this conversation, waiting
@@ -132,11 +133,12 @@ in exactly the way this change exists to fix.
   waiting case.
 - `hub/hub/turn_scheduler.py` — **unchanged.** Round 1 proposed two new `ScheduleResult` fields;
   they are unnecessary.
-- `hub/hub/checkpoint_cutover.py:131-145` — the auto-continue after a cutover is the **third**
-  conversation-addressed use, and its diagnostic logs `"successor %s did not start immediately: %s"`
-  against `successor.id` for a `waiting_reason` that may belong to another conversation. Same rule,
-  log-only exposure; corrected here because it is two lines and leaving it would reintroduce the
-  inconsistency the moment somebody reads that log.
+- `hub/hub/checkpoint_cutover.py:136-145` — the auto-continue after a cutover is the **third**
+  conversation-addressed use. Its diagnostic logs only `if result.waiting_reason:`, so when a turn
+  started for a *different* conversation the branch is skipped and **nothing is recorded** while the
+  successor did not start. Same rule, log-only exposure — `cutover_to_successor` reports no
+  auto-continue outcome at all (`checkpoints.py:305-312`) and no shipped requirement governs
+  `auto_continue`. Corrected here because it is the same rule and a few lines.
 - `hub/ui/src/api/checkpoints.ts:90-95` and
   `hub/ui/src/components/agents/AgentOutputPanel.tsx:742-756` — the three cases.
 - The other twelve `schedule_agent` call sites are agent-addressed and unaffected; enumerated in
