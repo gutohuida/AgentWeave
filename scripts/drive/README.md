@@ -94,3 +94,27 @@ They restart the Hub themselves, so running one leaves a Hub up on 8011 serving 
 on disk when it fired. Two things they cost time to learn: the `Run` row's pid is `claude.exe`
 itself and it dies with its Hub, and an interrupted run's `ended_at` is the **restart** time, so
 run durations read from the database are inflated by the outage.
+
+## Row 11's second half — a loop's ending, in the same fixture
+
+Added 2026-08-29, against `drive-wt-0829` on 8011. Row 11's first half (a loop firing at all) was
+driven in earlier sweeps; the ending never was.
+
+- `t_row11_loop.py` — the **queue-drained** ending. Creates a loop with two `initial_tasks` and
+  `stop_when_queue_empties`, fires it once by hand and lets the cron take the rest, watches it
+  stall on completed-but-unapproved work, approves both as the operator, and reads the four facts
+  `loop_ending.end_loop` promises. Then the three ways an operator might restart it. ~9 minutes,
+  two real Haiku turns. **19/21** — the two failures are one mis-specified assertion, kept
+  deliberately; see F121's strengthening in `FINDINGS.md`.
+- `t_row11_loop_quiet.py` — the **stop-time** ending, and the only check that distinguishes "the
+  four facts were written" from "the loop actually stopped": 160 seconds of wall clock, three cron
+  ticks, asserting `run_count` does not move. Costs no agent turn at all — the stop condition is
+  checked before the spawn. ~4 minutes. **11/12**, and the failure found F125.
+
+Both archive their loop and disable their job in a `finally`. **Do not pipe either through `head`**:
+SIGPIPE kills the process before the `finally` runs and leaves a job enabled.
+
+Two things they cost time to learn. A loop's queue drains at `approved`/`rejected`, not at
+`completed` — `TERMINAL_FOR_BINDING` is those two — so a loop only ends once somebody reviews its
+work, and until then it stalls with a reason rather than stopping. And approving a loop's task
+merges nothing, ever, for the structural reason in F124.

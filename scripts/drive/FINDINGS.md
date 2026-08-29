@@ -8340,3 +8340,198 @@ time, since both are about the same confusion between a firing, a turn, and the 
 
 Severity **C**: no work is lost, and the operator can find the truth in the agent's conversation.
 It is the *job* view that is wrong, and that is the view a job exists to be read from.
+
+---
+
+## Row 11 LOOPS, second half — a loop fires, works, stalls, drains and stops, and stays stopped
+
+Driven 2026-08-29 on 8011 against this branch, in `drive-wt-0829` (`proj-dc4d43543bea`), one Haiku
+agent. Two harnesses: `t_row11_loop.py` (the queue-drained ending) and `t_row11_loop_quiet.py` (the
+stop-time ending, plus the quiet window). **19/21 and 12/12** — and both of the first harness's two
+BADs are a mis-specified assertion of mine, not a defect; the measurement behind them is real and
+is recorded under F121 below.
+
+**The whole ladder, live.** `POST /jobs` with `stop_when_queue_empties` and two `initial_tasks`
+created the job, the `Loop` row and both queue entries in one call, and the response reported
+`queue: {"pending": 2}` — the seeded queue, not the empty one an earlier version of that route
+computed before seeding. One manual fire, then the cron:
+
+```
+17:18:15  manual     completed   task A pending -> in_progress -> completed
+17:19:00  scheduled  completed   task B pending -> in_progress -> completed
+17:20:00  scheduled  skipped     tick_count 2   "task task-c7a2f0dbb4c5 has no recorded evidence…"
+17:22:00  scheduled  skipped                    "loop queue is empty"   -> ending
+```
+
+Both artefacts exist with exactly the content asked for, each in its own task checkout
+(`.agentweave/tasks/<task-id>/loop_r11_{a,b}.txt`, `ALPHAONE` / `ALPHATWO`), on its own
+`agentweave/task/<task-id>` branch, and `main` was untouched throughout. **One task at a time**
+held: the second was never claimed while the first ran.
+
+**Stalled is not finished, and it says why.** With both tasks `completed` and nothing approved, the
+loop ticked twice more and stopped nothing. The skipped row carries a reason an operator can act
+on rather than a status word:
+
+> *task task-c7a2f0dbb4c5 has no recorded evidence, so there is no commit to review. Evidence
+> naming a commit is what a review turn is given. Until the work that finished this task is
+> recorded as evidence naming a commit, no reviewer can be given anything to look at.*
+
+and the second identical tick **incremented `tick_count` to 2 on the same row** instead of writing
+a duplicate, which is `loop-notices-and-reacts` design D6 working exactly as its docstring argues.
+
+**The four ending facts, both ways.** Approving both tasks drained the queue and the next tick
+ended the loop: `ending_state: "completed"`, `stop_reason: "loop queue is empty"`, `stopped_at`
+populated, `job.enabled` false. A second loop created with a `stop_at` **two minutes in the past**
+ended on its first firing with `ending_state: "stopped"` — not `completed`, because its queue still
+held open work — `stop_reason` naming the time, and **no agent was spawned at all**: the one queued
+task was still `pending` afterwards. The stop condition is checked before the spawn, and
+`POST /jobs/{id}/run` on it answered `409 loop stop time reached (…)` rather than firing.
+
+**Stopped is true, not merely reported** — which is the property `loop_ending.py`'s own docstring
+records going wrong once (a loop that read `stopped` at 23:09 and ran twelve more real turns).
+Watched for 160 seconds — three cron ticks — after the time-stop: `run_count` stayed 0, the history
+stayed at one row, the agent stayed idle, and the outstanding task was never picked up.
+
+**Three ways to restart an ended loop, all refused, each naming the remedy.**
+
+```
+PATCH /jobs/{id} {"enabled": true}
+  409 {"code": "loop_ended", "message": "This loop has ended (loop queue is empty) at
+       2026-08-29T17:22:00.049752+00:00 and cannot be restarted: its queue is closed, so the next
+       firing would stop it again within the minute. Create a new loop with the work instead."}
+  ...and it did not half-apply: the job was still disabled afterwards.
+
+POST /jobs/{id}/run
+  400 "Job is disabled"
+
+POST /tasks {"loop_id": "<the ended loop>"}
+  403 {"code": "loop_stopped", … "offered_task": {…}}   — the operator is refused too, and the
+      submitted task is echoed back so it can be resubmitted as a new loop's initial_tasks.
+```
+
+Every one of those quotes a real `stopped_at`; the `"an unknown time"` fallback that F13's write-up
+found live did not appear once. Two of the three were re-run against the **time-stopped** loop and
+answered identically, quoting its own reason and time — so "ended" is one state with one set of
+consequences, not two that happen to look alike. (The third differs only in *where* it is caught:
+`POST /run` on the time-stopped loop is what ended it, so it answered `409 loop stop time reached`
+rather than the `400 Job is disabled` a second press would get.)
+
+## F124 (B) — a loop's work can never reach the main branch, and the card offers a retry that cannot succeed
+
+**Status:** open, filed not fixed. Found by driving row 11's second half, 2026-08-29.
+
+Both loop tasks above were approved by the operator. `main` never moved:
+
+```
+git ls-tree main --name-only   ->  README.md, calc.py      (no loop_r11_a.txt, no loop_r11_b.txt)
+
+GET /tasks/task-d3c48be292dc
+  "latest_integration": {"outcome": "skipped", "commit_sha": null,
+                         "reason": "no accepted evidence names a commit, so there is nothing to merge"}
+```
+
+So far this is `task_integration.py` behaving exactly as designed and saying so on the task
+response, which `TaskIntegrationNote.tsx` renders. **The defect is that for a loop this reason is
+permanent, and the module's own comment says it should not be:**
+
+> *Why nothing was merged, in words that name the thing the operator would change. Each is a state
+> of the world rather than an error: none of them means anything went wrong…*
+
+`_commits_for_task` resolves what to merge through `TaskRequirementLink → RequirementEvidence
+(accepted) → EvidenceFootprint` (`task_integration.py:143-167`). A loop's tasks come from
+`create_loop`'s `initial_tasks`, and nothing requires — or, in the ordinary case, supplies — a
+`requirement_ids`. With no requirement link there is no requirement for `record_evidence` to name,
+so the agent cannot record evidence even if it tries; with no evidence there is nothing to accept;
+with nothing accepted there is no commit; so `NOTHING_TO_MERGE` is not a state of the world that
+could change, it is the only state this task can ever be in.
+
+The loop's own stall reason had already said the same thing from the other side — *"no reviewer can
+be given anything to look at"* — and it is right, for the same reason.
+
+**The visible half, measured twice.** `TaskIntegrationNote` offers **"Try again"** for every
+non-merged outcome except `no main branch set`. Pressed here, it answers `200` and appends a second
+identical row:
+
+```
+POST /tasks/task-d3c48be292dc/integrations/retry   -> 200
+  tint-ee8b204b8a30  skipped  "no accepted evidence names a commit…"   17:21:03
+  tint-7e8f8c3a45a4  skipped  "no accepted evidence names a commit…"   17:23:46   <- the retry
+GET  /tasks/task-d3c48be292dc/integration-preview  -> {"will_merge": false, "targets": []}
+```
+
+`integration-preview` **already knows** the retry cannot work (`will_merge: false`, `targets: []`)
+and the card does not ask it. This is the same shape as the bug the file's own comment records
+fixing once before — a remediation stated, followed, and provably a no-op — arriving on the button
+that replaced it.
+
+**Not F122.** F122's task had evidence sitting at `review_state: awaiting`, so a real remedy
+existed (accept it) and the complaint was that a *flow* cannot reach it. Here no evidence can exist
+at all, the approver is the operator, and no flow is involved. A fix for F122's accept step would
+not touch this.
+
+**What it costs.** A loop is the product's answer to "shorter dev loops that keep developing". Every
+one of them accumulates approved work on per-task branches that no operator action will ever merge,
+while the board says `approved` — and the one control offered for it appends a row each time it is
+pressed.
+
+**Three shapes, none of them chosen here.**
+
+1. *Let a task's own branch tip be a merge source when it has no requirement links.* Cheapest to
+   state, and it breaks the module's first rule ("merge a commit, never a branch") in the one place
+   that rule was written for — a task branch carries only that task's work, so it is arguably safe,
+   but it makes approval merge unreviewed work.
+2. *Make the loop path able to produce evidence* — a synthetic requirement per loop, or evidence
+   that names a task rather than a requirement. Honest, and the largest change: `RequirementEvidence`
+   is keyed on a requirement everywhere.
+3. *Say so instead of offering a retry.* Smallest true fix: `TaskIntegrationNote` asks
+   `integration-preview`, and when `will_merge` is false for a reason retrying cannot change, states
+   what would have to happen rather than offering a button. Fixes what the operator sees; leaves the
+   work unmergeable.
+
+Recommendation: **(3) now, (2) as its own change.** (1) trades a governance property for
+convenience and should not be taken quietly.
+
+## F121, strengthened — the same word under-counts on a loop and over-counts on a flow
+
+F121 recorded that a flow writes one `JobRun` per dispatched turn, so `JobCard.tsx`'s
+`{job.run_count} runs` reads 4 for two firings. The loop drive measured the divergence running the
+other way:
+
+```
+job history:  4 rows   (2 completed, 2 skipped — one of them tick_count 2, so 5 ticks)
+job.run_count: 2
+```
+
+A skipped firing does not increment `run_count`, which is consistent with the F25 comment's
+definition (*"firings that actually ran"*) and inconsistent with the card's own word. So the badge
+under-reports a stalled loop and over-reports a wide flow, and neither is a database defect. This
+does not change F121's status; it removes the reading that it is a flow-only quirk.
+
+*(The two `[BAD]` verdicts in `t_row11_loop.py` are this measurement. The assertion as written —
+`run_count == len(history)` — asserts a thing the design never promised; it is kept, failing, with
+this note, because deleting it would delete the measurement.)*
+
+## F125 (C) — a task's title cannot be changed by anybody, and F116's fix is what made that visible
+
+**Status:** open, filed not fixed. Small.
+
+Found by accident: the quiet harness tried to rename an orphaned task and got
+
+```
+PATCH /projects/{p}/tasks/{id}  {"title": "Write loop_r11_c.txt (orphaned)"}
+  422 [{"type": "extra_forbidden", "loc": ["body", "title"],
+        "msg": "Extra inputs are not permitted"}]
+```
+
+`TaskUpdate` (`hub/hub/schemas/tasks.py:120`) has no `title` field, and `TaskDetailDrawer.tsx`
+renders `task.title` into an `<h2>` with no editor anywhere. So a task is named once, at creation,
+forever — including a task an agent named, and including one whose title has gone stale because the
+work moved. `description` is editable; the line the board actually shows is not.
+
+Whether that is a gap or a deliberate contract is an operator call, which is why this is filed
+rather than fixed.
+
+**What is not in doubt is the 422.** This is F116's own change firing on a field nobody wrote a test
+for: before the `RequestModel` base landed, this PATCH answered `200` with the title unchanged —
+F117's exact shape, on the field most likely to be edited by hand. The first thing the strictness
+caught in the wild, it caught within a day, in a harness that was not looking for it.
