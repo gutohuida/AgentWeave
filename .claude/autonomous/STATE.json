@@ -206,5 +206,5 @@
     "The 14 older open findings in FINDINGS.md (F3 goes with F111 this run; F14, F53, F65, F66 each still want an operator decision rather than a repair). The operator was offered a triage pass over them and has not answered."
   ],
   "parent_sha_note": "master at arming, the commit that carries this STATE.json. Cut the branch from origin/master HEAD; if master has moved since (it should not have — the operator is away), branch from its tip and say so in the log rather than resetting to this sha.",
-  "last_heartbeat": "2026-08-29T18:57:08+01:00"
+  "last_heartbeat": "2026-08-29T18:17:39+01:00"
 }
