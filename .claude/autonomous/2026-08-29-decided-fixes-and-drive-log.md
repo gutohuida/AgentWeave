@@ -722,3 +722,87 @@ the exact status code (`== 409`, not `>= 300`).
   follows it, is a different case and is **not** driven.
 - **F123's recommendation (a `continuity_warning`-style field) is an opinion, not a finding.** What
   is measured is that job history says `failed` for work that completed.
+
+## Iteration 7 — row 11's second half: a loop's two endings (18:13–18:27 local)
+
+`next_action` named three thin rows and ordered them; (a) was row 11's ending — *"a loop that
+fires, claims, works, drains and STOPS, then is re-enabled after stopping"*. Driven in full, both
+endings, plus the check that separates them from a loop that merely *says* it stopped.
+
+**The Hub was not restarted.** 8011's uvicorn started 18:06:50 (measured from `Win32_Process`
+`CreationDate`, not assumed), `GET /api/v1/projects` lists `proj-dc4d43543bea` with its three Haiku
+agents, and nothing under `hub/` changed this iteration — so it serves this branch's code and a
+restart would have bought nothing.
+
+| Harness | Ending it drives | Verdicts |
+|---|---|---|
+| `t_row11_loop.py` | queue drained (`ending_state: "completed"`) | **19/21** |
+| `t_row11_loop_quiet.py` | stop time passed (`ending_state: "stopped"`) | **11/12** |
+
+**What held.** The creating call made the job, the `Loop` row and both queue entries together and
+reported the queue it had just seeded. One task at a time, two real Haiku turns, both artefacts on
+disk with exactly the content asked for, each in its own task checkout on its own branch, `main`
+untouched. A queue of completed-but-unapproved work **stalled rather than stopped**, and the
+skipped row carried a reason naming the remedy — and a second identical tick incremented
+`tick_count` on that row instead of writing a duplicate, which is design D6 working. Approving both
+drained it; the next tick wrote all four ending facts. Three restart attempts, three refusals,
+each machine-readable and each quoting a real `stopped_at` — the `"an unknown time"` fallback F13's
+write-up found live did not appear once.
+
+**And the one that matters most: stopped is *true*, not merely reported.** A loop given a `stop_at`
+two minutes in the past ended on its first firing, spawned no agent at all (its queued task was
+still `pending` afterwards — the stop condition is checked before the spawn), and then sat through
+160 seconds of wall clock, three cron ticks, with `run_count` at zero and one history row. That is
+the exact property `loop_ending.py`'s own docstring records going wrong once, when a loop that read
+`stopped` at 23:09 ran twelve more real turns.
+
+**F124 (B) — a loop's work can never reach the main branch.** Both loop tasks were approved by the
+operator and `main` never moved. The integration record says why, honestly, and the UI renders it —
+but for a loop the reason is *permanent*, which is precisely what `task_integration.py`'s own
+comment says none of its reasons are. Commits are resolved through `TaskRequirementLink →
+RequirementEvidence (accepted) → EvidenceFootprint`; a loop's `initial_tasks` carry no requirement
+links, so `record_evidence` has nothing to name, so nothing can ever be accepted. The card offers
+**"Try again"** anyway — pressed here, it answered `200` and appended a second identical `skipped`
+row, while `integration-preview` already knew `will_merge: false, targets: []` and was not asked.
+Three shapes costed in the finding, with a recommendation. Not F122: that task *had* evidence, and
+its complaint is that a flow cannot get it accepted.
+
+**F125 (C) — a task's title cannot be changed by anybody.** Found by accident: `TaskUpdate` has no
+`title` field and `TaskDetailDrawer` has no editor. Filed rather than fixed, because whether that
+is a gap or a contract is the operator's call. What is not in doubt is that **F116's own change is
+what made it visible** — before the `RequestModel` base landed this PATCH answered `200` with the
+title unchanged, F117's exact shape, on the field most likely to be edited by hand. The strictness
+caught its first thing in the wild within a day, in a harness that was not looking for it.
+
+**F121 strengthened, not restated.** The badge under-counts a stalled loop (`run_count` 2, history
+4 rows over 5 ticks) exactly as it over-counts a wide flow (4 rows for 2 firings). Same word, two
+divergences, opposite directions — which removes the reading that F121 is a flow-only quirk.
+
+### Verification
+
+| | |
+|---|---|
+| Suites | **not re-run, and deliberately** — nothing under `hub/`, `src/` or `tests/` changed this iteration. The only Python added is two `scripts/drive/t_*.py` harnesses that no test imports. The branch's last full verification stands (iteration 6: hub 3554 passed / 1 known F109 flake that passes alone, CLI 440 passed, ruff/black/mypy clean over CI's paths). |
+| The product | driven live, 31 assertions across two harnesses, 30 held; every verdict asserts a durable artefact (`git ls-tree`, file contents) or an exact status code — never `>= 300`, never "the agent went idle" |
+| Jobs / loops left enabled | **none** — `/jobs` and `/loops` empty in both 8011 projects, confirmed after teardown |
+| Lint on the new harnesses | `scripts/` is outside CI's lint paths (`ruff check src/ hub/ tests/`), and the existing drive scripts are not black-clean either; the two new files match the directory as it is |
+
+### What a reviewer should distrust
+
+- **30 of 31 held, and the one that did not was my assertion being wrong rather than the product.**
+  That ratio is the shape iteration 6 warned about. The mitigation is the same one it adopted: the
+  artefact assertions read the file (`ALPHAONE`, `ALPHATWO`) and the branch (`git ls-tree main`),
+  and the refusal assertions compare exact codes. It is still one hand writing both sides.
+- **The two `[BAD]` verdicts in `t_row11_loop.py` are kept failing on purpose.** `run_count ==
+  len(history)` asserts something the design never promised. Deleting it would delete the
+  measurement that strengthened F121; leaving it green would have meant weakening it until it
+  passed. Anyone running the harness sees two reds that are a footnote, and the footnote is in
+  `FINDINGS.md`.
+- **F124's third shape is a recommendation, not a finding.** What is measured is that a loop's
+  approved work stays on its branch, that the reason is structural rather than situational, and
+  that the retry offered for it appends a row and changes nothing. What to do about it is an
+  argument.
+- **Only one loop shape was driven per ending.** One agent, two tasks, no dependencies, no
+  questions, no `blocked` task, no delegated `control`. A loop whose queue stalls on a *dependency
+  gate* or an unanswered question reaches `_loop_stall_reason` by a different branch and was not
+  driven.
