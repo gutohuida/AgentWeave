@@ -49,9 +49,16 @@ _RATIO = ("context_usage", "context_usage_ratio")
 _WHEN = ("observed_at", "updated_at")
 # `source`, `model`, `session_id` and `percent` are read straight across rather than
 # through an alias, so they are consumed too.
-LEGACY_CONTEXT_VOCABULARY = frozenset(
-    _USED + _LIMIT + _RATIO + _WHEN + ("source", "model", "session_id", "percent")
-)
+_CARRIED = ("source", "model", "session_id", "percent")
+# And three the validator never reads, which is why enumerating the vocabulary from what
+# it *reads* missed them: the deleted watchdog computed `warning`/`critical` from the
+# percentage and pushed them with every sample, and the body repeated the agent's own name
+# alongside the one already in the path. They are retired names, not missing fields —
+# nothing here should start honouring them — but a body carrying them is the shape
+# `agent-context-usage`'s "Legacy data claims zero without a limit" scenario is written
+# about, and it SHALL degrade to `unavailable`, not 422.
+_RETIRED = ("agent", "warning", "critical")
+LEGACY_CONTEXT_VOCABULARY = frozenset(_USED + _LIMIT + _RATIO + _WHEN + _CARRIED + _RETIRED)
 
 
 class AgentSummary(BaseModel):

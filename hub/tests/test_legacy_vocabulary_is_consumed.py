@@ -112,6 +112,22 @@ def test_a_rolling_upgrade_body_carrying_two_names_is_accepted(body):
     assert sample.status == "measured"
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param({"percent": 0, "warning": False, "critical": False}, id="watchdog-reset"),
+        pytest.param({"agent": "someone", "tokens_limit": 200000}, id="body-repeats-the-agent"),
+    ],
+)
+def test_the_retired_watchdog_fields_are_consumed_not_refused(body):
+    """`warning` and `critical` were computed by the deleted watchdog and pushed with every
+    sample; `agent` repeated the name already in the path. The validator never *read* any of
+    them, so enumerating the vocabulary from what it reads missed all three -- and the first
+    body here is verbatim the shape `agent-context-usage`'s "Legacy data claims zero without
+    a limit" scenario is written about. It SHALL degrade, not 422."""
+    assert ContextUsageCreate.model_validate(body).status == "unavailable"
+
+
 def test_a_declared_field_survives_the_legacy_path():
     """`breakdown` is declared, and the fresh-dict rebuild dropped it on the legacy path.
 
