@@ -28,6 +28,8 @@ from pydantic import BaseModel
 
 from hub.main import create_app
 
+from ._routing import iter_api_routes
+
 # `document: Any` is deliberately tolerant, and so is the model around it:
 # `agent-document-creation` requires that an unsupported document shape be *unexpressible*
 # rather than merely refused, and `spec-document-authority`'s "The payload contract is
@@ -85,29 +87,38 @@ def _body_models(annotation: object) -> list[type[BaseModel]]:
     return found
 
 
-def _routes_with_bodies() -> list[tuple[APIRoute, object]]:
-    """(route, body annotation) for every route FastAPI parses a request body for.
+def _routes_with_bodies() -> list[tuple[str, APIRoute, object]]:
+    """(full path, route, body annotation) for every route FastAPI parses a request body for.
 
     `route.body_field` is FastAPI's own answer to "what is this route's body" -- derived from
     the same dependant it uses at request time. Classifying the endpoint's parameters by hand
     gets a different, wronger answer.
+
+    Reached through `iter_api_routes` rather than by iterating `app.routes` directly, because
+    those are not the same set on every Starlette. Under 1.x `app.routes` holds `_IncludedRouter`
+    wrappers and the real `APIRoute`s are nested inside them, so `isinstance(route, APIRoute)`
+    matches **nothing** and this walk returns an empty list. That is exactly what happened: this
+    file shipped iterating `app.routes`, passed on the dev machine's Starlette 0.52.1 where the
+    table is flattened, and failed in CI where `fastapi>=0.110` resolved 1.6.0 -- the same
+    version split `tests/_routing.py` was written for, one release earlier, for two other tests.
+
+    `test_the_probe_sees_the_whole_write_surface` is what turned that into a loud failure rather
+    than two assertions passing over an empty set, which is the whole reason it exists.
     """
     app = create_app()
     out = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
+    for path, route in iter_api_routes(app):
         body_field = getattr(route, "body_field", None)
         if body_field is None:
             continue
-        out.append((route, body_field.field_info.annotation))
+        out.append((path, route, body_field.field_info.annotation))
     return out
 
 
 def test_every_request_body_model_forbids_unknown_fields():
     offenders = []
     checked = 0
-    for route, annotation in _routes_with_bodies():
+    for path, route, annotation in _routes_with_bodies():
         for model in _body_models(annotation):
             checked += 1
             qualname = f"{model.__module__}.{model.__name__}"
@@ -115,7 +126,7 @@ def test_every_request_body_model_forbids_unknown_fields():
                 continue
             if qualname in LAX_BY_DESIGN:
                 continue
-            offenders.append(f"{qualname} (body of {route.name} {route.path})")
+            offenders.append(f"{qualname} (body of {route.name} {path})")
 
     assert checked, "found no request body models at all -- the walk is broken, not the code"
     assert not offenders, (
@@ -127,12 +138,12 @@ def test_every_request_body_model_forbids_unknown_fields():
 
 def test_every_route_with_a_body_has_a_contract():
     offenders = []
-    for route, annotation in _routes_with_bodies():
+    for path, route, annotation in _routes_with_bodies():
         if _body_models(annotation):
             continue
         if route.name in NO_CONTRACT_BY_DESIGN:
             continue
-        offenders.append(f"{route.name} {sorted(route.methods)} {route.path} -> {annotation!r}")
+        offenders.append(f"{route.name} {sorted(route.methods)} {path} -> {annotation!r}")
 
     assert not offenders, (
         "these routes take an untyped body, so no field name is ever refused; give them a "
