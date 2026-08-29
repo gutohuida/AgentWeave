@@ -32,7 +32,18 @@ from .constants import (
 )
 
 SECRET_FIELD_RE = re.compile(r"(api[_-]?key|token|secret|password|authorization)", re.I)
-SECRET_VALUE_RE = re.compile(r"(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9_=-]{32,})")
+# The two prefixes only count at the start of a word (F118). Unanchored, `sk-` matched inside
+# `task-<id>` — the Hub's own primary-key shape, which `doctor` prints back in task and session
+# state — and redacted it to `ta<redacted>`. The lookbehind rejects only `[A-Za-z0-9_]`, so a key
+# after a hyphen or any punctuation is still caught. The Hub keeps the one live copy of this rule
+# in `hub/hub/runner_events.py`; this is a deliberate second one, because the CLI imports nothing
+# from the Hub (see that module's docstring). Its third alternative is still the broad
+# `{32,}` catch-all the Hub narrowed for F31 — a divergence recorded as F119, not fixed here,
+# because what `doctor` prints is env and config values rather than the Hub's own vocabulary.
+SECRET_VALUE_RE = re.compile(
+    r"((?<![A-Za-z0-9_])aw_live_[A-Za-z0-9_=-]+|(?<![A-Za-z0-9_])sk-[A-Za-z0-9_=-]+"
+    r"|[A-Za-z0-9_=-]{32,})"
+)
 PLACEHOLDER_CONTEXT_MARKERS = (
     "[Replace with:",
     "<!-- Explain",

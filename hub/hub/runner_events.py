@@ -42,8 +42,20 @@ _SECRET_FIELD_RE = re.compile(r"(api[_-]?key|token|secret|password|authorization
 #: Excluding `_` and `-` is what separates the two populations. Raw credentials are hex or base64
 #: and carry neither; identifiers a human or the Hub composed are made of joined words and carry
 #: one or the other. A credential that does contain them is still caught whenever it wears a known
-#: prefix, which is what the first two alternatives are for, and those are untouched.
-_SECRET_VALUE_RE = re.compile(r"(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9+/=]{32,})")
+#: prefix, which is what the first two alternatives are for.
+#:
+#: **The two prefixes only count at the start of a word** (F118, driven live 2026-08-29). They were
+#: unanchored, and `task-` ends in the literal `sk-` — so every task id the Hub has ever minted was
+#: stored as `ta<redacted>`, in tool inputs, tool outputs, file paths under `.agentweave/tasks/`,
+#: and snapshot commit messages. `subtask-1` became `subta<redacted>`; one trailing character was
+#: enough. An operator reading a transcript could not tell which task any agent had worked on, and
+#: since a task id is the join between a transcript and the board, that is the identifier the
+#: reading exists to recover. The lookbehind rejects only `[A-Za-z0-9_]`, not `-`, because a
+#: hyphen does not start a word: `x-sk-...` is still a key wearing its prefix, `task-...` is not.
+_SECRET_VALUE_RE = re.compile(
+    r"((?<![A-Za-z0-9_])aw_live_[A-Za-z0-9_=-]+|(?<![A-Za-z0-9_])sk-[A-Za-z0-9_=-]+"
+    r"|[A-Za-z0-9+/=]{32,})"
+)
 
 
 def redact_secrets(value: Any) -> Any:

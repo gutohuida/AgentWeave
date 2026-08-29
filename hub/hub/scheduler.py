@@ -26,6 +26,7 @@ from .db.engine import async_session_factory
 from .db.models import Agent, AIJob, Checkpoint, JobRun, Loop, Message, Question, Run, Task
 from .loop_ending import QUEUE_DRAINED_REASON, end_loop
 from .run_task_binding import TERMINAL_FOR_BINDING, tasks_held_by_a_running_turn
+from .runner_events import redact_secrets
 from .sse import sse_manager
 from .task_transition_service import apply_transition
 from .task_transitions import (
@@ -39,11 +40,17 @@ from .utils import persist_event, short_id
 
 logger = logging.getLogger(__name__)
 
-_SECRET_RE = re.compile(r"(aw_live_[A-Za-z0-9_=-]+|sk-[A-Za-z0-9_=-]+|[A-Za-z0-9_=-]{32,})")
-
 
 def _safe_error_summary(exc: Exception) -> str:
-    return _SECRET_RE.sub("<redacted>", str(exc))[:500]
+    """Redact by `runner_events`' rule, not a private copy of it (F119).
+
+    This module carried its own regex, written before F31 narrowed the shared one and never
+    moved with it — so a loop's `error_summary`, which is what the operator reads when a firing
+    fails, still ate `mcp__agentweave__record_evidence` and every other long joined identifier
+    the Hub composes, and (F118) every task id along with them. Two copies of one rule means the
+    next repair lands in one of them; there is now one.
+    """
+    return str(redact_secrets(str(exc)))[:500]
 
 
 # --- Cron day-field ambiguity (finding F1) ---------------------------------------------------
