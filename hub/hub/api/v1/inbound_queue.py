@@ -13,6 +13,7 @@ from ...db.engine import get_session
 from ...db.models import InboundQueueEntry, Project
 from ...inbound_queue import DELIVERY_ATTEMPT_LIMIT, release_entry, withdraw_entry
 from ...launchability import get_agent_config, probe_agent
+from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...usage_accounting import project_budget_state
 from ...utils import persist_event
@@ -44,7 +45,7 @@ class QueueEntryResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class QueueSettings(BaseModel):
+class QueueSettings(RequestModel):
     hop_budget: int = Field(ge=1)
     turn_delivery_cap: int = Field(ge=1)
     agent_budget: int = Field(default=8, ge=1)

@@ -5,8 +5,10 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from .common import RequestModel
 
-class QuestionOption(BaseModel):
+
+class QuestionOption(RequestModel):
     """One offered answer.
 
     `label` is what comes back when it is chosen; `description` is what lets an operator pick
@@ -16,10 +18,8 @@ class QuestionOption(BaseModel):
     label: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=500)
 
-    model_config = {"extra": "forbid"}
 
-
-class QuestionCreate(BaseModel):
+class QuestionCreate(RequestModel):
     from_agent: str = Field(max_length=64)
     question: str = Field(max_length=10000)
     blocking: bool = False
@@ -35,7 +35,7 @@ class QuestionCreate(BaseModel):
     multi_select: bool
 
 
-class QuestionAnswer(BaseModel):
+class QuestionAnswer(RequestModel):
     """The operator's answer.
 
     `answer` is always the human-readable form. `labels` carries the structure when options were

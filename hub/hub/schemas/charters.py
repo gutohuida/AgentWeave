@@ -5,19 +5,17 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from .common import RequestModel
 
-class CharterCreate(BaseModel):
+
+class CharterCreate(RequestModel):
     name: str = Field(min_length=1, max_length=256)
     content: str
 
-    model_config = {"extra": "forbid"}
 
-
-class CharterUpdate(BaseModel):
+class CharterUpdate(RequestModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=256)
     content: Optional[str] = None
-
-    model_config = {"extra": "forbid"}
 
 
 class CharterResponse(BaseModel):

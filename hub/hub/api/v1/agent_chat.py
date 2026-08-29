@@ -45,6 +45,7 @@ from ...db.models import (
     Message,
     Project,
 )
+from ...schemas.common import RequestModel
 from ...sse import sse_manager
 
 router = APIRouter(prefix="/agent", tags=["agent-chat"])
@@ -150,7 +151,7 @@ class ConversationResponse(BaseModel):
     task_id: Optional[str] = None
 
 
-class ConversationRenameRequest(BaseModel):
+class ConversationRenameRequest(RequestModel):
     title: str
 
 

@@ -53,3 +53,68 @@ Run the Hub suite with **`py -3.11 -m pytest hub/tests/ -q`**. Bare `python` res
 *has* pytest — so it runs and looks legitimate — but produces three false failures in
 `test_pty_runner.py` on a completely green tree. Measured 2026-08-23: bare `python` gave
 3 failed / 2755 passed; `py -3.11` gave 2758 passed / 84 skipped.
+
+## The 2026-08-29 fixture — rows 12 and 16
+
+`drive-wt-0829` at `C:\Users\huida\Documents\drive-wt-0829`, registered as `proj-dc4d43543bea` on the
+**8011** Hub (`sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0829/aw0829.db`), not on 8010.
+A four-line `calc.py` in its own git repo, three agents (`alpha`, `beta`, `gamma`) all on
+`claude-haiku-4-5-20251001`, and an approved change document (`spec/changes/olive-chimera/spec.html`,
+`spdoc-ee4305b82730`) whose two tasks materialised into a flow's queue.
+
+It is deliberately trivial subject matter, unlike `ledger`, because rows 12 and 16 are about *the
+machinery around the work* — parallel checkouts, conflict detection, reviewer resolution — and a
+one-line function is enough to make two branches diverge on the same line.
+
+Harnesses:
+
+- `t_row16_worktrees.py` — two agents, two tasks, one file; then `/worktrees` and
+  `/worktrees/conflicts`.
+- `t_row12_flows.py` — document → approve → flow → fire → parallel turns → review dispatch, and
+  archives the job in a `finally`. **Do not pipe its output through `head`**: SIGPIPE kills it before
+  the `finally` runs and leaves the job enabled.
+- `t_row17_integration.py` — approving a completed task, and what the integration gate says.
+
+The flow's job is archived. Nothing in this project is left enabled.
+
+## Row 19's crash half — four harnesses that kill the Hub, in the same fixture
+
+Added 2026-08-29, all against `drive-wt-0829` on 8011. Each one triggers a real turn, kills the
+Hub with `Stop-Process -Force` (so `lifespan`'s `terminate_all_active_runs()` never runs — a crash,
+not a bounce), restarts it from `hub/` on the same database, and reads what the operator sees.
+
+- `t_row19_crash.py` — the plain case: is the spawned CLI orphaned, is the run reconciled, is the
+  agent wedged, does the operator's message come back.
+- `t_row19_crash_card.py` — a crash with a **permission card** on screen.
+- `t_row19_crash_question.py` — a crash with **`ask_user`** blocking.
+- `t_row19_crash_task.py` — **three** crashes on one task-bound run, which is the only way to reach
+  `reconcile_interrupted_runs`' `if run.task_id and not returned_entry_ids` branch.
+
+They restart the Hub themselves, so running one leaves a Hub up on 8011 serving whatever code was
+on disk when it fired. Two things they cost time to learn: the `Run` row's pid is `claude.exe`
+itself and it dies with its Hub, and an interrupted run's `ended_at` is the **restart** time, so
+run durations read from the database are inflated by the outage.
+
+## Row 11's second half — a loop's ending, in the same fixture
+
+Added 2026-08-29, against `drive-wt-0829` on 8011. Row 11's first half (a loop firing at all) was
+driven in earlier sweeps; the ending never was.
+
+- `t_row11_loop.py` — the **queue-drained** ending. Creates a loop with two `initial_tasks` and
+  `stop_when_queue_empties`, fires it once by hand and lets the cron take the rest, watches it
+  stall on completed-but-unapproved work, approves both as the operator, and reads the four facts
+  `loop_ending.end_loop` promises. Then the three ways an operator might restart it. ~9 minutes,
+  two real Haiku turns. **19/21** — the two failures are one mis-specified assertion, kept
+  deliberately; see F121's strengthening in `FINDINGS.md`.
+- `t_row11_loop_quiet.py` — the **stop-time** ending, and the only check that distinguishes "the
+  four facts were written" from "the loop actually stopped": 160 seconds of wall clock, three cron
+  ticks, asserting `run_count` does not move. Costs no agent turn at all — the stop condition is
+  checked before the spawn. ~4 minutes. **11/12**, and the failure found F125.
+
+Both archive their loop and disable their job in a `finally`. **Do not pipe either through `head`**:
+SIGPIPE kills the process before the `finally` runs and leaves a job enabled.
+
+Two things they cost time to learn. A loop's queue drains at `approved`/`rejected`, not at
+`completed` — `TERMINAL_FOR_BINDING` is those two — so a loop only ends once somebody reviews its
+work, and until then it stalls with a reason rather than stopping. And approving a loop's task
+merges nothing, ever, for the structural reason in F124.

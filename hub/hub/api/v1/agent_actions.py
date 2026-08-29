@@ -22,6 +22,7 @@ from ...checkpoint_access import (
 from ...conversations import conversation_id_for_run
 from ...db.engine import get_session
 from ...db.models import CheckpointNote, Question
+from ...schemas.common import RequestModel
 from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
 from ...schemas.messages import _MESSAGE_TYPES, MessageCreate, MessageResponse
 from ...schemas.questions import QuestionCreate, QuestionOption, QuestionResponse
@@ -52,7 +53,7 @@ from .tasks import (
 router = APIRouter(prefix="/agent-actions", tags=["agent-actions"])
 
 
-class AgentMessageCreate(BaseModel):
+class AgentMessageCreate(RequestModel):
     recipient: str = Field(max_length=64)
     subject: Optional[str] = Field(default=None, max_length=256)
     content: str = Field(max_length=10000)
@@ -71,8 +72,6 @@ class AgentMessageCreate(BaseModel):
     # in combination with conversation_id — see MessageCreate for the shared behaviour.
     start_new_thread: bool = False
 
-    model_config = {"extra": "forbid"}
-
     @field_validator("type")
     @classmethod
     def validate_type(cls, value: str) -> str:
@@ -81,7 +80,7 @@ class AgentMessageCreate(BaseModel):
         return value
 
 
-class AgentTaskCreate(BaseModel):
+class AgentTaskCreate(RequestModel):
     id: Optional[str] = Field(default=None, max_length=64)
     title: str = Field(max_length=256)
     description: str = Field(default="", max_length=10000)
@@ -100,8 +99,6 @@ class AgentTaskCreate(BaseModel):
     # Adds this task directly to a loop's queue — gated in `create_task_for_actor` against the
     # loop's own `AIJob.agent`, or the operator (design D1/D7).
     loop_id: Optional[str] = Field(default=None, max_length=64)
-
-    model_config = {"extra": "forbid"}
 
     @field_validator("status")
     @classmethod
@@ -129,7 +126,7 @@ class AgentTaskCreate(BaseModel):
         return value
 
 
-class AgentQuestionCreate(BaseModel):
+class AgentQuestionCreate(RequestModel):
     question: str = Field(max_length=10000)
     blocking: bool = False
     # All required — see QuestionCreate. An agent that omits them is rejected before the Hub
@@ -138,10 +135,8 @@ class AgentQuestionCreate(BaseModel):
     header: str = Field(min_length=1, max_length=64)
     multi_select: bool
 
-    model_config = {"extra": "forbid"}
 
-
-class AgentQuestionBatchCreate(BaseModel):
+class AgentQuestionBatchCreate(RequestModel):
     """Several questions asked in one call, answered in one sitting.
 
     Capped at 4 the way Claude Code's own `AskUserQuestion` is: past a handful, stepping through
@@ -152,23 +147,19 @@ class AgentQuestionBatchCreate(BaseModel):
     questions: List[AgentQuestionCreate] = Field(min_length=1, max_length=4)
     blocking: bool = True
 
-    model_config = {"extra": "forbid"}
-
 
 class AgentQuestionBatchResponse(BaseModel):
     batch_id: str
     questions: List[QuestionResponse]
 
 
-class BoundAgentRequest(BaseModel):
+class BoundAgentRequest(RequestModel):
     name: str = Field(min_length=1, max_length=32)
     template: str = Field(min_length=1, max_length=32)
     task: str = Field(min_length=1, max_length=100_000)
 
-    model_config = {"extra": "forbid"}
 
-
-class AgentJobCreate(BaseModel):
+class AgentJobCreate(RequestModel):
     name: str = Field(max_length=256)
     agent: str = Field(max_length=64)
     message: str = Field(max_length=10000)
@@ -184,8 +175,6 @@ class AgentJobCreate(BaseModel):
     stop_when_queue_empties: bool = False
     spec_document_id: Optional[str] = Field(default=None, max_length=64)
     initial_tasks: Optional[List[Dict[str, Any]]] = None
-
-    model_config = {"extra": "forbid"}
 
     @field_validator("session_mode")
     @classmethod
@@ -325,7 +314,7 @@ async def retry_shared_task_integration(
     )
 
 
-class AgentCheckpointNotes(BaseModel):
+class AgentCheckpointNotes(RequestModel):
     """What the agent knows that the record does not.
 
     Capped near the 1-2k tokens Anthropic recommends for distillation. The caps are not
@@ -337,8 +326,6 @@ class AgentCheckpointNotes(BaseModel):
     intent: str = Field(max_length=1500)
     suspicions: List[str] = Field(default_factory=list, max_length=8)
     warnings: List[str] = Field(default_factory=list, max_length=8)
-
-    model_config = {"extra": "forbid"}
 
     @field_validator("suspicions", "warnings")
     @classmethod
@@ -614,7 +601,7 @@ async def run_governed_job(
     )
 
 
-class PermissionDecisionCreate(BaseModel):
+class PermissionDecisionCreate(RequestModel):
     """One permission decision a run has *already* made and is reporting.
 
     Past tense throughout: the run answered Claude before calling this, so nothing here can
@@ -625,8 +612,6 @@ class PermissionDecisionCreate(BaseModel):
     tool_use_id: str = Field(default="", max_length=128)
     allowed: bool
     reason: str = Field(default="", max_length=1000)
-
-    model_config = {"extra": "forbid"}
 
 
 async def _operator_already_refused(
@@ -701,14 +686,12 @@ async def record_permission_decision(
     return {"recorded": not body.allowed}
 
 
-class PermissionRequestCreate(BaseModel):
+class PermissionRequestCreate(RequestModel):
     """A run asking the operator to decide one tool call."""
 
     tool_name: str = Field(max_length=128)
     tool_use_id: str = Field(default="", max_length=128)
     tool_input: dict = Field(default_factory=dict)
-
-    model_config = {"extra": "forbid"}
 
 
 @router.post("/permission-requests", status_code=status.HTTP_201_CREATED)
@@ -823,7 +806,7 @@ async def expire_permission_request(
     return {"id": row.id, "status": row.status}
 
 
-class EvidenceRecord(BaseModel):
+class EvidenceRecord(RequestModel):
     """Evidence an agent produced, for the requirement it demonstrates.
 
     There is no actor field, and there will not be one: identity comes from the
@@ -838,14 +821,10 @@ class EvidenceRecord(BaseModel):
     document: Optional[str] = Field(default=None, max_length=255)
     task_id: Optional[str] = Field(default=None, max_length=64)
 
-    model_config = {"extra": "forbid"}
 
-
-class EvidenceDecision(BaseModel):
+class EvidenceDecision(RequestModel):
     decision: str = Field(max_length=16)
     reason: str = Field(default="", max_length=10000)
-
-    model_config = {"extra": "forbid"}
 
 
 async def _resolve_requirement(session, project_id: str, identifier: str, document: str):
@@ -1033,7 +1012,7 @@ async def decide_evidence(
     return {"id": evidence.id, "review_state": evidence.review_state}
 
 
-class SpecDocumentRename(BaseModel):
+class SpecDocumentRename(RequestModel):
     """The document, and what it turned out to be about.
 
     `subject` is prose and the Hub derives the path from it. There is
@@ -1045,8 +1024,6 @@ class SpecDocumentRename(BaseModel):
 
     path: str = Field(max_length=255)
     subject: str = Field(max_length=512)
-
-    model_config = {"extra": "forbid"}
 
 
 @router.get("/spec/documents")
@@ -1280,7 +1257,7 @@ async def rename_spec_document(
     return {"path": result.path, "previous_path": result.previous_path}
 
 
-class SpecDocumentSubmission(BaseModel):
+class SpecDocumentSubmission(RequestModel):
     """A payload plus the document it belongs to.
 
     The document must already exist — call `create_spec_document` first if you
@@ -1291,8 +1268,6 @@ class SpecDocumentSubmission(BaseModel):
 
     path: str = Field(max_length=255)
     document: Any
-
-    model_config = {"extra": "forbid"}
 
 
 @router.post("/spec/documents")

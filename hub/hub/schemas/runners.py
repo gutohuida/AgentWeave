@@ -7,15 +7,14 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..db.models import RUNNER_CLIS
 from ..model_catalog import get_provider
+from .common import RequestModel
 
 
-class RunnerCreate(BaseModel):
+class RunnerCreate(RequestModel):
     name: str = Field(max_length=256)
     cli: str = Field(max_length=16)
     model: Optional[str] = Field(default=None, max_length=256)
     flags: Optional[List[str]] = None
-
-    model_config = {"extra": "forbid"}
 
     @field_validator("cli")
     @classmethod
@@ -25,12 +24,10 @@ class RunnerCreate(BaseModel):
         return v
 
 
-class RunnerUpdate(BaseModel):
+class RunnerUpdate(RequestModel):
     name: Optional[str] = Field(default=None, max_length=256)
     model: Optional[str] = Field(default=None, max_length=256)
     flags: Optional[List[str]] = None
-
-    model_config = {"extra": "forbid"}
 
 
 class RunnerResponse(BaseModel):

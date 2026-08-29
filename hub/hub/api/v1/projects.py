@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator, model_validator
+from pydantic import BaseModel, Field, create_model, field_validator, model_validator
 from pydantic import ValidationError as PydanticValidationError
 from pydantic.fields import FieldInfo
 from sqlalchemy import select
@@ -28,6 +28,7 @@ from ...project_workspace import (
     raise_workspace_http_error,
     resolve_project_workspace,
 )
+from ...schemas.common import RequestModel
 from ...sse import sse_manager
 
 logger = logging.getLogger(__name__)
@@ -60,18 +61,14 @@ class ProjectSummary(BaseModel):
     agents: List[ProjectAgentSummary]
 
 
-class ProjectPathRequest(BaseModel):
+class ProjectPathRequest(RequestModel):
     path: str = Field(min_length=1, max_length=4096)
     name: Optional[str] = Field(default=None, min_length=1, max_length=256)
     register_copy_as_new: bool = False
 
-    model_config = {"extra": "forbid"}
 
-
-class ProjectRelocateRequest(BaseModel):
+class ProjectRelocateRequest(RequestModel):
     path: str = Field(min_length=1, max_length=4096)
-
-    model_config = {"extra": "forbid"}
 
 
 class ProjectSettings(BaseModel):
@@ -178,7 +175,7 @@ def _as_optional(field: FieldInfo) -> FieldInfo:
 
 ProjectSettingsUpdate = create_model(  # type: ignore[call-overload]
     "ProjectSettingsUpdate",
-    __config__=ConfigDict(extra="forbid"),
+    __base__=RequestModel,
     **{
         name: (Optional[field.annotation], _as_optional(field))
         for name, field in ProjectSettings.model_fields.items()

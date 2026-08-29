@@ -20,7 +20,7 @@ import dataclasses
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,6 +53,7 @@ from ...db.models import (
     SpecEditProposal,
     SpecRequirement,
 )
+from ...schemas.common import RequestModel
 from ...spec_manifest import (
     Manifest,
     SpecPathError,
@@ -213,7 +214,7 @@ async def get_spec(
     return payload
 
 
-class DocumentCreate(BaseModel):
+class DocumentCreate(RequestModel):
     """Starting an exploration.
 
     Only what identifies the document. Explore is the one phase that would
@@ -231,16 +232,12 @@ class DocumentCreate(BaseModel):
     title: str = Field(default="", max_length=512)
     kind: str = Field(default="change-spec", max_length=32)
 
-    model_config = {"extra": "forbid"}
 
-
-class PhaseRequest(BaseModel):
+class PhaseRequest(RequestModel):
     reason: str = Field(default="", max_length=2000)
 
-    model_config = {"extra": "forbid"}
 
-
-class MergeRequest(BaseModel):
+class MergeRequest(RequestModel):
     """The operator folding a finished change's content into a capability document.
 
     `from_changes` names sources by path, like every other document-scoped route in this file —
@@ -250,8 +247,6 @@ class MergeRequest(BaseModel):
     payload: dict = Field(description="Same shape submit_spec_document accepts.")
     from_changes: list[str] = Field(min_length=1, max_length=16)
     note: str = Field(default="", max_length=2000)
-
-    model_config = {"extra": "forbid"}
 
 
 def _document_view(document) -> dict:
@@ -326,7 +321,7 @@ async def list_documents(
     return {"documents": views}
 
 
-class EvidenceRecord(BaseModel):
+class EvidenceRecord(RequestModel):
     """What the operator records to demonstrate a requirement."""
 
     identifier: str = Field(max_length=32)
@@ -337,20 +332,20 @@ class EvidenceRecord(BaseModel):
     task_id: Optional[str] = Field(default=None, max_length=64)
 
 
-class EvidenceDecision(BaseModel):
+class EvidenceDecision(RequestModel):
     decision: str = Field(max_length=16)
     reason: str = Field(default="", max_length=10000)
 
 
-class DriftResolution(BaseModel):
+class DriftResolution(RequestModel):
     resolution: str = Field(max_length=32)
 
 
-class RetentionSetting(BaseModel):
+class RetentionSetting(RequestModel):
     policy: str = Field(max_length=16)
 
 
-class ReindexRequest(BaseModel):
+class ReindexRequest(RequestModel):
     """Optional inputs to a reindex. The body itself is optional; all fields default.
 
     `home` exists because the Hub refuses to choose one. `_select_home` treats a guess as
@@ -363,7 +358,7 @@ class ReindexRequest(BaseModel):
     home: Optional[str] = Field(default=None, max_length=255)
 
 
-class DocumentAdopt(BaseModel):
+class DocumentAdopt(RequestModel):
     """Tracking a document that is already on disk.
 
     Carries a path and nothing else. Everything else about the document — its
@@ -373,8 +368,6 @@ class DocumentAdopt(BaseModel):
     """
 
     path: str = Field(max_length=255)
-
-    model_config = {"extra": "forbid"}
 
 
 async def _requirement(session: AsyncSession, project_id: str, identifier: str, document: str):
@@ -402,7 +395,7 @@ async def _requirement(session: AsyncSession, project_id: str, identifier: str, 
     return row
 
 
-class DocumentContent(BaseModel):
+class DocumentContent(RequestModel):
     """The operator's equivalent of an agent submission's body, minus the path.
 
     The path is in the URL, matching every other operator document route. There is deliberately no
@@ -412,10 +405,8 @@ class DocumentContent(BaseModel):
 
     document: Any
 
-    model_config = {"extra": "forbid"}
 
-
-class RigorRequest(BaseModel):
+class RigorRequest(RequestModel):
     """The operator setting how strictly a document is enforced.
 
     `expected_digest` is compare-and-swap: a rigor change must not land on a
@@ -427,8 +418,6 @@ class RigorRequest(BaseModel):
     rigor: str = Field(max_length=16)
     reason: str = Field(default="", max_length=2000)
     expected_digest: Optional[str] = Field(default=None, max_length=64)
-
-    model_config = {"extra": "forbid"}
 
 
 @router.post("/documents/{path:path}/rigor")
@@ -612,14 +601,12 @@ async def list_proposals(
     return {"proposals": [_proposal_view(row) for row in result.scalars().all()]}
 
 
-class ProposalDecision(BaseModel):
+class ProposalDecision(RequestModel):
     reason: str = Field(default="", max_length=2000)
     # The operator's own last-seen digest — a second, independent check from the proposal's own
     # `expected_digest` (design D4, round-3 clarification). Optional so a caller that has not read
     # the document can still act.
     expected_digest: Optional[str] = Field(default=None, max_length=64)
-
-    model_config = {"extra": "forbid"}
 
 
 @router.post("/documents/{path:path}/proposals/{proposal_id}/accept")
@@ -1206,7 +1193,7 @@ async def reindex(
     }
 
 
-class ArrangeRequest(BaseModel):
+class ArrangeRequest(RequestModel):
     """Setting a document's place in the corpus (design D3).
 
     An editorial judgement about what the project *is* — deliberately not something a document's
@@ -1216,8 +1203,6 @@ class ArrangeRequest(BaseModel):
 
     path: str = Field(max_length=255)
     parent: Optional[str] = Field(default=None, max_length=255)
-
-    model_config = {"extra": "forbid"}
 
 
 @router.post("/spec/documents/arrange")

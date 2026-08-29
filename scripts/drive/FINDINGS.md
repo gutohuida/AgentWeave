@@ -7572,7 +7572,27 @@ before a line of it is written.
 
 ## F116 (B) — the same API forbids an unknown field on one route and silently drops a safety-relevant one on another
 
-**Status:** **open.** Found 2026-08-29 while driving row 14, by getting it wrong first.
+**Status:** **FIXED 2026-08-29** on `autonomous/2026-08-29-decided-fixes-and-drive`, through the
+full three-round spec loop (`openspec/changes/2026-08-29-an-unknown-field-is-named/`). Found
+2026-08-29 while driving row 14, by getting it wrong first.
+
+Driven live on a Hub on 8011 running the fix: F116's exact body now answers
+`422 {"loc":["body","permission_mode"],"type":"extra_forbidden"}`, and the posture sent the way it
+actually travels — in `overrides` — still raises the card, which the operator allowed and the run
+then wrote its file. A refusal that broke the working path would not have been a fix.
+
+The rule went on a shared `RequestModel` base rather than on the one model, so all 57 request body
+models reachable from `app.routes` now forbid unknown fields, with one named exemption
+(`SpecDocumentCreate`, kept lax by two shipped requirements) and one named untyped body
+(`patch_agent` — see F117 below). A test walks the routing table and asserts both, so the next lax
+model is a red build rather than a discovery three months from now.
+
+Three things the fix would have broken, all repaired rather than exempted: `normalize_legacy`
+rebuilt its payload from keys it knew and so kept absorbing unknown fields on the legacy path;
+`normalize_assignee_aliases` stripped its aliases only when `assignee` was absent, so a
+rolling-upgrade body was refused for a name the contract accepts; and `PUT …/project/instructions`
+read `body.get("content", "")` off an untyped dict, so a misspelled field answered `200` and
+**blanked the project's instructions**.
 
 `POST /projects/{id}/agent/trigger` accepts an unknown top-level `permission_mode` and returns
 `200`, having ignored it:
@@ -7616,3 +7636,1440 @@ rule belongs.
 - **F3 confirmed live on the default path.** A freshly created Hub-owned operator agent comes back
   `"contact_mode": "watchdog-spawn"` — the deleted subsystem — from `POST /projects/{id}/agents`,
   not from any legacy route. Same root as F111's removal, and it should go with it.
+
+---
+
+## F117 (B) — `PATCH /agents/{name}` takes an untyped body: a misspelled setting answers 200 and changes nothing
+
+**Status:** open. Found 2026-08-29 by F116's own surface walk, confirmed live on 8011.
+
+F116 made every request body model refuse what it cannot honour. Three routes had no model to put
+the rule on — `body: dict`. One was `PUT …/project/instructions`, fixed in the same change because
+its defect was destructive. One is `POST …/agents/register`, which F111 deletes. This is the third,
+and it is the same shape as F116 on the route that carries an agent's *safety* settings —
+`default_permission_mode`, `permission_timeout_seconds`, `question_timeout_seconds`:
+
+```
+PATCH …/agents/asker {"permission_timeout_secondz": 5}
+  -> 200, agent unchanged, nothing said
+```
+
+The handler does have a vocabulary check, but it is narrower than it looks and it was described too
+generously in the change's own design (D7, which said "400 for an unknown key"). Measured: the
+`set(body.keys()) <= _unrestricted_fields` guard fires **only** when the name belongs to a
+session-synced configured agent, and then answers `409 "reserved for a configured agent"` — a
+message about the name, not about the field. For a Hub-owned agent, which is every agent an
+operator creates in the UI, there is no check at all.
+
+Not fixed inside F116 deliberately: modelling this body turns the existing `400`s that the handler
+raises by hand (`contact_mode`, and the per-field validators below it) into FastAPI `422`s, which
+is a visible change across the agent settings UI and wants its own review. It is named in
+`NO_CONTRACT_BY_DESIGN` in `hub/tests/test_request_strictness.py` with that reason, so the exemption
+is a decision on the record rather than a silence — but a named exemption over a live defect is not
+a fix.
+
+---
+
+## F118 (B) — every task id in every recorded transcript reads `ta<redacted>`, because `task-` ends in `sk-`
+
+**Status:** fixed this session (`hub/hub/runner_events.py`, `src/agentweave/diagnostics.py`), with
+nine tests watched red first and the repair driven live on 8011.
+
+Found driving row 16 of the coverage matrix. Reading the stored transcript of two agents editing one
+file, every identifier that should have said *which task* was gone:
+
+```
+tool_use   mcp__agentweave__update_task {"task_id": "ta<redacted>", "status": "completed"}
+tool_use   Read {"file_path": "C:\\...\\.agentweave\\tasks\\ta<redacted>\\calc.py"}
+tool_result "16ddfc6 Auto-snapshot: beta's turn on ta<redacted>"
+tool_result "On branch agentweave/task/ta<redacted>\nnothing to commit, working tree clean"
+```
+
+**The cause is two characters.** `_SECRET_VALUE_RE`'s second alternative is `sk-[A-Za-z0-9_=-]+`,
+the OpenAI key prefix, and it was **unanchored** — so it matched the `sk-` inside the word
+`ta·sk-479933b7ec7f`. Reproduced at the function, no server required:
+
+```
+redact_secrets("task-479933b7ec7f")                  -> 'ta<redacted>'
+redact_secrets("subtask-1")                          -> 'subta<redacted>'
+redact_secrets("agentweave/task/task-670a6d4a5b72")  -> 'agentweave/task/ta<redacted>'
+```
+
+`task-<12 hex>` is the shape the Hub mints for the primary key of **every** task, so this fired on
+every task id in every stored transcript, in every project, since the redactor shipped. `subtask-1`
+shows one trailing character is enough.
+
+**Why it matters more than a cosmetic loss.** The task id is the join between a transcript and the
+board. An operator reading an agent's output to answer *"what did this run actually touch"* had the
+one identifier that answers it replaced by a redaction marker — and, because the marker looks
+deliberate, it reads as the product protecting a secret rather than as damage. The file paths under
+`.agentweave/tasks/<task-id>/` and the auto-snapshot commit messages went with it, so the transcript
+could not even be reconciled against git by hand.
+
+**The fix** anchors both credential prefixes with `(?<![A-Za-z0-9_])`: a prefix is only a prefix at
+the start of a word. The lookbehind deliberately does *not* reject `-`, because a hyphen does not
+start a word — `x-sk-abcdef0123456789` is still a key wearing its prefix and is still redacted,
+while `task-...` is not. The third alternative is untouched.
+
+Driven live after the fix, a real Haiku turn on a Hub restarted onto the repaired code:
+
+```
+tool_use    mcp__agentweave__get_task {"task_id": "task-020be941e2e8"}
+tool_result {"id":"task-020be941e2e8", ...}
+text        task-020be941e2e8
+```
+
+**This is F31 one alternative over, and the same lesson.** F31 narrowed the *third* alternative
+after measuring that it ate the Hub's own vocabulary. Nobody then asked the same question of the
+first two — and the answer was worse, because a document slug only sometimes runs to 32 characters
+whereas *every* task id contains `sk-` by construction. The F31 test file existed, was thorough,
+and contained no task id.
+
+---
+
+## F119 (B) — F31's repair landed in one of three copies of the same regex
+
+**Status:** Hub half fixed this session (`hub/hub/scheduler.py` now calls `redact_secrets`); the
+CLI's copy keeps its own third alternative deliberately, and that divergence is left for the
+operator.
+
+The same credential-redaction rule is written out three times:
+
+| Where | What it redacts | Third alternative |
+|---|---|---|
+| `hub/hub/runner_events.py:46` | agent transcripts | `[A-Za-z0-9+/=]{32,}` — narrowed by F31 |
+| `hub/hub/scheduler.py:42` | a loop's `error_summary` | `[A-Za-z0-9_=-]{32,}` — **pre-F31** |
+| `src/agentweave/diagnostics.py:35` | `doctor` output | `[A-Za-z0-9_=-]{32,}` — **pre-F31** |
+
+F31 measured its list against the transcript path and fixed that path. The other two kept the broad
+rule, so the exact strings F31 recorded as damage still vanish from the surface an operator reads
+when a **firing fails**, which is the one place a long identifier is most likely to appear:
+
+```
+_safe_error_summary(RuntimeError("could not start mcp__agentweave__record_evidence"))
+  -> "could not start <redacted>"
+_safe_error_summary(RuntimeError("could not start spread-fairness-metric-fix-for-idle-staff"))
+  -> "could not start <redacted>"
+```
+
+All three also carried F118's unanchored `sk-`.
+
+**Fixed for the Hub by deleting the copy, not by syncing it.** `_safe_error_summary` now calls
+`redact_secrets` from `runner_events`, so there is one definition inside the Hub and the next repair
+cannot land in only one of them. The CLI's copy stays separate on purpose — the CLI imports nothing
+from the Hub, which `runner_events.py`'s own docstring states as the reason it is a reimplementation
+in the first place. Its `sk-` anchor is fixed (F118 applies verbatim), its third alternative is not:
+what `doctor` prints is env and config values rather than the Hub's composed vocabulary, so F31's
+measurement does not transfer, and narrowing a *secret* filter on an unmeasured surface is the
+operator's call. **Open question for the operator: should the CLI's catch-all be narrowed too?**
+
+---
+
+## F120 (C) — a flow's claim of a task is recorded as an operator's transition, by nobody
+
+**Status:** open, filed not fixed. Confirms `SURVEY.md`'s code-read suspicion **S6**, unverified
+since 2026-08-23.
+
+Driving row 12, the flow's first firing claimed both of its tasks. The transition rows:
+
+```
+seq  task              from     to           actor_kind  actor_agent  origin
+5    task-524904110504 pending  assigned     operator    None         actor
+6    task-08afabab0ba6 pending  assigned     operator    None         actor
+7    task-524904110504 assigned in_progress  run         alpha        runtime
+```
+
+Rows 7 onward are exemplary — the run, the agent, the origin. Rows 5 and 6 say a *person* moved
+those tasks, and name nobody. No person was awake: this was `POST /jobs/{id}/run` fanning out to two
+agents. The scheduler passes `operator()` to `apply_transition` because the loop is acting with
+operator authority, and authority is genuinely what the *gate* needs — but it is not what the
+*history* records. The argued point of the transition machine is that "every recorded history
+describes a legal sequence" worth reading, and an operator auditing how a task came to be assigned
+is told the answer is themselves.
+
+Not fixed here: it wants an actor kind meaning "a loop, with operator authority", which touches the
+transition machine's declared vocabulary and every reader of `actor_kind`. That is a spec loop, not
+a drive fix.
+
+---
+
+## F121 (C) — one firing of a flow, two `JobRun` rows, and the badge says "2 runs"
+
+**Status:** open, filed not fixed. Possibly working as designed; recorded because the *word* is
+overloaded, not because the rows are wrong.
+
+A flow that dispatches two turns in one firing writes two `JobRun` rows with an identical
+`fired_at`, and increments `job.run_count` once per row:
+
+```
+run-9f783fb558f2  2026-08-29 15:49:46.910091  completed  manual  tick_count=1
+run-45a5e9048a54  2026-08-29 15:49:46.910091  completed  manual  tick_count=1   <- same firing
+run-16becaa17f09  2026-08-29 15:50:24.844657  completed  manual  tick_count=1
+run-03cfcff87109  2026-08-29 15:50:24.844657  completed  manual  tick_count=1   <- same firing
+```
+
+`POST /jobs/{id}/run` returned **one** `run_id` per call, and the API was called twice.
+`run_count` read 4.
+
+The per-row design is deliberate and well argued (`_stage_selection`: "Returns the `JobRun` id so
+the starter can record a refusal against it") — a dispatched turn needs somewhere to record its own
+outcome. But `JobCard.tsx:434` renders `{job.run_count} runs`, and the F25 comment four lines below
+it defines the same word as *"firings that actually ran"*. Both definitions are now live on one
+card, and a flow is exactly the case where they diverge. A third firing that dispatched one turn
+took the count to 5 for three firings.
+
+Nothing is *wrong* in the database. What an operator cannot do is read "how many times did this
+flow fire" off the card.
+
+---
+
+## Row 12 FLOWS and row 16 WORKTREES — driven end to end, and what held
+
+Both rows were `not reached` in every previous sweep. Driven 2026-08-29 on 8011 against this
+branch's code, in a fresh git project (`drive-wt-0829`, `proj-dc4d43543bea`) with three Haiku agents.
+
+**Row 16 — worktree isolation held completely.** Two agents, two tasks, both told to edit `calc.py`:
+
+- each got its own checkout at `.agentweave/tasks/<task-id>/` on its own branch;
+- both edits landed, on their own branches, as `Auto-snapshot: <agent>'s turn on <task>` commits;
+- **`main` was untouched** — `git show main:calc.py` still had only `add` and `sub`;
+- `GET /worktrees/conflicts` named both *task* workspaces (not the agents) and the one conflicting
+  path, `calc.py`, which is exactly what `ConflictInfo`'s docstring promises;
+- `GET /worktrees/<agent>` listed each agent's task checkouts with `provisioned: true` and
+  `grandfathered: false`, and provisioned nothing by being read.
+
+**Row 12 — a flow decomposed an approved document and reviewed its own work.**
+
+- Two independent tasks materialised onto the board from the approved document, into the flow's
+  queue, with their requirement links intact (`FR-1`, `FR-2`).
+- The first firing started **both** in parallel, one per agent — the property that distinguishes a
+  flow from a loop, and it works.
+- With a third agent present, a later firing resolved `gamma` — idle, holding no work, **not the
+  author** — as reviewer for `alpha`'s completed task, moved it to `under_review`, ran a real review
+  turn, and `gamma` approved it. The whole ladder, live.
+
+**Refusals that held, each naming what would work instead.** Every one of these was provoked
+deliberately:
+
+```
+completed -> under_review, author still assigned
+  403 "...it is still assigned to 'alpha', the agent recorded as completing it, so the move would
+       claim its own author is reviewing it. Assign a different reviewer, or clear the assignee to
+       review it yourself. Left as is, the task is claimable by nobody and 'alpha' counts as busy
+       for every other review in this project."
+
+completed -> approved
+  409 "Cannot move a task from 'completed' to 'approved'. From 'completed' the available
+       transitions are: rejected, under_review."
+
+record_evidence, same requirement, same task, same commit, twice
+  409 duplicate_evidence "...Recording the same demonstration twice makes the reviewer decide once
+       per copy and overstates FR-1's evidence count. If the wording is wrong, say so on that piece;
+       if the work has moved on, commit it first so the new evidence names the commit it
+       demonstrates."
+
+integration retry on a task in 'completed'
+  409 "Cannot retry integration for a task in 'completed': only an approved task has work to
+       integrate."
+```
+
+The agents *read* the duplicate-evidence refusal correctly — alpha's transcript reasons "evidence
+for FR-1 has already been recorded" and moves on rather than retrying.
+
+---
+
+## F122 (B) — a flow drives a task to `approved` by itself, and the work never reaches the branch
+
+**Status:** open, filed not fixed. **Needs an operator decision**, so it is deliberately not
+repaired here.
+
+The end of row 12's drive. A flow started `task-524904110504`, `alpha` implemented it and recorded
+evidence, a later firing resolved `gamma` as an independent reviewer, and `gamma` approved it. The
+board reads `approved`. `main` still has only `add` and `sub`:
+
+```
+GET /tasks/task-524904110504/integrations
+  { "outcome": "skipped",
+    "reason": "no accepted evidence names a commit, so there is nothing to merge",
+    "actor": "gamma", "target_branch": "main", "commit_sha": null }
+
+git show main:calc.py   ->  add, sub.  No power().
+```
+
+The gate itself is right and says exactly why. The problem is that **the flow cannot clear it.**
+Integration needs *accepted* evidence; `alpha`'s `ev-e735dfc4db23` was `review_state: awaiting` and
+stayed there, because accepting evidence needs `can_accept_evidence`, which is `false` on every
+agent a project creates. So the reviewer the flow itself resolved could approve the *task* and could
+never accept the *evidence* — the one step between an approved task and merged work is the one step
+no participant in a default flow is able to take.
+
+The operator is not exactly uninformed — `latest_integration.outcome` is on the task — but the
+headline says `approved`, and a flow with `stop_when_queue_empties` will happily drain and stop
+having merged nothing.
+
+**Three shapes, none of them obviously right, which is why this is a decision and not a fix:**
+
+1. a flow-resolved reviewer is granted `can_accept_evidence` for the task it was resolved for —
+   narrow, but it makes implicit a grant the product deliberately made explicit;
+2. approving a task with unaccepted evidence is *refused*, the way the author/reviewer gate refuses
+   — loud, but it wedges every project that has not turned the grant on;
+3. nothing changes in the machinery and the flow *says* it: an approved-but-unmerged task is
+   surfaced as a stall, the way an unstaffable review already is.
+
+Related but not the same: **F88** fixed the sibling capability `can_read_checkpoints` and quotes
+`api/v1/agents.py` on `can_accept_evidence` having once been "enforced everywhere and grantable
+nowhere". It is grantable now. What is new here is that the flow's own reviewer ladder never grants
+it, so the automation cannot finish what it started.
+
+### F122, proved from the other side: the missing step is exactly one operator action
+
+Driven immediately after, on the same task, with no agent turn:
+
+```
+POST /project/spec/evidence/ev-e735dfc4db23/decision  {"decision":"accepted", ...}
+  -> review_state: "accepted", latest_review.actor_kind: "operator"
+
+GET  /tasks/task-524904110504/integration-preview
+  -> will_merge: true, targets: [2da8dc9ad076 on agentweave/task/task-524904110504, ...]
+
+POST /tasks/task-524904110504/integrations/retry
+  -> outcome "merged", commit 2da8dc9ad076 -> main
+
+git log --oneline main
+  bf6f1d7 Integrate approved work 2da8dc9ad076
+  2da8dc9 Auto-snapshot: alpha's turn on task-524904110504
+  2bdfb0e seed
+git show main:calc.py   ->  add, sub, power.
+```
+
+Nothing else changed. The task had been `approved` for eight minutes with `will_merge: false`;
+accepting one piece of evidence flipped the preview and the retry merged. So F122 is not a broken
+integration path — **the integration path is correct and complete**, and the gap is precisely that
+no participant in a default flow can perform the one operator action that opens it.
+
+## Row 17 INTEGRATION — driven end to end, and it held
+
+The same sequence covers row 17, which had not been driven on this branch. Beyond the merge itself:
+
+- the *second* target, `HEAD` — gamma's detached review checkout, pointing at the same commit — was
+  attempted and **skipped** with `"2da8dc9ad076 is already in main; there was nothing to merge"`
+  rather than merged twice;
+- `integration-preview` before the accept said `will_merge: false` with the same sentence the
+  skipped integration later recorded, so the operator could have predicted the outcome without
+  attempting it;
+- the refusal on a `completed` task (*"only an approved task has work to integrate"*) and the
+  refusal with no accepted evidence are two different sentences for two different causes.
+
+**One blemish, noted not filed:** the merged integration row reads `actor_kind: "operator"` with
+`actor: ""`. Same shape as F120 one table over — the record knows what kind of actor it was and does
+not name it. Not raised as its own finding because there is exactly one operator per instance today,
+so the empty string is unambiguous rather than wrong.
+
+**F75's fix confirmed live.** `gamma`, reviewing `alpha`'s work, recorded its own
+`manual_observation` (`ev-1cb189450dc8`) against `FR-1` with the *same digest* as the author's
+`implementation` evidence, and it was **accepted, not refused as a duplicate** — while `alpha`
+re-recording its own claim in a later turn *was* refused. The rule distinguishes a second author
+claim from an independent confirmation, which is exactly what F75 asked for.
+
+## Row 19 RESILIENCE, two of three parts — driven, and both held
+
+**Two concurrent triggers for one agent.** Two `POST .../agent/trigger` calls for `alpha` fired from
+two threads, 19 ms apart, into two different conversations. Neither raced, neither was lost, and
+each was told something *different and correct*:
+
+```
+trigger A  status "queued"  waiting_reason: "an older conversation's queued input is being
+                                             delivered first (run run-6a2a3219b785)"
+trigger B  status "queued"  waiting_reason: "agent is already running"
+```
+
+Both entries then ran, in arrival order, in their own runs:
+
+```
+entry-30b613696046  arrived 16:07:32.951  delivered 16:07:33.379  run-6a2a3219b785  ended :43.055
+entry-3fbc4defcd68  arrived 16:07:32.970  delivered 16:07:43.305  run-e18f0ca41828  started :43.306
+```
+
+`delivery_attempts: 0`, `abandoned_reason: null` on both. `turn_scheduler`'s per-`(project, agent)`
+lock is doing exactly what `SURVEY.md` credits it with, and the *reason* the loser was given names
+the run that beat it rather than a generic "busy".
+
+**Stopping a run mid-flight.** `POST .../agent/{name}/stop` eight seconds into a real turn:
+
+```
+200 {"success": true, "message": "Stop signal sent to beta (run run-c5fb49f86c77).",
+     "status": "stopping"}
+
+runs:        status "stopped", exit_code 2, ended 8.2s after it started
+event_logs:  run_stopped  severity "info"  exit_code 2
+agents:      beta idle within 4 seconds
+queue entry: state "delivered", abandoned_reason null
+```
+
+`stopped` is its own status, not `failed`, and the event is `info` rather than an error — which is
+the right reading of an operator doing something deliberate. This is the same family as **F94**
+(*"kill an agent and the product tells you `exit 4294967295`"*): a deliberate stop is now legible.
+
+**Not driven:** killing the Hub with a run in flight (`run_reconciliation`). Left for a later
+iteration — it needs the trial Hub restarted mid-turn, and this iteration's Hub was carrying an
+unrelated fix under test.
+
+**A stopped run keeps everything it produced** — settled by repeating the stop at twenty-five
+seconds rather than eight, because one run could not distinguish "the stop discarded buffered
+output" from "there was nothing yet":
+
+```
+run-5bc7ea3b2dcb  started 16:09:59.507  stopped 16:10:24.781  exit_code 2
+agent_outputs:    20 rows, first at 16:10:08.046, last at 16:10:23.309
+```
+
+The last row landed 1.5 s before the stop took effect, and the transcript is complete up to it. The
+earlier eight-second stop's empty transcript was therefore honest: this model's first output row
+arrives 8.0-8.5 s after start on this machine, every time it was measured today, so that run had
+genuinely produced nothing. **No finding** — recorded because an empty transcript after a stop looks
+exactly like discarded output, and the next reader deserves the measurement rather than the worry.
+
+## Row 19 RESILIENCE, the third part — the Hub killed with a run in flight. It held.
+
+Driven 2026-08-29 17:45-17:50 on 8011 against this branch, `scripts/drive/t_row19_crash.py`. This
+is the half the paragraph above left open. Two specimens, one per agent, both hard kills
+(`Stop-Process -Force`, so `lifespan`'s `terminate_all_active_runs()` never ran — a crash, not a
+bounce).
+
+**Nothing is orphaned, and that is measured rather than assumed.** The `Run` row's `pid` is the
+CLI itself, and it dies with its Hub:
+
+```
+hub pids 28980 (py.exe launcher) -> 22604 (python.exe, uvicorn)
+  22604 -> 25712 OpenConsole.exe      after Stop-Process -Force: gone
+  22604 -> 19688 claude.exe           after Stop-Process -Force: gone   <- runs.pid = 19688
+```
+
+This matters because `reconcile_interrupted_runs` **skips** any run whose `pid_alive(run.pid)` is
+still true. Had the ConPTY child survived its parent — which is the ordinary Windows expectation,
+nothing reaps a grandchild — every crashed run would have stayed `running` forever and wedged its
+agent, since `POST /agent/trigger` refuses while a run is in progress. The pseudoconsole closing is
+what makes the reconciler's precondition true here, so the good outcome rests on a property of
+ConPTY, not on anything the reconciler does.
+
+**The restart tells the truth and then does something about it.** Specimen one, `alpha`, killed 20 s
+into a turn:
+
+```
+16:46:40.653  run_triggered     run-7b910e688f68
+16:46:40.757  run_started
+   ~16:47:00   Stop-Process -Force on the Hub
+16:47:00.720  run_interrupted   pid 20504, returned_entry_ids ["entry-68dd93ce09b2"],
+                                abandoned_entry_ids []          severity warn
+16:47:04.115  run_triggered     run-179b80185f46   session_mode "resume"
+16:47:04.135  queue_entry_delivered  entry-68dd93ce09b2  <- the SAME entry, redelivered
+16:47:30.420  run_completed     exit_code 0
+```
+
+Four seconds from the Hub answering again to the operator's message being back in a live turn, with
+no operator action at all. That is `_schedule_or_defer`'s deferred re-drain firing off the first
+request the restarted Hub served — the path whose docstring says it exists because
+`reconcile_interrupted_runs` runs before the Hub knows its own address. It works.
+
+Specimen two, `beta`, reproduced it: `run-63d92186c7b6` -> `interrupted` at restart, `run-5aed9335cb5a`
+started within seconds on the same input.
+
+**The redelivered agent is told it is a redelivery.** From the resumed run's own transcript:
+
+> *"The note says 'delivery attempt 2; an earlier attempt was cut off before it finished' — so this
+> appears to be something that was interrupted and needs to be completed."*
+
+`inbound_queue.py:116-119` composes that line, and the agent read it and acted on it. A redelivery
+that looked like a first delivery would make the agent redo completed side effects silently.
+
+**Accounting records the crash rather than dropping it.** `unavailable_turns` went 2 -> 3 (alpha's
+0 -> 1) across the crash, so the interrupted run has exactly one outcome and it is `unavailable`,
+not a zero and not an absence — which is `usage-accounting`'s stated rule, reached by the crash
+path.
+
+**A trigger arriving during the recovery is queued, not lost or refused:**
+
+```
+POST /agent/trigger  200  {"status": "queued", "run_id": null,
+                           "waiting_reason": "agent is already running"}
+```
+
+It ran as `run-ec7005e6f593` the moment the resumed run ended.
+
+**No finding. Two things worth knowing anyway.**
+
+- **Three crashes withdraw an operator's message.** `return_run_entries` counts a delivery attempt
+  per interruption; at `RESUME_RETRY_LIMIT = 2` the conversation's `provider_session_id` is cleared
+  (the agent loses its provider-side context) and at `DELIVERY_ATTEMPT_LIMIT = 3` the entry is
+  `withdrawn` with `abandoned_reason` set. Both constants carry a written rationale that names this
+  case explicitly ("Fewer, and a Hub restart could discard an operator's message"), so this is a
+  decided trade-off, not a defect — but an operator whose Hub crash-loops three times loses the
+  message, and the only breadcrumb is `delivered_in_run_id` on a withdrawn entry.
+- **`pid_alive` is a pid-existence check, not pid+identity**, as its own docstring says. A Hub down
+  long enough for the OS to recycle the pid reads the run as still alive and never reconciles it.
+  Not reproducible on demand and already written down at `pty_runner.py:142-147`; recorded here
+  because this row is the one place the consequence is visible — the run stays `running` and its
+  agent is wedged with no way back except another restart.
+
+**What is not covered by this row even now:** a Hub killed while a *permission card* or a *question*
+is open (the reconciler calls `expire_pending_for_run`, which this drive never exercised because
+both specimens ran in default posture), and a crash while a run holds a task (`divergences_to_evaluate`
+is only populated for `run.task_id`, and neither specimen was task-bound).
+
+## Row 19 x row 14 — the Hub killed while an operator's decision is on screen. It held.
+
+The crash drive above ran both specimens in default posture, so `reconcile_interrupted_runs`'
+call to `expire_pending_for_run` was never reached. Its comment is the reason it exists — *"a Hub
+bounced while an operator decision was on screen leaves a row nobody will ever poll again"* — so
+this drives that, `scripts/drive/t_row19_crash_card.py`, 2026-08-29 17:54.
+
+```
+17:54:50  card perm-acc79b61af1d  status "pending"   run-2f56b98d86f3  tool Write
+   ~:58   Stop-Process -Force on the Hub
+17:55:0x  restart
+          card perm-acc79b61af1d  status "expired"   decided_at null   decided_by null
+          run-2f56b98d86f3        status "interrupted"
+          GET /permission-requests  -> the card is gone from the operator's list
+POST .../perm-acc79b61af1d/decide {"allow": true}
+   409 {"detail": "this request was already expired; the run has moved on"}
+17:55:10  perm-3d4bae2c9135  a FRESH card, run-67f5dee85c34, same Write
+          {"allow": true} -> 200, and card_crash_note2.txt exists in gamma's worktree 2s later
+17:55:15  gamma idle
+```
+
+Twenty seconds from crash to the operator being asked the same question again by a live run, and
+the stale card cannot be answered into a void — the `409` names *expired* rather than the generic
+"already decided", so the operator can tell "I was too slow" from "the Hub died under me".
+
+**`decided_at` is null on an expired card, and that is right.** Nobody decided it. It matters
+because a client that asks "is this card still open?" with `!decided_at` reads an expired card as
+answerable — **this harness did exactly that on its first run**, and the mistake was invisible
+because the list route hides expired rows by default (`pending_only`). Checked against the UI
+rather than left as a worry: `permissions.ts` types `status` as the four-value union,
+`PermissionRequestCard.tsx:66` selects on `status === 'pending' || status === 'expired'` and
+renders the expired one `is-stale` with a dismiss button and no answer buttons. The UI reads the
+field that carries the answer. **No finding.**
+
+**A harness bug that would have shipped a false verdict, recorded because it is the more useful
+half of this row.** The first run of `t_row19_crash_card.py` posted `{"decision": "allow"}` — the
+field is `allow`, a bool — got a `422`, and scored it as *"deciding a dead card is refused"*. It
+proved only that the harness could not spell the request. Worse, the same typo then failed to
+answer the **fresh** card, which expired 120 s later (`permission_denied`: *"no operator answered
+within 120s, so this was not approved"*), and the run completed without writing the file — which
+the harness scored as *"the work completed after the crash"* because it was watching the agent go
+idle rather than watching the file appear. Two green verdicts, both false, from one typo in a
+request body. The re-run asserts the artefact (`os.path.exists`) and the exact status code
+(`== 409`, not `>= 300`), which is what a verdict has to do to be worth reading.
+
+That is F116's own lesson arriving from the other side: **F116 forbade extras so a misspelled
+field is named rather than absorbed, and here the named refusal was still misread by the client
+that caused it.** The `422` did everything right. A drive that only checks "did it refuse?" learns
+nothing from a good refusal.
+
+## Row 19 x row 8 — three crashes on one task-bound run: the input is abandoned, and the operator is told
+
+`reconcile_interrupted_runs` has a branch nothing had ever reached:
+
+```python
+if run.task_id and not returned_entry_ids:
+    divergences_to_evaluate.append(run.id)
+```
+
+`returned_entry_ids` is empty only when `return_run_entries` gave up, which is
+`DELIVERY_ATTEMPT_LIMIT = 3` — so the branch needs the Hub killed **three times on the same
+input**. That is also exactly the case the crash drive above filed as *"an operator whose Hub
+crash-loops three times loses the message"*, so `scripts/drive/t_row19_crash_task.py` drives both
+at once: a task assigned to `beta`, a run bound to it, and three hard kills in four minutes.
+
+```
+entry-06b6c75505dc  task-d1ae1dfe5124  delivered, attempts 0
+crash 1 -> state "queued",     attempts 1, provider_session_id 7824ae64-… kept
+crash 2 -> state "queued",     attempts 2, provider_session_id NULL      <- RESUME_RETRY_LIMIT
+crash 3 -> state "withdrawn",  attempts 3, "delivery failed 3 times; the Hub stopped retrying"
+```
+
+Every constant behaved as its comment says, including the middle one nobody would notice: at the
+second failure the conversation's provider session is dropped, so the third delivery starts fresh
+rather than re-killing the runtime on a session that cannot be resumed.
+
+**The message is gone, and nothing about that is silent.** After the third crash:
+
+| Surface | What it says |
+|---|---|
+| `GET /tasks/{id}` | `status: "in_progress"`, `has_open_divergence: true` |
+| `GET /tasks/divergences/recent` | `div-6c07fa8009fb`, `run_exit_status: "interrupted"`, `task_status_at_end: "in_progress"`, `outcome: "surfaced"` |
+| `GET /queue/beta` | the entry, `state: "withdrawn"`, with its `abandoned_reason` |
+| `GET /agent/beta/chat/{conv}` | the operator's own message, `delivery_state: "abandoned"`, reason attached |
+| `AgentTimeline.tsx:787-808` | renders that as a red **"not delivered"** chip *with the reason beside it* |
+
+The task does not silently sit in `in_progress` looking like work in flight: the divergence is
+raised on the crash path, by the same `evaluate_run_end` the ordinary end-of-turn path uses. This
+is the S6-adjacent worry answered in the product's favour.
+
+**Two measurements taken because the first reading of them was wrong.**
+
+*Output produced before a crash is not discarded.* The three abandoned runs had **zero** stored
+output rows each, next to a completed run of the same work with sixteen — which reads exactly like
+a crash eating the transcript. It is not. Killed deliberately *after* rows existed:
+
+```
+run-1036804a218c  4 rows at t+9.1s (thinking, text, tool_use, tool_result)
+  Stop-Process -Force
+  rows immediately after the kill: 4
+  rows after the restart:          4
+```
+
+`record_agent_output` commits per event, and a committed row survives its Hub. The zero-row runs
+were killed **before this model's first output row**, which lands 8.0-8.5 s after start on this
+machine — measured twice today, once for the stop half of row 19 and once here.
+
+*An interrupted run's `ended_at` is the restart time, not the crash time.* `reconcile_interrupted_runs`
+sets `run.ended_at = now()`, and "now" is whenever the Hub came back:
+
+```
+started_at 17:00:28.66   killed ~17:00:37.6   ended_at 17:00:42.29
+lived ~9 s; the row claims 13.6 s
+```
+
+That is what made the zero-row runs look impossible — their durations are inflated by however long
+the Hub was down. **Not a finding today, because `ended_at` is on no response schema and no UI
+component reads it** (checked, not assumed). It becomes one the moment a run duration is surfaced:
+a Hub that crashes at midnight and restarts at nine reports a nine-hour run. Whoever exposes it
+should bound it by the last `agent_outputs` row for the run, which is the only honest upper bound
+the Hub still holds.
+
+## Row 19 x row 13 — the Hub killed while `ask_user` is blocking. Nothing expires the question, and nothing needs to.
+
+The card half of this is handled by an explicit pass (`expire_pending_for_run`). Questions get
+none: `run_reconciliation.py` does not mention them. That asymmetry is what this drove
+(`scripts/drive/t_row19_crash_question.py`), expecting to find a question left claiming an agent
+was waiting on it forever. It is not there, and the reason is worth writing down.
+
+```
+17:03:16  run-641a10f7c182 starts, calls ask_user, blocks
+17:03:27  q-3b7e6cc781f2  "Which colour should the badge be?"  asker_waiting true
+   ~:33   Stop-Process -Force on the Hub
+17:03:36  restart -> run-641a10f7c182 status "interrupted"
+          q-3b7e6cc781f2  still there, still unanswered, asker_waiting FALSE
+17:03:40  run-93067b1a17d5, the redelivered turn, asks again
+17:03:48  q-7bf5289f85aa  asker_waiting true
+          answered "blue" -> the run finished four seconds later
+```
+
+`asker_waiting` is derived per read — `created_by_run_id not in (runs whose status != "running")`
+(`questions.py:249-270`) — so the reconciler flipping the run to `interrupted` is *itself* the
+thing that makes every question that run asked go inert. A derived field cannot be forgotten by a
+new code path the way an explicit expiry pass can, which is why the asymmetry is a design rather
+than an omission. Two open questions, one dead and one live, are distinguishable by the field
+alone.
+
+**And the surfaces read it.** Not assumed — read:
+
+- `QuestionsPanel.tsx:150-151` partitions the unanswered list on `blocking && stillWaiting`, with
+  the comment *"asserting it collectively while ignoring it individually is the dishonest half"*:
+  the dead question drops out from under the "agents are waiting" banner instead of inflating it.
+- `AgentQuestionCard.tsx:70,86-95` renders a **"no longer waiting"** chip with the hover text
+  *"The run that asked this has ended. Answering now would reach it as a new message, not as the
+  answer it was waiting for."*
+
+Answering the dead one is still allowed (`200`), and that is the right call — the row keeps the
+operator's answer, and the reply reaches the agent as an ordinary message rather than vanishing.
+The product's honesty here is in labelling it, not in forbidding it.
+
+**No finding.** Recorded because the asymmetry looks like a bug from the code alone: one kind of
+operator-facing block is expired explicitly on the crash path and the other is not mentioned. The
+answer is that one is stored state and the other is computed from the run, and only driving it
+shows which.
+
+## Row 19 x row 11 — a crash mid-firing, and F123
+
+`reconcile_stale_job_runs` is the second half of the startup pass and nothing had driven it either.
+Driven 2026-08-29 18:06, `scripts/drive/t_row19_crash_job.py`: a job fired by hand, the Hub killed
+eight seconds in, restarted.
+
+**The reconciliation itself is exactly right.** No `JobRun` is left `in_progress`, the firing is
+`failed`, and the summary is one an operator can act on rather than a stack trace:
+
+```
+run-5d31c6858841  status "failed"  trigger "manual"  tick_count 1
+error_summary: "Reconciled on Hub start: no live run behind this firing"
+```
+
+It reaches that by the `conversation_id` correlation the two tables share by convention rather
+than by constraint — `JobRun` and `Run` have no foreign key — and the correlation held.
+
+## F123 (C, open) — a crashed firing reads `failed` forever, including after the Hub itself retried it and the work succeeded
+
+Same specimen, sixteen seconds later:
+
+```
+job_runs   run-5d31c6858841  conv-eb547b1f68eb  status "failed"
+runs       run-5fe90fc12c65  conv-eb547b1f68eb  status "interrupted"   (the crash)
+           run-bf3961c3ee7d  conv-eb547b1f68eb  status "completed"     (the retry, 17:07:10)
+queue      entry-7f110f6fcc1c  origin_type "job"  state "delivered"  attempts 1
+```
+
+The Hub's own crash recovery put the job's message back, delivered it to a new run **on the same
+conversation**, and that run did the work and completed. The job's history does not say so. It
+says `failed`, and there is no second row for the retry — so the operator's only view of whether
+this job's work happened reports the opposite of what happened.
+
+**Mechanism, and it is one line.** `scheduler.finalize_job_run_for_conversation` selects
+`JobRun.conversation_id == … AND JobRun.status == "in_progress"` (`scheduler.py:1569-1574`).
+Reconciliation has already moved this row to `failed`, so the completing retry matches nothing and
+finalisation is a no-op. Every part is individually defensible: the firing *did* fail, and a
+terminal row should not be silently rewritten by a later run.
+
+**Not fixed, because the fix is a decision about what a `JobRun` is**, and the same table already
+has **F121** open against it (one firing, two `JobRun` rows; the badge counts turns not firings).
+The three shapes, costed:
+
+1. *Let the retry finalise the failed row* — smallest diff (drop the `in_progress` filter, or
+   widen it to `("in_progress", "failed")`), but it makes a terminal status mutable and erases the
+   fact that a crash happened at all.
+2. *Append a `JobRun` for the retry* — the history reads firing → failed → retried → completed,
+   which is what happened. But the retry is not a firing: `run_count`, `last_run` and the badge all
+   count these rows, so this inflates every one of them, which is precisely F121's complaint.
+3. *Leave the row and mark the job* — a `continuity_warning`-style field saying "the last firing
+   was interrupted; its work was retried and completed". `JobResponse` already carries
+   `continuity_warning`, so the surface exists.
+
+My reading is (3), because it is the only one that keeps the firing's record honest *and* tells the
+operator the work happened — but F121 and this should be decided together rather than one at a
+time, since both are about the same confusion between a firing, a turn, and the work.
+
+Severity **C**: no work is lost, and the operator can find the truth in the agent's conversation.
+It is the *job* view that is wrong, and that is the view a job exists to be read from.
+
+---
+
+## Row 11 LOOPS, second half — a loop fires, works, stalls, drains and stops, and stays stopped
+
+Driven 2026-08-29 on 8011 against this branch, in `drive-wt-0829` (`proj-dc4d43543bea`), one Haiku
+agent. Two harnesses: `t_row11_loop.py` (the queue-drained ending) and `t_row11_loop_quiet.py` (the
+stop-time ending, plus the quiet window). **19/21 and 12/12** — and both of the first harness's two
+BADs are a mis-specified assertion of mine, not a defect; the measurement behind them is real and
+is recorded under F121 below.
+
+**The whole ladder, live.** `POST /jobs` with `stop_when_queue_empties` and two `initial_tasks`
+created the job, the `Loop` row and both queue entries in one call, and the response reported
+`queue: {"pending": 2}` — the seeded queue, not the empty one an earlier version of that route
+computed before seeding. One manual fire, then the cron:
+
+```
+17:18:15  manual     completed   task A pending -> in_progress -> completed
+17:19:00  scheduled  completed   task B pending -> in_progress -> completed
+17:20:00  scheduled  skipped     tick_count 2   "task task-c7a2f0dbb4c5 has no recorded evidence…"
+17:22:00  scheduled  skipped                    "loop queue is empty"   -> ending
+```
+
+Both artefacts exist with exactly the content asked for, each in its own task checkout
+(`.agentweave/tasks/<task-id>/loop_r11_{a,b}.txt`, `ALPHAONE` / `ALPHATWO`), on its own
+`agentweave/task/<task-id>` branch, and `main` was untouched throughout. **One task at a time**
+held: the second was never claimed while the first ran.
+
+**Stalled is not finished, and it says why.** With both tasks `completed` and nothing approved, the
+loop ticked twice more and stopped nothing. The skipped row carries a reason an operator can act
+on rather than a status word:
+
+> *task task-c7a2f0dbb4c5 has no recorded evidence, so there is no commit to review. Evidence
+> naming a commit is what a review turn is given. Until the work that finished this task is
+> recorded as evidence naming a commit, no reviewer can be given anything to look at.*
+
+and the second identical tick **incremented `tick_count` to 2 on the same row** instead of writing
+a duplicate, which is `loop-notices-and-reacts` design D6 working exactly as its docstring argues.
+
+**The four ending facts, both ways.** Approving both tasks drained the queue and the next tick
+ended the loop: `ending_state: "completed"`, `stop_reason: "loop queue is empty"`, `stopped_at`
+populated, `job.enabled` false. A second loop created with a `stop_at` **two minutes in the past**
+ended on its first firing with `ending_state: "stopped"` — not `completed`, because its queue still
+held open work — `stop_reason` naming the time, and **no agent was spawned at all**: the one queued
+task was still `pending` afterwards. The stop condition is checked before the spawn, and
+`POST /jobs/{id}/run` on it answered `409 loop stop time reached (…)` rather than firing.
+
+**Stopped is true, not merely reported** — which is the property `loop_ending.py`'s own docstring
+records going wrong once (a loop that read `stopped` at 23:09 and ran twelve more real turns).
+Watched for 160 seconds — three cron ticks — after the time-stop: `run_count` stayed 0, the history
+stayed at one row, the agent stayed idle, and the outstanding task was never picked up.
+
+**Three ways to restart an ended loop, all refused, each naming the remedy.**
+
+```
+PATCH /jobs/{id} {"enabled": true}
+  409 {"code": "loop_ended", "message": "This loop has ended (loop queue is empty) at
+       2026-08-29T17:22:00.049752+00:00 and cannot be restarted: its queue is closed, so the next
+       firing would stop it again within the minute. Create a new loop with the work instead."}
+  ...and it did not half-apply: the job was still disabled afterwards.
+
+POST /jobs/{id}/run
+  400 "Job is disabled"
+
+POST /tasks {"loop_id": "<the ended loop>"}
+  403 {"code": "loop_stopped", … "offered_task": {…}}   — the operator is refused too, and the
+      submitted task is echoed back so it can be resubmitted as a new loop's initial_tasks.
+```
+
+Every one of those quotes a real `stopped_at`; the `"an unknown time"` fallback that F13's write-up
+found live did not appear once. Two of the three were re-run against the **time-stopped** loop and
+answered identically, quoting its own reason and time — so "ended" is one state with one set of
+consequences, not two that happen to look alike. (The third differs only in *where* it is caught:
+`POST /run` on the time-stopped loop is what ended it, so it answered `409 loop stop time reached`
+rather than the `400 Job is disabled` a second press would get.)
+
+## F124 (B) — a loop's work can never reach the main branch, and the card offers a retry that cannot succeed
+
+**Status:** open, filed not fixed. Found by driving row 11's second half, 2026-08-29.
+
+Both loop tasks above were approved by the operator. `main` never moved:
+
+```
+git ls-tree main --name-only   ->  README.md, calc.py      (no loop_r11_a.txt, no loop_r11_b.txt)
+
+GET /tasks/task-d3c48be292dc
+  "latest_integration": {"outcome": "skipped", "commit_sha": null,
+                         "reason": "no accepted evidence names a commit, so there is nothing to merge"}
+```
+
+So far this is `task_integration.py` behaving exactly as designed and saying so on the task
+response, which `TaskIntegrationNote.tsx` renders. **The defect is that for a loop this reason is
+permanent, and the module's own comment says it should not be:**
+
+> *Why nothing was merged, in words that name the thing the operator would change. Each is a state
+> of the world rather than an error: none of them means anything went wrong…*
+
+`_commits_for_task` resolves what to merge through `TaskRequirementLink → RequirementEvidence
+(accepted) → EvidenceFootprint` (`task_integration.py:143-167`). A loop's tasks come from
+`create_loop`'s `initial_tasks`, and nothing requires — or, in the ordinary case, supplies — a
+`requirement_ids`. With no requirement link there is no requirement for `record_evidence` to name,
+so the agent cannot record evidence even if it tries; with no evidence there is nothing to accept;
+with nothing accepted there is no commit; so `NOTHING_TO_MERGE` is not a state of the world that
+could change, it is the only state this task can ever be in.
+
+The loop's own stall reason had already said the same thing from the other side — *"no reviewer can
+be given anything to look at"* — and it is right, for the same reason.
+
+**The visible half, measured twice.** `TaskIntegrationNote` offers **"Try again"** for every
+non-merged outcome except `no main branch set`. Pressed here, it answers `200` and appends a second
+identical row:
+
+```
+POST /tasks/task-d3c48be292dc/integrations/retry   -> 200
+  tint-ee8b204b8a30  skipped  "no accepted evidence names a commit…"   17:21:03
+  tint-7e8f8c3a45a4  skipped  "no accepted evidence names a commit…"   17:23:46   <- the retry
+GET  /tasks/task-d3c48be292dc/integration-preview  -> {"will_merge": false, "targets": []}
+```
+
+`integration-preview` **already knows** the retry cannot work (`will_merge: false`, `targets: []`)
+and the card does not ask it. This is the same shape as the bug the file's own comment records
+fixing once before — a remediation stated, followed, and provably a no-op — arriving on the button
+that replaced it.
+
+**Not F122.** F122's task had evidence sitting at `review_state: awaiting`, so a real remedy
+existed (accept it) and the complaint was that a *flow* cannot reach it. Here no evidence can exist
+at all, the approver is the operator, and no flow is involved. A fix for F122's accept step would
+not touch this.
+
+**What it costs.** A loop is the product's answer to "shorter dev loops that keep developing". Every
+one of them accumulates approved work on per-task branches that no operator action will ever merge,
+while the board says `approved` — and the one control offered for it appends a row each time it is
+pressed.
+
+**Three shapes, none of them chosen here.**
+
+1. *Let a task's own branch tip be a merge source when it has no requirement links.* Cheapest to
+   state, and it breaks the module's first rule ("merge a commit, never a branch") in the one place
+   that rule was written for — a task branch carries only that task's work, so it is arguably safe,
+   but it makes approval merge unreviewed work.
+2. *Make the loop path able to produce evidence* — a synthetic requirement per loop, or evidence
+   that names a task rather than a requirement. Honest, and the largest change: `RequirementEvidence`
+   is keyed on a requirement everywhere.
+3. *Say so instead of offering a retry.* Smallest true fix: `TaskIntegrationNote` asks
+   `integration-preview`, and when `will_merge` is false for a reason retrying cannot change, states
+   what would have to happen rather than offering a button. Fixes what the operator sees; leaves the
+   work unmergeable.
+
+Recommendation: **(3) now, (2) as its own change.** (1) trades a governance property for
+convenience and should not be taken quietly.
+
+## F121, strengthened — the same word under-counts on a loop and over-counts on a flow
+
+F121 recorded that a flow writes one `JobRun` per dispatched turn, so `JobCard.tsx`'s
+`{job.run_count} runs` reads 4 for two firings. The loop drive measured the divergence running the
+other way:
+
+```
+job history:  4 rows   (2 completed, 2 skipped — one of them tick_count 2, so 5 ticks)
+job.run_count: 2
+```
+
+A skipped firing does not increment `run_count`, which is consistent with the F25 comment's
+definition (*"firings that actually ran"*) and inconsistent with the card's own word. So the badge
+under-reports a stalled loop and over-reports a wide flow, and neither is a database defect. This
+does not change F121's status; it removes the reading that it is a flow-only quirk.
+
+*(The two `[BAD]` verdicts in `t_row11_loop.py` are this measurement. The assertion as written —
+`run_count == len(history)` — asserts a thing the design never promised; it is kept, failing, with
+this note, because deleting it would delete the measurement.)*
+
+## F125 (C) — a task's title cannot be changed by anybody, and F116's fix is what made that visible
+
+**Status:** open, filed not fixed. Small.
+
+Found by accident: the quiet harness tried to rename an orphaned task and got
+
+```
+PATCH /projects/{p}/tasks/{id}  {"title": "Write loop_r11_c.txt (orphaned)"}
+  422 [{"type": "extra_forbidden", "loc": ["body", "title"],
+        "msg": "Extra inputs are not permitted"}]
+```
+
+`TaskUpdate` (`hub/hub/schemas/tasks.py:120`) has no `title` field, and `TaskDetailDrawer.tsx`
+renders `task.title` into an `<h2>` with no editor anywhere. So a task is named once, at creation,
+forever — including a task an agent named, and including one whose title has gone stale because the
+work moved. `description` is editable; the line the board actually shows is not.
+
+Whether that is a gap or a deliberate contract is an operator call, which is why this is filed
+rather than fixed.
+
+**What is not in doubt is the 422.** This is F116's own change firing on a field nobody wrote a test
+for: before the `RequestModel` base landed, this PATCH answered `200` with the title unchanged —
+F117's exact shape, on the field most likely to be edited by hand. The first thing the strictness
+caught in the wild, it caught within a day, in a harness that was not looking for it.
+
+## F126 (B) — a spent checkpoint can be cut over again, and the second press mints a second successor that does the work a second time
+
+**Status:** open, filed not fixed (iteration 8, `t_row15_cutover.py`, the one `[BAD]` of 36).
+
+`POST /projects/{p}/checkpoints/{id}/cutover` has no guard against being called twice on the same
+checkpoint. Driven live against `ckpt-5acb5c671217`:
+
+```
+POST .../checkpoints/ckpt-5acb5c671217/cutover   200  successor conv-b21d999ecaf0  entry-ed1d74dcddd7
+POST .../checkpoints/ckpt-5acb5c671217/cutover   200  successor conv-c1799d084153  entry-2b8b17f41030
+```
+
+Both successors are `lifecycle: open`, `origin: handoff`, and carry the **same** derived title
+(`"Continued: Create a file called CHECKPOINT_A.txt …"`). Two conversations, indistinguishable in
+the navigation tree, both claiming to continue the one archived predecessor.
+
+**It is not merely a duplicate row — the duplicate did real, billed work.** I called `continue`
+exactly once, on the first successor. The queue afterwards:
+
+```
+entry-ed1d74dcddd7  checkpoint  delivered  conv-b21d999ecaf0  run-cdad300b6180
+entry-2b8b17f41030  checkpoint  delivered  conv-c1799d084153  run-99ba2ab65297
+```
+
+Two runs. Two Haiku turns. The second successor's transcript reads *"Good! The files already
+exist"* and then goes on to re-verify and re-close the same task — so the second turn was not a
+no-op, it was a whole turn spent rediscovering that there was nothing to do.
+
+### Mechanism
+
+`cut_over` (`hub/hub/checkpoint_cutover.py:63`) has exactly two refusals:
+
+1. `checkpoint.status != "ready"` — unchanged by a cutover, so a spent checkpoint still passes.
+2. `archivable(db, predecessor)` — whose **first line** is
+   `if conversation.lifecycle == "archived": return None` (`hub/hub/conversations.py:374`).
+
+That early return is right for what `archivable` is for: archiving an archived conversation is a
+no-op, not an error. It is the wrong question to ask here. Nothing anywhere records that this
+checkpoint has already been handed to a successor — `Checkpoint` has no consumed/spent column, and
+the route does not look for an existing `origin: handoff` conversation.
+
+### Why the UI has not shown this
+
+The Hub UI cannot reach it *from one tab*. `checkpointOperationStore.writeCheckpoint`
+(`hub/ui/src/store/checkpointOperationStore.ts:34`) holds an `inFlight` map keyed by
+`projectId:conversationId` and does take-then-cutover as one act, so a double-click within a tab
+coalesces. That guard is **client-side and per-tab**: a second browser tab, a reload between the
+201 and the cutover, a retried request after a network timeout, or any non-UI client gets two
+successors. The Hub's own standard elsewhere is a server-side claim — `take_checkpoint` holds
+`_checkpoint_claims` (`hub/hub/api/v1/checkpoints.py:27`) for exactly this reason on the *cheaper*
+half of the pair. Generation is guarded and idempotent-ish; cutover is unguarded and durable.
+
+Related, and worth deciding at the same time: the banner that offers a cutover in the UI filters on
+`checkpoint.trigger === 'context_pressure'` (`AgentOutputPanel.tsx:485`), so a checkpoint the
+operator generated on purpose is never offered one. The operator-triggered path reaches cutover only
+through `writeCheckpoint`, which generates its own.
+
+### Shapes
+
+1. **Smallest.** Refuse a second cutover: 409 when a conversation already exists whose
+   `origin == "handoff"` and whose queue entry names this checkpoint. Costs one query, names the
+   state, and is the same shape as `_checkpoint_claims`.
+2. **Honest.** Give `Checkpoint` a `cut_over_to_conversation_id`, set inside the same commit as the
+   successor, and refuse when it is set. The row then answers *"where did this checkpoint go"*,
+   which nothing can answer today, and the refusal can name the successor rather than a generic
+   conflict. One migration.
+3. **Do nothing, deliberately** — argue that a second cutover is a legitimate fork. It is not:
+   nothing forks the *predecessor*, both successors carry the same `lineage_id`, and the second one
+   is billed for rediscovering that its work is done.
+
+Recommendation: (2). It costs a migration and answers a question the operator can otherwise only
+answer by reading queue entries, and (1) is a subset of it.
+
+### What held around it — row 15's cutover leg, driven end to end
+
+35 of 36 verdicts. Worth recording because none of this had been driven live before:
+
+| | |
+|---|---|
+| Refusal with no checkpoint runner | exactly **409**, naming project settings — no silent fallback onto another agent's runner |
+| A partial `PUT /settings` | left `hop_budget` and `checkpoint_mode` untouched (the `exclude_unset` merge doing its job) |
+| Generation | **201** in 17s on Haiku, `status: ready`, `probe_status: passed`, no generation error |
+| `files_changed` | `["CHECKPOINT_A.txt"]` — the file the turn actually wrote |
+| The body | carried the deferred next action (`RELAYTWO`) and a citation quoting the line it came from |
+| `GET /checkpoints/{id}/rendered` | 2,035 chars, envelope + body, honest about the task list not being conversation-scoped |
+| Cutover | predecessor `archived`, successor `open`/`handoff`, title derived not regenerated, queue entry `origin_type: checkpoint` addressed to the successor and framed with the preamble |
+| **The relay** | the predecessor was told **not** to write `CHECKPOINT_B.txt`; after `continue`, the successor wrote it, containing `RELAYTWO`. The handover carried the work across, end to end, and the file on disk is the proof. |
+
+
+## Row 11 LOOPS, third pass — the three stall shapes that had never been driven, and D6's coalescing
+
+`t_row11_stalls.py`, **28 of 28 verdicts held.** Nothing under `hub/` changed; the Hub on 8011
+(started 18:06:50, newest `hub/` commit 17:04) served this branch's code throughout.
+
+`_loop_stall_reason` has four branches and iteration 7 drove exactly one of them — the queue whose
+tasks are all `completed` and unapproved. The other three are now driven, against a live Hub, with
+the **exact** sentence asserted each time rather than a substring:
+
+| shape | set up as | the Hub said |
+|---|---|---|
+| gate, still workable | A `blocked`, B `pending` depending on A | `loop queue is stalled: 1 still awaiting a prerequisite's approval` |
+| gate, permanent | A `rejected`, B still depending on A | `loop queue is stalled: 1 gated on a rejected prerequisite that will not clear on its own` |
+| no gate, waiting on a person | dependency removed, B `blocked` | `loop queue is stalled: no claimable task among 1 open (1 blocked)` |
+
+Each arrived as a **409** from `POST /jobs/{id}/run`, and each left the loop alive: `ending_state`
+null, `job.enabled` true, `next_run` still set. Skipped is not stopped, and the product means it.
+Three further facts came out of the same drive, none of them previously driven:
+
+* **The dependency edge is operator-reachable and symmetric.** `POST /tasks/{B}/dependencies`
+  answered 201, and afterwards B's response carried `prerequisites: [A]` while A's carried
+  `dependents: [B]` — the graph reads from both ends without a second request.
+* **Design D6's coalescing works.** Firing the same stall twice appended **no** second row: the
+  existing `JobRun` went `tick_count` 1 → 2 with `fired_at` frozen at the first refusal, and no
+  second `job_run_skipped` event was persisted. Change the shape (reject the prerequisite) and a
+  **new** row appears while the old one's count stays at 2 rather than being resurrected. A stall
+  that lasts an hour therefore leaves one readable row, not twelve identical ones.
+* **Zero spend.** Every `JobRun` this loop ever wrote is a `skipped` stall with a null
+  `session_id`, and the loop's agent never left `idle`. Four firings, no runner ever touched.
+
+The `blocked` shape needed `blocked_reason` on the PATCH — a 422 that names the field, which is
+right. Worth recording only because the first run of the harness omitted it, the task stayed
+`in_progress`, and the firing then **claimed it and spent a real turn**. The harness now aborts if
+the setup status is not what the shape requires, rather than driving a different scenario than the
+one it prints. That accident is what found F127 and F128 below.
+
+One teardown note, not a finding: a loop whose job is merely disabled cannot be archived
+(`400 this loop is still running`), because `ending_state` is written only by a firing that meets a
+stop condition. The operator's own ending path is `PATCH /jobs/{id}` with `stop_reason`, which
+routes through the same `end_loop` a firing uses. Both drive harnesses now tear down that way.
+
+## F127 (B) — pressing Run on a healthy loop whose agent is busy answers 500 "Failed to fire job"
+
+Reproduced deterministically: `t_run_while_busy2.py`, **7 of 7 verdicts held**, against
+`proj-dc4d43543bea` on 8011.
+
+`_do_fire_job` has **two** branches that decline a firing and deliberately record nothing:
+
+1. `DECISION_IN_FLIGHT` — every candidate is already being worked. **This is the one F48 fixed.**
+   `run_job` re-derives the decision through `_loop_work_is_all_in_flight`
+   (`hub/hub/api/v1/jobs.py:1139`) and answers 409: *"Every task on this loop's queue is already
+   being worked. Nothing was started, and nothing is wrong."*
+2. the **busy guard** — `_loop_flow_busy_reason` (`hub/hub/scheduler.py:2083`), the loop's agent is
+   mid-turn and nobody else is free. It returns `False` before a `JobRun` is even constructed.
+
+F48's re-derivation cannot see the second, because it asks a different question:
+`_loop_work_is_all_in_flight` calls `decide_firing`, and `decide_firing` never reaches the busy
+guard. For a loop with ordinary claimable work the answer is `DECISION_CLAIM`, not
+`DECISION_IN_FLIGHT` — so `run_job` falls through to the branch below it and raises **500** with the
+bare fallback string `"Failed to fire job"`, because there is no `JobRun.error_summary` to quote.
+
+Measured, with the loop in perfect health at that moment: `ending_state` null, `enabled` true,
+`next_run` set, its one task still `pending`, and **no history row written at all** — so the
+operator gets a 500, no reason, and nothing in the loop's history that explains it. F48's own
+write-up names this exact harm: *"the operator was being told their flow had broken."*
+
+Reproducing it needs the free list genuinely empty, which is why the first attempt missed (see
+F128): park one active task on every sibling agent, put the job's own agent mid-turn, press Run.
+
+**Shape of the fix (not implemented — it wants a round).** The honest one is to make the
+re-derivation ask the same question the firing asked: `_loop_work_is_all_in_flight` should also
+consult `_loop_flow_busy_reason`, and `run_job` should answer 409 naming the busy agent. The
+narrow one — treating "no `JobRun` was written" as "nothing is wrong" — is wrong for the reason F48
+gives itself: inferring health from the *absence* of a row is how "the flow is fine" and "the flow
+broke" became indistinguishable in the first place. The cron path is unaffected; this is purely
+what the **manual Run button** reports.
+
+## F128 (B) — a loop runs on an agent its job does not name, whenever its own agent is busy
+
+Driven live in `t_run_while_busy.py` (that file's own BAD lines are this discovery). Job
+`busy-run` was created with `agent: gamma`. gamma was put mid-turn on an unrelated errand. Pressing
+Run answered **200**, and the work went to **alpha**: `conv-a51b18211d43`, agent `alpha`, origin
+`job`, loop `loop-c888f4edb675`, and the queued task's `assignee` read `alpha`.
+
+The mechanism is `_loop_flow_busy_reason` (`hub/hub/scheduler.py:270`), whose refusal needs both
+halves: the job's agent is busy **and** `_agents_that_are_free(session, project_id)` is empty. That
+list is **project-scoped**. Its docstring states the invariant that is supposed to make this safe:
+
+> A single-agent loop reaches that by the general rule with no branch of its own — its one agent is
+> the busy one and the free list is empty — which is what keeps this exactly as strict as before
+> for every loop that exists today.
+
+**That invariant only holds in a project with exactly one agent.** In a three-agent project a loop
+that names one agent is not single-agent as far as this check is concerned, and the comment at
+`scheduler.py:2081` — *"identical for every single-agent loop, so this branch behaves exactly as it
+did for all of them"* — is false there. Two consequences, both measured:
+
+* the substitution above: `job.agent` is silently only a default, so a loop bound to an agent for
+  its charter or its runner is run by a different agent with a different charter and runner;
+* F127's busy-guard refusal is effectively unreachable in a multi-agent project until every sibling
+  is also occupied — which is exactly the corner where it does fire, and answers 500.
+
+**Not a defect on its own reading** — design D12 chose width for flows deliberately, and
+`job.agent` really is D2's default. What is wrong is that nothing tells the operator: the job form
+takes an agent, the loop lists a label and an agent, and neither says "or whoever is free". This is
+**the operator's call**, and it is one decision with two shapes: either the free list becomes
+loop-scoped (a loop staffs only the agents it names, a flow staffs its roster), or the UI and the
+API stop presenting `job.agent` as who runs this loop. Filed, not fixed.
+
+## F129 (B) — requirement drift works, and the app cannot reach any of it
+
+**Driven 2026-08-29, iteration 10, on the 8011 Hub running this branch. Row 10 of TESTPLAN.md,
+never driven before today. `scripts/drive/t_row10_drift.py`, 31/31 assertions good.**
+
+The loop itself is correct, and worth saying so plainly before the finding, because every sentence
+below was measured rather than read:
+
+| what was driven | result |
+|---|---|
+| operator records evidence naming `cart.py` | 201, footprint `kind=git`, `branch=main`, `commit_sha` equal to the repo's HEAD, and `review_state` already `accepted` on arrival |
+| scan with an unchanged tree | 200, nothing raised for that evidence |
+| commit a change to the footprinted file, scan | 200, exactly one candidate, `observed` naming `cart.py` alone with distinct `was`/`now` blob ids, hung off the right evidence row |
+| coverage while the candidate is open | `drifting` — the documented top precedence |
+| scan again while it is open | raises nothing; the same question is not asked twice |
+| resolve with a bogus resolution | **422** naming `unknown_resolution` |
+| resolve an unknown drift id | **404** |
+| resolve `implementation_corrected` | 200, `state: resolved`, coverage back to `verified` |
+| scan after resolving | raises nothing — the resolution holds |
+| move the ground *again* | a **fresh** candidate, a different row |
+| add an unrelated file | raises nothing |
+| put the footprinted file back to its recorded blob | raises nothing |
+
+That last row was found by accident: a second run of the harness rewrote `cart.py` to content an
+earlier run had already produced, the scan correctly said nothing, and the harness called it a
+defect. It is not one — a file that is byte-identical to its footprint has not drifted. The harness
+now stamps every write with the repo's commit count so no run can silently reproduce an earlier
+blob, and asserts the revert case deliberately.
+
+**The finding is that none of it is reachable from the product.** `POST /spec/drift/detect` is the
+**only** writer of a `RequirementDrift` row — no scheduler sweep, no MCP tool, no other route calls
+`requirement_evidence.detect_drift`. And `hub/ui/src` never calls it: the whole string `drift`
+appears in the UI in exactly two load-bearing places, both of them the *word* `drifting` as a
+coverage state — `api/spec.ts:98` in the union type, and `SpecCoverageBar.tsx:10` as a bucket.
+There is no hook for `/spec/drift`, none for `/spec/drift/detect`, none for
+`/spec/drift/{id}/resolve`.
+
+So the coverage bar carries a `drifting` bucket that **cannot light up through the app**, and if
+something outside the app lights it up, the operator is shown a requirement that has changed
+underneath its evidence with:
+
+* no way to see *what* moved (`observed` is only on `GET /spec/drift`),
+* no way to answer the question the whole feature exists to ask, and
+* no way to clear it — `drifting` is the top of the precedence chain, so that requirement now
+  reads `drifting` on every screen, permanently, until somebody makes an HTTP call by hand.
+
+The backend's own docstring says the outcome is *"a question for a person rather than a state the
+requirement acquires by itself"*. Today there is no person it can ask.
+
+**Shape of the fix** — this is a UI gap, not a backend one; the backend is complete and correct.
+The smallest honest version is three controls on the spec surface: a **Scan for drift** action, a
+list of open candidates showing `observed`, and the three-way resolution on each. The one design
+question worth the operator's judgement is whether the scan stays manual. It is not free (it runs
+`git ls-tree` per distinct branch plus a reachability refresh), and the route's own comment says
+the operator's explicit scan is also the moment reachability is re-answered — so making it
+automatic on some cadence changes two things at once, and the manual button should ship first.
+
+Filed as **B**, not **A**: nothing is lost or corrupted, and no run misbehaves. But a shipped
+feature that has a database table, a lifecycle, three routes, a precedence rule at the top of
+coverage, and a UI bucket — and that no operator can reach — is the shape this drive exists to
+find.
+
+### F128 — confirmed in isolation, 2026-08-29 iteration 10
+
+Iteration 9's caveat was that F128 was found by a harness asserting something else, and observed
+once. `scripts/drive/t_f128_substitution.py` is written for it, and holds **12 of 13** assertions:
+
+* three idle agents, a job configured `agent: gamma`, nobody parked, so the free list is genuinely
+  non-empty;
+* gamma put mid-turn on an unrelated errand, then Run pressed → **200**, not a refusal;
+* the conversation the firing created is `origin: job` and **ran on `alpha`** — one of the free
+  siblings, not gamma;
+* the loop's first task is `in_progress` with `assignee: alpha`;
+* and `GET /jobs/{id}` still answers `agent: gamma`. Nothing anywhere records that somebody else
+  did the work.
+
+Reproduced identically on three separate firings across three runs of the harness (`alpha` every
+time, with `beta` also free — so the choice is not random, though this harness does not establish
+what orders it).
+
+Two facts about *driving* a loop came out of it, neither of them defects, both worth knowing before
+writing the next harness:
+
+* **A loop delivers one task at a time.** Pressing Run again while the first errand is in flight is
+  refused **409** — *"Every task on this loop's queue is already being worked. Nothing was started,
+  and nothing is wrong"* — which is F48's re-derivation answering correctly.
+* **A Haiku errand does not close the task it was handed.** The turn answers the message and the
+  task sits `in_progress` indefinitely; four minutes of waiting proved it. The harness now has the
+  operator complete the task, which is a real operator action rather than a way around one.
+
+### F127 — reproduced a second time, in a shape nobody set up for it
+
+The second firing in that harness — healthy loop, one `pending` task, nothing in flight — answered
+**500 "Failed to fire job"**. The cause is F127 exactly: at that moment gamma was mid-turn, alpha
+was still finishing the turn the first firing started, and **beta was holding two `in_progress`
+tasks left over from an earlier drive**, so `_agents_that_are_free` was empty and the busy guard
+refused with nothing recorded.
+
+That matters for how F127 is read. `t_run_while_busy2.py` empties the free list deliberately, by
+parking a task on every sibling, and a reader could fairly ask how contrived that is. This one was
+not set up at all: **ordinary leftover work on one agent was enough**, in a three-agent project, to
+turn an operator's Run press into an unexplained 500. The narrower the roster and the longer the
+project has been used, the likelier it is.
+
+---
+
+## F130 — a checkpoint over an empty span makes the NEXT checkpoint re-summarise the whole conversation
+
+**Found by driving the second link of a checkpoint chain** (`scripts/drive/t_row15_chain.py`), which
+row 15's cutover leg never reached: every checkpoint that harness made was a conversation's *first*,
+so `previous_checkpoint_id` was NULL on all of them and nothing had ever exercised the lineage
+columns live.
+
+The chain machinery itself is **right**, and this is worth saying before the defect: three
+checkpoints on one conversation came back `ckpt-5270b01ef65a → ckpt-a6462ba1cbd4 →
+ckpt-e302e3e494f9`, each naming its predecessor, all three carrying the founder's `lineage_id`,
+exactly one of them with no predecessor, and each render printing `Previous checkpoint: <id>` at the
+top. The list route reports the same links. That half needed driving and it held.
+
+### The defect
+
+Press **Checkpoint** twice with no turn in between — an ordinary operator slip, and the product
+allows it: the second call answers **201**, `status: ready`, `probe_status: passed`, with a written
+body about a span in which nothing happened and `_No files recorded_` in its render.
+
+That checkpoint stored `covers_through_run_id = NULL`, because the span was empty:
+
+```python
+covers_from_run_id=runs[0].id if runs else None,
+covers_through_run_id=runs[-1].id if runs else None,   # hub/hub/checkpoints.py:367
+```
+
+and `runs_to_cover` reads NULL as *unknown, so cover everything*:
+
+```python
+if anchor is None or anchor.covers_through_run_id is None:
+    return runs                                        # hub/hub/checkpoints.py:179
+```
+
+So the **third** checkpoint, anchored on the empty one, silently re-covered the conversation from
+the beginning. Measured: after a first turn that wrote `CHAIN_ONE.txt` and a second that wrote
+`CHAIN_TWO.txt`, checkpoint #3's `files_changed` names **both** — `CHAIN_ONE.txt` had already been
+covered by #1 and is not new work by any reading.
+
+The fallback's own docstring justifies itself against a *different* case: "falls back to all runs
+when the anchor names a run this conversation no longer has — covering a turn twice is a redundancy,
+whereas silently covering none is a hole." That reasoning is sound for a **missing** run. Here
+nothing is missing: the anchor is intact and its emptiness is a **fact**, not an absence of
+information. NULL is being asked to mean two different things — "I do not know where you got to" and
+"I got to exactly where the last one did" — and only the first is handled.
+
+### Why it is worse than a redundancy
+
+In the first run of the harness the third checkpoint's written half opened:
+
+> "## Current state — No progress. The file creation task remains incomplete—the file has not been
+> created."
+
+while its own computed half listed `CHAIN_ONE.txt`. The file **had** been created. Re-covering an
+old span does not merely cost the worker tokens; it hands the worker a span whose outcome it has to
+reconstruct from a transcript it half-summarised already, and the result was a checkpoint that
+contradicts its own file list. `probe_status` was **passed** throughout — correctly, because the
+probe grades whether a blind reader can recover files/tasks/questions from the render, not whether
+the prose is true. The probe cannot catch this and is not meant to.
+
+The blast radius grows with the conversation: on a long one, one stray Checkpoint press means every
+later checkpoint in that conversation re-summarises everything back to turn one, at full worker
+price, forever — nothing ever re-establishes a non-NULL `covers_through`.
+
+### The fix shape (not decided here)
+
+Three options, cheapest first:
+
+1. **Carry the anchor forward.** When the span is empty, store the anchor's `covers_through_run_id`
+   rather than NULL. One line, keeps the chain continuous, and the empty checkpoint stays a legal
+   record of "the operator asked at this moment".
+2. **Refuse the empty span**, 409, naming the checkpoint that already covers it. Cleaner in that it
+   stops writing a body about nothing, but it removes an operator's ability to re-checkpoint after
+   editing notes, so it needs the notes path checked first.
+3. **Distinguish the two NULLs** — an explicit `covers_nothing` flag, or making `covers_through`
+   non-nullable with a sentinel. Most honest, most schema churn.
+
+(1) and (2) are not exclusive. What must not happen is the fourth option nobody proposed: leaving it
+and treating "covering a turn twice is a redundancy" as covering this case, because the observed
+cost here was a checkpoint that says the work was not done.
+
+### Reproduction
+
+`py -3.11 scripts/drive/t_row15_chain.py` against a Hub with a checkpoint runner available
+(`AW_PROJECT`, `AW_AGENT`, `AW_RUNNER` override the defaults). The F130 assertion is written in the
+direction the product **actually behaves** — "#3 ALSO re-covers the first turn" — so the day it is
+fixed that line goes red and says why.
+
+---
+
+## F131 — Continue on one conversation starts a different conversation's work, and reports success against the one you pressed
+
+**Found by driving the `continue` endpoint's unreached branches**
+(`scripts/drive/t_continue_branches.py`). Two of them are fine and are now covered: pressing Continue
+with nothing queued answers **200** with `started: false, waiting_reason: "queue is empty"`, and
+pressing it while the agent is mid-turn answers **200** with
+`waiting_reason: "agent is already running"`. Both name the reason rather than failing silently, and
+neither started anything.
+
+The third thing the drive asked is not a branch. `POST /conversations/{id}/continue` resolves the
+conversation **only to 404 on it**, and then schedules the *agent*:
+
+```python
+conversation = await _conversation_or_404(session, project_id, conversation_id)
+result = await schedule_agent(project_id, conversation.agent)      # hub/hub/api/v1/checkpoints.py:271
+return {"conversation_id": conversation_id, "started": result.waiting_reason is None, ...}
+```
+
+`schedule_agent` takes the agent's **next queued entry, whatever conversation it belongs to**. The
+conversation in the path contributes nothing except the agent's name and a 404.
+
+### Measured
+
+With gamma idle and exactly one thing queued — a checkpoint entry addressed to successor
+`conv-7e15b83ad8b5`, produced by a cutover — Continue was pressed on `conv-766a9eee3bfc`, an
+unrelated open conversation of the same agent with nothing queued for it.
+
+* the call answered **200**, `started: true`, `waiting_reason: null`, `conversation_id:
+  conv-766a9eee3bfc` — the one pressed;
+* the successor's queue entry was **consumed** (`GET /queue/gamma` empty afterwards);
+* and the runs table for that window holds exactly one new run, `run-f36b8f55fae9`, on
+  **`conv-7e15b83ad8b5`**. The pressed conversation's newest run is minutes older, from a previous
+  harness.
+
+So the operator pressed Continue on A, was told A started, and B ran.
+
+### Why it matters, and why it is not simply "the queue is per agent"
+
+It is true and correct that a turn is a per-agent resource: one agent runs one turn at a time, and
+the queue is the agent's. The defect is not the scheduling — the right work ran. It is that the
+**endpoint is addressed per conversation and answers as if it were**. `started: true` alongside the
+conversation id the caller supplied is a claim about that conversation, and it is false. An operator
+watching A sees a success and then nothing: no turn appears, no output, no error. The very next
+thing they will do is press it again.
+
+The shape is the same one F116 was about: a route that accepts an input, does something else with
+it, and returns a success that names the input back. There the input was silently discarded; here it
+is silently substituted. And it is the same family as F128, where a loop's configured agent is not
+the agent that runs it — a product that reports the identifier you supplied rather than the one it
+acted on.
+
+### The fix shape (not decided here)
+
+1. **Report what actually started.** `schedule_agent` knows the entry it picked; return *its*
+   conversation id and let the UI show that a different conversation began. Smallest honest change,
+   and it makes the surprising case visible instead of invisible.
+2. **Refuse the mismatch.** If the agent's next entry is not for the conversation in the path,
+   answer 409 naming the conversation that is actually next. Safer for an operator who meant "this
+   one", worse for the case where they just want the agent moving.
+3. **Both** — refuse by default, report on force. Probably over-built for one button.
+
+What must not happen is keeping the current answer, because it is the one shape that is
+indistinguishable from success.
+
+### Reproduction
+
+`py -3.11 scripts/drive/t_continue_branches.py` against a Hub with a checkpoint runner available
+(`AW_PROJECT`, `AW_AGENT`, `AW_RUNNER` override the defaults). Needs an existing conversation for
+that agent to act as the wrongly-pressed one — the harness takes the first it finds. The F131
+assertions are written in the direction the product **actually behaves**, so the day it is fixed
+they go red and say why.
+
+---
+
+## F132 — drift has no agent-side half either, and the gate's remedy names an action no surface offers
+
+**Read 2026-08-29, iteration 12. Static, not driven: this closes `next_action` item (e), "the drift
+feature's agent-side half (F129), if it has one." It has none, and looking for it turned up a
+sharper version of F129 than F129 states.**
+
+F129 measured that `POST /spec/drift/detect` is the only writer of a `RequirementDrift` row and that
+`hub/ui/src` never calls it — so the operator surface cannot raise drift. The open question it left
+was whether the agent surface could. It cannot, and the two halves compose into something worse than
+either alone.
+
+### The agent surface has no entrance
+
+| where an agent could reach drift | what is there |
+|---|---|
+| `hub/hub/mcp_server.py` | 26 `@mcp.tool()` functions; **none** mentions drift. Both string matches for "drift" in that file are comments about *spec-payload* drift failing in CI (lines 34, 1016) — a different concept. |
+| `hub/hub/api/v1/agent_actions.py` — the agent's whole route surface | 31 routes; the spec block is `/spec/evidence` (record, list, decide) and `/spec/documents` (list, create, rename, submit). **No `/spec/drift` route of any kind.** Its only "drift" match is `spec_lifecycle.divergence` at line 1118, which is a document-digest divergence check, unrelated to `RequirementDrift`. |
+| the canonical turn context (`hub/hub/api/v1/agents.py`) | no `coverage` and no `drift`; the only matches are three comments using "drift" in its ordinary English sense. `requirement_coverage` is imported by `api/v1/spec.py`, `api/v1/tasks.py`, `requirement_gate.py`, `schemas/tasks.py` and `task_transition_service.py` — never by the agent's context or its routes. |
+
+So an agent cannot raise a candidate, cannot list one, cannot resolve one, and is never told that a
+requirement it is working on is `drifting`. Drift is an operator-API-only feature on both sides.
+
+### The part that is worse than unreachable
+
+`drifting` is not inert while it is unreachable — `requirement_gate` consumes it. The gate refuses
+the `approved` transition for any `gate`-rigor requirement whose coverage is not `verified`
+(`requirement_gate.py:39`, `:235`), and every non-verified state carries a remedy naming what would
+change it. Drift's is:
+
+```
+requirement_coverage.DRIFTING: (
+    "the implementation changed after it was verified — resolve the drift candidate"
+),
+```
+`hub/hub/requirement_gate.py:60-62`
+
+**"Resolve the drift candidate" is an action no surface in the product offers.** The only writer of
+a state other than `candidate` is `requirement_evidence.resolve_drift`, reachable only through
+`POST /spec/drift/{drift_id}/resolve` (`api/v1/spec.py:974`), which — measured again this iteration,
+independently of F129 — appears nowhere in `hub/ui/src`: grepping the whole UI for "drift" returns
+the union member `'drifting'` in `api/spec.ts:98`, the coverage bucket in `SpecCoverageBar.tsx:10`,
+the unrelated *spec-manifest* drift summary in `SpecDocumentPanel.tsx`, and 45 further matches that are all code comments using "drift" in its ordinary
+English sense (49 lines in total). No URL.
+
+**And it cannot self-heal.** `detect_drift` skips any evidence that already has an open candidate
+(`requirement_evidence.py:1041-1058`, the `open_candidates` set and the `continue` on it) and never
+closes one. Putting the file back to its footprinted blob makes a *later* scan raise nothing — F129
+measured that — but does nothing to the row already open. Re-scanning is explicitly designed not to
+ask the same question twice, which is right, and which also means re-scanning is not an escape.
+
+The gate's docstring says the refusal has to be actionable because "an unactionable gate gets
+switched off, which is worse than never having built one" (`requirement_gate.py:17-22`). This is one
+refusal whose remedy is unactionable through the app by construction. The reason nobody has hit it
+is only that the same missing UI that cannot clear a candidate also cannot raise one — the feature
+is symmetrically unreachable, and that symmetry is the whole thing keeping the gate usable. Anything
+that adds a *detect* button without a *resolve* one — an obvious first slice, and the cheaper half —
+would strand a task in `approved`-refused with no way out but a hand-written API call.
+
+### What this changes about F129's fix
+
+F129 asks for a way to reach detection. This says the two routes must ship **together, or resolve
+first**, and that the gate's remedy string is the acceptance test: a state whose remedy cannot be
+performed on the surface that shows it is a bug even when the state is correct.
+
+Not proposed here — this wants a spec loop, and the clock ended this session before one could start.
+
+**Evidence:** all static, all cheap to re-check. `grep -c "@mcp.tool()" hub/hub/mcp_server.py` → 26;
+`grep -n "^@router\." hub/hub/api/v1/agent_actions.py`; `grep -rn "drift" hub/ui/src`;
+`hub/hub/requirement_gate.py:39,60-62,235`; `hub/hub/requirement_evidence.py:998-1058`;
+`hub/hub/api/v1/spec.py:921,942,974`.

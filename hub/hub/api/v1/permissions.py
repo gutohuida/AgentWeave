@@ -15,17 +15,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import PermissionRequest
+from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...utils import persist_event
 
 router = APIRouter(prefix="/permission-requests", tags=["permission-requests"])
 
 
-class PermissionDecision(BaseModel):
+class PermissionDecision(RequestModel):
     allow: bool
     # Free-text is deliberately absent: the answer an agent receives is the decision, and a
     # message the operator types here would be a second channel nothing reads.
-    model_config = {"extra": "forbid"}
 
 
 class PermissionRequestResponse(BaseModel):

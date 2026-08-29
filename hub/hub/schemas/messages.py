@@ -5,10 +5,12 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from .common import RequestModel
+
 _MESSAGE_TYPES = ["message", "delegation", "review", "discussion", "direct_trigger"]
 
 
-class MessageCreate(BaseModel):
+class MessageCreate(RequestModel):
     # JSON uses "from"/"to"; Python model uses sender/recipient
     sender: str = Field(alias="from", max_length=64)
     recipient: str = Field(alias="to", max_length=64)
@@ -28,7 +30,7 @@ class MessageCreate(BaseModel):
     # with conversation_id — naming a thread and asking for a new one are contradictory.
     start_new_thread: bool = Field(default=False)
 
-    model_config = {"populate_by_name": True, "extra": "forbid"}
+    model_config = {"populate_by_name": True}
 
     @field_validator("type")
     @classmethod

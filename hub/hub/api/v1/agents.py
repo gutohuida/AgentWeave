@@ -56,6 +56,7 @@ from ...schemas.agents import (
     AgentTimelineEvent,
     ContextUsageCreate,
 )
+from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...task_transitions import LIVE_STATUSES
 from ...utils import persist_event, short_id
@@ -71,14 +72,14 @@ _AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
 _CONTACT_MODES = ("poll", "mcp-push", "watchdog-spawn")
 
 
-class AgentRequest(BaseModel):
+class AgentRequest(RequestModel):
     name: str = Field(min_length=1, max_length=32)
     template: str = Field(min_length=1, max_length=32)
     task: str = Field(min_length=1, max_length=100_000)
     run_id: str = Field(min_length=1, max_length=64)
 
 
-class OperatorAgentCreate(BaseModel):
+class OperatorAgentCreate(RequestModel):
     """Either `runner_id` (an existing runner) or both `provider` and `model` (find-or-create
     one) must be given, not both and not neither — provider+model is the primary path the
     Hub UI's Add-agent dialog uses (2026-08-04-hub-model-control-and-provisioning); runner_id
