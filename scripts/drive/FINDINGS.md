@@ -8535,3 +8535,91 @@ rather than fixed.
 for: before the `RequestModel` base landed, this PATCH answered `200` with the title unchanged —
 F117's exact shape, on the field most likely to be edited by hand. The first thing the strictness
 caught in the wild, it caught within a day, in a harness that was not looking for it.
+
+## F126 (B) — a spent checkpoint can be cut over again, and the second press mints a second successor that does the work a second time
+
+**Status:** open, filed not fixed (iteration 8, `t_row15_cutover.py`, the one `[BAD]` of 36).
+
+`POST /projects/{p}/checkpoints/{id}/cutover` has no guard against being called twice on the same
+checkpoint. Driven live against `ckpt-5acb5c671217`:
+
+```
+POST .../checkpoints/ckpt-5acb5c671217/cutover   200  successor conv-b21d999ecaf0  entry-ed1d74dcddd7
+POST .../checkpoints/ckpt-5acb5c671217/cutover   200  successor conv-c1799d084153  entry-2b8b17f41030
+```
+
+Both successors are `lifecycle: open`, `origin: handoff`, and carry the **same** derived title
+(`"Continued: Create a file called CHECKPOINT_A.txt …"`). Two conversations, indistinguishable in
+the navigation tree, both claiming to continue the one archived predecessor.
+
+**It is not merely a duplicate row — the duplicate did real, billed work.** I called `continue`
+exactly once, on the first successor. The queue afterwards:
+
+```
+entry-ed1d74dcddd7  checkpoint  delivered  conv-b21d999ecaf0  run-cdad300b6180
+entry-2b8b17f41030  checkpoint  delivered  conv-c1799d084153  run-99ba2ab65297
+```
+
+Two runs. Two Haiku turns. The second successor's transcript reads *"Good! The files already
+exist"* and then goes on to re-verify and re-close the same task — so the second turn was not a
+no-op, it was a whole turn spent rediscovering that there was nothing to do.
+
+### Mechanism
+
+`cut_over` (`hub/hub/checkpoint_cutover.py:63`) has exactly two refusals:
+
+1. `checkpoint.status != "ready"` — unchanged by a cutover, so a spent checkpoint still passes.
+2. `archivable(db, predecessor)` — whose **first line** is
+   `if conversation.lifecycle == "archived": return None` (`hub/hub/conversations.py:374`).
+
+That early return is right for what `archivable` is for: archiving an archived conversation is a
+no-op, not an error. It is the wrong question to ask here. Nothing anywhere records that this
+checkpoint has already been handed to a successor — `Checkpoint` has no consumed/spent column, and
+the route does not look for an existing `origin: handoff` conversation.
+
+### Why the UI has not shown this
+
+The Hub UI cannot reach it *from one tab*. `checkpointOperationStore.writeCheckpoint`
+(`hub/ui/src/store/checkpointOperationStore.ts:34`) holds an `inFlight` map keyed by
+`projectId:conversationId` and does take-then-cutover as one act, so a double-click within a tab
+coalesces. That guard is **client-side and per-tab**: a second browser tab, a reload between the
+201 and the cutover, a retried request after a network timeout, or any non-UI client gets two
+successors. The Hub's own standard elsewhere is a server-side claim — `take_checkpoint` holds
+`_checkpoint_claims` (`hub/hub/api/v1/checkpoints.py:27`) for exactly this reason on the *cheaper*
+half of the pair. Generation is guarded and idempotent-ish; cutover is unguarded and durable.
+
+Related, and worth deciding at the same time: the banner that offers a cutover in the UI filters on
+`checkpoint.trigger === 'context_pressure'` (`AgentOutputPanel.tsx:485`), so a checkpoint the
+operator generated on purpose is never offered one. The operator-triggered path reaches cutover only
+through `writeCheckpoint`, which generates its own.
+
+### Shapes
+
+1. **Smallest.** Refuse a second cutover: 409 when a conversation already exists whose
+   `origin == "handoff"` and whose queue entry names this checkpoint. Costs one query, names the
+   state, and is the same shape as `_checkpoint_claims`.
+2. **Honest.** Give `Checkpoint` a `cut_over_to_conversation_id`, set inside the same commit as the
+   successor, and refuse when it is set. The row then answers *"where did this checkpoint go"*,
+   which nothing can answer today, and the refusal can name the successor rather than a generic
+   conflict. One migration.
+3. **Do nothing, deliberately** — argue that a second cutover is a legitimate fork. It is not:
+   nothing forks the *predecessor*, both successors carry the same `lineage_id`, and the second one
+   is billed for rediscovering that its work is done.
+
+Recommendation: (2). It costs a migration and answers a question the operator can otherwise only
+answer by reading queue entries, and (1) is a subset of it.
+
+### What held around it — row 15's cutover leg, driven end to end
+
+35 of 36 verdicts. Worth recording because none of this had been driven live before:
+
+| | |
+|---|---|
+| Refusal with no checkpoint runner | exactly **409**, naming project settings — no silent fallback onto another agent's runner |
+| A partial `PUT /settings` | left `hop_budget` and `checkpoint_mode` untouched (the `exclude_unset` merge doing its job) |
+| Generation | **201** in 17s on Haiku, `status: ready`, `probe_status: passed`, no generation error |
+| `files_changed` | `["CHECKPOINT_A.txt"]` — the file the turn actually wrote |
+| The body | carried the deferred next action (`RELAYTWO`) and a citation quoting the line it came from |
+| `GET /checkpoints/{id}/rendered` | 2,035 chars, envelope + body, honest about the task list not being conversation-scoped |
+| Cutover | predecessor `archived`, successor `open`/`handoff`, title derived not regenerated, queue entry `origin_type: checkpoint` addressed to the successor and framed with the preamble |
+| **The relay** | the predecessor was told **not** to write `CHECKPOINT_B.txt`; after `continue`, the successor wrote it, containing `RELAYTWO`. The handover carried the work across, end to end, and the file on disk is the proof. |
