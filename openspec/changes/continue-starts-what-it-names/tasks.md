@@ -1,41 +1,47 @@
 ## 1. Reproduce the defect as a failing test first
 
-- [ ] 1.1 Add `hub/tests/test_continue_starts_what_it_names.py`. Build the mismatch deliberately: one agent, two open conversations, a queued entry on conversation B with the **lower** `sequence`, a second on conversation A. Assert the current behaviour so the test is a reproduction before it is a guard.
-- [ ] 1.2 In that test, `POST …/conversations/{A}/continue` and assert the run that appears is bound to **B**, proving the substitution rather than assuming it. Query `Run` by `conversation_id`, not by recency.
-- [ ] 1.3 Assert the response today reports `started: true` with `conversation_id == A` and carries no field naming B. This is the assertion that must flip in section 3; write it so its failure message says which conversation actually started.
-- [ ] 1.4 Run the new file and confirm it passes against unmodified code — a reproduction that does not pass first is not a reproduction.
+- [ ] 1.1 Add `hub/tests/test_a_start_is_reported_to_its_own_input.py`. Build the mismatch deliberately: one agent, two open conversations, a queued entry on conversation B with the **lower** `sequence`, a second entry on conversation A.
+- [ ] 1.2 `POST …/conversations/{A}/continue`, then assert the run that appears is bound to **B** — query `Run` by `conversation_id`, never by recency, so the assertion cannot pass on a stale row.
+- [ ] 1.3 Assert the current answer: `started: true`, `conversation_id == A`, no field naming B. Write the failure message so it says which conversation actually started.
+- [ ] 1.4 Run the file against unmodified code and confirm it passes — a reproduction that does not pass first is not a reproduction.
 
-## 2. Carry the started identity out of the scheduler
+## 2. Report the start against the input it is about
 
-- [ ] 2.1 Add `started_conversation_id: Optional[str] = None` and `started_entry_ids: Tuple[str, ...] = ()` to `ScheduleResult` (`hub/hub/turn_scheduler.py:51-56`), with a docstring paragraph stating the same reason `TurnRefusal.entry_ids` gives at `:39-43` — the turn is built from the agent's whole queue, so the caller cannot infer which conversation ran.
-- [ ] 2.2 Populate both on the success path only, from `conversation.id` and `[entry.id for entry in selected]`, at the construction site that returns the successful `ScheduleResult`. Do not touch `queued_entries`, `controlling`, the `selected` filter, `can_start`, or the hop-budget logic.
-- [ ] 2.3 Add a test asserting every early-return `ScheduleResult` — running, empty queue, hop budget, no conversation, conversation unavailable, empty selection — still carries `started_conversation_id is None` and `started_entry_ids == ()`. Six branches, enumerated by name, so a seventh added later fails the count.
-- [ ] 2.4 Confirm no other `schedule_agent` caller reads the new fields: the fourteen agent-addressed sites listed in design.md stay untouched.
+- [ ] 2.1 In `continue_conversation` (`hub/hub/api/v1/checkpoints.py:254-277`) derive `started` from `result.response is not None and result.response.conversation_id == conversation_id`, mirroring `agent_trigger.py:1353`. Do not add fields to `ScheduleResult`; do not touch `turn_scheduler.py`.
+- [ ] 2.2 Add `started_conversation_id` to the response, from `result.response.conversation_id` when a turn began and `None` otherwise.
+- [ ] 2.3 For the mismatch case, set a `waiting_reason` that names the situation — the addressed conversation's input is waiting behind other input — distinct in wording from the scheduler's own `"queue is empty"`, so the two cannot be confused by a reader or a test.
+- [ ] 2.4 Add a test pinning that `POST /agent/trigger` still satisfies the same requirement (`agent_trigger.py:1344-1358`), so the two conversation-addressed routes cannot drift apart again. This is the test that would have caught the defect.
+- [ ] 2.5 Extend the route docstring: the addressed conversation is what `started` is about, the started conversation is reported separately, and the turn is the agent's.
 
-## 3. Answer with what started
+## 3. Flip the reproduction into a guard
 
-- [ ] 3.1 In `continue_conversation` (`hub/hub/api/v1/checkpoints.py:254-277`), add `started_conversation_id` to the returned dict, sourced from the `ScheduleResult`. Leave `agent`, `conversation_id`, `started` and `waiting_reason` exactly as they are.
-- [ ] 3.2 Extend the route's docstring to say that the addressed conversation is echoed and the started one is reported separately, and why the two can differ.
-- [ ] 3.3 Flip task 1.3's assertion to the required behaviour: `conversation_id == A`, `started_conversation_id == B`, `started: true`. Add the matching case where the addressed conversation *is* the one that starts and both fields are equal.
-- [ ] 3.4 Add the nothing-started case: no eligible entry, `started: false`, `started_conversation_id is None`, `waiting_reason` set.
+- [ ] 3.1 Rewrite task 1.3's assertion to the required behaviour: `started: false`, `conversation_id == A`, `started_conversation_id == B`, `waiting_reason` set.
+- [ ] 3.2 Assert A's queue entry is **still queued** after the call — the waiting answer is only true if the input really is still waiting.
+- [ ] 3.3 Add the equal case: the addressed conversation is the one that starts, `started: true`, `started_conversation_id == conversation_id`.
+- [ ] 3.4 Add the nothing-started case: `started: false`, `started_conversation_id is None`, `waiting_reason` set.
 
-## 4. Tell the operator
+## 4. Correct the cutover diagnostic
 
-- [ ] 4.1 Add `started_conversation_id?: string | null` to `ContinueResult` (`hub/ui/src/api/checkpoints.ts:90-95`).
-- [ ] 4.2 Give `handleContinue` (`hub/ui/src/components/agents/AgentOutputPanel.tsx:742-756`) its third case: started and `started_conversation_id === currentConversationId` → `'Continuing…'`; started and different → a notice stating another conversation began, naming it; not started → the existing reason text.
-- [ ] 4.3 Leave the `hasQueuedWork` button gate (`:337-340`, `:1064`) unchanged, and add a comment recording why it is not the fix — it reads client-side state that another conversation's older entry does not appear in.
-- [ ] 4.4 Add or extend a UI test covering the three notices, keyed on the returned `started_conversation_id` rather than on rendering timing.
+- [ ] 4.1 In `checkpoint_cutover.py:131-145`, log the conversation the `waiting_reason` belongs to rather than attributing it to `successor.id` unconditionally. Keep it a log — this path makes no operator-facing claim.
+- [ ] 4.2 Add a comment recording why it is here: same rule as the route above, fourth scenario of the requirement.
 
-## 5. Reconcile the drive harness
+## 5. Tell the operator
 
-- [ ] 5.1 Update `scripts/drive/t_continue_branches.py` — its F131 assertions are deliberately written in the direction the product currently behaves and will now fail. Rewrite them to the fixed direction and note in the file that the flip was the fix.
-- [ ] 5.2 Re-check `scripts/drive/t_continue_burns_attempts.py`, `t_row15_cutover.py` and `t_sweep_conversations.py` for reads of the continue response, and update any that assume `conversation_id` describes what ran.
+- [ ] 5.1 Add `started_conversation_id?: string | null` to `ContinueResult` (`hub/ui/src/api/checkpoints.ts:90-95`).
+- [ ] 5.2 Give `handleContinue` (`AgentOutputPanel.tsx:742-756`) its third case. Started and equal → `'Continuing…'`. Not started with a `started_conversation_id` → a notice saying this conversation's work is waiting behind other input, naming what began. Not started without one → the existing reason text.
+- [ ] 5.3 Leave the `hasQueuedWork` button gate (`:337-340`, `:1064`) unchanged, and comment why it is not the fix: it reads client-side state in which another conversation's older entry does not appear.
+- [ ] 5.4 Add or extend a UI test covering the three notices, keyed on the response fields rather than on rendering timing.
 
-## 6. Verify and record
+## 6. Reconcile the drive harness
 
-- [ ] 6.1 `py -3.11 -m pytest hub/tests/test_continue_starts_what_it_names.py -v` green, then the full `hub/tests/` suite; compare the failure list against the known F109 flake rather than assuming.
-- [ ] 6.2 `py -3.11 -m ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `py -3.11 -m mypy src/`, and `cd hub/ui && npm run lint`.
-- [ ] 6.3 `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`; commit `hub/ui/src` and `hub/hub/static/ui` together.
-- [ ] 6.4 Drive it live against the 8010 trial Hub with a cheap runner: two conversations, the older entry on the one not addressed, press Continue, and confirm the response and the notice both name the conversation that ran. Nothing closes on the strength of the unit tests alone.
-- [ ] 6.5 Mark F131 fixed in `scripts/drive/FINDINGS.md`, and record there the correction this change established — that F131's own reproduction is not reachable from the shipped UI, while the older-entry path is.
-- [ ] 6.6 Sync the new `conversation-turn-start` capability into `openspec/specs/` and archive the change.
+- [ ] 6.1 Update `scripts/drive/t_continue_branches.py` — its F131 assertions are written in the direction the product currently behaves and will now fail. Rewrite them to the fixed direction and note in the file that the flip was the fix.
+- [ ] 6.2 Check `t_continue_burns_attempts.py`, `t_row15_cutover.py` and `t_sweep_conversations.py` for reads of the continue response, and update any that treat `started` as "a turn began for the agent".
+
+## 7. Verify and record
+
+- [ ] 7.1 `py -3.11 -m pytest hub/tests/test_a_start_is_reported_to_its_own_input.py -v` green, then the full `hub/tests/` suite; compare any failure against the known F109 flake rather than assuming.
+- [ ] 7.2 `py -3.11 -m ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `py -3.11 -m mypy src/`, `cd hub/ui && npm run lint`.
+- [ ] 7.3 `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`; commit `hub/ui/src` and `hub/hub/static/ui` together.
+- [ ] 7.4 Drive it live against the 8010 trial Hub with a cheap runner: two conversations, the older entry on the one not addressed, press Continue, confirm the answer says waiting and names what ran, and confirm the addressed conversation's entry is still queued. Nothing closes on unit tests alone.
+- [ ] 7.5 Mark F131 fixed in `scripts/drive/FINDINGS.md`, recording both corrections this change established — that F131's own reproduction is unreachable from the shipped UI while the older-entry path is, and that the rule was already shipped for refusals and merely unwritten for starts.
+- [ ] 7.6 `openspec validate --strict`, sync the delta into `openspec/specs/agent-conversation-workspace/spec.md`, and archive the change.
