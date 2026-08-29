@@ -897,3 +897,106 @@ is never offered a cutover anywhere in the UI.
   or the second link of a chain (`previous_checkpoint_id` set), reaches cutover by paths not driven.
 - **`continue` was tested on a successor that had a queue entry waiting.** Its refusal/waiting
   branches (`waiting_reason` non-null) were not reached.
+
+## Iteration 9 — the stall shapes hold; two findings about pressing Run (18:43–19:45 local)
+
+`next_action` offered three thin targets and (b) was the loop stalls: *"a loop that stalls for a
+reason OTHER than 'nothing to review' — a dependency gate, or an unanswered question on a `blocked`
+task. Iteration 7 drove only the completed-but-unapproved branch of `_loop_stall_reason`; the other
+three exist and none has been driven."* All three are now driven, and the accident of getting the
+setup wrong the first time found two defects the plan did not contain.
+
+**The Hub was re-measured, not assumed.** 8011's uvicorn was created `2026-08-29 18:06:50`
+(`Get-CimInstance Win32_Process`), the newest commit touching `hub/` is `17:04:08`, and
+`GET /api/v1/projects` lists `proj-dc4d43543bea`. It serves this branch's code, and nothing under
+`hub/` changed this iteration.
+
+### What was driven — `t_row11_stalls.py`, 28 of 28
+
+Three stall shapes, each asserted against the **exact** sentence rather than a substring: the
+dependency gate with a workable prerequisite (`1 still awaiting a prerequisite's approval`), the
+gate with a `rejected` one (`1 gated on a rejected prerequisite that will not clear on its own`),
+and the ungated queue holding one `blocked` task (`no claimable task among 1 open (1 blocked)`).
+Each came back **409** from `POST /jobs/{id}/run` with the loop left alive — `ending_state` null,
+`enabled` true, `next_run` set. Skipped is not stopped.
+
+Design **D6's coalescing** was driven for the first time and is correct: the same stall twice
+appended no row, counted `tick_count` 1 → 2, froze `fired_at`, and emitted no second
+`job_run_skipped` event; changing the shape wrote a new row and left the old count where it was.
+Zero spend across four firings — every `JobRun` is a `skipped` with a null `session_id`, and the
+loop's agent never left `idle`.
+
+The operator-side dependency route (F36) was exercised on the way: 201, and afterwards the edge
+reads from both ends (`prerequisites` on B, `dependents` on A).
+
+### F127 (B) — a healthy loop answers 500 when you press Run while its agent is busy
+
+The first run of the stall harness omitted `blocked_reason`, so the task never reached `blocked`,
+the firing **claimed it and spent a real turn**, and the two firings after that came back
+`500 Failed to fire job`. That was worth chasing rather than tidying away.
+
+`_do_fire_job` has two branches that decline and deliberately record nothing. F48 fixed one of them
+(`DECISION_IN_FLIGHT`) by having `run_job` re-derive the decision and answer 409 *"nothing is
+wrong"*. The other is the **busy guard**, and F48's re-derivation cannot see it: it calls
+`decide_firing`, which never reaches the guard. So the operator gets a 500 carrying the bare
+fallback string, with no `JobRun` and nothing in the loop's history to explain it — while
+`ending_state` is null, the job is enabled and its task is still `pending`.
+
+Reproduced deterministically in `t_run_while_busy2.py`, **7/7**: park one active task on every
+sibling agent so `_agents_that_are_free` is genuinely empty, put the job's own agent mid-turn, press
+Run. Not fixed — the honest fix makes the re-derivation ask the same question the firing asked, and
+that wants a round.
+
+### F128 (B) — a loop runs on an agent its job does not name
+
+The first attempt at F127 (`t_run_while_busy.py`) failed to reproduce and found this instead, so
+five of its eleven verdicts are BAD: they are **the prediction being wrong, not the product
+misbehaving**, and the file is kept with that stated at the top rather than quietly rewritten.
+
+Job `busy-run` was configured `agent: gamma`. With gamma mid-turn, pressing Run answered **200** and
+the work went to **alpha** — `conv-a51b18211d43`, origin `job`, the loop's id on it, and the task's
+`assignee` reading `alpha`. `_loop_flow_busy_reason` refuses only when the job's agent is busy *and*
+`_agents_that_are_free(session, project_id)` is empty, and that list is project-scoped. Its own
+docstring asserts the invariant that a single-agent loop "reaches that by the general rule — its one
+agent is the busy one and the free list is empty"; **that is only true in a project with exactly one
+agent.** This is the failure mode CLAUDE.md names: an argument that is wrong about code that may
+well be right. Design D12 chose width deliberately and `job.agent` really is D2's default — so this
+is filed as **the operator's decision**, one decision with two shapes (loop-scoped free list, or
+stop presenting `job.agent` as who runs the loop), not a fix.
+
+### Verification
+
+| | |
+|---|---|
+| Suites | **not re-run, deliberately** — nothing under `hub/`, `src/` or `tests/` changed. Three new `scripts/drive/t_*.py` harnesses, which no test imports, plus FINDINGS.md. The branch's last full verification stands (iteration 6). |
+| The product | driven live: 28/28 on the stalls, 7/7 on the F127 repro, and one exploratory harness whose wrong prediction is documented in place |
+| Jobs / loops left enabled | **none** — `GET /jobs` shows no enabled job and `GET /loops` lists none; every loop this iteration created was stopped through `PATCH stop_reason` and archived |
+| Tasks parked for the repro | all rejected in the harness's `finally`, confirmed by re-reading `/tasks` |
+| Agent spend | two Haiku turns deliberately (the F128 errand and the F127 errand), plus one accidental turn from the mis-set-up first run |
+
+### What a reviewer should distrust
+
+* **The stall assertions read the Hub's own account of itself** — status codes and `JobRun` rows —
+  because a stall has no filesystem artefact by construction. The mitigation is that every sentence
+  is asserted in full, and the "nothing was spawned" claim is anchored on `session_id` being null
+  and the agent never leaving `idle`, not on the absence of a row.
+* **F128 was found by a harness that was asserting something else.** Its measurements are real, but
+  it was never designed to isolate this, and the substitution was observed once. A harness written
+  *for* it would be better evidence.
+* **The teardown discovery is not a finding.** A loop whose job is merely disabled cannot be
+  archived; `PATCH /jobs/{id}` with `stop_reason` is the operator's ending path and it works. Both
+  harnesses now use it. Recorded in FINDINGS.md as context, not as a defect.
+
+### One self-inflicted incident, recorded rather than tidied away
+
+Rewriting `STATE.json` through `py -3.11 -c "..."` in the Bash tool, the backticked spans inside the
+new `next_action` were **command-substituted by the shell before python ever saw them**. Two effects,
+both caught immediately: several phrases were silently deleted from the field (rewritten cleanly
+afterwards from a script file), and one of them — <code>agentweave --port</code> — was actually
+*executed*. It hit argparse's "expected one argument" and exited; **no Hub was started, nothing was
+migrated, no database was touched.** 8010 and 8000 were never contacted. The rule it nearly broke is
+one of this session's standing limits, so it is written down here rather than left in a scrollback.
+
+Two shell traps now recorded in `next_action` for the next process: backticks inside a double-quoted
+`-c` string are command substitution, and a heredoc whose body contains an odd number of apostrophes
+fails to parse in this shell. Prose goes to a file via the Write tool; python reads the file.
