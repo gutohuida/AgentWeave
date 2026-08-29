@@ -8837,3 +8837,92 @@ parking a task on every sibling, and a reader could fairly ask how contrived tha
 not set up at all: **ordinary leftover work on one agent was enough**, in a three-agent project, to
 turn an operator's Run press into an unexplained 500. The narrower the roster and the longer the
 project has been used, the likelier it is.
+
+---
+
+## F130 — a checkpoint over an empty span makes the NEXT checkpoint re-summarise the whole conversation
+
+**Found by driving the second link of a checkpoint chain** (`scripts/drive/t_row15_chain.py`), which
+row 15's cutover leg never reached: every checkpoint that harness made was a conversation's *first*,
+so `previous_checkpoint_id` was NULL on all of them and nothing had ever exercised the lineage
+columns live.
+
+The chain machinery itself is **right**, and this is worth saying before the defect: three
+checkpoints on one conversation came back `ckpt-5270b01ef65a → ckpt-a6462ba1cbd4 →
+ckpt-e302e3e494f9`, each naming its predecessor, all three carrying the founder's `lineage_id`,
+exactly one of them with no predecessor, and each render printing `Previous checkpoint: <id>` at the
+top. The list route reports the same links. That half needed driving and it held.
+
+### The defect
+
+Press **Checkpoint** twice with no turn in between — an ordinary operator slip, and the product
+allows it: the second call answers **201**, `status: ready`, `probe_status: passed`, with a written
+body about a span in which nothing happened and `_No files recorded_` in its render.
+
+That checkpoint stored `covers_through_run_id = NULL`, because the span was empty:
+
+```python
+covers_from_run_id=runs[0].id if runs else None,
+covers_through_run_id=runs[-1].id if runs else None,   # hub/hub/checkpoints.py:367
+```
+
+and `runs_to_cover` reads NULL as *unknown, so cover everything*:
+
+```python
+if anchor is None or anchor.covers_through_run_id is None:
+    return runs                                        # hub/hub/checkpoints.py:179
+```
+
+So the **third** checkpoint, anchored on the empty one, silently re-covered the conversation from
+the beginning. Measured: after a first turn that wrote `CHAIN_ONE.txt` and a second that wrote
+`CHAIN_TWO.txt`, checkpoint #3's `files_changed` names **both** — `CHAIN_ONE.txt` had already been
+covered by #1 and is not new work by any reading.
+
+The fallback's own docstring justifies itself against a *different* case: "falls back to all runs
+when the anchor names a run this conversation no longer has — covering a turn twice is a redundancy,
+whereas silently covering none is a hole." That reasoning is sound for a **missing** run. Here
+nothing is missing: the anchor is intact and its emptiness is a **fact**, not an absence of
+information. NULL is being asked to mean two different things — "I do not know where you got to" and
+"I got to exactly where the last one did" — and only the first is handled.
+
+### Why it is worse than a redundancy
+
+In the first run of the harness the third checkpoint's written half opened:
+
+> "## Current state — No progress. The file creation task remains incomplete—the file has not been
+> created."
+
+while its own computed half listed `CHAIN_ONE.txt`. The file **had** been created. Re-covering an
+old span does not merely cost the worker tokens; it hands the worker a span whose outcome it has to
+reconstruct from a transcript it half-summarised already, and the result was a checkpoint that
+contradicts its own file list. `probe_status` was **passed** throughout — correctly, because the
+probe grades whether a blind reader can recover files/tasks/questions from the render, not whether
+the prose is true. The probe cannot catch this and is not meant to.
+
+The blast radius grows with the conversation: on a long one, one stray Checkpoint press means every
+later checkpoint in that conversation re-summarises everything back to turn one, at full worker
+price, forever — nothing ever re-establishes a non-NULL `covers_through`.
+
+### The fix shape (not decided here)
+
+Three options, cheapest first:
+
+1. **Carry the anchor forward.** When the span is empty, store the anchor's `covers_through_run_id`
+   rather than NULL. One line, keeps the chain continuous, and the empty checkpoint stays a legal
+   record of "the operator asked at this moment".
+2. **Refuse the empty span**, 409, naming the checkpoint that already covers it. Cleaner in that it
+   stops writing a body about nothing, but it removes an operator's ability to re-checkpoint after
+   editing notes, so it needs the notes path checked first.
+3. **Distinguish the two NULLs** — an explicit `covers_nothing` flag, or making `covers_through`
+   non-nullable with a sentinel. Most honest, most schema churn.
+
+(1) and (2) are not exclusive. What must not happen is the fourth option nobody proposed: leaving it
+and treating "covering a turn twice is a redundancy" as covering this case, because the observed
+cost here was a checkpoint that says the work was not done.
+
+### Reproduction
+
+`py -3.11 scripts/drive/t_row15_chain.py` against a Hub with a checkpoint runner available
+(`AW_PROJECT`, `AW_AGENT`, `AW_RUNNER` override the defaults). The F130 assertion is written in the
+direction the product **actually behaves** — "#3 ALSO re-covers the first turn" — so the day it is
+fixed that line goes red and says why.

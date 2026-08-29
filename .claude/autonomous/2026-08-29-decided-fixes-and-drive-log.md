@@ -1109,3 +1109,80 @@ Spend: four Haiku turns across three runs. Teardown verified after each: no enab
 listed, every task this harness created rejected. The two stale `in_progress` tasks on beta are
 **older than this iteration** and were left alone — they are somebody else's drive state, and
 rejecting them would erase the very condition that reproduced F127.
+
+---
+
+## Iteration 11 — 2026-08-29 19:18–19:25 — E2E-DRIVE: the second link of a checkpoint chain, and F130
+
+`next_action` item (a): the checkpoint shapes row 15 never reached. Two were named — a checkpoint
+that fails its probe, and the second link of a chain. **The chain is now driven**
+(`scripts/drive/t_row15_chain.py`, **25/25** on the second run, 22/24 on the first with both BADs being harness bugs); the failing probe is **not**, deliberately, and the
+reason is in "What was not done" below.
+
+### What the chain leg establishes
+
+The anchor is per **conversation** (`latest_checkpoint`, `hub/hub/checkpoints.py:95`), not per
+lineage across a cutover — a cutover creates a new conversation, so its first checkpoint founds a
+new lineage and `previous_checkpoint_id` stays NULL. That is why `t_row15_cutover.py` never reached
+link two, and why reaching it means checkpointing **the same conversation twice**, not cutting over
+twice. Worth writing down: the obvious reading of "chain" (predecessor → successor across a
+handover) is the one shape that does **not** set the column.
+
+Driven live, on real Haiku turns, exact status codes, artefacts not codes: three checkpoints on one
+conversation come back linked `#1 → #2 → #3`, each naming its predecessor, all three carrying the
+founder's `lineage_id`, exactly one with no predecessor, each render printing
+`Previous checkpoint: <id>` at the top, and the list route reporting the same links.
+
+### F130 — pressing Checkpoint twice poisons every later checkpoint in that conversation
+
+The empty-span checkpoint answers **201**, `ready`, `probe_status: passed`, and stores
+`covers_through_run_id = NULL` because there were no runs to name (`checkpoints.py:367`).
+`runs_to_cover` reads NULL as *unknown, so cover everything* (`checkpoints.py:179`) — so the **next**
+checkpoint silently re-covers the conversation from turn one. Measured: #3's `files_changed` names
+`CHAIN_ONE.txt`, which #1 had already covered, alongside the new `CHAIN_TWO.txt`.
+
+The fallback is defended in its own docstring against a different case — an anchor naming a run the
+conversation no longer has. There, NULL means information is missing. Here the anchor is intact and
+the emptiness is a **fact**. One NULL is being asked to carry both meanings and only one is handled.
+
+In the first of the two runs the re-covered checkpoint's body opened *"No progress. The file
+creation task remains incomplete—the file has not been created"* while its own computed half listed
+`CHAIN_ONE.txt`. So the cost is not only wasted worker price on a long conversation: it produced a
+checkpoint that contradicts its own file list. The probe passed, correctly — it grades a blind
+reader's recovery of files/tasks/questions, not whether the prose is true. Full write-up, three fix
+shapes costed, in FINDINGS.md F130.
+
+### The harness bug worth carrying forward
+
+The first run scored 22/24, and **both BADs were mine, not the product's**:
+`POST /agent/trigger` without `conversation_id` opens a **new** conversation, so the second turn
+landed where the chain could not see it and #3 covered no new work for an innocent reason. The
+patched harness passes `conversation_id` explicitly. This is the same class of mistake as iteration
+10's global-emptiness assertions: a harness that does not say *which* container it means will be
+handed a different one.
+
+### Verification
+
+| | |
+|---|---|
+| Suites | **not re-run, deliberately** — nothing under `hub/`, `src/` or `tests/` changed this iteration. One new `scripts/drive/t_row15_chain.py`, which no test imports, plus FINDINGS.md and this log. |
+| The product | driven live twice against the Hub on 8011 serving this branch: 22/24 then, after the harness bug below was fixed, **25/25** — F130 reproduced in both, on two independent chains (`ckpt-5270b01ef65a…` and `ckpt-0aef4c72ee9c…`) |
+| Jobs / loops left enabled | none created this iteration |
+| Teardown | `checkpoint_runner_id` reset to NULL in a `finally`, both runs |
+| Agent spend | four Haiku turns plus five checkpoint-generation worker turns across the two runs; each generation took 12–20s |
+
+### What a reviewer should distrust
+
+* **The failing-probe shape is still unreached, and that is a choice.** `grade_probe`
+  (`checkpoint_generation.py:376`) fails only when a blind reader's recovered files/tasks/questions
+  disagree with the Hub's computed record. Nothing on the operator surface makes that happen on
+  demand — it needs a worker that writes a body omitting or inventing a path, which is the worker's
+  judgement, not an input. Forcing it would have meant reaching past the product surface, which this
+  drive does not do. It wants either a fault-injection seam or a unit test, and that is a decision,
+  not an oversight.
+* **The worktree already held `CHAIN_ONE.txt` from the first run** when the second ran, so "the
+  first turn wrote its anchor file" is weak evidence on run two. Every F130 assertion is scoped to
+  the checkpoint ids *this run* minted, and the `files_changed` claim comes from run footprints, not
+  from the worktree's contents.
+* **F130 rests on two code paths and one measurement.** Both lines are quoted with file and line;
+  both are cheap to re-read.
