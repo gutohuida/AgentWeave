@@ -8,7 +8,7 @@
   "parent_sha": "00fb5e5",
   "stop_at": "2026-08-29T20:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 8,
+  "iteration": 9,
   "log_file": ".claude/autonomous/2026-08-29-decided-fixes-and-drive-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "green_at_arming": "CI ran green on ALL NINE cells for run 33247142872 at commit c994af5 (2026-08-29 ~10:20 UTC): six test matrix legs (ubuntu/macos/windows x 3.11/3.12), hub-test, ui-test and build, plus hub-image.yml. That is stronger evidence than a local run because the 3.12 legs cannot be reproduced on this machine. Everything committed since c994af5 (b6a9b38, 84adff4, 65b8245) touches only scripts/drive/*.md and two new scripts/drive/t_*.py files that no test imports. Local at 7cfa6bd the night before: hub 3510 passed / 84 skipped / 1 xfailed / 0 failed with `claude` stripped from PATH, CLI 440 passed, UI 1446 passed, ruff + black + mypy + tsc clean, openspec validate --specs --strict 42/42. A red suite at iteration 1 is therefore YOURS, not inherited — with one exception named in known_flakes.",
@@ -204,5 +204,5 @@
     "The 14 older open findings in FINDINGS.md (F3 goes with F111 this run; F14, F53, F65, F66 each still want an operator decision rather than a repair). The operator was offered a triage pass over them and has not answered."
   ],
   "parent_sha_note": "master at arming, the commit that carries this STATE.json. Cut the branch from origin/master HEAD; if master has moved since (it should not have — the operator is away), branch from its tip and say so in the log rather than resetting to this sha.",
-  "last_heartbeat": "2026-08-29T18:02:50+01:00"
+  "last_heartbeat": "2026-08-29T18:43:45+01:00"
 }
