@@ -8733,3 +8733,65 @@ takes an agent, the loop lists a label and an agent, and neither says "or whoeve
 **the operator's call**, and it is one decision with two shapes: either the free list becomes
 loop-scoped (a loop staffs only the agents it names, a flow staffs its roster), or the UI and the
 API stop presenting `job.agent` as who runs this loop. Filed, not fixed.
+
+## F129 (B) — requirement drift works, and the app cannot reach any of it
+
+**Driven 2026-08-29, iteration 10, on the 8011 Hub running this branch. Row 10 of TESTPLAN.md,
+never driven before today. `scripts/drive/t_row10_drift.py`, 31/31 assertions good.**
+
+The loop itself is correct, and worth saying so plainly before the finding, because every sentence
+below was measured rather than read:
+
+| what was driven | result |
+|---|---|
+| operator records evidence naming `cart.py` | 201, footprint `kind=git`, `branch=main`, `commit_sha` equal to the repo's HEAD, and `review_state` already `accepted` on arrival |
+| scan with an unchanged tree | 200, nothing raised for that evidence |
+| commit a change to the footprinted file, scan | 200, exactly one candidate, `observed` naming `cart.py` alone with distinct `was`/`now` blob ids, hung off the right evidence row |
+| coverage while the candidate is open | `drifting` — the documented top precedence |
+| scan again while it is open | raises nothing; the same question is not asked twice |
+| resolve with a bogus resolution | **422** naming `unknown_resolution` |
+| resolve an unknown drift id | **404** |
+| resolve `implementation_corrected` | 200, `state: resolved`, coverage back to `verified` |
+| scan after resolving | raises nothing — the resolution holds |
+| move the ground *again* | a **fresh** candidate, a different row |
+| add an unrelated file | raises nothing |
+| put the footprinted file back to its recorded blob | raises nothing |
+
+That last row was found by accident: a second run of the harness rewrote `cart.py` to content an
+earlier run had already produced, the scan correctly said nothing, and the harness called it a
+defect. It is not one — a file that is byte-identical to its footprint has not drifted. The harness
+now stamps every write with the repo's commit count so no run can silently reproduce an earlier
+blob, and asserts the revert case deliberately.
+
+**The finding is that none of it is reachable from the product.** `POST /spec/drift/detect` is the
+**only** writer of a `RequirementDrift` row — no scheduler sweep, no MCP tool, no other route calls
+`requirement_evidence.detect_drift`. And `hub/ui/src` never calls it: the whole string `drift`
+appears in the UI in exactly two load-bearing places, both of them the *word* `drifting` as a
+coverage state — `api/spec.ts:98` in the union type, and `SpecCoverageBar.tsx:10` as a bucket.
+There is no hook for `/spec/drift`, none for `/spec/drift/detect`, none for
+`/spec/drift/{id}/resolve`.
+
+So the coverage bar carries a `drifting` bucket that **cannot light up through the app**, and if
+something outside the app lights it up, the operator is shown a requirement that has changed
+underneath its evidence with:
+
+* no way to see *what* moved (`observed` is only on `GET /spec/drift`),
+* no way to answer the question the whole feature exists to ask, and
+* no way to clear it — `drifting` is the top of the precedence chain, so that requirement now
+  reads `drifting` on every screen, permanently, until somebody makes an HTTP call by hand.
+
+The backend's own docstring says the outcome is *"a question for a person rather than a state the
+requirement acquires by itself"*. Today there is no person it can ask.
+
+**Shape of the fix** — this is a UI gap, not a backend one; the backend is complete and correct.
+The smallest honest version is three controls on the spec surface: a **Scan for drift** action, a
+list of open candidates showing `observed`, and the three-way resolution on each. The one design
+question worth the operator's judgement is whether the scan stays manual. It is not free (it runs
+`git ls-tree` per distinct branch plus a reachability refresh), and the route's own comment says
+the operator's explicit scan is also the moment reachability is re-answered — so making it
+automatic on some cadence changes two things at once, and the manual button should ship first.
+
+Filed as **B**, not **A**: nothing is lost or corrupted, and no run misbehaves. But a shipped
+feature that has a database table, a lifecycle, three routes, a precedence rule at the top of
+coverage, and a UI bucket — and that no operator can reach — is the shape this drive exists to
+find.

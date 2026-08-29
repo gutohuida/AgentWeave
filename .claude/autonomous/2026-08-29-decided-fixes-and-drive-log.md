@@ -1000,3 +1000,81 @@ one of this session's standing limits, so it is written down here rather than le
 Two shell traps now recorded in `next_action` for the next process: backticks inside a double-quoted
 `-c` string are command substitution, and a heredoc whose body contains an odd number of apostrophes
 fails to parse in this shell. Prose goes to a file via the Write tool; python reads the file.
+
+---
+
+## Iteration 10 — 2026-08-29 18:58 → 19:06 +01:00
+
+**Position at start.** Branch `autonomous/2026-08-29-decided-fixes-and-drive` at `c61bce2`, clean,
+matching STATE.json. `current: E2E-DRIVE`. `next_action` named four thin areas in order; this
+iteration did **(a)**, the one that had never been driven at all.
+
+**The Hub on 8011 was re-measured before being trusted**, as instructed: PID 27772, started
+2026-08-29 18:06:50, and `GET /api/v1/projects` answers with this branch's project list. Nothing
+under `hub/` has changed since it started, so it was not restarted.
+
+### Row 10 — requirement drift, driven end to end for the first time
+
+`scripts/drive/t_row10_drift.py`, **31/31 assertions good**, against a throwaway git repository at
+`C:\Users\huida\Documents\drive-drift-0829` (branch `main`) registered on 8011 as
+`proj-dec382cf5a97`. No agent turn and no spend — this row is entirely operator-side.
+
+The full chain was exercised: a document with one requirement, one criterion and one task, approved;
+operator evidence naming `cart.py`, whose footprint came back `kind=git`, `branch=main` and
+`commit_sha` equal to HEAD; a scan on an unchanged tree raising nothing; a commit to the footprinted
+file raising exactly one candidate whose `observed` names `cart.py` alone with distinct `was`/`now`
+blob ids; coverage moving to `drifting` and back to `verified`; the 422 on an unknown resolution and
+the 404 on an unknown id; the resolution holding against a re-scan; and a *further* change raising a
+genuinely new row. Every status code is asserted exactly, never `>= 300`.
+
+**Two of the harness's own failures were the harness being wrong, and are recorded as such.**
+
+* A second run rewrote `cart.py` to content an earlier run had already produced. The scan raised
+  nothing and the harness called it a defect — but a file byte-identical to its footprint *has not
+  drifted*. Every write is now stamped with the repo's commit count, and the revert case is asserted
+  deliberately as its own row.
+* `raised == []` was the wrong assertion in a project that has been driven before: an earlier run's
+  evidence carries an older baseline and legitimately drifts. The harness now filters every `raised`
+  list down to the candidates hanging off *this* run's evidence. Asserting the product was wrong
+  because the harness could not tell two runs apart is exactly the mistake this file keeps warning
+  about.
+
+Two vocabulary facts worth carrying: the requirement's identifier is **minted by the Hub** (`FR-1`),
+not the `key` the document used, and the decision route takes `accepted`/`rejected`, not
+`accept` — it refuses the wrong word with a 422 that lists the permitted ones, which is the right
+behaviour.
+
+### F129 (B) — the feature is correct and the app cannot reach any of it
+
+`POST /spec/drift/detect` is the **only** writer of a `RequirementDrift` row: no scheduler sweep, no
+MCP tool, no second route calls `detect_drift`. And `hub/ui/src` never calls it. The string `drift`
+survives in the UI in exactly two load-bearing places, both the *word* `drifting` as a coverage
+state — `api/spec.ts:98` and `SpecCoverageBar.tsx:10`.
+
+So the coverage bar carries a `drifting` bucket that cannot light up through the app; and if
+something outside the app lights it up, `drifting` sits at the **top** of the coverage precedence,
+so that requirement reads `drifting` on every screen permanently — with no way to see what moved, no
+way to answer the question, and no way to clear it. The backend's own docstring says the outcome is
+"a question for a person rather than a state the requirement acquires by itself". There is no person
+it can ask. Written up in FINDINGS.md with the fix shape (three controls; keep the scan manual for
+now, and why).
+
+### Verification
+
+| | |
+|---|---|
+| Suites | **not re-run, deliberately** — nothing under `hub/`, `src/` or `tests/` changed. One new `scripts/drive/t_row10_drift.py`, which no test imports, plus FINDINGS.md and the autonomous log. The branch's last full verification stands (iteration 6). |
+| The product | driven live: 31/31, twice in a row from a dirty repo, which is what proved the two harness bugs above |
+| Jobs / loops left enabled | none created this iteration |
+| Drift candidates left open | none for this run's evidence; older candidates from earlier evidence rows are left as they are — they are correct, and resolving them would be inventing an operator judgement |
+| Agent spend | **zero** — this row has no agent turn in it |
+
+### What a reviewer should distrust
+
+* **The 8011 project has been driven repeatedly**, so it carries several documents that all mint
+  `FR-1` and several evidence rows with different baselines. Every assertion here is scoped by
+  `requirement_id` or `evidence_id` rather than by the display identifier; a reader checking by hand
+  against `GET /spec/drift` will see rows this harness deliberately ignores.
+* **F129 is an absence**, and absences are the easiest thing to be wrong about. It rests on two
+  greps — `detect_drift` has one caller in `hub/hub/`, and the UI's only occurrences of `drift` are
+  the coverage-state word. Both are cheap to re-run and are quoted in the finding.
