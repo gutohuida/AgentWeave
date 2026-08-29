@@ -9000,3 +9000,76 @@ indistinguishable from success.
 that agent to act as the wrongly-pressed one — the harness takes the first it finds. The F131
 assertions are written in the direction the product **actually behaves**, so the day it is fixed
 they go red and say why.
+
+---
+
+## F132 — drift has no agent-side half either, and the gate's remedy names an action no surface offers
+
+**Read 2026-08-29, iteration 12. Static, not driven: this closes `next_action` item (e), "the drift
+feature's agent-side half (F129), if it has one." It has none, and looking for it turned up a
+sharper version of F129 than F129 states.**
+
+F129 measured that `POST /spec/drift/detect` is the only writer of a `RequirementDrift` row and that
+`hub/ui/src` never calls it — so the operator surface cannot raise drift. The open question it left
+was whether the agent surface could. It cannot, and the two halves compose into something worse than
+either alone.
+
+### The agent surface has no entrance
+
+| where an agent could reach drift | what is there |
+|---|---|
+| `hub/hub/mcp_server.py` | 26 `@mcp.tool()` functions; **none** mentions drift. Both string matches for "drift" in that file are comments about *spec-payload* drift failing in CI (lines 34, 1016) — a different concept. |
+| `hub/hub/api/v1/agent_actions.py` — the agent's whole route surface | 31 routes; the spec block is `/spec/evidence` (record, list, decide) and `/spec/documents` (list, create, rename, submit). **No `/spec/drift` route of any kind.** Its only "drift" match is `spec_lifecycle.divergence` at line 1118, which is a document-digest divergence check, unrelated to `RequirementDrift`. |
+| the canonical turn context (`hub/hub/api/v1/agents.py`) | no `coverage` and no `drift`; the only matches are three comments using "drift" in its ordinary English sense. `requirement_coverage` is imported by `api/v1/spec.py`, `api/v1/tasks.py`, `requirement_gate.py`, `schemas/tasks.py` and `task_transition_service.py` — never by the agent's context or its routes. |
+
+So an agent cannot raise a candidate, cannot list one, cannot resolve one, and is never told that a
+requirement it is working on is `drifting`. Drift is an operator-API-only feature on both sides.
+
+### The part that is worse than unreachable
+
+`drifting` is not inert while it is unreachable — `requirement_gate` consumes it. The gate refuses
+the `approved` transition for any `gate`-rigor requirement whose coverage is not `verified`
+(`requirement_gate.py:39`, `:235`), and every non-verified state carries a remedy naming what would
+change it. Drift's is:
+
+```
+requirement_coverage.DRIFTING: (
+    "the implementation changed after it was verified — resolve the drift candidate"
+),
+```
+`hub/hub/requirement_gate.py:60-62`
+
+**"Resolve the drift candidate" is an action no surface in the product offers.** The only writer of
+a state other than `candidate` is `requirement_evidence.resolve_drift`, reachable only through
+`POST /spec/drift/{drift_id}/resolve` (`api/v1/spec.py:974`), which — measured again this iteration,
+independently of F129 — appears nowhere in `hub/ui/src`: grepping the whole UI for "drift" returns
+the union member `'drifting'` in `api/spec.ts:98`, the coverage bucket in `SpecCoverageBar.tsx:10`,
+the unrelated *spec-manifest* drift summary in `SpecDocumentPanel.tsx`, and 45 further matches that are all code comments using "drift" in its ordinary
+English sense (49 lines in total). No URL.
+
+**And it cannot self-heal.** `detect_drift` skips any evidence that already has an open candidate
+(`requirement_evidence.py:1041-1058`, the `open_candidates` set and the `continue` on it) and never
+closes one. Putting the file back to its footprinted blob makes a *later* scan raise nothing — F129
+measured that — but does nothing to the row already open. Re-scanning is explicitly designed not to
+ask the same question twice, which is right, and which also means re-scanning is not an escape.
+
+The gate's docstring says the refusal has to be actionable because "an unactionable gate gets
+switched off, which is worse than never having built one" (`requirement_gate.py:17-22`). This is one
+refusal whose remedy is unactionable through the app by construction. The reason nobody has hit it
+is only that the same missing UI that cannot clear a candidate also cannot raise one — the feature
+is symmetrically unreachable, and that symmetry is the whole thing keeping the gate usable. Anything
+that adds a *detect* button without a *resolve* one — an obvious first slice, and the cheaper half —
+would strand a task in `approved`-refused with no way out but a hand-written API call.
+
+### What this changes about F129's fix
+
+F129 asks for a way to reach detection. This says the two routes must ship **together, or resolve
+first**, and that the gate's remedy string is the acceptance test: a state whose remedy cannot be
+performed on the surface that shows it is a bug even when the state is correct.
+
+Not proposed here — this wants a spec loop, and the clock ended this session before one could start.
+
+**Evidence:** all static, all cheap to re-check. `grep -c "@mcp.tool()" hub/hub/mcp_server.py` → 26;
+`grep -n "^@router\." hub/hub/api/v1/agent_actions.py`; `grep -rn "drift" hub/ui/src`;
+`hub/hub/requirement_gate.py:39,60-62,235`; `hub/hub/requirement_evidence.py:998-1058`;
+`hub/hub/api/v1/spec.py:921,942,974`.

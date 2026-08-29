@@ -1233,3 +1233,81 @@ reading the `runs` table read-only, and the harness now asserts what the API can
 queue entry being consumed, and the mismatch between the reported and the queued conversation). A
 helper that swallows a 404 into an empty list turns "I could not look" into "there was nothing there"
 — the same shape as the global-emptiness trap from iteration 10, one layer down.
+
+---
+
+## Iteration 12 — 2026-08-29 19:33–19:37 — `next_action` item (e): drift's agent-side half, and F132
+
+**The clock chose this unit.** The firing landed at 19:33 against a `stop_at` of 20:00 — 25 usable
+minutes. `next_action` item (d), a spec loop for F130/F131, was the larger prize and was
+deliberately not started: a proposal written in twenty minutes that rounds 2 and 3 will never see is
+the exact failure this repository's round discipline exists to prevent, and the limits say to stop
+at a round boundary rather than leave a half-written one. Item (e) — "the drift feature's agent-side
+half (F129), if it has one" — is small, self-contained, and answerable by reading. It was taken
+instead, and it finished.
+
+**The answer is no, and looking for it produced something sharper than the question.** Recorded as
+**F132** in `scripts/drive/FINDINGS.md`.
+
+The agent surface has no entrance to drift at all: 26 MCP tools, none of them drift (the two "drift"
+strings in `mcp_server.py` are comments about spec-payload drift in CI); 31 routes in
+`agent_actions.py`, none `/spec/drift` (its only match is `spec_lifecycle.divergence`, a
+document-digest check on a different concept); and the canonical turn context carries neither
+coverage nor drift — `requirement_coverage` is imported by five modules, none of them the agent's.
+
+The part worth the operator's attention is what that composes into. `drifting` is **not inert**
+while it is unreachable: `requirement_gate` refuses the `approved` transition for any `gate`-rigor
+requirement that is not `verified`, and drift's remedy string is *"the implementation changed after
+it was verified — resolve the drift candidate."* That names an action no surface offers — the only
+writer of a non-`candidate` state is `POST /spec/drift/{id}/resolve`, which appears nowhere in
+`hub/ui/src` (re-measured this iteration, independently of F129's claim: 49 "drift" matches in the
+UI, all of them the `'drifting'` union member, the coverage bucket, the unrelated spec-*manifest*
+drift panel, or comments — no URL). Nor can it self-heal: `detect_drift` skips evidence that already
+has an open candidate and never closes one, so restoring the file raises nothing later but clears
+nothing now.
+
+The gate's own docstring says a refusal has to be actionable because "an unactionable gate gets
+switched off, which is worse than never having built one". This is one whose remedy cannot be
+performed on the surface that shows it. **The only reason nobody has hit it is that the feature is
+symmetrically unreachable** — the same missing UI that cannot clear a candidate also cannot raise
+one. Which makes the obvious first slice of F129's fix — a Detect button, the cheaper half — the
+dangerous one: it would strand tasks in `approved`-refused with no exit but a hand-written API call.
+Detect and resolve ship together, or resolve ships first.
+
+### Verification
+
+| | |
+|---|---|
+| Suites | **not re-run, deliberately** — this iteration changed only `scripts/drive/FINDINGS.md` and this log. No `hub/`, `src/` or `tests/` file was touched all iteration. |
+| The product | not driven; this unit is a code reading, and it says so. Every claim is a file-and-line a reviewer can re-check in one grep, and the "Evidence" line of F132 lists the exact commands. |
+| Jobs / loops left enabled | none created |
+| Hub on 8011 | not started this iteration — nothing needed it |
+| Agent spend | none |
+
+### What a reviewer should distrust
+
+* **F132 is static.** It has not been driven, and it says so at the top. The composed claim — that
+  the gate would strand a task — is an inference from two measured facts (the gate refuses on
+  `drifting`; nothing on any surface resolves a candidate), not an observation of a stranded task.
+  Driving it needs a `gate`-rigor requirement with accepted evidence, a hand-rolled
+  `POST /spec/drift/detect`, and an attempted approval. That is a good next drive and was not
+  affordable in 25 minutes.
+* **"No agent-side half" is a claim about three places** — `mcp_server.py`, `agent_actions.py`, and
+  the turn context — reached by grep. If drift is reachable from somewhere a grep for the word
+  "drift" and for `requirement_coverage` would miss, this is wrong.
+
+### Session close
+
+This is the last iteration: `stop_at` is 20:00 and the next firing would be past it. What the
+operator should look at, in order, is unchanged from iteration 11 except that F132 now sits with
+F129:
+
+1. **F130** — a checkpoint over an empty span makes every later checkpoint re-summarise the whole
+   conversation. Cheapest of the three; the cheapest fix shape is one line.
+2. **F131** — Continue on one conversation starts another's work and reports success against the
+   one you pressed.
+3. **F129 + F132** — drift is correct, unreachable from both surfaces, and gated on anyway.
+4. **F127** — pressing Run on a healthy loop whose agent is busy answers 500.
+
+Each wants a spec loop, and none was started. The queue still carries F111+F3, F113 and F115 as
+unstarted four-item spec loops.
