@@ -7970,3 +7970,61 @@ so the empty string is unambiguous rather than wrong.
 `implementation` evidence, and it was **accepted, not refused as a duplicate** — while `alpha`
 re-recording its own claim in a later turn *was* refused. The rule distinguishes a second author
 claim from an independent confirmation, which is exactly what F75 asked for.
+
+## Row 19 RESILIENCE, two of three parts — driven, and both held
+
+**Two concurrent triggers for one agent.** Two `POST .../agent/trigger` calls for `alpha` fired from
+two threads, 19 ms apart, into two different conversations. Neither raced, neither was lost, and
+each was told something *different and correct*:
+
+```
+trigger A  status "queued"  waiting_reason: "an older conversation's queued input is being
+                                             delivered first (run run-6a2a3219b785)"
+trigger B  status "queued"  waiting_reason: "agent is already running"
+```
+
+Both entries then ran, in arrival order, in their own runs:
+
+```
+entry-30b613696046  arrived 16:07:32.951  delivered 16:07:33.379  run-6a2a3219b785  ended :43.055
+entry-3fbc4defcd68  arrived 16:07:32.970  delivered 16:07:43.305  run-e18f0ca41828  started :43.306
+```
+
+`delivery_attempts: 0`, `abandoned_reason: null` on both. `turn_scheduler`'s per-`(project, agent)`
+lock is doing exactly what `SURVEY.md` credits it with, and the *reason* the loser was given names
+the run that beat it rather than a generic "busy".
+
+**Stopping a run mid-flight.** `POST .../agent/{name}/stop` eight seconds into a real turn:
+
+```
+200 {"success": true, "message": "Stop signal sent to beta (run run-c5fb49f86c77).",
+     "status": "stopping"}
+
+runs:        status "stopped", exit_code 2, ended 8.2s after it started
+event_logs:  run_stopped  severity "info"  exit_code 2
+agents:      beta idle within 4 seconds
+queue entry: state "delivered", abandoned_reason null
+```
+
+`stopped` is its own status, not `failed`, and the event is `info` rather than an error — which is
+the right reading of an operator doing something deliberate. This is the same family as **F94**
+(*"kill an agent and the product tells you `exit 4294967295`"*): a deliberate stop is now legible.
+
+**Not driven:** killing the Hub with a run in flight (`run_reconciliation`). Left for a later
+iteration — it needs the trial Hub restarted mid-turn, and this iteration's Hub was carrying an
+unrelated fix under test.
+
+**A stopped run keeps everything it produced** — settled by repeating the stop at twenty-five
+seconds rather than eight, because one run could not distinguish "the stop discarded buffered
+output" from "there was nothing yet":
+
+```
+run-5bc7ea3b2dcb  started 16:09:59.507  stopped 16:10:24.781  exit_code 2
+agent_outputs:    20 rows, first at 16:10:08.046, last at 16:10:23.309
+```
+
+The last row landed 1.5 s before the stop took effect, and the transcript is complete up to it. The
+earlier eight-second stop's empty transcript was therefore honest: this model's first output row
+arrives 8.0-8.5 s after start on this machine, every time it was measured today, so that run had
+genuinely produced nothing. **No finding** — recorded because an empty transcript after a stop looks
+exactly like discarded output, and the next reader deserves the measurement rather than the worry.
