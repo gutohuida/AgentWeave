@@ -8115,3 +8115,53 @@ It ran as `run-ec7005e6f593` the moment the resumed run ended.
 is open (the reconciler calls `expire_pending_for_run`, which this drive never exercised because
 both specimens ran in default posture), and a crash while a run holds a task (`divergences_to_evaluate`
 is only populated for `run.task_id`, and neither specimen was task-bound).
+
+## Row 19 x row 14 — the Hub killed while an operator's decision is on screen. It held.
+
+The crash drive above ran both specimens in default posture, so `reconcile_interrupted_runs`'
+call to `expire_pending_for_run` was never reached. Its comment is the reason it exists — *"a Hub
+bounced while an operator decision was on screen leaves a row nobody will ever poll again"* — so
+this drives that, `scripts/drive/t_row19_crash_card.py`, 2026-08-29 17:54.
+
+```
+17:54:50  card perm-acc79b61af1d  status "pending"   run-2f56b98d86f3  tool Write
+   ~:58   Stop-Process -Force on the Hub
+17:55:0x  restart
+          card perm-acc79b61af1d  status "expired"   decided_at null   decided_by null
+          run-2f56b98d86f3        status "interrupted"
+          GET /permission-requests  -> the card is gone from the operator's list
+POST .../perm-acc79b61af1d/decide {"allow": true}
+   409 {"detail": "this request was already expired; the run has moved on"}
+17:55:10  perm-3d4bae2c9135  a FRESH card, run-67f5dee85c34, same Write
+          {"allow": true} -> 200, and card_crash_note2.txt exists in gamma's worktree 2s later
+17:55:15  gamma idle
+```
+
+Twenty seconds from crash to the operator being asked the same question again by a live run, and
+the stale card cannot be answered into a void — the `409` names *expired* rather than the generic
+"already decided", so the operator can tell "I was too slow" from "the Hub died under me".
+
+**`decided_at` is null on an expired card, and that is right.** Nobody decided it. It matters
+because a client that asks "is this card still open?" with `!decided_at` reads an expired card as
+answerable — **this harness did exactly that on its first run**, and the mistake was invisible
+because the list route hides expired rows by default (`pending_only`). Checked against the UI
+rather than left as a worry: `permissions.ts` types `status` as the four-value union,
+`PermissionRequestCard.tsx:66` selects on `status === 'pending' || status === 'expired'` and
+renders the expired one `is-stale` with a dismiss button and no answer buttons. The UI reads the
+field that carries the answer. **No finding.**
+
+**A harness bug that would have shipped a false verdict, recorded because it is the more useful
+half of this row.** The first run of `t_row19_crash_card.py` posted `{"decision": "allow"}` — the
+field is `allow`, a bool — got a `422`, and scored it as *"deciding a dead card is refused"*. It
+proved only that the harness could not spell the request. Worse, the same typo then failed to
+answer the **fresh** card, which expired 120 s later (`permission_denied`: *"no operator answered
+within 120s, so this was not approved"*), and the run completed without writing the file — which
+the harness scored as *"the work completed after the crash"* because it was watching the agent go
+idle rather than watching the file appear. Two green verdicts, both false, from one typo in a
+request body. The re-run asserts the artefact (`os.path.exists`) and the exact status code
+(`== 409`, not `>= 300`), which is what a verdict has to do to be worth reading.
+
+That is F116's own lesson arriving from the other side: **F116 forbade extras so a misspelled
+field is named rather than absorbed, and here the named refusal was still misread by the client
+that caused it.** The `422` did everything right. A drive that only checks "did it refuse?" learns
+nothing from a good refusal.
