@@ -1186,3 +1186,50 @@ handed a different one.
   from the worktree's contents.
 * **F130 rests on two code paths and one measurement.** Both lines are quoted with file and line;
   both are cheap to re-read.
+
+### Iteration 11, second unit — the `continue` endpoint's unreached branches, and F131
+
+The clock allowed a second unit (the first finished at 19:25, not the 19:52 I had estimated before
+stamping a real time), so `next_action` item (c) was driven too:
+`scripts/drive/t_continue_branches.py`, **16/16**, run twice.
+
+**The two waiting branches are fine and are now covered.** Pressing Continue with nothing queued
+answers 200 with `started: false, waiting_reason: "queue is empty"`; pressing it while the agent is
+mid-turn answers 200 with `waiting_reason: "agent is already running"`. Both name the reason, and
+neither starts anything. `t_row15_cutover.py` had only ever seen `started: true`.
+
+**F131 is what the third probe found.** `POST /conversations/{id}/continue` resolves the conversation
+only to 404 on it, then calls `schedule_agent(project_id, conversation.agent)` — which takes the
+agent's next queued entry, whatever conversation it belongs to — and returns
+`{"conversation_id": <the one you pressed>, "started": true}`. Measured twice with different ids: a
+cutover left one checkpoint entry queued for a successor, Continue was pressed on a **different**
+open conversation of the same agent with nothing queued for it, and the answer was `started: true`
+against the pressed conversation while the successor's entry was consumed and the run landed on the
+successor (checked by hand against the `runs` table the first time: exactly one new run in the
+window, on the successor, none on the pressed conversation).
+
+The scheduling is right — a turn is a per-agent resource and the correct work ran. What is wrong is
+that the endpoint is **addressed per conversation and answers as if it were**: an operator watching
+the conversation they pressed sees a success and then nothing at all. Same family as F116 (a route
+that accepts an input, does something else, and hands the input back as success) and F128 (a loop
+that reports the agent it was configured with rather than the one that ran). Three fix shapes costed
+in FINDINGS.md F131; the smallest is to return the conversation id of the entry actually picked.
+
+### Verification, second unit
+
+| | |
+|---|---|
+| Suites | still not re-run — nothing under `hub/`, `src/` or `tests/` changed all iteration |
+| The product | driven live twice: 14/15 then, after the two dead assertions below were replaced, **16/16** |
+| Jobs / loops left enabled | none |
+| Teardown | `checkpoint_runner_id` reset to NULL in a `finally`, both runs |
+| Agent spend | two Haiku turns plus two checkpoint generations |
+
+**Two of the first run's assertions were dead, and this is the correction.** `runs_of()` called
+`GET /projects/{id}/conversations/{id}/runs`, which does not exist — it answered 404, the helper
+returned `[]`, and one check passed vacuously while the F131 check failed for the wrong reason. There
+is no per-conversation runs route on the API; the first run's landing evidence therefore came from
+reading the `runs` table read-only, and the harness now asserts what the API can actually see (the
+queue entry being consumed, and the mismatch between the reported and the queued conversation). A
+helper that swallows a 404 into an empty list turns "I could not look" into "there was nothing there"
+— the same shape as the global-emptiness trap from iteration 10, one layer down.

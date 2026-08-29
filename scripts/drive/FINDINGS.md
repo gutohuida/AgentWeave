@@ -8926,3 +8926,77 @@ cost here was a checkpoint that says the work was not done.
 (`AW_PROJECT`, `AW_AGENT`, `AW_RUNNER` override the defaults). The F130 assertion is written in the
 direction the product **actually behaves** — "#3 ALSO re-covers the first turn" — so the day it is
 fixed that line goes red and says why.
+
+---
+
+## F131 — Continue on one conversation starts a different conversation's work, and reports success against the one you pressed
+
+**Found by driving the `continue` endpoint's unreached branches**
+(`scripts/drive/t_continue_branches.py`). Two of them are fine and are now covered: pressing Continue
+with nothing queued answers **200** with `started: false, waiting_reason: "queue is empty"`, and
+pressing it while the agent is mid-turn answers **200** with
+`waiting_reason: "agent is already running"`. Both name the reason rather than failing silently, and
+neither started anything.
+
+The third thing the drive asked is not a branch. `POST /conversations/{id}/continue` resolves the
+conversation **only to 404 on it**, and then schedules the *agent*:
+
+```python
+conversation = await _conversation_or_404(session, project_id, conversation_id)
+result = await schedule_agent(project_id, conversation.agent)      # hub/hub/api/v1/checkpoints.py:271
+return {"conversation_id": conversation_id, "started": result.waiting_reason is None, ...}
+```
+
+`schedule_agent` takes the agent's **next queued entry, whatever conversation it belongs to**. The
+conversation in the path contributes nothing except the agent's name and a 404.
+
+### Measured
+
+With gamma idle and exactly one thing queued — a checkpoint entry addressed to successor
+`conv-7e15b83ad8b5`, produced by a cutover — Continue was pressed on `conv-766a9eee3bfc`, an
+unrelated open conversation of the same agent with nothing queued for it.
+
+* the call answered **200**, `started: true`, `waiting_reason: null`, `conversation_id:
+  conv-766a9eee3bfc` — the one pressed;
+* the successor's queue entry was **consumed** (`GET /queue/gamma` empty afterwards);
+* and the runs table for that window holds exactly one new run, `run-f36b8f55fae9`, on
+  **`conv-7e15b83ad8b5`**. The pressed conversation's newest run is minutes older, from a previous
+  harness.
+
+So the operator pressed Continue on A, was told A started, and B ran.
+
+### Why it matters, and why it is not simply "the queue is per agent"
+
+It is true and correct that a turn is a per-agent resource: one agent runs one turn at a time, and
+the queue is the agent's. The defect is not the scheduling — the right work ran. It is that the
+**endpoint is addressed per conversation and answers as if it were**. `started: true` alongside the
+conversation id the caller supplied is a claim about that conversation, and it is false. An operator
+watching A sees a success and then nothing: no turn appears, no output, no error. The very next
+thing they will do is press it again.
+
+The shape is the same one F116 was about: a route that accepts an input, does something else with
+it, and returns a success that names the input back. There the input was silently discarded; here it
+is silently substituted. And it is the same family as F128, where a loop's configured agent is not
+the agent that runs it — a product that reports the identifier you supplied rather than the one it
+acted on.
+
+### The fix shape (not decided here)
+
+1. **Report what actually started.** `schedule_agent` knows the entry it picked; return *its*
+   conversation id and let the UI show that a different conversation began. Smallest honest change,
+   and it makes the surprising case visible instead of invisible.
+2. **Refuse the mismatch.** If the agent's next entry is not for the conversation in the path,
+   answer 409 naming the conversation that is actually next. Safer for an operator who meant "this
+   one", worse for the case where they just want the agent moving.
+3. **Both** — refuse by default, report on force. Probably over-built for one button.
+
+What must not happen is keeping the current answer, because it is the one shape that is
+indistinguishable from success.
+
+### Reproduction
+
+`py -3.11 scripts/drive/t_continue_branches.py` against a Hub with a checkpoint runner available
+(`AW_PROJECT`, `AW_AGENT`, `AW_RUNNER` override the defaults). Needs an existing conversation for
+that agent to act as the wrongly-pressed one — the harness takes the first it finds. The F131
+assertions are written in the direction the product **actually behaves**, so the day it is fixed
+they go red and say why.
