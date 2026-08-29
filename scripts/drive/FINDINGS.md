@@ -8165,3 +8165,75 @@ That is F116's own lesson arriving from the other side: **F116 forbade extras so
 field is named rather than absorbed, and here the named refusal was still misread by the client
 that caused it.** The `422` did everything right. A drive that only checks "did it refuse?" learns
 nothing from a good refusal.
+
+## Row 19 x row 8 — three crashes on one task-bound run: the input is abandoned, and the operator is told
+
+`reconcile_interrupted_runs` has a branch nothing had ever reached:
+
+```python
+if run.task_id and not returned_entry_ids:
+    divergences_to_evaluate.append(run.id)
+```
+
+`returned_entry_ids` is empty only when `return_run_entries` gave up, which is
+`DELIVERY_ATTEMPT_LIMIT = 3` — so the branch needs the Hub killed **three times on the same
+input**. That is also exactly the case the crash drive above filed as *"an operator whose Hub
+crash-loops three times loses the message"*, so `scripts/drive/t_row19_crash_task.py` drives both
+at once: a task assigned to `beta`, a run bound to it, and three hard kills in four minutes.
+
+```
+entry-06b6c75505dc  task-d1ae1dfe5124  delivered, attempts 0
+crash 1 -> state "queued",     attempts 1, provider_session_id 7824ae64-… kept
+crash 2 -> state "queued",     attempts 2, provider_session_id NULL      <- RESUME_RETRY_LIMIT
+crash 3 -> state "withdrawn",  attempts 3, "delivery failed 3 times; the Hub stopped retrying"
+```
+
+Every constant behaved as its comment says, including the middle one nobody would notice: at the
+second failure the conversation's provider session is dropped, so the third delivery starts fresh
+rather than re-killing the runtime on a session that cannot be resumed.
+
+**The message is gone, and nothing about that is silent.** After the third crash:
+
+| Surface | What it says |
+|---|---|
+| `GET /tasks/{id}` | `status: "in_progress"`, `has_open_divergence: true` |
+| `GET /tasks/divergences/recent` | `div-6c07fa8009fb`, `run_exit_status: "interrupted"`, `task_status_at_end: "in_progress"`, `outcome: "surfaced"` |
+| `GET /queue/beta` | the entry, `state: "withdrawn"`, with its `abandoned_reason` |
+| `GET /agent/beta/chat/{conv}` | the operator's own message, `delivery_state: "abandoned"`, reason attached |
+| `AgentTimeline.tsx:787-808` | renders that as a red **"not delivered"** chip *with the reason beside it* |
+
+The task does not silently sit in `in_progress` looking like work in flight: the divergence is
+raised on the crash path, by the same `evaluate_run_end` the ordinary end-of-turn path uses. This
+is the S6-adjacent worry answered in the product's favour.
+
+**Two measurements taken because the first reading of them was wrong.**
+
+*Output produced before a crash is not discarded.* The three abandoned runs had **zero** stored
+output rows each, next to a completed run of the same work with sixteen — which reads exactly like
+a crash eating the transcript. It is not. Killed deliberately *after* rows existed:
+
+```
+run-1036804a218c  4 rows at t+9.1s (thinking, text, tool_use, tool_result)
+  Stop-Process -Force
+  rows immediately after the kill: 4
+  rows after the restart:          4
+```
+
+`record_agent_output` commits per event, and a committed row survives its Hub. The zero-row runs
+were killed **before this model's first output row**, which lands 8.0-8.5 s after start on this
+machine — measured twice today, once for the stop half of row 19 and once here.
+
+*An interrupted run's `ended_at` is the restart time, not the crash time.* `reconcile_interrupted_runs`
+sets `run.ended_at = now()`, and "now" is whenever the Hub came back:
+
+```
+started_at 17:00:28.66   killed ~17:00:37.6   ended_at 17:00:42.29
+lived ~9 s; the row claims 13.6 s
+```
+
+That is what made the zero-row runs look impossible — their durations are inflated by however long
+the Hub was down. **Not a finding today, because `ended_at` is on no response schema and no UI
+component reads it** (checked, not assumed). It becomes one the moment a run duration is surfaced:
+a Hub that crashes at midnight and restarts at nine reports a nine-hour run. Whoever exposes it
+should bound it by the last `agent_outputs` row for the run, which is the only honest upper bound
+the Hub still holds.
