@@ -270,6 +270,15 @@ one key, not three.
 A right answer resting on a wrong argument is the failure this repository produces most, and only a
 round that re-derives the argument finds it. Three turned up here.
 
+**The hub suite was run with the change applied, and nothing goes red.** All eighteen models
+patched to `extra="forbid"` (`SpecDocumentCreate` untouched): **3510 passed, 84 skipped, 1 xpassed,
+0 failed** — counts identical to the same tree's baseline. Every one of the 3595 collected tests has
+run under the probe. Round 1's open question is answered with a measurement instead of an estimate:
+**no test in `hub/tests/` sends an undeclared field to any of the nineteen routes**, so the risk row
+"a test goes red and is a caller that was being ignored" is empty. The corollary matters as much —
+the existing suite proves nothing about this rule today, which is what makes tasks 2.2 and 2.3 the
+substance of the change rather than its paperwork.
+
 ## Open questions for round 3
 
 - **Is any *other* shipped requirement served by tolerance?** One was found by reading a docstring

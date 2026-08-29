@@ -96,9 +96,12 @@ Implementation begins only after 1.1–1.7.
 
 - [ ] 4.1 The two tests from 2.2 and 2.3 pass.
 - [ ] 4.2 Mutation-check both: revert `TriggerAgentRequest` to `BaseModel` and confirm each fails.
-- [ ] 4.3 Full hub suite **in file chunks** (`pytest hub/tests/` exceeds the 600s cap). Every red
-      test is a caller that was being ignored: fix the payload, never relax the model. If an extra
-      field turns out to be meaningful, that is a missing field and a finding — record it.
+- [ ] 4.3 Full hub suite. Round 2 already ran it with all 18 patched: **3510 passed / 84 skipped /
+      1 xpassed / 0 failed**, identical to baseline, so this is a regression check against the
+      *implementation*, not a discovery run — a red test here is something 3.1–3.5 did that the
+      probe did not. The guidance still holds if one appears: fix the payload, never relax the
+      model; a meaningful extra field is a missing field and a finding. Note the suite takes ~26
+      minutes and exceeds a 600s tool cap — run it detached, not in chunks.
 - [ ] 4.4 `pytest tests/ -v` (CLI), and `ruff check src/ hub/ tests/`,
       `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`.
 - [ ] 4.5 **Drive it live** against a Hub on 8011 running this branch: send F116's exact body and

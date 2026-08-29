@@ -179,7 +179,7 @@ leaves the rest to be refused — rather than licensing a translated vocabulary 
 
 | Risk | Mitigation |
 |---|---|
-| A hub test sends an extra field to a now-strict route and goes red | Expected and wanted — each one is a caller that was being ignored. Fix the test's payload, do not relax the model. If a test's extra field turns out to be *meaningful*, that is a missing field on the model and a finding. |
+| A hub test sends an extra field to a now-strict route and goes red | **Measured in round 2: none does.** All 18 patched, full suite run — 3510 passed / 0 failed, identical to baseline. The guidance stands if one appears later (fix the payload, never relax the model), but there is nothing to fix today. |
 | A model needs `populate_by_name` and loses it | D3: subclass `model_config` merges over the base's. Checked per model at implementation. |
 | The `mode="before"` ordering assumption is wrong | **Closed in round 2** — proven at the model and through the route: a legacy body answers `201`, a modern body carrying an unknown key answers `422` naming it. |
 | A `mode="before"` translation swallows an unknown field before `extra` can refuse it | **Found in round 2** on `ContextUsageCreate`, which is why D6 now rewrites it to `tasks.py:92`'s consume-what-you-recognise pattern. R3's 1.6 looks for the others: this is the one shape where the rule silently does not reach, and it is invisible from the model's config. |

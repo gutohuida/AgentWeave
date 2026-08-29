@@ -284,3 +284,63 @@ were written and they were not.
 
 Round 1's second named hazard is also closed: `SessionSyncRequest` declares `data` and nothing else,
 and `sync_session` reads `body.data` at five sites and no sibling key.
+
+### The suite measurement the proposal asked for, and what it cost to get an honest number
+
+Round 1 left this open: *"R2/R3 must find every test that sends an extra field to a lax route. The
+~23-minute cost is real, but the number is not a guess to carry into implementation."* Round 2 got
+the number by patching all eighteen models to `extra="forbid"` — `SpecDocumentCreate` left alone —
+and running the suite. **The number is zero.** Not one test in `hub/tests/` sends an undeclared
+field to any of the nineteen routes.
+
+Getting there was not clean, and the mess is worth recording because it cost most of the iteration.
+
+| Run | Probe | Result |
+|---|---|---|
+| 1 | all 18 | stalled at ~95%, CPU frozen at 1019.6s across two samples ten minutes apart; killed |
+| 2 | all 18 | stalled at the same place; killed |
+| tail files, in two groups (16 files, 192 tests) | all 18 | **all passed**, 55s + 36s |
+| `test_task_worktrees.py` alone (40 tests) | all 18 | **all passed**, 17s |
+| baseline | none | **3510 passed, 84 skipped, 1 xpassed, 0 failed**, 26:04 |
+| 3 (`-v -u`) | all 18 | **3510 passed, 84 skipped, 1 xpassed, 0 failed**, 25:46 |
+
+Every one of the 3595 collected tests has now run with the probe genuinely applied — the first ~95%
+in runs 1 and 2, the remaining files as groups — with **no failure anywhere**, and run 3 covered the
+whole suite in one process with counts identical to the baseline's. The proposal's risk row "a hub
+test sends an extra field to a now-strict route and goes red" is empty. That is a real result for
+implementation: the eighteen edits should be behaviour-neutral for the existing suite, which also
+means the suite currently proves nothing about this rule and tasks 2.2/2.3 have to supply that.
+
+**What is not explained:** why runs 1 and 2 stalled at ~95% and run 3 did not. Run 1's stall is not
+an inference — its CPU counter was byte-identical ten minutes apart while the process was alive, so
+it was blocked, not slow. It is not the tree's: the baseline completed clean, and CI ran green on
+all nine cells this morning. It is not any single test's: every file in the neighbourhood passes
+alone and in groups with the probe on. Two candidates worth naming rather than guessing between —
+the shared-connection interaction already written up as **F109** (one `StaticPool` connection across
+sessions, order-dependent, known to bite ~1 run in 6), and this machine under three concurrent
+`py -3.11` processes, which runs 1 and 2 had and run 3 did not. **It is not evidence about this
+change, and it should not be carried into round 3 as if it were** — but a suite that can block
+rather than fail is worth knowing about, and this is the second time F109's mechanism has cost a
+session an hour.
+
+### What round 3 gets
+
+Tasks 1.5–1.7 stand, with 1.6 rewritten to re-derive round 2's two-vocabulary enumeration rather
+than read it — task 3.5 now rests entirely on that enumeration being complete, and round 2 produced
+it from one script and one reading, which is exactly the standing round 1's count was in.
+
+### What a reviewer should distrust in this entry
+
+The enumeration. "Three `mode="before"` validators and one aliased model, and there is no third
+mechanism" is the strongest claim in this round and the one carrying the most weight, and it comes
+from a single walk. If a body can carry a second vocabulary some way neither counted — a
+`field_validator(mode="before")` on an individual field, a custom `__init__`, a dependency that
+rewrites the body before it reaches the model — then 3.5 fixes one instance of a class that still
+has members. Round 3 should try to break that sentence specifically.
+
+Second: the suite result is a claim about *this* suite, not about callers. Zero red tests means no
+test sends an undeclared field; it does not mean no client does. The callers were read separately,
+by hand, and that reading is what D1 actually rests on.
+
+Nothing was implemented. `hub/hub/` is byte-identical to where iteration 1 left it — the probe was
+applied and reverted three times and `git status` is clean. F116 is still open and still reproducible.
