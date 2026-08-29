@@ -8028,3 +8028,90 @@ earlier eight-second stop's empty transcript was therefore honest: this model's 
 arrives 8.0-8.5 s after start on this machine, every time it was measured today, so that run had
 genuinely produced nothing. **No finding** — recorded because an empty transcript after a stop looks
 exactly like discarded output, and the next reader deserves the measurement rather than the worry.
+
+## Row 19 RESILIENCE, the third part — the Hub killed with a run in flight. It held.
+
+Driven 2026-08-29 17:45-17:50 on 8011 against this branch, `scripts/drive/t_row19_crash.py`. This
+is the half the paragraph above left open. Two specimens, one per agent, both hard kills
+(`Stop-Process -Force`, so `lifespan`'s `terminate_all_active_runs()` never ran — a crash, not a
+bounce).
+
+**Nothing is orphaned, and that is measured rather than assumed.** The `Run` row's `pid` is the
+CLI itself, and it dies with its Hub:
+
+```
+hub pids 28980 (py.exe launcher) -> 22604 (python.exe, uvicorn)
+  22604 -> 25712 OpenConsole.exe      after Stop-Process -Force: gone
+  22604 -> 19688 claude.exe           after Stop-Process -Force: gone   <- runs.pid = 19688
+```
+
+This matters because `reconcile_interrupted_runs` **skips** any run whose `pid_alive(run.pid)` is
+still true. Had the ConPTY child survived its parent — which is the ordinary Windows expectation,
+nothing reaps a grandchild — every crashed run would have stayed `running` forever and wedged its
+agent, since `POST /agent/trigger` refuses while a run is in progress. The pseudoconsole closing is
+what makes the reconciler's precondition true here, so the good outcome rests on a property of
+ConPTY, not on anything the reconciler does.
+
+**The restart tells the truth and then does something about it.** Specimen one, `alpha`, killed 20 s
+into a turn:
+
+```
+16:46:40.653  run_triggered     run-7b910e688f68
+16:46:40.757  run_started
+   ~16:47:00   Stop-Process -Force on the Hub
+16:47:00.720  run_interrupted   pid 20504, returned_entry_ids ["entry-68dd93ce09b2"],
+                                abandoned_entry_ids []          severity warn
+16:47:04.115  run_triggered     run-179b80185f46   session_mode "resume"
+16:47:04.135  queue_entry_delivered  entry-68dd93ce09b2  <- the SAME entry, redelivered
+16:47:30.420  run_completed     exit_code 0
+```
+
+Four seconds from the Hub answering again to the operator's message being back in a live turn, with
+no operator action at all. That is `_schedule_or_defer`'s deferred re-drain firing off the first
+request the restarted Hub served — the path whose docstring says it exists because
+`reconcile_interrupted_runs` runs before the Hub knows its own address. It works.
+
+Specimen two, `beta`, reproduced it: `run-63d92186c7b6` -> `interrupted` at restart, `run-5aed9335cb5a`
+started within seconds on the same input.
+
+**The redelivered agent is told it is a redelivery.** From the resumed run's own transcript:
+
+> *"The note says 'delivery attempt 2; an earlier attempt was cut off before it finished' — so this
+> appears to be something that was interrupted and needs to be completed."*
+
+`inbound_queue.py:116-119` composes that line, and the agent read it and acted on it. A redelivery
+that looked like a first delivery would make the agent redo completed side effects silently.
+
+**Accounting records the crash rather than dropping it.** `unavailable_turns` went 2 -> 3 (alpha's
+0 -> 1) across the crash, so the interrupted run has exactly one outcome and it is `unavailable`,
+not a zero and not an absence — which is `usage-accounting`'s stated rule, reached by the crash
+path.
+
+**A trigger arriving during the recovery is queued, not lost or refused:**
+
+```
+POST /agent/trigger  200  {"status": "queued", "run_id": null,
+                           "waiting_reason": "agent is already running"}
+```
+
+It ran as `run-ec7005e6f593` the moment the resumed run ended.
+
+**No finding. Two things worth knowing anyway.**
+
+- **Three crashes withdraw an operator's message.** `return_run_entries` counts a delivery attempt
+  per interruption; at `RESUME_RETRY_LIMIT = 2` the conversation's `provider_session_id` is cleared
+  (the agent loses its provider-side context) and at `DELIVERY_ATTEMPT_LIMIT = 3` the entry is
+  `withdrawn` with `abandoned_reason` set. Both constants carry a written rationale that names this
+  case explicitly ("Fewer, and a Hub restart could discard an operator's message"), so this is a
+  decided trade-off, not a defect — but an operator whose Hub crash-loops three times loses the
+  message, and the only breadcrumb is `delivered_in_run_id` on a withdrawn entry.
+- **`pid_alive` is a pid-existence check, not pid+identity**, as its own docstring says. A Hub down
+  long enough for the OS to recycle the pid reads the run as still alive and never reconciles it.
+  Not reproducible on demand and already written down at `pty_runner.py:142-147`; recorded here
+  because this row is the one place the consequence is visible — the run stays `running` and its
+  agent is wedged with no way back except another restart.
+
+**What is not covered by this row even now:** a Hub killed while a *permission card* or a *question*
+is open (the reconciler calls `expire_pending_for_run`, which this drive never exercised because
+both specimens ran in default posture), and a crash while a run holds a task (`divergences_to_evaluate`
+is only populated for `run.task_id`, and neither specimen was task-bound).
