@@ -6890,10 +6890,44 @@ and the delivery-attempt accounting that is now **F114**.
 
 ## F109 (B) — the hub suite runs every session on one database connection, and the retry chain stalls because of it
 
-**Status:** **mechanism proven, three fixes measured, none applied.** Filed 2026-08-28 while
-implementing F108 and upgraded the same night. This is the "unexplained flake" carried from handoff
-0096. It is a harness artefact, **demonstrated rather than argued**, and the fix is real but is not
-a drop-in — see *What was measured* below.
+**Status:** **the mechanism was already known — this finding rediscovered it.** Filed 2026-08-28
+while implementing F108, upgraded the same night, and then **corrected**: see *This was not news*
+immediately below before reading the rest. What is genuinely new is the link to the flaky test, a
+cheap reproduction, three measured fixes, and a second affected test.
+
+### This was not news, and the finding should have checked
+
+`test_agent_trigger_overrides.py:259` carries an `xfail` whose reason describes this mechanism in
+more detail than the sections below, and with better numbers:
+
+> `sqlite+aiosqlite:///:memory:` resolves to a StaticPool: one DBAPI connection shared by every
+> session in the process. SQLAlchemy tracks transaction state per Session, SQLite per connection, so
+> any session closing concurrently rolls back the shared transaction and discards another session's
+> pending UPDATE while its `commit()` still returns cleanly. **Measured in isolation at 105/200
+> commits lost with a concurrent poller against 0/200 without**, and observed on CI (`3c1f33a`,
+> 2026-08-17): a ROLLBACK from another task landed 2.5 ms before `_execute_run`'s finalize COMMIT,
+> which then committed nothing. Production is unaffected — a file-backed `DATABASE_URL` gets
+> `AsyncAdaptedQueuePool`, one connection per session. **Un-xfail once the fixture gives each
+> session its own connection**; the assertions below are correct as written and this test has never
+> failed for a product reason.
+
+That is the whole of this finding's mechanism, written down eleven days earlier by whoever hit it
+first, and it even answers the question this finding recorded as unproven — whether production is
+safe. The e2e skill's own rule covers this exactly: *"you may be finding confirmation rather than
+news"*, and it names checking the specs, the archived changes and the roadmap. **A grep for
+`StaticPool` would have found it in one command, and was not run.**
+
+Kept rather than deleted, because the parts below are still additions:
+
+- the **link to the flake** — nobody had connected that known fixture defect to
+  `test_spawn_failure_marks_run_failed`, which had been carried as "unexplained" across two handoffs;
+- a **five-second reproduction**, against a full-suite run that surfaced it once in two hours;
+- **three measured fix candidates**, which turn "un-xfail once the fixture gives each session its
+  own connection" from an instruction into a costed decision;
+- a **second affected test**, found by sweeping (below).
+
+Corrected here rather than quietly, because a finding that claims to have discovered what the
+codebase already knew misleads the next reader about where the knowledge lives.
 
 ### What happens
 
@@ -6987,19 +7021,33 @@ breaks tests for a second reason, and the variant that works costs a multiple of
 on every run and every CI job. That is a change with its own design question, its own verification,
 and a cost the operator should weigh — not something to flip unattended at 01:00.
 
-### Still not swept for
+### Swept for, 2026-08-29 — and there is a second one
 
-The same interleaving is available to **every** test that lets a background run task commit while a
-request session is open — most of the ones that call `_await_background_run()`. Two cells in
-`25469ac` were already found green for reasons unrelated to what they claimed; this is a third
-mechanism for that, and nothing has looked for others.
+The same interleaving is available to every test that lets a background run task commit while a
+request session is open. That population is the **21 test files** that await a background run;
+running all of them eight times over (257 tests, ~2.5 minutes a round) turned up:
+
+| | |
+|---|---|
+| `test_agent_trigger.py::test_spawn_failure_broadcasts_run_failed_event` | **failed 1 round in 8** — a *different* test from the known flake, in the same file and the same family |
+| the `xfail` at `test_agent_trigger_overrides.py:259` | alternated `xpassed` / `xfailed` across the eight rounds — it is `strict=False`, so it is harmless, but it is the same non-determinism showing as an expectedly-failing test that passes about half the time |
+| everything else | deterministic across all eight rounds |
+
+So the answer to "has anyone looked for others" is now yes, and the answer is **at least one more**,
+plus the xfail that was already flagged. Both are in the population the mechanism predicts, which is
+the useful part: the prediction held.
+
+Two cells in `25469ac` were already found green for reasons unrelated to what they claimed. This is
+a third mechanism for that, and the sweep above is the first time it has been quantified.
 
 ### What it costs today
 
-The flaky test fails about **one full-suite run in two** in practice (both full runs on the night of
-2026-08-28 hit it), and roughly **one in six** for the five-second selection. Merging this branch
-therefore has a material chance of a red CI run for a reason that has nothing to do with the
-branch.
+`test_spawn_failure_marks_run_failed` failed **two of the three** full-suite runs on the night of
+2026-08-28 and roughly **one in six** for the five-second selection;
+`test_spawn_failure_broadcasts_run_failed_event` failed **one round in eight** of the targeted sweep.
+The third full-suite run was completely green. So merging has a material chance of a red CI run for a
+reason that has nothing to do with the branch — and an equally material chance of looking fine,
+which is the harder half to act on.
 
 ### What to do about it
 
