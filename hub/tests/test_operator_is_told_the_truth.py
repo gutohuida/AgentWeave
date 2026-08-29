@@ -1,13 +1,16 @@
-"""F31 and F30: what the operator is shown must match what the system does.
+"""F31, F118, F119 and F30: what the operator is shown must match what the system does.
 
-F31 — redaction ate the Hub's own vocabulary. F30 — the launchability probe and the spawn
-disagreed about the same agent, and the probe is the one on screen.
+F31 — redaction ate the Hub's own vocabulary. F118 — it also ate every task id, because
+`task-` ends in the literal `sk-`. F119 — the scheduler kept its own pre-F31 copy of the
+same rule. F30 — the launchability probe and the spawn disagreed about the same agent, and
+the probe is the one on screen.
 """
 
 import pytest
 
 from hub.launchability import get_agent_config, probe_agent
 from hub.runner_events import redact_secrets
+from hub.scheduler import _safe_error_summary
 
 # ---------------------------------------------------------------------------
 # F31: redaction is bounded so it cannot consume non-secrets
@@ -54,6 +57,76 @@ def test_a_secret_field_name_is_still_redacted_whatever_its_value():
 
 def test_a_credential_embedded_in_a_sentence_is_still_found():
     out = redact_secrets("the key is aw_live_58ab7d84a1bf7b34eb2d1b424875bacd ok")
+    assert "aw_live_" not in out
+    assert "<redacted>" in out
+
+
+# ---------------------------------------------------------------------------
+# F118: a prefix is only a prefix at the start of a word
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "survivor",
+    [
+        # Driven live 2026-08-29: every one of these was stored as `ta<redacted>`, because
+        # `task-` ends in the literal `sk-` and the alternative was unanchored. The Hub mints
+        # this id shape for the primary key of every task, so the loss was universal.
+        "task-479933b7ec7f",
+        "the task-479933b7ec7f is done",
+        r"C:\Users\x\.agentweave\tasks\task-479933b7ec7f\calc.py",
+        "agentweave/task/task-670a6d4a5b72",
+        "Auto-snapshot: beta's turn on task-670a6d4a5b72",
+        # One character is enough: `subtask-1` became `subta<redacted>`.
+        "subtask-1",
+    ],
+)
+def test_a_task_id_is_not_a_credential(survivor):
+    """`task-` contains `sk-`, and the operator lost which task every agent touched."""
+    assert redact_secrets(survivor) == survivor
+
+
+@pytest.mark.parametrize(
+    "credential",
+    [
+        "sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345",
+        "the key is sk-abcdef0123456789 and that is that",
+        '{"key": "sk-abcdef0123456789"}',
+        "Bearer sk-abcdef0123456789",
+        # A hyphen does not start a word, so a real key is still caught after one.
+        "x-sk-abcdef0123456789",
+    ],
+)
+def test_anchoring_the_prefix_does_not_cost_a_real_key(credential):
+    out = redact_secrets(credential)
+    assert "sk-abcdef" not in out
+    assert "sk-ant-api03" not in out
+    assert "<redacted>" in out
+
+
+# ---------------------------------------------------------------------------
+# F119: one rule, not three drifting copies
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "survivor",
+    [
+        "task-479933b7ec7f",
+        # F31's own measured list. The scheduler's copy predated that repair, so a loop's
+        # error summary still ate the Hub's vocabulary a year after the transcript stopped.
+        "mcp__agentweave__record_evidence",
+        "spread-fairness-metric-fix-for-idle-staff",
+    ],
+)
+def test_a_loop_error_summary_redacts_by_the_same_rule(survivor):
+    assert survivor in _safe_error_summary(RuntimeError(f"could not start {survivor}"))
+
+
+def test_a_loop_error_summary_still_hides_a_credential():
+    out = _safe_error_summary(
+        RuntimeError("auth failed for aw_live_58ab7d84a1bf7b34eb2d1b424875bacd")
+    )
     assert "aw_live_" not in out
     assert "<redacted>" in out
 
