@@ -7485,3 +7485,125 @@ real provider run, and no token budget was agreed for the overnight session, so 
 *perform the repair, get every message* — is covered by
 `test_the_input_survives_until_the_agent_can_run` rather than by a live drive. That is the one
 assertion in this finding's closure that rests on a test rather than on the product.
+
+---
+
+## F115 (B?) — the agent worktree is a working directory, not a boundary: an absolute path writes straight into the operator's checkout, and the Hub still records the worktree
+
+**Status:** **open, severity is the operator's call.** Found 2026-08-29 driving rows 13 and 14 — the
+first live agent turns ever spent on this product. Reproduced across four runs.
+
+Project `drive-2026-08-29` (`proj-8e29ef6813e4`), one agent `asker` on a Haiku runner, no task
+binding. Every run was told the same thing in different words: *write a line to a new file in the
+project root.*
+
+| Run | Posture | Where the file landed |
+|---|---|---|
+| `run-cd72f733910f` | default | — (`ask_user` row, no write) |
+| `run-c10e35f30d81` | default | `.agentweave/worktrees/asker/drive-note.txt` — **isolated** |
+| `run-72de0f5c6898` | `manual` | `C:\…\drive-2026-08-29\drive-note-121250.txt` — **the operator's checkout** |
+
+**All four runs recorded the same `workspace_dir`:**
+
+```
+sqlite> select id, workspace_dir from runs where project_id='proj-8e29ef6813e4';
+run-cd72f733910f | C:\…\drive-2026-08-29\.agentweave\worktrees\asker
+run-c10e35f30d81 | C:\…\drive-2026-08-29\.agentweave\worktrees\asker
+run-e3f1a39c2a14 | C:\…\drive-2026-08-29\.agentweave\worktrees\asker
+run-72de0f5c6898 | C:\…\drive-2026-08-29\.agentweave\worktrees\asker   <- wrote outside it
+```
+
+So the Hub believes all four ran in the worktree. Three did. One wrote into the checkout the
+worktree exists to protect, and nothing recorded that it had.
+
+### What actually decides it
+
+Nothing in the product — **the model's choice of path form.** The worktree is the spawned process's
+*cwd*. An agent that writes `drive-note.txt` stays inside it; an agent that resolves "the project
+root" to `C:\Users\huida\Documents\drive-2026-08-29\drive-note.txt` and passes that absolute path
+to `Write` lands outside it and succeeds. Same agent, same project, same instruction, two different
+outcomes across two runs — because the model spelled the path differently the second time.
+
+### Why it matters beyond the stray file
+
+- **Evidence is footprinted at `Run.workspace_dir`** (F71, 2026-08-27). A change written outside the
+  worktree is invisible to footprinting: the evidence looks at the worktree and finds nothing, so
+  work that *did* happen cannot be attributed, and work that escaped review is not flagged.
+- **Per-task isolation** (`2026-08-27-work-is-isolated-per-task`, 69 tasks) rests on the same
+  assumption. Its guarantee — approving one task cannot ship another task's unreviewed work — holds
+  only for agents that use relative paths.
+- The auto-snapshot commit on `agentweave/<agent>` captures the worktree, so the escaped write is
+  **not** in the snapshot either.
+
+### The counter-argument, which is why the severity is a question and not a claim
+
+In `manual` posture the operator *was* shown the truth. The card named the tool and the full input:
+
+```
+tool_name: "Write"
+tool_input: {"file_path": "C:\…\drive-2026-08-29\drive-note-121250.txt",
+             "content": "drive touched this"}
+```
+
+A reading operator sees the absolute path and can deny it. That is the permissions feature doing
+exactly its job, and it is a real argument that the boundary is *meant* to be the operator rather
+than the filesystem — consistent with CLAUDE.md's native mode, which "can open valid local
+directories" and reserves path confinement for Docker mode.
+
+But the two default-posture runs raised **no card at all**, and one of those wrote a file. So in the
+posture an operator is most likely to be running, nothing shows the path and nothing constrains it.
+
+**What the operator has to decide:** whether native mode is supposed to confine writes to the
+worktree (making this a defect in worktree setup), or whether the worktree is only ever a cwd and
+the operator is the boundary (making this a **documentation and `workspace_dir` honesty** problem —
+the column should not claim an isolation that was not enforced). Those are different changes, and
+this repository's rule is that a change needing a spec gets three rounds first.
+
+---
+
+## F116 (B) — the same API forbids an unknown field on one route and silently drops a safety-relevant one on another
+
+**Status:** **open.** Found 2026-08-29 while driving row 14, by getting it wrong first.
+
+`POST /projects/{id}/agent/trigger` accepts an unknown top-level `permission_mode` and returns
+`200`, having ignored it:
+
+```
+POST …/agent/trigger {"agent":"asker","message":"…","permission_mode":"manual"}
+  -> 200 {"success": true, "status": "running", "run_id": "run-c10e35f30d81"}
+```
+
+No card was ever raised; the run wrote its file unsupervised. Posture is not a top-level field at
+all — it travels in `overrides`, keyed `permission_mode`, which is the map the composer's
+Permissions pill fills (`hub/ui/src/api/modelCatalog.ts:56`,
+`hub/ui/src/components/agents/AgentOutputPanel.tsx:327-328`). Sent that way it works, and the card
+appears in about twelve seconds.
+
+The sibling route is strict about exactly this:
+
+```
+POST …/permission-requests/{id}/decide {"decision":"allow"}
+  -> 422 {"detail":[{"type":"missing","loc":["body","allow"],"msg":"Field required"},
+                    {"type":"extra_forbidden","loc":["body","decision"],
+                     "msg":"Extra inputs are not permitted"}]}
+```
+
+Two opposite policies inside one API, and **the lax one is the safety-relevant one.** An operator
+scripting a supervised run gets a normal-looking `200`, a run that starts, and no supervision —
+with no way to tell from the response that the posture they asked for was discarded. The strict
+route, by contrast, told me precisely what was wrong and what the field was called; that refusal is
+the product at its best, and is what the trigger route should do with an unknown `permission_mode`.
+
+Smallest honest fix: forbid extras on `TriggerAgentRequest` too, so the misuse is named rather than
+absorbed. Worth checking whether other write routes share the lax setting before choosing where the
+rule belongs.
+
+### Two smaller things noticed in the same drive, filed here rather than as findings
+
+- **The agent roster listing carries no `id`.** `GET /projects/{id}/agents` returns rows keyed by
+  `name` with no identifier, while `POST /projects/{id}/agents` returns `{"id": "agent-…"}`. Nothing
+  is broken — `/agent/trigger` wants the name — but a script that creates an agent and then reads
+  the roster cannot correlate the two without matching on name.
+- **F3 confirmed live on the default path.** A freshly created Hub-owned operator agent comes back
+  `"contact_mode": "watchdog-spawn"` — the deleted subsystem — from `POST /projects/{id}/agents`,
+  not from any legacy route. Same root as F111's removal, and it should go with it.
