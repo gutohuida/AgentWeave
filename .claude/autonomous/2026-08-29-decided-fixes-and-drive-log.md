@@ -497,3 +497,128 @@ tree; the only files this iteration wrote are the four under
 
 **F116 is still open and still reproducible.** Three rounds are done and the change is ready to
 implement, which is exactly where the round discipline says it should be.
+
+---
+
+## Iteration 4 - F116-IMPL: the change is implemented, driven and archived (15:48-16:36 local)
+
+Started at 15:48, twelve minutes inside the 17:00 rule, so F116-IMPL ran rather than being parked.
+It finished: the change is implemented, the full hub suite is green on it, it is driven live, and
+`hub-api-request-contract` is in the corpus. **F116 is closed.**
+
+### What shipped
+
+`RequestModel` (`extra="forbid"`) in `hub/hub/schemas/common.py`, and **every one of the 57 request
+body models reachable from `app.routes` now inherits it** except the single named exemption. The
+route that started it:
+
+```
+POST .../agent/trigger {"agent":"asker","message":"...","permission_mode":"manual"}
+  -> 422 {"loc":["body","permission_mode"],"type":"extra_forbidden"}
+```
+
+Driven against a Hub on **8011 running this branch** - restarted onto it, because the instance that
+was up had been running since yesterday 16:57 and served stale code (confirmed by its start time and
+its empty project list, then reseeded with a project, a Haiku runner and a bound agent). The working
+path was driven in the same session and still works end to end: posture in `overrides` -> card in
+six seconds -> operator allows -> `hello.txt` written -> run idle. A refusal that broke the working
+path would not have been a fix.
+
+Three repairs the forbidding required, none of them exemptions:
+
+- `PUT .../project/instructions` took `body: dict` and read `body.get("content", "")`, so
+  `{"contents":"x"}` answered `200` and **blanked the project's instructions**. Driven live before
+  and after: it now `422`s naming `contents`, and the stored text survives - the second half is the
+  point.
+- `normalize_assignee_aliases` stripped its aliases only when `assignee` was absent (`TaskCreate`)
+  or never at all (`TaskUpdate`), so a rolling-upgrade body was refused for a name the contract
+  accepts. Both strip unconditionally now; the canonical value wins.
+- `normalize_legacy` - see below.
+
+Committed in five pieces so the behaviour change, the refactor and the documentation are reviewable
+apart: the red test first, then the fix, then the 37-model refactor, then the suite's finding, then
+the archive.
+
+### The test was red before it was green, and red again on demand
+
+2.2 / 2.2a / 2.3 were committed **red on purpose**, naming the eighteen tolerant models, both
+non-exempt untyped bodies, and F116's own body answering `409` where it should answer `422`. 4.2's
+mutation check: reverting `TriggerAgentRequest` to `BaseModel` reds both the surface walk and F116's
+body. A test that has never failed proves nothing, so this one has failed twice on request.
+
+### What the full suite found - and why it matters more than the fix
+
+4.3 called itself "a regression check, not a discovery run - a red test here is something 3.1-3.5
+did". It was a discovery run. Four tests went red:
+
+```
+test_bola.py:142          {"percent": 50, "warning": False}         -> 422 warning
+test_context_usage.py:216 {"agent": ..., "percent": 0, "warning": False,
+                           "critical": False, "updated_at": ...}    -> 422 warning
+```
+
+The second test's own docstring says what that body is: *"An older CLI posts `{"percent": 0}` on
+every session reset/compaction."* The deleted watchdog computed `warning`/`critical` from the
+percentage and pushed them with every sample (`_check_context_usage`, found in commit `578afad4`),
+and the body repeated the agent's name beside the one already in the route's path.
+
+**D8 enumerated the legacy vocabulary from the names `normalize_legacy` reads. These three it reads
+nowhere** - no alias tuple mentions them, no line consumes them - because the contract stopped
+acting on them: the Hub derives its own thresholds, and the route already carries the agent. A name
+nothing reads leaves no trace to enumerate, and the fresh-dict rebuild is exactly what kept that
+invisible: rebuilding drops them silently, so the omission had no symptom until the rebuild stopped.
+
+And the first body is *verbatim* `agent-context-usage`'s scenario **"Legacy data claims zero without
+a limit -> the UI SHALL show unavailable rather than a trusted zero-percent bar."** A `422` means
+the sample never becomes `unavailable`; it becomes an error. That is a breach of a shipped
+requirement - the same class D8 protected, by the same mechanism, one layer further out.
+
+Fixed as `_RETIRED = ("agent", "warning", "critical")` in the vocabulary, with a test naming both
+shapes, **and with a delta paragraph and scenario** so the rule covers the case rather than the code
+carrying a patch under a rule that does not mention it. Recorded as D9.
+
+**Three rounds in a row the defect was the enumeration, not the code.** Round 2 found round 1's,
+round 3 found round 2's, implementation found round 3's. Each was strictly narrower than the last,
+and none was found by re-reading the previous round - they were found by re-deriving the population
+by a different route, and finally by running everything. That is the round discipline's actual
+mechanism, and it is worth more than this change is.
+
+### F117 filed, not fixed
+
+`PATCH .../agents/{name}` still takes `body: dict`. Driven live: `{"permission_timeout_secondz": 5}`
+answers `200` and changes nothing - F116's own shape, on the route carrying an agent's *safety*
+settings. D7 described its guard too generously ("400 for an unknown key"); measured, the
+`set(body.keys()) <= _unrestricted_fields` check fires **only** for a session-synced configured
+agent and answers `409` about the *name*. For a Hub-owned agent - every agent an operator creates in
+the UI - there is no check at all. Named in `NO_CONTRACT_BY_DESIGN` with that reason, because a
+named exemption over a live defect is better than a silent one but is not a fix.
+
+### Verification, in full
+
+| | |
+|---|---|
+| Hub suite | **3540 passed / 84 skipped / 1 xpassed / 0 failed**, 26:00 - the 3510 baseline plus exactly this change's 30 tests |
+| CLI suite | 440 passed / 3 skipped |
+| ruff / black / mypy | clean over CI's exact paths |
+| `openspec validate --specs --strict` | **43/43** with `hub-api-request-contract` added |
+| Live drive | F116's body, the `overrides` path with a real Haiku turn and an allowed card, the instructions blanking, and a rolling-upgrade context pair - all on 8011 running this branch |
+
+Two suite runs, not one: the first was killed at 29% once the four reds were diagnosed, because its
+remaining results would have been about code that no longer existed.
+
+### What a reviewer should distrust
+
+- **The 37-model refactor (3.4) is asserted behaviour-preserving and only the suite backs that.**
+  Each model dropped a hand-written `model_config` for an inherited one; `MessageCreate` keeps
+  `populate_by_name` and `ProjectSettingsUpdate` swapped `__config__=ConfigDict(extra="forbid")` for
+  `__base__=RequestModel`. Both were checked by reading their merged `model_config` back. Nothing
+  else distinguishes the refactor from the fix except the commit boundary.
+- **F117's deferral is a judgement, not a finding.** That the defect is real is measured live. That
+  it belongs in its own review - because modelling the body turns the handler's hand-raised `400`s
+  into `422`s across the agent settings UI - is an argument, and if it is wrong this change ships a
+  named exemption over a live defect.
+- **`_RETIRED` is three names, and what found them was a suite run, not an enumeration.** There is
+  no reason to believe a fourth retired name does not exist in some older writer's output; what
+  there is, now, is a test that goes red the moment one arrives rather than a silence.
+- **The queue's later items are untouched.** F111+F3, F113 and F115 are still unproposed, and
+  E2E-DRIVE has not started. F116 is one of four.
