@@ -8237,3 +8237,46 @@ component reads it** (checked, not assumed). It becomes one the moment a run dur
 a Hub that crashes at midnight and restarts at nine reports a nine-hour run. Whoever exposes it
 should bound it by the last `agent_outputs` row for the run, which is the only honest upper bound
 the Hub still holds.
+
+## Row 19 x row 13 — the Hub killed while `ask_user` is blocking. Nothing expires the question, and nothing needs to.
+
+The card half of this is handled by an explicit pass (`expire_pending_for_run`). Questions get
+none: `run_reconciliation.py` does not mention them. That asymmetry is what this drove
+(`scripts/drive/t_row19_crash_question.py`), expecting to find a question left claiming an agent
+was waiting on it forever. It is not there, and the reason is worth writing down.
+
+```
+17:03:16  run-641a10f7c182 starts, calls ask_user, blocks
+17:03:27  q-3b7e6cc781f2  "Which colour should the badge be?"  asker_waiting true
+   ~:33   Stop-Process -Force on the Hub
+17:03:36  restart -> run-641a10f7c182 status "interrupted"
+          q-3b7e6cc781f2  still there, still unanswered, asker_waiting FALSE
+17:03:40  run-93067b1a17d5, the redelivered turn, asks again
+17:03:48  q-7bf5289f85aa  asker_waiting true
+          answered "blue" -> the run finished four seconds later
+```
+
+`asker_waiting` is derived per read — `created_by_run_id not in (runs whose status != "running")`
+(`questions.py:249-270`) — so the reconciler flipping the run to `interrupted` is *itself* the
+thing that makes every question that run asked go inert. A derived field cannot be forgotten by a
+new code path the way an explicit expiry pass can, which is why the asymmetry is a design rather
+than an omission. Two open questions, one dead and one live, are distinguishable by the field
+alone.
+
+**And the surfaces read it.** Not assumed — read:
+
+- `QuestionsPanel.tsx:150-151` partitions the unanswered list on `blocking && stillWaiting`, with
+  the comment *"asserting it collectively while ignoring it individually is the dishonest half"*:
+  the dead question drops out from under the "agents are waiting" banner instead of inflating it.
+- `AgentQuestionCard.tsx:70,86-95` renders a **"no longer waiting"** chip with the hover text
+  *"The run that asked this has ended. Answering now would reach it as a new message, not as the
+  answer it was waiting for."*
+
+Answering the dead one is still allowed (`200`), and that is the right call — the row keeps the
+operator's answer, and the reply reaches the agent as an ordinary message rather than vanishing.
+The product's honesty here is in labelling it, not in forbidding it.
+
+**No finding.** Recorded because the asymmetry looks like a bug from the code alone: one kind of
+operator-facing block is expired explicitly on the crash path and the other is not mentioned. The
+answer is that one is stored state and the other is computed from the run, and only driving it
+shows which.
