@@ -124,7 +124,8 @@ rounds exist for.
 
 ## 3. Verification
 
-- [ ] 3.1 Full hub suite **with `claude` stripped from PATH**.
+- [x] 3.1 Full hub suite **with `claude` stripped from PATH**: **3,510 passed, 84 skipped,
+      1 xfailed, 0 failed** (23m11s). Fully green — the F109 flake did not fire on this run.
 - [x] 3.2 CLI suite, UI suite, `ruff` / `black` / `mypy` / `npm run lint` / `tsc --noEmit`.
 - [x] 3.3 `npx openspec validate --specs --strict`.
 - [x] 3.4 **Drive it live** against the trial Hub. Both re-measured on the fixed code:
@@ -135,6 +136,11 @@ rounds exist for.
       **Not driven live: the delivery after the repair.** Binding a runner here spawns a real
       provider run and no token budget was agreed for the overnight session, so that outcome rests
       on `test_the_input_survives_until_the_agent_can_run`.
-- [ ] 3.5 Sync the delta into `openspec/specs/agent-conversation-workspace/spec.md`, archive with
-      `--skip-specs`, and fix the doubled date prefix.
-- [ ] 3.6 Update `scripts/drive/FINDINGS.md`: F114 closed, with the live re-measurement.
+- [x] 3.5 Sync the delta into `openspec/specs/agent-conversation-workspace/spec.md`, archive with
+      `--skip-specs`, and fix the doubled date prefix. Synced: 1 requirement, 7 scenarios, taking
+      the capability to 62. `npx openspec validate --specs --strict` passes 42/42. Archived, and the
+      prefix renamed — `openspec archive` stamped it `2026-08-29-2026-08-28-…`, which is the doubled
+      form the dead-end note predicts, doubled across a date boundary this time.
+- [x] 3.6 Update `scripts/drive/FINDINGS.md`: F114 closed, with the live re-measurement, and
+      with what the three rounds changed — the fix the finding proposed is not the fix that
+      shipped, which is worth recording where the next reader meets the finding.
