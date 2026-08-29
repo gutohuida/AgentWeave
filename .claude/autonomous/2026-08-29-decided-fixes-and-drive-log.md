@@ -1311,3 +1311,35 @@ F129:
 
 Each wants a spec loop, and none was started. The queue still carries F111+F3, F113 and F115 as
 unstarted four-item spec loops.
+
+---
+
+## Iteration 13 — 2026-08-29 19:43 +01:00 — stood down, no work performed
+
+A firing arrived at **19:43**, inside `stop_at` (20:00) by 17 minutes, because iteration 12 ended
+with the branch-release step that sets `last_heartbeat` 40 minutes into the past. That step is
+boilerplate for handing the branch to the *next working* iteration; iteration 12's `next_action`
+had already declared the session over, and that declaration wins over the release.
+
+**Nothing was done, deliberately.** State verified before deciding:
+
+| Check | Result |
+|---|---|
+| Branch | `autonomous/2026-08-29-decided-fixes-and-drive`, as STATE.json claims |
+| HEAD | `54fec74`, matching STATE.json's last recorded commit |
+| Working tree | clean |
+| Remote | in sync with `origin/autonomous/...` — nothing unpushed |
+| Time vs `stop_at` | 19:43 vs 20:00 — 17 minutes, below any honest unit of work |
+
+Seventeen minutes buys a spec-loop round that could not be finished, or a drive that could not be
+verified, and the queue's own ordering rule says stopping must leave complete changes rather than
+half-written ones. The correct move is the one iteration 12 named.
+
+`last_heartbeat` is set to **now, not to the past** — the branch is deliberately *not* released.
+Any further firing before 20:00 stands down against a fresh heartbeat; any firing after 20:00
+stands down against `stop_at`. The branch is the operator's.
+
+The handover is unchanged and is in iteration 12's "Session close" above: **F130, F131,
+F129+F132, F127**, in that order, all written up in `scripts/drive/FINDINGS.md` with file-and-line
+evidence, none proposed. `F111+F3`, `F113` and `F115` remain unstarted four-item spec loops in the
+queue. No jobs or loops are enabled; no Hub was started this iteration.
