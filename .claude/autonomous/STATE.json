@@ -192,7 +192,5 @@
     "Whether /review-iteration runs over the 2026-08-27 overnight run's iterations 1-15.",
     "The 14 older open findings in FINDINGS.md (F3 goes with F111 this run; F14, F53, F65, F66 each still want an operator decision rather than a repair). The operator was offered a triage pass over them and has not answered."
   ],
-  "parent_sha_note": "master at arming, the commit that carries this STATE.json. Cut the branch from origin/master HEAD; if master has moved since (it should not have — the operator is away), branch from its tip and say so in the log rather than resetting to this sha.",
-  "last_heartbeat": "2026-08-29T12:48:01+01:00",
-  "heartbeat_note": "Claimed by the interactive arming session while it writes the handoff. It will be CLEARED explicitly when that session finishes, so the next firing takes over immediately rather than waiting out the 25-minute grace. If you are reading this as a live heartbeat and no session is running, the session died mid-handoff: take over."
+  "parent_sha_note": "master at arming, the commit that carries this STATE.json. Cut the branch from origin/master HEAD; if master has moved since (it should not have — the operator is away), branch from its tip and say so in the log rather than resetting to this sha."
 }
