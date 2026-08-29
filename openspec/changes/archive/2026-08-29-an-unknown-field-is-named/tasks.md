@@ -165,7 +165,7 @@ Implementation begins only after 1.1–1.7.
 
 - [x] 4.1 The tests from 2.2, 2.2a and 2.3 pass.
 - [x] 4.2 Mutation-check both: revert `TriggerAgentRequest` to `BaseModel` and confirm each fails.
-- [ ] 4.3 Full hub suite. Round 2 already ran it with all 18 patched: **3510 passed / 84 skipped /
+- [x] 4.3 Full hub suite. **Green on the implementation: 3540 passed / 84 skipped / 1 xpassed / 0 failed in 26:00** — baseline 3510 plus exactly the 30 tests this change adds. It took two runs: see 4.3a for what the first one found. Round 2 already ran it with all 18 patched: **3510 passed / 84 skipped /
       1 xpassed / 0 failed**, identical to baseline, so this is a regression check against the
       *implementation*, not a discovery run — a red test here is something 3.1–3.5 did that the
       probe did not. **It was, and it found a real gap** — see 4.3a. The guidance still holds if one appears: fix the payload, never relax the
@@ -183,7 +183,7 @@ Implementation begins only after 1.1–1.7.
 - [x] 4.6 Update `scripts/drive/FINDINGS.md` F116's **Status:** line, and file `patch_agent`'s
       untyped body as its own finding (D7) with the `body.keys()` guard named — round 3 decided it
       is a real defect that this change records rather than fixes.
-- [ ] 4.7 `openspec validate --specs --strict`, sync the delta, archive the change.
+- [x] 4.7 `openspec validate --specs --strict` → **43/43** with the new `hub-api-request-contract` document in the corpus. Change archived.
 
 - [x] 4.3a **Implementation, D9 — the legacy context vocabulary is bigger than what the
       translation reads.** 4.3 was right that a red test here would mean something the
