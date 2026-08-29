@@ -806,3 +806,94 @@ divergences, opposite directions — which removes the reading that F121 is a fl
   questions, no `blocked` task, no delegated `control`. A loop whose queue stalls on a *dependency
   gate* or an unanswered question reaches `_loop_stall_reason` by a different branch and was not
   driven.
+
+## Iteration 8 — row 15's cutover leg, and a checkpoint that can be spent twice (18:33–18:45 local)
+
+`next_action` ordered three thin targets and put row 15's cutover first: *"F89 was found there and
+fixed; the cutover leg itself has not been driven end to end."* Driven in full —
+`scripts/drive/t_row15_cutover.py`, **35 of 36 verdicts held**, and the one that did not is a real
+defect with a live reproduction.
+
+**The Hub was not restarted, and both halves of that were measured rather than assumed.** 8011's
+uvicorn was created `2026-08-29 18:06:50` (`Get-CimInstance Win32_Process`), the newest commit
+touching `hub/` is `17:04:08`, and `GET /api/v1/projects` lists `proj-dc4d43543bea`. It serves this
+branch's code and nothing under `hub/` changed this iteration.
+
+### What was driven
+
+One real Haiku turn on `gamma`, deliberately shaped so the handover could be *proved* rather than
+inspected: write `CHECKPOINT_A.txt` containing `ANCHORONE`, **do not** write `CHECKPOINT_B.txt`,
+and end the reply with the line naming `CHECKPOINT_B.txt`/`RELAYTWO` as the next action. Then:
+refuse a checkpoint with no runner configured, configure one, generate, render, cut over, press
+cutover a second time, continue the successor, and look on disk.
+
+**The relay is the assertion that matters, and it held.** The predecessor was told not to write
+`CHECKPOINT_B.txt` and did not. After `POST /conversations/{successor}/continue`, the file exists
+in `gamma`'s worktree containing `RELAYTWO`. The checkpoint carried the work across a conversation
+boundary end to end, and a file on disk is the proof — not a summary, not a status field.
+
+Also held, none of it driven live before: the no-runner refusal is exactly **409** and names project
+settings rather than quietly spending another agent's runner; a partial `PUT /settings` left
+`hop_budget` and `checkpoint_mode` alone; generation returned **201** in 17s with
+`probe_status: passed`; `files_changed` was `["CHECKPOINT_A.txt"]`, the file the turn really wrote;
+the rendered artifact is 2,035 characters of envelope + body and is *honest* about the task list not
+being conversation-scoped; and after cutover the predecessor is `archived`, the successor is
+`open`/`handoff` with a derived title, and its queue entry is `origin_type: checkpoint`, addressed
+to the successor, framed with the delivery preamble.
+
+### F126 (B) — a spent checkpoint can be cut over again
+
+Two `POST .../checkpoints/ckpt-5acb5c671217/cutover` calls, two `200`s, two successors —
+`conv-b21d999ecaf0` and `conv-c1799d084153` — both `open`, both `origin: handoff`, both carrying the
+**identical** derived title. In the navigation tree they are indistinguishable.
+
+**And the duplicate did real work.** `continue` was called exactly once, on the first successor.
+Both entries came back `delivered`, in two different runs (`run-cdad300b6180`,
+`run-99ba2ab65297`), and the second successor's transcript reads *"Good! The files already exist"*
+before re-verifying and re-closing the same task. A whole billed turn spent rediscovering that
+there was nothing to do.
+
+Mechanism: `cut_over` refuses on `checkpoint.status != "ready"` (unchanged by a cutover) and on
+`archivable(predecessor)` — whose first line is `if conversation.lifecycle == "archived": return
+None`. That early return is correct for what `archivable` is *for*; it is the wrong question here.
+Nothing records that a checkpoint has been spent.
+
+The reason this has not shown up in the UI is the sharp part. `checkpointOperationStore` holds an
+`inFlight` map and does take-then-cutover as one act — so a double-click *inside one tab* coalesces.
+That guard is client-side and per-tab. A second tab, a reload between the 201 and the cutover, a
+retried request, or any non-UI client gets two successors. The Hub's own standard elsewhere is a
+server-side claim: `take_checkpoint` holds `_checkpoint_claims` for exactly this reason — on the
+*cheaper* half of the pair. Generation is guarded; cutover, which is durable, is not.
+
+Filed with three shapes costed and a recommendation (give `Checkpoint` a
+`cut_over_to_conversation_id` and refuse when set — it also answers "where did this checkpoint go",
+which nothing can answer today). **Not fixed:** it wants a migration, and a spec loop that cannot
+finish before 20:00 must not be started.
+
+Recorded alongside it, because it should be decided at the same time: the UI's cutover banner
+filters on `trigger === 'context_pressure'`, so a checkpoint the operator generated **on purpose**
+is never offered a cutover anywhere in the UI.
+
+### Verification
+
+| | |
+|---|---|
+| Suites | **not re-run, deliberately** — nothing under `hub/`, `src/` or `tests/` changed. The only file added is one `scripts/drive/t_*.py` harness that no test imports. The branch's last full verification stands (iteration 6). |
+| The product | driven live, 36 assertions, 35 held; every verdict asserts a durable artefact (a file's contents in the worktree, a queue row, a lifecycle) or an exact status code — never `>= 300` |
+| Jobs / loops left enabled | **none** — both 8011 projects re-checked after teardown: two jobs, both `enabled: false`, zero loops |
+| Settings left changed | none — `checkpoint_runner_id` is reset to `null` in the harness's `finally`, confirmed by re-reading `/settings` for both projects |
+
+### What a reviewer should distrust
+
+- **35/36 is again the ratio iteration 6 warned about.** The mitigation is the same: the
+  load-bearing assertions read the filesystem (`CHECKPOINT_A.txt`, `CHECKPOINT_B.txt`) and exact
+  status codes, not the Hub's own account of itself. It is still one hand writing both sides.
+- **The second-cutover assertion was written expecting a refusal, from reading `archivable` first.**
+  That is the honest order — the code was read, a refusal was predicted, and the drive contradicted
+  the prediction — but it does mean the harness went looking for this one rather than tripping over
+  it. The billed second turn was *not* predicted and was found only by reading the queue afterwards.
+- **One checkpoint shape only.** Operator-triggered, `probe_status: passed`, no open questions, no
+  permission decisions, no predecessor checkpoint in the chain. A checkpoint that fails its probe,
+  or the second link of a chain (`previous_checkpoint_id` set), reaches cutover by paths not driven.
+- **`continue` was tested on a successor that had a queue entry waiting.** Its refusal/waiting
+  branches (`waiting_reason` non-null) were not reached.
