@@ -622,3 +622,103 @@ remaining results would have been about code that no longer existed.
   there is, now, is a test that goes red the moment one arrives rather than a silence.
 - **The queue's later items are untouched.** F111+F3, F113 and F115 are still unproposed, and
   E2E-DRIVE has not started. F116 is one of four.
+
+## Iteration 5 — reconciled from its commits, because it died before writing this (17:00-17:11 local)
+
+Iteration 5 left no log entry. It committed six times and then stopped mid-suite: `97b2dbc`,
+its last act, is a heartbeat with the message *"heartbeat while the hub suite runs"*. So the
+verification it started was never read by the process that started it. What it did, from the
+commits and the working tree:
+
+- `b30c0d4` / `5e038df` — **F118 and F119 fixed.** `_SECRET_VALUE_RE`'s credential prefixes were
+  unanchored and `task-` ends in the literal `sk-`, so every task id the Hub has ever minted was
+  stored as `ta<redacted>`. Both prefixes now carry `(?<![A-Za-z0-9_])`. `scheduler`'s second
+  copy of the whole rule, predating F31, was deleted rather than synced.
+- `666d83b` — **rows 12 and 16 driven**, F118-F122 filed.
+- `155167a` — **row 17**, and F122 proved from the other side.
+- `53bd8a8` — **row 19's concurrency and stop halves**, both held.
+
+**Iteration 6 finished its verification.** Hub suite `3554 passed / 84 skipped / 1 xpassed /
+1 failed` in 27:01 — the failure is `test_agent_trigger.py::test_spawn_failure_broadcasts_run_failed_event`,
+named in `known_flakes` as F109's ~1-in-8, and **it passes alone** (re-run, 1 passed in 2.86s).
+CLI `440 passed / 3 skipped`. `ruff` / `black` / `mypy` clean over CI's exact paths. So iteration
+5's fix is green, and the branch is green.
+
+## Iteration 6 — row 19's crash half, four ways (17:38-18:2x local)
+
+`next_action` said E2E-DRIVE, and the row the last three sweeps kept deferring was the one that
+needs the Hub itself killed. Four harnesses, all in the `drive-wt-0829` fixture on 8011 against
+this branch, all with `Stop-Process -Force` so `lifespan`'s `terminate_all_active_runs()` never
+runs — a crash, not a bounce.
+
+| Harness | What it kills the Hub on | Verdict |
+|---|---|---|
+| `t_row19_crash.py` | a plain turn | held |
+| `t_row19_crash_card.py` | a **permission card** on screen | held |
+| `t_row19_crash_question.py` | **`ask_user`** blocking | held |
+| `t_row19_crash_task.py` | a **task-bound** run, three times | held |
+| `t_row19_crash_job.py` | a **job firing** | held, and **F123** |
+
+**The load-bearing measurement.** `reconcile_interrupted_runs` skips any run whose
+`pid_alive(run.pid)` is still true, so the whole recovery depends on the spawned CLI being dead.
+Measured rather than assumed, by listing the descendant tree before the kill and re-checking each
+pid after: the `Run` row's pid **is `claude.exe`**, and it dies with its Hub along with the
+`OpenConsole.exe` between them. Had the ConPTY child been orphaned the way a Windows grandchild
+ordinarily is, every crashed run would stay `running` forever and wedge its agent.
+
+**What held, briefly.** Four seconds from the Hub answering again to the operator's message being
+back in a live turn, with no operator action — and the agent reads the *"delivery attempt 2; an
+earlier attempt was cut off"* note and says so in its own transcript. A pending card becomes
+`expired` and answering it returns `409 … already expired`. A question needs no expiry pass at all
+because `asker_waiting` is derived from the asking run's status, and both UI surfaces read the
+field rather than merely receiving it. Three crashes on one input walk `attempts 1 → 2 (provider
+session cleared) → 3 (withdrawn)`, and the loss is announced on four separate surfaces including
+a red **"not delivered"** chip carrying the reason.
+
+**F123 (C, open)** is the one thing that is wrong. The Hub's own crash recovery redelivered a
+job's message, a new run on the same conversation completed the work — and the job's history still
+reads `failed`, with no row for the retry, because `finalize_job_run_for_conversation` matches only
+`status == "in_progress"` and reconciliation has already moved the row on. Not fixed: it is a
+decision about what a `JobRun` *is*, and **F121** is already open against the same table for the
+same confusion. Three shapes costed in the finding, with a recommendation and why the other two
+are worse.
+
+**Two readings corrected by measurement rather than argument.** The abandoned runs had zero stored
+output rows next to a completed run of the same work with sixteen, which reads exactly like a
+crash eating the transcript. Killed deliberately *after* rows existed: 4 before, 4 immediately
+after, 4 after the restart — nothing is discarded. What made that look impossible is that an
+interrupted run's `ended_at` is the **restart** time, so its duration is inflated by the outage;
+not a finding today because `ended_at` is on no response schema and no UI component reads it, but
+a nine-hour outage would report a nine-hour run to whoever surfaces it first.
+
+**And one harness that lied.** `t_row19_crash_card.py`'s first run posted `{"decision": "allow"}`
+when the field is `allow`, scored the resulting `422` as *"deciding a dead card is refused"*, then
+failed to answer the fresh card with the same typo — which expired at 120 s, ended the run without
+the write, and was scored *"the work completed after the crash"* because the check watched the
+agent go idle rather than the file appear. **Two green verdicts, both false, from one misspelled
+field.** That is F116's own lesson arriving from the other side: the `422` did everything right and
+the client that caused it still misread it. The re-run asserts the artefact (`os.path.exists`) and
+the exact status code (`== 409`, not `>= 300`).
+
+### Verification
+
+| | |
+|---|---|
+| Hub suite | 3554 passed / 84 skipped / 1 xpassed / 1 failed (F109's known flake; passes alone) |
+| CLI suite | 440 passed / 3 skipped |
+| ruff / black / mypy | clean over CI's exact paths |
+| UI | untouched this iteration — no `hub/ui/src` change, so no bundle rebuild |
+| Jobs / loops left enabled | **none** — `/jobs` and `/loops` empty in both 8011 projects |
+
+### What a reviewer should distrust
+
+- **Five "held" verdicts and one finding is a suspicious ratio**, and the card harness proves the
+  mechanism by which it could be wrong. Every remaining verdict in these harnesses asserts either
+  a durable artefact or an exact status code, but they were written by the same hand that got it
+  wrong once.
+- **The crash window is not controlled.** Each harness kills the Hub a fixed number of seconds
+  after the agent reports `running`, so all five specimens died at roughly the same point in a
+  turn. A crash during the final flush, or between `run.status = "completed"` and the commit that
+  follows it, is a different case and is **not** driven.
+- **F123's recommendation (a `continuity_warning`-style field) is an opinion, not a finding.** What
+  is measured is that job history says `failed` for work that completed.
