@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from .common import RequestModel
 
 
-class QuestionOption(BaseModel):
+class QuestionOption(RequestModel):
     """One offered answer.
 
     `label` is what comes back when it is chosen; `description` is what lets an operator pick
@@ -17,8 +17,6 @@ class QuestionOption(BaseModel):
 
     label: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=500)
-
-    model_config = {"extra": "forbid"}
 
 
 class QuestionCreate(RequestModel):

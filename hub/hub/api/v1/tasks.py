@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,6 +48,7 @@ from ...run_task_binding import (
     release_bindings_to,
     release_reason,
 )
+from ...schemas.common import RequestModel
 from ...schemas.tasks import (
     TaskCreate,
     TaskDependencyRef,
@@ -1341,7 +1342,7 @@ async def recent_divergences(
     ]
 
 
-class DependencyRequest(BaseModel):
+class DependencyRequest(RequestModel):
     """One edge, named by task ids.
 
     Ids rather than document keys: keys are the document's own vocabulary, minted by the agent that
@@ -1351,8 +1352,6 @@ class DependencyRequest(BaseModel):
     """
 
     depends_on: str = Field(max_length=64)
-
-    model_config = {"extra": "forbid"}
 
 
 @router.post("/{task_id}/dependencies", status_code=status.HTTP_201_CREATED)

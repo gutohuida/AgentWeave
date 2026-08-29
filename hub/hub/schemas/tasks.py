@@ -6,6 +6,8 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from .common import RequestModel
+
 # Matches generated ids of the form "{prefix}-{hex}", where the prefix is a short word (e.g.
 # "task", "msg"). Deliberately does not pin the segment's width: `short_id()` widened from 8 hex
 # characters to 12 on 2026-08-24 and ids at both widths are valid forever, because a segment is only
@@ -40,7 +42,7 @@ _ASSIGNEE_ALIASES = ("assigned_to", "assigned_agent")
 _DIVERGENCE_POLICIES = {"surface", "retry", "escalate"}
 
 
-class TaskCreate(BaseModel):
+class TaskCreate(RequestModel):
     title: str = Field(max_length=256)
     description: str = Field(default="", max_length=10000)
     status: str = Field(default="pending", max_length=64)
@@ -68,8 +70,6 @@ class TaskCreate(BaseModel):
     # the agent find the task. Validated to the same shape as the CLI's
     # generate_id() output and the local Task model.
     id: Optional[str] = Field(default=None, max_length=64)
-
-    model_config = {"extra": "forbid"}
 
     @field_validator("id")
     @classmethod
@@ -117,7 +117,7 @@ class TaskCreate(BaseModel):
         return v
 
 
-class TaskUpdate(BaseModel):
+class TaskUpdate(RequestModel):
     status: Optional[str] = Field(default=None, max_length=64)
     priority: Optional[str] = Field(default=None, max_length=64)
     # `None` means *clear it*, not *leave it alone* — the difference is carried by
@@ -149,8 +149,6 @@ class TaskUpdate(BaseModel):
     # by name rather than by `extra="forbid"` silently swallowing it — see D14 for why this is
     # enforced in code and not a DB constraint (SQLite cannot drop one later).
     loop_id: Optional[str] = Field(default=None, max_length=64)
-
-    model_config = {"extra": "forbid"}
 
     @model_validator(mode="after")
     def blocking_by_hand_must_say_what_for(self) -> "TaskUpdate":

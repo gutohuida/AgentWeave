@@ -5,8 +5,10 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from .common import RequestModel
 
-class JobCreate(BaseModel):
+
+class JobCreate(RequestModel):
     name: str = Field(max_length=256)
     agent: str = Field(max_length=64)
     message: str = Field(max_length=10000)
@@ -32,8 +34,6 @@ class JobCreate(BaseModel):
     # implicit loop opt-in) unless the job is already opting into a loop via the fields above.
     initial_tasks: Optional[List[Dict[str, Any]]] = None
 
-    model_config = {"extra": "forbid"}
-
     @field_validator("session_mode")
     @classmethod
     def validate_session_mode(cls, v: str) -> str:
@@ -42,7 +42,7 @@ class JobCreate(BaseModel):
         return v
 
 
-class JobUpdate(BaseModel):
+class JobUpdate(RequestModel):
     name: Optional[str] = Field(default=None, max_length=256)
     message: Optional[str] = Field(default=None, max_length=10000)
     cron: Optional[str] = Field(default=None, max_length=128)
@@ -55,8 +55,6 @@ class JobUpdate(BaseModel):
     stop_when_queue_empties: Optional[bool] = None
     stop_reason: Optional[str] = Field(default=None, max_length=4000)
     spec_document_id: Optional[str] = Field(default=None, max_length=64)
-
-    model_config = {"extra": "forbid"}
 
     @field_validator("session_mode")
     @classmethod
@@ -166,13 +164,11 @@ class LoopDetail(LoopSummary):
     events: List[Dict[str, Any]] = Field(default_factory=list)
 
 
-class LoopControlUpdate(BaseModel):
+class LoopControlUpdate(RequestModel):
     """Delegate a loop's control to its creator agent, or take it back to the operator
     (design D10, task A1.2). Only these two values exist — see `Loop.control`'s own comment."""
 
     control: str = Field(max_length=32)
-
-    model_config = {"extra": "forbid"}
 
     @field_validator("control")
     @classmethod
