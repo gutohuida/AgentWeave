@@ -38,6 +38,14 @@ them is what a rolling upgrade emits rather than a mistake: the translation read
 the other would refuse a name the contract itself declares it accepts. A field the vocabulary does
 not define SHALL still be refused, and both vocabularies SHALL be refused on the same terms.
 
+The vocabulary SHALL include the names the superseded writer emitted that the translation reads
+nowhere at all. A retired writer commonly sends values the current contract has stopped acting on —
+a threshold it now derives itself, an identifier the route already carries — and those names appear
+in no translation rule precisely because nothing consumes them. Enumerating the vocabulary from the
+translation's own reads therefore misses them, and the omission is invisible while the translation
+rebuilds the request, because rebuilding drops them silently. Refusing them once it stops rebuilding
+turns a request the contract is required to accept into an error.
+
 The system SHALL detect a write contract that neither refuses undeclared fields nor states why it
 does not. The rule's failure mode is omission: it is enforced by writing nothing, so its absence is
 invisible on inspection and its cost surfaces only when a caller sends the field. Any check
@@ -73,6 +81,12 @@ any other exemption.
 - **THEN** the request is refused
 - **AND** the refusal names that field
 - **AND** a request in that vocabulary carrying only names it defines is accepted
+
+#### Scenario: A name the superseded writer emitted but nothing reads is accepted
+
+- **WHEN** a caller submits a request in a superseded vocabulary carrying a name that writer emitted and the translation reads nowhere
+- **THEN** the request is accepted and translated
+- **AND** that name is not refused
 
 #### Scenario: A superseded vocabulary carrying two names for one value is accepted
 

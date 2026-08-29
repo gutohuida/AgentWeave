@@ -93,41 +93,41 @@ starts only after round 3. Nothing here is closed by a plan existing.
 
 Implementation begins only after 1.1–1.7.
 
-- [ ] 2.1 Add `RequestModel` to `hub/hub/schemas/common.py` — `ConfigDict(extra="forbid")` and a
+- [x] 2.1 Add `RequestModel` to `hub/hub/schemas/common.py` — `ConfigDict(extra="forbid")` and a
       docstring stating why a request body refuses what it cannot honour (D1, D3).
-- [ ] 2.2 Add `hub/tests/test_request_strictness.py` (D4): walk `app.routes`, take each route's
+- [x] 2.2 Add `hub/tests/test_request_strictness.py` (D4): walk `app.routes`, take each route's
       **`body_field`** (not its parameters — round 2's 1.1), unwrap
       `body_field.field_info.annotation` to its `BaseModel` subclasses, **recurse into those
       models' fields**, and assert `extra == "forbid"` or membership in `LAX_BY_DESIGN` with an
       inline reason. Skip `body_field is None` (**36** write routes take no body — round 3's count;
       round 2's 28 was low). **Run it now and watch it fail**, naming `TriggerAgentRequest` among
       the nineteen.
-- [ ] 2.2a **Round 3, D7** — the same test asserts a route with a body has a **contract**: if the
+- [x] 2.2a **Round 3, D7** — the same test asserts a route with a body has a **contract**: if the
       unwrap yields no `BaseModel`, that is a failure, not a skip. Carry a second named list
       `NO_CONTRACT_BY_DESIGN` with a reason per entry, seeded with `agents.register_agent`
       (deleted by F111) and `agents.patch_agent` (filed as its own finding — D7). **Run it now and
       watch it name all three `dict` bodies**, before 3.6 removes one of them. Without this
       assertion the whole test passes over them in silence, which is this change shipping its own
       subject.
-- [ ] 2.3 Add a test asserting `POST …/agent/trigger` with a top-level `permission_mode` answers
+- [x] 2.3 Add a test asserting `POST …/agent/trigger` with a top-level `permission_mode` answers
       `422` naming that field — F116's exact body. **Run it and watch it fail.**
 
 ## 3. Implementation — the models
 
-- [ ] 3.1 `TriggerAgentRequest` inherits `RequestModel`. F116's own route, first.
-- [ ] 3.2 The remaining seventeen lax models inherit it — `OperatorAgentCreate`, `AgentRequest`,
+- [x] 3.1 `TriggerAgentRequest` inherits `RequestModel`. F116's own route, first.
+- [x] 3.2 The remaining seventeen lax models inherit it — `OperatorAgentCreate`, `AgentRequest`,
       `ConversationRenameRequest`, `BudgetUpdate`, `QueueSettings`, `SessionSyncRequest`,
       `spec.EvidenceRecord`, `spec.EvidenceDecision`, `DriftResolution`, `ReindexRequest`,
       `RetentionSetting`, `AgentHeartbeatCreate`, `AgentOutputCreate`, `ContextUsageCreate`,
       `LogEventCreate`, `QuestionCreate`, `QuestionAnswer`.
-- [ ] 3.3 `SpecDocumentCreate` stays on `BaseModel`; its docstring gains the
+- [x] 3.3 `SpecDocumentCreate` stays on `BaseModel`; its docstring gains the
       `agent-document-creation` citation; the test's `LAX_BY_DESIGN` carries it with the reason
       (D2).
-- [ ] 3.4 The 36 models that already forbid move to `RequestModel`, dropping the hand-written
+- [x] 3.4 The 36 models that already forbid move to `RequestModel`, dropping the hand-written
       `model_config` line — keeping any other key they set (D3). Round 2 measured that this is
       exactly one model: `messages.MessageCreate`, which keeps `populate_by_name`. Separate commit
       from 3.1–3.3 so the behaviour change and the refactor are reviewable apart.
-- [ ] 3.5 Rewrite `ContextUsageCreate.normalize_legacy` so the residue it carries forward is
+- [x] 3.5 Rewrite `ContextUsageCreate.normalize_legacy` so the residue it carries forward is
       `data` **minus the whole legacy vocabulary**, not minus the names its first-wins `next(...)`
       selected (**D8, round 3 — this corrects D6's wording, which round 3 implemented and measured
       failing**). Hoist the alias tuples to module level as `_USED`, `_LIMIT`, `_RATIO`, `_WHEN`
@@ -147,13 +147,13 @@ Implementation begins only after 1.1–1.7.
       - `{"tokens_used":1200,"tokens_limit":200000,"breakdown":{"input_tokens":10}}` now yields
         `breakdown={"input_tokens":10}` where today it yields `None` — the intended side effect of
         the residue, asserted so it is a decision rather than a surprise.
-- [ ] 3.6 **Round 3, D7** — give `PUT …/project/instructions` a contract:
+- [x] 3.6 **Round 3, D7** — give `PUT …/project/instructions` a contract:
       `InstructionsUpdate(RequestModel)` in `hub/hub/api/v1/instructions.py` with
       `content: str = ""`, replacing `body: dict` and `body.get("content", "")`. Test that
       `{"contents": "x"}` answers `422` naming `contents` — today it answers `200 {"content": ""}`
       and **blanks the project's instructions**, measured by driving the real route in round 3. Remove it from
       `NO_CONTRACT_BY_DESIGN` in the same commit.
-- [ ] 3.7 **Round 3, D8** — `normalize_assignee_aliases` (`hub/hub/schemas/tasks.py:86`) removes the
+- [x] 3.7 **Round 3, D8** — `normalize_assignee_aliases` (`hub/hub/schemas/tasks.py:86`) removes the
       alias keys **unconditionally**, not only when `assignee` is absent. Measured today:
       `TaskCreate {"title":"t","assignee":"a","assigned_to":"a"}` -> `422 assigned_to`, a
       rolling-upgrade body refused a name the contract accepts, which the delta's new paragraph
@@ -163,24 +163,48 @@ Implementation begins only after 1.1–1.7.
 
 ## 4. Verification
 
-- [ ] 4.1 The tests from 2.2, 2.2a and 2.3 pass.
-- [ ] 4.2 Mutation-check both: revert `TriggerAgentRequest` to `BaseModel` and confirm each fails.
+- [x] 4.1 The tests from 2.2, 2.2a and 2.3 pass.
+- [x] 4.2 Mutation-check both: revert `TriggerAgentRequest` to `BaseModel` and confirm each fails.
 - [ ] 4.3 Full hub suite. Round 2 already ran it with all 18 patched: **3510 passed / 84 skipped /
       1 xpassed / 0 failed**, identical to baseline, so this is a regression check against the
       *implementation*, not a discovery run — a red test here is something 3.1–3.5 did that the
-      probe did not. The guidance still holds if one appears: fix the payload, never relax the
+      probe did not. **It was, and it found a real gap** — see 4.3a. The guidance still holds if one appears: fix the payload, never relax the
       model; a meaningful extra field is a missing field and a finding. Note the suite takes ~26
       minutes and exceeds a 600s tool cap — run it detached, not in chunks.
-- [ ] 4.4 `pytest tests/ -v` (CLI), and `ruff check src/ hub/ tests/`,
+- [x] 4.4 `pytest tests/ -v` (CLI), and `ruff check src/ hub/ tests/`,
       `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`.
-- [ ] 4.5 **Drive it live** against a Hub on 8011 running this branch: send F116's exact body and
+- [x] 4.5 **Drive it live** against a Hub on 8011 running this branch: send F116's exact body and
       confirm the `422` names `permission_mode`; then send the same posture via
       `overrides` and confirm the permission card still appears. A refusal that also broke the
       working path is not a fix.
-- [ ] 4.5a **Drive 3.6 live too**: `PUT …/project/instructions` with `{"contents":"x"}` answers
+- [x] 4.5a **Drive 3.6 live too**: `PUT …/project/instructions` with `{"contents":"x"}` answers
       `422`, and the stored instructions are **unchanged** — the second half is the point, since
       the defect is the blanking, not the status code.
-- [ ] 4.6 Update `scripts/drive/FINDINGS.md` F116's **Status:** line, and file `patch_agent`'s
+- [x] 4.6 Update `scripts/drive/FINDINGS.md` F116's **Status:** line, and file `patch_agent`'s
       untyped body as its own finding (D7) with the `body.keys()` guard named — round 3 decided it
       is a real defect that this change records rather than fixes.
 - [ ] 4.7 `openspec validate --specs --strict`, sync the delta, archive the change.
+
+- [x] 4.3a **Implementation, D9 — the legacy context vocabulary is bigger than what the
+      translation reads.** 4.3 was right that a red test here would mean something the
+      implementation did, and four went red: `test_bola.py:142` posts
+      `{"percent": 50, "warning": False}` and `test_context_usage.py:216` posts
+      `{"agent": …, "percent": 0, "warning": False, "critical": False, "updated_at": …}` —
+      "an older CLI posts this on every session reset/compaction", in that test's own words.
+      All four answered `422 warning`.
+      **D8 enumerated the vocabulary from the names `normalize_legacy` *reads*, and these
+      three it reads nowhere.** The deleted watchdog computed `warning`/`critical` from the
+      percentage and pushed them with every sample (`_check_context_usage`, commit 578afad4),
+      and the body repeated the agent's own name beside the one already in the path. The
+      fresh-dict rebuild is exactly what hid them: a name nothing consumes is invisible while
+      rebuilding drops it silently.
+      They are retired names, not missing fields — nothing should start honouring them — but
+      the first body is verbatim `agent-context-usage`'s *Legacy data claims zero without a
+      limit* scenario, which says it SHALL degrade to `unavailable`. A `422` there is a breach.
+      Fixed by adding `_RETIRED = ("agent", "warning", "critical")` to the vocabulary, with a
+      test naming both shapes, and by a delta paragraph and scenario so the rule covers the
+      case rather than this being a patch under it.
+      **This is the third round in a row where the enumeration was the defect, not the code**
+      — round 2 found round 1's, round 3 found round 2's, and implementation found round 3's.
+      Each was narrower than the last; none was found by re-reading the previous round.
+

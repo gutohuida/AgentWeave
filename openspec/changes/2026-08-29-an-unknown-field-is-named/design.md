@@ -212,6 +212,51 @@ population change when a route is added.
 The test must fail before the fix — run it against the tree with only `RequestModel` added and
 nothing inheriting it, and watch it name `TriggerAgentRequest`.
 
+### D9 — the vocabulary includes the names the writer emitted and the translation never reads
+
+**Decided during implementation, by the full hub suite going red.** D8 fixed the residue to be
+`data` minus the *whole* legacy vocabulary rather than minus the aliases `next(...)` selected, and
+enumerated that vocabulary from `normalize_legacy`'s own reads: `_USED`, `_LIMIT`, `_RATIO`,
+`_WHEN`, plus the four carried straight across. Twelve bodies were measured against it and all
+twelve behaved. Four tests still went red on the real suite:
+
+```
+test_bola.py:142          {"percent": 50, "warning": False}                  -> 422 warning
+test_context_usage.py:216 {"agent": …, "percent": 0, "warning": False,
+                           "critical": False, "updated_at": …}               -> 422 warning
+```
+
+The second test's own docstring says what that body is: *"An older CLI posts `{"percent": 0}` on
+every session reset/compaction."* The deleted watchdog computed `warning` and `critical` from the
+percentage in `_check_context_usage` and pushed them with every sample (commit `578afad4`), and the
+body repeated the agent's own name beside the one already in the route's path.
+
+**Why enumerating from the reads could not find them.** D8's method was to ask what the translation
+consumes. These three it consumes *nowhere* — no alias tuple mentions them, no line reads them —
+because the current contract has stopped acting on them: the Hub derives its own thresholds now, and
+the path already carries the agent. A name nothing reads leaves no trace in the translation to
+enumerate, and the fresh-dict rebuild is what kept that invisible: rebuilding drops them silently,
+so the omission had no symptom until the rebuild stopped.
+
+**Why they belong in the vocabulary rather than in the model.** They are retired names, not missing
+fields — nothing in the Hub should start honouring a threshold flag it computes itself. And the
+first body is verbatim the scenario `agent-context-usage`'s *Legacy context compatibility* is
+written about — *"Legacy data claims zero without a limit → the UI SHALL show unavailable rather
+than a trusted zero-percent bar"*. A `422` there means the sample never becomes `unavailable` at
+all: it becomes an error. Refusing it is a breach of a shipped requirement, in the same class D8
+protected and by the same mechanism, one layer further out.
+
+**Fixed** by `_RETIRED = ("agent", "warning", "critical")` joining `LEGACY_CONTEXT_VOCABULARY`, with
+`test_the_retired_watchdog_fields_are_consumed_not_refused` naming both shapes, and by a delta
+paragraph and scenario so the rule covers the case rather than the code carrying a patch under it.
+
+**What this says about the method, which is the part worth keeping.** Three rounds in a row, the
+defect was the *enumeration* and not the code: round 2 found round 1's, round 3 found round 2's, and
+implementation found round 3's. Each was strictly narrower than the last, and none was found by
+re-reading the previous round's reasoning — they were found by re-deriving the population by a
+different route, and finally by running the whole suite. 4.3 called itself "a regression check, not
+a discovery run". It was a discovery run.
+
 ### D5 — the refusal is pydantic's, unmodified
 
 **Decided:** no custom error shape, no custom handler.

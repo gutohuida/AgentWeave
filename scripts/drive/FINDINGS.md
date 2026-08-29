@@ -7572,7 +7572,27 @@ before a line of it is written.
 
 ## F116 (B) — the same API forbids an unknown field on one route and silently drops a safety-relevant one on another
 
-**Status:** **open.** Found 2026-08-29 while driving row 14, by getting it wrong first.
+**Status:** **FIXED 2026-08-29** on `autonomous/2026-08-29-decided-fixes-and-drive`, through the
+full three-round spec loop (`openspec/changes/2026-08-29-an-unknown-field-is-named/`). Found
+2026-08-29 while driving row 14, by getting it wrong first.
+
+Driven live on a Hub on 8011 running the fix: F116's exact body now answers
+`422 {"loc":["body","permission_mode"],"type":"extra_forbidden"}`, and the posture sent the way it
+actually travels — in `overrides` — still raises the card, which the operator allowed and the run
+then wrote its file. A refusal that broke the working path would not have been a fix.
+
+The rule went on a shared `RequestModel` base rather than on the one model, so all 57 request body
+models reachable from `app.routes` now forbid unknown fields, with one named exemption
+(`SpecDocumentCreate`, kept lax by two shipped requirements) and one named untyped body
+(`patch_agent` — see F117 below). A test walks the routing table and asserts both, so the next lax
+model is a red build rather than a discovery three months from now.
+
+Three things the fix would have broken, all repaired rather than exempted: `normalize_legacy`
+rebuilt its payload from keys it knew and so kept absorbing unknown fields on the legacy path;
+`normalize_assignee_aliases` stripped its aliases only when `assignee` was absent, so a
+rolling-upgrade body was refused for a name the contract accepts; and `PUT …/project/instructions`
+read `body.get("content", "")` off an untyped dict, so a misspelled field answered `200` and
+**blanked the project's instructions**.
 
 `POST /projects/{id}/agent/trigger` accepts an unknown top-level `permission_mode` and returns
 `200`, having ignored it:
@@ -7616,3 +7636,34 @@ rule belongs.
 - **F3 confirmed live on the default path.** A freshly created Hub-owned operator agent comes back
   `"contact_mode": "watchdog-spawn"` — the deleted subsystem — from `POST /projects/{id}/agents`,
   not from any legacy route. Same root as F111's removal, and it should go with it.
+
+---
+
+## F117 (B) — `PATCH /agents/{name}` takes an untyped body: a misspelled setting answers 200 and changes nothing
+
+**Status:** open. Found 2026-08-29 by F116's own surface walk, confirmed live on 8011.
+
+F116 made every request body model refuse what it cannot honour. Three routes had no model to put
+the rule on — `body: dict`. One was `PUT …/project/instructions`, fixed in the same change because
+its defect was destructive. One is `POST …/agents/register`, which F111 deletes. This is the third,
+and it is the same shape as F116 on the route that carries an agent's *safety* settings —
+`default_permission_mode`, `permission_timeout_seconds`, `question_timeout_seconds`:
+
+```
+PATCH …/agents/asker {"permission_timeout_secondz": 5}
+  -> 200, agent unchanged, nothing said
+```
+
+The handler does have a vocabulary check, but it is narrower than it looks and it was described too
+generously in the change's own design (D7, which said "400 for an unknown key"). Measured: the
+`set(body.keys()) <= _unrestricted_fields` guard fires **only** when the name belongs to a
+session-synced configured agent, and then answers `409 "reserved for a configured agent"` — a
+message about the name, not about the field. For a Hub-owned agent, which is every agent an
+operator creates in the UI, there is no check at all.
+
+Not fixed inside F116 deliberately: modelling this body turns the existing `400`s that the handler
+raises by hand (`contact_mode`, and the per-field validators below it) into FastAPI `422`s, which
+is a visible change across the agent settings UI and wants its own review. It is named in
+`NO_CONTRACT_BY_DESIGN` in `hub/tests/test_request_strictness.py` with that reason, so the exemption
+is a decision on the record rather than a silence — but a named exemption over a live defect is not
+a fix.

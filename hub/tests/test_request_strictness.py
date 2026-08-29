@@ -49,10 +49,12 @@ NO_CONTRACT_BY_DESIGN: dict[str, str] = {
         "work thrown away."
     ),
     "patch_agent": (
-        "F116/D7: the handler guards on `body.keys()` and answers 400 for an unknown key, so "
-        "the vocabulary is enforced -- but by hand, and with the wrong status. Modelling it "
-        "turns those 400s into 422s across the agent UI; filed as its own finding rather than "
-        "changed inside this one."
+        "F117, filed not fixed. The handler's `set(body.keys()) <= _unrestricted_fields` guard "
+        "looks like a vocabulary check but fires only for a session-synced configured agent, and "
+        "answers 409 about the *name*; for a Hub-owned agent a misspelled setting answers 200 and "
+        "changes nothing -- measured live. Modelling it turns the handler's hand-raised 400s into "
+        "422s across the agent settings UI, which wants its own review rather than a rider on "
+        "this change."
     ),
 }
 
