@@ -248,6 +248,43 @@ async def test_job_that_cannot_start_records_the_queue_reason_as_failed():
         assert run.error_summary == reason
 
 
+@pytest.mark.asyncio
+async def test_a_request_level_refusal_still_fails_the_job_run():
+    """F108 changed what the *operator's route* does with a refusal; the flow path is untouched.
+
+    The sibling above covers an environment-level refusal. This one covers the population F108
+    newly answers with a status code, and asserts the flow consumer is indifferent to it: a job
+    firing into a request-level refusal still records `failed` with the reason, exactly as before.
+    `terminal_failure` is what this branch reads and this change never touched it — the refusal is
+    carried alongside, in a field only the route looks at.
+    """
+    from hub.turn_scheduler import ScheduleResult, TurnRefusal
+
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="request-level", agent="ghost-job-agent")
+
+    reason = "ghost-job-agent is not an agent in this project, so there is nothing to trigger."
+    with patch(
+        "hub.turn_scheduler.schedule_agent",
+        AsyncMock(
+            return_value=ScheduleResult(
+                waiting_reason=reason,
+                refusal=TurnRefusal(status_code=409, detail=reason, entry_ids=("entry-x",)),
+            )
+        ),
+    ):
+        scheduler = JobScheduler()
+        async with async_session_factory() as db:
+            fresh_job = await db.get(AIJob, job.id)
+            success = await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+    assert success is True
+    async with async_session_factory() as db:
+        run = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalar_one()
+        assert run.status == "failed"
+        assert run.error_summary == reason
+
+
 async def _make_loop(db, *, job_id, **fields):
     loop = Loop(id=f"loop-{job_id}", project_id="proj-test", job_id=job_id, **fields)
     db.add(loop)

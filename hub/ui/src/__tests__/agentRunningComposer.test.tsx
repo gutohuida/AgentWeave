@@ -208,8 +208,44 @@ describe('running-agent composer', () => {
 
     await waitFor(() => expect(composer).toHaveValue('Please preserve this draft'))
     expect(composer).toBeEnabled()
+    // Unchanged by F108, and that is deliberate: `readableRefusal` renders the Hub's own words
+    // only when the body is a structured refusal. A bare 503 whose body is the word "failed" is
+    // not one, so the generic sentence stands rather than putting a stray token in front of a
+    // person. The refusal case is the next test.
     expect(screen.getByRole('alert')).toHaveTextContent('Failed to send message')
     expect(screen.getByTestId('session-continuity')).toHaveTextContent('Failed to send message')
+    errorSpy.mockRestore()
+  })
+
+  it('renders the refusal’s own sentence when the Hub refuses the request (F108)', async () => {
+    const refusal =
+      "Task task-91c is already under review by 'critic'. Reassign the task if 'claude' should "
+      + 'take it over, or let the review in flight finish.'
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: refusal }), { status: 409 }),
+    )
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    render(<AgentOutputPanel agent={idleAgent} conversationId={conversation.id} />)
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Review it' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(refusal))
+    expect(screen.getByTestId('session-continuity')).toHaveTextContent(refusal)
+    errorSpy.mockRestore()
+  })
+
+  it('falls back to a plain sentence when the refusal carries no body at all', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 502 }))
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    render(<AgentOutputPanel agent={idleAgent} conversationId={conversation.id} />)
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Anything' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Failed to send message'),
+    )
     errorSpy.mockRestore()
   })
 })

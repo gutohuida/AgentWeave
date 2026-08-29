@@ -27,7 +27,7 @@ import {
   dismissCheckpointWarning,
   useCheckpoints,
 } from '@/api/checkpoints'
-import { ApiError } from '@/api/client'
+import { ApiError, readableRefusal } from '@/api/client'
 import { useAccounting, useConversationAccounting } from '@/api/accounting'
 import { useConfigStore } from '@/store/configStore'
 import {
@@ -670,7 +670,12 @@ export function AgentOutputPanel({
       }),
     })
     if (!response.ok) {
-      throw new Error(`Trigger failed with status ${response.status}`)
+      // Carry the body, not just the number (F108). The Hub now refuses a request it will never
+      // honour — a review of a task somebody else took, a name that is on no roster — and the
+      // refusal's own sentence is the only place the remedy is written. Thrown as `ApiError` so
+      // `readableApiError` can find `detail` in it, the same way every hook-based call site
+      // already does.
+      throw new ApiError(response.status, await response.text())
     }
     return (await response.json()) as TriggerResult
   }
@@ -874,8 +879,13 @@ export function AgentOutputPanel({
       }
     } catch (err) {
       console.error('Failed to send message:', err)
-      setSubmissionError('Failed to send message')
-      setSessionNotice('Failed to send message')
+      // The server's own sentence where there is one. "Failed to send message" is accurate and
+      // useless; the refusal says which task, who holds it, and what to do instead — and before
+      // F108 the operator at least read that much, wrongly labelled as a wait. Ending up worse
+      // informed than the bug is not a fix.
+      const stated = readableRefusal(err, 'Failed to send message')
+      setSubmissionError(stated)
+      setSessionNotice(stated)
       throw err
     } finally {
       setIsSending(false)

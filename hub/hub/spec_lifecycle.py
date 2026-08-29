@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import SpecDocument, SpecDocumentEvent
+from .db.models import SPEC_KINDS, SpecDocument, SpecDocumentEvent
 from .utils import short_id
 
 EXPLORING = "exploring"
@@ -181,6 +181,17 @@ async def create_document(
     `approve` — inventing a history that did not happen in order to record one that did. A row
     that already exists is refused above, before this argument is reached.
     """
+    # Same reason the `phase` check below exists, for the column beside it: `kind` carries a CHECK
+    # constraint (`ck_spec_documents_kind`), so an unrecognised value reached the flush and came
+    # back as an unhandled `IntegrityError` — `500 Internal Server Error`, with nothing in it to
+    # act on. Found by driving the surface 2026-08-28 (F112), and the near-miss is the likely
+    # input: `"change"` is what a caller guesses from a path of `spec/changes/…` and a default
+    # reported as `"change-spec"`, and it was the case that produced the 500.
+    if kind not in SPEC_KINDS:
+        raise PhaseError(
+            f"unknown document kind {kind!r}; a document is one of: {', '.join(SPEC_KINDS)}",
+            code="unknown_kind",
+        )
     if phase is not None:
         if phase not in (EXPLORING, PROPOSED, APPROVED, ARCHIVED, CURRENT):
             raise PhaseError(f"unknown phase {phase!r}", code="unknown_phase")

@@ -6808,7 +6808,9 @@ Hub on 8011 is left running on this branch's code; 8000 and 8010 were never cont
 
 ## F108 (B) — a permanently refused request answers `200 {"success": true}`
 
-**Status:** fixed **for review dispatch** (2026-08-28); **open as a class.**
+**Status:** **closed as a class** (2026-08-28), and **the class was not the one described below.**
+See *What the class actually turned out to be* at the end of this section before trusting the
+paragraph that opens it.
 
 Found by driving F76's own fix, and it is the reason phase 4 exists. Every dispatch-time guard
 behaved exactly as designed, the task was left untouched every time — and the operator could not
@@ -6842,3 +6844,614 @@ of which this change has driven. That is its own change.
 **Three rounds of review did not find this, and the first drive did.** The rounds were reading code;
 the drive was the first time the change was asked a question by an operator. Nothing in three passes
 thought to ask what the HTTP route *returns* when the function it calls raises.
+
+### What the class actually turned out to be
+
+Closed by `2026-08-28-a-refused-request-says-so`, and the change's round 2 found that **the four
+examples above are not the class.** Each was checked against the route rather than taken on trust:
+
+| This section's example | Where it actually lands |
+|---|---|
+| an archived agent | already **409 pre-queue**, `agent_trigger.py:1108` |
+| a task that does not exist | already **409 pre-queue**, `:1173` and `:1199` |
+| a `work_dir` the project does not contain | already **400 pre-queue**, `:1134` |
+| an unimplemented runner | **unreachable** — `Runner.cli` is constrained to `claude`/`codex`, and the test that used to reach the 501 was deleted with a note saying so |
+
+The observation in this finding is correct and was reproduced. The *class* it inferred was written
+without checking the route's own guard list, and the change that fixed it would have shipped with
+none of its named cases able to fire. Recorded here because the next reader of this finding meets
+this paragraph, not the change's design document.
+
+**What is really reachable**, and it is a better reason than the one given here:
+
+1. Conditions with no pre-queue mirror at all — a name that is on no roster (`:452`), `work_dir`
+   combined with a review (`:591`), a turn batching two review targets or mixing kinds
+   (`:337`/`:351`).
+2. **Every hoisted guard is time-of-check/time-of-use.** The pre-queue guards run when the request
+   arrives; the entry is delivered when the agent is next idle, which the queue makes arbitrarily
+   later. Hoisting more guards can never close that, because the gap is time, not coverage. That is
+   the durable justification for the fix.
+
+The fix also had to be narrower than "propagate non-transient refusals", the mechanism this
+section proposes. Non-transient covers refusals about the **environment** — no runner bound, a CLI
+missing from PATH — which the product deliberately queues so that performing the repair delivers
+them (**F96**). Refusing those, and withdrawing their entries, would have deleted F96's fix. The
+gate is a new explicit *request-level* classification instead.
+
+**Driven live after the fix:** `POST /agent/trigger` for a mistyped agent answers `409` with the
+refusal's own sentence and `GET /queue/<agent>/status` reports `waiting_count: 0`; an agent with no
+runner bound still answers `200 … queued` with its entry intact.
+
+**Filed out of this change, not fixed by it:** `terminal_failure`'s dishonest defaults (six early
+returns claim `True` without meaning it, and `scheduler.py`'s two flow consumers gate on that flag),
+and the delivery-attempt accounting that is now **F114**.
+
+---
+
+## F109 (B) — the hub suite runs every session on one database connection, and the retry chain stalls because of it
+
+**Status:** **the mechanism was already known — this finding rediscovered it.** Filed 2026-08-28
+while implementing F108, upgraded the same night, and then **corrected**: see *This was not news*
+immediately below before reading the rest. What is genuinely new is the link to the flaky test, a
+cheap reproduction, three measured fixes, and a second affected test.
+
+### This was not news, and the finding should have checked
+
+`test_agent_trigger_overrides.py:259` carries an `xfail` whose reason describes this mechanism in
+more detail than the sections below, and with better numbers:
+
+> `sqlite+aiosqlite:///:memory:` resolves to a StaticPool: one DBAPI connection shared by every
+> session in the process. SQLAlchemy tracks transaction state per Session, SQLite per connection, so
+> any session closing concurrently rolls back the shared transaction and discards another session's
+> pending UPDATE while its `commit()` still returns cleanly. **Measured in isolation at 105/200
+> commits lost with a concurrent poller against 0/200 without**, and observed on CI (`3c1f33a`,
+> 2026-08-17): a ROLLBACK from another task landed 2.5 ms before `_execute_run`'s finalize COMMIT,
+> which then committed nothing. Production is unaffected — a file-backed `DATABASE_URL` gets
+> `AsyncAdaptedQueuePool`, one connection per session. **Un-xfail once the fixture gives each
+> session its own connection**; the assertions below are correct as written and this test has never
+> failed for a product reason.
+
+That is the whole of this finding's mechanism, written down eleven days earlier by whoever hit it
+first, and it even answers the question this finding recorded as unproven — whether production is
+safe. The e2e skill's own rule covers this exactly: *"you may be finding confirmation rather than
+news"*, and it names checking the specs, the archived changes and the roadmap. **A grep for
+`StaticPool` would have found it in one command, and was not run.**
+
+Kept rather than deleted, because the parts below are still additions:
+
+- the **link to the flake** — nobody had connected that known fixture defect to
+  `test_spawn_failure_marks_run_failed`, which had been carried as "unexplained" across two handoffs;
+- a **five-second reproduction**, against a full-suite run that surfaced it once in two hours;
+- **three measured fix candidates**, which turn "un-xfail once the fixture gives each session its
+  own connection" from an instruction into a costed decision;
+- a **second affected test**, found by sweeping (below).
+
+Corrected here rather than quietly, because a finding that claims to have discovered what the
+codebase already knew misleads the next reader about where the knowledge lives.
+
+### What happens
+
+`test_agent_trigger.py::test_spawn_failure_marks_run_failed` fails intermittently on
+`assert entries[0].delivery_attempts == DELIVERY_ATTEMPT_LIMIT` with `2 == 3`. Handoff 0096 recorded
+it as needing full-suite state and not reproducing in isolation. It does reproduce in isolation —
+about **one attempt in seven** — when the same scenario is run 40 times in one parametrized test.
+
+The state it stalls in is the alarming part, and it is the same shape as an outage
+`_execute_run`'s own comment says was worth a `CancelledError` handler to prevent:
+
+| | |
+|---|---|
+| the `Run` row | `status='running'`, `ended_at=NULL`, `error=NULL` — **forever** |
+| the queue entry | `state='queued'`, `delivery_attempts=2` — never retried, never abandoned |
+| every later `schedule_agent` for that agent | `"agent is already running"` |
+
+An agent in that state accepts input and never runs again, with nothing anywhere a human would see.
+
+### The mechanism, as far as it was measured
+
+Traced with a `before_update` mapper listener on `Run`, a spy on `schedule_agent` recording the
+running-run set and its caller, and two probes inside `_execute_run`'s spawn-failure branch:
+
+```
+execute-begin   R2
+failbranch      R2 run_found=True status=running      <- R2 writes failed, commits
+schedule->STARTED R2   running=[]                     <- the failed write is visible here
+execute-end     R1
+failbranch-postcommit R2 about to redrain
+schedule->agent is already running  running=[R2]      <- R2 is running again
+```
+
+**No ORM update and no Core `update(Run)` sets the row back to `running`** — the listener saw the
+`-> failed` writes and nothing after them, and `grep "update(Run)"` over `hub/hub` is empty. The
+state is produced by transaction interleaving, not by application logic.
+
+And the interleaving is available because **the suite gives every session the same database
+connection.** `TEST_DATABASE_URL` is `sqlite+aiosqlite:///:memory:`, and SQLAlchemy forces
+`StaticPool` for that URL — measured, not assumed:
+
+```
+$ DATABASE_URL=sqlite+aiosqlite:///:memory: python -c "...; print(type(engine.pool).__name__)"
+StaticPool
+```
+
+Production resolves to `AsyncAdaptedQueuePool`, one connection per session. So in the suite a
+background run task's `commit()` and a request session's transaction are the *same* SQLite
+transaction, and `async with async_session_factory()` exiting can revert work another session
+believes it committed. In production it cannot.
+
+### Proven, 2026-08-29
+
+The first pass of this finding said the mechanism was *probably* transaction interleaving on a
+shared connection. It is, and here it is. A listener on `before_cursor_execute` / `begin` / `commit`
+/ `rollback`, logging the **raw DBAPI connection** behind each event:
+
+```
+conn#3840 >>> BEGIN                                        (session A)
+conn#3840 SELECT runs.id AS runs_id, …                     (session A)
+conn#3840 >>> BEGIN                                        (session B, same connection)
+conn#3840 UPDATE runs SET status=?, error=?, ended_at=?     (session B marks the run failed)
+conn#3840 <<< COMMIT                                       (session B)
+conn#3840 <<< ROLLBACK   <--                               (session A closes)
+conn#3840 SELECT job_runs.…
+conn#3840 UPDATE inbound_queue_entries SET delivery_attempts=?
+conn#3840 <<< COMMIT
+```
+
+**Every statement in the whole trace is on one connection.** Two `AsyncSession`s each believe they
+own a transaction; SQLite has exactly one per connection. One session's `COMMIT` ends the other's
+transaction, and one session's closing `ROLLBACK` discards work the other believes it committed —
+which is how the run ends up `running` with no `error` and no `ended_at`, forever.
+
+**The trap that nearly hid it:** logging `id(conn.connection)` shows *different* ids per session,
+because that names a per-checkout `_ConnectionFairy` wrapper rather than the connection. Read
+naively it looks like proof of isolation. `driver_connection` is the one to log.
+
+### What was measured, and why none of it was applied
+
+Three configurations, each run against the reproduction:
+
+| Configuration | Result |
+|---|---|
+| `NullPool` + `file:…?mode=memory&cache=shared` | **Dies.** `no such table: projects` — a shared-cache in-memory database exists only while a connection to it is open, and `NullPool` closes each one when it is done. |
+| the same, plus a keep-alive connection held for the process lifetime | **Three of four tests in the reproduction fail**, and not the flaky one — different failures, in the mocked-spawn tests, with the mocked `FileNotFoundError` escaping instead of being handled. |
+| `NullPool` + a **file-backed** SQLite database | **The flake disappears.** 12/12 probe runs clean and 6/6 of the flaky selection, against ~1 in 6 today. But the suite runs roughly **four times slower** — 2% of the suite in the time the current configuration takes for 8% — and a full run was stopped rather than completed. |
+
+So a fix exists and is reachable, and it is **not** a one-line switch: the fastest isolated variant
+breaks tests for a second reason, and the variant that works costs a multiple of the suite's runtime
+on every run and every CI job. That is a change with its own design question, its own verification,
+and a cost the operator should weigh — not something to flip unattended at 01:00.
+
+### Swept for, 2026-08-29 — and there is a second one
+
+The same interleaving is available to every test that lets a background run task commit while a
+request session is open. That population is the **21 test files** that await a background run;
+running all of them eight times over (257 tests, ~2.5 minutes a round) turned up:
+
+| | |
+|---|---|
+| `test_agent_trigger.py::test_spawn_failure_broadcasts_run_failed_event` | **failed 1 round in 8** — a *different* test from the known flake, in the same file and the same family |
+| the `xfail` at `test_agent_trigger_overrides.py:259` | alternated `xpassed` / `xfailed` across the eight rounds — it is `strict=False`, so it is harmless, but it is the same non-determinism showing as an expectedly-failing test that passes about half the time |
+| everything else | deterministic across all eight rounds |
+
+So the answer to "has anyone looked for others" is now yes, and the answer is **at least one more**,
+plus the xfail that was already flagged. Both are in the population the mechanism predicts, which is
+the useful part: the prediction held.
+
+Two cells in `25469ac` were already found green for reasons unrelated to what they claimed. This is
+a third mechanism for that, and the sweep above is the first time it has been quantified.
+
+### What it costs today
+
+`test_spawn_failure_marks_run_failed` failed **two of the three** full-suite runs on the night of
+2026-08-28 and roughly **one in six** for the five-second selection;
+`test_spawn_failure_broadcasts_run_failed_event` failed **one round in eight** of the targeted sweep.
+The third full-suite run was completely green. So merging has a material chance of a red CI run for a
+reason that has nothing to do with the branch — and an equally material chance of looking fine,
+which is the harder half to act on.
+
+### What to do about it
+
+Not fixed here deliberately: the candidate fix is giving the suite genuinely independent
+connections, which changes the transaction semantics under ~3,500 tests at once, cannot be verified
+in less than a full 25-minute suite run per attempt, and can plausibly trade this flake for
+`database is locked`. That is an operator's call, not something to change unattended.
+
+The cheap reproduction is the contribution, and there is now a cheaper one still. This selection
+takes about five seconds and fails roughly one run in six:
+
+```
+pytest hub/tests/test_agent_trigger.py -q -k "spawn_failure or unbound_agent or runtime"
+```
+
+Six consecutive runs of it **at commit `84c990e`, before any of 2026-08-28's changes existed**:
+
+```
+1 failed, 3 passed        <- assert 2 == 3   (delivery_attempts)
+4 passed
+4 passed
+4 passed
+4 passed
+4 passed
+```
+
+That is also the attribution: the flake predates the F108 work, so a full-suite run of that branch
+reporting this single failure is reporting this, not a regression. Worth having written down,
+because it is the failure most likely to be misread as a casualty of the next change to touch the
+queue — `2026-08-28-a-delivery-attempt-means-a-delivery` names it in its D7 for exactly that reason.
+
+The earlier reproduction still has a use: a parametrized test running the scenario 40 times, which
+stalls in ~6 of 40 and lets the *state* be inspected rather than only the assertion.
+
+---
+
+## F110 (B) — `AW_CHECK_UI_BUNDLE=1` passes on a stale bundle if you skip the build
+
+**Status:** **fixed** (2026-08-29). Found 2026-08-28 by walking into it while shipping F108's UI
+half — the script certified a bundle whose hash had not moved, and twelve tests agreed.
+
+`CLAUDE.md` describes the guard as: after `npm run build`, run `scripts/refresh_ui_bundle.py`,
+which "copies `dist/` over it, confirms the copy, and records `ui-build-stamp.json`, the
+fingerprint of the source it was built from", and `test_ui_build_stamp.py` "gates the stricter
+bundle-matches-source assertion behind `AW_CHECK_UI_BUNDLE=1`".
+
+Run the refresh script **without** building first and the guard is satisfied anyway:
+
+```
+# three .tsx/.ts files edited, no `npm run build`
+$ py -3.11 scripts/refresh_ui_bundle.py
+Refreshed hub/hub/static/ui and recorded the build stamp.
+$ git status --short hub/hub/static/ui
+ M hub/hub/static/ui/ui-build-stamp.json          <- the JS hash never moved
+$ AW_CHECK_UI_BUNDLE=1 pytest hub/tests/test_ui_build_stamp.py -q
+12 passed
+```
+
+The stamp is written **from the current source**, and the assertion compares the stamp to the
+current source — so the script stamps whatever `dist/` happens to hold as though it were built
+from what is on disk now. The one input neither of them consults is whether `dist/` is older than
+the source it is being certified against.
+
+**Why it matters more than it looks.** This is the guard that exists so `/health` can stop
+reporting `ui_stale`, and the failure it is aimed at — committing a bundle that does not match its
+source — is exactly the failure it will now certify as fine. It also fails in the safe-looking
+direction: everything is green, and the operator is served a UI missing the change whose tests all
+passed. Running the build afterwards produced a different JS hash
+(`index-CCnq-93I.js` → `index-C3KKeU0v.js`), which is how it was caught at all.
+
+**Fixed by the second of the two candidates**, which keeps the build an explicit step:
+`refresh_ui_bundle.stale_build()` refuses when the newest file under `hub/ui/src` is newer than
+everything in `hub/ui/dist`. A build reads all of the source and writes all of the output, so a
+source file newer than the whole bundle means the build never saw it. The refusal names the file
+that moved and the command to run.
+
+The stamp itself is excluded from the comparison. It is written into the copy *after* the build, so
+counting it as build output would make every run look fresh — which is the failure this guard exists
+to prevent, reintroduced by the guard.
+
+Driven both ways before committing: with `dist/` current the script runs normally; after
+`touch hub/ui/src/api/client.ts` it exits 1 with *"hub/ui/dist is older than
+hub/ui/src/api/client.ts, so it cannot have been built from the source that is here now."* Test
+`test_ui_build_stamp.py::test_the_refresh_script_refuses_a_dist_older_than_the_source`,
+mutation-checked by disabling the guard.
+
+**The other candidate is still open**: having the script run the build itself would make the
+documented sequence impossible to get wrong, where this only makes getting it wrong loud. It was
+not taken because it turns a copy step into a build step, which changes what `make ui` means — a
+decision rather than a repair.
+
+---
+
+## F111 (B) — a self-registered agent with no runner is told to install a binary named after itself
+
+**Status:** **open, and it is the un-fixed half of a finding believed closed.** Found 2026-08-28 by
+driving F108's own fix against the trial Hub.
+
+Registered `unbound-driver` through `POST /agents/register`, bound it nothing, sent it a message:
+
+```
+POST /agent/trigger {"agent": "unbound-driver", "message": "hello"}
+  -> 200 {"status": "queued",
+          "waiting_reason": "Runner CLI 'unbound-driver' was not found in PATH."}
+GET /queue/unbound-driver/status
+  -> {"waiting_count": 1, "waiting_reason": "Runner CLI 'unbound-driver' was not found in PATH."}
+```
+
+There is no runner bound at all. The operator is told to go and install a program named after their
+own agent, and there is no such program and never was.
+
+### It is the case `get_agent_config`'s own comment says it fixed
+
+`launchability.get_agent_config` (`hub/hub/launchability.py:361`) carries this, from 2026-08-25:
+
+> Both patched the *bound* case only, so the **unbound** case — `runner_id IS NULL` — still fell
+> through `RUNNER_CLI["native"] is None` to the agent-name fallback, and reported a missing CLI
+> named after the agent. … all three such agents were reported unlaunchable with
+> `Runner CLI 'architect' was not found in PATH` — a binary named after the agent.
+
+The repair it made is guarded:
+
+```python
+elif not agent_row.self_registered and "runner" not in meta:
+    meta["runner"] = RUNNER_UNBOUND
+```
+
+So a **self-registered** agent with no runner anywhere still takes the fallback — and the very
+sentence the comment quotes as the symptom is what the drive read back, three days later.
+
+### Why it is narrower than it looks, and why it still matters
+
+An operator creating an agent in the Hub UI is unaffected: the UI posts
+`POST /api/v1/projects/{id}/agents`, which sets `self_registered=False` (`api/v1/agents.py:669`).
+`self_registered=True` comes only from `POST /agents/register` — an agent joining itself, and the
+repo's own harnesses. That is exactly the population the 2026-08-25 measurement was taken on, so it
+is reachable, it has been seen live twice now, and the surface it is wrong on is the one an operator
+consults when nothing is happening.
+
+### It is on the operator's main screen, three times in one view
+
+Filed above from the API. Driven through the dashboard the same night, the same wrong sentence
+appears three times in a single screenshot of the conversation view — in the message's
+not-delivered badge, in the queue line beneath the transcript (*"1 waiting — Runner CLI 'ui-probe'
+was not found in PATH."*), and under the composer (*"Queued — Runner CLI 'ui-probe' was not found
+in PATH."*).
+
+That is not a corner of an API response. It is the surface an operator reads when they are working
+out why nothing is happening, and every line of it points at a program that does not exist.
+
+### Not fixed here, because the obvious fix is also wrong
+
+Dropping `self_registered` from the condition would make `probe_agent` answer *"No runner is bound
+to this agent. Bind one in the Hub UI before it can run."* — and for a polling self-registered agent
+that is **also** false. It runs itself; it is not waiting to be bound, and binding a runner is not
+the remedy. Neither existing sentence is true of this agent, which makes this a question about what
+the third sentence should say and which verdict owns it (`collaboration_ready` already draws a
+related line) — a design decision, not a one-line change. Left for a spec loop.
+
+---
+
+## F112 (B) — creating a document with an unrecognised `kind` answers `500 Internal Server Error`
+
+**Status:** **fixed** the same night (2026-08-28). Found by the full-surface sweep.
+
+```
+POST /projects/{id}/project/documents {"title":"Sweep C","kind":"change"}
+  -> 500  Internal Server Error
+POST /projects/{id}/project/documents {"title":"Sweep D","kind":"banana"}
+  -> 500  Internal Server Error
+```
+
+`"change"` is not a contrived input. The Hub mints document paths under `spec/changes/…` and
+reports the default kind as `"change-spec"`, so `"change"` is exactly what a caller guesses — and
+the guess produces the least useful response the surface can give: no status worth branching on, no
+sentence, nothing naming the four values that would have worked.
+
+The valid set is `SPEC_KINDS = ("baseline", "system-map", "roadmap", "change-spec", "capability")`,
+enforced by a CHECK constraint (`ck_spec_documents_kind`). `spec_lifecycle.create_document` wrote
+`kind` straight through, so an unrecognised value reached the flush and surfaced as an unhandled
+`IntegrityError`.
+
+**The same function already guards the column beside it, and says why.** Its `phase` check carries
+this comment:
+
+> Stated here too so the refusal names the problem rather than surfacing as an IntegrityError from
+> the flush below.
+
+That reasoning was never applied to `kind`. This is the argument-versus-code gap the round
+discipline exists for, sitting inside one function: the principle is written down, correct, and
+applied to one of two adjacent columns.
+
+**Reachable by agents, not only operators.** `create_spec_document` is an MCP tool, and it reaches
+the same function. An agent that guesses the kind gets a 500 and has no way to learn the valid set —
+the refusal is its only feedback and it carries nothing.
+
+**Fixed** by mirroring the `phase` guard: `PhaseError(code="unknown_kind")` whose message names
+every valid kind, which the route already maps to `409 {"message", "code"}`. Test
+`test_an_unrecognised_document_kind_is_refused_and_names_the_kinds`; mutation-checked by removing
+the guard.
+
+---
+
+## F113 (B) — `propose` promises "every check that refuses it" and omits one of them
+
+**Status:** **open.** Found 2026-08-28 by the full-surface sweep. The fix changes a status code, so
+it is a decision rather than a repair.
+
+`POST /project/documents/propose` has two blockers and reports them through two different channels:
+
+| Blocker | How it comes back |
+|---|---|
+| the payload is incomplete (`spec_completeness.check`) | **`200`** with a `blocking` array — one entry per check, each naming what to do |
+| the exploration has not been closed (`spec_lifecycle.transition`, `:332`) | **`409 {"code": "explore_not_closed"}`** |
+
+The second is **never in the first's list.** Driven live:
+
+```
+POST …/documents/propose            -> 200  blocking: [no_requirements, non_goals_empty]
+   phase afterwards: exploring, explore_closed=false      <- the closure blocked it too, unlisted
+POST …/documents/close-exploration  -> 200  explore_closed=true
+POST …/documents/propose            -> 200  blocking: [no_requirements, non_goals_empty]
+```
+
+So an operator holding an incomplete document with an open exploration is told two things block the
+proposal. Three do. They fix the two, propose again, and meet the third — a round trip caused only
+by the list omitting one of its own members.
+
+**The route states the contract it breaks**, which is what makes this a B rather than friction:
+
+> *Move a document to `proposed`, or report every check that refuses it.* — the route docstring
+
+It is also asymmetric in the other direction. The *same* situation — "this cannot be proposed yet,
+and here is why" — arrives as `200` with a list when the payload is incomplete and as `409` when it
+is complete but the exploration is open. A client cannot write one branch for "not yet".
+
+### Why it is not fixed here
+
+The clean fix is for `spec_service.propose` to compute the closure blocker as a finding and put it
+in `blocking` with the others, leaving `transition()` as the authority behind it. That makes the
+list honest and gives clients one shape — and it turns today's `409 explore_not_closed` from this
+route into a `200` with a blocker, which is a behaviour change with tests naming it.
+
+The additive alternative — add the closure finding only when the list is already non-empty — keeps
+every status code and makes the list complete exactly when it exists, which is a worse contract
+than either of the other two.
+
+Choosing between those is the operator's call, and by this repository's own rule a change that
+needs a spec goes through three rounds before a line of it is written.
+
+---
+
+## F114 (A) — sending three messages to an agent that cannot launch destroys the first one
+
+**Status:** **fixed** (2026-08-29) by `2026-08-28-a-delivery-attempt-means-a-delivery`, through
+three rounds and re-measured live. Measured 2026-08-28 against the trial Hub. F108's round 1 filed
+this abstractly ("a non-transient refusal consuming three delivery attempts on every path"); this
+is the measurement, and it was worse than the abstraction suggested.
+
+Five messages to an agent with no runner bound, sent back to back, nothing else happening:
+
+```
+entry                  content      state       att  abandoned_reason
+entry-aeef00996fce     message 1    withdrawn     3  delivery failed 3 times (Runner CLI '…' was not found…)
+entry-2e1f5501377e     message 2    queued        2
+entry-f6cb62ebf395     message 3    queued        0
+entry-20c7fe2918f9     message 4    queued        0
+entry-f202b1e9d3ec     message 5    queued        0
+```
+
+**Message 1 is gone, and no run was ever attempted for it.** Its recorded reason —
+*"delivery failed 3 times"* — describes three deliveries that never happened. What actually
+happened is that the operator sent two more messages: every `POST /agent/trigger` calls
+`schedule_agent`, which selects the oldest conversation's entries and, on a non-transient refusal,
+increments `delivery_attempts` on each of them (`turn_scheduler.py:191`). Three *messages* consume
+the three *delivery attempts* — and so does anything else that schedules the agent, including the
+Continue button below and `redrain_queued_agents`, which runs at the end of every turn in the
+project.
+
+Elapsed time is not involved. This took under two seconds.
+
+### Why it is severity A
+
+- **The operator's input is destroyed**, silently as far as the composer is concerned — every
+  trigger answered `200 … "queued"`.
+- **The stated reason is false.** An operator reading "delivery failed 3 times" will go looking for
+  three failures, and there are none.
+- **It undercuts F96 exactly.** F96 exists so that binding a runner delivers the message queued
+  while none was bound. An operator who sends a few messages before getting round to the binding
+  has already lost the first ones. F96's own live log shows the same mechanism from the other side:
+  `waiting_reason` had become `"delivery failed 1 time; 2 attempts left"`, the retry counter having
+  taken the reason's place.
+- **The trigger is ordinary use.** Not a retry storm, not a loop — a person typing twice more.
+
+### The product's own suggested remedy is what destroys it
+
+The conversation view offers a button for exactly this situation:
+
+> **Continue** — *`<agent>` has work waiting — start it without sending a message.*
+
+It calls `POST /conversations/{id}/continue`, which reaches `schedule_agent` like everything else.
+Measured (`scripts/drive/t_continue_burns_attempts.py`), one queued message, no other activity:
+
+```
+after queueing:      state='queued'     attempts=1
+Continue click 1:    started=False  ->  state='queued'     attempts=2
+Continue click 2:    started=False  ->  state='withdrawn'  attempts=3
+      abandoned_reason: delivery failed 3 times (…); the Hub stopped retrying
+Continue click 3:    started=False  ->  state='withdrawn'  attempts=3
+```
+
+**Two clicks.** Every one answered `200`. Every one reported `started: false` and nothing else — no
+indication that clicking again is destructive, and no sign afterwards that the click is what did
+it. An operator who cannot see why their message is not moving, and presses the button the product
+put there to move it, deletes it.
+
+That is what settles the severity. It is not an edge case reachable by unusual API use; it is the
+single most likely thing a person does next.
+
+### And the operator is told the false thing, not just the database
+
+Driven through the dashboard the same night (`scripts/drive/t_ui_refusal.py`, Playwright against
+the trial Hub), the conversation view renders the message with a red badge:
+
+```
+NOT DELIVERED   delivery failed 3 times (Runner CLI 'ui-probe' was not found in PATH.);
+                the Hub stopped retrying
+```
+
+So this is not a database detail an operator would have to go looking for. The claim that delivery
+was attempted three times and abandoned is stated on the main conversation surface, above the
+message it destroyed, and it is false.
+
+### The fix shape, and why it was not available until tonight
+
+`F56` added the counting for a stated reason: a refusal raised before any run exists "repeats
+identically forever, and every entry queued behind it starves along with it". That reasoning is
+sound — **for a refusal about what was asked.** It is exactly wrong for a refusal about the
+environment, where the entry is *supposed* to wait for a repair and the product has promised to
+keep it.
+
+Until tonight there was no way to tell those apart at that line. F108 introduced
+`TriggerAgentError.request_level` for the operator's route, and the same flag answers this:
+
+> count a delivery attempt only when the refusal is **request-level**; leave the counter alone for
+> an environment-level refusal, exactly as it is already left alone for a transient one.
+
+A permanently-wrong entry still stops wedging the queue, which is what F56 was protecting. An entry
+waiting for a runner to be bound stops being consumed by the operator's own typing, which is what
+F96 was protecting. The two findings stop pulling against each other.
+
+**Not implemented when this was filed.** It changes when the Hub gives up on operator input, which
+is the most consequential thing the queue does, and this repository's rule is that a change needing
+a spec goes through three rounds before a line of it is written.
+
+### What the three rounds changed, and why the first shape was wrong
+
+The fix shape above — *reuse `request_level`* — **is not what shipped**, and round 2 is why.
+
+`request_level` answers *will this caller ever be satisfied*. The counter is asking something else:
+*does this refusal block only this entry, or the whole agent?* Those axes cross. `:756` — "could not
+prepare isolated worktree" — is environment-level **and** entry-specific, because the workspace it
+failed to prepare is the **task's**, not the agent's. And `schedule_agent` always builds its turn
+from the oldest eligible entry, so an entry whose checkout can never be prepared sits at the head
+and starves every other conversation. Gating on `request_level` would have stopped counting there
+and reintroduced F56's scenario exactly.
+
+What shipped is a third classification, `TriggerAgentError.agent_wide`, defaulting to `False`, on
+three sites and nothing else: **no runner is bound**, **the bound runner's row is gone**, **the
+bound runner's CLI is not on PATH**. All three are properties of the agent's own binding, so nothing
+is starving behind the entry they protect — which is the same reason the transient branch beside
+them already declines to count.
+
+Round 3 added one more correction, and it made the change smaller: the requirement everyone assumed
+this contradicted — *Repeated delivery failure does not wedge an agent* — is scoped in its own first
+sentence to *"a failed run's input"* and *"how many times a queued input has **failed to be
+delivered**"*. This path has no run and no delivery. **The behaviour F114 complains about was never
+specified at all**; `F56` added the second counting site without a requirement behind it.
+
+### Re-measured live, 2026-08-29
+
+Same two scripts that produced the finding, same trial Hub, after the fix:
+
+```
+$ py -3.11 scripts/drive/t_queue_attrition.py
+  message 1..5 queued
+  entry-abafb836663f  message 1  queued  0
+  entry-63648d89193b  message 2  queued  0
+  entry-92bb8988880d  message 3  queued  0
+  entry-c0594881f6a4  message 4  queued  0
+  entry-42b7143c8cea  message 5  queued  0
+  sent 5, still queued 5, withdrawn 0
+
+$ py -3.11 scripts/drive/t_continue_burns_attempts.py
+  Continue click 1: started=False -> state='queued' attempts=0
+  Continue click 2: started=False -> state='queued' attempts=0
+  Continue click 3: started=False -> state='queued' attempts=0
+  the entry survived three clicks
+```
+
+Before: message 1 withdrawn at three attempts, and two clicks of Continue enough to do it.
+
+**Not re-measured live: the delivery after the repair.** Binding a runner on this machine spawns a
+real provider run, and no token budget was agreed for the overnight session, so the outcome —
+*perform the repair, get every message* — is covered by
+`test_the_input_survives_until_the_agent_can_run` rather than by a live drive. That is the one
+assertion in this finding's closure that rests on a test rather than on the product.

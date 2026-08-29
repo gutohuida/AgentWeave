@@ -109,6 +109,30 @@ export function readableApiError(error: unknown, fallback: string): string {
 }
 
 /**
+ * The refusal's own sentence, or *fallback* when the response carried no refusal to read.
+ *
+ * One difference from `readableApiError`, and it is the whole reason this exists: a body that is
+ * not a structured refusal — an empty 502, a reverse proxy's HTML error page, the bare word
+ * "failed" — yields the fallback rather than being rendered at the operator. `readableApiError`'s
+ * callers put their result in a small inline message beside the control that failed, where a
+ * stray token is survivable. This one's callers put it in a conversation banner and the composer's
+ * own error line, which is where a person is told what to do next; a page of HTML there is worse
+ * than the generic sentence it replaced.
+ *
+ * Added for F108, where the Hub began answering a request it will never honour with the refusal's
+ * own words. Reading them is the point — but only when they are words.
+ */
+export function readableRefusal(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiError)) return fallback
+  try {
+    JSON.parse(error.message)
+  } catch {
+    return fallback
+  }
+  return readableApiError(error, fallback)
+}
+
+/**
  * The machine-readable `code` from a structured refusal, or null.
  *
  * `readableApiError` deliberately returns only the sentence, which is all most callers need. A

@@ -26,11 +26,34 @@ from .utils import persist_event
 _agent_locks: Dict[Tuple[str, str], asyncio.Lock] = {}
 
 
+@dataclass(frozen=True)
+class TurnRefusal:
+    """A refusal about what a request asked for, carried out to the caller that asked it.
+
+    Exists so a caller can answer *no* instead of *queued* (F108). Its **presence** is the
+    classification, which is why it is a separate object rather than another boolean beside
+    `terminal_failure`: that flag defaults to `True` and six early returns below take the default
+    without meaning it, so a caller gating on it would report a working request as failed. Nothing
+    but the refusal branch can construct one of these, so no early return can produce a false
+    positive however its defaults are written.
+
+    `entry_ids` is what makes it attributable. `schedule_agent` builds its turn from the oldest
+    eligible entry across the agent's *whole* queue, so a refusal frequently belongs to a
+    conversation the current caller never mentioned; without the ids, answering *no* to whoever
+    happened to arrive would report a refusal about somebody else's input.
+    """
+
+    status_code: int
+    detail: str
+    entry_ids: Tuple[str, ...]
+
+
 @dataclass
 class ScheduleResult:
     response: Optional[object] = None
     waiting_reason: Optional[str] = None
     terminal_failure: bool = True
+    refusal: Optional[TurnRefusal] = None
 
 
 def _lock_for(project_id: str, agent: str) -> asyncio.Lock:
@@ -178,7 +201,7 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                         "directory_state": exc.directory_state,
                     },
                 )
-            elif not transient:
+            elif not transient and not getattr(exc, "agent_wide", False):
                 # No `Run` was ever created for this attempt, so `selected` never became
                 # `delivered` and `return_run_entries`'s own abandonment bookkeeping never runs
                 # for it (F56) — a refusal raised here (a review target with no evidence naming a
@@ -186,6 +209,27 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                 # forever, and every entry queued behind it starves along with it. Count the
                 # attempt the same way a spawned-and-failed run's does, and give up on the same
                 # schedule, so a permanently wrong entry stops wedging the whole queue.
+                #
+                # **`and not agent_wide` is F114, and it is the same rule the `transient` half of
+                # this condition already applies.** F56's reasoning holds wherever the refused
+                # entry is *in the way of other input* — which is every example in the list above.
+                # It does not hold where the refusal stops the agent running at all: no runner is
+                # bound, its CLI is not installed, its runner row is gone. Nothing is starving
+                # behind that entry, because nothing for that agent could run either way, so
+                # dropping the head of the queue buys nobody a turn — and it costs the operator
+                # the input the product promised to hold until they performed the repair (F96).
+                #
+                # Measured before this line existed: three messages to an unbound agent destroyed
+                # the first in under two seconds, and two clicks of the Continue button — the
+                # control the conversation view offers for exactly this situation — destroyed it
+                # faster. Every schedule counted an attempt, so the operator's own attempts to
+                # find out why nothing was happening were what consumed the allowance.
+                #
+                # Only refusals that are *certainly* agent-wide carry the flag. A refusal that
+                # blocks one entry keeps counting, including the one that looks environmental and
+                # is not: a task's checkout that could not be prepared is the **task's** workspace,
+                # not the agent's, so other input really could run and the head entry really is in
+                # the way (design D3a).
                 abandoned: list[InboundQueueEntry] = []
                 for entry in selected:
                     entry.delivery_attempts = (entry.delivery_attempts or 0) + 1
@@ -224,9 +268,24 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
             # "agent is already running" above without an event, because a queue waiting its turn
             # is the system working. The entry keeps `delivery_attempts` at whatever it was, stays
             # `queued`, and the next tick tries again.
+            # Carried out only when the refusal is about what was asked (design D10). A
+            # non-transient refusal about the *environment* — no runner bound, the CLI missing
+            # from PATH — is why the queue exists: the entry waits, the operator performs the
+            # repair, and binding a runner delivers it (F96). Answering those as failures would
+            # discard input the Hub promised to keep.
+            refusal = (
+                TurnRefusal(
+                    status_code=exc.status_code,
+                    detail=exc.detail,
+                    entry_ids=tuple(entry.id for entry in selected),
+                )
+                if getattr(exc, "request_level", False) and not transient
+                else None
+            )
             return ScheduleResult(
                 waiting_reason=exc.detail,
                 terminal_failure=not transient,
+                refusal=refusal,
             )
         return ScheduleResult(response=response, terminal_failure=False)
 

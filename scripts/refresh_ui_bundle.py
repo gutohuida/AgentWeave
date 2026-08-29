@@ -34,6 +34,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 UI_DIST = REPO_ROOT / "hub" / "ui" / "dist"
 UI_SRC = REPO_ROOT / "hub" / "ui" / "src"
 STATIC_UI = REPO_ROOT / "hub" / "hub" / "static" / "ui"
+#: Named here rather than taken from `hub.main.UI_BUILD_STAMP`, which is imported inside `main()`
+#: after the path is set up. `stale_build` runs before that and only needs the file name.
+UI_BUILD_STAMP_NAME = "ui-build-stamp.json"
 
 sys.path.insert(0, str(REPO_ROOT / "hub"))
 
@@ -54,6 +57,45 @@ def differences(left: Path, right: Path) -> list[str]:
 
     walk(filecmp.dircmp(left, right), "")
     return found
+
+
+def newest(tree: Path, skip: set[str] = frozenset()) -> tuple[float, Path | None]:
+    """The most recently modified file under *tree*, and its path."""
+    latest, newest_path = 0.0, None
+    for path in tree.rglob("*"):
+        if not path.is_file() or path.name in skip:
+            continue
+        stamp = path.stat().st_mtime
+        if stamp > latest:
+            latest, newest_path = stamp, path
+    return latest, newest_path
+
+
+def stale_build() -> str | None:
+    """Why `dist/` cannot have been built from the source that is on disk now, or None.
+
+    **F110.** Without this, skipping `npm run build` was invisible and *green*: the stamp is written
+    from the current source and the strict assertion compares the stamp to the current source, so
+    running this script alone certified whatever `dist/` happened to hold as freshly built. Measured
+    2026-08-28 — three edited `.tsx`/`.ts` files, no build, twelve passing tests, and a JS bundle
+    whose hash had not moved. The one input neither the stamp nor the assertion consulted was
+    whether `dist/` is older than the source it is being certified against.
+
+    Compared against the newest file on each side, because a build reads all of the source and
+    writes all of the output: a source file newer than everything in `dist/` means the build has not
+    seen it. The stamp itself is excluded — this script writes it into `dist/`'s copy afterwards, so
+    including it would make every run look fresh for the same reason the check exists to prevent.
+    """
+    src_time, src_path = newest(UI_SRC)
+    dist_time, _ = newest(UI_DIST, skip={UI_BUILD_STAMP_NAME})
+    if src_path is None or dist_time == 0.0 or src_time <= dist_time:
+        return None
+    return (
+        f"{UI_DIST.relative_to(REPO_ROOT)} is older than "
+        f"{src_path.relative_to(REPO_ROOT)}, so it cannot have been built from the source that is "
+        f"here now. Run `cd hub/ui && npm run build` first — recording the stamp over a stale "
+        f"build is exactly what this check exists to prevent (F110)."
+    )
 
 
 def main() -> int:
@@ -90,6 +132,11 @@ def main() -> int:
 
     if not UI_DIST.exists():
         print(f"No build at {UI_DIST}. Run `cd hub/ui && npm run build` first.", file=sys.stderr)
+        return 1
+
+    stale = stale_build()
+    if stale:
+        print(stale, file=sys.stderr)
         return 1
 
     if STATIC_UI.exists():

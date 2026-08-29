@@ -305,3 +305,34 @@ async def withdraw_entry(
     entry.withdrawn_at = datetime.now(timezone.utc)
     await db.commit()
     return entry
+
+
+async def withdraw_refused_entry(
+    db: AsyncSession, project_id: str, entry_id: str, reason: str
+) -> bool:
+    """Withdraw an entry whose submitting request is being answered with a refusal.
+
+    Returns whether this call is the one that withdrew it, so the caller knows whether to announce
+    it. `False` means somebody got there first — `schedule_agent` withdraws at the delivery-attempt
+    limit on the very path that raised the refusal, and it announces its own.
+
+    **`populate_existing=True` is load-bearing, not defensive** (design D11). The session factory
+    is built with `expire_on_commit=False`, and `schedule_agent` runs in a session of its own, so
+    the caller's copy of this row still reads `state="queued"` after the scheduler withdrew it.
+    An ordinary `select()` returns that identity-mapped object with its stale attributes intact —
+    the check would be correct, tested, and unable to fire, because a test whose fake scheduler
+    shares the caller's session sees the write it is supposed to have missed.
+    """
+    result = await db.execute(
+        select(InboundQueueEntry)
+        .where(InboundQueueEntry.id == entry_id)
+        .execution_options(populate_existing=True)
+    )
+    entry = result.scalar_one_or_none()
+    if entry is None or entry.project_id != project_id or entry.state != "queued":
+        return False
+    entry.state = "withdrawn"
+    entry.withdrawn_at = datetime.now(timezone.utc)
+    entry.abandoned_reason = reason
+    await db.commit()
+    return True
