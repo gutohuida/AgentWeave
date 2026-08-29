@@ -7667,3 +7667,256 @@ is a visible change across the agent settings UI and wants its own review. It is
 `NO_CONTRACT_BY_DESIGN` in `hub/tests/test_request_strictness.py` with that reason, so the exemption
 is a decision on the record rather than a silence — but a named exemption over a live defect is not
 a fix.
+
+---
+
+## F118 (B) — every task id in every recorded transcript reads `ta<redacted>`, because `task-` ends in `sk-`
+
+**Status:** fixed this session (`hub/hub/runner_events.py`, `src/agentweave/diagnostics.py`), with
+nine tests watched red first and the repair driven live on 8011.
+
+Found driving row 16 of the coverage matrix. Reading the stored transcript of two agents editing one
+file, every identifier that should have said *which task* was gone:
+
+```
+tool_use   mcp__agentweave__update_task {"task_id": "ta<redacted>", "status": "completed"}
+tool_use   Read {"file_path": "C:\\...\\.agentweave\\tasks\\ta<redacted>\\calc.py"}
+tool_result "16ddfc6 Auto-snapshot: beta's turn on ta<redacted>"
+tool_result "On branch agentweave/task/ta<redacted>\nnothing to commit, working tree clean"
+```
+
+**The cause is two characters.** `_SECRET_VALUE_RE`'s second alternative is `sk-[A-Za-z0-9_=-]+`,
+the OpenAI key prefix, and it was **unanchored** — so it matched the `sk-` inside the word
+`ta·sk-479933b7ec7f`. Reproduced at the function, no server required:
+
+```
+redact_secrets("task-479933b7ec7f")                  -> 'ta<redacted>'
+redact_secrets("subtask-1")                          -> 'subta<redacted>'
+redact_secrets("agentweave/task/task-670a6d4a5b72")  -> 'agentweave/task/ta<redacted>'
+```
+
+`task-<12 hex>` is the shape the Hub mints for the primary key of **every** task, so this fired on
+every task id in every stored transcript, in every project, since the redactor shipped. `subtask-1`
+shows one trailing character is enough.
+
+**Why it matters more than a cosmetic loss.** The task id is the join between a transcript and the
+board. An operator reading an agent's output to answer *"what did this run actually touch"* had the
+one identifier that answers it replaced by a redaction marker — and, because the marker looks
+deliberate, it reads as the product protecting a secret rather than as damage. The file paths under
+`.agentweave/tasks/<task-id>/` and the auto-snapshot commit messages went with it, so the transcript
+could not even be reconciled against git by hand.
+
+**The fix** anchors both credential prefixes with `(?<![A-Za-z0-9_])`: a prefix is only a prefix at
+the start of a word. The lookbehind deliberately does *not* reject `-`, because a hyphen does not
+start a word — `x-sk-abcdef0123456789` is still a key wearing its prefix and is still redacted,
+while `task-...` is not. The third alternative is untouched.
+
+Driven live after the fix, a real Haiku turn on a Hub restarted onto the repaired code:
+
+```
+tool_use    mcp__agentweave__get_task {"task_id": "task-020be941e2e8"}
+tool_result {"id":"task-020be941e2e8", ...}
+text        task-020be941e2e8
+```
+
+**This is F31 one alternative over, and the same lesson.** F31 narrowed the *third* alternative
+after measuring that it ate the Hub's own vocabulary. Nobody then asked the same question of the
+first two — and the answer was worse, because a document slug only sometimes runs to 32 characters
+whereas *every* task id contains `sk-` by construction. The F31 test file existed, was thorough,
+and contained no task id.
+
+---
+
+## F119 (B) — F31's repair landed in one of three copies of the same regex
+
+**Status:** Hub half fixed this session (`hub/hub/scheduler.py` now calls `redact_secrets`); the
+CLI's copy keeps its own third alternative deliberately, and that divergence is left for the
+operator.
+
+The same credential-redaction rule is written out three times:
+
+| Where | What it redacts | Third alternative |
+|---|---|---|
+| `hub/hub/runner_events.py:46` | agent transcripts | `[A-Za-z0-9+/=]{32,}` — narrowed by F31 |
+| `hub/hub/scheduler.py:42` | a loop's `error_summary` | `[A-Za-z0-9_=-]{32,}` — **pre-F31** |
+| `src/agentweave/diagnostics.py:35` | `doctor` output | `[A-Za-z0-9_=-]{32,}` — **pre-F31** |
+
+F31 measured its list against the transcript path and fixed that path. The other two kept the broad
+rule, so the exact strings F31 recorded as damage still vanish from the surface an operator reads
+when a **firing fails**, which is the one place a long identifier is most likely to appear:
+
+```
+_safe_error_summary(RuntimeError("could not start mcp__agentweave__record_evidence"))
+  -> "could not start <redacted>"
+_safe_error_summary(RuntimeError("could not start spread-fairness-metric-fix-for-idle-staff"))
+  -> "could not start <redacted>"
+```
+
+All three also carried F118's unanchored `sk-`.
+
+**Fixed for the Hub by deleting the copy, not by syncing it.** `_safe_error_summary` now calls
+`redact_secrets` from `runner_events`, so there is one definition inside the Hub and the next repair
+cannot land in only one of them. The CLI's copy stays separate on purpose — the CLI imports nothing
+from the Hub, which `runner_events.py`'s own docstring states as the reason it is a reimplementation
+in the first place. Its `sk-` anchor is fixed (F118 applies verbatim), its third alternative is not:
+what `doctor` prints is env and config values rather than the Hub's composed vocabulary, so F31's
+measurement does not transfer, and narrowing a *secret* filter on an unmeasured surface is the
+operator's call. **Open question for the operator: should the CLI's catch-all be narrowed too?**
+
+---
+
+## F120 (C) — a flow's claim of a task is recorded as an operator's transition, by nobody
+
+**Status:** open, filed not fixed. Confirms `SURVEY.md`'s code-read suspicion **S6**, unverified
+since 2026-08-23.
+
+Driving row 12, the flow's first firing claimed both of its tasks. The transition rows:
+
+```
+seq  task              from     to           actor_kind  actor_agent  origin
+5    task-524904110504 pending  assigned     operator    None         actor
+6    task-08afabab0ba6 pending  assigned     operator    None         actor
+7    task-524904110504 assigned in_progress  run         alpha        runtime
+```
+
+Rows 7 onward are exemplary — the run, the agent, the origin. Rows 5 and 6 say a *person* moved
+those tasks, and name nobody. No person was awake: this was `POST /jobs/{id}/run` fanning out to two
+agents. The scheduler passes `operator()` to `apply_transition` because the loop is acting with
+operator authority, and authority is genuinely what the *gate* needs — but it is not what the
+*history* records. The argued point of the transition machine is that "every recorded history
+describes a legal sequence" worth reading, and an operator auditing how a task came to be assigned
+is told the answer is themselves.
+
+Not fixed here: it wants an actor kind meaning "a loop, with operator authority", which touches the
+transition machine's declared vocabulary and every reader of `actor_kind`. That is a spec loop, not
+a drive fix.
+
+---
+
+## F121 (C) — one firing of a flow, two `JobRun` rows, and the badge says "2 runs"
+
+**Status:** open, filed not fixed. Possibly working as designed; recorded because the *word* is
+overloaded, not because the rows are wrong.
+
+A flow that dispatches two turns in one firing writes two `JobRun` rows with an identical
+`fired_at`, and increments `job.run_count` once per row:
+
+```
+run-9f783fb558f2  2026-08-29 15:49:46.910091  completed  manual  tick_count=1
+run-45a5e9048a54  2026-08-29 15:49:46.910091  completed  manual  tick_count=1   <- same firing
+run-16becaa17f09  2026-08-29 15:50:24.844657  completed  manual  tick_count=1
+run-03cfcff87109  2026-08-29 15:50:24.844657  completed  manual  tick_count=1   <- same firing
+```
+
+`POST /jobs/{id}/run` returned **one** `run_id` per call, and the API was called twice.
+`run_count` read 4.
+
+The per-row design is deliberate and well argued (`_stage_selection`: "Returns the `JobRun` id so
+the starter can record a refusal against it") — a dispatched turn needs somewhere to record its own
+outcome. But `JobCard.tsx:434` renders `{job.run_count} runs`, and the F25 comment four lines below
+it defines the same word as *"firings that actually ran"*. Both definitions are now live on one
+card, and a flow is exactly the case where they diverge. A third firing that dispatched one turn
+took the count to 5 for three firings.
+
+Nothing is *wrong* in the database. What an operator cannot do is read "how many times did this
+flow fire" off the card.
+
+---
+
+## Row 12 FLOWS and row 16 WORKTREES — driven end to end, and what held
+
+Both rows were `not reached` in every previous sweep. Driven 2026-08-29 on 8011 against this
+branch's code, in a fresh git project (`drive-wt-0829`, `proj-dc4d43543bea`) with three Haiku agents.
+
+**Row 16 — worktree isolation held completely.** Two agents, two tasks, both told to edit `calc.py`:
+
+- each got its own checkout at `.agentweave/tasks/<task-id>/` on its own branch;
+- both edits landed, on their own branches, as `Auto-snapshot: <agent>'s turn on <task>` commits;
+- **`main` was untouched** — `git show main:calc.py` still had only `add` and `sub`;
+- `GET /worktrees/conflicts` named both *task* workspaces (not the agents) and the one conflicting
+  path, `calc.py`, which is exactly what `ConflictInfo`'s docstring promises;
+- `GET /worktrees/<agent>` listed each agent's task checkouts with `provisioned: true` and
+  `grandfathered: false`, and provisioned nothing by being read.
+
+**Row 12 — a flow decomposed an approved document and reviewed its own work.**
+
+- Two independent tasks materialised onto the board from the approved document, into the flow's
+  queue, with their requirement links intact (`FR-1`, `FR-2`).
+- The first firing started **both** in parallel, one per agent — the property that distinguishes a
+  flow from a loop, and it works.
+- With a third agent present, a later firing resolved `gamma` — idle, holding no work, **not the
+  author** — as reviewer for `alpha`'s completed task, moved it to `under_review`, ran a real review
+  turn, and `gamma` approved it. The whole ladder, live.
+
+**Refusals that held, each naming what would work instead.** Every one of these was provoked
+deliberately:
+
+```
+completed -> under_review, author still assigned
+  403 "...it is still assigned to 'alpha', the agent recorded as completing it, so the move would
+       claim its own author is reviewing it. Assign a different reviewer, or clear the assignee to
+       review it yourself. Left as is, the task is claimable by nobody and 'alpha' counts as busy
+       for every other review in this project."
+
+completed -> approved
+  409 "Cannot move a task from 'completed' to 'approved'. From 'completed' the available
+       transitions are: rejected, under_review."
+
+record_evidence, same requirement, same task, same commit, twice
+  409 duplicate_evidence "...Recording the same demonstration twice makes the reviewer decide once
+       per copy and overstates FR-1's evidence count. If the wording is wrong, say so on that piece;
+       if the work has moved on, commit it first so the new evidence names the commit it
+       demonstrates."
+
+integration retry on a task in 'completed'
+  409 "Cannot retry integration for a task in 'completed': only an approved task has work to
+       integrate."
+```
+
+The agents *read* the duplicate-evidence refusal correctly — alpha's transcript reasons "evidence
+for FR-1 has already been recorded" and moves on rather than retrying.
+
+---
+
+## F122 (B) — a flow drives a task to `approved` by itself, and the work never reaches the branch
+
+**Status:** open, filed not fixed. **Needs an operator decision**, so it is deliberately not
+repaired here.
+
+The end of row 12's drive. A flow started `task-524904110504`, `alpha` implemented it and recorded
+evidence, a later firing resolved `gamma` as an independent reviewer, and `gamma` approved it. The
+board reads `approved`. `main` still has only `add` and `sub`:
+
+```
+GET /tasks/task-524904110504/integrations
+  { "outcome": "skipped",
+    "reason": "no accepted evidence names a commit, so there is nothing to merge",
+    "actor": "gamma", "target_branch": "main", "commit_sha": null }
+
+git show main:calc.py   ->  add, sub.  No power().
+```
+
+The gate itself is right and says exactly why. The problem is that **the flow cannot clear it.**
+Integration needs *accepted* evidence; `alpha`'s `ev-e735dfc4db23` was `review_state: awaiting` and
+stayed there, because accepting evidence needs `can_accept_evidence`, which is `false` on every
+agent a project creates. So the reviewer the flow itself resolved could approve the *task* and could
+never accept the *evidence* — the one step between an approved task and merged work is the one step
+no participant in a default flow is able to take.
+
+The operator is not exactly uninformed — `latest_integration.outcome` is on the task — but the
+headline says `approved`, and a flow with `stop_when_queue_empties` will happily drain and stop
+having merged nothing.
+
+**Three shapes, none of them obviously right, which is why this is a decision and not a fix:**
+
+1. a flow-resolved reviewer is granted `can_accept_evidence` for the task it was resolved for —
+   narrow, but it makes implicit a grant the product deliberately made explicit;
+2. approving a task with unaccepted evidence is *refused*, the way the author/reviewer gate refuses
+   — loud, but it wedges every project that has not turned the grant on;
+3. nothing changes in the machinery and the flow *says* it: an approved-but-unmerged task is
+   surfaced as a stall, the way an unstaffable review already is.
+
+Related but not the same: **F88** fixed the sibling capability `can_read_checkpoints` and quotes
+`api/v1/agents.py` on `can_accept_evidence` having once been "enforced everywhere and grantable
+nowhere". It is grantable now. What is new here is that the flow's own reviewer ladder never grants
+it, so the automation cannot finish what it started.

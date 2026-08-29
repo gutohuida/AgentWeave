@@ -90,11 +90,15 @@ DOM and DOW are restricted (e.g. `0 0 1 * 1`). Test: T-CRON.
 ### S5 — Scheduler pinned to UTC, UI says "server time" *(confirmed in code)*
 `scheduler.py:626` and `:683` both pass `timezone="UTC"`. Verify the UI copy. Test: T-CRON.
 
-### S6 — A loop claim is recorded as an operator action *(honesty, low)*
+### S6 — A loop claim is recorded as an operator action *(CONFIRMED LIVE 2026-08-29 — see F120)*
 `scheduler.py:978`: `apply_transition(session, claimed_task, "assigned", operator())`. The loop —
 not a person — claimed it, but the transition history will say the operator did. The whole point of
 the transition machine is that "every recorded history describes a legal sequence" worth reading.
 Test: T-LOOP (read `task_transitions` after a firing).
+
+**Confirmed** by driving row 12 on `proj-dc4d43543bea`: a flow's manual firing wrote
+`pending -> assigned  actor_kind=operator  actor_agent=None` for both of its tasks, with nobody
+awake. Filed as `FINDINGS.md` F120, open.
 
 ### S7 — A stopped loop sets `job.enabled = False` permanently *(design, verify recovery)*
 `scheduler.py:878` + `remove_job`. If an operator re-enables a job whose loop already stopped

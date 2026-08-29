@@ -53,3 +53,26 @@ Run the Hub suite with **`py -3.11 -m pytest hub/tests/ -q`**. Bare `python` res
 *has* pytest — so it runs and looks legitimate — but produces three false failures in
 `test_pty_runner.py` on a completely green tree. Measured 2026-08-23: bare `python` gave
 3 failed / 2755 passed; `py -3.11` gave 2758 passed / 84 skipped.
+
+## The 2026-08-29 fixture — rows 12 and 16
+
+`drive-wt-0829` at `C:\Users\huida\Documents\drive-wt-0829`, registered as `proj-dc4d43543bea` on the
+**8011** Hub (`sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0829/aw0829.db`), not on 8010.
+A four-line `calc.py` in its own git repo, three agents (`alpha`, `beta`, `gamma`) all on
+`claude-haiku-4-5-20251001`, and an approved change document (`spec/changes/olive-chimera/spec.html`,
+`spdoc-ee4305b82730`) whose two tasks materialised into a flow's queue.
+
+It is deliberately trivial subject matter, unlike `ledger`, because rows 12 and 16 are about *the
+machinery around the work* — parallel checkouts, conflict detection, reviewer resolution — and a
+one-line function is enough to make two branches diverge on the same line.
+
+Harnesses:
+
+- `t_row16_worktrees.py` — two agents, two tasks, one file; then `/worktrees` and
+  `/worktrees/conflicts`.
+- `t_row12_flows.py` — document → approve → flow → fire → parallel turns → review dispatch, and
+  archives the job in a `finally`. **Do not pipe its output through `head`**: SIGPIPE kills it before
+  the `finally` runs and leaves the job enabled.
+- `t_row17_integration.py` — approving a completed task, and what the integration gate says.
+
+The flow's job is archived. Nothing in this project is left enabled.
