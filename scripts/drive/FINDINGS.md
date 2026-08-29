@@ -7553,11 +7553,20 @@ directories" and reserves path confinement for Docker mode.
 But the two default-posture runs raised **no card at all**, and one of those wrote a file. So in the
 posture an operator is most likely to be running, nothing shows the path and nothing constrains it.
 
-**What the operator has to decide:** whether native mode is supposed to confine writes to the
-worktree (making this a defect in worktree setup), or whether the worktree is only ever a cwd and
-the operator is the boundary (making this a **documentation and `workspace_dir` honesty** problem —
-the column should not claim an isolation that was not enforced). Those are different changes, and
-this repository's rule is that a change needing a spec gets three rounds first.
+**Decided by the operator, 2026-08-29: the worktree is only ever a cwd, and the operator is the
+boundary.** Native mode is not to confine writes; path confinement stays a Docker-mode property. So
+this is a **`workspace_dir` honesty** problem, not a worktree-setup defect, and the change is:
+
+1. `Run.workspace_dir` must stop implying containment — it records where the run was *started*, not
+   where its writes landed.
+2. A write outside the worktree should be **detected and recorded** rather than passing silently.
+3. Evidence footprinting (F71) must learn about escapes, so work that left the worktree is not
+   invisible to attribution.
+4. The docs must say plainly that native mode does not confine and Docker mode does.
+
+The accepted risk, in the operator's words: work still lands in the real checkout — the operator
+just finds out about it. Queued as a spec loop; by this repository's rule it gets three rounds
+before a line of it is written.
 
 ---
 
