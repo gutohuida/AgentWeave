@@ -6895,6 +6895,16 @@ while implementing F108, upgraded the same night, and then **corrected**: see *T
 immediately below before reading the rest. What is genuinely new is the link to the flaky test, a
 cheap reproduction, three measured fixes, and a second affected test.
 
+**The fix is declined, 2026-08-29 — the operator will not pay 4× suite runtime.** The file-backed
+fixture works (12/12 clean against ~1-in-6) and costs roughly four times the suite's runtime on
+every local run and every CI job. The suite is *already* too long at ~23 minutes, so quadrupling it
+is the wrong trade for a 1-in-6 flake in three named tests whose cause is documented at the line and
+whose production path is proven unaffected. CI was green on all nine jobs at `c994af5` the same day.
+
+**Do not re-propose the file-backed fixture.** What is open instead is the broader question the
+decision surfaced — *the hub suite takes too long* — which is its own investigation and not this
+finding. Revisit F109 only in that context, or if the flake rate rises.
+
 ### This was not news, and the finding should have checked
 
 `test_agent_trigger_overrides.py:259` carries an `xfail` whose reason describes this mechanism in
@@ -7143,8 +7153,9 @@ decision rather than a repair.
 
 ## F111 (B) — a self-registered agent with no runner is told to install a binary named after itself
 
-**Status:** **open, and it is the un-fixed half of a finding believed closed.** Found 2026-08-28 by
-driving F108's own fix against the trial Hub.
+**Status:** **superseded by an operator decision, 2026-08-29 — self-registration leaves the product.**
+Found 2026-08-28 by driving F108's own fix against the trial Hub, and originally filed as a question
+about what a third sentence should say. It is not. See *The decision* at the end.
 
 Registered `unbound-driver` through `POST /agents/register`, bound it nothing, sent it a message:
 
@@ -7206,6 +7217,25 @@ that is **also** false. It runs itself; it is not waiting to be bound, and bindi
 the remedy. Neither existing sentence is true of this agent, which makes this a question about what
 the third sentence should say and which verdict owns it (`collaboration_ready` already draws a
 related line) — a design decision, not a one-line change. Left for a spec loop.
+
+### The decision, 2026-08-29 — there is no third sentence, because the population goes away
+
+The operator's answer to "does self-registration still belong in the product" was **no**, and the
+code agrees. Measured before asking:
+
+- **No shipped client calls `POST /agents/register`.** Not the CLI — `src/agentweave/` only ever
+  *reads* `self_registered` (`transport/http.py:570,579`). Not the UI — `hub/ui/src/api/agents.ts`
+  types the flag and `AgentCard.tsx:65` renders a badge from it, but nothing posts to the route. Not
+  `mcp_server.py`, which has no reference to either.
+- Its only callers are **~30 Hub test files** using it as a fast agent fixture, `.claude/skills/
+  e2e-loop/e2e.py`, and a row in `docs/reference/hub-api.md`.
+- It comes from the archived `2026-04-26-agent-self-registration` change — the watchdog era. The rot
+  is visible in the same file: `_CONTACT_MODES` still offers `"watchdog-spawn"` and `agents.py:668`
+  still *defaults* to it, for a subsystem that was deleted. That is **F3**, and it has the same root.
+
+So F111 and F3 both close by **deletion**, not by wording — the agent that reads the wrong sentence
+can no longer be created. The real cost is re-fixturing the ~30 test files that use the route for
+convenience. Queued as a spec loop.
 
 ---
 
