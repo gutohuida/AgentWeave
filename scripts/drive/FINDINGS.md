@@ -8623,3 +8623,113 @@ answer by reading queue entries, and (1) is a subset of it.
 | `GET /checkpoints/{id}/rendered` | 2,035 chars, envelope + body, honest about the task list not being conversation-scoped |
 | Cutover | predecessor `archived`, successor `open`/`handoff`, title derived not regenerated, queue entry `origin_type: checkpoint` addressed to the successor and framed with the preamble |
 | **The relay** | the predecessor was told **not** to write `CHECKPOINT_B.txt`; after `continue`, the successor wrote it, containing `RELAYTWO`. The handover carried the work across, end to end, and the file on disk is the proof. |
+
+
+## Row 11 LOOPS, third pass — the three stall shapes that had never been driven, and D6's coalescing
+
+`t_row11_stalls.py`, **28 of 28 verdicts held.** Nothing under `hub/` changed; the Hub on 8011
+(started 18:06:50, newest `hub/` commit 17:04) served this branch's code throughout.
+
+`_loop_stall_reason` has four branches and iteration 7 drove exactly one of them — the queue whose
+tasks are all `completed` and unapproved. The other three are now driven, against a live Hub, with
+the **exact** sentence asserted each time rather than a substring:
+
+| shape | set up as | the Hub said |
+|---|---|---|
+| gate, still workable | A `blocked`, B `pending` depending on A | `loop queue is stalled: 1 still awaiting a prerequisite's approval` |
+| gate, permanent | A `rejected`, B still depending on A | `loop queue is stalled: 1 gated on a rejected prerequisite that will not clear on its own` |
+| no gate, waiting on a person | dependency removed, B `blocked` | `loop queue is stalled: no claimable task among 1 open (1 blocked)` |
+
+Each arrived as a **409** from `POST /jobs/{id}/run`, and each left the loop alive: `ending_state`
+null, `job.enabled` true, `next_run` still set. Skipped is not stopped, and the product means it.
+Three further facts came out of the same drive, none of them previously driven:
+
+* **The dependency edge is operator-reachable and symmetric.** `POST /tasks/{B}/dependencies`
+  answered 201, and afterwards B's response carried `prerequisites: [A]` while A's carried
+  `dependents: [B]` — the graph reads from both ends without a second request.
+* **Design D6's coalescing works.** Firing the same stall twice appended **no** second row: the
+  existing `JobRun` went `tick_count` 1 → 2 with `fired_at` frozen at the first refusal, and no
+  second `job_run_skipped` event was persisted. Change the shape (reject the prerequisite) and a
+  **new** row appears while the old one's count stays at 2 rather than being resurrected. A stall
+  that lasts an hour therefore leaves one readable row, not twelve identical ones.
+* **Zero spend.** Every `JobRun` this loop ever wrote is a `skipped` stall with a null
+  `session_id`, and the loop's agent never left `idle`. Four firings, no runner ever touched.
+
+The `blocked` shape needed `blocked_reason` on the PATCH — a 422 that names the field, which is
+right. Worth recording only because the first run of the harness omitted it, the task stayed
+`in_progress`, and the firing then **claimed it and spent a real turn**. The harness now aborts if
+the setup status is not what the shape requires, rather than driving a different scenario than the
+one it prints. That accident is what found F127 and F128 below.
+
+One teardown note, not a finding: a loop whose job is merely disabled cannot be archived
+(`400 this loop is still running`), because `ending_state` is written only by a firing that meets a
+stop condition. The operator's own ending path is `PATCH /jobs/{id}` with `stop_reason`, which
+routes through the same `end_loop` a firing uses. Both drive harnesses now tear down that way.
+
+## F127 (B) — pressing Run on a healthy loop whose agent is busy answers 500 "Failed to fire job"
+
+Reproduced deterministically: `t_run_while_busy2.py`, **7 of 7 verdicts held**, against
+`proj-dc4d43543bea` on 8011.
+
+`_do_fire_job` has **two** branches that decline a firing and deliberately record nothing:
+
+1. `DECISION_IN_FLIGHT` — every candidate is already being worked. **This is the one F48 fixed.**
+   `run_job` re-derives the decision through `_loop_work_is_all_in_flight`
+   (`hub/hub/api/v1/jobs.py:1139`) and answers 409: *"Every task on this loop's queue is already
+   being worked. Nothing was started, and nothing is wrong."*
+2. the **busy guard** — `_loop_flow_busy_reason` (`hub/hub/scheduler.py:2083`), the loop's agent is
+   mid-turn and nobody else is free. It returns `False` before a `JobRun` is even constructed.
+
+F48's re-derivation cannot see the second, because it asks a different question:
+`_loop_work_is_all_in_flight` calls `decide_firing`, and `decide_firing` never reaches the busy
+guard. For a loop with ordinary claimable work the answer is `DECISION_CLAIM`, not
+`DECISION_IN_FLIGHT` — so `run_job` falls through to the branch below it and raises **500** with the
+bare fallback string `"Failed to fire job"`, because there is no `JobRun.error_summary` to quote.
+
+Measured, with the loop in perfect health at that moment: `ending_state` null, `enabled` true,
+`next_run` set, its one task still `pending`, and **no history row written at all** — so the
+operator gets a 500, no reason, and nothing in the loop's history that explains it. F48's own
+write-up names this exact harm: *"the operator was being told their flow had broken."*
+
+Reproducing it needs the free list genuinely empty, which is why the first attempt missed (see
+F128): park one active task on every sibling agent, put the job's own agent mid-turn, press Run.
+
+**Shape of the fix (not implemented — it wants a round).** The honest one is to make the
+re-derivation ask the same question the firing asked: `_loop_work_is_all_in_flight` should also
+consult `_loop_flow_busy_reason`, and `run_job` should answer 409 naming the busy agent. The
+narrow one — treating "no `JobRun` was written" as "nothing is wrong" — is wrong for the reason F48
+gives itself: inferring health from the *absence* of a row is how "the flow is fine" and "the flow
+broke" became indistinguishable in the first place. The cron path is unaffected; this is purely
+what the **manual Run button** reports.
+
+## F128 (B) — a loop runs on an agent its job does not name, whenever its own agent is busy
+
+Driven live in `t_run_while_busy.py` (that file's own BAD lines are this discovery). Job
+`busy-run` was created with `agent: gamma`. gamma was put mid-turn on an unrelated errand. Pressing
+Run answered **200**, and the work went to **alpha**: `conv-a51b18211d43`, agent `alpha`, origin
+`job`, loop `loop-c888f4edb675`, and the queued task's `assignee` read `alpha`.
+
+The mechanism is `_loop_flow_busy_reason` (`hub/hub/scheduler.py:270`), whose refusal needs both
+halves: the job's agent is busy **and** `_agents_that_are_free(session, project_id)` is empty. That
+list is **project-scoped**. Its docstring states the invariant that is supposed to make this safe:
+
+> A single-agent loop reaches that by the general rule with no branch of its own — its one agent is
+> the busy one and the free list is empty — which is what keeps this exactly as strict as before
+> for every loop that exists today.
+
+**That invariant only holds in a project with exactly one agent.** In a three-agent project a loop
+that names one agent is not single-agent as far as this check is concerned, and the comment at
+`scheduler.py:2081` — *"identical for every single-agent loop, so this branch behaves exactly as it
+did for all of them"* — is false there. Two consequences, both measured:
+
+* the substitution above: `job.agent` is silently only a default, so a loop bound to an agent for
+  its charter or its runner is run by a different agent with a different charter and runner;
+* F127's busy-guard refusal is effectively unreachable in a multi-agent project until every sibling
+  is also occupied — which is exactly the corner where it does fire, and answers 500.
+
+**Not a defect on its own reading** — design D12 chose width for flows deliberately, and
+`job.agent` really is D2's default. What is wrong is that nothing tells the operator: the job form
+takes an agent, the loop lists a label and an agent, and neither says "or whoever is free". This is
+**the operator's call**, and it is one decision with two shapes: either the free list becomes
+loop-scoped (a loop staffs only the agents it names, a flow staffs its roster), or the UI and the
+API stop presenting `job.agent` as who runs this loop. Filed, not fixed.
