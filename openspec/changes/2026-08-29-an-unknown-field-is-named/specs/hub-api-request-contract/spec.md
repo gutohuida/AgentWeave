@@ -1,4 +1,4 @@
-# api-request-strictness — delta
+# hub-api-request-contract — delta
 
 ## ADDED Requirements
 
@@ -25,6 +25,13 @@ refuse; it is a request the system answers completely, on its own terms. Such a 
 in its own text why it declines, so that a declining contract is distinguishable from one where the
 rule was never applied.
 
+Where a contract accepts a superseded vocabulary by translating it into its declared fields before
+validating them, the translation SHALL consume only the names it recognises and SHALL carry every
+other field forward to be refused. A translation that rebuilds the request from the names it knows
+discards the rest silently, which is this rule's own failure reintroduced inside the mechanism meant
+to satisfy it — and hidden better, because the contract's declaration says it refuses unknown
+fields while one of its vocabularies does not.
+
 The system SHALL detect a write contract that neither refuses undeclared fields nor states why it
 does not. The rule's failure mode is omission: it is enforced by writing nothing, so its absence is
 invisible on inspection and its cost surfaces only when a caller sends the field. Any check
@@ -47,6 +54,13 @@ performed once decays at the next route added.
 - **WHEN** a write contract answers an undeclared field by producing a value the caller could not have supplied
 - **THEN** that contract may accept the request without refusing the field
 - **AND** its own text states why it declines the rule
+
+#### Scenario: A translated legacy vocabulary refuses what it does not recognise
+
+- **WHEN** a caller submits a request in a superseded vocabulary the contract translates, carrying a field that vocabulary does not define
+- **THEN** the request is refused
+- **AND** the refusal names that field
+- **AND** a request in that vocabulary carrying only names it defines is accepted
 
 #### Scenario: A write contract that is silently lax is detected
 

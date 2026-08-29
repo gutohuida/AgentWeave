@@ -155,3 +155,132 @@ process. Task 1.1 exists to make round 2 re-derive them independently rather tha
 if the population differs, the proposal is wrong before anything else is checked.
 
 Nothing was implemented. No test was written or run; F116 is still open and still reproducible.
+
+---
+
+## Iteration 2 — F116-R2: the independent review round (13:03 local)
+
+**Branch and state reconciled, nothing to correct.** `STATE.json` said `iteration: 1`,
+`current: F116-R2`, heartbeat released at 12:22. `git log` matched exactly: `20abc75` (release),
+`e4722ff` (the R1 proposal), `eebcec4` (claim). Iteration 2 claimed the branch at 13:03.
+
+**Delivered:** `openspec/changes/2026-08-29-an-unknown-field-is-named/` revised — proposal, design,
+tasks and the delta. Tasks 1.1–1.4 ticked with what was measured. `openspec validate --strict`
+passes. **Nothing implemented**, per the round discipline.
+
+### The rule round 2 was given, and what obeying it cost
+
+Round 1's own instruction was *"do not read this table, re-derive it"*. That was obeyed: the route
+walk was written fresh before opening `proposal.md`'s audit section.
+
+**The count survives, twice.** Walk one classified endpoint annotations; walk two used
+`route.body_field` — FastAPI's own answer to what the body is. Both return **55 models, 36 strict,
+19 lax**, the same names on both sides. Round 1's foundation is sound.
+
+Round 2 also asked a question round 1 did not: what about models nested *inside* a body? Two are
+reachable one level down (`AgentQuestionCreate`, `QuestionOption`) and both already forbid. The hole
+is empty — but the enforcement test must recurse anyway, because "empty today" is exactly the state
+`TriggerAgentRequest`'s 36 strict siblings were in.
+
+### Three arguments were wrong. The decisions they supported were right.
+
+This is the failure mode the round discipline was written for, and it turned up three times in one
+round.
+
+**D2 rejected the self-declaring-marker alternative because it would "make laxness *expressible*
+again".** That is false. Under a `RequestModel` base, a subclass writing
+`model_config = ConfigDict(extra="ignore")` overrides the base and pydantic accepts it — run and
+confirmed. Laxness never stopped being expressible; the base only made it *visible*. The decision
+(exemption list lives in the test) is unchanged, and its real reason is now written down: an
+exemption should cost a second file and a second reader, not a self-declaration.
+
+**D3 said "three of the models needing it also set `populate_by_name` … or run `mode="before"`
+validators", naming four things.** Measured across all 55: **exactly one body model sets any
+`model_config` key besides `extra`** — `messages.MessageCreate` — and it is already in the strict 36,
+so it is not a model "needing it". No `spec_payload` model is a request body at all. Validators are
+not `model_config` and were never at risk from what the base sets. Decision stands; the risk it
+guards is one model and one key, not three.
+
+**The proposal claimed `post_agent_output` "gets better, not worse"** — that forbidding extras makes
+its `400`/`422` legacy-body fallback fire and do its job. It cannot. The fallback fires on what the
+*server* answers, and the Hub it was written for is an old one running old code; nothing done to
+this Hub's models reaches it. Against a current Hub the question does not arise at all:
+`AgentOutputCreate` already declares all six fields the CLI sends. The claim is struck and replaced
+with the true, smaller one — the value is prospective, not present. Round 1 also promised "two lax
+routes get better" and named one; there is no second.
+
+### D6 was proven, and proving it found a hole the change would have shipped
+
+Task 1.2 said prove the `mode="before"` ordering **by running it**. Done at the model and through the
+real route, with `extra="forbid"` on `ContextUsageCreate` alone:
+
+```
+POST …/agents/{a}/context-usage {"tokens_used":1200,"tokens_limit":200000}  -> 201
+POST …/agents/{a}/context-usage {"status":"measured",…,"wat":1}             -> 422 extra_forbidden: wat
+```
+
+D6 is right: the before-validator runs first. **But the same probe found what D6 did not say:**
+
+```
+POST …/agents/{a}/context-usage {"tokens_used":1200,"tokens_limit":200000,"wat":1} -> 201
+```
+
+`normalize_legacy` builds a *fresh* dict, so on the legacy path an unknown field is dropped by the
+translation before `extra` can see it. The route would have shipped **declaring that it refuses
+unknown fields while one of its two vocabularies did not** — this change's own defect, reintroduced
+inside the mechanism meant to satisfy it, and hidden better than the original.
+
+Round 2's first answer was to write that down as a stated limit in the delta. That answer was wrong.
+**The right one was already in the tree.** `TaskCreate`/`TaskUpdate` face the identical problem —
+legacy `assigned_to`/`assigned_agent` aliases reaching a model that forbids extras — and solve it by
+consuming only the aliases they recognise and passing everything else through, with the reason in a
+comment at `hub/hub/schemas/tasks.py:92`:
+
+> `# Remove legacy alias keys so extra='forbid' does not reject them`
+
+So `normalize_legacy` is rewritten to that shipped pattern (new task **3.5**), not exempted. Run
+against the real validator: every legacy shape still normalises (`{tokens_used, tokens_limit}` →
+measured 1200; `{context_usage: 0.4}` → 40%), and `{…, "wat":1}` now answers `422` naming `wat`.
+**The change needs no exemption for this route at all.** The operator's standing preference decided
+this — the cleanest solution, and "more work" is never the objection — at the one place in this
+round where taking the exemption was the easier move.
+
+### The risk class is now enumerated, not sampled
+
+A request body can carry two vocabularies by exactly two mechanisms, and both were counted across
+all 56 body models including nested ones:
+
+- **`mode="before"` model validators — three.** `ContextUsageCreate.normalize_legacy`, and
+  `TaskCreate`/`TaskUpdate.normalize_assignee_aliases`. All three read: two already correct, one
+  fixed by 3.5.
+- **Field aliases — one.** `MessageCreate` (`from`/`to`), which already carries `populate_by_name`
+  *and* `extra="forbid"` together, so both vocabularies work and unknown fields are still refused.
+
+There is no third mechanism and no fourth instance. Round 3's task 1.6 was rewritten to re-derive
+this rather than read it, because task 3.5 now rests on the enumeration being complete.
+
+### 1.3 — the capability home, decided while moving is still free
+
+**Its own document, renamed `hub-api-request-contract`** (`git mv`, round 2). No existing capability
+can hold a rule spanning the operator- *and* agent-facing write surface: `agent-capability-plane` is
+agent-facing (run credentials, the agent allowlist), `hub-interaction-feedback` is pointer and focus
+states, `runtime-diagnostics` is the doctor's surface. Renamed because `hub-` is the corpus's prefix
+for Hub-wide concerns while `api-` is used by no capability at all, and because a document named
+after one property (`strictness`) has nowhere to put the second requirement about a request body —
+`contract` is the subject, and the delta's own text already said "contract" seven times.
+
+### 1.4 — all nineteen call sites, not the fifteen the task asked for
+
+**Six of the nineteen have a UI write call site at all**, and every body sends declared fields only:
+`agent/trigger` ×3 (`tasks.ts:365`, `AgentOutputPanel.tsx:655`, `NewConversationSurface.tsx:98`),
+`accounting.ts:85`, `questions.ts:70`, `agents.ts:335` (from `AgentCreateDialog.tsx:185`), and
+`agentChat.ts`'s rename. `session/sync` is **read** in the UI; its writer is the CLI. The CLI's own
+bodies were re-read caller by caller and are clean, with `post_context_usage` the one that passes a
+caller-supplied dict straight through — round 1 said so and it is still true.
+
+**The five lax `project/spec/*` routes have no shipped caller of any kind** — only this repo's
+`scripts/drive` harnesses — which is the likeliest reason their strict twins in `agent_actions.py`
+were written and they were not.
+
+Round 1's second named hazard is also closed: `SessionSyncRequest` declares `data` and nothing else,
+and `sync_session` reads `body.data` at five sites and no sibling key.

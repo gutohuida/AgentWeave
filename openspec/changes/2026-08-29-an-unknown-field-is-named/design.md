@@ -47,26 +47,57 @@ omissions this change is closing, and it would be re-swept the next time someone
 
 **Rejected:** a marker attribute on the model that the test reads, e.g.
 `model_config = {"extra": "ignore", "json_schema_extra": {"aw_lax_reason": "…"}}`. Cleaner in one
-sense — the reason travels with the model — but it makes laxness *expressible* again, which is the
-property this change is removing. A hard-coded list in the test means adding an exemption is an edit
-to the enforcement itself, which is the friction that should exist. **Left open for R2/R3 to
-challenge:** the proposal's last open question.
+sense — the reason travels with the model — but a model that can exempt itself is exempted in one
+file, by the person adding it, with nothing that has to be convinced. The hard-coded list means an
+exemption is an edit to the enforcement, in a second file, which is the friction that should exist.
+
+**Round 2 corrected this decision's reasoning while keeping the decision.** Round 1 rejected the
+marker because "it makes laxness *expressible* again, which is the property this change is
+removing". That argument is false, and measurably so: under D1's base class a subclass writing
+`model_config = ConfigDict(extra="ignore")` **already** overrides the base and is accepted by
+pydantic — verified by running it. Laxness never stopped being expressible; D1 only made it
+*visible*. The list belongs in the test for the reason now stated above — who has to agree — not
+because the alternative would reopen a door this change closes. This is the failure mode the round
+discipline exists for: a right decision resting on a wrong argument, which a review that only checks
+outcomes would have passed.
 
 ### D3 — `RequestModel` sets `extra` and nothing else
 
 **Decided:** the base carries `model_config = ConfigDict(extra="forbid")` alone.
 
-Three of the models needing it also set `populate_by_name` (`messages.MessageCreate`,
-`spec_payload`-adjacent models) or run `mode="before"` validators (`tasks.TaskUpdate`,
-`agents.ContextUsageCreate`). A base that also decided `populate_by_name` would change how three
-models parse aliases as a side effect of a change about unknown fields. Those models set their own
-extra config keys on top; pydantic merges a subclass's `model_config` over its base's.
+A base that also decided `populate_by_name` would change how a model parses aliases as a side
+effect of a change about unknown fields. Subclasses set their own config keys on top; pydantic
+merges a subclass's `model_config` over its base's — verified by running it, including that a
+subclass setting `extra` itself wins over the base.
+
+**Round 2 corrected the facts behind this.** Round 1 said "three of the models needing it also set
+`populate_by_name` … or run `mode="before"` validators", naming `messages.MessageCreate`,
+"`spec_payload`-adjacent models", `tasks.TaskUpdate` and `agents.ContextUsageCreate`. Measured
+across all 55 body models: **exactly one sets any `model_config` key other than `extra`** —
+`messages.MessageCreate` (`populate_by_name`) — and it is already in the strict 36, so it is not one
+of "the models needing it". No `spec_payload` model is a request body at all. Validators are not
+`model_config` and were never at risk from what the base sets. The decision is unchanged and the
+merge risk is real but far narrower than stated: one model, already strict, one key.
 
 ### D4 — the audit becomes a test that walks the routes
 
 **Decided:** `hub/tests/test_request_strictness.py` builds the app, iterates `app.routes` for
 `APIRoute`s with a body field, unwraps the annotation to its `BaseModel` subclasses, and asserts
 each either has `model_config["extra"] == "forbid"` or appears in `LAX_BY_DESIGN`.
+
+**Round 2 fixed how the body is found.** Round 1 described classifying the endpoint's *parameters*.
+That re-implements a judgement FastAPI has already made and can disagree with it — a
+`Depends()`-injected pydantic model is a parameter and is not a body. Use `route.body_field`, which
+is FastAPI's own answer, and unwrap `body_field.field_info.annotation`. Round 2 ran both walks: they
+return the identical population of 55, so nothing is miscounted today, but only one of them is
+*defined* to stay correct.
+
+Two shapes the test must handle rather than assume away, both absent today and both checked:
+`route.body_field is None` (28 write routes take no body at all — they must be skipped, not failed),
+and the synthetic `Body_*` model FastAPI generates when a route declares several embedded body
+params. No route does that today; if one appears, the synthetic wrapper is not a model anyone wrote
+and asserting on it would be noise. It must be unwrapped to its fields' models or skipped by name,
+deliberately.
 
 This is the only part of the change that has a future. The 18 edits are one-time; the test is what
 means the nineteenth omission cannot ship. It also documents the count, so a reviewer can see the
@@ -93,9 +124,56 @@ legacy shapes it handles keep working.
 The one behaviour that changes: a payload carrying `status` **and** a legacy key returns from the
 validator unchanged (`schemas/agents.py:135`) and is then refused. That is a caller mixing the new
 and old vocabularies in one body, which no in-repo client does, and the refusal names the offending
-key. **R2 must confirm the `mode="before"` ordering claim by test, not by reading pydantic docs** —
-if extras were checked first, every legacy context-usage payload would start failing, which is the
-one way this change could break something quietly.
+key.
+
+**Round 2 proved the ordering rather than asserting it**, at the model *and* at the route. With
+`extra="forbid"` on `ContextUsageCreate` alone and the real route driven through the app:
+
+```
+POST …/agents/{a}/context-usage {"tokens_used":1200,"tokens_limit":200000}   -> 201
+POST …/agents/{a}/context-usage {"status":"measured","source":"x",…,"wat":1} -> 422
+    {"type":"extra_forbidden","loc":["body","wat"],"msg":"Extra inputs are not permitted"}
+```
+
+The before-validator runs first and extras are evaluated on its output. D6 stands.
+
+**But the same run found what D6 does not say, and it is a limit on the fix rather than a risk to
+it.** `normalize_legacy` does not edit the caller's dict; it builds a fresh `normalized` one from
+the keys it recognises. So on the legacy path an unknown field is *dropped before `extra` can see
+it*, and the route still answers `2xx`:
+
+```
+POST …/agents/{a}/context-usage {"tokens_used":1200,"tokens_limit":200000,"wat":1} -> 201
+```
+
+Round 2's first answer was to state that limit in the delta and accept it. **That answer was wrong,
+and the repository already contains the right one.** `TaskCreate`/`TaskUpdate` run a `mode="before"`
+validator over the same problem — legacy `assigned_to`/`assigned_agent` aliases arriving at a model
+that forbids extras — and solve it by consuming only the aliases they recognise and passing
+everything else through, with the reason written beside it (`hub/hub/schemas/tasks.py:92`):
+
+> `# Remove legacy alias keys so extra='forbid' does not reject them`
+
+`normalize_legacy` differs only in *building a fresh dict instead of editing the caller's*, which
+drops unknown keys as a side effect of how it happens to be written rather than as a decision. So
+**`normalize_legacy` is rewritten to the pattern already shipped one module over**: it keeps any key
+it did not consume, and `extra="forbid"` refuses it. Round 2 ran this against the real validator:
+
+```
+{"tokens_used":1200,"tokens_limit":200000}          -> OK, measured, 1200
+{"tokens_used":1200,"tokens_limit":200000,"wat":1}  -> 422 extra_forbidden: wat
+{"status":"measured",…,"wat":1}                     -> 422 extra_forbidden: wat
+{"context_usage":0.4,"source":"codex"}              -> OK, measured, 40%
+```
+
+Every legacy shape the validator exists to accept still works, and the rule now holds on both
+vocabularies with **no exemption at all**. This is the operator's standing preference applied to a
+place where taking the exemption was easier: the cleanest solution wins and "more work" is not the
+objection. It also removes an exemption that would have had to be true forever, and an exemption
+nobody wrote down is how this change's own defect got here.
+
+The delta states the general rule this produces — a translation consumes what it recognises and
+leaves the rest to be refused — rather than licensing a translated vocabulary to swallow anything.
 
 ## Risks
 
@@ -103,5 +181,6 @@ one way this change could break something quietly.
 |---|---|
 | A hub test sends an extra field to a now-strict route and goes red | Expected and wanted — each one is a caller that was being ignored. Fix the test's payload, do not relax the model. If a test's extra field turns out to be *meaningful*, that is a missing field on the model and a finding. |
 | A model needs `populate_by_name` and loses it | D3: subclass `model_config` merges over the base's. Checked per model at implementation. |
-| The `mode="before"` ordering assumption is wrong | D6: proven by a test that sends a legacy `context-usage` body and expects `200`, run before the change is believed. |
+| The `mode="before"` ordering assumption is wrong | **Closed in round 2** — proven at the model and through the route: a legacy body answers `201`, a modern body carrying an unknown key answers `422` naming it. |
+| A `mode="before"` translation swallows an unknown field before `extra` can refuse it | **Found in round 2** on `ContextUsageCreate`, which is why D6 now rewrites it to `tasks.py:92`'s consume-what-you-recognise pattern. R3's 1.6 looks for the others: this is the one shape where the rule silently does not reach, and it is invisible from the model's config. |
 | A new capability document is the wrong home for the rule | Open question for R2; the delta directory is the part that is expensive to move after `openspec-sync-specs`. |

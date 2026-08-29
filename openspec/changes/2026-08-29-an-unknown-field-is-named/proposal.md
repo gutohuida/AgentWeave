@@ -164,11 +164,18 @@ measurement rather than the assertion.
 | `api/tasks.ts:365`, `AgentOutputPanel.tsx:655`, `NewConversationSurface.tsx:98` | `agent/trigger` | `agent`, `message`, `conversation_id`, `overrides`, `spec_document`, `task_id` — all declared |
 | `transport/http.py:161` | all writes | already strips `project_id` and seven identity fields *because* most schemas forbid extras |
 
-**Two lax routes get better, not worse.** `post_agent_output` (`http.py:496-503`) already catches
-`400`/`422` and retries with a legacy body — a fallback written for a Hub too old to know
-`kind`/`payload`/`run_id`/`sequence`. Today a lax old Hub swallows those silently and records output
-with its structure lost; forbidding makes the fallback fire and do its job. That is F116's own
-argument, one route over.
+**Round 2 struck a claim that was here and did not survive checking.** Round 1 wrote that
+`post_agent_output` (`http.py:496-503`) "gets better, not worse": it catches `400`/`422` and retries
+with a legacy body, a fallback written for a Hub too old to know `kind`/`payload`/`run_id`/
+`sequence`, so — the argument went — forbidding makes that fallback fire and do its job.
+
+**It cannot.** The fallback fires on what the *server* answers, and an old Hub runs old code; nothing
+this change does to this Hub's models reaches it. And against a current Hub the question does not
+arise: `AgentOutputCreate` declares all six fields the CLI sends (`schemas/agents.py:246-254`), so
+forbidding extras there is a **no-op for every caller in the tree**. Its value is prospective and
+worth stating as such — if a later Hub drops a field the CLI still sends, the CLI is told which one
+instead of having it absorbed, which is the condition the fallback was written to detect and today
+cannot. Round 1 also promised "two lax routes" and named one; there is no second.
 
 **Two hazards a reviewer must check, not dismissed here.**
 
@@ -192,20 +199,87 @@ audit finds a request model where extras are load-bearing, or a shipped client t
 tolerance". The audit found **one** — `SpecDocumentCreate`, load-bearing on a shipped requirement —
 and it is exempted by name rather than swept. No shipped client relies on the tolerance. **Proceed.**
 
-## Open questions for review rounds
+## Round 2 — what was re-derived, and what it changed
 
-- **Does `api-request-strictness` deserve to be its own capability?** The rule spans 55 models across
-  every router, so it fits no existing capability document; but a new capability for one rule may be
-  the wrong granularity, and `agent-capability-plane` already states a shared HTTP/MCP contract.
-  R2 must decide, because the delta directory is the hard-to-undo part.
-- **R2 must verify the audit independently** by re-running the route walk, not by reading this
-  table. The count is the whole argument.
-- **R2/R3 must find every test that sends an extra field to a lax route.** Round 1 did not run the
-  hub suite with the change applied; the ~23-minute cost is real, but the number is not a guess to
-  carry into implementation.
-- **R3 must check** whether any lax model's laxness is depended on by the *UI* in a path round 1 did
-  not read — round 1 read the three `agent/trigger` call sites and `accounting.ts:85`, not all
-  nineteen.
-- **Should the exemption list live in the test or beside the model?** It is written in both here
-  (docstring plus test list), which is duplication; the alternative is a marker on the model itself
-  that the test reads.
+Round 2 did not read round 1's reasoning before opening the code. The count and the shape of the fix
+survived; **three of round 1's supporting arguments did not**, and one hazard round 1 named turned
+out to be a hole the change would have shipped with.
+
+**The count survives.** Two independent walks — one classifying endpoint annotations, one using
+FastAPI's own `route.body_field` — return the same 55 models and the same **36 strict / 19 lax**
+split, with the same names on each side. Round 1's foundation holds.
+
+**D6's ordering is proven, and a hole it did not know about is closed.** With `extra="forbid"` on
+`ContextUsageCreate` alone, a legacy `{tokens_used, tokens_limit}` body still answers `201` through
+the real route, and a modern body carrying `wat` answers `422` naming `wat`. But
+`{tokens_used, tokens_limit, wat}` *also* answered `201`: `normalize_legacy` builds a fresh
+dictionary, so on the legacy path an unknown field is dropped by the translation before `extra` can
+see it. The route would have shipped declaring that it refuses unknown fields while one of its two
+vocabularies did not — this change's own defect, reintroduced inside the mechanism meant to satisfy
+it, and hidden better.
+
+Round 2's first instinct was to write that down as a stated limit. The right answer was already in
+the tree: `TaskCreate`/`TaskUpdate` face the identical problem — legacy `assigned_to` aliases
+reaching a model that forbids extras — and consume only the aliases they recognise, passing the rest
+through to be refused, with the reason in a comment at `hub/hub/schemas/tasks.py:92`. So
+`normalize_legacy` is rewritten to that pattern instead, and round 2 ran it: every legacy shape still
+normalises, `{…, "wat":1}` now answers `422` naming `wat`, and **the change needs no exemption for
+this route at all.** The delta states the general rule rather than licensing the hole.
+
+**The second named hazard is closed.** `SessionSyncRequest` declares `data` and nothing else, and
+`sync_session` reads `body.data` at five call sites and no sibling key
+(`hub/hub/api/v1/session_sync.py:45-178`). Forbidding on the wrapper cannot reach the payload
+inside, which stays `Dict[str, Any]`.
+
+**Two vocabularies is the whole risk class, and it is now enumerated.** A request body can carry
+more than one vocabulary by exactly two mechanisms, and round 2 found every instance of each.
+`mode="before"` model validators: **three** across all 56 body models (including nested) —
+`ContextUsageCreate.normalize_legacy` and `TaskCreate`/`TaskUpdate.normalize_assignee_aliases`. All
+three were read; two are already correct and one is fixed by 3.5. Field aliases: **one** —
+`MessageCreate`, whose `from`/`to` aliases sit beside `populate_by_name` *and* `extra="forbid"`
+already, so both vocabularies are accepted and unknown fields are still refused. There is no third
+mechanism and no fourth instance. Round 1 named this hazard on one model; it is a class, and the
+class is closed.
+
+**A claim was struck.** Round 1's "two lax routes get better" argument for `post_agent_output` does
+not hold — see the breaking-change section, where it is now written up as retracted with the reason.
+
+**The capability is its own document, renamed `hub-api-request-contract`.** No existing capability
+can hold a rule that spans the operator- and agent-facing write surface both;
+`agent-capability-plane` is agent-facing, `hub-interaction-feedback` is pointer and focus.
+`hub-` is the corpus's prefix for Hub-wide concerns, `api-` is used by nothing, and a document named
+after one property has nowhere to put the second requirement. Moved with `git mv` while moving is
+still free.
+
+**Every lax route's callers are read, and one argument in D2 was wrong.** Six of the nineteen have a
+UI write call site; all six send declared fields only. The five `project/spec/*` ones have no
+shipped caller at all, which is the likeliest reason their strict twins in `agent_actions.py` exist
+and they do not. And D2 rejected the self-declaring-marker alternative on the grounds that it "makes
+laxness expressible again" — which is simply false: under a base class a subclass writing
+`extra="ignore"` overrides it and pydantic accepts that, as round 2 confirmed by running it. The
+decision is unchanged; its stated reason is now the true one (an exemption should need a second
+file and a second reader, not a self-declaration).
+
+D3's supporting facts were wrong too: it named "three of the models needing it" as also setting
+`populate_by_name` or running `mode="before"` validators. Measured across all 55, **exactly one body
+model sets any `model_config` key besides `extra`** — `MessageCreate` — and it is already strict, so
+it is not one of the models needing anything. No `spec_payload` model is a request body at all, and
+validators are not `model_config`. D3's decision stands; the risk it guards against is one model and
+one key, not three.
+
+A right answer resting on a wrong argument is the failure this repository produces most, and only a
+round that re-derives the argument finds it. Three turned up here.
+
+## Open questions for round 3
+
+- **Is any *other* shipped requirement served by tolerance?** One was found by reading a docstring
+  (`agent-document-creation`). A second would not be. R3 searches `openspec/specs/` rather than the
+  code.
+- **Re-derive the two-vocabulary enumeration.** Round 2 claims exactly three `mode="before"`
+  validators and one aliased model across all 56 body models, and that this is the complete risk
+  class. It is a claim from one script and one reading, and it is now the argument the whole of 3.5
+  rests on. R3 re-derives it rather than reading the paragraph — the same instruction round 2 was
+  given about the 36/19 count, for the same reason.
+- **Does inheriting `RequestModel` disturb anything the 36 already set?** Round 2 verified the
+  mechanism — a subclass setting other `model_config` keys keeps the base's `extra="forbid"`, and a
+  subclass setting `extra` itself wins — but not model by model. That is R3's 1.7.
