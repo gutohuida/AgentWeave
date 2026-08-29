@@ -26,16 +26,28 @@ in its own text why it declines, so that a declining contract is distinguishable
 rule was never applied.
 
 Where a contract accepts a superseded vocabulary by translating it into its declared fields before
-validating them, the translation SHALL consume only the names it recognises and SHALL carry every
-other field forward to be refused. A translation that rebuilds the request from the names it knows
-discards the rest silently, which is this rule's own failure reintroduced inside the mechanism meant
-to satisfy it — and hidden better, because the contract's declaration says it refuses unknown
-fields while one of its vocabularies does not.
+validating them, the translation SHALL remove every name that vocabulary defines and SHALL carry
+every other field forward to be refused. A translation that rebuilds the request from the names it
+knows discards the rest silently, which is this rule's own failure reintroduced inside the mechanism
+meant to satisfy it — and hidden better, because the contract's declaration says it refuses
+unknown fields while one of its vocabularies does not.
+
+What the translation removes SHALL be the vocabulary it defines, not the names it happened to read.
+A superseded vocabulary commonly offers several names for one value, and a request carrying two of
+them is what a rolling upgrade emits rather than a mistake: the translation reads one, and refusing
+the other would refuse a name the contract itself declares it accepts. A field the vocabulary does
+not define SHALL still be refused, and both vocabularies SHALL be refused on the same terms.
 
 The system SHALL detect a write contract that neither refuses undeclared fields nor states why it
 does not. The rule's failure mode is omission: it is enforced by writing nothing, so its absence is
 invisible on inspection and its cost surfaces only when a caller sends the field. Any check
 performed once decays at the next route added.
+
+A write request that declares no contract for its body SHALL be detected by that same check. A body
+accepted as an open mapping does not declare a field, so it cannot refuse one, and it evades a check
+that inspects contracts by having none to inspect — the rule's absence is invisible there twice
+over. Such a route SHALL either declare a contract or be recorded as declining, on the same terms as
+any other exemption.
 
 #### Scenario: An undeclared field is refused
 
@@ -61,6 +73,18 @@ performed once decays at the next route added.
 - **THEN** the request is refused
 - **AND** the refusal names that field
 - **AND** a request in that vocabulary carrying only names it defines is accepted
+
+#### Scenario: A superseded vocabulary carrying two names for one value is accepted
+
+- **WHEN** a caller submits a request carrying two names the superseded vocabulary defines for the same value, of which the translation reads one
+- **THEN** the request is accepted and translated
+- **AND** the name the translation did not read is not refused
+
+#### Scenario: A body with no declared contract is detected
+
+- **WHEN** a write route accepts its body as an open mapping rather than as a declared contract
+- **THEN** the system reports it as a defect
+- **AND** reporting it does not depend on the route being sent an undeclared field
 
 #### Scenario: A write contract that is silently lax is detected
 

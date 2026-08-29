@@ -43,18 +43,51 @@ starts only after round 3. Nothing here is closed by a plan existing.
       which `scripts/drive` uses. **The five lax `project/spec/*` routes have no UI caller and no
       shipped caller of any kind** — only this repo's drive harnesses — which is the likeliest
       reason their strict twins in `agent_actions.py` were written and they were not.
-- [ ] 1.5 **Round 3** — fresh comparison against the code. Specifically: search `openspec/specs/`
-      for any *other* requirement, besides `agent-document-creation`, that depends on a request
-      body being tolerated rather than refused. One was found by reading a docstring; a second
-      would not be.
-- [ ] 1.6 **Round 3** — re-derive round 2's two-vocabulary enumeration independently: that the only
-      ways a body carries more than one vocabulary are `mode="before"` model validators (round 2
-      counts three: `ContextUsageCreate.normalize_legacy`, `TaskCreate`/`TaskUpdate.
-      normalize_assignee_aliases`) and field aliases (round 2 counts one: `MessageCreate`, already
-      correct). Task 3.5 rests entirely on that enumeration being complete. Do not read round 2's
-      paragraph — run the walk.
-- [ ] 1.7 **Round 3** — confirm `RequestModel` inheritance does not disturb the response models
-      that share a module, and that no model in the 36 loses a `model_config` key in the rewrite.
+- [x] 1.5 **Round 3** — **a second one exists, and it is out of this change's reach.**
+      `spec-document-authority`, *The payload contract is versioned and forward compatible*
+      (`openspec/specs/spec-document-authority/spec.md:71`): "The Hub MUST preserve fields it does
+      not recognise across a read and re-write of the same document", scenario *An unrecognised
+      field survives a round trip*, "**AND** no validation error is raised on their account". That
+      tolerance is real, but it lives inside `SpecDocumentSubmission.document: Any`
+      (`agent_actions.py:1293`) and `MergeRequest.payload: dict` (`spec.py:250`) — one level *below*
+      models that already carry `extra="forbid"`. The requirement is satisfied by field typing, not
+      by model laxness, so nothing in section 3 can breach it. **Recorded in D-risks** because
+      narrowing either field into a model later would.
+      Two near-misses checked and cleared: `agent-stream-events`' *Cross-version compatibility*
+      speaks of "clients that ignore unknown **response** fields" and of text-only producers, which
+      send fewer fields, not extra ones — `AgentOutputCreate` is safe to tighten;
+      `agent-context-usage`'s *Legacy context compatibility* is **not** clear and is what 1.6 and
+      D8 are about.
+- [x] 1.6 **Round 3** — re-derived from pydantic's own decorator registry
+      (`__pydantic_decorators__`) rather than a grep, over the recursive closure of 56 body models.
+      **Round 2's pydantic-layer enumeration holds, and six further candidate mechanisms are
+      measured empty:** `model_validator(mode="before")` **3** (`ContextUsageCreate.normalize_legacy`,
+      `TaskCreate`/`TaskUpdate.normalize_assignee_aliases`), field alias **1 model**
+      (`MessageCreate`, `from`/`to`, with `populate_by_name`), and then
+      `model_validator(mode="wrap")` **0**, `field_validator(mode="before")` **0**,
+      `field_validator(mode="wrap")` **0**, v1 `@root_validator` **0**, v1 `@validator` **0**,
+      `Annotated` `BeforeValidator`/`WrapValidator`/`AliasPath` metadata **0**, `alias_generator`
+      **0**, custom `__init__` **0**, custom `__get_pydantic_core_schema__` **0**, overridden
+      `model_validate` **0**. The route-layer escape is also empty, measured not assumed: **no**
+      write route takes a `Request` parameter and **no** endpoint reads `request.json()`,
+      `request.body()` or `request.form()`, so no dependency rewrites a body before the model sees
+      it.
+      **But the enumeration was incomplete one layer up, and round 2 could not have seen it by
+      counting models.** Three write routes have no model at all (`body: dict`) — an unbounded
+      vocabulary, and the drafted test's blind spot. See D7, and tasks 2.2 / 3.6.
+      **And running round 2's own sentence for 3.5 broke it** — see D8 and the rewritten 3.5.
+- [x] 1.7 **Round 3** — clean, and measured four ways. (a) All **19** lax models set *no*
+      `model_config` of their own, so nothing is lost by inheriting. (b) Among the 36 strict, the
+      only one setting more than `extra` is `messages.MessageCreate` (`populate_by_name`) — round 2
+      is right; the `validate_by_alias`/`validate_by_name` keys that appear alongside it in the
+      merged config are pydantic 2.11 derivations of `populate_by_name`, not source, and appear on
+      no model that does not set it. (c) **No body model has a subclass**, so no `ConfigDict`
+      propagates from a request model onto anything else, and none has a non-`BaseModel` base that
+      would collide with `RequestModel`. (d) Exactly two body models are *also* reachable as
+      response models — `QueueSettings` and the nested `QuestionOption`. Both response paths return
+      constructed instances (`inbound_queue.py:72`, `:107`), so response validation is a model round
+      trip over declared fields; `extra="forbid"` cannot reach it. Named in D-risks because that
+      safety rests on the handlers' return type, not on the config.
 
 ## 2. Implementation — the base and the enforcement
 
@@ -66,8 +99,16 @@ Implementation begins only after 1.1–1.7.
       **`body_field`** (not its parameters — round 2's 1.1), unwrap
       `body_field.field_info.annotation` to its `BaseModel` subclasses, **recurse into those
       models' fields**, and assert `extra == "forbid"` or membership in `LAX_BY_DESIGN` with an
-      inline reason. Skip `body_field is None` (28 write routes take no body). **Run it now and
-      watch it fail**, naming `TriggerAgentRequest` among the nineteen.
+      inline reason. Skip `body_field is None` (**36** write routes take no body — round 3's count;
+      round 2's 28 was low). **Run it now and watch it fail**, naming `TriggerAgentRequest` among
+      the nineteen.
+- [ ] 2.2a **Round 3, D7** — the same test asserts a route with a body has a **contract**: if the
+      unwrap yields no `BaseModel`, that is a failure, not a skip. Carry a second named list
+      `NO_CONTRACT_BY_DESIGN` with a reason per entry, seeded with `agents.register_agent`
+      (deleted by F111) and `agents.patch_agent` (filed as its own finding — D7). **Run it now and
+      watch it name all three `dict` bodies**, before 3.6 removes one of them. Without this
+      assertion the whole test passes over them in silence, which is this change shipping its own
+      subject.
 - [ ] 2.3 Add a test asserting `POST …/agent/trigger` with a top-level `permission_mode` answers
       `422` naming that field — F116's exact body. **Run it and watch it fail.**
 
@@ -86,15 +127,43 @@ Implementation begins only after 1.1–1.7.
       `model_config` line — keeping any other key they set (D3). Round 2 measured that this is
       exactly one model: `messages.MessageCreate`, which keeps `populate_by_name`. Separate commit
       from 3.1–3.3 so the behaviour change and the refactor are reviewable apart.
-- [ ] 3.5 Rewrite `ContextUsageCreate.normalize_legacy` to `hub/hub/schemas/tasks.py:92`'s pattern
-      (D6, round 2): keep every key it did not consume, so `extra="forbid"` refuses it, instead of
-      returning a freshly built dict that drops unknown keys silently. Add a test for
-      `{"tokens_used":1200,"tokens_limit":200000,"wat":1}` -> `422` naming `wat`, alongside one
-      asserting each legacy shape still normalises.
+- [ ] 3.5 Rewrite `ContextUsageCreate.normalize_legacy` so the residue it carries forward is
+      `data` **minus the whole legacy vocabulary**, not minus the names its first-wins `next(...)`
+      selected (**D8, round 3 — this corrects D6's wording, which round 3 implemented and measured
+      failing**). Hoist the alias tuples to module level as `_USED`, `_LIMIT`, `_RATIO`, `_WHEN`
+      and take the vocabulary as their union plus the carried `source`, `model`, `session_id`,
+      `percent`; build `normalized` from `{k: v for k, v in data.items() if k not in VOCAB}` and
+      then `update()` the derived fields over it. Tests, all measured against the corrected shape
+      in round 3:
+      - `{"tokens_used":1200,"tokens_limit":200000,"wat":1}` -> `422` naming `wat`
+      - `{"status":"measured",…,"wat":1}` -> `422` naming `wat`
+      - each legacy shape still normalises: `{tokens_used,tokens_limit}`, `{context_usage:0.4}`,
+        `{percent:0}` -> `unavailable`, `{tokens_used,max_context_tokens}`
+      - **the four rolling-upgrade pairs D8 found, all accepted**:
+        `tokens_used`+`input_tokens`, `tokens_limit`+`context_limit`,
+        `context_usage`+`context_usage_ratio`, `observed_at`+`updated_at`. Two of these are named
+        by `agent-context-usage`'s *Legacy context compatibility*; a red test here is a breach of a
+        shipped requirement, not a payload to fix.
+      - `{"tokens_used":1200,"tokens_limit":200000,"breakdown":{"input_tokens":10}}` now yields
+        `breakdown={"input_tokens":10}` where today it yields `None` — the intended side effect of
+        the residue, asserted so it is a decision rather than a surprise.
+- [ ] 3.6 **Round 3, D7** — give `PUT …/project/instructions` a contract:
+      `InstructionsUpdate(RequestModel)` in `hub/hub/api/v1/instructions.py` with
+      `content: str = ""`, replacing `body: dict` and `body.get("content", "")`. Test that
+      `{"contents": "x"}` answers `422` naming `contents` — today it answers `200 {"content": ""}`
+      and **blanks the project's instructions**, measured by driving the real route in round 3. Remove it from
+      `NO_CONTRACT_BY_DESIGN` in the same commit.
+- [ ] 3.7 **Round 3, D8** — `normalize_assignee_aliases` (`hub/hub/schemas/tasks.py:86`) removes the
+      alias keys **unconditionally**, not only when `assignee` is absent. Measured today:
+      `TaskCreate {"title":"t","assignee":"a","assigned_to":"a"}` -> `422 assigned_to`, a
+      rolling-upgrade body refused a name the contract accepts, which the delta's new paragraph
+      forbids. One line: lift the `data = {k: v for k, v in data.items() if k not in (…)}` out of
+      the `data.get("assignee") is None` branch. Test both models with canonical-plus-alias bodies,
+      and assert the canonical value wins.
 
 ## 4. Verification
 
-- [ ] 4.1 The two tests from 2.2 and 2.3 pass.
+- [ ] 4.1 The tests from 2.2, 2.2a and 2.3 pass.
 - [ ] 4.2 Mutation-check both: revert `TriggerAgentRequest` to `BaseModel` and confirm each fails.
 - [ ] 4.3 Full hub suite. Round 2 already ran it with all 18 patched: **3510 passed / 84 skipped /
       1 xpassed / 0 failed**, identical to baseline, so this is a regression check against the
@@ -108,5 +177,10 @@ Implementation begins only after 1.1–1.7.
       confirm the `422` names `permission_mode`; then send the same posture via
       `overrides` and confirm the permission card still appears. A refusal that also broke the
       working path is not a fix.
-- [ ] 4.6 Update `scripts/drive/FINDINGS.md` F116's **Status:** line.
+- [ ] 4.5a **Drive 3.6 live too**: `PUT …/project/instructions` with `{"contents":"x"}` answers
+      `422`, and the stored instructions are **unchanged** — the second half is the point, since
+      the defect is the blanking, not the status code.
+- [ ] 4.6 Update `scripts/drive/FINDINGS.md` F116's **Status:** line, and file `patch_agent`'s
+      untyped body as its own finding (D7) with the `body.keys()` guard named — round 3 decided it
+      is a real defect that this change records rather than fixes.
 - [ ] 4.7 `openspec validate --specs --strict`, sync the delta, archive the change.

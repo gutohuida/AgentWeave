@@ -279,16 +279,106 @@ run under the probe. Round 1's open question is answered with a measurement inst
 the existing suite proves nothing about this rule today, which is what makes tasks 2.2 and 2.3 the
 substance of the change rather than its paperwork.
 
-## Open questions for round 3
+## What round 3 changed
 
-- **Is any *other* shipped requirement served by tolerance?** One was found by reading a docstring
-  (`agent-document-creation`). A second would not be. R3 searches `openspec/specs/` rather than the
-  code.
-- **Re-derive the two-vocabulary enumeration.** Round 2 claims exactly three `mode="before"`
-  validators and one aliased model across all 56 body models, and that this is the complete risk
-  class. It is a claim from one script and one reading, and it is now the argument the whole of 3.5
-  rests on. R3 re-derives it rather than reading the paragraph — the same instruction round 2 was
-  given about the 36/19 count, for the same reason.
-- **Does inheriting `RequestModel` disturb anything the 36 already set?** Round 2 verified the
-  mechanism — a subclass setting other `model_config` keys keeps the base's `extra="forbid"`, and a
-  subclass setting `extra` itself wins — but not model by model. That is R3's 1.7.
+Round 2 corrected three of round 1's *arguments* and left every decision standing. Round 3 corrects
+two of the change's *decisions*, and both were found by running something rather than reading it.
+
+**The population was never models — it was routes, and three routes have no model.** Rounds 1 and 2
+both counted `extra` across request *models*, twice, by two methods, and agreed: 36 strict, 19 lax.
+Round 3 re-derived it a third time and agrees again — but the question the change actually needs
+answered is *which write bodies refuse an unknown field*, and a body annotated `dict` is not a model
+and was never in the population. There are three:
+
+```
+POST  /projects/{id}/agents/register        (agents.register_agent)
+PATCH /projects/{id}/agents/{name}          (agents.patch_agent)
+PUT   /projects/{id}/project/instructions   (instructions.put_instructions)
+```
+
+The drafted test in 2.2 would have passed straight over all three: `body_field` is present, the
+unwrap finds no `BaseModel`, nothing is asserted, green. A change whose delta says *"the system
+SHALL detect a write contract that neither refuses undeclared fields nor states why it does not"*
+would have shipped a detector blind to the three worst cases — an omission invisible to itself,
+which is the exact failure the delta's own paragraph is about.
+
+And they are not academic. `put_instructions` reads `body.get("content", "")`: a body of
+`{"contents": "…"}` — one typo — answers `200` and **overwrites the project's instructions with an
+empty string**. Driven through the real route rather than inferred: after writing real text, a
+typo'd key answers `200 {"content": ""}` and the `GET` confirms it is gone. F116 loses a supervision
+posture; this loses the operator's text. `patch_agent` fails two ways at once: an unknown key is
+absorbed for a self-registered agent, and for a *configured* one it flips the reserved-name guard
+`set(body.keys()) <= _unrestricted_fields` into a `409` blaming the agent's name for a typo in a
+field.
+
+D7 decides what happens to each: `put_instructions` gets a model here (task 3.6), `register_agent`
+is recorded as declining because F111 deletes the route, `patch_agent` is recorded as declining and
+filed as its own finding — a wide `"x" in body` partial update whose modelling is a real behaviour
+change and belongs in its own review, not riding in on this one. The test carries both, named, with
+reasons (task 2.2a). **The delta gained a requirement paragraph and a scenario for this**: a body
+accepted as an open mapping declares no field, so it cannot refuse one, and it evades a contract
+check by having no contract.
+
+**D6's repair, taken at its word, breaches a shipped requirement.** Round 2's task 3.5 said the
+rewritten `normalize_legacy` should *"keep every key it did not consume"*. Round 3 implemented that
+sentence literally and ran it against the real validator. Four legacy bodies are refused:
+
+```
+{"tokens_used":1200,"input_tokens":1200,"tokens_limit":200000}          -> 422  input_tokens
+{"tokens_used":1200,"tokens_limit":200000,"context_limit":200000}       -> 422  context_limit
+{"context_usage":0.4,"context_usage_ratio":0.4}                         -> 422  context_usage_ratio
+{"tokens_used":1,"tokens_limit":10,"observed_at":1.0,"updated_at":1.0}  -> 422  updated_at
+```
+
+`normalize_legacy` picks each operand first-wins from an alias tuple, so *consumed* means the alias
+that won, not the alias set — and a body carrying two names for one operand is exactly what a
+rolling upgrade emits. Two of those four fields are named **in a shipped requirement**:
+`agent-context-usage`'s *Legacy context compatibility* — "readers SHALL normalize unambiguous legacy
+aliases including `tokens_used`, `tokens_limit`, `input_tokens`, `context_limit`, and ratio-form
+`context_usage`". Round 2 tested two legacy shapes and both happened to carry one alias each.
+
+The correction (D8): the residue is the request minus the **whole** legacy vocabulary, not minus the
+names that were read. Verified over twelve bodies — every legacy shape normalises exactly as today,
+the modern path is untouched, and only the genuinely undeclared field is refused. The precedent
+round 2 cited is right and its transcription was wrong: `tasks.py:92` removes *both* assignee
+aliases whichever one it read. That precedent also carries the narrower version of the same hole —
+`TaskCreate {"assignee":"a","assigned_to":"a"}` answers `422 assigned_to` today — which is now a
+one-line task 3.7 rather than a finding, and a new delta scenario.
+
+**What round 3 confirmed rather than corrected.** The two-vocabulary enumeration holds at the
+pydantic layer, re-derived from `__pydantic_decorators__` instead of a grep, with six further
+candidate mechanisms measured empty (`mode="wrap"` model validators, `mode="before"` and `wrap`
+field validators, v1 `@root_validator`/`@validator`, `Annotated` before/wrap/alias metadata,
+`alias_generator`, custom `__init__`, custom `__get_pydantic_core_schema__`, overridden
+`model_validate`) — and the route-layer escape is empty too: **no** write endpoint takes a `Request`
+or reads `request.json()`/`.body()`/`.form()`, so nothing rewrites a body before its model sees it.
+1.7 is clean four ways: all 19 lax models set no `model_config` of their own, `MessageCreate` is the
+only strict model setting more than `extra`, no body model has a subclass for a `ConfigDict` to
+propagate onto, and the two models that are *also* response models return constructed instances so
+`extra="forbid"` never reaches a response. And 1.5 found a second tolerance-dependent requirement —
+`spec-document-authority`'s forward-compatible payload contract — which is out of reach because its
+tolerance lives inside `document: Any` and `payload: dict`, below models that already forbid extras.
+
+## The questions round 3 was handed, and what it found
+
+- **Is any *other* shipped requirement served by tolerance?** **Yes, one:**
+  `spec-document-authority`'s *The payload contract is versioned and forward compatible* — "no
+  validation error is raised on their account". **Out of reach**: the tolerance is inside
+  `SpecDocumentSubmission.document: Any` and `MergeRequest.payload: dict`, below models that already
+  forbid. Recorded so that narrowing either field later is known to breach it.
+- **Re-derive the two-vocabulary enumeration.** **Holds at the pydantic layer** — re-derived from
+  `__pydantic_decorators__` with nine further candidate mechanisms measured empty, and the
+  route-layer escape (a dependency rewriting the body) measured empty too. **Incomplete one layer
+  up**: three routes have no model at all, which no count of models could have found. See D7.
+- **Does inheriting `RequestModel` disturb anything the 36 already set?** **No**, checked model by
+  model and four ways — see task 1.7. One thing rounds 1 and 2 did not ask and round 3 did: two body
+  models are *also* response models, and `extra="forbid"` reaches a response path. Both are safe
+  because their handlers return constructed instances, and that is now a named risk rather than an
+  accident.
+
+## What round 3 leaves open
+
+- **`patch_agent`'s untyped body** (D7). Filed as its own finding rather than fixed here. It is a
+  real defect of this change's own class; modelling it changes `400`s to `422`s across the
+  agent-editing UI and needs its own review.
+- **Nothing else.** Tasks 1.1–1.7 are closed. Implementation starts at 2.1.
