@@ -7920,3 +7920,53 @@ Related but not the same: **F88** fixed the sibling capability `can_read_checkpo
 `api/v1/agents.py` on `can_accept_evidence` having once been "enforced everywhere and grantable
 nowhere". It is grantable now. What is new here is that the flow's own reviewer ladder never grants
 it, so the automation cannot finish what it started.
+
+### F122, proved from the other side: the missing step is exactly one operator action
+
+Driven immediately after, on the same task, with no agent turn:
+
+```
+POST /project/spec/evidence/ev-e735dfc4db23/decision  {"decision":"accepted", ...}
+  -> review_state: "accepted", latest_review.actor_kind: "operator"
+
+GET  /tasks/task-524904110504/integration-preview
+  -> will_merge: true, targets: [2da8dc9ad076 on agentweave/task/task-524904110504, ...]
+
+POST /tasks/task-524904110504/integrations/retry
+  -> outcome "merged", commit 2da8dc9ad076 -> main
+
+git log --oneline main
+  bf6f1d7 Integrate approved work 2da8dc9ad076
+  2da8dc9 Auto-snapshot: alpha's turn on task-524904110504
+  2bdfb0e seed
+git show main:calc.py   ->  add, sub, power.
+```
+
+Nothing else changed. The task had been `approved` for eight minutes with `will_merge: false`;
+accepting one piece of evidence flipped the preview and the retry merged. So F122 is not a broken
+integration path — **the integration path is correct and complete**, and the gap is precisely that
+no participant in a default flow can perform the one operator action that opens it.
+
+## Row 17 INTEGRATION — driven end to end, and it held
+
+The same sequence covers row 17, which had not been driven on this branch. Beyond the merge itself:
+
+- the *second* target, `HEAD` — gamma's detached review checkout, pointing at the same commit — was
+  attempted and **skipped** with `"2da8dc9ad076 is already in main; there was nothing to merge"`
+  rather than merged twice;
+- `integration-preview` before the accept said `will_merge: false` with the same sentence the
+  skipped integration later recorded, so the operator could have predicted the outcome without
+  attempting it;
+- the refusal on a `completed` task (*"only an approved task has work to integrate"*) and the
+  refusal with no accepted evidence are two different sentences for two different causes.
+
+**One blemish, noted not filed:** the merged integration row reads `actor_kind: "operator"` with
+`actor: ""`. Same shape as F120 one table over — the record knows what kind of actor it was and does
+not name it. Not raised as its own finding because there is exactly one operator per instance today,
+so the empty string is unambiguous rather than wrong.
+
+**F75's fix confirmed live.** `gamma`, reviewing `alpha`'s work, recorded its own
+`manual_observation` (`ev-1cb189450dc8`) against `FR-1` with the *same digest* as the author's
+`implementation` evidence, and it was **accepted, not refused as a duplicate** — while `alpha`
+re-recording its own claim in a later turn *was* refused. The rule distinguishes a second author
+claim from an independent confirmation, which is exactly what F75 asked for.
