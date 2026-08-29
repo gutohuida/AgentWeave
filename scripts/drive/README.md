@@ -76,3 +76,21 @@ Harnesses:
 - `t_row17_integration.py` — approving a completed task, and what the integration gate says.
 
 The flow's job is archived. Nothing in this project is left enabled.
+
+## Row 19's crash half — four harnesses that kill the Hub, in the same fixture
+
+Added 2026-08-29, all against `drive-wt-0829` on 8011. Each one triggers a real turn, kills the
+Hub with `Stop-Process -Force` (so `lifespan`'s `terminate_all_active_runs()` never runs — a crash,
+not a bounce), restarts it from `hub/` on the same database, and reads what the operator sees.
+
+- `t_row19_crash.py` — the plain case: is the spawned CLI orphaned, is the run reconciled, is the
+  agent wedged, does the operator's message come back.
+- `t_row19_crash_card.py` — a crash with a **permission card** on screen.
+- `t_row19_crash_question.py` — a crash with **`ask_user`** blocking.
+- `t_row19_crash_task.py` — **three** crashes on one task-bound run, which is the only way to reach
+  `reconcile_interrupted_runs`' `if run.task_id and not returned_entry_ids` branch.
+
+They restart the Hub themselves, so running one leaves a Hub up on 8011 serving whatever code was
+on disk when it fired. Two things they cost time to learn: the `Run` row's pid is `claude.exe`
+itself and it dies with its Hub, and an interrupted run's `ended_at` is the **restart** time, so
+run durations read from the database are inflated by the outage.

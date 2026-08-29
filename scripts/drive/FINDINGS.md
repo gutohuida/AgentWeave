@@ -8280,3 +8280,63 @@ The product's honesty here is in labelling it, not in forbidding it.
 operator-facing block is expired explicitly on the crash path and the other is not mentioned. The
 answer is that one is stored state and the other is computed from the run, and only driving it
 shows which.
+
+## Row 19 x row 11 — a crash mid-firing, and F123
+
+`reconcile_stale_job_runs` is the second half of the startup pass and nothing had driven it either.
+Driven 2026-08-29 18:06, `scripts/drive/t_row19_crash_job.py`: a job fired by hand, the Hub killed
+eight seconds in, restarted.
+
+**The reconciliation itself is exactly right.** No `JobRun` is left `in_progress`, the firing is
+`failed`, and the summary is one an operator can act on rather than a stack trace:
+
+```
+run-5d31c6858841  status "failed"  trigger "manual"  tick_count 1
+error_summary: "Reconciled on Hub start: no live run behind this firing"
+```
+
+It reaches that by the `conversation_id` correlation the two tables share by convention rather
+than by constraint — `JobRun` and `Run` have no foreign key — and the correlation held.
+
+## F123 (C, open) — a crashed firing reads `failed` forever, including after the Hub itself retried it and the work succeeded
+
+Same specimen, sixteen seconds later:
+
+```
+job_runs   run-5d31c6858841  conv-eb547b1f68eb  status "failed"
+runs       run-5fe90fc12c65  conv-eb547b1f68eb  status "interrupted"   (the crash)
+           run-bf3961c3ee7d  conv-eb547b1f68eb  status "completed"     (the retry, 17:07:10)
+queue      entry-7f110f6fcc1c  origin_type "job"  state "delivered"  attempts 1
+```
+
+The Hub's own crash recovery put the job's message back, delivered it to a new run **on the same
+conversation**, and that run did the work and completed. The job's history does not say so. It
+says `failed`, and there is no second row for the retry — so the operator's only view of whether
+this job's work happened reports the opposite of what happened.
+
+**Mechanism, and it is one line.** `scheduler.finalize_job_run_for_conversation` selects
+`JobRun.conversation_id == … AND JobRun.status == "in_progress"` (`scheduler.py:1569-1574`).
+Reconciliation has already moved this row to `failed`, so the completing retry matches nothing and
+finalisation is a no-op. Every part is individually defensible: the firing *did* fail, and a
+terminal row should not be silently rewritten by a later run.
+
+**Not fixed, because the fix is a decision about what a `JobRun` is**, and the same table already
+has **F121** open against it (one firing, two `JobRun` rows; the badge counts turns not firings).
+The three shapes, costed:
+
+1. *Let the retry finalise the failed row* — smallest diff (drop the `in_progress` filter, or
+   widen it to `("in_progress", "failed")`), but it makes a terminal status mutable and erases the
+   fact that a crash happened at all.
+2. *Append a `JobRun` for the retry* — the history reads firing → failed → retried → completed,
+   which is what happened. But the retry is not a firing: `run_count`, `last_run` and the badge all
+   count these rows, so this inflates every one of them, which is precisely F121's complaint.
+3. *Leave the row and mark the job* — a `continuity_warning`-style field saying "the last firing
+   was interrupted; its work was retried and completed". `JobResponse` already carries
+   `continuity_warning`, so the surface exists.
+
+My reading is (3), because it is the only one that keeps the firing's record honest *and* tells the
+operator the work happened — but F121 and this should be decided together rather than one at a
+time, since both are about the same confusion between a firing, a turn, and the work.
+
+Severity **C**: no work is lost, and the operator can find the truth in the agent's conversation.
+It is the *job* view that is wrong, and that is the view a job exists to be read from.
