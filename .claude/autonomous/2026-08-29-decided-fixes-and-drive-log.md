@@ -344,3 +344,156 @@ by hand, and that reading is what D1 actually rests on.
 
 Nothing was implemented. `hub/hub/` is byte-identical to where iteration 1 left it — the probe was
 applied and reverted three times and `git status` is clean. F116 is still open and still reproducible.
+
+---
+
+## Iteration 3 — F116-R3: the second independent review (15:33 local)
+
+**Branch and state reconciled, nothing to correct.** `STATE.json` said `iteration: 2`,
+`current: F116-R3`, heartbeat released at 14:49. `git log` matched exactly: `368db0d` (release),
+`5d1215d` and `6a48ebf` (the R2 revisions), `c01411a` (claim). Iteration 3 claimed the branch at
+15:33.
+
+**Delivered:** `openspec/changes/2026-08-29-an-unknown-field-is-named/` revised again — proposal,
+design, tasks and the delta. Tasks 1.5–1.7 ticked with what was measured; two new decisions (D7,
+D8), three new implementation tasks (2.2a, 3.6, 3.7), two new delta scenarios and one sharpened
+requirement paragraph. `openspec validate --strict` passes. **Nothing implemented** — `hub/` and
+`src/` are byte-identical to where iteration 2 left them, and the one scratch test written to drive
+a claim was deleted before the commit.
+
+Round 2 corrected three of round 1's *arguments* and left every decision standing. Round 3 corrected
+two of the change's *decisions*. Both were found by running something, not by reading it.
+
+### The population was never models — and rounds 1 and 2 counted models, twice
+
+Round 1 counted `extra` across request models. Round 2 re-derived it by a second method and got the
+identical answer: 36 strict, 19 lax, 55 models. Round 3 re-derived it a third time, from
+`route.body_field` plus a recursive closure over the models' fields, and agrees again — 55 roots,
+56 in closure, 37 strict / 19 lax.
+
+All three counts answer a question the change does not ask. It needs to know *which write bodies
+refuse an unknown field*. A body annotated `dict` is not a model, so it was never in the population,
+and no re-derivation of a model count could ever have found it. There are three:
+
+```
+POST  /projects/{id}/agents/register        (agents.register_agent)
+PATCH /projects/{id}/agents/{name}          (agents.patch_agent)
+PUT   /projects/{id}/project/instructions   (instructions.put_instructions)
+```
+
+The test drafted in task 2.2 would have passed straight over all three — `body_field` is present,
+the unwrap finds no `BaseModel`, nothing is asserted, green. The change's own delta says *"the
+system SHALL detect a write contract that neither refuses undeclared fields nor states why it does
+not"*, and it would have shipped a detector blind to the three worst cases. That is this change's
+own subject, committed by the change.
+
+**They are not academic, and this was driven rather than read.** `put_instructions` reads
+`body.get("content", "")`. Through the real route:
+
+```
+PUT  {"content": "the operator's real instructions"}  -> 200 {"content": "the operator's real…"}
+PUT  {"contents": "a typo"}                           -> 200 {"content": ""}
+GET                                                   -> 200 {"content": ""}
+```
+
+One letter, and the operator's project instructions are gone. F116 loses a supervision posture;
+this loses text. `patch_agent` fails two ways at once — absorbed silently for a self-registered
+agent, and for a configured one it flips the reserved-name guard
+`set(body.keys()) <= _unrestricted_fields` into a `409` blaming the agent's *name* for a typo in a
+*field*.
+
+**D7 decides each rather than sweeping them.** `put_instructions` gets a model here (task 3.6): it
+is two lines and it is the live data-loss case. `register_agent` is recorded as declining, because
+F111 — the very next change in this queue — deletes the route, and writing a contract for it is work
+with a negative lifespan. `patch_agent` is recorded as declining and filed as its own finding: a
+wide `"x" in body` partial update whose modelling turns per-field `400`s into `422`s across the
+agent-editing UI, which needs its own review rather than riding in on this one. Task 2.2a makes the
+test assert a body **is** a contract, with both exemptions named and reasoned. A defect that is
+listed is a decision; a defect the walk cannot see is the omission this change exists to stop.
+
+### D6's repair, taken at its word, breaches a requirement that shipped first
+
+Round 2 found that `ContextUsageCreate.normalize_legacy` builds a fresh dict and so swallows unknown
+fields on the legacy path, and fixed it — task 3.5, in these words: *"keep every key it did not
+consume, so `extra='forbid'` refuses it."*
+
+Round 3's instruction was to re-derive the enumeration 3.5 rests on. It did that, and then did the
+thing the enumeration could not tell it: **implemented round 2's sentence literally and ran it.**
+Four legacy bodies are refused:
+
+```
+{"tokens_used":1200,"input_tokens":1200,"tokens_limit":200000}          -> 422  input_tokens
+{"tokens_used":1200,"tokens_limit":200000,"context_limit":200000}       -> 422  context_limit
+{"context_usage":0.4,"context_usage_ratio":0.4}                         -> 422  context_usage_ratio
+{"tokens_used":1,"tokens_limit":10,"observed_at":1.0,"updated_at":1.0}  -> 422  updated_at
+```
+
+`normalize_legacy` picks each operand first-wins from an alias tuple, so *consumed* means the alias
+that won, not the alias set — and a body carrying two names for one operand is not a mistake, it is
+what a rolling upgrade emits. Two of those four fields are named in a **shipped requirement**,
+`agent-context-usage`'s *Legacy context compatibility*:
+
+> readers SHALL normalize unambiguous legacy aliases including `tokens_used`, `tokens_limit`,
+> **`input_tokens`**, **`context_limit`**, and ratio-form `context_usage`.
+
+Round 2 tested two legacy shapes and each happened to carry one alias. This is the same shape as
+2026-08-28, when round 3 caught rounds 1 and 2 both breaching a four-day-old requirement — and it is
+sharper here, because the breach was inside the repair for the previous round's finding.
+
+**D8 corrects it:** the residue is the request minus the *whole* legacy vocabulary, not minus the
+names that were read. Verified over twelve bodies — every legacy shape normalises exactly as today,
+the modern path is untouched, and only the genuinely undeclared field is refused. One side effect,
+now asserted rather than discoverable: `breakdown`, a *declared* field the fresh dict silently drops
+on the legacy path, survives into the model.
+
+The precedent round 2 cited is right and its transcription was wrong. `tasks.py:92` removes **both**
+assignee aliases whichever one it read. And that precedent carries the narrower version of the same
+hole — measured live, `TaskCreate {"assignee":"a","assigned_to":"a"}` answers `422 assigned_to`,
+a rolling-upgrade body refused a name the contract itself accepts. One line, so task 3.7 rather than
+a finding, plus a delta scenario so the rule covers it.
+
+### What round 3 confirmed rather than corrected
+
+- **1.6, the pydantic layer holds.** Re-derived from `__pydantic_decorators__` — pydantic's own
+  registry — rather than a grep: 3 `model_validator(mode="before")`, 1 aliased model. Nine further
+  candidate mechanisms measured **empty**: `mode="wrap"` model validators, `before`/`wrap` field
+  validators, v1 `@root_validator`, v1 `@validator`, `Annotated` before/wrap/alias metadata,
+  `alias_generator`, custom `__init__`, custom `__get_pydantic_core_schema__`, overridden
+  `model_validate`. The route-layer escape is empty too: **no** write endpoint takes a `Request` or
+  reads `request.json()`/`.body()`/`.form()`, so nothing rewrites a body before its model sees it.
+- **1.5, a second tolerance-dependent requirement exists and is out of reach.**
+  `spec-document-authority`'s *The payload contract is versioned and forward compatible* — "no
+  validation error is raised on their account" — but that tolerance lives inside
+  `SpecDocumentSubmission.document: Any` and `MergeRequest.payload: dict`, below models that already
+  forbid extras. Recorded so that narrowing either field later is known to breach it. Two near
+  misses cleared: `agent-stream-events`' cross-version compatibility is about *response* fields and
+  text-only producers that send *fewer* fields, so `AgentOutputCreate` is safe to tighten.
+- **1.7 is clean four ways.** All 19 lax models set no `model_config` of their own. `MessageCreate`
+  is the only strict model setting more than `extra` (the `validate_by_*` keys beside it are
+  pydantic 2.11 derivations of `populate_by_name`, not source). No body model has a subclass, so no
+  `ConfigDict` propagates onto anything else, and none has a non-`BaseModel` base. And a question
+  rounds 1 and 2 did not ask: two body models are **also** response models (`QueueSettings`, nested
+  `QuestionOption`), so `extra="forbid"` reaches a response path — both safe, because their handlers
+  return constructed instances rather than dicts. That is now a named risk instead of an accident.
+
+### What a reviewer should distrust in this entry
+
+**D7's decision, not its finding.** That the three `dict` bodies exist is measured and that
+`put_instructions` blanks is driven. What is a judgement is deferring `patch_agent`: the argument is
+that modelling it changes `400`s to `422`s across the agent UI and belongs in its own review. If
+that is wrong, this change ships a named exemption over a live defect, which is better than a silent
+one but is not a fix.
+
+**The twelve-body verification of D8 is a model-level run, not a route-level one.** Round 2 drove
+`ContextUsageCreate` through the real route and round 3 did not — it validated against the real
+model class. The `mode="before"`-runs-before-`extra` ordering that makes this work is what round 2
+proved at the route, and nothing in D8 changes that ordering, but the twelve rows themselves have
+not been through HTTP. Task 4.5 should carry one of the rolling-upgrade pairs.
+
+**Nothing was implemented and the suite was not re-run.** Round 2's 26-minute measurement stands
+untouched, deliberately — no code changed. `hub/` and `src/` are byte-identical to iteration 2's
+tree; the only files this iteration wrote are the four under
+`openspec/changes/2026-08-29-an-unknown-field-is-named/`.
+
+**F116 is still open and still reproducible.** Three rounds are done and the change is ready to
+implement, which is exactly where the round discipline says it should be.
