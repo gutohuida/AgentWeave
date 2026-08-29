@@ -31,6 +31,9 @@ _PRIORITIES = ["low", "medium", "high", "critical"]
 # `hub/tests/test_task_transitions.py`. Restated rather than imported because this module is a
 # leaf that the schemas layer imports widely, and the transition module imports nothing.
 _ENTRY_STATUSES = {"pending", "assigned"}
+# Older writers name the assignee two other ways. Both models read them and neither
+# declares them, so both must also *remove* them — see the validators below.
+_ASSIGNEE_ALIASES = ("assigned_to", "assigned_agent")
 
 # Restated from `hub.run_task_binding.POLICIES` for the same reason, and pinned to it by
 # `hub/tests/test_run_task_binding.py`.
@@ -83,13 +86,17 @@ class TaskCreate(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_assignee_aliases(cls, data: Any) -> Any:
-        if isinstance(data, dict) and data.get("assignee") is None:
-            for key in ("assigned_to", "assigned_agent"):
-                if data.get(key):
-                    data = {**data, "assignee": data[key]}
-                    break
-            # Remove legacy alias keys so extra='forbid' does not reject them
-            data = {k: v for k, v in data.items() if k not in ("assigned_to", "assigned_agent")}
+        if isinstance(data, dict):
+            if data.get("assignee") is None:
+                for key in _ASSIGNEE_ALIASES:
+                    if data.get(key):
+                        data = {**data, "assignee": data[key]}
+                        break
+            # Remove the alias keys whichever name won — a rolling upgrade emits the
+            # canonical name *and* its alias in the same body, and stripping only when
+            # `assignee` was absent handed the survivor to extra='forbid', refusing a
+            # body the contract itself accepts.
+            data = {k: v for k, v in data.items() if k not in _ASSIGNEE_ALIASES}
         return data
 
     @field_validator("status")
@@ -192,11 +199,16 @@ class TaskUpdate(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_assignee_aliases(cls, data: Any) -> Any:
-        if isinstance(data, dict) and data.get("assignee") is None:
-            for key in ("assigned_to", "assigned_agent"):
-                if data.get(key):
-                    data = {**data, "assignee": data[key]}
-                    break
+        if isinstance(data, dict):
+            if data.get("assignee") is None:
+                for key in _ASSIGNEE_ALIASES:
+                    if data.get(key):
+                        data = {**data, "assignee": data[key]}
+                        break
+            # This model never removed them at all, so *every* alias body it read was
+            # then refused by extra='forbid' — the alias was accepted in principle and
+            # rejected in fact. Same line as its sibling above.
+            data = {k: v for k, v in data.items() if k not in _ASSIGNEE_ALIASES}
         return data
 
     @field_validator("status")

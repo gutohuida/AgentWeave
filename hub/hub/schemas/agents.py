@@ -8,6 +8,8 @@ from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from .common import RequestModel
+
 StreamEventKind = Literal[
     "text",
     "thinking",
@@ -32,6 +34,24 @@ CONTEXT_BREAKDOWN_FIELDS = {
     "reasoning_tokens",
     "cached_input_tokens",
 }
+
+# The legacy context-usage vocabulary, hoisted so `normalize_legacy` can subtract the
+# WHOLE of it from a body rather than only the alias it happened to read.
+#
+# `next(...)` picks first-wins, so a rolling upgrade that emits two names for one operand
+# — `tokens_used` *and* `input_tokens`, both named by `agent-context-usage`'s "Legacy
+# context compatibility" — leaves the loser behind. Subtracting only the winner would
+# hand that survivor to `extra="forbid"` and 422 a body the shipped requirement says the
+# Hub SHALL normalize. Subtract the vocabulary, not the reading.
+_USED = ("context_tokens", "tokens_used", "input_tokens")
+_LIMIT = ("limit_tokens", "tokens_limit", "context_limit", "max_context_tokens")
+_RATIO = ("context_usage", "context_usage_ratio")
+_WHEN = ("observed_at", "updated_at")
+# `source`, `model`, `session_id` and `percent` are read straight across rather than
+# through an alias, so they are consumed too.
+LEGACY_CONTEXT_VOCABULARY = frozenset(
+    _USED + _LIMIT + _RATIO + _WHEN + ("source", "model", "session_id", "percent")
+)
 
 
 class AgentSummary(BaseModel):
@@ -106,12 +126,12 @@ class AgentTimelineEvent(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class AgentHeartbeatCreate(BaseModel):
+class AgentHeartbeatCreate(RequestModel):
     status: str = Field(default="active", max_length=64)
     message: Optional[str] = Field(default=None, max_length=10000)
 
 
-class ContextUsageCreate(BaseModel):
+class ContextUsageCreate(RequestModel):
     status: Literal["measured", "estimated", "unsupported", "unavailable"]
     source: str = Field(min_length=1, max_length=64)
     basis: Optional[
@@ -136,36 +156,37 @@ class ContextUsageCreate(BaseModel):
         if not isinstance(value, dict) or "status" in value:
             return value
         data = dict(value)
-        used = next(
-            (data[key] for key in ("context_tokens", "tokens_used", "input_tokens") if key in data),
-            None,
-        )
-        limit = next(
-            (
-                data[key]
-                for key in ("limit_tokens", "tokens_limit", "context_limit", "max_context_tokens")
-                if key in data
-            ),
-            None,
-        )
-        ratio = data.get("context_usage", data.get("context_usage_ratio"))
+        used = next((data[key] for key in _USED if key in data), None)
+        limit = next((data[key] for key in _LIMIT if key in data), None)
+        ratio = next((data[key] for key in _RATIO if key in data), None)
         percent = data.get("percent")
         if ratio is not None:
             percent = ratio * 100 if isinstance(ratio, (int, float)) else ratio
-        observed_at = data.get("observed_at", data.get("updated_at", time.time()))
+        observed_at = next((data[key] for key in _WHEN if key in data), time.time())
         if isinstance(observed_at, str):
             with contextlib.suppress(ValueError):
                 observed_at = datetime.fromisoformat(observed_at.replace("Z", "+00:00")).timestamp()
+        # Start from the residue — everything this validator did not consume — so a field
+        # the legacy vocabulary does not name reaches `extra="forbid"` and is refused by
+        # name, instead of vanishing into a dict built only from keys we knew about. Same
+        # shape as `tasks.normalize_assignee_aliases`. One deliberate consequence: a
+        # declared field the old fresh-dict dropped (`breakdown`) now survives the legacy
+        # path, which is what a declared field should do.
         normalized = {
-            "status": "measured",
-            "source": data.get("source") or "legacy",
-            "basis": "provider_context",
-            "context_tokens": used,
-            "limit_tokens": limit,
-            "model": data.get("model"),
-            "session_id": data.get("session_id"),
-            "observed_at": observed_at,
+            key: item for key, item in data.items() if key not in LEGACY_CONTEXT_VOCABULARY
         }
+        normalized.update(
+            {
+                "status": "measured",
+                "source": data.get("source") or "legacy",
+                "basis": "provider_context",
+                "context_tokens": used,
+                "limit_tokens": limit,
+                "model": data.get("model"),
+                "session_id": data.get("session_id"),
+                "observed_at": observed_at,
+            }
+        )
 
         def degrade_to_unavailable() -> Dict[str, Any]:
             normalized.update(
@@ -239,7 +260,7 @@ class ContextUsageCreate(BaseModel):
         return self
 
 
-class AgentOutputCreate(BaseModel):
+class AgentOutputCreate(RequestModel):
     content: str = Field(max_length=MAX_STREAM_CONTENT_CHARS)
     session_id: Optional[str] = Field(default=None, max_length=128)
     kind: Optional[StreamEventKind] = None

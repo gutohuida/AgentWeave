@@ -22,7 +22,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +30,7 @@ from ...agent_colors import next_color_index
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, ProjectSession
+from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
 
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/session", tags=["session"])
 
 
-class SessionSyncRequest(BaseModel):
+class SessionSyncRequest(RequestModel):
     data: Dict[str, Any]
 
 

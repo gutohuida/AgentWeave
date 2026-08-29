@@ -53,6 +53,7 @@ from ...db.models import (
     SpecEditProposal,
     SpecRequirement,
 )
+from ...schemas.common import RequestModel
 from ...spec_manifest import (
     Manifest,
     SpecPathError,
@@ -326,7 +327,7 @@ async def list_documents(
     return {"documents": views}
 
 
-class EvidenceRecord(BaseModel):
+class EvidenceRecord(RequestModel):
     """What the operator records to demonstrate a requirement."""
 
     identifier: str = Field(max_length=32)
@@ -337,20 +338,20 @@ class EvidenceRecord(BaseModel):
     task_id: Optional[str] = Field(default=None, max_length=64)
 
 
-class EvidenceDecision(BaseModel):
+class EvidenceDecision(RequestModel):
     decision: str = Field(max_length=16)
     reason: str = Field(default="", max_length=10000)
 
 
-class DriftResolution(BaseModel):
+class DriftResolution(RequestModel):
     resolution: str = Field(max_length=32)
 
 
-class RetentionSetting(BaseModel):
+class RetentionSetting(RequestModel):
     policy: str = Field(max_length=16)
 
 
-class ReindexRequest(BaseModel):
+class ReindexRequest(RequestModel):
     """Optional inputs to a reindex. The body itself is optional; all fields default.
 
     `home` exists because the Hub refuses to choose one. `_select_home` treats a guess as

@@ -167,4 +167,31 @@ def test_the_probe_sees_the_whole_write_surface():
     assert len(_routes_with_bodies()) > 50
 
 
+@pytest.mark.asyncio
+async def test_instructions_refuses_a_misspelled_field_and_keeps_the_text(app, auth_headers):
+    """The status code is the smaller half of this.
+
+    `PUT .../project/instructions` read `body.get("content", "")` off an untyped dict, so a
+    body that named the field anything else answered 200 and wrote the empty string over
+    whatever was there. The assertion that matters is the second one: the text survives.
+    """
+    stored = await app.put(
+        "/api/v1/projects/proj-test/project/instructions",
+        json={"content": "the operator's actual instructions"},
+        headers=auth_headers,
+    )
+    assert stored.status_code == 200, stored.text
+
+    refused = await app.put(
+        "/api/v1/projects/proj-test/project/instructions",
+        json={"contents": "oops"},
+        headers=auth_headers,
+    )
+    assert refused.status_code == 422, refused.text
+    assert "contents" in refused.text
+
+    after = await app.get("/api/v1/projects/proj-test/project/instructions", headers=auth_headers)
+    assert after.json()["content"] == "the operator's actual instructions"
+
+
 assert os.environ.get("DATABASE_URL"), "conftest must have configured the test database"

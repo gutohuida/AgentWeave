@@ -3,13 +3,13 @@
 from typing import Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import InboundQueueEntry, Project
+from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...usage_accounting import accounting_snapshot, budget_state, conversation_usage
 from ...utils import persist_event
@@ -17,7 +17,7 @@ from ...utils import persist_event
 router = APIRouter(prefix="/accounting", tags=["accounting"])
 
 
-class BudgetUpdate(BaseModel):
+class BudgetUpdate(RequestModel):
     token_budget: Optional[int]
 
 

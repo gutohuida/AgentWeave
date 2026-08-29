@@ -5,6 +5,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from .common import RequestModel
+
 
 class QuestionOption(BaseModel):
     """One offered answer.
@@ -19,7 +21,7 @@ class QuestionOption(BaseModel):
     model_config = {"extra": "forbid"}
 
 
-class QuestionCreate(BaseModel):
+class QuestionCreate(RequestModel):
     from_agent: str = Field(max_length=64)
     question: str = Field(max_length=10000)
     blocking: bool = False
@@ -35,7 +37,7 @@ class QuestionCreate(BaseModel):
     multi_select: bool
 
 
-class QuestionAnswer(BaseModel):
+class QuestionAnswer(RequestModel):
     """The operator's answer.
 
     `answer` is always the human-readable form. `labels` carries the structure when options were

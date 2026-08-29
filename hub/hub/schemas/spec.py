@@ -20,6 +20,13 @@ class SpecDocumentCreate(BaseModel):
     default (ignore) rather than `"forbid"`, unlike this route's siblings —
     here the whole point is that stray identity or placement fields cost the
     caller nothing to send and gain them nothing either.
+
+    So this model deliberately does **not** inherit `RequestModel`, and is the
+    one named entry in `LAX_BY_DESIGN` (hub/tests/test_request_strictness.py).
+    Two shipped requirements stand behind that: `agent-document-creation`'s
+    "unexpressible rather than merely refused", and `spec-document-authority`'s
+    *The payload contract is versioned and forward compatible* — "no validation
+    error is raised on their account". Forbidding here would breach both.
     """
 
     title: Optional[str] = Field(default=None, max_length=256)

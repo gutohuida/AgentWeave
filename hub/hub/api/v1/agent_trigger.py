@@ -125,6 +125,7 @@ from ...scheduler import (
     enter_selected_task,
     finalize_job_run_for_conversation,
 )
+from ...schemas.common import RequestModel
 from ...spec_manifest import SpecPathError, validate_spec_path
 from ...sse import sse_manager
 from ...task_transition_service import TransitionRefusedError
@@ -166,7 +167,7 @@ CODEX_OPERATOR_DECISION_TIMEOUT = 120
 CODEX_OPERATOR_POLL_SECONDS = 2
 
 
-class TriggerAgentRequest(BaseModel):
+class TriggerAgentRequest(RequestModel):
     agent: str = Field(..., max_length=64, description="Target agent name (e.g., 'claude')")
     message: str = Field(..., max_length=10000, description="Prompt to send to the agent")
     conversation_id: Optional[str] = Field(default=None, max_length=64)
