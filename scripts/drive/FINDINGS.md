@@ -8795,3 +8795,45 @@ Filed as **B**, not **A**: nothing is lost or corrupted, and no run misbehaves. 
 feature that has a database table, a lifecycle, three routes, a precedence rule at the top of
 coverage, and a UI bucket — and that no operator can reach — is the shape this drive exists to
 find.
+
+### F128 — confirmed in isolation, 2026-08-29 iteration 10
+
+Iteration 9's caveat was that F128 was found by a harness asserting something else, and observed
+once. `scripts/drive/t_f128_substitution.py` is written for it, and holds **12 of 13** assertions:
+
+* three idle agents, a job configured `agent: gamma`, nobody parked, so the free list is genuinely
+  non-empty;
+* gamma put mid-turn on an unrelated errand, then Run pressed → **200**, not a refusal;
+* the conversation the firing created is `origin: job` and **ran on `alpha`** — one of the free
+  siblings, not gamma;
+* the loop's first task is `in_progress` with `assignee: alpha`;
+* and `GET /jobs/{id}` still answers `agent: gamma`. Nothing anywhere records that somebody else
+  did the work.
+
+Reproduced identically on three separate firings across three runs of the harness (`alpha` every
+time, with `beta` also free — so the choice is not random, though this harness does not establish
+what orders it).
+
+Two facts about *driving* a loop came out of it, neither of them defects, both worth knowing before
+writing the next harness:
+
+* **A loop delivers one task at a time.** Pressing Run again while the first errand is in flight is
+  refused **409** — *"Every task on this loop's queue is already being worked. Nothing was started,
+  and nothing is wrong"* — which is F48's re-derivation answering correctly.
+* **A Haiku errand does not close the task it was handed.** The turn answers the message and the
+  task sits `in_progress` indefinitely; four minutes of waiting proved it. The harness now has the
+  operator complete the task, which is a real operator action rather than a way around one.
+
+### F127 — reproduced a second time, in a shape nobody set up for it
+
+The second firing in that harness — healthy loop, one `pending` task, nothing in flight — answered
+**500 "Failed to fire job"**. The cause is F127 exactly: at that moment gamma was mid-turn, alpha
+was still finishing the turn the first firing started, and **beta was holding two `in_progress`
+tasks left over from an earlier drive**, so `_agents_that_are_free` was empty and the busy guard
+refused with nothing recorded.
+
+That matters for how F127 is read. `t_run_while_busy2.py` empties the free list deliberately, by
+parking a task on every sibling, and a reader could fairly ask how contrived that is. This one was
+not set up at all: **ordinary leftover work on one agent was enough**, in a three-agent project, to
+turn an operator's Run press into an unexplained 500. The narrower the roster and the longer the
+project has been used, the likelier it is.

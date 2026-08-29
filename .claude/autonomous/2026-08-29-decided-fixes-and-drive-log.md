@@ -1078,3 +1078,34 @@ now, and why).
 * **F129 is an absence**, and absences are the easiest thing to be wrong about. It rests on two
   greps — `detect_drift` has one caller in `hub/hub/`, and the UI's only occurrences of `drift` are
   the coverage-state word. Both are cheap to re-run and are quoted in the finding.
+
+### Iteration 10, second unit — F128 isolated (the clock allowed it)
+
+The drift work finished at 19:06, well inside `stop_at`, so `next_action`'s item (b) was done too:
+a harness written **for** F128 rather than one that tripped over it.
+`scripts/drive/t_f128_substitution.py`, **12/13**.
+
+Confirmed against artefacts, not status codes: three idle agents, a job configured `agent: gamma`,
+nobody parked; gamma put mid-turn; Run pressed → **200**; the conversation the firing created is
+`origin: job` and ran on **alpha**; the loop's task is `in_progress` with `assignee: alpha`; and
+`GET /jobs/{id}` still answers `agent: gamma`. Three firings across three runs, `alpha` every time.
+F128's caveat from iteration 9 — "observed once, by a harness asserting something else" — is
+discharged.
+
+**The one BAD is F127 reproducing, and it strengthens F127 rather than weakening this harness.**
+The second firing — healthy loop, one `pending` task, nothing in flight — answered
+**500 "Failed to fire job"**. At that moment gamma was mid-turn, alpha was finishing the turn the
+first firing started, and **beta was holding two `in_progress` tasks left over from an earlier
+drive**, so the free list was empty and the busy guard refused with nothing recorded.
+`t_run_while_busy2.py` had to park a task on every sibling to reach that state; here **ordinary
+leftover work on one agent was enough**. Written into FINDINGS.md under both findings.
+
+Two facts about driving loops, learned by being wrong twice and recorded in the harness itself: a
+loop delivers one task at a time (a second Run while the first is in flight is correctly refused
+409), and a Haiku errand does not close the task it was handed — four minutes of waiting proved it,
+so the harness now has the operator complete it.
+
+Spend: four Haiku turns across three runs. Teardown verified after each: no enabled job, no loop
+listed, every task this harness created rejected. The two stale `in_progress` tasks on beta are
+**older than this iteration** and were left alone — they are somebody else's drive state, and
+rejecting them would erase the very condition that reproduced F127.
