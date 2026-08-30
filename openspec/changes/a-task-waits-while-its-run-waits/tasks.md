@@ -1,8 +1,8 @@
 ## 1. Reproduce both halves as failing tests first
 
-- [ ] 1.1 Add `hub/tests/test_a_task_waits_while_its_run_waits.py`. Build F14's shape: an agent, a run bound to a task in `in_progress`, and a blocking question asked through `POST /questions` on the agent-facing router (`agent_actions.ask_operator_question`) with the run's own credential. Assert the current behaviour — `task.status == "in_progress"`, `blocked_reason is None`, `question.blocked_task_id is None` — and run it against unmodified code to confirm it passes. A reproduction that does not pass first is not a reproduction.
-- [ ] 1.2 Add F60's shape to the same file: the same setup, then the run moves the task to `completed` while the question is still unanswered. Assert what F60 measured — `tasks.status == "completed"`, `blocked_reason is None`, `questions.answered is False`, `declined is False`, `blocked_task_id is None` — and that nothing on the task response says a decision was made without the operator. Confirm it passes against unmodified code.
-- [ ] 1.3 Add the batch shape: `POST /questions/batch` with two blocking questions, and assert that today neither records `blocked_task_id` and the task does not move.
+- [x] 1.1 Add `hub/tests/test_a_task_waits_while_its_run_waits.py`. Build F14's shape: an agent, a run bound to a task in `in_progress`, and a blocking question asked through `POST /questions` on the agent-facing router (`agent_actions.ask_operator_question`) with the run's own credential. Assert the current behaviour — `task.status == "in_progress"`, `blocked_reason is None`, `question.blocked_task_id is None` — and run it against unmodified code to confirm it passes. A reproduction that does not pass first is not a reproduction.
+- [x] 1.2 Add F60's shape to the same file: the same setup, then the run moves the task to `completed` while the question is still unanswered. Assert what F60 measured — `tasks.status == "completed"`, `blocked_reason is None`, `questions.answered is False`, `declined is False`, `blocked_task_id is None` — and that nothing on the task response says a decision was made without the operator. Confirm it passes against unmodified code.
+- [x] 1.3 Add the batch shape: `POST /questions/batch` with two blocking questions, and assert that today neither records `blocked_task_id` and the task does not move.
 
 ## 2. Park at ask time
 
