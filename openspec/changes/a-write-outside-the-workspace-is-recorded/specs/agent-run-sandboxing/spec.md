@@ -15,10 +15,17 @@ agent's identity would be able to disagree with the first, and nothing could the
 
 The record SHALL name **which workspace was written into**, as a kind and a name, and not merely that
 the write left the run's own. The destinations are distinguishable and they do not mean the same
-thing: a write into the project's own directory sits there visibly, and a write into another
-workspace is committed onto that workspace's branch by the Hub's own snapshot, under a subject naming
-its owner's turn, and thereafter flows through review, evidence and integration attributed to the
-wrong actor.
+thing. A write into another agent's or task's workspace is committed onto that workspace's branch by
+the Hub's own snapshot, under a subject naming its owner's turn, and thereafter flows through review,
+evidence and integration attributed to the wrong actor. A write into the project's tracked tree lands
+where its owner's `git status` will show it.
+
+**The Hub's own working directory under the project root SHALL be a destination kind of its own, and
+SHALL NOT be reported as the project's directory.** The Hub seeds the repository's ignore rules with
+its own subtree on every turn, so a write there is the one part of the project root that is
+deliberately invisible to `git status` — the opposite of the tracked case above — and part of it is
+the Hub's own record-keeping about the very run doing the writing. Naming it "the project" would
+attach the mildest reading to the least visible destination.
 
 The record SHALL be bounded, and repeated writes to the same destination within one run SHALL notify
 the operator once rather than once per call.
@@ -31,6 +38,19 @@ something it may not have done.
 
 A run for which no observation was made SHALL be distinguishable from a run observed and found to
 have written nothing outside its workspace.
+
+The record SHALL NOT be a refusal and SHALL NOT be presented as one. The action it describes was
+allowed — by an operator who answered for it, or by a posture that checked nothing — and a record
+that reads as a refusal would tell the operator the write did not land when it did.
+
+**A run whose workspace is the project's own directory is outside this requirement's reach, and the
+absence of a record for it SHALL NOT be read as confinement.** Where the run's workspace and the
+project directory are the same — a read-only agent, a project that is not a repository, a machine
+with no git — every path inside the project is inside that run's workspace, including another
+agent's checkout. Such a run is correctly recorded as having written nothing outside its workspace,
+because its workspace is everything; it is also the least confined run the product has. The two
+readings are only compatible while the recorded directory is read as *where the run started*, which
+is what the companion requirement in `workspace-isolation` establishes.
 
 **Scope is part of the requirement, not a limitation of it.** What is recorded is that a file tool
 wrote outside the workspace. It SHALL NOT be described, labelled or surfaced as a complete account of
@@ -80,6 +100,18 @@ Named for exactly what it catches, it is coverage.
 - **WHEN** a file-writing call names a relative path that resolves outside the workspace only after
   traversal
 - **THEN** it is recorded as a write outside the workspace
+
+#### Scenario: The record is not a refusal
+
+- **WHEN** a write outside the run's workspace is recorded
+- **THEN** the record is not a refusal
+- **AND** it does not claim the action was refused or prevented
+
+#### Scenario: A run whose workspace is the project directory records nothing
+
+- **WHEN** a run's workspace is the project's own directory and it writes anywhere inside the project
+- **THEN** no write outside the workspace is recorded
+- **AND** the empty record is not a statement that the run was confined
 
 #### Scenario: Reads are not recorded
 
@@ -139,15 +171,9 @@ about. The refusals an operator never saw are precisely the ones they cannot oth
 A refusal SHALL be recorded once. A decision the operator already answered is already recorded, and
 recording it again tells them it happened twice.
 
-Only refusals SHALL be recorded **as refusals**. An allowed action is the ordinary case, and an
-event per allowed action buries the refusals among them.
-
-This constrains the refusal record, and it does not forbid every other durable event about a run.
-An event about an action that was allowed SHALL be recorded only where the action is not the
-ordinary case, SHALL NOT be presented as a refusal, and SHALL be bounded so that it cannot bury the
-refusals it sits beside. A file write leaving the run's workspace is the case this admits: it is
-rare rather than ordinary, it is recorded whether it was allowed by an operator or never checked at
-all, and it is notified once per destination per run rather than once per call.
+Only refusals SHALL be recorded **as refusals**. An allowed action is the ordinary case, and a
+refusal record with an entry per allowed action buries the refusals among them. This constrains
+what the refusal record may contain; it is not a rule about every durable event the system keeps.
 
 The recorded event SHALL name the refused action in terms the operator can read.
 
@@ -170,10 +196,3 @@ The recorded event SHALL name the refused action in terms the operator can read.
 
 - **WHEN** a refusal is recorded
 - **THEN** the action it names is readable rather than an internal method name
-
-#### Scenario: An allowed action that is not ordinary may still be recorded
-
-- **WHEN** a run is recorded as having written outside its own workspace
-- **THEN** that record is not a refusal
-- **AND** it does not claim the action was refused
-

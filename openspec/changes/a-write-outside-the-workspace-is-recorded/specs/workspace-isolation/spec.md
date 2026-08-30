@@ -19,6 +19,11 @@ in the same two-field form every reported checkout already uses. A destination g
 puts the reader back where the finding began: unable to tell whether the write landed in the
 project's own directory, in another agent's checkout, or in a task's.
 
+The kinds SHALL distinguish the Hub's own working directory beneath the project root from the
+project's tracked tree. They are not the same destination: the Hub's subtree is added to the
+repository's ignore rules by the Hub itself, so a write there is invisible to the owner's `git
+status`, while a write into the tracked tree is exactly what that command is for.
+
 #### Scenario: The recorded directory is where the run started
 
 - **WHEN** a run is started in a workspace
@@ -36,3 +41,10 @@ project's own directory, in another agent's checkout, or in a task's.
 - **WHEN** a write outside the run's workspace is recorded
 - **THEN** the destination is identified by workspace kind and name
 - **AND** a path that belongs to no workspace is identified as such rather than left unclassified
+
+#### Scenario: The Hub's own directory is not reported as the project's
+
+- **WHEN** a run writes into the Hub's working directory beneath the project root, outside any agent,
+  task or review checkout
+- **THEN** the destination is identified as the Hub's own directory
+- **AND** it is not identified as the project's tracked tree

@@ -64,6 +64,29 @@ this stays a transport-internal carrier and adds nothing to the stored payload.
 (`agent_trigger.py:1880`) and `_on_event` (`agent_trigger.py:2474`) each already have `work_dir`,
 `run_id`, `project_id` and `agent` in scope, for the same reason.
 
+**Round 3: that list is right and it is not sufficient.** The four values were re-checked and all
+four are there — `_execute_run` takes `work_dir: Optional[str]` alongside `project_id`, `agent` and
+`run_id` (`agent_trigger.py:1720-1740`), and so does `_execute_codex_appserver_run`
+(`:2389-2406`). But D4 classifies against **two** roots, not one: it needs the project root as well,
+to compute `worktree_path`, `task_worktree_path` and `review_path` and to tell `project` from
+`outside`. `repo_root` occurs **nowhere** in either function — measured across `agent_trigger.py`
+lines 1720-2274 and 2389-2752, zero occurrences. It is computed in the trigger body above and never
+passed down.
+
+So both functions take a new parameter. That is a small change and it is the right one: the
+alternative — re-reading the project row from the database inside a per-event callback — would put a
+query on every tool call of every run to answer a question that is constant for the run. Tasks 4.3
+and 4.3b are written as though the project root were already in scope; they are corrected to pass it.
+
+**Round 3 also confirms the one-population-site claim, with one boundary on it.** `kind="tool_use"`
+is constructed in exactly one place in `hub/hub` — `runner_events.py:154`, inside `tool_use_event` —
+so D2 holds for every event the Hub produces, and task 2.5c is answered rather than left conditional.
+The boundary: `record_agent_output`'s own docstring says it mirrors `POST .../output`, an ingest
+route that will accept a `tool_use` kind from a self-reporting agent the Hub did not spawn. Such a
+row has no `RunEvent` behind it and no workspace to check it against, which is correct — it is not a
+Hub-spawned run — but the claim is "one population site for the events the Hub produces", not "for
+every `tool_use` row in the database".
+
 Not the whole tool input on the event: that would duplicate what the payload already carries and
 invite a second consumer to grow a second opinion about what an input means.
 
@@ -75,21 +98,44 @@ will attribute it, and a read leaves nothing behind. Recording reads would also 
 enormous and unreadable — an agent reads outside its workspace constantly and correctly (the
 project's own source, its dependencies, the standard library).
 
-**Round 2: the list already exists in the product, twice, and must not become a third.**
-`runner_commands.py:210` disallows exactly `Edit,Write,NotebookEdit` for a read-only agent — the
-product's own statement of which Claude tools write — and `mcp_server.py:858` holds
-`_PATH_KEYS = ("file_path", "path", "notebook_path")`, its statement of where a path lives. Round 1's
-list added `MultiEdit`, which nothing else in this codebase recognises. Adding it is harmless in
-isolation (an unknown tool extracts nothing) but a third, unreconciled list is precisely the
-"two opinions about one thing" this design refuses for the boundary.
+**Round 2 said the list exists twice and must not become a third. Round 3 measured it: it exists
+three times, and round 2 reconciled against the wrong one.**
 
-`mcp_server.py` may import **only** stdlib plus fastmcp, so it cannot import `workspace_writes.py`
-and the lists cannot literally be one object. The codebase's shipped answer to exactly this is
-restate-and-assert: `OPERATOR_POSTURE` is restated in `mcp_server.py` and
-`test_permission_approver.py` asserts the two agree; `test_mcp_server_stdio_surface.py:95` asserts
-import and spawn agree about the tool surface. `workspace_writes.py` follows it — it holds the list,
-and a test asserts that every tool it calls a writer appears in `runner_commands`'s disallowed set
-and that its path keys are a subset of `_PATH_KEYS`.
+The third is `WRITING_TOOLS` in `hub/ui/src/components/agents/AgentTimeline.tsx:573`:
+
+```ts
+const WRITING_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'apply_patch'])
+```
+
+That is the same *concept* this change needs — tools whose call is a write, across both providers —
+and it is the timeline's basis for the "wrote to N files" summary an operator already reads. So
+`MultiEdit` is not, as round 2 wrote, a tool "nothing else in this codebase recognises": it is
+recognised here, at `AgentTimeline.tsx:558`, in `lib/editDiff.ts:20`, and in a test written against a
+real `MultiEdit`-shaped payload (`hub/ui/src/__tests__/agentTimeline.test.tsx:801-827`). Round 2's
+ground for dropping it is false, and it goes back in.
+
+**`runner_commands.py:210` is not a statement of which tools write.** Read in place, the flag is
+`restrict_spec_writes` and its own comment names its subject: F4/design D6, *which tools exist at
+all* for a spec-authoring agent, applied unconditionally including under yolo. It is a permissions
+decision about one kind of agent — Claude-only by construction, since it is a `--disallowedTools`
+argument, so `apply_patch` can never appear in it. Round 2's proposed assertion, that every tool
+`written_paths` calls a writer appears in that set, is therefore **false by construction for the
+Codex half** and would have forced `MultiEdit` out for a reason that does not hold. (That
+`restrict_spec_writes` omits `MultiEdit` while the UI counts it as a write is worth a finding of its
+own — a spec-restricted agent may be able to write through it — but it is not this change's to fix,
+and this change must not inherit the gap by treating that list as the definition.)
+
+What survives from round 2 is the `_PATH_KEYS` half, and only for Claude. `mcp_server.py:858` holds
+`_PATH_KEYS = ("file_path", "path", "notebook_path")`, and every Claude writer's declared path is one
+of those, `MultiEdit` included — its input is `{file_path, edits: [...]}`, so the file it touches is
+at the top level. Codex's `apply_patch` names its paths at `changes[].path`, a nested key `_PATH_KEYS`
+does not contain and should not.
+
+So the reconciliation is: `workspace_writes.py` holds the list; a test asserts it agrees with the
+UI's `WRITING_TOOLS`, which is the same concept; and a second asserts its **Claude** path keys are a
+subset of `_PATH_KEYS`. `mcp_server.py` may import only stdlib plus fastmcp, so restate-and-assert is
+the shape available — the same one `test_permission_approver.py` uses for `OPERATOR_POSTURE` and
+`test_mcp_server_stdio_surface.py:95` uses for the tool surface.
 
 This deliberately differs from `_decide`, which checks *every* tool including reads. That is right
 there and wrong here: refusing a read is a safety posture the operator chose, whereas recording a
@@ -109,12 +155,60 @@ The layout is entirely derivable from pure helpers in `worktrees.py`, with no da
 | `<root>/.agentweave/worktrees/<agent>` (`worktree_path`) | `agent` | the agent |
 | `<root>/.agentweave/tasks/<task-id>` (`task_worktree_path`) | `task` | the task id |
 | `<root>/.agentweave/reviews/<agent>` (`review_path`) | `review` | the reviewing agent |
+| `<root>/.agentweave/`, none of the above | `hub` | the Hub's own directory |
 | the project root, none of the above | `project` | the project's directory |
 | nothing in the project | `outside` | — |
+
+**Round 3 added the `hub` row, and it is not cosmetic.** Rounds 1 and 2 folded everything under the
+project root that is not a worktree into `project`, and then justified `project` as the mild
+destination on the grounds that a write there *sits visibly*. That justification is exactly inverted
+for `<root>/.agentweave/`. `repo_hygiene.EXCLUDE_PATTERNS` (`hub/hub/repo_hygiene.py:59-80`) lists
+`.agentweave/worktrees/`, `.agentweave/reviews/`, `.agentweave/tasks/`, `.agentweave/logs/`,
+`.agentweave/evidence/` and `.agentweave/context/`, and `seed_repo_excludes` writes them into the
+repository's `info/exclude` on **every turn** — `resolve_agent_workspace` calls it as its first
+statement (`worktrees.py:627`), before it does anything else. So the Hub itself has told git to hide
+that subtree. A write into `<root>/.agentweave/evidence/` is a run writing into the Hub's own
+record-keeping about runs, it appears in no `git status` anywhere, and under the round-1/round-2
+table it would have been reported to the operator as the destination that "sits there visibly".
+
+It also keeps the table honest about its own construction: three of those exclude patterns are the
+same three directories the layout helpers name, and the remainder is precisely the residue this row
+now claims. The classifier still derives the three from `worktree_path`/`task_worktree_path`/
+`review_path` rather than from the exclude list — one source of truth for the layout — but the two
+must not drift, and a test that walks `EXCLUDE_PATTERNS` and asserts every `.agentweave/` pattern
+classifies as `agent`, `task`, `review` or `hub` and never as `project` is what keeps them together.
 
 The comparison is on `os.path.realpath` + `os.path.commonpath` with `normcase`, the same construction
 `_decide` uses and for the same reason: `commonpath` compares components, so `/work-other` does not
 read as inside `/work`, and both sides being real paths collapses `..` before the comparison.
+
+**Round 3: the construction is not complete without `_decide`'s first line, and rounds 1 and 2 both
+omitted it.** `_decide` does not call `realpath` on the reported path. It joins first
+(`mcp_server.py:901`):
+
+```python
+absolute = candidate if os.path.isabs(candidate) else os.path.join(root, candidate)
+resolved = os.path.realpath(absolute)
+```
+
+Round 1's open question said the relative case "should be caught by realpath before comparison —
+assert it rather than assume it", and round 2 left it unanswered. It is not caught by realpath.
+`os.path.realpath` resolves a *relative* path against the calling **process's** working directory,
+and the two call sites do not share one:
+
+- `_decide` runs inside the **agent's own process** — it is the spawned `mcp_server.py`, whose cwd is
+  the run's workspace. Its own comment relies on this in the shell branch: *"Relative paths are left
+  alone: they resolve against the run's cwd, which is the workspace."* There, `realpath` alone would
+  have been nearly right, and the join makes it exactly right.
+- The detector runs inside the **Hub process**, whose cwd is wherever uvicorn was started and has
+  nothing to do with any project. One Hub serves many projects; there is no cwd that could be
+  correct.
+
+So `os.path.join(workspace_dir, candidate)` is a named, load-bearing step, not an implementation
+detail of the comparison. Without it the delta's scenario *A relative path that traverses outside is
+caught* would resolve `../../x` against the Hub's launch directory and classify essentially at
+random — usually `outside`, for the wrong reason, and on a Hub started inside a project, silently
+`project`.
 
 **The boundary compared against is the run's own recorded one.** `AW_WORKSPACE_DIR`,
 `Run.workspace_dir` and `_execute_run`'s `work_dir` are all `effective_work_dir`
@@ -158,6 +252,33 @@ create.
 
 **Not a new table.** Decided (D3 in the run's `decisions_for_user`), and the shape does not need one:
 this is a property of a run, read only with its run, never joined and never queried across runs.
+
+**Round 3: where the accumulated state lives, and when the column is written.** Neither round said,
+and both of D5's own constraints need it — "at most 20 entries plus a total count" and "once per
+distinct destination per run" are per-*run* facts, while the only sites that see the calls are
+per-*event* callbacks that each open their own session (`_flush_line`'s `for event in parsed.events`
+loop at `agent_trigger.py:1930-1945`, and `_on_event` at `:2474-2489`).
+
+The precedent D5 cites points at the answer that is wrong here. `turn_produced_nothing` is emitted
+from `evaluate_run_end` (`run_divergence.py:622-635`, reached at `:672`) — at the run boundary, once,
+having read the whole run back. Flushing this column the same way would be the natural reading of
+D5 as written, and it loses the entire record for a run that is killed, whose Hub is restarted, or
+whose process dies — which is exactly the population of runs whose stray writes matter most. A record
+that survives only tidy runs is not the record F115 asked for.
+
+So: **accumulate in the enclosing closure, write on first sight of each destination.** The
+accumulator is a `dict` keyed by destination — the same `nonlocal` shape `sequence` and
+`accounting_sample` already use in both functions, and safe for the same reason, since each sink is
+awaited serially within a run and only one of the two runs for any given run. When a destination is
+seen for the first time, one transaction writes the `Run` column and emits the `persist_event`
+together; every later write to a destination already recorded touches the closure only.
+
+That gives, per run, at most one database write per distinct destination — a handful, and bounded by
+the same 20 that bounds the column. A killed run keeps every destination it reached and the first
+path into each, which is the whole of the operator-facing fact. What a killed run loses is the exact
+per-destination call count, updated best-effort at the run boundary. That is the least valuable field
+in the record and the only one it is safe to lose, and it makes the column and the activity event
+consistent by construction rather than by two code paths agreeing to be.
 
 ## D6 — Part (1) is a specification change, not a code change
 
@@ -226,34 +347,76 @@ than through either item mapper.
 - Does anything today read `Run.workspace_dir` and treat it as a containment guarantee besides
   footprinting?
 
-## D9 — This change records an *allowed* action, and `agent-run-sandboxing` already says not to
+## D9 — `Only refusals SHALL be recorded` does not say what round 2 read it as
 
-Found in round 2, in the capability this change adds to. The shipped requirement *A refusal is
-recorded wherever it is decided* (`openspec/specs/agent-run-sandboxing/spec.md:321`) contains:
+Round 2 found the sentence, concluded that this change's operator notification breaches it, and
+carried a MODIFIED delta to narrow it. Round 3 was asked to attack that judgement. The judgement
+survives; **the argument for it does not, and the delta it produced was three times the size the
+correct argument supports.**
 
-> Only refusals SHALL be recorded. An allowed action is the ordinary case, and an event per allowed
-> action buries the refusals among them.
+### The premise is false, and the product disproves it
 
-D5 emits `persist_event(..., severity="warn")` for a write that was **allowed** — approved by the
-operator under `manual`, or never checked at all under full access. Round 1 wrote two ADDED
-requirements into this file and never cited the sentence next door that constrains what may be
-recorded in it.
+The sentence sits in the requirement *A refusal is recorded wherever it is decided*
+(`openspec/specs/agent-run-sandboxing/spec.md:321`). Round 2 read it as a constraint on what the
+system may record *at all*. Measured against the shipped Hub, that reading fails immediately.
+`persist_event` is called 55 times across `hub/hub`, carrying **44 distinct event types**. Exactly
+one of them — `permission_denied` — is a refusal. The other 43 record things that happened and were
+allowed:
 
-It is not fatal, and the requirement is not wrong. Its own fourth scenario reads *"Allowed actions
-are not recorded **as refusals**"*, so the scenario is already narrower than the prose, and the
-argument the prose gives — burying the refusals — is about volume, which D5 already bounds to once
-per destination per run. But in this corpus the SHALL sentence is normative and the scenario is
-evidence rather than a limit on it; leaving the prose unqualified would ship a change whose own
-notification breaches a requirement in the file it ships into.
+```
+queue_entry_delivered   question_answered      task_created       job_fired
+agent_heartbeat         run_interrupted        project_adopted    message_read
+checkpoint_notes_submitted   conversation_titled    loop_stopped   context_warning
+```
 
-So the change carries a **MODIFIED** delta for that requirement, narrowing the sentence to
-"recorded *as refusals*" and stating the conditions an allowed action must meet to be recorded at
-all — not ordinary, not presented as a refusal, bounded. That is the narrowest edit that makes the
-corpus true, and it does not weaken the original: the volume argument survives as a constraint
-rather than being deleted.
+Under round 2's reading the Hub breaches its own shipped requirement forty-three ways, and has since
+the requirement was written. A reading that convicts the entire activity log is not the reading.
 
-This is the same failure shape round 2 of the F14 loop found — a change breaching a shipped
-requirement it did not think it was near — and it is why the round exists.
+Three further things agree. The requirement's **title** is about the refusal record. Every other
+sentence in it is about the refusal record — what triggers one, that runtime-decided refusals are
+covered too, that a refusal is recorded once, that the named action is readable. And its own fourth
+scenario already says the narrow thing: *"Allowed actions are not recorded **as refusals**"*. Round 2
+noticed that scenario and argued past it — *"in this corpus the SHALL sentence is normative and the
+scenario is evidence rather than a limit on it"*. That inverts openspec's structure, in which the
+scenarios are the requirement's testable content, and it needed to be true only because the prose had
+been read out of its subject.
+
+### So the answer to round 2's own question is: the choice was never forced
+
+Round 2 posed the question for round 3 as narrow-the-sentence versus emit-no-notification-at-all, and
+called its choice a judgement rather than a derivation. It was right that it was not a derivation, and
+wrong about which branch needed defending. Nothing in the corpus ever forbade the notification, so
+"live only on the run row" was never the price of compliance — it would have been a straight
+downgrade of the change (a record the operator never sees does not answer F115) bought to satisfy a
+requirement that does not object. The notification stays, for D5's own reasons.
+
+### What the delta should be
+
+Not nothing. The prose and its own scenario disagree by two words, and this change is the reader that
+tripped over the gap — which is the ordinary case for a clarification. So the MODIFIED delta keeps
+the two words, adds one sentence saying what the paragraph is about, and stops:
+
+> Only refusals SHALL be recorded **as refusals**. … This constrains what the refusal record may
+> contain; it is not a rule about every durable event the system keeps.
+
+Removed from round 2's version, and why:
+
+- **The paragraph legislating "an allowed action that is not ordinary".** It wrote this change's
+  policy — rare, not presented as a refusal, bounded — into a requirement about refusals. That
+  couples two capabilities through a sentence neither owns, makes the refusal requirement carry a
+  general rule nothing enforces, and invites the next change to argue about its edges. This change's
+  own ADDED requirement is where its policy belongs.
+- **The scenario *An allowed action that is not ordinary may still be recorded*.** Same reason,
+  and it has moved: `agent-run-sandboxing`'s ADDED requirement now carries *The record is not a
+  refusal*, which pins the same fact where the fact lives.
+
+### The shape this is an instance of
+
+Round 2 was right that a change can breach a shipped requirement it did not think it was near, and
+right to go looking. What it did on finding a candidate was edit the corpus to fit the change. The
+cheaper move was available and was not made: read the sentence against the product, and see whether
+the product already breaches it. If it does, the reading is wrong — not the product, and not the
+requirement.
 
 ## D10 — Two columns, one migration, and the numbers
 
@@ -279,6 +442,56 @@ then have to fabricate it.
 sites (`:423` and `:921`) pass what they read from the run. The "one place maps a footprint onto a
 row" property the function's docstring is about survives, which is the point of routing through it
 at all.
+
+## D12 — The detector is structurally silent for a run whose workspace is the project root
+
+Found in round 3, and neither round had asked. `resolve_agent_workspace` returns `repo_root` itself
+on three branches (`worktrees.py:607-636`): a **read-only agent**, a **project that is not a git
+repository**, and a **machine with no git at all** — the last two being deliberate degradations the
+module's docstring defends at length. `resolve_turn_workspace` routes through the same function
+whenever `takes_task_workspace` is false (`:651-694`), and `agent_trigger.py:891` records the
+consequence in its own words: `isolated_workspace = workspace if workspace != repo_root else None`.
+
+For such a run, `effective_work_dir` **is** the project root. The detector's boundary is then the
+entire project, so nothing inside it is ever an outside write — including a write into another
+agent's worktree, which is the case this change calls the worst one and the case whose record
+justifies naming a destination at all.
+
+This is not a defect to fix here, and the fix is not to invent a narrower boundary for those runs:
+the record would then disagree with `Run.workspace_dir`, `AW_WORKSPACE_DIR` and `_decide`, which is
+the second-boundary failure D4 exists to prevent. The record is honest — that run's workspace really
+is the root.
+
+What must not stand is the **claim of coverage**. D5 makes `[]` mean *observed, nothing left the
+workspace*, and for a root-workspace run that value is simultaneously true and the least informative
+sentence the product could emit: the least confined run it has, reporting a clean sheet. The
+requirement now says so explicitly rather than letting a reader infer confinement from an empty list,
+and it is the same discipline as the label rule in D1 — a detector that reads as coverage where it
+has none is worse than none.
+
+Partially mitigating, and only partially: a read-only agent is spawned with
+`--disallowedTools Edit,Write,NotebookEdit` (`runner_commands.py:210`), so most of its write tools do
+not exist. `MultiEdit` is not in that list (see D3), and neither mitigation reaches the
+non-repository or no-git branches, where the agent is a full writer standing at the project root.
+
+## D13 — The cost objection to checking every tool call is already answered
+
+Round 2 asked round 3 to confirm that `written_paths` returns on the tool name before touching the
+input, since `tool_use_event` is called for every tool of every run. It should, and it is one
+membership test to write — but the premise deserves correcting rather than satisfying. By the time
+`written_paths` could be called, `tool_use_event` has *already* committed to the expensive work
+unconditionally (`runner_events.py:142-143`):
+
+```python
+safe_input = redact_secrets(input_data)
+input_text, input_truncated = _truncate_utf8(_stringify(safe_input), MAX_TOOL_RESULT_BYTES)
+```
+
+`redact_secrets` walks the whole structure and `_stringify` is `json.dumps(..., sort_keys=True)` over
+it. A tuple-membership test on a short string is not measurable beside that, on any call. Keep the
+early return because it makes the function read as what it is — writers only, everything else empty —
+and drop performance as the reason for it. A design that defends a cheap thing with a cost argument
+invites the next reader to relax it when the cost argument stops applying.
 
 ## Round 2 corrections, 2026-08-30
 
@@ -329,3 +542,64 @@ Recorded rather than silently applied, in the order they were found.
   of calls pay nothing.
 - Does anything else construct a `RunEvent` of kind `tool_use` without going through
   `tool_use_event`? If so, D2's "one population site" claim is false and round 3 should say so.
+
+## Round 3 corrections, 2026-08-30
+
+An independent re-derivation against the code, not a re-read of round 2. Six corrections, in the
+order they were found. The change is still not implemented.
+
+1. **D9's premise is false and its delta was three times too big.** *"Only refusals SHALL be
+   recorded"* constrains the refusal record, not every durable event — disproved by measuring the
+   product: 44 distinct `persist_event` types, one of which is a refusal. Round 2's reading convicts
+   the shipped Hub 43 times. The two-word clarification stays; the paragraph legislating "allowed
+   actions that are not ordinary" and its scenario are removed from `agent-run-sandboxing`'s MODIFIED
+   delta, and the fact they pinned now lives in this change's own ADDED requirement. See D9.
+2. **D4 omitted the step its own scenario depends on.** `_decide` joins a relative path to the
+   workspace *before* `realpath` (`mcp_server.py:901`); `realpath` alone resolves against the calling
+   process's cwd, and the detector's process is the Hub, which has no cwd that could be right. Round
+   1's open question assumed realpath would catch it; round 2 left the question open. See D4.
+3. **`.agentweave/` is not "the project".** Rounds 1 and 2 classified it as `project` and justified
+   that as the destination that "sits there visibly" — while the Hub seeds that exact subtree into
+   the repository's ignore rules on every turn (`repo_hygiene.py:59-80`, called first thing in
+   `resolve_agent_workspace`). A new `hub` kind, and the requirement no longer rests the `project`
+   case on visibility. See D4.
+4. **D3 reconciled against the wrong list.** The write-tool list exists three times, not twice; the
+   third (`AgentTimeline.tsx:573`) is the one whose concept matches, it includes `MultiEdit`, and
+   round 2's ground for dropping `MultiEdit` was false. `runner_commands.py:210` is
+   `restrict_spec_writes`, a Claude-only permissions flag that cannot contain `apply_patch`, so round
+   2's proposed assertion was false by construction for the Codex half. See D3.
+5. **D5 specified bounds and dedup with no accumulator and no write point**, and the precedent it
+   cites fires at the run boundary — losing the whole record for a killed run, the population whose
+   stray writes matter most. Accumulate in the closure, write on first sight of each destination. See
+   D5.
+6. **The detector is structurally silent where the workspace is the project root** — read-only
+   agents, non-repository projects, machines with no git. Not a defect to fix, but the empty record
+   must not read as confinement. See D12.
+
+### What round 3 re-derived and did *not* overturn
+
+7. **D2's one-population-site claim holds.** `kind="tool_use"` is constructed once in `hub/hub`
+   (`runner_events.py:154`). Task 2.5c is answered, not conditional. The one boundary: the
+   `POST .../output` ingest route accepts a `tool_use` kind from an agent the Hub did not spawn, so
+   the claim covers events the Hub produces. See D2.
+8. **`write_paths` is never persisted.** `record_agent_output` takes `content`, `kind`, `payload`,
+   `run_id`, `sequence` and the ids, and nothing else off the event. Re-checked at its definition.
+9. **`work_dir` is genuinely in scope at both sinks** — `Optional[str]` on both `_execute_run` and
+   `_execute_codex_appserver_run`. The list was right; it was incomplete, because D4 also needs the
+   project root, which is in neither. See D2.
+10. **The premise correction from round 1 survives a third reading.**
+    `DEFAULT_CLAUDE_PERMISSION_MODE = WORKSPACE_PERMISSION_MODE` (`runner_commands.py:66`), with
+    `acceptEdits` as the no-approver fallback (`:73`), and `_decide` really does refuse an outside
+    path on realpath + commonpath + normcase (`mcp_server.py:864-916`).
+11. **The cost objection to running the extractor on every tool call is moot** — `tool_use_event`
+    already redacts and JSON-serialises every input unconditionally. Keep the early return; drop the
+    argument. See D13.
+
+### For implementation
+
+- Task 1.4 is still the first thing to run and still the stop condition: if `_decide` does not refuse
+  the absolute path under the default posture, the proposal's premise is wrong and nothing should be
+  built on it. Three rounds have now read that code and none has executed it.
+- D12 is the one open question this change deliberately leaves: whether a run whose workspace is the
+  project root should get a boundary at all is a product question about the non-repository case, and
+  it is not this change's to answer.

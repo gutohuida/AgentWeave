@@ -23,22 +23,35 @@
   It owns the two halves that must not drift apart — which tools write, and where a path belongs.
 - [ ] 2.2 `written_paths(tool: str, input_data: Any) -> tuple[str, ...]` — the declared path
   argument(s) of a file-*writing* tool call, empty for everything else. Claude: `Write`, `Edit`,
-  `NotebookEdit`. Codex: `apply_patch`. Reads (`Read`, `Glob`, `Grep`, `LS`) return empty, per design
+  `MultiEdit`, `NotebookEdit`. Codex: `apply_patch`. (`MultiEdit` is back: round 2 dropped it on the
+  false ground that nothing else recognises it - see 2.2b.) Reads (`Read`, `Glob`, `Grep`, `LS`) return empty, per design
   D3. An unknown tool returns empty rather than guessing from key names: a detector that invents
   coverage is the failure mode this whole change is careful about. Return on the tool name **before**
-  looking at the input — this runs for every tool call of every run, and the overwhelming majority
-  are not writes.
-- [ ] 2.2b Reconcile the list with the two the product already has, per round 2's correction to D3.
-  Add a test asserting that every Claude tool `written_paths` treats as a writer appears in
-  `runner_commands.py:210`'s `--disallowedTools Edit,Write,NotebookEdit`, and that its path keys are
-  a subset of `mcp_server.py:858`'s `_PATH_KEYS`. `mcp_server.py` may import only stdlib plus
-  fastmcp, so this is restate-and-assert, the same shape `test_permission_approver.py` uses for
-  `OPERATOR_POSTURE`. Round 1's list included `MultiEdit`, which nothing else in this codebase
-  recognises; it is dropped.
-- [ ] 2.3 Cover the multi-path case. Round 2's answer: of the tools that survive 2.2b, `NotebookEdit`
-  names one file under `notebook_path` and Codex's `apply_patch` names several under
-  `changes[].path`, so the tuple return is load-bearing for the Codex side and one-element for
-  Claude's. `MultiEdit` is dropped, so its shape is no longer a question this change has to answer.
+  looking at the input, because that is what the function *is*: writers only, everything else empty.
+  Not for cost. `tool_use_event` already runs `redact_secrets` and `json.dumps(sort_keys=True)` over
+  every input unconditionally (`runner_events.py:142-143`), so a membership test is not measurable
+  beside it (design D13).
+- [ ] 2.2b Reconcile the list against the source that shares its concept, per round 3's correction to
+  D3. The product states "which tools write" three times, not twice, and the match is
+  `WRITING_TOOLS` in `hub/ui/src/components/agents/AgentTimeline.tsx:573` -
+  `{Edit, MultiEdit, Write, NotebookEdit, apply_patch}` - both providers, already driving the "wrote
+  to N files" summary an operator reads. Assert `written_paths`' writer set equals it.
+  **Do not** assert against `runner_commands.py:210`: that is `restrict_spec_writes`, an F4/D6
+  permissions flag scoping one kind of agent, Claude-only by construction, so the assertion round 2
+  proposed is false for `apply_patch` and would force `MultiEdit` out for a reason that does not
+  hold. Separately assert that the **Claude** path keys are a subset of `mcp_server.py:858`'s
+  `_PATH_KEYS` (`MultiEdit` passes: its input is `{file_path, edits: [...]}`). Codex's
+  `changes[].path` is nested and is deliberately not in `_PATH_KEYS`. `mcp_server.py` may import only
+  stdlib plus fastmcp, so this is restate-and-assert, the shape `test_permission_approver.py` uses
+  for `OPERATOR_POSTURE`.
+- [ ] 2.2c File, do not fix: `restrict_spec_writes` disallows `Edit,Write,NotebookEdit` and omits
+  `MultiEdit`, which the UI counts as a write, so a spec-restricted agent may be able to write
+  through it. Out of scope here, and this change must not inherit the gap by treating that flag as
+  the definition of a write tool.
+- [ ] 2.3 Cover the multi-path case. `NotebookEdit` names one file under `notebook_path`; `Write`,
+  `Edit` and `MultiEdit` name one under `file_path` - `MultiEdit`'s several edits all target that one
+  file, so it stays one-element; Codex's `apply_patch` names several under `changes[].path`. The
+  tuple return is load-bearing for the Codex side.
 - [ ] 2.4 Add `write_paths` to **`RunEvent`** (`hub/hub/runner_events.py:111-115`), not to
   `ParsedLine` — see round 2's correction to D2. Carry tool name, call id and the raw path string,
   nothing else, defaulting to `()`. Populate it inside `tool_use_event`
@@ -57,9 +70,11 @@
   written against a live item rather than off `_file_change_summary`. Copy its malformed-input cases
   verbatim: `None`, `{}`, `{"changes": "not-a-list"}`, `{"changes": [{"path": 1}, {}, None]}` — all
   extract nothing, none raise.
-- [ ] 2.5c Confirm nothing else constructs a `tool_use` `RunEvent` without going through
-  `tool_use_event`. If something does, D2's one-population-site claim is false and the design needs
-  correcting before this is built.
+- [ ] 2.5c **Answered in round 3; keep it as a regression test.** `kind="tool_use"` is constructed in
+  exactly one place in `hub/hub` - `runner_events.py:154`, inside `tool_use_event`. Add a test that
+  asserts it, so a future second constructor fails here rather than silently escaping detection. The
+  one boundary to state in the test's docstring: `POST .../output` accepts a `tool_use` kind from an
+  agent the Hub did not spawn, which has no `RunEvent` and no workspace to be checked against.
 - [ ] 2.6 Assert the parser stays pure: no workspace argument, no filesystem access, no import of
   anything that touches the database. A test that imports `runner_parsing` in isolation is enough to
   keep this honest.
@@ -68,14 +83,28 @@
 
 - [ ] 3.1 In `workspace_writes.py`, add `classify(path, *, workspace_dir, project_root)` returning a
   workspace kind and name: `agent`/`task`/`review` from the layout helpers in `worktrees.py`
-  (`worktree_path`, `task_worktree_path`, `review_path`), `project` for the project's own directory,
-  `outside` for anything else. Kind-and-name, per design D4 and `workspace-isolation`'s existing
+  (`worktree_path`, `task_worktree_path`, `review_path`), **`hub` for anything else under
+  `<root>/.agentweave/`**, `project` for the project's own directory, `outside` for anything else. Kind-and-name, per design D4 and `workspace-isolation`'s existing
   requirement that a reported workspace says which namespace it belongs to.
-- [ ] 3.2 Compare on `os.path.realpath` + `os.path.commonpath` + `os.path.normcase`, the same
-  construction `mcp_server._decide` uses (`hub/hub/mcp_server.py:900-914`) and for the same stated
-  reasons: `commonpath` compares components so `/work-other` does not read as inside `/work`, and
-  realpath collapses `..` and symlinks before the comparison. Relative paths resolve against the
-  workspace, which is the run's cwd.
+- [ ] 3.1b The `hub` kind is round 3's correction and it is not cosmetic: the Hub seeds
+  `.agentweave/worktrees|reviews|tasks|logs|evidence|context` into the repository's `info/exclude` on
+  every turn (`repo_hygiene.py:59-80`, called first in `resolve_agent_workspace`), so that subtree is
+  the one part of the project root git has been told to hide - while the requirement described
+  `project` as the destination that "sits there visibly". Add a test that walks `EXCLUDE_PATTERNS`
+  and asserts every `.agentweave/` pattern classifies as `agent`, `task`, `review` or `hub`, never
+  `project`. The classifier still derives the three checkouts from the layout helpers, not from the
+  exclude list - one source of truth - and this test is what keeps the two from drifting.
+- [ ] 3.2 **Join before resolving**, then compare on `os.path.realpath` + `os.path.commonpath` +
+  `os.path.normcase` - `_decide`'s whole construction, including the first line rounds 1 and 2 both
+  omitted (`mcp_server.py:901`):
+  `absolute = candidate if os.path.isabs(candidate) else os.path.join(root, candidate)`.
+  Round 1 asserted realpath alone would catch the `..` case. It will not: `realpath` resolves a
+  relative path against the **calling process's** cwd. `_decide` gets away with it because it *is*
+  the spawned MCP server, whose cwd is the run's workspace (its own shell-branch comment relies on
+  exactly that), whereas this runs in the Hub process, which serves many projects from wherever
+  uvicorn was started. Test a relative `../../x` explicitly and assert it classifies against the
+  workspace, not the Hub's cwd - run the test from a cwd other than the fixture workspace, or it
+  proves nothing. `commonpath` compares components so `/work-other` does not read as inside `/work`.
 - [ ] 3.3 Return "inside" for a path within the run's own workspace, and record nothing for it.
 - [ ] 3.4 Return "unknown" — never "outside" — when `workspace_dir` is absent or `realpath` raises.
   Test it explicitly: an unresolvable workspace must not produce a record accusing the run of
@@ -96,21 +125,45 @@
   (`0099_question_wait_window.py`). Bump `hub/tests/test_migrations.py:39`
   (`HEAD_REVISION = "0099"`) **and** `hub/tests/test_project_persistence.py:227`
   (`assert version == "0099"`).
-- [ ] 4.3 In `_flush_line` (`hub/hub/api/v1/agent_trigger.py:1880`), classify each event's
+- [ ] 4.3 **Pass the project root down first.** Round 3 measured it: `repo_root` occurs nowhere in
+  `_execute_run` (lines 1720-2274) or `_execute_codex_appserver_run` (2389-2752). `work_dir`,
+  `run_id`, `project_id` and `agent` are all in scope; the project root, which D4 needs to compute
+  `worktree_path`/`task_worktree_path`/`review_path` and to tell `project` from `outside`, is not.
+  Add it as a parameter to both, from the trigger body that already computes it. Do **not** re-read
+  the project row inside the callback: that is a query per tool call to answer a question that is
+  constant for the run.
+- [ ] 4.3a In `_flush_line` (`hub/hub/api/v1/agent_trigger.py:1880`), classify each event's
   `write_paths` against `work_dir` and the project root, and append the outside ones to the run.
   `work_dir`, `AW_WORKSPACE_DIR` and `Run.workspace_dir` are all `effective_work_dir` — use the value
   already in scope, never a workspace recomputed from the agent's name (design D4).
 - [ ] 4.3b Do the same in `_on_event` (`hub/hub/api/v1/agent_trigger.py:2474`), the Codex app-server
-  sink, which never reaches `_flush_line` and has the same four values in scope. Without this the
+  sink, which never reaches `_flush_line` and now has the same five values in scope. Without this the
   change covers two of three transports; round 1 covered one. Factor the classify-and-record step so
   the two sinks call one function rather than growing two opinions about it.
 - [ ] 4.4 Bound the list at 20 entries plus a total count. An unbounded column on a run that writes
   in a loop is a column nobody can read.
+- [ ] 4.4b **Accumulate in the closure; write on first sight of each destination** (design D5, round
+  3). Both bounds above and the once-per-destination rule in 4.5 are per-*run* facts, and the only
+  sites that see the calls are per-*event* callbacks each opening their own session. Hold a `dict`
+  keyed by destination as a `nonlocal`, the same shape `sequence` and `accounting_sample` already
+  use in both functions and safe for the same reason (each sink is awaited serially within a run,
+  and only one of the two runs for any given run). On the **first** sighting of a destination, one
+  transaction writes the `Run` column and emits 4.5's event together; later writes to a destination
+  already recorded touch the closure only.
+- [ ] 4.4c Do **not** flush the column at the run boundary the way `turn_produced_nothing` does. That
+  is the natural reading of D5 as round 2 wrote it and it loses the whole record for a run that is
+  killed or whose Hub restarts - exactly the runs whose stray writes matter. Add a test that kills a
+  run mid-turn after one outside write and asserts the destination and its first path survived. The
+  exact per-destination call count is best-effort at the boundary and is the only field it is safe
+  to lose.
 - [ ] 4.5 Emit `persist_event(..., "agent_wrote_outside_workspace", severity="warn")` naming the run,
   the agent, the tool, the path and the destination workspace — once per distinct destination per
-  run, not once per call. Follow `turn_produced_nothing`
-  (`hub/hub/run_divergence.py:622-635`) exactly; it is the shipped answer to "record it and surface
-  it to the operator".
+  run, not once per call, in the same transaction as 4.4b's first-sighting write. Follow
+  `turn_produced_nothing`'s **payload and severity** (`hub/hub/run_divergence.py:622-635`); do not
+  follow its *timing*, which is `evaluate_run_end` — see 4.4c. Round 3 checked what this is allowed
+  to record: `persist_event` carries 44 distinct event types in the shipped Hub and one of them is a
+  refusal, so `agent-run-sandboxing`'s *"Only refusals SHALL be recorded"* was never a constraint on
+  this event (design D9).
 - [ ] 4.6 Recording must never be able to kill a turn. Wrap it the way `_report_decision` is wrapped:
   a failure here is observational, and a run that dies because a path could not be classified is a
   worse outcome than one that wrote outside unnoticed.
@@ -177,23 +230,33 @@
   absolute-path `Write` outside its worktree, under a posture that permits it. Assert the run row and
   the activity event, not just the test. A passing suite is not proof of behaviour, and this change
   exists because a live drive found what the suite could not.
-- [ ] 9.5 `openspec validate --strict` on the change, then sync all **four** deltas into
-  `openspec/specs/` by verbatim header — three ADDED capabilities plus the MODIFIED requirement
-  *A refusal is recorded wherever it is decided* in `agent-run-sandboxing` (design D9), then archive. `--strict` does not compare capabilities, so a
-  missed delta validates clean — verify the sync by grep, not by exit code.
+- [ ] 9.5 `openspec validate --strict` on the change, then sync every delta into `openspec/specs/`
+  by verbatim header — the ADDED requirements in `agent-run-sandboxing` and `workspace-isolation`,
+  the MODIFIED requirement in `requirement-traceability`, and the now-minimal MODIFIED requirement
+  *A refusal is recorded wherever it is decided* in `agent-run-sandboxing` (design D9, as corrected
+  in round 3: two words plus one sentence of scope, nothing more) — then archive. `--strict` does not
+  compare capabilities, so a missed delta validates clean; verify the sync by grep, not by exit code.
 
 
 ## 10. What round 2 added
 
-- [ ] 10.1 Modify the shipped requirement *A refusal is recorded wherever it is decided*
-  (`openspec/specs/agent-run-sandboxing/spec.md:321`), whose sentence *"Only refusals SHALL be
-  recorded"* this change's own operator notification breaches — it records a write that was
-  **allowed**. The delta narrows it to "recorded *as refusals*" and states what an allowed action
-  must be to be recorded at all: not the ordinary case, not presented as a refusal, bounded. Design
-  D9. Do not delete the volume argument; it survives as a constraint.
-- [ ] 10.2 Add the scenario that pins it: a run recorded as having written outside its workspace is
-  not a refusal and does not claim the action was refused. Assert it against the event payload, so
-  the label check in task 8.3 has something to fail against.
+- [ ] 10.1 **Superseded by round 3.** Round 2 read *"Only refusals SHALL be recorded"* as a
+  constraint on every durable event and modified the shipped requirement to accommodate this change.
+  The premise is false — 44 distinct `persist_event` types ship today and one is a refusal — so the
+  MODIFIED delta keeps only the two-word clarification (*"as refusals"*, which the requirement's own
+  fourth scenario already says) plus one sentence naming its scope. The paragraph legislating
+  "allowed actions that are not ordinary" is removed: it wrote this change's policy into a
+  requirement about refusals. Design D9.
+- [ ] 10.2 The scenario that pins it moves to this change's **own** ADDED requirement, where the fact
+  lives: *The record is not a refusal*. Assert it against the event payload, so the label check in
+  task 8.3 has something to fail against.
+- [ ] 10.4 Test the classification of a path under `<root>/.agentweave/` that is not a worktree, task
+  or review checkout — `.agentweave/evidence/x` is the sharp case, being the Hub's own record-keeping
+  about runs. It must classify as `hub`, never `project` (design D4, task 3.1b).
+- [ ] 10.5 Test the run whose workspace **is** the project root (design D12): a read-only agent, or a
+  project that is not a git repository. Writing anywhere in the project records nothing, including
+  into another agent's worktree. Assert that, and assert the requirement's wording does not let the
+  empty record read as confinement.
 - [ ] 10.3 Test the review-turn case explicitly. A review run's workspace *is* the detached review
   checkout (`agent_trigger.py:824`), so a reviewer writing into its own agent worktree is a write
   outside its workspace and is recorded as one. That is correct and it should be a test rather than
