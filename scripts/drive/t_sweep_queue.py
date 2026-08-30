@@ -165,8 +165,8 @@ for _entry in (_leftover if isinstance(_leftover, list) else _leftover.get("entr
     if _entry.get("state") == "queued":
         api("DELETE", f"/projects/{P}/queue/entries/{_entry['id']}")
         _drained += 1
-print(f"
-drained {_drained} leftover entr{'y' if _drained == 1 else 'ies'} for {AGENT}")
+print()
+print(f"drained {_drained} leftover entr{'y' if _drained == 1 else 'ies'} for {AGENT}")
 
 print()
 print("=" * 78)
