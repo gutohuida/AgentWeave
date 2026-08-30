@@ -37,8 +37,8 @@
 
 ## 6. Reconcile the drive harness
 
-- [ ] 6.1 Update `scripts/drive/t_continue_branches.py` — its F131 assertions are written in the direction the product currently behaves and will now fail. Rewrite them to the fixed direction and note in the file that the flip was the fix.
-- [ ] 6.2 Check `t_continue_burns_attempts.py`, `t_row15_cutover.py` and `t_sweep_conversations.py` for reads of the continue response, and update any that treat `started` as "a turn began for the agent".
+- [x] 6.1 Update `scripts/drive/t_continue_branches.py` — its F131 assertions are written in the direction the product currently behaves and will now fail. Rewrite them to the fixed direction and note in the file that the flip was the fix.
+- [x] 6.2 Check `t_continue_burns_attempts.py`, `t_row15_cutover.py` and `t_sweep_conversations.py` for reads of the continue response, and update any that treat `started` as "a turn began for the agent".
 
 ## 7. Verify and record
 

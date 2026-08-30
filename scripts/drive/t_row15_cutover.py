@@ -258,6 +258,14 @@ def main():
     show("continue", c, cont)
     check("continue returns 200", c == 200, str(c))
     check("it reports the turn started", cont.get("started") is True, str(cont))
+    # F131 (fixed 2026-08-30): `started` now means "the conversation you named started", not "a
+    # turn began for this agent". Here the successor's checkpoint entry is the only thing queued,
+    # so the two coincide -- and this assertion says which one is being claimed.
+    check(
+        "and it is the successor that started",
+        cont.get("started_conversation_id") == succ_id,
+        repr(cont.get("started_conversation_id")),
+    )
     wait_idle(AGENT, limit=420)
 
     b_text = read_in_worktree("CHECKPOINT_B.txt")
