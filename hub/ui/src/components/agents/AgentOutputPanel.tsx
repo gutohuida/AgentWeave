@@ -335,6 +335,11 @@ export function AgentOutputPanel({
    *  successor is exactly this, which is why the Continue control keys on it rather than on
    *  "was this conversation created by a handoff". */
   const { data: queuedEntries = [] } = useQueuedEntries(agent.name)
+  /** Deliberately unchanged by F131, and not the fix for it. This gate reads client-side state
+   *  in which *another* conversation's older entry does not appear, so it can be satisfied and
+   *  the Hub can still start that other conversation's turn instead. It is what makes the
+   *  substitution uncommon; it is not what could make it impossible. The honesty lives in what
+   *  the answer says, not in whether the button renders. */
   const hasQueuedWork = queuedEntries.some(
     (entry) => entry.conversation_id === currentConversationId,
   )
@@ -744,9 +749,23 @@ export function AgentOutputPanel({
     setIsSending(true)
     try {
       const result = await continueConversation(projectId, currentConversationId)
-      setSessionNotice(
-        result.started ? 'Continuing…' : `Not started — ${result.waiting_reason ?? 'unknown'}`,
-      )
+      if (result.started) {
+        setSessionNotice('Continuing…')
+      } else if (result.started_conversation_id) {
+        // A turn began, in another conversation of this agent (F131). The server has already
+        // distinguished waiting-behind-other-input from nothing-was-queued; render its reason
+        // rather than composing a second sentence here, which is how the two drift apart. All
+        // this adds is which conversation ran — by its label, never by its identifier.
+        const started = conversationsRef.current.find(
+          (item) => item.id === result.started_conversation_id,
+        )
+        setSessionNotice(
+          `Not started — ${result.waiting_reason ?? 'unknown'}. ` +
+            `${started ? conversationLabel(started) : 'Another conversation'} started instead.`,
+        )
+      } else {
+        setSessionNotice(`Not started — ${result.waiting_reason ?? 'unknown'}`)
+      }
     } catch (err) {
       console.error('Failed to continue:', err)
       setSessionNotice('Could not start the queued work')

@@ -30,10 +30,10 @@
 
 ## 5. Tell the operator
 
-- [ ] 5.1 Add `started_conversation_id?: string | null` to `ContinueResult` (`hub/ui/src/api/checkpoints.ts:90-95`).
-- [ ] 5.2 Give `handleContinue` (`AgentOutputPanel.tsx:742-756`) its third case, rendering the server's `waiting_reason` rather than composing its own sentence — the backend already distinguishes waiting-behind-input from nothing-queued, and duplicating that judgement client-side is how the two drift. Started and equal → `'Continuing…'`; not started with a `started_conversation_id` → the reason plus the conversation that began; not started without one → the existing reason text.
-- [ ] 5.3 Leave the `hasQueuedWork` button gate (`:337-340`, `:1064`) unchanged, and comment why it is not the fix: it reads client-side state in which another conversation's older entry does not appear.
-- [ ] 5.4 Add or extend a UI test covering the three notices, keyed on the response fields rather than on rendering timing.
+- [x] 5.1 Add `started_conversation_id?: string | null` to `ContinueResult` (`hub/ui/src/api/checkpoints.ts:90-95`).
+- [x] 5.2 Give `handleContinue` (`AgentOutputPanel.tsx:742-756`) its third case, rendering the server's `waiting_reason` rather than composing its own sentence — the backend already distinguishes waiting-behind-input from nothing-queued, and duplicating that judgement client-side is how the two drift. Started and equal → `'Continuing…'`; not started with a `started_conversation_id` → the reason plus the conversation that began; not started without one → the existing reason text.
+- [x] 5.3 Leave the `hasQueuedWork` button gate (`:337-340`, `:1064`) unchanged, and comment why it is not the fix: it reads client-side state in which another conversation's older entry does not appear.
+- [x] 5.4 Add or extend a UI test covering the three notices, keyed on the response fields rather than on rendering timing.
 
 ## 6. Reconcile the drive harness
 
@@ -45,7 +45,7 @@
 - [ ] 7.1 `py -3.11 -m pytest hub/tests/test_a_start_is_reported_to_its_own_input.py -v` green, then the full `hub/tests/` suite. The baseline to compare against is **3555 passed / 84 skipped / 1 xpassed / 0 failed** in 13:38, measured on `a533c68` on 2026-08-29 — the F109 flake did not fire, so a single failure is a regression until shown otherwise, not a shrug.
 - [x] 7.2 Confirm `test_continue_does_not_consume_the_work_it_offers_to_start` (`hub/tests/test_a_delivery_attempt_means_a_delivery.py:118-134`) still passes: it asserts `started is False` under a no-runner trigger with one conversation, which holds under the new derivation because `response` is `None`. Checked in round 3; verify rather than assume.
 - [ ] 7.3 `py -3.11 -m ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `py -3.11 -m mypy src/`, `cd hub/ui && npm run lint`.
-- [ ] 7.4 `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`; commit `hub/ui/src` and `hub/hub/static/ui` together.
+- [x] 7.4 `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`; commit `hub/ui/src` and `hub/hub/static/ui` together.
 - [ ] 7.5 Drive it live against the 8010 trial Hub with a cheap runner: two conversations, the older entry on the one not addressed, press Continue, confirm the answer says waiting and names what ran, and confirm the addressed conversation's entry is still queued. Nothing closes on unit tests alone.
 - [ ] 7.6 Mark F131 fixed in `scripts/drive/FINDINGS.md`, recording both corrections this change established — that F131's own reproduction is unreachable from the shipped UI while the older-entry path is, and that the rule was already shipped for refusals and merely unwritten for starts.
 - [ ] 7.7 `openspec validate --strict`, sync the delta into `openspec/specs/agent-conversation-workspace/spec.md`, and archive the change.
