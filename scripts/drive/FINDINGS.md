@@ -11135,7 +11135,7 @@ and `drain_deferred_schedules`.
 
 ---
 
-## F151 — running migrations at startup silences the Hub's logging, and uvicorn's, for the life of the process
+## F151 — running migrations at startup silences the Hub's logging, and uvicorn's, for the life of the process — FIXED
 
 **Severity B. Found while trying to read a Hub log, which is the only way this shows up.**
 
@@ -11200,16 +11200,40 @@ rule buffering out, and changed nothing. Any path that reaches `init_db()` is af
 every path that starts the Hub — the console script, `agentweave hub_start`, the Docker image, and
 `python -m uvicorn hub.main:app` alike.
 
-### The fix, and why it is filed and not applied here
+### FIXED, 2026-08-30, reproduction first
 
-One keyword: `fileConfig(config.config_file_name, disable_existing_loggers=False)`. That is small
-and unambiguous enough for D5's fix bucket, and it should be taken together with a test asserting
-that a logger created before `env.py` runs still emits afterwards.
+One keyword — `fileConfig(config.config_file_name, disable_existing_loggers=False)` — which is
+squarely inside D5's fix bucket: small, self-contained, no design decision, and it restores
+behaviour rather than choosing new behaviour. The Hub configures no logging of its own, so keeping
+the existing loggers overrides nothing.
 
-It is filed rather than applied because of when it was found: 11:15, against a 12:00 stop, and the
-reproduction-first discipline D5 attaches to every fix needs a test written against the migration
-path rather than a one-line edit pushed on the way out. This is the **first item worth picking up
-next**, not a decision waiting on the operator.
+Order of work, in the discipline's order:
+
+1. **Reproduced before fixing.** `test_running_migrations_leaves_existing_loggers_enabled` in
+   `hub/tests/test_migrations.py` creates `uvicorn.error` and `hub.run_reconciliation`, runs a real
+   `alembic upgrade head` through the same `env.py` the Hub uses, and asserts neither ends up
+   `disabled`. Run against the *unfixed* `env.py` (stashed) it **FAILS**; with the fix it passes,
+   as do the other 75 tests in that file.
+2. **Verified on the product, not only in the suite.** The 8011 Hub was restarted from source and
+   its log read. Three kinds of line that had never appeared in eleven previous process starts are
+   now there:
+
+   ```
+   INFO:     Started server process [26628]
+   INFO:     Waiting for application startup.
+   INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+   INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+   INFO:     Application startup complete.
+   INFO:     Uvicorn running on http://127.0.0.1:8011 (Press CTRL+C to quit)
+   INFO:     127.0.0.1:56820 - "GET /api/v1/projects HTTP/1.1" 200 OK
+   ```
+
+   Startup confirmation, the bound address, and an access log — the three things an operator looks
+   for, none of which the Hub had ever printed.
+
+**Not verified, and worth a look next:** whether `_ui_staleness_warning()` now actually reaches the
+console. It only fires on a stale bundle, and this checkout's is current, so nothing here forced it.
+The mechanism that suppressed it is gone; that it now prints is inference, not measurement.
 
 **Evidence:** `hub/hub/migrations/env.py:14`; `hub/hub/alembic.ini` — `[loggers] keys = root,
 sqlalchemy, alembic`; `hub/hub/main.py` `lifespan()` ordering (`init_db()` first,

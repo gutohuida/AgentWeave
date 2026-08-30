@@ -89,12 +89,12 @@ def spawn_hub():
             "DATABASE_URL": DB,
             "AW_BOOTSTRAP_API_KEY": os.environ.get("AW_KEY", ""),
             "AW_TICKET_SECRET": TICKET_SECRET,
-            # Without this the crash log is worthless. The other four crash harnesses spawn the
-            # Hub the same way and their logs stop at "Waiting for application startup." for
-            # every process in the file: Python block-buffers a redirected stdout, and a Hub that
-            # is going to be **force-killed** never flushes. Every WARNING the run emits --
-            # including `drain_deferred_schedules`'s, which is the one this drive needs -- is lost
-            # in the buffer of the process the drive then kills.
+            # Set while chasing why the crash log stopped at "Waiting for application startup."
+            # for every process in the file. Buffering was the obvious suspect and was WRONG --
+            # setting this changed nothing, which is what turned the investigation towards the
+            # real cause, F151 (migrations disabling every existing logger at startup). Kept
+            # anyway: a Hub this harness is about to **force-kill** never gets to flush, so an
+            # unbuffered stream is the right thing for a crash drive regardless.
             "PYTHONUNBUFFERED": "1",
         },
         stdout=open(LOG, "ab"),
@@ -322,12 +322,15 @@ def main():
     # first request is the operator's own follow-up. So the operator's second message is what
     # restarts the turn that then makes it wait.
     #
-    # Asserted on the OBSERVABLE, not on the Hub's log. The log was tried first and cannot answer:
-    # running migrations at startup calls `fileConfig` on `alembic.ini` without
-    # `disable_existing_loggers=False`, which disables `uvicorn.error` and every `hub.*` module
-    # logger for the life of the process (F151) -- so `drain_deferred_schedules`'s own WARNING is
-    # never written, and an absent line would prove nothing. What IS decisive: the entry was
-    # already `delivered` into a NEW run by the time this POST's response came back, having been
+    # Asserted on the OBSERVABLE, not on the Hub's log -- and it stays that way even now that the
+    # log works. The log was tried first and could not answer: running migrations at startup called
+    # `fileConfig` on `alembic.ini` without `disable_existing_loggers=False`, disabling
+    # `uvicorn.error` and every `hub.*` module logger for the life of the process, so
+    # `drain_deferred_schedules`'s own WARNING was never written and an absent line proved nothing.
+    # That is F151, found here and fixed. The drain count below is now real evidence and is printed
+    # for the reader, but the VERDICT is kept on the queue state, which does not depend on a log
+    # level, a handler, or where stdout was pointed. What is decisive: the entry was already
+    # `delivered` into a NEW run by the time this POST's response came back, having been
     # `delivered` into the killed run before it.
     #
     # `log_offset` is captured anyway, so this reads only lines this drive's Hub wrote -- the log
@@ -339,7 +342,8 @@ def main():
             drained = [ln.strip() for ln in fh if "Draining" in ln]
     except OSError as exc:  # noqa: BLE001
         print("  could not read the hub log:", exc)
-    print(f"  drain lines in the hub log: {len(drained)}  (expected 0 while F151 stands)")
+    print(f"  drain lines in the hub log: {len(drained)}"
+          "   (before F151 was fixed this was always 0 -- the Hub could not speak)")
     r1_now = entry_row(entry1)
     verdicts.append(
         (

@@ -15,6 +15,7 @@ fix is applied. After the fix, every test in this file must pass.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -3071,3 +3072,36 @@ def test_migration_0098_is_guarded_when_the_queue_table_does_not_exist(tmp_path)
 
     with sqlite3.connect(db_file) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0098"
+
+
+def test_running_migrations_leaves_existing_loggers_enabled(tmp_path) -> None:
+    """F151: `env.py` must not silence the process it is migrating inside of.
+
+    `env.py` calls `logging.config.fileConfig`, whose `disable_existing_loggers` defaults to
+    **True** — it sets `disabled = True` on every logger that already exists and is not named in
+    `alembic.ini`. Migrations run from `init_db()`, the first line of the Hub's `lifespan()`, by
+    which point `uvicorn.error`, `uvicorn.access` and every `hub.*` module logger have been
+    created at import time. With the default, starting the Hub muted the entire process for its
+    whole life: no "Application startup complete.", no access log, no `_ui_staleness_warning()`,
+    no run-failure traceback. Only alembic's own lines survived, because `[loggers]` names them.
+
+    The two loggers asserted on are the two that matter and the two an operator actually reads:
+    uvicorn's, which reports that the server is up and serving, and a `hub.*` module logger,
+    which is every warning the Hub itself raises. Both are created here **before** the upgrade,
+    which is the ordering the Hub has at startup and the only ordering under which this can fail.
+    """
+    uvicorn_logger = logging.getLogger("uvicorn.error")
+    hub_logger = logging.getLogger("hub.run_reconciliation")
+    assert not uvicorn_logger.disabled
+    assert not hub_logger.disabled
+
+    _upgrade_to(f"sqlite+aiosqlite:///{tmp_path / 'logging.db'}", "head")
+
+    assert not uvicorn_logger.disabled, (
+        "running migrations disabled uvicorn's logger; the Hub serves the rest of the process "
+        "without printing a single line (F151)"
+    )
+    assert not hub_logger.disabled, (
+        "running migrations disabled the Hub's own module loggers; every logger.warning it "
+        "raises after startup goes nowhere (F151)"
+    )
