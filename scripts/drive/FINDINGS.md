@@ -10544,3 +10544,72 @@ sentence about somebody else reviewing, the second on the implementation task's 
 green checks for a briefing that says the opposite of what was being asserted. The file now asserts
 the implementation wording is present (F143's actual state) and that the review wording is not, so
 the day it is fixed the lines swap and say so.
+
+---
+
+## F144 (C) — row 13's other half holds, and the one red check was the harness looking for the note on a surface that cannot carry one
+
+**Status:** harness fixed in the same commit. Filed because the *product* result matters and
+because this is the sixth harness defect in four iterations, all the same species.
+
+`scripts/drive/t_row13_timeout.py` was written in iteration 13 and never finished — the run died
+mid-flight and left `driver.question_timeout_seconds = 60` behind (cleared before this run, which
+is why preflight could pass). Driven to completion here on `proj-1964cdedffe2` / `driver` / Haiku,
+`AW_TIMEOUT=60`: **16 of 17 checks held**, and the one that did not was the file's own.
+
+### The product half: the unanswered path is safe, and this is the first sweep to reach it
+
+Three sweeps recorded row 13's expiry half as "not reached". It is reached now, and every claim
+that decides whether an unattended project is safe held:
+
+| claim | measured |
+|---|---|
+| the question reaches the operator, blocking, with someone waiting | `q-1ef831008b68`, `from_agent=driver`, `blocking=true`, `asker_waiting=true`, after 12s |
+| the wait ends on its own rather than hanging | agent back to `idle` after **70s** against a 60s window |
+| …near the agent's own deadline, not the provider's | 70s vs 60s — the poll interval, not a four-minute default |
+| …cleanly | `idle`, not `error` |
+| afterwards: not answered, not declined, nobody waiting | `answered=false`, `declined=false`, `asker_waiting=false` |
+| the agent says what it decided without an answer | *"I asked the operator to choose … but the operator did not answer within the timeout. I decided on `report_095714.md`"* |
+
+The operator-side legibility of the leftover row is also already built, and reading
+`QuestionsPanel.tsx:22-26,52-64,150-151` against this data confirms it fires: `asker_waiting=false`
+drops the row out of the red **"Blocking — agents are waiting for your answer"** banner into plain
+*Unanswered*, and stamps it `no longer waiting` with the title *"The run that asked this has ended.
+Answering now would reach it as a new message, not as the answer it was waiting for."* An operator
+who slept through the question is not told to answer something nobody is holding for.
+
+### The harness half: the note is delivered, and no operator surface can show it
+
+The failing check searched the agent's `/output` transcript for the word `unanswered`, expecting
+`ask_user`'s note (`mcp_server.py:448-455`):
+
+> *"1 of 1 question(s) went unanswered within 60s. Continue as best you can and say plainly which
+> decisions you made without an answer."*
+
+It is not there — and it never could be. **F139 already established that the Hub records every tool
+result as the literal string `tool completed`**, and `/agent/{name}/chat` is built from the same
+`AgentOutput` rows (`agent_chat.py:645-700`), so there is no operator surface anywhere that carries
+a tool's return value. The check was reporting a known property of the transcript's *shape* as a
+fresh product defect — exactly F135's and F137's species, the sixth time in four iterations, and
+again in the direction that makes the product look worse than it is.
+
+The note did arrive. The proof is in the agent's own thinking, which names a number the turn prompt
+never mentions:
+
+> *"The operator did not answer within **60 seconds**. The result shows: - answered: false -
+> declined: false - answer: null. According to the `ask_user` documentation, this means 'nobody
+> responded within the timeout'."*
+
+`60` appears in exactly one place the agent can see: the note. So the assertion now checks that the
+agent repeats the window back, with the reasoning written down at the assertion so the next reader
+does not re-derive it. Re-running the file will re-prove delivery rather than re-file F139.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 AW_AGENT=driver \
+    AW_TIMEOUT=60 PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row13_timeout.py
+```
+
+Restores the agent's timeout in `finally` and declines its own leftover question. Costs one Haiku
+turn and about 90 seconds.

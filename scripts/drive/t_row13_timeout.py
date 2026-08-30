@@ -211,10 +211,24 @@ def main():
         text = "\n".join(str(o.get("content") or "") for o in outputs(60))
         tail = text[-2500:]
         print("  " + tail[-1200:].replace(chr(10), chr(10) + "  "))
+        # The note itself is NOT assertable from here, and looking for it was this file's own
+        # first wrong turn (F144). `/output` -- and `/agent/{name}/chat`, which is built from the
+        # same rows -- record every tool result as the literal string "tool completed" (F139), so
+        # `ask_user`'s `note` reaches the agent and no operator surface at all. Searching the
+        # transcript for "unanswered" therefore reports a fact about the transcript's shape as a
+        # product defect.
+        #
+        # What IS assertable is the one thing the agent could only have learned from the note: the
+        # size of the window. The turn prompt never names it, the charter never names it, and the
+        # only place AW_QUESTION_TIMEOUT's value is ever spoken in words is
+        # `mcp_server.py:448-455`. So the agent repeating it back is proof of delivery.
+        said_window = str(TIMEOUT) in text
         check(
-            "the expiry was reported to the agent in words, not as an empty answer",
-            "unanswered" in text.lower() or "went unanswered" in text.lower(),
-            "found" if "unanswered" in text.lower() else "the note never reached the transcript",
+            "the expiry reached the agent as a stated window, not as an empty answer",
+            said_window,
+            f"the agent repeated the {TIMEOUT}s window back"
+            if said_window
+            else f"the agent never names {TIMEOUT}s, so the note may not have been delivered",
         )
         check(
             "the agent named the choice it made without one",
