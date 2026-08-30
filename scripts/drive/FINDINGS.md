@@ -10265,3 +10265,125 @@ tasks in the loop's own queue; both were started in one firing on two agents, wh
 width working; each ran in its own task checkout with its own auto-snapshot commit; the job's
 history records one run row per dispatched task rather than one per firing; and `LEAVE NO JOB
 ENABLED` held — the job was disabled and archived, and `GET /jobs` returns `[]`.
+
+---
+
+## F141 (C) — the approval gate probes git, refuses, names the conflicting file, and then forgets it ever happened
+
+**Status:** open, filed not fixed. The repair is a choice between two surfaces and the code carries
+a written argument for the current behaviour, so it is the operator's. Found driving **row 17,
+integration**, which no previous sweep had reached.
+
+**The refusal itself is the best thing in this drive.** Two task branches on
+`proj-1964cdedffe2` both created `calc_082529.py` from nothing. Approving the first merged it into
+`main` cleanly. Approving the second answered:
+
+```
+PATCH /projects/proj-1964cdedffe2/tasks/task-fb0635e03198  {"status": "approved"}   409
+{"detail": {"code": "gate_unsatisfied",
+            "unmergeable": [{"commit_sha": "1f6869d249fb…",
+                             "source_branch": "agentweave/task/task-fb0635e03198",
+                             "target_branch": "main",
+                             "paths": ["calc_082529.py"]}],
+            "message": "This task's work does not merge cleanly into main: calc_082529.py.
+                        Resolve the conflict on the branch, then approve — approving is what
+                        merges it."}}
+```
+
+That is a real `git` probe (`requirement_gate._check_mergeable` →
+`task_integration.would_conflict`, `requirement_gate.py:154-193`) run *before* the transition, so
+the repository is never touched: `main` stayed at `f8bc7f99`, the task stayed `under_review`, and
+nothing was stranded. It names the commit, the branch, the path, and the way out. Almost nothing
+else in the product refuses this well.
+
+**Then it is gone.** Immediately after that refusal, in the same session:
+
+| where the operator would look | what it says |
+|---|---|
+| `GET /tasks/task-fb0635e03198` | `latest_integration: null` |
+| `GET /tasks/task-fb0635e03198/integrations` | `{"integrations": []}` |
+| `GET /tasks/task-fb0635e03198/integration-preview` | **`will_merge: true`, `reason: ""`** |
+| `GET /worktrees/conflicts` | the pair is gone — the merged task's checkout was released |
+
+So the 409's body is the *only* place the conflict exists. Dismiss the modal, reload, and the
+sentence beside the approve control says the work will merge — for a branch the Hub established
+minutes earlier that it will not. Press approve again and you get the same refusal again, which is
+the product being consistent about a thing it declines to remember.
+
+**The preview's silence is deliberate; the task's is not.** `task_integration_preview`'s own
+docstring (`api/v1/tasks.py:1041-1064`) says it is *"deliberately read-only and deliberately cheap:
+no git subprocess, no conflict probe — that is `requirement_gate`'s job at the moment of approval,
+where a refusal can still stop it. This is a sentence, not a second gate."* That argument is sound
+in isolation. It stops being sound once the gate **has already run** and produced an answer nobody
+kept: the second probe the docstring refuses to pay for is not needed, because the first one's
+result is sitting in a discarded HTTP response.
+
+And the sibling route was written for exactly this reader. `task_integrations`'s docstring:
+
+> *"My approved work is not on main" needs an answer, and a skipped merge with a stated reason is
+> that answer.*
+
+A skipped merge is recorded. A **refused** one is not — and the refused one is the case where the
+operator has to do something.
+
+### Two repairs, and why choosing is the operator's
+
+1. **Persist the refusal** as an integration row with an `outcome` like `refused`, so
+   `/integrations` and `latest_integration` answer the question the routes were written to answer.
+   Honest — it happened, and it is what the operator acted on — but it makes a *rejected transition*
+   write a row, which no other refusal in the product does, and the row would go stale the moment
+   somebody rebases the branch.
+2. **Let the preview say it**, by having it read the last refusal (not by running a second probe —
+   the docstring's objection stands and this repair does not breach it). Cheap and it lands where
+   the operator is already looking, but it is only as fresh as the last approval attempt, so a
+   preview that has never been refused still promises a merge it cannot guarantee.
+
+A third exists — `worktrees/conflicts` reporting branch-versus-`main`, not only workspace-versus-
+workspace — and would have caught this case before approve was ever pressed. It is also the largest
+of the three.
+
+**Reproduce:** two task branches that both touch one file, each with accepted evidence naming its
+head commit, then
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 \
+    AW_TASK_A=<first> AW_TASK_B=<second> AW_TASK_C=<one with no evidence> \
+    PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row17_integration.py
+```
+
+`t_row17_integration.py` asserts this in the direction the product behaves today, so the line goes
+red and says so on the day it is fixed.
+
+### Rows 16 and 17 otherwise held, and they are the strongest rows driven so far
+
+**Row 16, worktrees** (`t_row16_worktrees.py`, `driver` and `peer`, one file, parallel Haiku turns):
+
+| what | result |
+|---|---|
+| two task-bound turns run **at the same time** on one file | both started, both finished, no lock contention |
+| each works in its **own** checkout, not the agent worktree | `.agentweave/tasks/<task id>/`, `provisioned: true` |
+| the agent's workspace view lists the checkouts it holds | `task_checkouts[]` on `GET /worktrees/<agent>` |
+| `GET /worktrees/conflicts` finds the overlap | both pairs, by path — `calc.py` and `calc_082529.py` |
+
+The conflicts endpoint found the row-12 pair as well as its own, without being asked about it.
+
+**Row 17, integration**, everything except the paragraph above:
+
+| what | result |
+|---|---|
+| a task whose evidence names no commit previews honestly | `will_merge: false`, *"no accepted evidence names a commit, so there is nothing to merge"* |
+| evidence recorded by an agent is **not** accepted on arrival | the operator's `decision` route is what accepts it, and nothing merges before that |
+| once accepted, the preview names the commit it will write | `targets: [{commit_sha, source_branch}]` |
+| `completed → approved` is refused, and the refusal names the way through | *"From 'completed' the available transitions are: rejected, under_review."* |
+| approving the first task merges it | `outcome: "merged"`, `mechanism: "local"`, `actor_kind: "operator"` |
+| …and the **repository agrees** | `main` moved `5e74727d → f8bc7f99`, the evidence's commit is an ancestor of `main`, and `git show main:calc_082529.py` prints the function |
+| retrying an integration for a task that was never approved | `409`, *"only an approved task has work to integrate"* |
+
+**One harness defect, the same one as always.** The integration row's key is `outcome`
+(`api/v1/tasks.py:1094-1110`); the harness read `status` and reported `[None]` — "it did not report
+success" — for a row that said `"outcome": "merged"` four lines above in its own printed output.
+That is the seventh harness defect of this drive and the fifth of exactly this kind: guessing a
+shape with the real one on screen. The file also expected B to *attempt* an integration and record
+a failure, which made a refusal that is better than what was expected read as a silent nothing.
+Both corrected, and the whole file rewritten from raw response dumps to verdicts so the next run
+says which of these held rather than printing four thousand lines of JSON.
