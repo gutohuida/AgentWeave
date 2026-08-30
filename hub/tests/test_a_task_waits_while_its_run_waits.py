@@ -1488,3 +1488,116 @@ def test_the_two_statements_are_spelled_by_one_module():
 
     empty = Question(id="q-empty", project_id="proj-test", question="")
     assert proceeded_without_answer_reason(empty) == "Proceeded without your answer."
+
+
+# ---------------------------------------------------------------------------
+# 3. Blocked-while-running breaks nothing
+#
+# One test per row of the proposal's table a reviewer could reasonably doubt. These are guards, not
+# reproductions: they passed before this change and must pass after it. What is new is that
+# `blocked` and a *running* bound run can now coexist for the whole of a wait, which before this
+# change was true only for the moments between a run ending and the operator answering.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_run_ending_on_a_task_it_already_parked_is_not_divergent(app):
+    """3.1. `run-task-binding:594`. An agent that stopped to ask is not an agent that dropped the
+    work, and nothing must be started in response."""
+    from hub.db.models import RunDivergence
+
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    assert (await task_row(task_id)).status == "blocked"
+
+    await end_the_run()
+
+    assert (await task_row(task_id)).status == "blocked"
+    async with async_session_factory() as session:
+        divergences = list(
+            (
+                await session.execute(
+                    select(RunDivergence).where(RunDivergence.run_id == "run-waiter")
+                )
+            ).scalars()
+        )
+    assert divergences == []
+
+
+@pytest.mark.asyncio
+async def test_a_loop_does_not_claim_a_task_parked_at_ask_time_but_still_shows_it(app):
+    """3.2. The firing and the board deliberately disagree here, and that is the shipped design:
+    `blocked` is not claimable — the operator is who unblocks it — and it is still the loop's
+    current work, so the card must keep listing it."""
+    from hub.scheduler import (
+        CLAIMABLE_LOOP_TASK_STATUSES,
+        CURRENT_ITEM_TASK_STATUSES,
+        candidate_is_startable,
+    )
+
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+
+    # The two sets are what do the gating, so that `candidate_is_startable` can stay a single rule.
+    assert "blocked" not in CLAIMABLE_LOOP_TASK_STATUSES
+    assert "blocked" in CURRENT_ITEM_TASK_STATUSES
+
+    # And the rule itself lets it through without a fresh gate check, deliberately: nothing is
+    # about to transition it, so asking the dependency gate would be asking whether work that is
+    # not about to start is allowed to start — and a refusal would hide the task from the one place
+    # the operator can see that the loop is waiting on them.
+    async with async_session_factory() as session:
+        task = await session.get(Task, task_id)
+        startable, refusal = await candidate_is_startable(session, task)
+    assert (startable, refusal) == (True, None)
+
+
+@pytest.mark.asyncio
+async def test_a_second_run_binding_to_a_parked_task_leaves_it_parked(app):
+    """3.3. `run-task-binding:618`. Binding is a statement about the run, not a claim about the
+    task's status — so the second turn of a waiting conversation must not unpark the work."""
+    from hub.run_task_binding import bind_run_to_task
+
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+
+    async with async_session_factory() as session:
+        session.add(Run(id="run-second", project_id="proj-test", agent="worker", status="running"))
+        await session.commit()
+    async with async_session_factory() as session:
+        second = await session.get(Run, "run-second")
+        task = await session.get(Task, task_id)
+        transition = await bind_run_to_task(session, second, task)
+        await session.commit()
+
+    assert transition is None
+    task = await task_row(task_id)
+    assert task.status == "blocked"
+    assert task.blocked_reason == "Waiting on your answer: which colour?"
+
+
+@pytest.mark.asyncio
+async def test_the_agent_whose_run_is_waiting_is_not_free(app):
+    """3.4. `_agents_that_are_free` reads *not running* and *holding no active task*, and the first
+    half is what covers this: the run is suspended inside a tool call, but it is running.
+
+    `LIVE_STATUSES` deliberately excludes `blocked` — a task waiting on a person is not work anyone
+    is presently doing — so the second half would not have caught it, which is exactly why the
+    requirement asks for both.
+    """
+    from hub.scheduler import _agents_that_are_free
+
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+
+    async with async_session_factory() as session:
+        free = await _agents_that_are_free(session, "proj-test")
+    assert "worker" not in free

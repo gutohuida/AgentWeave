@@ -34,10 +34,10 @@ already told it may make, and the ADDED requirement in `task-lifecycle-governanc
 One test per row of the proposal's table that a reviewer could reasonably doubt. These are guards,
 not reproductions; they must pass before and after.
 
-- [ ] 3.1 A run whose task was parked at ask time ends with the question still unanswered: no divergence is recorded, the task is still `blocked`, and nothing was started in response (`run-task-binding:594`).
-- [ ] 3.2 A loop firing does not claim a task parked at ask time, and the loop's board still shows it as the current item (`jobs.py:354`).
-- [ ] 3.3 A second run binding to a task parked at ask time leaves it parked (`run-task-binding:618`).
-- [ ] 3.4 `_free_agents` still excludes the agent whose run is waiting.
+- [x] 3.1 A run whose task was parked at ask time ends with the question still unanswered: no divergence is recorded, the task is still `blocked`, and nothing was started in response (`run-task-binding:594`).
+- [x] 3.2 A loop firing does not claim a task parked at ask time, and the loop's board still shows it as the current item (`jobs.py:354`).
+- [x] 3.3 A second run binding to a task parked at ask time leaves it parked (`run-task-binding:618`).
+- [x] 3.4 `_free_agents` still excludes the agent whose run is waiting.
 - [x] 3.5 **Do this with group 7, not without it** (design D5): a board that reads a waiting task as "flagged, not stopped" while the gate can still stop it permanently states something false, and ungating without this leaves a resumable task rendered `gated`. Fix `dependency_state` in `hub/hub/api/v1/tasks.py:317`: `running_on_regressed` is derived from `response.status == "in_progress"` and must also hold for `blocked`, which is reachable only from `in_progress` and therefore has always started. Add a test for a parked task with a regressed prerequisite, and a comment recording that this was already wrong before ask-time parking and is only widened by it.
 
 ## 3a. Who is on a blocked task while a run is on it
@@ -117,7 +117,7 @@ already has both halves — `expire_permission_request`: *"The run reports and t
 
 ## 9. Gates, suites and a live drive
 
-- [ ] 9.1 `ruff check src/ hub/ tests/` · `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` · `mypy src/` · `cd hub/ui && npm run lint`.
+- [x] 9.1 `ruff check src/ hub/ tests/` · `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` · `mypy src/` · `cd hub/ui && npm run lint`.
 - [ ] 9.2 Full Hub suite. Baseline before this change is what the previous iteration measured; the difference must be exactly the tests this change adds.
 - [ ] 9.3 CLI suite and UI suite.
 - [ ] 9.4 A drive harness under `scripts/drive/`, against a Hub on 8011 started from current source, binding Haiku: a real agent asks a real blocking question about a real task, and the task is observed `blocked` **while the run is still `running`** — the assertion no unit test can make. Then leave it unanswered, let the timeout expire, and assert the task returns to `in_progress`, the agent completes it, and the completed task carries the statement. Restart the Hub first and confirm it serves the code under test.
