@@ -199,7 +199,7 @@
       "detail": "THIS IS HALF THE ASK AND IT IS TIME-GUARANTEED, NOT CONDITIONAL - see the 08:00 rule in limits. Invoke the e2e-loop skill and run it as a FULL-SURFACE SWEEP, not scoped to one change. Drive the product the way an operator would: real Hub, real agents, real runs. Bind Haiku for every real agent turn (standing operator directive - 'On testing with claude always use cheap models'); there is no token-budget gate and no coverage row is off limits for cost. Use your own Hub on 8011 per environment above, and a test project OUTSIDE this repo or under testbed/ - never proj-5e960453 or proj-18e5d4e0. File everything you find in scripts/drive/FINDINGS.md continuing the F-number sequence (F133 onward), each with a reproduction and file-and-line evidence. FIX what is small, self-contained and unambiguous; for anything that needs a design decision, FILE it and move on rather than guessing. Lessons from earlier drives, do not relearn them: name conversation_id explicitly on /agent/trigger or you open a NEW conversation; a helper that swallows a 404 into an empty list turns 'I could not look' into 'there was nothing there'; a loop delivers ONE task at a time; a drive prompt naming a fixed filename contaminates its own next run, so use a unique name per run; check questions unfiltered before calling a missing row a finding. LEAVE NO JOB ENABLED."
     }
   ],
-  "current": "F14-IMPL: groups 1, 2 and 2b done and pushed",
+  "current": "F14-IMPL: groups 1, 2, 2b, 3a, 4, 5, 5a, 6 done",
   "next_action": "Iteration 6: F14-IMPL — implement `openspec/changes/a-task-waits-while-its-run-waits/`. All three spec rounds are complete (R1 in iteration 2, R2 in iteration 4 at 19f5af2, R3 in iteration 5 at ff16cd8); do NOT run another round and do NOT re-propose. Read the F14-IMPL queue entry in full first, then tasks.md, then design.md — design D3, D10 and D11 are the three round 3 added and are the ones most likely to be skipped because they are not in the original shape of the change. ELEVEN groups (1, 2, 2b, 3, 3a, 4, 5, 5a, 6, 7, 8, 9). Group 1's reproductions must pass against unmodified code before anything else is touched. Commit per group, not at the end. Run the hub suite in background or in file chunks — it is ~14 minutes and exceeds the 600s cap — and `pytest hub/tests/ tests/` together fails collection, so run them separately. If you touch hub/ui/src you owe `npm run build` + `py -3.11 scripts/refresh_ui_bundle.py` and a joint commit. HONOUR THE 08:00 RULE: from 08:00 local do not start a new group; park at the last completed group with its commit pushed and start E2E-DRIVE, which the operator extended the stop to 12:00 specifically to make room for. If it is already past 08:00 when you read this, do NOT start F14-IMPL at all — go straight to E2E-DRIVE.",
   "limits": [
     "Push, do not open PRs. - standing operator directive",
@@ -277,5 +277,5 @@
     "The feature freeze's parameters are still unsettled.",
     "Whether /review-iteration ever runs over the 2026-08-27 overnight run's iterations 1-15."
   ],
-  "last_heartbeat": "2026-08-30T04:52:42+01:00"
+  "last_heartbeat": "2026-08-30T05:11:53+01:00"
 }

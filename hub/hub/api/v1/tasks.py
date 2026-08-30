@@ -358,9 +358,10 @@ async def _attach_awaiting_answer(
     * the question already names the task in `blocked_task_id` — the parked case, so a `blocked`
       card and a `under_review` one waiting on the same thing read alike.
 
-    Only `blocking=True`, unanswered, undeclined questions count, matching
-    `unanswered_blocking_question` exactly: a non-blocking `ask_user` is a note the agent left
-    while carrying on, and a declined question is one the operator has already closed.
+    Only `blocking=True`, unanswered, undeclined questions whose wait has not ended count,
+    matching `unanswered_blocking_question` exactly: a non-blocking `ask_user` is a note the agent
+    left while carrying on, a declined question is one the operator has already closed, and a
+    question whose wait ended is one nobody is waiting on any more (design D6).
     """
     task_ids = {response.id for response in responses}
     if not task_ids:
@@ -374,6 +375,7 @@ async def _attach_awaiting_answer(
             Question.blocking.is_(True),
             Question.answered.is_(False),
             Question.declined.is_(False),
+            Question.wait_ended_at.is_(None),
         )
         .where(
             Question.blocked_task_id.in_(task_ids)

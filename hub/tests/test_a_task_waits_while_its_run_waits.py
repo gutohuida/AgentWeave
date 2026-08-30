@@ -20,6 +20,8 @@ from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Question, Run, Task
 from hub.task_transition_service import history_for
 
+AUTH = {"Authorization": "Bearer aw_live_testkey_abcdefgh"}
+
 
 async def make_run(
     run_id: str = "run-waiter",
@@ -986,3 +988,170 @@ async def test_a_swept_task_carries_the_same_record_as_a_reported_one(app):
     swept_row = await question_row(second.json()["id"])
     assert (reported_row.wait_ended_at is not None) == (swept_row.wait_ended_at is not None) is True
     assert (await task_row(reported_task)).status == (await task_row(swept_task)).status
+
+
+# ---------------------------------------------------------------------------
+# 6. An expired wait is not an open one (design D6)
+#
+# `wait_ended_at` introduces a state that did not exist: a question that is unanswered, undeclined,
+# and nobody is waiting on. Rounds 1 and 2 fixed the two queries this change happens to touch;
+# round 3 asked what *else* derives "somebody is waiting" from `answered = False` and found three
+# more, two of them governed by shipped requirements in other capabilities. The decision is not one
+# answer — two are excluded and the third is kept and marked.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_run_that_reported_its_expiry_and_then_dropped_the_work_is_divergent(app):
+    """6.3, and the case 6.1 exists for.
+
+    Without the `wait_ended_at IS NULL` exclusion the boundary would park the task on a wait that
+    had already ended, and suppress a divergence that is real: the agent proceeded, then dropped
+    the work, and the record would say it was waiting on somebody.
+    """
+    from hub.db.models import RunDivergence
+
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+    await expire_the_wait(question_id)
+    await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+    assert (await task_row(task_id)).status == "in_progress"
+
+    await end_the_run()
+
+    task = await task_row(task_id)
+    assert task.status == "in_progress"
+    assert task.blocked_reason is None
+    async with async_session_factory() as session:
+        divergences = list(
+            (
+                await session.execute(
+                    select(RunDivergence).where(RunDivergence.run_id == "run-waiter")
+                )
+            ).scalars()
+        )
+    assert len(divergences) == 1
+
+
+@pytest.mark.asyncio
+async def test_the_board_stops_reporting_a_wait_that_ended(app):
+    """6.2. `_attach_awaiting_answer` inherits the same exclusion as the predicate it matches."""
+    await make_agent()
+    task_id = await make_task("task-review", status="under_review")
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+    assert (await read_task(app, headers, task_id))["awaiting_answer_reason"] is not None
+
+    await expire_the_wait(question_id)
+    await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+
+    assert (await read_task(app, headers, task_id))["awaiting_answer_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_three_surfaces_read_the_same_ended_wait_and_two_stop_saying_someone_waits(app):
+    """6.7. One run, one expired wait, three readers — and the decision is different per reader.
+
+    The conversation rail and the loop's open-question count are read by the **operator**: a
+    "waiting on you" that outranks `running`, and a count they read as "these still need me".
+    Neither may include a wait nobody is in. The checkpoint's question list is read by the
+    successor **agent**, which needs to know the question was asked and decided without anybody —
+    so it keeps the entry and says the wait ended.
+    """
+    from hub.checkpoints import _open_questions_for
+    from hub.conversations import conversation_attention
+    from hub.db.models import AIJob, Conversation, JobRun, Loop
+
+    await make_agent()
+    task_id = await make_task()
+
+    async with async_session_factory() as session:
+        session.add(Conversation(id="conv-wait", project_id="proj-test", agent="worker"))
+        session.add(
+            AIJob(
+                id="job-wait",
+                project_id="proj-test",
+                name="the loop",
+                agent="worker",
+                message="keep going",
+                cron="0 9 * * *",
+            )
+        )
+        session.add(
+            Loop(id="loop-wait", project_id="proj-test", job_id="job-wait", purpose="keep going")
+        )
+        session.add(
+            JobRun(
+                id="jr-wait",
+                job_id="job-wait",
+                project_id="proj-test",
+                conversation_id="conv-wait",
+            )
+        )
+        await session.commit()
+
+    headers = await make_run(task_id=task_id)
+    async with async_session_factory() as session:
+        run = await session.get(Run, "run-waiter")
+        run.conversation_id = "conv-wait"
+        await session.commit()
+
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+
+    async def read_all():
+        async with async_session_factory() as session:
+            rail = await conversation_attention(session, ["conv-wait"])
+            checkpoint = await _open_questions_for(session, "conv-wait")
+        loops = await app.get("/api/v1/projects/proj-test/jobs", headers=AUTH)
+        job = next(row for row in loops.json() if row["id"] == "job-wait")
+        return rail["conv-wait"], job["loop"]["open_questions"], checkpoint
+
+    rail, open_questions, checkpoint = await read_all()
+    assert rail == "waiting"
+    assert open_questions == 1
+    assert [entry["wait_ended"] for entry in checkpoint] == [False]
+
+    await expire_the_wait(question_id)
+    await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+
+    rail, open_questions, checkpoint = await read_all()
+    # The rail's own shipped rationale is the consumed timeout, and it is spent. `running` again,
+    # which is what the run is actually doing.
+    assert rail == "running"
+    assert open_questions == 0
+    # Kept, and marked. Dropping it would lose the most useful thing on the successor's list — and
+    # it is the stated cover for the task `LIVE_STATUSES` omits during a wait.
+    assert [entry["question"] for entry in checkpoint] == ["which colour?"]
+    assert [entry["wait_ended"] for entry in checkpoint] == [True]
+
+
+def test_the_loops_stop_reason_is_deliberately_out_of_scope():
+    """6.8. `scheduler._pending_loop_request` is a fifth reader of the same family and a real
+    defect — it has no `declined` exclusion at all — but it is about a loop's *stop reason*, not
+    about who is waiting, and folding it in would put an unrelated fix inside a reproduction that
+    cannot cover it. Recorded here so the omission is deliberate rather than forgotten.
+    """
+    import inspect
+
+    from hub import scheduler
+
+    source = inspect.getsource(scheduler._pending_loop_request)
+    assert "declined" not in source
+    assert "wait_ended_at" not in source

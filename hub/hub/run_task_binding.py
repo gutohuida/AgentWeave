@@ -590,6 +590,16 @@ async def unanswered_blocking_question(session: AsyncSession, run: Run) -> Optio
     a decline: the operator closes the question, the task is released, the run ends, and the task is
     parked again on the very question they just closed.
 
+    **Nor does a question whose wait has ended** (`a-task-waits-while-its-run-waits`, design D6).
+    `wait_ended_at` introduces a state that did not exist before it: unanswered, undeclined, and
+    nobody waiting. Without this exclusion a timed-out run would park its task at the boundary and
+    suppress a divergence that is real — the agent proceeded, then dropped the work, and the record
+    would say it was waiting on somebody.
+
+    Note the ordering this creates for the run-end sweep: the sweep has to find its candidate
+    *before* recording `wait_ended_at`, because after that this predicate will not return it again.
+    That is also what makes a sweep arriving after the tool's report harmless.
+
     Earliest first: a run that asked several is waiting on the first thing it got stuck on, which is
     the more useful thing to name on the card.
     """
@@ -599,6 +609,7 @@ async def unanswered_blocking_question(session: AsyncSession, run: Run) -> Optio
         .where(Question.blocking.is_(True))
         .where(Question.answered.is_(False))
         .where(Question.declined.is_(False))
+        .where(Question.wait_ended_at.is_(None))
         .order_by(Question.created_at, Question.batch_index)
         .limit(1)
     )
