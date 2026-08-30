@@ -197,3 +197,116 @@ than merely carrying a stamp.
 `4` with *"unrecognized arguments"* before a single test runs. Cost one wasted suite launch. Bound a
 long suite with the tool's own backgrounding, not with a plugin flag this repo does not have.
 
+
+---
+
+## Iteration 3 — 2026-08-30 03:35 → 03:4x — F14-R1
+
+**Queue item:** `F14-R1`, round 1 of three on the F14+F60 spec loop. Explore the code, write the
+proposal, implement nothing. `openspec/changes/a-task-waits-while-its-run-waits/` — proposal,
+design, delta, tasks — committed at `d8882c0` and pushed.
+
+### Reconciliation
+
+| Claim in STATE.json | Actual | Verdict |
+|---|---|---|
+| branch `autonomous/2026-08-30-decided-work-and-drive` | same | ✓ |
+| `iteration: 2`, HEAD `7bb95a4` "release the branch after iteration 2" | same, tree clean | ✓ |
+| `next_action`: start F14-R1, do not revisit F131-IMPL | F131 archived under `openspec/changes/archive/2026-08-30-continue-starts-what-it-names/` | ✓ nothing to take over this time |
+
+### What the proposal says
+
+Both halves of the operator's decision in one change. **(a)** the park moves from
+`run_divergence.evaluate_run_end` — `block_task_for_question`'s only caller today — to the moment
+`ask_user` blocks, in the agent-facing question routes. **(b)** when the tool's wait expires and the
+agent proceeds anyway, the Hub is told, the task returns to `in_progress`, and the question keeps a
+durable mark that its wait ended unanswered; the task then carries a derived, **permanent**
+statement that the work proceeded without an answer.
+
+Delta is `task-lifecycle-governance` alone: three MODIFIED requirements ("A task is recorded as
+waiting because the system observed it", "Only an unanswered blocking question makes a task wait",
+"Starting work is gated on its prerequisites") and two ADDED.
+
+### The two things the queue entry told round 1 to settle
+
+**(i) `blocked` while the run is `running`.** Checked every reader of task status rather than the
+three the entry named. Seven are already safe and the proposal records *why*, so rounds 2 and 3 can
+attack the reasoning instead of rebuilding it: `evaluate_run_end` (the runtime park is
+`origin=runtime`, so `run_advanced_its_task` still answers False, and the already-blocked branch
+returns None into a status check that returns None), `bind_run_to_task:430`, `CLAIMABLE_STATUSES`,
+the loop board, `_free_agents`, `scheduler.py:642` (already reads `("in_progress", "blocked")`
+together), and `LIVE_STATUSES` (a decided exclusion, widened in window, not changed in kind).
+
+One is **wrong**: `dependency_state` (`tasks.py:317`) derives `running_on_regressed` from
+`response.status == "in_progress"` alone, so a parked task whose prerequisite regressed reads
+`gated` — "has not started" — about work that has started and is waiting. `blocked` is reachable
+only from `in_progress`, so it has always started. Wrong today; this change widens the window from
+"after the run ends" to "the whole wait", so it is fixed here.
+
+**(ii) The `blocked → completed` timeout path.** The answer is that the edge stays absent.
+`task-lifecycle-governance:413` already forbids it, in a sentence written for exactly F60's record
+— *"no recorded history states a task was completed while still waiting on a person who never
+answered"*. F60 escaped it only because the task never entered `blocked` at all. Half (a) puts it
+there, and then half (b) is what the requirement **forces**, not an addition beside it: the wait has
+to end explicitly, through `in_progress`, before the work can be recorded as done.
+
+### Two things the exploration found that the recorded decision did not anticipate
+
+Both are the round earning its cost, and both would have shipped as defects.
+
+1. **The dependency gate runs on `blocked → in_progress`** (`task_transition_service.py:371-383` —
+   its own comment names the resume edge). `release_block_for_question` swallows the refusal, so
+   today an answer can silently fail to release a task whose prerequisite regressed while it
+   waited. Short window, nobody has hit it. After (a) the window is the whole wait, and after (b)
+   the release is what lets the agent finish — so a refusal answers `update_task(completed)` with
+   `409` from `blocked`, for work the agent has actually completed, with no action available to it.
+   Resuming a wait is therefore ungated, derived from the task's status inside the transition
+   service rather than from a flag a caller can forget.
+
+2. **`unanswered_blocking_question` would match a question whose wait already ended.** It selects
+   `blocking AND NOT answered AND NOT declined`. A run that timed out, proceeded, and then ended
+   *without* moving its task would be parked as "waiting on a person" — recording a wait that had
+   already finished and suppressing a divergence that is real. The predicate gains
+   `wait_ended_at IS NULL`, and both its readers inherit it.
+
+### Decided rather than left open
+
+* **Who says the wait ended.** The Hub cannot observe it: it knows the run is running and the
+  question is unanswered, but not whether the tool is still waiting. `QUESTION_ANSWER_TIMEOUT` is
+  the tool's own, resolved in `mcp_server.py` with a 240 default the Hub never sees (it sets
+  `AW_QUESTION_TIMEOUT` only when `Agent.question_timeout_seconds` is non-null). So the tool reports
+  both ends: `wait_seconds` at ask time, recorded as `wait_expires_at`, and an expiry report the Hub
+  refuses if that deadline has not passed. A missed report leaves the task `blocked` — today's
+  behaviour, and the right one for a run that died rather than proceeded.
+* **The mark is permanent**, not cleared by a later answer. F60 measured the operator answering five
+  minutes after the run ended, choosing the option the agent did *not* ship; clearing the mark then
+  would erase the record of the unilateral call at the moment it becomes most misleading.
+* **The release rule for a batch is not touched.** `run-task-binding:684` requires answering *any*
+  recorded question to release, so answering one of four returns the task to `in_progress` while its
+  run waits for the rest. That is the strongest argument for keeping `awaiting_answer_reason` rather
+  than folding it into the status, and the proposal says so instead of quietly re-deciding a shipped
+  requirement.
+
+### Adjacent defect, recorded and not fixed
+
+`scheduler._pending_loop_request` (`scheduler.py:376-382`) selects the loop's outstanding question
+with `Question.answered == False` and **no `declined` exclusion**, so a question the operator
+explicitly closed is still reported as what the loop is waiting on. Every other reader of that
+predicate excludes `declined`. Out of scope — it is a loop stop reason, not a task status — and
+written into `design.md` so it is not lost.
+
+### Verification
+
+A proposal round produces no runnable behaviour, so verification is what it can be, and is stated as
+such rather than dressed up:
+
+| Check | Result |
+|---|---|
+| `openspec validate a-task-waits-while-its-run-waits --strict` | valid |
+| Every code claim read at source | yes — `run_task_binding.py`, `run_divergence.py`, `task_transitions.py`, `task_transition_service.py`, `tasks.py`, `agent_actions.py`, `questions.py`, `mcp_server.py`, `scheduler.py`, `jobs.py`, `models.py` |
+| Cited line numbers re-checked after writing | yes — three were stale and were corrected in `tasks.md` |
+| Shipped requirements read before proposing against them | `task-lifecycle-governance` 407/439/474/509/535/1193, `run-task-binding` 594/618/639/663 |
+| Tree clean, committed, pushed | `d8882c0` |
+
+**Not verified, on purpose:** nothing was run. Rounds 2 and 3 exist to attack the argument above,
+and `F14-IMPL` is where a reproduction has to pass against unmodified code before anything changes.
