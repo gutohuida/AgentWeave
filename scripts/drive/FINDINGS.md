@@ -11068,3 +11068,150 @@ whether the activity log should read either. That is the operator's call, not a 
 **Evidence:** `hub/hub/scheduler.py:2100`, `:2130`, `:2314`, `:2469`, `:2482`, `:2697`, `:2756`,
 `:2766`; `hub/hub/db/models.py` `JobRun`; `hub/ui/src/hooks/useSSE.ts:514`. Live rows above from
 `C:/Users/huida/AppData/Local/Temp/aw0830/aw0830.db`, job `job-c0d5d3a94a9e`.
+
+---
+
+## F150 — the crash-ordering seam drives clean: a dead-window follow-up is delayed by exactly one turn, not stranded
+
+**Severity: none. This is a covered-and-correct record, not a defect.** It is written down because
+the seam has a docstring naming a failure it was built to end, and nothing had ever driven it with
+a real second message.
+
+`return_run_entries` (`hub/hub/inbound_queue.py`) deliberately preserves two fields on an entry it
+puts back, and says why:
+
+> every later input, including a request for a fresh conversation, queues behind the one doing the
+> killing
+
+`sequence` is kept so the operator's first message does not lose its place; `conversation_id` is
+kept because an entry belonging to no conversation cannot be scheduled at all. Both are right
+alone. Together they mean a message sent into the dead window — which `POST /agent/trigger` always
+puts on a **fresh** conversation — cannot ride on the redelivered turn, because `schedule_agent`
+filters the batch to `entry.conversation_id == conversation.id`. The open question was whether that
+is a delay or a strand.
+
+**Driven live, `scripts/drive/t_row19_crash_order.py`, 13/13 PASS**, on `driver`/Haiku against the
+8011 fixture. One crash, one follow-up POSTed as the first HTTP request the restarted Hub sees:
+
+```
+09:53:38  entry1 seq 141  conv A   delivered   run interrupted by the kill
+09:53:54  entry1 seq 141  conv A   delivered   attempts 1, NEW run, session_mode: resume
+09:53:54  entry2 seq 142  conv B   queued      "agent is already running"
+09:54:09  entry2 seq 142  conv B   delivered   own run, session_mode: new
+09:54:2x  agent reply text: SECOND-1788083634
+```
+
+**Fifteen seconds, not forever.** The follow-up is deferred for exactly the length of the
+redelivered turn and then runs on its own conversation, with its own words reaching the agent —
+asserted on that run's `agent_outputs` rows of `kind = "text"`, so it is the agent's reply and not
+its reasoning.
+
+While it waits the operator is told the truth: the trigger answers `status: queued` with
+`waiting_reason: "agent is already running"`, and `GET /queue/{agent}/status` independently reports
+`waiting_count: 1, running: true` with the same reason.
+
+### The one thing worth noticing
+
+**The operator's own follow-up is the request that restarts the turn it then waits behind.**
+Startup reconciliation cannot re-drain by itself — it runs inside `lifespan()`, before the Hub has
+served anything, so `bound_address` is empty and `_schedule_or_defer` parks the agent. The park is
+drained by `_observe_bound_address` from *the first request the Hub serves*. With a TCP-only
+liveness poll, that first request is the follow-up. Measured: by the time the POST response came
+back, entry one was already `delivered` with `delivery_attempts: 1` into a **different** run.
+
+That is a good property, not a bad one — the answer the operator gets is accurate precisely because
+their own request had already un-parked the turn a moment earlier. Recorded so nobody reads the
+sequence as a race.
+
+**Together with F146** (three crashes on one input until `DELIVERY_ATTEMPT_LIMIT` abandons it) the
+docstring's whole argument is now driven: a blocker that recovers costs the follow-up one turn, and
+a blocker that never recovers is withdrawn after three attempts and stops blocking. Neither leg
+loses the second message.
+
+**Evidence:** `scripts/drive/t_row19_crash_order.py`; `hub/hub/inbound_queue.py`
+`return_run_entries`; `hub/hub/turn_scheduler.py` — `schedule_agent`'s conversation filter;
+`hub/hub/main.py` `_observe_bound_address`; `hub/hub/run_reconciliation.py` `_schedule_or_defer`
+and `drain_deferred_schedules`.
+
+---
+
+## F151 — running migrations at startup silences the Hub's logging, and uvicorn's, for the life of the process
+
+**Severity B. Found while trying to read a Hub log, which is the only way this shows up.**
+
+`hub/hub/migrations/env.py:14` runs
+
+```python
+fileConfig(config.config_file_name)
+```
+
+`logging.config.fileConfig` defaults to **`disable_existing_loggers=True`**. It is called from
+`init_db()`, which is the first line of `lifespan()` — by which point every `hub.*` module logger
+has been created at import time and uvicorn's `uvicorn.error` and `uvicorn.access` loggers already
+exist. All of them are set `disabled = True` and stay that way until the process ends.
+
+Measured directly rather than inferred:
+
+```
+cd hub && py -3.11 -c "...fileConfig('hub/alembic.ini')..."
+
+WARNING:uvicorn.error:BEFORE: uvicorn.error speaks
+WARNING:hub.run_reconciliation:BEFORE: a hub module speaks
+uvicorn.error.disabled = False | hub logger disabled = False
+--- after fileConfig(alembic.ini) ---
+uvicorn.error.disabled = True  | hub logger disabled = True
+(neither AFTER line printed)
+```
+
+Confirmed against every Hub this run has started. `hub_crash.log` holds eleven process starts and
+each one is the same four lines, then silence:
+
+```
+INFO:     Started server process [22196]
+INFO:     Waiting for application startup.
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+```
+
+The alembic lines survive because `logger_alembic` is one of the loggers `alembic.ini` itself
+configures. Everything else is gone. **`Application startup complete.` and `Uvicorn running on
+http://...` never print** — the two lines an operator looks for to know the Hub is up. Neither does
+a single access log line, nor the shutdown lines.
+
+### What is actually lost
+
+Every `logger.warning` the Hub can emit, including:
+
+- `main.py`'s `_ui_staleness_warning()` — the warning that the committed UI bundle does not match
+  its source. It is emitted in `lifespan()` **after** `init_db()`, so it has never once been seen.
+- `run_reconciliation.py`'s `"Draining %d deferred post-reconciliation schedule(s)"` — the only
+  record that a restarted Hub re-drained an interrupted agent. Its absence is what sent F150's
+  investigation down a dead end; an assertion on that line would have read FAIL forever with the
+  product behaving correctly.
+- every uvicorn access line, and every unhandled-exception traceback uvicorn would log.
+
+An operator diagnosing a Hub that is misbehaving has, today, **no log at all** past the fourth line.
+`agentweave doctor` does not fill the gap: it inspects the environment, not the running process.
+
+### Scope
+
+Not specific to this drive's spawn command. `PYTHONUNBUFFERED=1` was set on the last two runs to
+rule buffering out, and changed nothing. Any path that reaches `init_db()` is affected, which is
+every path that starts the Hub — the console script, `agentweave hub_start`, the Docker image, and
+`python -m uvicorn hub.main:app` alike.
+
+### The fix, and why it is filed and not applied here
+
+One keyword: `fileConfig(config.config_file_name, disable_existing_loggers=False)`. That is small
+and unambiguous enough for D5's fix bucket, and it should be taken together with a test asserting
+that a logger created before `env.py` runs still emits afterwards.
+
+It is filed rather than applied because of when it was found: 11:15, against a 12:00 stop, and the
+reproduction-first discipline D5 attaches to every fix needs a test written against the migration
+path rather than a one-line edit pushed on the way out. This is the **first item worth picking up
+next**, not a decision waiting on the operator.
+
+**Evidence:** `hub/hub/migrations/env.py:14`; `hub/hub/alembic.ini` — `[loggers] keys = root,
+sqlalchemy, alembic`; `hub/hub/main.py` `lifespan()` ordering (`init_db()` first,
+`logger.warning(warning)` after); `C:/Users/huida/AppData/Local/Temp/aw0830/hub_crash.log`, eleven
+process starts, four lines each.
