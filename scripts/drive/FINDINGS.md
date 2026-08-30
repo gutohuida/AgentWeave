@@ -462,7 +462,8 @@ which is what the operator actually needs to hear.
 
 ## F14 (B) — A task waiting on the operator still reads `in_progress`
 
-**Status:** partially fixed 7fcd172 (a derived `awaiting_answer_reason` reports the wait); the task-state half is undecided and blocks F60's parked half
+**Status:** partially fixed 7fcd172 (a derived `awaiting_answer_reason` reports the wait);
+**the task-state half is DECIDED 2026-08-30 and queued as a spec loop.**
 
 `ask_user` worked well: `builder` asked a structured question with two labelled options,
 `blocking: true`, `asker_waiting: true`, and the answer reached the agent, which then completed the
@@ -473,6 +474,43 @@ But while the run sat blocked on the question, its bound task read `status: in_p
 `run_divergence.evaluate_run_end` (`run_divergence.py:325-326`) — so a task only parks to `blocked`
 if the run **ends** with the question unanswered. During the wait, which is the whole point, the
 board says the work is progressing.
+
+### The decision, 2026-08-30
+
+**Park at ask time, and flag the timeout outcome.** Both halves, in one change, because the second
+is what F60 needs and it has nowhere to live without the first.
+
+**(a) The park moves to the moment the question blocks.** `block_task_for_question` is reached from
+`run_divergence.evaluate_run_end` and nowhere else (`run_divergence.py:718`, restated at
+`tasks.py:338`), so today a task parks only if the run *ends* unanswered. It must park when
+`ask_user` blocks instead.
+
+This is cheaper than it looks, and the exploration that established that belongs here so round 1
+does not redo it: **no new task state is needed.** `blocked` is already a real status
+(`src/agentweave/constants.py:273`) with `blocked_reason`, a transition map consulted through
+`allowed_targets`, `question.blocked_task_id` recording what to release, and `release_reason`
+called on every exit — the answer arriving, the operator releasing it, reassignment, rejection.
+The machinery exists and works. It fires at the wrong moment.
+
+**(b) A question that times out while the agent proceeds anyway is recorded on the task.** This is
+F60's parked half. `QUESTION_ANSWER_TIMEOUT` expires *inside* the tool call, the agent decides the
+judgment call itself and can move the task to `completed` in the same turn — so by the time
+`evaluate_run_end` runs there is nothing left to park, and the board shows a clean completed task.
+The operator is never told that a substantive call was made because they did not answer in time.
+
+**What round 1 must settle rather than assume**, both consequences of (a):
+
+- A task will be `blocked` while its run is still `running`. That combination does not exist today.
+  Everything reading task status has to be checked against it — the divergence boundary check, loop
+  and flow task selection, the dependency board.
+- The timeout path needs a defined reconciliation: the task is `blocked`, the agent proceeds and
+  tries to complete it. Whether `blocked → completed` is permitted, and what (b) writes when it
+  happens, is the crux of the change rather than a detail of it.
+
+**Rejected:** leaving the lifecycle alone and rendering `awaiting_answer_reason` more prominently.
+Smaller and touches no transitions — but F60 measured the run-end fallback failing in exactly the
+case that matters most, so a more prominent secondary field would still leave a timed-out question
+ending as a clean completed task.
 
 ## F15 (C) — Stopping an agent does not stop the work
 
@@ -3167,7 +3205,11 @@ distinction F55's own live verification drew for `Checkpoint`.
 
 ## F60 (A) — An unanswered `ask_user` question that resolves itself mid-turn leaves the task reading `completed`, and the operator can still "answer" it afterward into a state that contradicts the code that shipped
 
-**Status:** partially fixed 033ec4c — the guard that refuses an answer whose asking run has ended predates the filing (`questions.py`, `_asker_is_gone`); the half that leaves the task reading `completed` is parked for F14
+**Status:** partially fixed 033ec4c — the guard that refuses an answer whose asking run has ended
+predates the filing (`questions.py`, `_asker_is_gone`); the half that leaves the task reading
+`completed` **is no longer parked — the operator decided it 2026-08-30 as part (b) of F14's
+decision.** It ships with F14 rather than after it: a timed-out question whose agent proceeded
+anyway is recorded on the task, so the board can say a decision was made without the operator.
 
 Driven live (Q8), following the method's own directive to leave a question deliberately
 unanswered. `proj-8605b92d0028`'s `author` agent (Haiku, cheap runner) was told, honestly, to ask
@@ -3556,7 +3598,17 @@ review is a separate question about the ladder**, not about this fix, and is lef
 
 ## F66 — A batched turn's workspace and its run binding are decided by two different rules, and they can name different tasks
 
-**Status:** open — deliberately not fixed; it asks the operator whether a turn should ever batch a review and ordinary work, and test 1.3 pins the binding meanwhile
+**Status:** **closed 2026-08-30 — the question was answered in code, and this line was stale for
+four days.** The operator question below ("should a turn ever batch a review and ordinary work?")
+was answered **no** by `2026-08-27-every-run-knows-its-task` (archived), the day after this was
+filed. Enforced in two layers: `turn_scheduler.py:110-131` narrows `selected` to the controlling
+entry's kind before a turn starts, and `agent_trigger._review_task_from_entries` refuses a
+hand-built mixed batch with a 409 as defence in depth. `run_task_binding.binding_from_entries`
+states the outcome from its own side — *"That batch can no longer survive."* It is normative, not
+merely implemented: `agent-conversation-workspace` carries **"A turn admits entries of one kind
+only"** (`spec.md:1751`) and **"A delivered turn carries a review or ordinary work, never both"**
+(`:1779`). The two rules can no longer disagree because the batch they would disagree about cannot
+be assembled. Nothing below is retracted — it is the record of why the rule exists.
 
 **Found:** 2026-08-26, driving group 6 of `one-answer-to-what-is-happening` live against the trial
 Hub on port 8010. Not by reading — by checking a claim I had already written down and finding it
@@ -7567,6 +7619,114 @@ this is a **`workspace_dir` honesty** problem, not a worktree-setup defect, and 
 The accepted risk, in the operator's words: work still lands in the real checkout — the operator
 just finds out about it. Queued as a spec loop; by this repository's rule it gets three rounds
 before a line of it is written.
+
+### Part (2) decided, 2026-08-30 — and the premise it was parked on was wrong
+
+Part (2) was the one thing left unauthorised, on the stated grounds that *default posture raises no
+permission card, so there is nowhere honest to detect an escape*. **That premise is false.** The
+card is the **approval** path; there is a separate **observation** path that runs in every posture,
+because it is how the transcript is built. `runner_parsing.py:264-272` parses every `tool_use` block
+from Claude's stream with its full input:
+
+```python
+elif block_type == "tool_use":
+    events.append(tool_use_event(
+        tool=block.get("name", "unknown"),
+        input_data=block.get("input", {}),      # the whole input, file_path included
+        call_id=block.get("id"),
+    ))
+```
+
+That fires regardless of `permission_mode`, and `codex_appserver.py` emits the same events for
+Codex. F115's own escaping run was a `Write` call carrying an absolute `file_path` — exactly the
+shape this parse already sees, in exactly the posture the finding is about.
+
+**Decided: detect at the tool-event parse point, and name it for precisely what it catches.** The
+recorded fact is *a file tool wrote outside the workspace*, never "escapes". Two vectors are
+explicitly out of scope and get their own finding rather than being silently implied by the label:
+
+- **Shell writes.** A `Bash` call arrives as a command string, not a path; `echo x > /abs/path`
+  is invisible to a path check.
+- **Symlink traversal.** A symlink inside the worktree pointing out defeats any path check, because
+  the path the tool reports is legitimately inside.
+
+The finding's own warning — a detector that misses the case it is about is worse than none, because
+it reads as coverage — applies to the **label**, not to the mechanism. Named exactly, this is real
+coverage of the reproduction that produced the finding.
+
+**Containment is not to be built.** If native mode ever confines, it adopts an existing OS-level
+sandbox rather than inventing a boundary — see the research below.
+
+### What the rest of the field does (researched 2026-08-30)
+
+**"A worktree is not a sandbox" is the explicit industry consensus**, and it is this finding's
+reframe arrived at independently:
+
+> A separate checkout constrains where an agent's *Git* writes land. It does not constrain what
+> commands the agent runs, what it reads outside the repository, or where a symlink points.
+> — *Isolation boundary, not a security boundary.*
+> ([digitalapplied.com](https://www.digitalapplied.com/blog/agent-cli-worktree-isolation-parallel-coding-agents))
+
+Worktrees solve a **concurrency** problem, not a **containment** one. That survey is also where the
+symlink vector above came from.
+
+**The architecture is mainstream.** The GitHub Copilot desktop app (Build 2026) runs each parallel
+agent session in its own isolated worktree; Copilot CLI shipped an experimental `/worktree` command
+on 2026-08-03; Claude Code documents a `--worktree` flag and `isolation: "worktree"` for subagents.
+One worktree per agent on its own branch is table stakes, not a differentiator.
+
+**Containment exists as a buyable layer.**
+[`@anthropic-ai/sandbox-runtime`](https://github.com/anthropic-experimental/sandbox-runtime)
+enforces filesystem and network restriction at the OS level without a container: Seatbelt
+(`sandbox-exec`) on macOS and bubblewrap on Linux, both deny-by-default with an allow-list; on
+**Windows**, a dedicated `srt-sandbox` local user account with additive inheriting ACEs granted on
+the working tree for that SID alone — a model that composes with worktrees unusually well. Claude
+Code ships its own `/sandbox` on the same primitives.
+
+**Why that is a later option and not this change.** Windows support is **alpha**, needs a one-time
+elevated `npx @anthropic-ai/sandbox-runtime windows-install`, cannot do per-execution filesystem
+overrides, and does not reach per-user tool installations. Claude Code's `/sandbox` is documented
+for Linux and macOS, with its sandboxed bash tool a beta research preview. And on Linux the
+deny-path mechanism *"only blocks files that already exist"* — which is precisely the create-a-new-
+file case F115 reproduced. Recorded as the eventual containment path, to revisit when Windows
+support leaves alpha.
+
+### The cross-worktree variant — worse than the case above
+
+Raised by the operator 2026-08-30 and confirmed in code. Everything above concerns an agent writing
+into the **operator's** checkout. The same mechanism lets alice write an absolute path into
+**bob's** worktree, and the consequence there is worse.
+
+`snapshot_worktree` (`hub/hub/worktrees.py:737-776`) commits whatever is dirty in a worktree onto
+that agent's own branch:
+
+```python
+_run_git(worktree, "add", "-A")
+...
+message = f"Auto-snapshot: {agent}'s turn"
+```
+
+`git add -A` — everything in the folder, whoever put it there — committed to `agentweave/bob`,
+under a subject saying it was bob's turn.
+
+| Escape | What happens | Would the operator notice? |
+|---|---|---|
+| → operator's checkout | file sits uncommitted, visible in `git status` | probably, eventually |
+| → another agent's worktree | **auto-committed to that agent's branch**, labelled as that agent's turn, flows through review and merge looking legitimate | no |
+
+The second does not merely escape isolation — it **launders the work through the wrong identity**.
+Review approves it as bob's, evidence attributes it to bob, and the trail back to alice is gone.
+Part (2)'s tool-level detection catches this too, since the path is equally outside the writing
+agent's own workspace; what it adds is that the recorded fact must name *which* workspace was
+written into, not merely that one was left.
+
+### One thing this is not
+
+Not a prompting problem. Non-determinism makes the escape *unpredictable*; it is not what makes it
+*possible*. A perfectly deterministic agent instructed to use absolute paths would do the same and
+succeed. "Always use relative paths" is a request competing with a model that often has good
+reasons to resolve paths absolutely. The only real levers are an OS-enforced boundary or noticing
+after the fact.
 
 ---
 
