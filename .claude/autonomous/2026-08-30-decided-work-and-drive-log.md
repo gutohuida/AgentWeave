@@ -1228,3 +1228,117 @@ timeout half — letting a question expire rather than answering it — was neve
 with `asker_waiting: false` was observed on a completed run, which is the state that half would
 examine. The fixture is warm and cheap to reuse: `proj-1964cdedffe2`, three Haiku agents
 (`asker`, `driver`, `peer`), worktrees already provisioned for all three.
+
+---
+
+## Iteration 12 — 2026-08-30, 07:50 → 08:15 — E2E-DRIVE, rows 5 and 6 live
+
+**Unit of work:** `E2E-DRIVE`, continued. The 08:00 rule was already in force at 07:50, so no queue
+item was opened and no spec-loop round was started; the drive was the whole iteration. The clock was
+read from PowerShell five times.
+
+**Reconciliation:** branch, tree and `git log` matched `STATE.json` exactly — `f884959`, clean,
+`autonomous/2026-08-30-decided-work-and-drive`. Nothing to reconcile.
+
+### The Hub, and the check that it was mine
+
+`http://127.0.0.1:8011`, PID 19460, started **05:27:03** on `…/Temp/aw0830/aw0830.db` — the same
+process iteration 11 used. `find hub/hub src -newermt "2026-08-30 05:27:03" -name '*.py'` returns
+nothing, so no Python under test has moved since it started and every result below describes this
+checkout. 8000 and 8010 were never touched. Fixture reused: `proj-1964cdedffe2`
+(`drive-0830-sweep`), agents `driver` and `peer` on `claude-haiku-4-5-20251001`.
+
+### What was driven
+
+| Row | Verdict |
+|---|---|
+| 5 Conversations (API) | driven, `t_sweep_conversations.py`, **0 unexpected** |
+| 15 Checkpoints (API refusals) | driven, same run, 0 unexpected |
+| 6 Inbound queue (API) | driven, `t_sweep_queue.py` — 0 unexpected **once its preconditions were fixed**, and F136 fell out of doing so |
+| **5 Conversations (live)** | **PASS** — new `t_row5_conversations.py`, two Haiku turns, 14/14 |
+| **6 Inbound queue (live hop chain)** | **PASS** — new `t_row6_hop_chain.py`, 12/12 on the clean run |
+
+### Four findings
+
+**F136 (B) — an unbound self-registered agent is told to install a binary named after itself.**
+`launchability.py:36-43` introduces `RUNNER_UNBOUND` *specifically* to end the sentence
+`Runner CLI '<agent>' was not found in PATH`, and `get_agent_config`'s docstring says the repair
+"fixes both surfaces at once". Both surfaces still produce it. The branch is gated on
+`not agent_row.self_registered` (`launchability.py:418`), so it is off for exactly the population
+that reaches the unbound state through `POST /agents/register` and on for the one that cannot —
+the UI's create route writes `self_registered=False` and demands a launchable runner up front.
+Reproduced on `GET /agents/launchability` and on the queue's `waiting_reason` in the same request
+cycle. The exemption's two written defences are both measurably false: nothing is refused
+(`runnable` is already `false` either way), `collaboration_ready` is `null` rather than "already
+saying so", and the test cited as pinning it configures its agent through `session/sync` and so
+never reaches the guard. Removing the clause leaves **129 tests green** — measured across
+`test_launchability`, `test_agents`, `test_agents_self_registered`, `test_inbound_queue` and
+`test_agent_trigger`, then reverted. **Filed, not fixed:** a `contact_mode: "mcp"` agent needs a
+third reason rather than "bind a runner in the Hub UI", and that is a design decision.
+
+**F137 (C) — the harness that promised to spend no provider tokens had been spending them.**
+`t_sweep_queue.py` names a fixed agent and never checked the three preconditions its own docstring
+asserts. On the warm fixture that agent was archived (three false `UNEXPECTED` lines that were the
+product refusing correctly), and then, once unarchived, turned out to have Haiku bound — so a file
+whose premise is "not a single provider token" started **five real turns**, and silently swapped
+what it measured: `"agent is already running"` instead of the never-launchable case. That
+substitution is what had been hiding F136. Now asserts exists / open / no-runner and exits rather
+than reporting on a situation it does not describe. It also drains its own leftovers now.
+
+**F138 (B) — three harnesses hard-wired to a forbidden project, and one of them writes.**
+`t_hop.py`, `t_loop.py` and `t_spec.py` carry `P = "proj-18e5d4e0"` with no `AW_PROJECT` override
+and no guard, while five sibling files enforce the same rule explicitly. `aw.py` defaults `AW_HUB`
+to **8010** with a live key, so the *bare* invocation of each file is the unsafe one, and
+`t_spec.py` PUTs a complete change-spec document. Fixed using the shape the compliant files already
+use; both refusal paths verified to exit 1 without issuing a request. No damage occurred — the files
+were read before they were run, which is the only reason this is a finding rather than an incident.
+
+**F139 (B) — the agent reached for the host's `SendMessage` and reported AgentWeave's roster as
+unreachable.** Told in prose to *"use the send_message tool"*, `driver` called Claude Code's own
+`SendMessage`, got `tool completed` with the message going nowhere, then loaded the host's
+`ListAgents`, saw Claude Code sessions, and told the operator that `peer` "is not currently
+reachable". `peer` was open, idle and bound throughout. The canonical context states the
+`mcp__agentweave__` prefix rule once in a header line and then lists every tool bare. The identical
+instruction had succeeded nine minutes earlier — nothing in the product decides which tool is
+picked. Filed rather than fixed: qualifying the injected names is a decision about which runner the
+agent-facing text is written for.
+
+### What held, and is worth not re-deriving
+
+- **A conversation is a real thread.** Two triggers separated by an operator rename resumed the same
+  `provider_session_id`, and the agent recalled a codeword planted in turn 1. The operator's title
+  survived the next turn, confirming the documented `name_conversation` no-op from the agent side.
+- **The hop budget works, end to end.** Depth increments and is attributed to the agent; the
+  over-budget entry is held rather than discarded; the **timeline** marks it `hop_budget_exceeded`
+  (the queue listing correctly does not carry the field — it is the Continue control's flag); the
+  status says "hop budget exhausted"; an operator message is not caught by it; and `release` frees
+  exactly one message by resetting `hop_depth` to 0, so the budget still bounds everything after.
+- The `release` refusal for an entry that is *not* hop-blocked is the best sentence in FINDINGS.md:
+  it names the hop, the budget, the conclusion, and where to look next.
+
+### Three harness lessons, all the same lesson
+
+Every wrong verdict this iteration came from the harness, not the product, and each was the same
+mistake in a new place: **guessing a shape instead of reading it.** The chat route returns `entries`
+with a `kind`, not `messages` with a `role` — the first row-5 harness read every completed turn as
+an empty transcript. `hop_budget_exceeded` is on the timeline, not the queue listing — the first
+row-6 harness reported a correctly-held entry as unmarked. And "an entry at hop 1" matched against a
+warm fixture's whole history found the *previous* run's entry in 0s and passed while this run's
+agent had not sent anything. All three are now filtered, documented in place with file-and-line
+references, and the preconditions are asserted rather than stated.
+
+### Cleanup
+
+`hop_budget` restored to 6. No queued entry anywhere on `proj-1964cdedffe2` (the six
+`unbound-driver` leftovers were drained by hand and the harness now drains its own). No jobs exist,
+enabled or otherwise. No token budget. All five agents idle, no pending permission card, no open
+question. `unbound-driver` is left **unbound**, which is `t_sweep_queue.py`'s precondition — do not
+bind a runner to that name.
+
+### Next
+
+`E2E-DRIVE` continues. Unreached: rows **15** (checkpoints — drive past the threshold, render,
+continue, cut over; F126 and F130 already filed here), **17** (integration), **12** (flows), **16**
+(worktrees), **19** (resilience), and within row 13 the timeout half. Read any harness before
+believing it — that is now five harness defects in two iterations, and every one of them made the
+product look worse than it is.
