@@ -9,7 +9,7 @@
   "parent_sha_note": "master at 2dcff93, pushed - the commit that carries this STATE.json. Contains: the 2026-08-29 overnight run's 63 commits, the CI fix for the strictness probe, the F14/F115/F66 decision write-ups, and the COMPLETED F131 spec loop under openspec/changes/continue-starts-what-it-names/. That last one matters: F131-IMPL is the first queue item and its proposal, design, spec delta and tasks.md are all on master already. Do not re-propose it.",
   "stop_at": "2026-08-30T12:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 4,
+  "iteration": 6,
   "log_file": ".claude/autonomous/2026-08-30-decided-work-and-drive-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "green_at_arming": {
@@ -64,7 +64,7 @@
       "id": "F14-IMPL",
       "title": "F14+F60 implementation",
       "status": "pending",
-      "detail": "Implement `openspec/changes/a-task-waits-while-its-run-waits/` \u2014 three rounds are complete and the proposal, design (D1-D11), tasks.md and FIVE spec deltas are on this branch at ff16cd8. ELEVEN task groups, not eight: 1, 2, 2b, 3, 3a, 4, 5, 5a, 6, 7, 8, 9. Work them in order; the order is load-bearing in two places. (i) Group 1 writes the reproductions and they must PASS against unmodified code before anything is changed \u2014 a reproduction that does not pass first is not a reproduction. (ii) Groups 3.5 and 7 are coupled in both directions and neither ships alone; 5a must find its candidate before 6.1's exclusion applies to it, and 6.6 is what keeps 3a.6's decision to leave LIVE_STATUSES alone honest. Three groups came from round 3 and are the ones a hurried implementation would drop: 2b closes the PATCH route that otherwise bypasses everything in 4-8; 3a fixes task_attribution; 5a adds the run-end sweep behind the expiry report. Do NOT reintroduce `wait_seconds` on any schema \u2014 round 3 removed it deliberately and design D3 says why. Gates and suites per group 9, and 9.4/9.4a are a real drive on 8011 with Haiku, not a unit test. This is a large change: if the 08:00 rule arrives mid-implementation, park at a completed group with its commit pushed, never mid-group."
+      "detail": "Implement `openspec/changes/a-task-waits-while-its-run-waits/` — three rounds are complete and the proposal, design (D1-D11), tasks.md and FIVE spec deltas are on this branch at ff16cd8. ELEVEN task groups, not eight: 1, 2, 2b, 3, 3a, 4, 5, 5a, 6, 7, 8, 9. Work them in order; the order is load-bearing in two places. (i) Group 1 writes the reproductions and they must PASS against unmodified code before anything is changed — a reproduction that does not pass first is not a reproduction. (ii) Groups 3.5 and 7 are coupled in both directions and neither ships alone; 5a must find its candidate before 6.1's exclusion applies to it, and 6.6 is what keeps 3a.6's decision to leave LIVE_STATUSES alone honest. Three groups came from round 3 and are the ones a hurried implementation would drop: 2b closes the PATCH route that otherwise bypasses everything in 4-8; 3a fixes task_attribution; 5a adds the run-end sweep behind the expiry report. Do NOT reintroduce `wait_seconds` on any schema — round 3 removed it deliberately and design D3 says why. Gates and suites per group 9, and 9.4/9.4a are a real drive on 8011 with Haiku, not a unit test. This is a large change: if the 08:00 rule arrives mid-implementation, park at a completed group with its commit pushed, never mid-group."
     },
     {
       "id": "F115-R1",
@@ -200,7 +200,7 @@
     }
   ],
   "current": "F14-R3 done",
-  "next_action": "Iteration 6: F14-IMPL \u2014 implement `openspec/changes/a-task-waits-while-its-run-waits/`. All three spec rounds are complete (R1 in iteration 2, R2 in iteration 4 at 19f5af2, R3 in iteration 5 at ff16cd8); do NOT run another round and do NOT re-propose. Read the F14-IMPL queue entry in full first, then tasks.md, then design.md \u2014 design D3, D10 and D11 are the three round 3 added and are the ones most likely to be skipped because they are not in the original shape of the change. ELEVEN groups (1, 2, 2b, 3, 3a, 4, 5, 5a, 6, 7, 8, 9). Group 1's reproductions must pass against unmodified code before anything else is touched. Commit per group, not at the end. Run the hub suite in background or in file chunks \u2014 it is ~14 minutes and exceeds the 600s cap \u2014 and `pytest hub/tests/ tests/` together fails collection, so run them separately. If you touch hub/ui/src you owe `npm run build` + `py -3.11 scripts/refresh_ui_bundle.py` and a joint commit. HONOUR THE 08:00 RULE: from 08:00 local do not start a new group; park at the last completed group with its commit pushed and start E2E-DRIVE, which the operator extended the stop to 12:00 specifically to make room for. If it is already past 08:00 when you read this, do NOT start F14-IMPL at all \u2014 go straight to E2E-DRIVE.",
+  "next_action": "Iteration 6: F14-IMPL — implement `openspec/changes/a-task-waits-while-its-run-waits/`. All three spec rounds are complete (R1 in iteration 2, R2 in iteration 4 at 19f5af2, R3 in iteration 5 at ff16cd8); do NOT run another round and do NOT re-propose. Read the F14-IMPL queue entry in full first, then tasks.md, then design.md — design D3, D10 and D11 are the three round 3 added and are the ones most likely to be skipped because they are not in the original shape of the change. ELEVEN groups (1, 2, 2b, 3, 3a, 4, 5, 5a, 6, 7, 8, 9). Group 1's reproductions must pass against unmodified code before anything else is touched. Commit per group, not at the end. Run the hub suite in background or in file chunks — it is ~14 minutes and exceeds the 600s cap — and `pytest hub/tests/ tests/` together fails collection, so run them separately. If you touch hub/ui/src you owe `npm run build` + `py -3.11 scripts/refresh_ui_bundle.py` and a joint commit. HONOUR THE 08:00 RULE: from 08:00 local do not start a new group; park at the last completed group with its commit pushed and start E2E-DRIVE, which the operator extended the stop to 12:00 specifically to make room for. If it is already past 08:00 when you read this, do NOT start F14-IMPL at all — go straight to E2E-DRIVE.",
   "limits": [
     "Push, do not open PRs. - standing operator directive",
     "DO NOT MERGE TO MASTER. Push this branch and leave the merge to the operator. Precedent set 2026-08-29: the operator merges with --no-ff when present and CI is green.",
@@ -277,5 +277,5 @@
     "The feature freeze's parameters are still unsettled.",
     "Whether /review-iteration ever runs over the 2026-08-27 overnight run's iterations 1-15."
   ],
-  "last_heartbeat": "2026-08-30T03:46:23+01:00"
+  "last_heartbeat": "2026-08-30T04:30:21+01:00"
 }
