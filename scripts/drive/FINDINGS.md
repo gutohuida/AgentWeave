@@ -9889,3 +9889,95 @@ look" / "there was nothing there" confusion this file complains about elsewhere,
 currently reaches it: there is no agent-rename route, so a name in the UI cannot go stale, and
 archiving is refused outright while entries are still queued (`agents.py:2124-2143`). Recorded so
 the next person who adds a rename knows the queue is keyed on the name string.
+
+## Row 5 driven live — the conversation thread holds together, 14 checks, 0 failures
+
+**Driven 2026-08-30, iteration 12, on the 8011 Hub, `proj-1964cdedffe2`, agent `driver` bound to
+Haiku. New harness `scripts/drive/t_row5_conversations.py`, two real turns.** Recorded because row 5
+had never been driven past its API half, and because everything below is only observable once a
+provider has actually replied.
+
+Turn 1 plants a codeword and is told to reply `OK`. The operator then renames the conversation and
+sends a second message asking for the codeword back. Every check passed:
+
+| what | result |
+|---|---|
+| trigger names a conversation, run starts | `conv-c0f582c3d4ae`, `status: "running"` |
+| the operator's own message is in the transcript | yes, as `kind: "operator_input"` |
+| the agent replied | `agent_output` / `output_kind: "text"` → `"OK"`, ~8s |
+| the conversation was given a title, not marked operator-set | yes, `title_set_by_operator: false` |
+| a provider session was recorded | `374666cc-…` |
+| rename accepted, title is exactly what was typed | yes |
+| rename flips `title_set_by_operator` | `true` |
+| second message stayed in the **same** conversation | yes, same id back |
+| **the agent still knew the codeword** | replied `TANGERINE-I12B` |
+| the operator's title survived the next turn | yes — the documented `name_conversation` no-op holds |
+| one provider session across both turns | `374666cc…` → `374666cc…`, unchanged |
+| conversation idle again, context usage measured | `attention: "idle"`, 17.69% of Haiku's window |
+
+The middle one is the row's whole point. Two triggers, separated by an operator rename, resumed the
+same provider session — so a conversation in this product is a real thread and not two runs sharing
+an id. Nothing in the API half could have shown that.
+
+**One cosmetic note, not filed.** With no `name_conversation` call the title is the first 115
+characters of the opening message, cut mid-word: `'…Reply with only the two characters OK. Do not'`.
+It is a placeholder doing its job, and the sidebar ellipsises it anyway; recorded only so the next
+person to look at titles knows nothing generates one.
+
+## F138 (B) — three drive harnesses are hard-wired to a forbidden project, and one of them writes
+
+**Found 2026-08-30, iteration 12, while reading `t_hop.py` before trusting it. Fixed in the same
+commit.** No damage occurred: the files were read, not run.
+
+`scripts/drive/` carries a standing rule, repeated in `STATE.json`'s limits and in three of the
+files' own docstrings — *"never `proj-5e960453` (this repo on the trial Hub) or `proj-18e5d4e0`"*.
+Five files enforce it with an explicit `FORBIDDEN` set. Three do the opposite:
+
+```
+scripts/drive/t_hop.py:8    P = "proj-18e5d4e0"
+scripts/drive/t_loop.py:8   P = "proj-18e5d4e0"
+scripts/drive/t_spec.py:5   P = "proj-18e5d4e0"
+```
+
+Hard-coded, with no `AW_PROJECT` override and no guard. And `aw.py:16-18` defaults `AW_HUB` to
+**`http://127.0.0.1:8010`** — the operator's own trial Hub — with a real key baked in as the
+default. So `py -3.11 scripts/drive/t_spec.py`, run with no environment at all, is a request
+against the operator's live Hub and their protected project. That is the *default* invocation; the
+protection has to be added by the caller, which is backwards.
+
+`t_hop.py` and `t_loop.py` only poll. **`t_spec.py` writes**:
+
+```python
+c, b = api("PUT", f"/projects/{P}/project/documents/{DOC}/content", {"document": payload})
+```
+
+`DOC` is `spec/changes/indigo-wyvern/spec.html` and `payload` is a fully-formed change-spec about a
+ledger library. Running that file replaces the content of that document in `proj-18e5d4e0` — a
+project this run is explicitly forbidden to touch — and the operator's only warning is a line five
+files down that they would have had to open the file to read.
+
+This is the same class as F137 but a step worse. F137 was a harness measuring the wrong thing.
+This is a harness whose *safe* invocation is the one nobody types.
+
+**Fixed**, using the shape the five compliant files already established, so there is one pattern
+rather than two:
+
+```python
+P = os.environ.get("AW_PROJECT", "")
+if P in ("proj-5e960453", "proj-18e5d4e0") or not P:
+    print("REFUSING TO RUN: set AW_PROJECT to a drive project. "
+          "proj-5e960453 (this repository) and proj-18e5d4e0 are off limits.")
+    sys.exit(1)
+```
+
+Verified by running each with `AW_PROJECT=proj-18e5d4e0` and with it unset: both exit 1 with the
+refusal and issue no request. Refusing the *empty* case as well is deliberate — an unset
+`AW_PROJECT` used to mean "use the hard-coded one", and silently falling back to a working default
+is how the hazard survived this long.
+
+**Left for the operator.** `aw.py`'s defaults are the other half of this and were not changed:
+`HUB` defaults to 8010 and `KEY` to a literal `aw_live_…` for that Hub. Every drive in this
+directory is run with all three variables exported, so the defaults serve nobody and point at the
+one instance the drive must not disturb. Removing them — or defaulting `HUB` to nothing and
+refusing — is a one-line change with no caller to break, but it changes how every file in the
+directory is invoked, so it is stated here rather than done unattended.

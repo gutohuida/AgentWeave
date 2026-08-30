@@ -1,8 +1,20 @@
 """T-SPEC: drive the whole specification flow as the operator."""
 
+import os
+import sys
+
 from aw import api, show
 
-P = "proj-18e5d4e0"
+# Pinned to `proj-18e5d4e0` when it was written, which is one of the two projects the drive is
+# forbidden to touch. Five sibling files in this directory already carry this guard; these three
+# predate it. Honour `AW_PROJECT` and refuse the protected ids outright — `aw.py` also defaults
+# `AW_HUB` to **8010**, the operator's own trial Hub, so an unguarded run of this file reached
+# their live project by doing nothing at all.
+P = os.environ.get("AW_PROJECT", "")
+if P in ("proj-5e960453", "proj-18e5d4e0") or not P:
+    print("REFUSING TO RUN: set AW_PROJECT to a drive project. "
+          "proj-5e960453 (this repository) and proj-18e5d4e0 are off limits.")
+    sys.exit(1)
 DOC = "spec/changes/indigo-wyvern/spec.html"
 
 payload = {
