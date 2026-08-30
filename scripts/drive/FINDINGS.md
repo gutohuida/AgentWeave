@@ -9429,6 +9429,19 @@ calls `send_message` to `driver`; the resulting agent-origin entry cannot start.
  "waiting_reason":null,"delivery_attempts":0}
 ```
 
+### What the operator actually sees
+
+`AgentTimeline.tsx:341` is the only render of this field:
+
+```tsx
+{queueStatus.waiting_count} waiting{queueStatus.waiting_reason ? ` — ${queueStatus.waiting_reason}` : ''}
+```
+
+So the panel reads **"2 waiting"**, full stop. The transient half is `AgentOutputPanel.tsx:693` and
+`:763`, which show the *trigger response's* reason as a session notice — the operator is told
+"Not started — token budget exhausted" once, at the moment they press send, and the standing
+display beside the agent from then on says only how many.
+
 `waiting_count: 2, waiting_reason: null` is exactly the state `db/models.py:586` records as the
 defect the `waiting_reason` column was added to remove — *"reported to the operator as
 `waiting_count: 1, waiting_reason: null`"* — reproduced by the operator doing the one thing the
@@ -9590,3 +9603,95 @@ not exist, and a name that is not legal). Row 3 also hard-codes the agents `driv
 `404 Agent not found`, which is the harness's state and not the product's. Left as-is and stated
 here rather than made self-provisioning: creating agents inside a probe script is how a sweep starts
 testing its own setup code.
+
+## F115, reproduced independently — two identical triggers, one inside the boundary and one outside
+
+**Driven 2026-08-30, iteration 11, on the 8011 Hub, `proj-1964cdedffe2` (`drive-0830-sweep`), a
+fresh project created this morning. Not a new finding — the same defect F115 states, reached by a
+different route, and worth recording because the two runs differed with nothing else changed.**
+
+Row 14's harness triggers `asker` under `manual` posture with one instruction: *"Write the single
+line 'drive touched this' to a new file named `<tag>.txt` in the project root."* It was run twice,
+nine minutes apart, same agent, same runner, same posture, same sentence with only the filename tag
+different. The permission card's `tool_input.file_path` was:
+
+| run | tag | path the card offered |
+|---|---|---|
+| `run-dddadb7f817e` | `i11b` | `…\drive-0830-sweep\.agentweave\worktrees\asker\drive-note-i11b.txt` |
+| `run-0d750fe5d14d` | `i11c` | `…\drive-0830-sweep\drive-note-i11c.txt` |
+
+Both were approved. Both writes landed where the card said. So the operator's checkout now holds
+`drive-note-i11c.txt` as an untracked file on `main`, while `drive-note-i11b.txt` sits on
+`agentweave/asker` where it belongs:
+
+```
+$ git -C drive-0830-sweep status --porcelain
+?? .agentweave/
+?? drive-note-i11c.txt          <- outside the boundary
+$ ls drive-0830-sweep/.agentweave/worktrees/asker/
+calc.py  drive-note-i11b.txt    <- inside it
+```
+
+Nothing in the product distinguished the two. This is the phrase "project root" being genuinely
+ambiguous to an agent standing in a worktree — and the point is that the ambiguity is *load-bearing*,
+because whichever way it resolves the Hub proceeds identically.
+
+**What this adds to F115.** F115's proposal already covers the posture analysis and states that
+`manual`'s card "named the tool and the full absolute path". What it does not say is that the card
+names the path *and nothing else* — no marker that this one leaves the agent's workspace, no
+comparison against the boundary the Hub itself computed a moment earlier to launch the run. The
+operator approving that card is the last human who could have stopped it, and the card gives them
+nothing to notice with. Recorded here rather than proposed: the change's scope is settled (decision
+D3 — record it against the Run) and widening it to the approval surface is the operator's call, not
+an unattended run's. The relevant sentence for them is that `manual` is not a safer posture than the
+default here; it is the posture in which a human is asked to make a judgement they have not been
+given the inputs for.
+
+**Also driven, and held:** rows 13 and 14 both pass on Claude/Haiku. `ask_user` raised a real
+blocking question in ~20s, `PATCH /questions/{id}` answered it and it left the open list
+immediately; the `manual` posture raised a permission card in ~12s on both runs and
+`POST …/decide {"allow": true}` cleared it in under a poll. Neither row was passing when this
+iteration started — see F135 continued below for why the harness said otherwise.
+
+## F135, continued — three more of the sweep's own wrong turns, all in the live-turn harnesses
+
+Same class as F135 above; grouped with it rather than given new numbers, because none is a product
+defect and the pattern is the finding.
+
+1. **Row 13 answered somebody else's question and called itself passing.** `wait_for` matched *the
+   first open question in the project*, and an earlier drive in the same project had left one open
+   from a different agent (`from_agent: "peer"`, about a task called `Sweep B`). It appeared "after
+   ~0s", was answered, and row 13 reported PASS without `asker` having asked anything. Fixed: the
+   row now snapshots the open set before triggering and requires a question that is both new and
+   `from_agent == agent`. With the fix, the real question — *"Which colour should the badge be?"*,
+   from `asker` — appeared after ~20s and the row passes honestly.
+
+2. **Row 14 blamed the product for row 13's run still being alive.** Both rows trigger the same
+   agent and nothing waited between them, so row 14's trigger answered
+   `status: "queued", waiting_reason: "agent is already running"` — the Hub saying exactly what was
+   wrong — and the row spent 160 seconds waiting for a permission card that could not exist,
+   then reported *"no permission request was ever raised"*. Fixed: both rows wait for the agent to
+   go idle first, and row 14 returns `SKIPPED` rather than `FAIL` if it never does.
+
+3. **Row 14's decision body had the wrong shape.** It sent `{"decision": "allow"}`; the route takes
+   `{"allow": true}` (`PermissionDecision`, `hub/hub/api/v1/permissions.py:25-26`). The refusal is a
+   good one and is worth quoting as the counter-example to this file's usual complaint about
+   illegible 4xx — it names both halves of the mistake:
+
+   ```
+   422 {"detail":[{"type":"missing","loc":["body","allow"],"msg":"Field required"},
+                  {"type":"extra_forbidden","loc":["body","decision"],
+                   "msg":"Extra inputs are not permitted","input":"allow"}]}
+   ```
+
+4. **`t_row13_questions.py` hard-coded the 2026-08-29 drive's repository**, which is also F115's
+   live reproduction, with no way to point it elsewhere — so running row 13 would have written an
+   agent's note file into somebody else's evidence. It opened that project on the 8011 Hub before
+   this was noticed; nothing was written and the directory is intact (`README.md`, `calc.py`, and
+   yesterday's `drive-note-121250.txt`, all unchanged). `WORKDIR` now reads `AW_DRIVE_DIR` and
+   `PROJECT_NAME` follows the directory's own name.
+
+The through-line: **every one of these made the product look worse than it is**, and three of the
+four would have been filed as findings by a less suspicious reading. A harness that carries state
+between rows, or between runs in one project, is not a cheaper fixture — it is a source of false
+positives whose cost is paid by whoever reads the report.
