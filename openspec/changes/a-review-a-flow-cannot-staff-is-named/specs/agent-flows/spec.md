@@ -19,14 +19,26 @@ agent that has not worked on that task, and SHALL NOT allow it to be claimed by 
 agent completed such a task, so no agent's own sign-off is at stake; but an agent may still have
 produced the work, and offering it that work to review is self-approval reached by a different route.
 
-**The agents that have worked a task SHALL be determined from its recorded transitions together with
-the agent it is assigned to, and SHALL NOT be determined from either alone.** The history is required
-because who holds a task is overwritten by every reassignment, so a task returned for revision and
-picked up by a second agent has two authors and only the history names both. The assignee is required
-because an agent takes a transition only when it *changes* a task's status: an agent working a task
-that is already in progress records nothing, so a task the operator started by hand and then marked
-finished can carry a full history that names no agent while an agent produced all of the work. Either
-term alone leaves a task whose author the Hub can rule out and does not.
+**The agents that have worked a task SHALL be determined from every record that associates an agent
+with it — its recorded transitions, the agent it is assigned to, and the runs recorded as bound to
+it — and SHALL NOT be determined from any of those alone.** Each names a different fact and each is
+incomplete. The history is required because who holds a task is overwritten by every reassignment,
+so a task returned for revision and picked up by a second agent has two authors and only the history
+names both. The assignee is required because an agent takes a transition only when it *changes* a
+task's status: an agent working a task that is already in progress records nothing, so a task the
+operator started by hand and then marked finished can carry a full history that names no agent while
+an agent produced all of the work. The bound runs are required because the assignee holds one name
+and is not overwritten by a later agent, so the *second* agent to work an already-started task is
+named by neither of the other two — and it is that agent, not the first, that the other two terms
+would offer its own work to review.
+
+Because no completion is recorded, no record proves which agent authored the work, and the Hub SHALL
+NOT act as though one does. The determination SHALL therefore be over-inclusive by construction: a
+record that associates an agent with a task SHALL be sufficient to exclude it, and a source that
+fails to record an agent SHALL NOT be taken as evidence that the agent did not work the task. The
+cost of excluding an agent that did nothing is a review the flow reports it could not staff, which
+the operator sees and resolves; the cost of including an agent that wrote the work is a self-approval
+nobody sees.
 
 Where no completion is recorded at all, the task SHALL remain claimable by nobody. Nothing rules any
 agent out, so nothing rules the author out either.
@@ -65,6 +77,12 @@ agent out, so nothing rules the author out either.
 
 - **WHEN** a task's most recent completion was recorded by the operator, and the task is assigned to
   an agent that no transition on that task names
+- **THEN** that agent is not fired for it
+
+#### Scenario: A second agent that worked the task is excluded although it holds neither the history nor the assignment
+
+- **WHEN** a task's most recent completion was recorded by the operator, and an agent's run was
+  bound to that task while another agent was recorded on its transitions and held its assignment
 - **THEN** that agent is not fired for it
 
 #### Scenario: A task with no recorded completion stays claimable by nobody

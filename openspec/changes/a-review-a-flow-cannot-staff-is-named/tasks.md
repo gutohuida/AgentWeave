@@ -29,6 +29,14 @@
   it — no `in_progress -> in_progress` edge exists, so the binding recorded nothing — and that
   `task.assignee` names the agent. This is the fixture that proves the exclusion cannot be the
   transition set alone (design D5, round 2). Write it before task 2.4.
+- [ ] 1.5a **Round 3's reproduction, and it is the one round 2's repair does not close.** Fixture
+  (e): a flow staffs `builder-1` on a `pending` task the ordinary way, so `builder-1` is on the
+  transitions **and** in `assignee`; then a second run for `builder-2` binds to the same task while
+  it is `in_progress` (`bind_run_to_task`, `builder-1` not running); then the operator moves it
+  `in_progress -> completed`. Assert all three facts directly: `agents_that_worked` returns
+  `{builder-1}`, `task.assignee` is `builder-1`, and a `Run` row exists with `agent='builder-2'` and
+  `task_id` equal to the task. Then assert that `worked | {assignee}` — round 2's union — does
+  **not** contain `builder-2`. That last assertion is the defect; it inverts at 2.5 (design D14).
 - [ ] 1.6 **D8's reproduction.** Move (b) to `under_review` by hand with the working agent still in
   `assignee`, fire, and assert it lands in `_cannot_staff` — the false *"a reviewer holds this"*.
   Confirm against unmodified code.
@@ -53,14 +61,26 @@
   restaff, and a task returned for revision has two authors. It records the converse just as plainly,
   because round 2 found round 1 asserting the opposite: this set does **not** contain every agent
   that worked the task. An agent binding to a task already `in_progress` takes no edge and is absent.
+- [ ] 2.4a Add `agents_of_runs_bound_to(session, task_id) -> set[str]`: `SELECT DISTINCT agent FROM
+  runs WHERE task_id = ?`. Its docstring must carry D14's justification for reaching for a column
+  `checkpoint_handover.py:87-92` forbids reading — the failure directions are opposite. There, a
+  NULL produces a *wrong answer*; here it produces a *missing candidate* in a set whose only job is
+  to grow. State that this is a term and never the set, or the next reader will make
+  `checkpoint_handover`'s mistake with this function's blessing.
 - [ ] 2.5 The exclusion the ladder is given is `agents_that_worked(...) | ({task.assignee} if
-  task.assignee else set())`. Put that union behind one named helper rather than composing it at each
-  of the two call sites — the wedge predicate in group 5 uses the **transitions-only** set and the
-  two must be impossible to confuse. Name them so a reader cannot pick the wrong one by accident.
-- [ ] 2.6 Test `agents_that_worked` on all four fixtures: (a) returns the agent, (b) returns the
+  task.assignee else set()) | agents_of_runs_bound_to(...)` — **three terms, none droppable**
+  (design D14). Put that union behind one named helper rather than composing it at each of the two
+  call sites — the wedge predicate in group 5 uses the **transitions-only** set and the two must be
+  impossible to confuse. Name them so a reader cannot pick the wrong one by accident: the helper's
+  question is *"might this agent be the author?"* and `agents_that_worked`'s is *"which agents moved
+  this task?"*, and each docstring should say which. The runs term must **not** reach the wedge
+  predicate for the same reason the assignee term must not, and more quietly: an assignee's own run
+  is bound to the task in almost every case.
+- [ ] 2.6 Test `agents_that_worked` on all five fixtures: (a) returns the agent, (b) returns the
   agent that worked it even though the operator completed it, (c) returns the empty set, (d) returns
-  the empty set **while an agent worked the task** — and test that the union of 2.5 returns that
-  agent for (d).
+  the empty set **while an agent worked the task**, (e) returns `{builder-1}` **while `builder-2`
+  also worked the task**. Then test the 2.5 union on each: it contains the worker for (d) and
+  contains **both** agents for (e). 1.5a's failing assertion is the one that inverts here.
 
 ## 3. The review arm
 
@@ -79,6 +99,10 @@
 - [ ] 3.3a **Round 2's self-approval reproduction inverts.** On fixture (d), with the agent that did
   the work as the only free agent, assert the firing does **not** select it. Written against the arm
   rather than against `resolve_reviewer`, because 1.5 already proves the trap at the resolver.
+- [ ] 3.3b **Round 3's inverts too, and it is the one a two-term exclusion passes.** On fixture (e),
+  with `builder-2` as the only free agent, assert the firing does **not** select it. Run this test
+  against an exclusion built from `worked | {assignee}` and confirm it **fails** before adding the
+  third term, or it proves nothing (design D14).
 - [ ] 3.4 The *an agent completed it* arm is byte-identical to today, `exclude={author}`. Design D6:
   where the product has a decided answer to who the author is, do not widen it.
 - [ ] 3.5 Test each arm against its fixture, and test that the operator arm reaches an *approved*
@@ -108,13 +132,24 @@
 
 - [ ] 4.1 `task_is_claimable_by` (`scheduler.py:546-593`) gains the operator arm: claimable by any
   agent not in the 2.5 union. The *nothing recorded* case keeps returning `False` unchanged. It must
-  be the **same** set the review arm excludes, or the two walks disagree about fixture (d) — which is
-  the disagreement group 4 exists to prevent, arriving through the term round 1 left out.
-- [ ] 4.2 Extend the docstring rather than replacing it. Its argument — *"handing finished work to an
-  agent the Hub cannot rule out as its author … is self-approval reached by two permissive defaults
-  agreeing"* — is what **licenses** this change, because `agents_that_worked` is exactly what rules
-  them out. Say so, or the next reader will read the new arm as an exception carved out of the rule.
-- [ ] 4.3 Add the two cases to `test_actor_aware_claimability.py` beside its existing
+  be the **same** set the review arm excludes — the helper, called, not a second composition of the
+  same three terms — or the two walks disagree about fixtures (d) and (e), which is the
+  disagreement group 4 exists to prevent, arriving through the terms rounds 1 and 2 left out.
+- [ ] 4.2 Extend the docstring's *argument* — *"handing finished work to an agent the Hub cannot rule
+  out as its author … is self-approval reached by two permissive defaults agreeing"* — which is what
+  **licenses** this change, because the exclusion is exactly what rules them out. Say so, or the next
+  reader will read the new arm as an exception carved out of the rule.
+- [ ] 4.2a **And correct the two sentences in that docstring that are false** (design D17). Not
+  "extend": leave them standing and the next reader trusts them, which is how this defect survived
+  being read. (i) *"Every task that reaches `completed` through `apply_transition` records its
+  completer, so this is the legacy and hand-written case only"* — an operator completion reaches
+  `completed` through `apply_transition` and records `actor_agent = NULL`, so the `None` population
+  includes every task an operator finishes through the supported route. That sentence is why the
+  branch looked safe. (ii) *"it stalls the queue and the operator reviews it, which is ... a state
+  the operator can see and resolve"* — F142 measured both halves false: the stall reason is the
+  status histogram, which names no task, and `completed` has no exit that returns the work to an
+  agent.
+- [ ] 4.3 Add the cases — (b), (d) and (e) — to `test_actor_aware_claimability.py` beside its existing
   unattributed-task assertion at `:169`, which stays true for case (c). The new fixtures must be
   built through `apply_transition`; the existing one at `:169` is the direct-write kind and is case
   (c), not case (b).

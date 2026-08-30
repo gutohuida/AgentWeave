@@ -82,11 +82,16 @@ it.**
 - **The exclusion protects against a specific harm that is absent here.** Author/reviewer separation
   exists so an agent does not sign off its own work. An operator's completion introduces no agent
   that could. Refusing to staff the review does not prevent a self-approval; it prevents a review.
+- **The product has already decided this case on its other path.** `agent_trigger.py:444-452` bars
+  a manually dispatched reviewer only where an agent is *recorded* as completing the task, so an
+  operator-completed task is reviewable by hand **today**. This change removes a disagreement
+  between two paths rather than introducing a judgement — **round 3's finding, and now the
+  load-bearing argument here; see D15.**
 - **`requirement-traceability:158`** — *"Where a project has granted no agent that capability,
-  acceptance SHALL fall to the operator. That is a supported way to work, not a degraded one."* The
-  corpus already holds that an operator acting in person is first-class. A flow that dead-ends the
-  moment the operator touches a card says the opposite, in the one situation where they are most
-  likely to.
+  acceptance SHALL fall to the operator. That is a supported way to work, not a degraded one."*
+  Supporting colour only. **Round 3 found this citation stretched** — it is scoped to a capability
+  the project has not granted, not to an operator acting where an agent could have — and demoted it
+  from the argument it used to carry. D15.
 - **F142 measured the alternative and it is a dead end with no exit.** `completed` reaches only
   `rejected` and `under_review`; `under_review` by hand hits D8's bug; the only remaining move is the
   operator approving it themselves, which is the flow's own job done by hand with the flow never
@@ -119,10 +124,10 @@ prevents is an agent approving its own work, which is silent and produces a merg
 checked. Those are not comparable, and `task_is_claimable_by`'s docstring already chose between them
 for the neighbouring case: *"refuse to offer, permit to act"*.
 
-**Round 3 must re-derive this rather than confirm it.** The specific thing to attack: whether
-`requirement-traceability:158` is being stretched. It is about *evidence acceptance* falling to the
-operator, not about task completion, and a round that only checks outcomes would not notice the
-difference.
+**Round 3 re-derived this rather than confirming it, and the attack landed.**
+`requirement-traceability:158` *was* being stretched — it is about evidence acceptance falling to
+the operator, not about task completion. The judgement stands on a better ground that neither
+earlier round cited. **D15 is that re-derivation and supersedes this section's second bullet.**
 
 ## D5 — with no completer, "the author" is every agent that worked the task
 
@@ -177,9 +182,16 @@ set())`. `assignee` is not a *replacement* for the transition set — round 1's 
 that stand, and a task returned for revision still has two authors only the history names — it is the
 term that covers the agent the history does not.
 
+**Round 3: that last clause is true of exactly one agent.** The assignee column holds one name, and
+`bind_run_to_task` fills it only when it is empty — so the *second* agent to work an already-started
+task is named by neither term, and the mechanism that hides it from the history is the same one that
+denies it the column. A third term is required. **D14 supersedes this paragraph's two-way union with
+a three-way one.**
+
 **The union belongs to the exclusion and not to the wedge predicate.** D8 asks *"is the assignee one
 of the agents that worked this?"*, and `assignee` is trivially a member of `worked | {assignee}`,
-which would wedge every review in progress. Two questions, two sets; see D8.
+which would wedge every review in progress. Two questions, two sets; see D8. D14's third term makes
+that separation more load-bearing still, not less.
 
 ## D6 — the wider exclusion applies only to the unattributed arm
 
@@ -369,3 +381,236 @@ into two accounts of the same rung.
 
 `agent_trigger`'s manual dispatch is untouched: it never calls `resolve_reviewer`, and its own 403
 names the completing agent only where one is recorded (`agent_trigger.py:445-455`), which stays true.
+
+## D14 — round 3: the exclusion is still too narrow, and the hole is the *second* agent
+
+Round 2 widened the exclusion from `agents_that_worked` to `agents_that_worked ∪ {task.assignee}`,
+on the ground that *"`assignee` is the term that covers the agent the history does not."* Round 3
+re-derived that sentence against the code and it is **true of exactly one agent and false of every
+one after it**. The union closes the hole for the first agent to work a task and leaves it open for
+the second — and the mechanism that hides an agent from the history is the same mechanism that
+denies it the assignee column, so the two terms fail together rather than covering for each other.
+
+### The route, and it needs no unusual operator behaviour
+
+1. A flow staffs task `T` on `builder-1`. `enter_selected_task` writes `assignee = builder-1` and
+   `pending -> assigned` as the operator; `bind_run_to_task` then takes `assigned -> in_progress`
+   as `builder-1`'s run. **`builder-1` is on the record.**
+2. `builder-1` stalls, or finishes without calling `update_task` (which is F140, this run's change
+   A). The operator starts `builder-2` on the same card.
+3. `builder-2`'s run reaches `bind_run_to_task`. `run.task_id` is set. `task.assignee` is already
+   `builder-1`, so the assignee is **not** overwritten (`run_task_binding.py:429-430`). The task is
+   already `in_progress`, and `TRANSITIONS["in_progress"]` has no `in_progress` target, so the
+   binding **records no transition** (`:436-438`).
+4. `builder-2` writes the work. The operator marks the card done.
+
+`agents_that_worked` is `{builder-1}`. `task.assignee` is `builder-1`. The union is `{builder-1}`.
+**`builder-2` — which wrote the work — is eligible to review it**, which is the precise outcome D5
+exists to prevent, surviving inside round 2's repair for it.
+
+**Measured, not argued.** Round 3 built that fixture against the real `bind_run_to_task`,
+`apply_transition` and `Actor`, on the suite's own database, and every step held: `builder-1`'s
+binding took `assigned -> in_progress`; `builder-2`'s returned `None` and travelled no edge;
+`run.task_id` was set on it anyway; `task.assignee` stayed `builder-1`; and after the operator's
+`-> completed` the transitions named `{builder-1}` alone, so `worked | {assignee}` did **not**
+contain `builder-2` while `SELECT DISTINCT agent FROM runs WHERE task_id = ?` returned both. The
+throwaway file was deleted; task 1.5a is its permanent form, and it must reproduce those exact
+intermediate assertions rather than only the conclusion.
+
+Nothing in that route is exotic. Starting a second agent on a card the first one left is ordinary
+operator behaviour in a multi-agent product, and it is explicitly permitted: `resolve_bound_task`
+*"never consults `Task.assignee`"* (`agent_trigger.py:845`), and the only concurrency refusal is on
+a turn that is **running right now** (`agent_trigger.py:863-872`), not on one that has ended.
+
+### The third term: the runs recorded as bound to the task
+
+`bind_run_to_task`'s **first statement** is `run.task_id = task.id` (`run_task_binding.py:427`),
+above the `blocked` guard and above the legality check. So a run that binds and takes no edge still
+records that it was about that task — the one record in the product that names `builder-2` in the
+route above. The exclusion becomes:
+
+```
+agents_that_worked(task)  ∪  {task.assignee}  ∪  {r.agent for r in runs where r.task_id == task.id}
+```
+
+Three sources for one question is not elegant, and the reason it is nonetheless right is that each
+one is a *different fact* and each is individually incomplete:
+
+| source | names | misses |
+|---|---|---|
+| transitions | every agent that **moved** the task | an agent that worked it without moving it |
+| `assignee` | the agent that **holds** it now | every previous holder; anyone who worked it without taking the column |
+| bound runs | every agent whose run was **about** it | runs predating the column, and runs never bound |
+
+The rule D6 states — *the narrowest set that provably contains the author* — is unachievable on this
+arm, because with no completion row the author is not provable from anything. What is achievable is
+its honest restatement, and it is the one this change should have been using all along: **exclude
+every agent any record associates with the task.** Under that rule the three-way union is not three
+patches, it is the complete enumeration of the records that exist.
+
+### Why `Run.task_id`'s measured unreliability does not disqualify it here
+
+`checkpoint_handover.py:87-92` rules it out in the strongest terms — *"**And never from
+`run.task_id`.** … of the ten runs that had recorded a `completed` transition, **six carried
+`run.task_id = NULL`**"* — and a change that reaches for the column right after that must say why it
+is not the same mistake.
+
+It is not, because the two uses have opposite failure directions. `_task_this_run_completed` asks
+*which task did this run finish?* and a NULL there produces a **wrong answer**: a handover that
+should have happened does not. This change asks *might this agent be the author?* and a NULL
+produces a **missing candidate** in a set whose only job is to grow. A source that under-reports
+cannot make this exclusion unsafe; it can only fail to make it safer. That is why the column is a
+**term** here and never the whole set — dropping the transition set for it would reproduce
+`checkpoint_handover`'s bug exactly.
+
+### The wedge predicate is unaffected, and the naming must make that impossible to get wrong
+
+D8's predicate stays `task.assignee in agents_that_worked(task)` — the **transitions-only** set. The
+runs term would break it the same way the assignee term does, and more quietly: the assignee's own
+run is bound to the task in almost every case, so `assignee ∈ runs-derived` is nearly always true and
+every review in flight would again report as unstaffable. Two questions, two sets, and now three
+sources on one side and one on the other. Task 2.5's named-helper requirement is what carries this;
+round 3 raises it from a preference to the thing that keeps D14 and D8 from colliding.
+
+### What the third term costs
+
+It excludes an agent whose run was bound to the task but which did no work — including, since
+2026-08-26, a **previous reviewer**, because review runs bind through `review_task_id`
+(`run_task_binding.py:170-186`). Checked rather than assumed: a reviewer that ran and recorded no
+verdict leaves the task `under_review` holding it, which reaches the `in_flight` arm and never
+consults this exclusion at all; and a reviewer that *did* record a verdict is already in the
+transition set. So the extra exclusions this term produces are almost entirely agents that would
+have been excluded anyway, and the residue is paid at rung 3, visibly, on the arm this change built
+for exactly that.
+
+## D15 — round 3: the judgement re-derived, and its citation corrected
+
+Round 3's first assignment was D4's central citation, and the suspicion was right.
+
+**`requirement-traceability:158` is being stretched.** Read in place, the sentence is scoped by the
+one before it: *"Where a project has granted no agent that capability, acceptance SHALL fall to the
+operator. That is a supported way to work, not a degraded one."* It is about a **capability the
+project has not granted** — the operator acts because no agent is permitted to. It says nothing
+about an operator who acts where an agent *could* have, which is this change's case. Generalising it
+to *"the operator acting in person is first-class"* is a conclusion the sentence does not carry, and
+a round that only checked outcomes would have kept it because the outcome it supports is correct.
+
+**The judgement survives, on a ground neither earlier round cited.** The product has already decided
+this exact case, on its other path:
+
+```python
+completing_agent = await agent_that_completed(session, task.id)
+if completing_agent is not None and completing_agent == reviewer:
+    return (403, ...)
+```
+
+`agent_trigger.py:444-452`. The manual review-dispatch route bars only the agent **recorded** as
+completing the task. On an operator-completed task `completing_agent` is `None`, the guard permits,
+and the review runs. **So operator-completed work is reviewable today** — by hand, through the route
+an operator actually uses when they notice the flow has stopped. This change does not introduce the
+judgement; it removes a disagreement between two paths about one task, and it removes it in the
+direction the shipped path already chose.
+
+That is a materially stronger argument than the one it replaces, for three reasons: it is shipped
+behaviour rather than an inference from a neighbouring requirement; it is behaviour this change
+deliberately leaves untouched (D13's closing paragraph); and `task-lifecycle-governance`'s
+*"Dispatching a review staffs the task, whichever path dispatched it"* — with its scenario **"A
+review started by hand leaves the reviewer able to record a verdict"**, written for a completed task
+and a reviewer that is not its author — establishes path-independence as a stated principle of the
+review mechanism, even though its own words govern staffing mechanics rather than eligibility. Round
+3 states that limit rather than borrowing the requirement's authority for something it does not say;
+that is the error being corrected here, and repeating it one requirement over would be no better.
+
+`requirement-traceability:158` stays in the file as **supporting** colour and is no longer load-
+bearing. The corpus does not decide this question; the product does, and the two paths must agree.
+
+### The other half of the assignment: is the exclusion now too wide?
+
+Round 3 was told to ask what round 2's widening costs, and D14 has just widened it again, so the
+question is sharper than when it was written. The answer is that **the width cannot regress
+anything**, and it is worth stating as a property rather than re-argued case by case:
+
+- **The review arm.** Today the operator-completed branch is `continue` — it staffs **nobody**. Any
+  exclusion, of any width, staffs at least as many agents as that. The union cannot make this arm
+  worse than it is.
+- **`task_is_claimable_by`.** Today it returns `False` for every agent on an operator-completed task
+  (`scheduler.py:589-592`). Same argument: a wider exclusion is closer to today, never past it.
+- **The wedged branch.** Uses the transitions-only set (D8, D14), unchanged by the widening.
+- **The attributed arm.** `exclude={author}`, untouched by D6.
+
+So the whole cost of over-exclusion is an *opportunity* cost — a review that could have been staffed
+is surfaced at rung 3 instead — and this change is the one that makes rung 3 reach the operator with
+the task's name on it. Weighed against a silent self-approval that produces a merged commit nobody
+checked, that is not a close call, and it is the same asymmetry `task_is_claimable_by`'s docstring
+already settled for the neighbouring case: **refuse to offer, permit to act.**
+
+The one case worth naming, because it is the honest cost and it should not be discovered in a drive:
+a two-agent project where the builder is excluded and the reviewer's run was once bound to the task
+now reaches rung 3 where the narrower set would have staffed. The operator is told, by name, with a
+remedy. That is the designed outcome of this change, not a failure of it.
+
+## D16 — round 3: does the fix belong in `decide_firing` at all?
+
+The third assignment: whether `bind_run_to_task` should record the agent's turn on a task it did not
+move, making `agents_that_worked` true to its name and deleting the assignee term. Round 2 chose the
+cheaper repair deliberately; round 3's answer is that the choice was **right, and not because it was
+cheaper.**
+
+**The decisive argument is that a recording fix is forward-only, and this change's whole population
+already exists.** F142's fixture, F140's drive, and every task an operator has already hand-driven
+are in the broken state **now**, with histories that will never gain a row. An exclusion computed
+from a record that starts being written today is empty for exactly the tasks this change was written
+to make safe. A safety exclusion cannot be built on a mechanism that has no past.
+
+The three recording designs, and why each is rejected on its own terms as well:
+
+- **An `in_progress -> in_progress` self-edge.** Requires a new entry in `TRANSITIONS`, which
+  `test_task_transitions.py:55-59` asserts over as a whole, and it contradicts a rule the corpus has
+  already stated one status over: *"Staffing SHALL be idempotent. Where the task is already held by
+  that reviewer and already in review, dispatching SHALL leave both unchanged and **SHALL travel no
+  transition**, so that a task does not accumulate a record of being entered into review more than
+  once for one review"* (`task-lifecycle-governance`, *Dispatching a review staffs the task*). A
+  self-edge on every re-bind is precisely the accumulation that clause forbids, one band over. It
+  would also make `TaskTransition` answer *"who touched this"* rather than *"how did this move"*,
+  which is a different table.
+- **A participation table.** Forward-only as above, plus a migration and a second record of
+  something three existing records already partially answer. The change's *"no migration, no schema
+  change"* property is not a virtue in itself, but paying for one to get a strictly worse-covered
+  version of D14's union is not a trade.
+- **`Run.task_id` as a replacement for the transition set.** Rejected on measurement rather than on
+  taste — see D14: `checkpoint_handover.py:87-92` records six of ten NULL. It is a widening term and
+  never the set.
+
+So the fix belongs where round 2 put it. What round 3 changes is the *justification*: the reason to
+read the exclusion at decision time is not that writing it would be more work, it is that decision
+time is the only moment with access to the whole record — including the part written before any of
+this shipped.
+
+## D17 — round 3: `task_is_claimable_by`'s docstring argues from two false premises
+
+Found by re-deriving D7 against the function rather than against D7. The docstring is the
+change's own licence (task 4.2), and two of its sentences are **untrue**, in the way this round
+exists to catch: the argument is wrong while everything it argues about is right.
+
+1. > *"Every task that reaches `completed` through `apply_transition` records its completer, so this
+   > is the legacy and hand-written case only."*
+
+   False, and it is the root of F142. A task the **operator** completes reaches `completed` through
+   `apply_transition` and records `actor_agent = NULL`, because `Actor(kind="operator")` may not
+   carry an agent (`task_transitions.py:64-67`). The `None` population is therefore not "legacy and
+   hand-written only" — it includes every task an operator finishes, today, through the supported
+   route. The sentence is why the branch above it looked safe to everyone who read it.
+
+2. > *"it stalls the queue and the operator reviews it, which is what happens today and is a state
+   > the operator can see and resolve."*
+
+   Both halves measured false by F142. The operator cannot **see** it: the stall reason is the status
+   histogram, which names no task. The operator cannot **resolve** it: `completed` reaches only
+   `rejected` and `under_review`, and `under_review` by hand lands on D8's bug.
+
+Task 4.2 said *"extend the docstring"*. Extending it leaves both sentences standing, and the second
+reader to trust them is how this defect survives its own fix. They must be **corrected**, and the
+correction is short: name the operator-completed world as the third case, and say that the stall it
+produced was invisible until F142 measured it and is what the new arm exists to end. A docstring that
+still claims the operator can see and resolve this state, in the function the change edits to make
+that true, is a claim the product will be judged against.

@@ -492,3 +492,159 @@ should attack, in order:
    `bind_run_to_task` should record the agent's turn on a task it did not move — which would make
    `agents_that_worked` true to its name and delete the assignee term. Round 2 chose the cheaper
    repair deliberately; round 3 should say whether that was right.
+
+---
+
+## Iteration 4 — 2026-08-31 00:34 to 00:46 (+01:00)
+
+Branch `autonomous/2026-08-31-the-flow-lands-its-work` at `d4402aa`, tree clean, `git log` matching
+STATE.json exactly. Nothing to reconcile. Heartbeat claimed at 00:34.
+
+### One item, one round
+
+`B-R3` only. **No product code was touched.** Five files changed, all inside
+`openspec/changes/a-review-a-flow-cannot-staff-is-named/`. `openspec validate --strict` passes.
+
+Round 3 was run as an independent re-derivation, not a review of round 2: the three attack points
+the queue named were taken in order and each was carried back to the code rather than to `design.md`.
+All three landed, and one of them is the change's central safety property.
+
+### Finding 1 — round 2's repair closes the hole for the *first* agent and leaves it open for every one after
+
+Round 2 widened the exclusion to `agents_that_worked ∪ {task.assignee}` with the sentence *"`assignee`
+is the term that covers the agent the history does not."* That is true of **exactly one agent**. The
+assignee column holds one name and `bind_run_to_task` fills it only when it is **empty**
+(`run_task_binding.py:429-430`) — so the same mechanism that hides an agent from the transition
+history also denies it the column, and the two terms fail together rather than covering for each
+other.
+
+The route needs no unusual operator behaviour:
+
+1. A flow staffs `builder-1` the ordinary way — assignee written, `pending → assigned` as operator,
+   `assigned → in_progress` by `builder-1`'s run. `builder-1` is on the record and in `assignee`.
+2. `builder-1` stalls, or finishes without calling `update_task` (**which is F140, this run's change
+   A**). The operator starts `builder-2` on the same card. That is permitted:
+   `resolve_bound_task` *"never consults `Task.assignee`"* (`agent_trigger.py:845`) and the only
+   concurrency refusal is against a turn running **right now** (`:863-872`).
+3. `builder-2`'s binding leaves the assignee alone (already set) and travels no edge (no
+   `in_progress → in_progress` in `TRANSITIONS`).
+4. `builder-2` writes the work; the operator marks the card done.
+
+`worked ∪ {assignee}` is `{builder-1}`. **The agent that wrote the work is offered it to review** —
+the exact self-approval D5 exists to prevent, surviving inside the repair for it, one agent over.
+
+**Measured rather than argued.** Built as a throwaway pytest against the real `bind_run_to_task`,
+`apply_transition` and `Actor`, on the suite's own database. Every intermediate assertion held:
+`moved2 is None`, `r2.task_id == task.id`, `task.assignee == "builder-1"`, transitions naming
+`{builder-1}` alone, and `SELECT DISTINCT agent FROM runs WHERE task_id = ?` returning both. Passed
+first run, file deleted; task **1.5a** is its permanent form and must assert the intermediates, not
+only the conclusion.
+
+**The fix (design D14):** a third term, `agents_of_runs_bound_to(task)`. `bind_run_to_task`'s *first
+statement* is `run.task_id = task.id` (`:427`), above every guard — the one record in the product
+that names `builder-2`. The exclusion becomes transitions ∪ assignee ∪ bound runs, and the design
+now states the rule that makes three terms right rather than three patches: with no completion row
+the author is not provable from anything, so **exclude every agent any record associates with the
+task**, and treat a source's silence as a missing candidate rather than as evidence of innocence.
+
+`checkpoint_handover.py:87-92` forbids reading `run.task_id` in the strongest terms (*"of the ten
+runs that had recorded a `completed` transition, six carried `run.task_id = NULL`"*), so D14 says why
+this is not the same mistake: there a NULL produces a **wrong answer**, here a **missing candidate**
+in a set whose only job is to grow. It is a term and never the set.
+
+### Finding 2 — D4's central citation was stretched, and the judgement stands on better ground
+
+The attack the queue named was right. `requirement-traceability:158` is scoped by the sentence before
+it — *"Where a project has granted no agent that capability"* — and is about the operator acting where
+**no agent is permitted to**. This change is about the operator acting where an agent **could** have.
+Generalising it to *"the operator acting in person is first-class"* is a conclusion the sentence does
+not carry, and a round that only checked outcomes would have kept it, because the outcome is right.
+
+The judgement survives on a ground neither earlier round cited: **the product has already decided this
+case on its other path.** `agent_trigger.py:444-452` bars a manually dispatched reviewer only where an
+agent is *recorded* as completing the task, so an operator-completed task is reviewable **by hand
+today**. The change removes a disagreement between two paths about one task, in the direction the
+shipped path already chose — and it is a path this change deliberately leaves untouched (D13).
+`task-lifecycle-governance`'s *"Dispatching a review staffs the task, whichever path dispatched it"*,
+with its scenario *"A review started by hand leaves the reviewer able to record a verdict"*, makes
+path-independence a stated principle; D15 records the limit that its words govern staffing mechanics
+rather than eligibility, rather than borrowing its authority for something it does not say — which
+would be the same error one requirement over. `:158` stays as supporting colour, demoted.
+
+**And the other half of that attack — is the union too wide? — is answered as a property**, which
+matters more now that D14 has widened it again: it **cannot regress anything**. Every path it touches
+produces "nobody" today. The review arm is `continue`; `task_is_claimable_by` returns `False` for all;
+the wedge branch uses the transitions-only set; the attributed arm is untouched. So the whole cost of
+over-exclusion is a review surfaced at rung 3 instead of staffed — by name, with a remedy, through the
+machinery this change builds — weighed against a silent self-approval that merges a commit nobody
+checked.
+
+### Finding 3 — where the fix belongs, and the third assignment answered
+
+Round 2 chose to read the exclusion at decision time rather than make `bind_run_to_task` record the
+turn. That was **right, and not because it was cheaper** (D16):
+
+- **A recording fix is forward-only, and this change's whole population already exists.** F142's
+  fixture, F140's drive, and every hand-driven card are in the broken state now with histories that
+  will never gain a row. A safety exclusion cannot be built on a mechanism with no past.
+- An `in_progress → in_progress` self-edge contradicts a rule the corpus already states one band
+  over — *"dispatching SHALL leave both unchanged and **SHALL travel no transition**, so that a task
+  does not accumulate a record of being entered into review more than once"* — and would make
+  `TaskTransition` answer *"who touched this"* rather than *"how did this move"*.
+- A participation table is forward-only plus a migration, for strictly worse coverage than D14's
+  union.
+
+### Finding 4 — `task_is_claimable_by`'s docstring argues from two false premises
+
+Found by re-deriving D7 against the function rather than against D7, and it is this round's shape
+exactly: the argument is wrong while everything it argues about is right.
+
+1. *"Every task that reaches `completed` through `apply_transition` records its completer, so this is
+   the legacy and hand-written case only."* **False, and it is the root of F142.** An operator
+   completion reaches `completed` through `apply_transition` and records `actor_agent = NULL`. The
+   `None` population includes every task an operator finishes through the supported route. This
+   sentence is why the branch above it looked safe to everyone who read it.
+2. *"it stalls the queue and the operator reviews it, which is … a state the operator can see and
+   resolve."* **Both halves measured false by F142.** The stall reason is the status histogram, which
+   names no task; and `completed` has no exit that returns the work to an agent.
+
+Task 4.2 said "extend the docstring", which leaves both standing. New task **4.2a** corrects them:
+the second reader to trust those sentences is how this defect survived its own fix.
+
+### What changed on the page
+
+- `design.md` — **D14** (the second-agent hole, the third term, the `checkpoint_handover` distinction,
+  the measurement), **D15** (the judgement re-derived, citation corrected, over-width answered as a
+  property), **D16** (where the fix belongs; three recording designs rejected with reasons),
+  **D17** (the two false docstring sentences). D4, D5 and D8 amended to point at them rather than
+  leaving superseded arguments to be inherited.
+- `proposal.md` — the exclusion is three terms; the *Why*'s judgement paragraph now cites the shipped
+  manual path instead of `requirement-traceability:158`; the trap section carries the `builder-2`
+  route.
+- `specs/agent-flows/spec.md` — the determination is over **every record that associates an agent with
+  the task**, with the reason each term is individually incomplete, plus an explicit
+  over-inclusiveness clause (a source's silence is not evidence) and a new scenario for the second
+  agent.
+- `specs/task-lifecycle-governance/spec.md` — the wedge determination is now *transitions alone*,
+  excluding the assignee **and** the bound runs, with the reason the wider set cannot be reused.
+- `tasks.md` — new 1.5a (the measured reproduction), 2.4a (the runs query and its
+  `checkpoint_handover` justification), 3.3b (must fail against a two-term exclusion first), 4.2a
+  (the docstring correction); 2.5, 2.6, 4.1, 4.3 rewritten for three terms and five fixtures.
+
+### Verification
+
+- `openspec validate a-review-a-flow-cannot-staff-is-named --strict` — valid.
+- The D14 fixture executed and passed on the hub suite's database; scratch file deleted, tree clean.
+- `git status` shows five files, all inside the change directory. No product code, no suite run —
+  correct for a spec round.
+
+### Next
+
+**`B-IMPL`.** Change B has had all three rounds and every one of them found a real defect in the
+proposal, which is the discipline's sixth consecutive outing with a hit. Implement it reproduction-
+first, in the task order above, and note that **1.5a and 3.3b are the two tests that must fail
+against round 2's two-term exclusion before the third term is added** — a green run of either without
+that check proves nothing. Then DRIVE-1.
+
+Carried, unfixed: `_emit_review_unstaffed` has no dedup and change B routes a permanently
+unresolvable condition through it (iteration 3's finding, still open).

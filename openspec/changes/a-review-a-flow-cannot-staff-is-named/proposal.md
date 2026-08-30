@@ -84,10 +84,14 @@ So the question is not *can we tell?* but *what should the flow do about the fir
 proposal's position, with both arguments recorded in `design.md` D4 for round 3 to re-derive:
 
 **A flow MAY staff a review for work the operator completed.** The exclusion exists to stop an agent
-signing off its own work; an operator's completion creates no agent that could. And
-`requirement-traceability:158` already holds that the operator acting in person is *"a supported way
-to work, not a degraded one"* — a flow that dead-ends the moment the operator touches a card
-contradicts that in the one place it is most likely to happen.
+signing off its own work; an operator's completion creates no agent that could. **And the product
+has already decided it, on its other path:** `agent_trigger.py:444-452` refuses a manually
+dispatched reviewer only where an agent is *recorded* as completing the task, so an
+operator-completed task is reviewable by hand today. The flow's silent drop is a disagreement
+between two paths about one task, and this change removes it in the direction the shipped path
+already chose. (Round 3 replaced round 1's argument here, which leaned on
+`requirement-traceability:158` — a sentence scoped to a capability the project has not granted, not
+to an operator acting where an agent could have. Design D15.)
 
 ### The trap in doing it naively — and this is round 1's real finding
 
@@ -105,12 +109,14 @@ agreeing"* — arriving through a new door.
 
 So allowing it requires a different notion of the author: not *who recorded the completion* but
 **which agents worked this task**, read as the distinct non-null `actor_agent` over the task's
-transitions, **together with the agent the task is assigned to**. That set contains the builder in
-F140's scenario and is empty for a task no agent ever touched. It is what makes the permissive
-direction safe, and without it this change would ship a regression worse than the bug.
+transitions, **together with the agent the task is assigned to and the agents whose runs were bound
+to it**. That set contains the builder in F140's scenario and is empty for a task no agent ever
+touched. It is what makes the permissive direction safe, and without it this change would ship a
+regression worse than the bug.
 
 **Round 2 found the assignee term is load-bearing rather than belt-and-braces**, and round 1's
-argument for leaving it out was wrong. Round 1 held that *"`assignee` is still in the set whenever it
+argument for leaving it out was wrong. **Round 3 then found the two terms together still leave a
+hole** — see the end of this section. Round 1 held that *"`assignee` is still in the set whenever it
 matters, because an agent holding a task moved it to `in_progress` through `apply_transition` and is
 on the record."* It is not. `bind_run_to_task` (`run_task_binding.py:432-436`) records a
 `→ in_progress` transition only when that edge is legal, and `TRANSITIONS` has no
@@ -121,6 +127,18 @@ while an agent wrote every line of the work. Transitions alone would then exclud
 that agent its own work to review — the trap this paragraph exists to close, surviving in the repair.
 The walk's own comment already names that state as reachable (*"a task left `in_progress` with its
 `assignee` cleared or never set"*, `scheduler.py:1298-1300`).
+
+**Round 3: the assignee term covers the first such agent and no other, and the hole needs no unusual
+operator behaviour.** A flow staffs `builder-1` on a task, which puts it on the record and in
+`assignee`. `builder-1` stalls or finishes without calling `update_task` — which is F140, this run's
+change A — and the operator starts `builder-2` on the same card. `resolve_bound_task` *"never
+consults `Task.assignee`"* (`agent_trigger.py:845`) and the only concurrency refusal is against a
+turn running *right now* (`:863-872`), so the start is permitted; `bind_run_to_task` leaves the
+assignee alone because it is already set, and takes no edge because the task is already
+`in_progress`. `builder-2` writes the work, the operator marks the card done, and `worked ∪
+{assignee}` is `{builder-1}`. **The agent that wrote the work is offered it to review.** The one
+record that names `builder-2` is `run.task_id`, assigned on `bind_run_to_task`'s first line above
+every guard — which is why the exclusion takes a third term (design D14).
 
 ## What Changes
 
@@ -135,8 +153,13 @@ The walk's own comment already names that state as reachable (*"a task left `in_
 
 2. **`agents_that_worked(session, task_id)`** — the distinct non-null `actor_agent` over a task's
    transitions. The honest answer to *"which agents are recorded as having moved this task"* when no
-   completion names one. The **exclusion** the ladder is given is that set together with
-   `task.assignee`, because moving a task and working it are not the same event (design D5).
+   completion names one. The **exclusion** the ladder is given is wider than that set, because
+   moving a task and working it are not the same event (design D5): it is every agent *any* record
+   associates with the task — the transitions, the assignee, **and the runs bound to it**. Round 3
+   found the two-term union still lets the *second* agent to work an already-started task review its
+   own work, since the assignee column holds one name and `bind_run_to_task` fills it only when it
+   is empty; `run.task_id` is the one record that names that agent, and it is set before any
+   legality check (design D14).
    The **wedge predicate** of item 4 uses the transitions-only set and must not use the union, or
    `assignee ∈ ({…} ∪ {assignee})` is true of every assigned task and every review in progress
    becomes wedged (design D8).
@@ -208,9 +231,10 @@ The walk's own comment already names that state as reachable (*"a task left `in_
   - `agent-loops` — **MODIFIED** *"A firing is refused while its queue is stalled"* (:815), so a
     stall the walk can attribute to one task names that task instead of the histogram. This
     reconciles F64's shipped behaviour as well as this change's.
-- **Code:** `hub/hub/task_transition_service.py` (two new functions, `agent_that_completed` becomes a
-  wrapper), `hub/hub/scheduler.py` (the review arm, the wedged-review branch, `task_is_claimable_by`,
-  and `resolve_reviewer`'s two refusal sentences).
+- **Code:** `hub/hub/task_transition_service.py` (two new functions plus the exclusion helper,
+  `agent_that_completed` becomes a wrapper), `hub/hub/scheduler.py` (the review arm, the
+  wedged-review branch, `task_is_claimable_by` — including the two false sentences in its docstring,
+  design D17 — and `resolve_reviewer`'s two refusal sentences).
 - **Tests:** `hub/tests/test_actor_aware_claimability.py`, `test_flow_fires_a_review_turn.py`,
   `test_flow_chain_end_to_end.py`, `test_reviewer_is_not_the_author.py`, plus a new reproduction
   file.

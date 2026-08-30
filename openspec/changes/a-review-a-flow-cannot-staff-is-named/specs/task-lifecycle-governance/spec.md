@@ -16,12 +16,16 @@ which is the false statement this requirement exists to prevent, reached one cas
 live: an operator who moved a stuck task to `under_review` by hand, following the only route the
 lifecycle offers them, produced exactly that.
 
-**This determination SHALL NOT include the agent the task is assigned to**, and that is the one place
-it differs from the determination used to exclude an agent from reviewing. The question here is
-whether the assignee is one of the agents that produced the work; an assignee counted as a producer
-by definition answers yes for every task that has one, and every review genuinely in progress would
-be reported as one nobody is doing. A reviewer legitimately staffed onto a task is absent from its
-transitions, and that absence is what carries the distinction.
+**This determination SHALL be drawn from the task's recorded transitions alone, and SHALL NOT
+include the agent the task is assigned to or the agents whose runs were bound to it**, and that is
+the one place it differs from the determination used to exclude an agent from reviewing. The
+question here is whether the assignee is one of the agents that produced the work; an assignee
+counted as a producer by definition answers yes for every task that has one, and every review
+genuinely in progress would be reported as one nobody is doing. The bound runs answer yes very
+nearly as often, since a staffed reviewer's own run is bound to the task it is inspecting. A
+reviewer legitimately staffed onto a task is absent from its **transitions**, and that absence is
+what carries the distinction — so the wider determination the exclusion uses cannot be reused here,
+however tempting one determination for two questions looks.
 
 Where nothing is recorded as completing the task at all, the ladder SHALL surface it rather than
 staff it, naming the task. Recovery is not possible for such a task — no agent can be ruled out as its
