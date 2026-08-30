@@ -174,14 +174,122 @@ async def test_continue_reports_the_start_against_the_conversation_it_names(
         await _state_of(entry_a) == "queued"
     ), "the addressed conversation's input is still waiting"
 
-    # Task 1.3 — the *current* answer, asserted so this file passes against unmodified code and
-    # proves the defect is real before anything is changed. Task 3.1 flips it to the requirement.
     assert body["conversation_id"] == conv_a
-    assert (
-        body["started"] is True
-    ), "expected today's wrong answer; if this fails the defect is already gone"
-    assert started_elsewhere.conversation_id == conv_b
-    assert conv_b not in repr(body), (
-        f"answered started: true against {conv_a}, and nothing in the response says the turn "
-        f"that began was in {conv_b}"
+    assert body["started"] is False, (
+        f"answered started against {conv_a}, but the turn that began was in "
+        f"{started_elsewhere.conversation_id}"
     )
+    assert body["started_conversation_id"] == conv_b
+    assert body["waiting_reason"] == "this conversation's input is waiting behind other input"
+
+
+@pytest.mark.asyncio
+async def test_the_addressed_conversation_is_the_one_that_starts(app, auth_headers, bind_runner):
+    """3.3 — the equal case. Built with a second conversation present so it cannot pass vacuously.
+
+    The addressed conversation holds the **older** entry here, which is the only difference from
+    the test above: same two conversations, same two entries, opposite arrival order.
+    """
+    agent = "f131-equal"
+    await _register(app, auth_headers, bind_runner, agent)
+    conv_a, conv_b = "conv-f131-equal-a", "conv-f131-equal-b"
+    await _open_conversation(agent, conv_a)
+    await _open_conversation(agent, conv_b)
+    entry_a = await _queue(agent, conv_a, "arrived first, in the conversation the operator sees")
+    entry_b = await _queue(agent, conv_b, "arrived second, elsewhere")
+
+    with patch(TRIGGER, _spawning_trigger()):
+        body = await _continue(app, auth_headers, conv_a)
+
+    assert await _run_for(conv_a) is not None
+    assert await _run_for(conv_b) is None
+    assert await _state_of(entry_a) == "delivered"
+    assert await _state_of(entry_b) == "queued"
+
+    assert body["started"] is True
+    assert body["conversation_id"] == conv_a
+    assert body["started_conversation_id"] == conv_a
+    assert body["waiting_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_nothing_started_names_no_conversation(app, auth_headers, bind_runner):
+    """3.4 — no turn began at all: the reason stands, and nothing is identified as started."""
+    agent = "f131-nothing"
+    await _register(app, auth_headers, bind_runner, agent)
+    conv = "conv-f131-nothing"
+    await _open_conversation(agent, conv)
+
+    with patch(TRIGGER, _spawning_trigger()) as trigger:
+        body = await _continue(app, auth_headers, conv)
+
+    trigger.assert_not_awaited()
+    assert body["started"] is False
+    assert body["started_conversation_id"] is None
+    assert body["waiting_reason"] == "queue is empty"
+
+
+@pytest.mark.asyncio
+async def test_a_conversation_that_queued_nothing_is_not_told_it_is_waiting(
+    app, auth_headers, bind_runner
+):
+    """3.5 — F131's own reproduction, and the case rounds 1 and 2 collapsed into the one above.
+
+    Nothing is queued for the addressed conversation, and another conversation's entry starts.
+    "Waiting behind other input" would report a queue position that does not exist and tell the
+    caller to wait for a delivery that will never arrive. Reachable by API; the shipped Continue
+    button gates it out, which is why it is not the reproduction that matters — but it is a
+    different question and it gets a different answer.
+    """
+    agent = "f131-nothing-queued"
+    await _register(app, auth_headers, bind_runner, agent)
+    conv_a, conv_b = "conv-f131-silent", "conv-f131-busy"
+    await _open_conversation(agent, conv_a)
+    await _open_conversation(agent, conv_b)
+    entry_b = await _queue(agent, conv_b, "the only input this agent holds")
+
+    with patch(TRIGGER, _spawning_trigger()):
+        body = await _continue(app, auth_headers, conv_a)
+
+    assert await _run_for(conv_b) is not None
+    assert await _run_for(conv_a) is None
+    assert await _state_of(entry_b) == "delivered"
+
+    assert body["started"] is False
+    assert body["conversation_id"] == conv_a
+    assert body["started_conversation_id"] == conv_b
+    assert body["waiting_reason"] == "this conversation had nothing queued"
+    assert "waiting behind" not in body["waiting_reason"]
+
+
+@pytest.mark.asyncio
+async def test_trigger_reports_the_start_against_the_conversation_it_appended_to(
+    app, auth_headers, bind_runner
+):
+    """2.4 — the other conversation-addressed route, pinned so the two cannot drift apart again.
+
+    `POST /agent/trigger` has satisfied this rule since F108's change and says so in a comment
+    (`agent_trigger.py:1344-1358`). Nothing asserted it against the *start* direction, which is
+    why `continue` could be written without it. This is the test that would have caught F131.
+    """
+    agent = "f131-trigger"
+    await _register(app, auth_headers, bind_runner, agent)
+    conv_b = "conv-f131-trigger-older"
+    await _open_conversation(agent, conv_b)
+    entry_b = await _queue(agent, conv_b, "arrived first, in another conversation")
+
+    with patch(TRIGGER, _spawning_trigger()):
+        resp = await app.post(
+            "/api/v1/projects/proj-test/agent/trigger",
+            json={"agent": agent, "message": "start my own work"},
+            headers=auth_headers,
+        )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    assert body["status"] == "queued", "the turn that began carried another conversation's input"
+    assert body["conversation_id"] != conv_b
+    assert await _run_for(conv_b) is not None
+    assert await _run_for(body["conversation_id"]) is None
+    assert await _state_of(entry_b) == "delivered"
+    assert await _state_of(body["queue_entry_id"]) == "queued"

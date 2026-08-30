@@ -7,19 +7,19 @@
 
 ## 2. Report the start against the input it is about
 
-- [ ] 2.1 In `continue_conversation` (`hub/hub/api/v1/checkpoints.py:254-277`) derive `started` from `result.response is not None and result.response.conversation_id == conversation_id`, mirroring `agent_trigger.py:1353`. Do not add fields to `ScheduleResult`; do not touch `turn_scheduler.py`.
-- [ ] 2.2 Add `started_conversation_id` to the response, from `result.response.conversation_id` when a turn began and `None` otherwise.
-- [ ] 2.3 For the mismatch case, ask whether the addressed conversation has queued input — `queued_entries(session, project_id, agent, conversation_id)`, the parameter's first caller — and set one of two distinct `waiting_reason`s: it has input, waiting behind other input; or it had nothing queued. Both distinct in wording from the scheduler's own `"queue is empty"`, which is about the agent, so a reader or a test cannot confuse the three.
-- [ ] 2.4 Add a test pinning that `POST /agent/trigger` still satisfies the same requirement (`agent_trigger.py:1344-1358`), so the two conversation-addressed routes cannot drift apart again. This is the test that would have caught the defect.
-- [ ] 2.5 Extend the route docstring: the addressed conversation is what `started` is about, the started conversation is reported separately, and the turn is the agent's.
+- [x] 2.1 In `continue_conversation` (`hub/hub/api/v1/checkpoints.py:254-277`) derive `started` from `result.response is not None and result.response.conversation_id == conversation_id`, mirroring `agent_trigger.py:1353`. Do not add fields to `ScheduleResult`; do not touch `turn_scheduler.py`.
+- [x] 2.2 Add `started_conversation_id` to the response, from `result.response.conversation_id` when a turn began and `None` otherwise.
+- [x] 2.3 For the mismatch case, ask whether the addressed conversation has queued input — `queued_entries(session, project_id, agent, conversation_id)`, the parameter's first caller — and set one of two distinct `waiting_reason`s: it has input, waiting behind other input; or it had nothing queued. Both distinct in wording from the scheduler's own `"queue is empty"`, which is about the agent, so a reader or a test cannot confuse the three.
+- [x] 2.4 Add a test pinning that `POST /agent/trigger` still satisfies the same requirement (`agent_trigger.py:1344-1358`), so the two conversation-addressed routes cannot drift apart again. This is the test that would have caught the defect.
+- [x] 2.5 Extend the route docstring: the addressed conversation is what `started` is about, the started conversation is reported separately, and the turn is the agent's.
 
 ## 3. Flip the reproduction into a guard
 
-- [ ] 3.1 Rewrite task 1.3's assertion to the required behaviour: `started: false`, `conversation_id == A`, `started_conversation_id == B`, `waiting_reason` set.
-- [ ] 3.2 Assert A's queue entry is **still queued** after the call — the waiting answer is only true if the input really is still waiting.
-- [ ] 3.3 Add the equal case: the addressed conversation is the one that starts, `started: true`, `started_conversation_id == conversation_id`.
-- [ ] 3.4 Add the nothing-started case: `started: false`, `started_conversation_id is None`, `waiting_reason` set.
-- [ ] 3.5 Add **F131's own reproduction** as its own case — the addressed conversation has nothing queued while another conversation's entry starts. Assert `started: false`, `started_conversation_id == B`, and a reason saying nothing was queued rather than that input is waiting. This is the case rounds 1 and 2 collapsed into the one above.
+- [x] 3.1 Rewrite task 1.3's assertion to the required behaviour: `started: false`, `conversation_id == A`, `started_conversation_id == B`, `waiting_reason` set.
+- [x] 3.2 Assert A's queue entry is **still queued** after the call — the waiting answer is only true if the input really is still waiting.
+- [x] 3.3 Add the equal case: the addressed conversation is the one that starts, `started: true`, `started_conversation_id == conversation_id`.
+- [x] 3.4 Add the nothing-started case: `started: false`, `started_conversation_id is None`, `waiting_reason` set.
+- [x] 3.5 Add **F131's own reproduction** as its own case — the addressed conversation has nothing queued while another conversation's entry starts. Assert `started: false`, `started_conversation_id == B`, and a reason saying nothing was queued rather than that input is waiting. This is the case rounds 1 and 2 collapsed into the one above.
 
 ## 4. Correct the cutover diagnostic
 
@@ -43,7 +43,7 @@
 ## 7. Verify and record
 
 - [ ] 7.1 `py -3.11 -m pytest hub/tests/test_a_start_is_reported_to_its_own_input.py -v` green, then the full `hub/tests/` suite. The baseline to compare against is **3555 passed / 84 skipped / 1 xpassed / 0 failed** in 13:38, measured on `a533c68` on 2026-08-29 — the F109 flake did not fire, so a single failure is a regression until shown otherwise, not a shrug.
-- [ ] 7.2 Confirm `test_continue_does_not_consume_the_work_it_offers_to_start` (`hub/tests/test_a_delivery_attempt_means_a_delivery.py:118-134`) still passes: it asserts `started is False` under a no-runner trigger with one conversation, which holds under the new derivation because `response` is `None`. Checked in round 3; verify rather than assume.
+- [x] 7.2 Confirm `test_continue_does_not_consume_the_work_it_offers_to_start` (`hub/tests/test_a_delivery_attempt_means_a_delivery.py:118-134`) still passes: it asserts `started is False` under a no-runner trigger with one conversation, which holds under the new derivation because `response` is `None`. Checked in round 3; verify rather than assume.
 - [ ] 7.3 `py -3.11 -m ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `py -3.11 -m mypy src/`, `cd hub/ui && npm run lint`.
 - [ ] 7.4 `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`; commit `hub/ui/src` and `hub/hub/static/ui` together.
 - [ ] 7.5 Drive it live against the 8010 trial Hub with a cheap runner: two conversations, the older entry on the one not addressed, press Continue, confirm the answer says waiting and names what ran, and confirm the addressed conversation's entry is still queued. Nothing closes on unit tests alone.
