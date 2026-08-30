@@ -1483,3 +1483,93 @@ card on screen when the Hub dies - the only exercise of `expire_pending_for_run`
 `DELIVERY_ATTEMPT_LIMIT` abandons it). Both have harnesses already written against the 0829 fixture
 and both need the same `AW_DB` / `AW_HUBLOG` / `AW_TICKET_SECRET` overrides and the same
 precondition treatment the other three got. The 8011 fixture is warm and clean.
+
+---
+
+## Iteration 15 — 2026-08-30 10:25–10:40 (+01:00)
+
+**Unit:** the two remaining row-19 crosses. Both driven, both green, both harnesses hardened.
+**That closes every row of the sweep plan.**
+
+Started from a clean tree at `966782f`, branch and log matching STATE. 8011 confirmed serving this
+checkout before anything was driven: uvicorn started `10:15:09`,
+`find hub/hub src -name '*.py' -newermt '2026-08-30 10:15:09'` empty.
+
+### Row 19 x row 14 — a permission card on screen when the Hub dies
+
+`t_row19_crash_card.py` on `peer`, **6/6 PASS**. The only exercise `expire_pending_for_run` has
+ever had outside its own tests. Card `perm-0b7159e2527d` pending → Hub force-killed → back up →
+`status=expired`, `decided_at=None`; the list route no longer offers it; deciding it anyway is
+**409** with a sentence that says why; the redelivered turn resumes on the same conversation and
+asks **again**; allowing the fresh card lands the write in `peer`'s worktree and the agent goes
+idle. 27 seconds, start to finish.
+
+Checked before filing so nobody re-derives it: expiry broadcasts nothing, and that is deliberate,
+not a gap — `hub/ui/src/api/permissions.ts` polls at `refetchInterval: 3000` *and* fetches
+`include_expired=true`, so the operator watches the card turn expired rather than vanish.
+
+### Row 19 x row 8 — three crashes on one input until the Hub gives up
+
+`t_row19_crash_task.py` on `driver`, **9/9 PASS**. The only route to
+`run_reconciliation.py:95` (`if run.task_id and not returned_entry_ids`). One entry, three
+force-kills, 52 seconds:
+
+```
+crash 1  attempts 1  delivered  provider_session_id set     next delivery: resume
+crash 2  attempts 2  delivered  provider_session_id None    next delivery: new
+crash 3  attempts 3  withdrawn  "delivery failed 3 times; the Hub stopped retrying"
+```
+
+The reset lands exactly at `RESUME_RETRY_LIMIT = 2`, and `run_triggered.session_mode` flips
+`resume → new` to prove it is a real fresh session rather than a flag. At the third crash the
+branch fires: `run_interrupted` with `returned_entry_ids: []` and
+`abandoned_entry_ids: ['entry-a50ce4e98cce']`, then `run_diverged` → `div-2413cdad4090`,
+`outcome: surfaced`, task `has_open_divergence: true`. The first two crashes correctly record no
+divergence — `evaluate_run_end`'s `input_returned` qualification is the difference between
+"dropped" and "retried". Nothing about the loss is silent.
+
+### Harness defects — one more, running total nine for this sweep
+
+**`t_row19_crash_task.py` asserted less than it printed.** It fetched the divergence list and the
+whole event history, printed both, and asserted neither — so it could have read 6/6 green with the
+branch it exists to prove never firing at all. Three verdicts added: a divergence names this task,
+that divergence names a run, and the abandonment reached the event stream rather than only the
+database. Not the "assertion agreed with the bug" species this time; the milder one — **the
+assertion was not there at all, and the printed output was doing the work a reader had to do by
+eye.**
+
+Both files also got the precondition block the other three crash harnesses were given in iteration
+14 (agent idle and bound, nothing queued, no job enabled, a uvicorn actually serving the port) and
+a `finally` that leaves the fixture as found. `t_row19_crash_card.py` additionally stamps its note
+filename per run, so it can never pass on the previous run's leftover file.
+
+### F149 — found by reading the activity log, not by a harness
+
+`job_fired` publishes a **JobRun** id under the key `run_id`, one second away from a `run_started`
+publishing a real `Run` id under the same key, both `run-` prefixed. `run-e584a6b1bee3` from
+iteration 14's job drive exists in `job_runs` and not in `runs` at all. Four payloads do it:
+`job_fired` at `scheduler.py:2469`/`:2482`, `job_run_skipped` at `:2130`/`:2314`. Nothing breaks —
+`useSSE.ts:514` reads only `id`, and no route resolves a run by path — so the cost is confined to
+the operator's event history, where a firing names a run that cannot be found. Filed, not fixed:
+renaming a published event key with a UI listener, a test and every existing database's persisted
+rows behind it is a compatibility decision (D5).
+
+### Cleanup
+
+Fixture verified clean after both drives: five agents idle, `unbound-driver` **still unbound**, no
+job, no permission card in any state, no queued entry for any agent, no run `running`, and the
+drive's task `task-9be066aa5aaf` moved to `rejected` by its own `finally`. 8011 up. Tree clean, two
+commits pushed.
+
+No product code was touched this iteration, so the arming green still describes the tree.
+
+### Next
+
+Every row of the sweep plan has now been driven live. The natural continuation is the one seam this
+drive's own data points at and nothing has exercised: **a crash re-queues an entry while the
+operator sends a second message into the gap.** `return_run_entries` deliberately preserves
+`sequence` and `conversation_id`, and its docstring names the failure it was written to end —
+*"every later input, including a request for a fresh conversation, queues behind the one doing the
+killing"*. That ordering has never been driven with a real second message. One crash, one extra
+`POST /agent/trigger` during the dead window, then read which entry the resumed Hub delivers first
+and on whose conversation.
