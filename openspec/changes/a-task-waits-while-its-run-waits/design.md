@@ -56,6 +56,15 @@ merely accusatory.
 `wait_seconds` is optional. `blocking=False` sends none and gets none; an older tool sending none
 gets a null deadline, and a null deadline refuses every expiry report — the safe direction.
 
+**The two clocks cannot cross, and the ordering is why** (established round 2, because D4's refusal
+depends on it and nothing said so). The Hub stamps `wait_expires_at = now + wait_seconds` while
+serving the ask; the tool computes `deadline = time.monotonic() + QUESTION_ANSWER_TIMEOUT`
+*after* that request returns (`hub/hub/mcp_server.py:354`), and its poll loop sleeps
+`QUESTION_POLL_SECONDS` before its first check. So the tool's real expiry is always **later** than
+the deadline the Hub recorded, by at least a round trip. The refusal in D4 can therefore reject a
+forged early report but can never reject a genuine one — which is what makes "refuse a report that
+arrives before the deadline" safe rather than a race.
+
 ## D4 — The end of the wait is a report, not a lever
 
 `POST /questions/wait-ended` on the agent-facing router, taking the batch's question ids. It is not
@@ -82,26 +91,70 @@ block early and mark the question as proceeded-without-an-answer — which is a 
 unflattering* record, not a way to look clean. There is no version of this call that hides
 something.
 
-## D5 — Resuming a wait is not gated
+## D5 — Resuming a wait is not gated, and that reverses a shipped requirement
 
 `apply_transition` runs the dependency gate on every `-> in_progress` edge, `blocked -> in_progress`
-included. Today `release_block_for_question` swallows the refusal, so an answer can fail to release
-a task whose prerequisite regressed while it waited, silently. The window is short and nobody has
-hit it.
+included — deliberately, and the code says so: `task_transition_service.py:370-378` names "the
+`blocked -> in_progress` resume edge" and cites `task-dependencies` design D1, whose diagram spells
+it out. Today `release_block_for_question` swallows the refusal, so an answer can fail to release a
+task whose prerequisite regressed while it waited, silently. The window is short and nobody has hit
+it.
 
 Half (a) makes the window the whole wait. Half (b) makes the release the thing that lets the agent
 finish: refused, the agent's `update_task(completed)` comes back `409` from `blocked`, for a task it
 has genuinely completed, with no action available to it.
 
-So the gate skips the `blocked -> in_progress` edge, **derived from the task's status inside the
-transition service** rather than from a flag the caller passes. A flag would be one more thing a
-caller can forget and one more thing a caller can abuse; the status at the transition already
-carries the whole fact. The justification is the gate's own: it asks whether work may **start**, and
-`blocked` is reachable only from `in_progress`, so this work started.
+**So the gate skips this edge — and because that is a shipped rule, this change carries deltas for
+both places it is written.** `task-dependencies`' requirement *An unmet dependency prevents starting
+and nothing else* carries the scenario *Resuming is gated the same way as starting*
+(`openspec/specs/task-dependencies/spec.md:76`); `task-lifecycle-governance`'s *Starting work is
+gated on its prerequisites* (`:1193`) states the placement half. Round 1 modified only the second and
+left the first standing, which would have archived a corpus stating both rules at once —
+`openspec validate --strict` does not compare capabilities and passed either way. Round 2 added the
+`task-dependencies` delta.
 
-All three releases — answer, decline, expiry — get it that way, which is right: the reasoning does
-not distinguish them, and leaving two of them gated would be an inconsistency nobody could explain
-later.
+Three facts carry the reversal, and only the first was in round 1's argument.
+
+1. **The gate asks whether work may start, and `blocked` is reachable only from `in_progress`**, so
+   this work started.
+2. **Every refusal at this edge is a change that happened after the task started.** The way *into*
+   `in_progress` is the gated edge, so a waiting task cleared the gate on the way in. A prerequisite
+   can therefore only be unmet on the way out because it left `approved` during the wait, or was
+   declared during the wait. The first case is governed by the shipped requirement *A dependency that
+   regresses after a dependent has started does not halt it* (`task-dependencies:105`) — "the
+   dependent SHALL continue, and the situation SHALL be surfaced". The current gate stops it. So the
+   ungating **restores** that requirement at this edge; it does not trade it away.
+3. **The scheduler already made this decision, the opposite way from the transition service.**
+   `candidate_is_startable` (`hub/hub/scheduler.py:619-625`) exempts `blocked` from the same
+   `dependency_gate.evaluate` call with this argument in these words: *"nothing is about to
+   transition it either — it is waiting on a person. Gating it would be asking whether work that is
+   not about to start is allowed to start."* The board and the gate contradict each other today at
+   exactly one edge, and `task-dependencies` human check 13.1 is that the firing and the board never
+   disagree about a queue item. This is the change that makes them agree.
+
+**The consequence, stated rather than left to be found.** A dependency *declared* while a task waits
+(`task-dependencies:262` — "the existing gate SHALL apply to B unchanged") will no longer stop that
+task resuming. That is the honest cost, and it is small: the work is already under way, so the gate
+could not have prevented it, only the record of it. It surfaces as `running_on_regressed` on the
+task once the release lands, which is where a dependency problem on started work already belongs.
+
+**Mechanism.** Derived from the task's status inside the transition service — `from_status` is
+already captured at the top of `apply_transition` — rather than from a flag the caller passes. A flag
+would be one more thing a caller can forget and one more thing a caller can abuse; the status at the
+transition already carries the whole fact, and it is sufficient precisely because the rule is
+unconditional. All three releases — answer, decline, expiry — get it that way, which is right: the
+reasoning does not distinguish them, and leaving two of them gated would be an inconsistency nobody
+could explain later.
+
+**Coupled to the `dependency_state` fix (proposal, task 3.5), in both directions.** Teaching the
+board to read a waiting task as `running_on_regressed` — "flagged, not stopped" — while the gate can
+still stop it permanently would make the board state something false. Ungating without the board fix
+leaves a resumable task rendered as `gated`. Neither half is shippable alone.
+
+**A shipped test asserts the old rule** and the implementation must overturn it, not work around it:
+`hub/tests/test_dependency_gate.py:185` `test_the_blocked_resume_edge_is_gated_the_same_way`, plus
+that module's own docstring and the section comment at `:155`. Its sibling
+`test_the_blocked_resume_edge_succeeds_once_the_prerequisite_is_approved` stays true and stays.
 
 This does not weaken `task-dependencies`: the gate still guards every edge that *begins* work.
 
@@ -180,3 +233,29 @@ this predicate excludes `declined`, for the reason `2026-08-11-declining-a-quest
 Out of scope: it is about a loop's stop reason, not about a task's status, and folding it in would
 put an unrelated fix inside a change whose reproduction cannot cover it. Recorded here so it is not
 lost.
+
+## What round 2 overturned
+
+Round 2 re-derived the proposal against the code rather than re-reading round 1. Recorded here
+because the next round should attack these conclusions, not rebuild them.
+
+| Round 1 said | Round 2 found |
+|---|---|
+| Ungating `blocked -> in_progress` needs a `task-lifecycle-governance` delta | It needs **two**. `task-dependencies` states the same rule and carries the scenario *Resuming is gated the same way as starting* (`:76`). Round 1 modified the duplicate and left the original, and `--strict` passed because it does not compare capabilities. Delta added; D5 rewritten |
+| The ungating is justified by "the gate asks whether work may start" | True but the weakest of the three available arguments. Round 2 added: every refusal at this edge is necessarily a *post-start* change, so the shipped *A dependency that regresses … does not halt it* already governs it and the current code **breaches** it; and `scheduler.candidate_is_startable` already exempts `blocked` in the same words, so board and gate disagree today |
+| (unstated) | A dependency **declared** during a wait will no longer stop the resume (`task-dependencies:262`). Stated as the honest cost, with a test (7.6) |
+| Task 3.5 (`dependency_state`) is an independent fix | Coupled to group 7 in both directions. Either alone makes the board state something false |
+| Task 2.8: an `under_review` task's question "still records `blocked_task_id`" | **Wrong about the code.** `block_task_for_question` records it only when the task is already `blocked` (`run_task_binding.py:625-628`) — and that is correct, since `run-task-binding:663` is scoped to a task *already waiting*. Assertion inverted; D2's "reused unchanged" survives |
+| Two comments state the retired fact | **Four**: the two backend ones plus `hub/ui/src/api/tasks.ts` and `TaskCard.tsx` |
+| (unstated) | The park needs its own **commit**, because `ask_question_for_actor` already committed; and the ask must survive a park that raises |
+| (unstated) | `hub/tests/test_dependency_gate.py:185` asserts the old rule and must be overturned by name (7.5), along with two gate docstrings |
+
+Re-derived and **confirmed**, so a later round can spend its budget elsewhere: the transition map
+needs no edit and `blocked -> completed` stays absent (`task_transitions.py:113-133`);
+`_guard_run_holds_the_task` does not fire on `-> blocked` and takes its no-op branch on the expiry
+release, because the run is already bound; the batch parks once and records the rest through the
+already-blocked branch; `release_reason` is reached on both existing exits (`tasks.py:1183`, shared
+by the operator and agent PATCH routes, and `run_task_binding.py:687`); `expired` rather than
+`unanswered` is the right list at `mcp_server.py:411`, and a decline leaves the wait early and is
+never marked; and all seven "safe" rows of the proposal's blocked-while-running table hold, with the
+UI needing no behavioural change because `TaskCard` already coalesces the two reasons.

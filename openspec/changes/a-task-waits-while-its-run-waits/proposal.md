@@ -117,20 +117,57 @@ are already right, and the reasons are worth recording so a later round does not
 | `LIVE_STATUSES` → `agents._ACTIVE_TASK_STATUSES`, `checkpoints._LIVE_TASK_STATUSES` | **unchanged in kind, widened in window.** `blocked` is deliberately outside `LIVE_STATUSES`, so a checkpoint taken during the wait omits the task. It already did once the run ended; the window is now the whole wait. Left alone — the band classification is a decided answer and `open_questions` covers the checkpoint case |
 | the dependency gate on `blocked -> in_progress` (`task_transition_service.py:371-383`) | **newly load-bearing.** See below |
 
-### The gate on the way out
+### The gate on the way out, and the shipped requirement that governs it
 
 `blocked -> in_progress` shares its `to_status` with the claim edges, so `evaluate_dependencies`
 runs on it. Today `release_block_for_question` catches `TransitionRefusedError` and returns `None`,
 so a prerequisite that regressed while the task waited makes the answer silently fail to release it.
-That is pre-existing and rare because the window is short.
+That is pre-existing and rare because the window is short. After (a) the window is the entire wait,
+and after (b) the release is what lets the agent finish: a refused release means the agent's
+`update_task(completed)` is answered `409` from `blocked` for a task it has actually completed — a
+new failure with no remedy the agent can act on.
 
-After (a) the window is the entire wait, and after (b) the release is what lets the agent finish.
-A refused release means the agent's `update_task(completed)` is answered `409` from `blocked` for a
-task it has actually completed — a new failure with no remedy the agent can act on. So **resuming a
-wait is not gated**: the gate asks whether work may *start*, and this work already started. The skip
-is derived from the task's status inside the transition service rather than passed by the caller, so
-all three releases — answer, decline, expiry — get it, which is right, because the reasoning is
-identical for all three and only one of them is new.
+So **resuming a wait is not gated.** That is a change to a **shipped** requirement and this change
+carries the delta for it. `task-dependencies` states the rule twice — as the requirement *An unmet
+dependency prevents starting and nothing else* (`openspec/specs/task-dependencies/spec.md:42`), whose
+scenario *Resuming is gated the same way as starting* (`:76`) says in as many words that the
+resumption is refused, and as `task-lifecycle-governance`'s *Starting work is gated on its
+prerequisites* (`:1193`), which is about placement. Both are modified here. Modifying only the
+second, which is what this proposal did before round 2, would archive a corpus stating the opposite
+rules in two capabilities; `openspec validate --strict` does not cross-check capabilities and passes
+either way.
+
+Three facts carry the reversal, and only the first was stated before round 2.
+
+1. **The gate asks whether work may start, and this work started.** `blocked` is reachable only from
+   `in_progress`.
+2. **Every refusal at this edge is therefore a change that happened *after* the task started.** The
+   edge into `in_progress` is itself gated, so a waiting task passed the gate on the way in. A
+   prerequisite can only be unmet on the way out if it left `approved` while the task waited, or was
+   declared against the task while it waited. The first is exactly the shipped requirement *A
+   dependency that regresses after a dependent has started does not halt it*
+   (`task-dependencies:105`) — "the dependent SHALL continue". **The current code breaches that
+   requirement at this edge.** Ungating restores it rather than weakening anything.
+3. **The scheduler already decided this, the other way from the transition service.**
+   `candidate_is_startable` (`hub/hub/scheduler.py:619-625`) exempts `blocked` from the same
+   dependency determination, in the same words: *"Gating it would be asking whether work that is not
+   about to start is allowed to start."* So the board and the gate disagree today about one edge, and
+   `task-dependencies` human check 13.1 requires the firing and the board never to disagree. This
+   makes them agree.
+
+One consequence follows and is stated rather than discovered later: a dependency **declared** while a
+task is waiting (`task-dependencies:262`, "the existing gate SHALL apply to B unchanged") will no
+longer stop that task resuming. It is reported against the task instead, which is all the gate could
+usefully have done about work already under way.
+
+The skip is derived from the task's status inside the transition service rather than passed by the
+caller, so all three releases — answer, decline, expiry — get it. Status alone is sufficient because
+the rule is unconditional: `from_status == 'blocked' and to_status == 'in_progress'`.
+
+**This is coupled to the `dependency_state` fix below and must not ship without it, or without it
+shipping too.** Fixing `dependency_state` so a waiting task reads `running_on_regressed` — "flagged,
+not stopped" — while leaving the gate in place would make the board say a task is merely flagged
+about work the gate can stop permanently.
 
 ## An expired wait is not an open one
 
