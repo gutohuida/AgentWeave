@@ -8806,6 +8806,7 @@ caught in the wild, it caught within a day, in a harness that was not looking fo
 ## F126 (B) — a spent checkpoint can be cut over again, and the second press mints a second successor that does the work a second time
 
 **Status:** open, filed not fixed (iteration 8, `t_row15_cutover.py`, the one `[BAD]` of 36).
+**Still open, reproduced 2026-08-30 08:24 on this checkout** — the same file, now runnable against any fixture, was the one `[BAD]` of 37 again: `ckpt-e85b2f8ad366` cut over twice, successors `conv-8e14f60f8cd2` and `conv-509580740b71`, and the second successor's queue entry was delivered and burned a turn without `continue` ever being called on it.
 
 `POST /projects/{p}/checkpoints/{id}/cutover` has no guard against being called twice on the same
 checkpoint. Driven live against `ckpt-5acb5c671217`:
@@ -10112,3 +10113,155 @@ right shape and nothing said so anywhere; it is written down here now.
 and withdrawing immediately loses the race — the entry is delivered inside the same second and the
 `409 "already delivered/withdrawn"` reads as a product failure. The harness now occupies the agent
 first and withdraws the entry that queues behind the running turn.
+
+---
+
+## F140 (A) — a flow's briefing tells the agent to "finish the task and stop", and never tells it, or the Hub, what finishing means
+
+**Status:** open, filed not fixed. Two defensible repairs exist and choosing between them is a
+design decision (decision D5's stated line for filing). Found driving **row 12, flows** — the first
+time that row has been reached by any sweep.
+
+**What was driven.** `scripts/drive/t_row12_flows.py` against `proj-1964cdedffe2` on the 8011 Hub:
+a `change-spec` document with two independent tasks, approved into a flow
+(`job-9079283b06cc` / `loop-10e08b3bbfab`, `spec_document_id` set, `stop_when_queue_empties: true`),
+then fired by hand twice, Haiku throughout.
+
+**Firing 1 did everything right.** Both tasks were claimed in the same firing and started in
+parallel, on two different agents:
+
+```
+task-a7e3ff434835  Add power(a, b) to calc_082529.py    in_progress  peer
+task-fb0635e03198  Add modulo(a, b) to calc_082529.py   in_progress  asker
+```
+
+Both agents did the work, in their own task checkouts, and it is on disk and committed:
+
+```
+drive-0830-sweep/.agentweave/tasks/task-a7e3ff434835/calc_082529.py  ->  def power(a, b): return a ** b
+drive-0830-sweep/.agentweave/tasks/task-fb0635e03198/calc_082529.py  ->  def modulo(a, b): return a % b
+```
+
+`peer` also called `record_evidence` for `FR-1` and `submit_checkpoint_notes`, both succeeding.
+`unresolved_requirements` is `[]`. By every measure the work is done.
+
+**Neither task ever left `in_progress`.** So firing 2 claimed the same two tasks again, briefed the
+same two agents for them again, and burned two more Haiku turns. `peer`'s second transcript is the
+evidence that this is waste and not progress:
+
+> *"Ah, evidence has already been recorded for FR-1 on this task. … So there was a prior peer's
+> turn on this task. The prior agent likely already recorded evidence for FR-1."*
+
+It then submitted checkpoint notes again and stopped again. The board after firing 2 is
+byte-identical to the board after firing 1.
+
+**Why it repeats, in the code.** `decide_firing` (`hub/hub/scheduler.py:1318-1322`) treats an
+`in_progress` task with an assignee as *resumption*, deliberately:
+
+```python
+if task.assignee:
+    # Already staffed; this firing is *resuming* it, not staffing it.
+    agent = task.assignee
+```
+
+That is correct behaviour for a task genuinely mid-flight. Nothing distinguishes it from a task
+whose work finished two firings ago, because the only thing that would — the status — is the thing
+that never moved.
+
+**Why the status never moves.** The flow briefing (`scheduler.py:1765-1775`) says:
+
+> **Finish the task below and stop.** Do not pick up the next item and do not hand the work to
+> anyone — routing is the flow's job, and the next firing decides who does what. Record what a
+> reviewer will need (see `submit_checkpoint_notes`); somebody else reads it.
+
+It names `submit_checkpoint_notes` explicitly, and **both agents called it.** It never names
+`update_task`, and **neither agent called it.** The canonical context is no better: `update_task`
+appears exactly once in the whole 10 kB document, as a bare line in a tool list —
+
+```
+- `update_task(task_id, status)` — status is required, one of `pending`, `assigned`,
+  `in_progress`, `completed`, `under_review`, `revision_needed`, `approved`, `rejected`.
+```
+
+— with nothing anywhere saying that moving a task to `completed` is how a flow learns work is
+finished. The agents obeyed the tool the product named and skipped the one it did not. That is not
+a model failure; it is the product declining to state its own contract at the one place the agent
+reliably reads, which is the same shape as design D8's own argument for putting the tier statement
+in the briefing: *"an agent that does not know to ask never asks."*
+
+**The cost is not one wasted turn — it is the whole second half of the feature.** The briefing's
+own first paragraph promises *"Finished work is claimed for review by an agent other than the one
+that did it."* That mechanism is gated on `REVIEWABLE_LOOP_TASK_STATUSES`, which is
+`REVIEWABLE_STATUSES` sorted, which is `completed` and nothing else (`scheduler.py:530-536`). A
+task that never reaches `completed` is never offered to a reviewer, so:
+
+- the reviewer ladder never runs, and `resolve_reviewer` is never consulted;
+- `stop_when_queue_empties` cannot fire — its band is `TERMINAL_FOR_BINDING`,
+  `{approved, rejected}` (`run_task_binding.py:465`, `task_transition_service.py:485`), two
+  transitions further on than the one that did not happen;
+- so a flow left on its cron re-briefs its agents for finished work **on every firing, forever**,
+  at one provider turn per task per firing, and reports itself busy the whole time.
+
+Row 12 is exactly the row an operator would leave running unattended overnight.
+
+**This is the same defect as F139 seen from the other side.** F139 was an agent reaching for the
+wrong tool when the product named a capability in prose without qualifying it. Here the product
+does not name the capability at all. Both come out of agent-facing text that was written as
+description rather than as instruction.
+
+### Two repairs, and why neither is obviously right
+
+1. **Say it in the briefing.** One sentence after the `submit_checkpoint_notes` line naming
+   `update_task(<task id>, status="completed")` and what it causes — the flow offers the work for
+   review. Cheap, local, and it matches the evidence: the tool the briefing names is the tool the
+   agent calls. But it makes the flow's progress depend on an agent choosing to make a tool call,
+   which is what F27 and F139 both say is not reliable.
+2. **Let the Hub conclude it.** A run that ends cleanly, bound to a loop task it was briefed for,
+   moves that task to `completed`. Reliable and agent-independent, but it asserts the work is
+   finished on the strength of the turn ending, which is precisely the inference the operator
+   retired the question-detection backstop for making (CLAUDE.md, 2026-08-20) — and a turn can end
+   because the agent gave up.
+
+A third shape exists — brief the agent *and* have the Hub surface "the turn ended with its task
+still `in_progress`" as a stall rather than silently re-briefing — and is probably the honest one,
+since it neither guesses nor depends on the agent. Choosing is the operator's.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 AW_AGENT=peer \
+    AW_RUNNER=runner-74060952df62 PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row12_flows.py
+```
+
+Sections D and E print the board before and after each firing; the two rows for `calc_<run>.py`
+read `in_progress` in both.
+
+### Two harness defects found in the same run, both fixed
+
+**`t_row12_flows.py` read the loop by the job's id.** `GET /projects/{p}/loops/{job_id}` answered
+`404 Loop not found` twice, which reads as "this job has no loop" — for a job whose own create
+response carries `loop: {"id": "loop-10e08b3bbfab", …}`. The route is keyed by the loop's id
+(`api/v1/loops.py:138`). Guessing a shape instead of reading the one in front of it is now the
+sixth harness defect of this drive and the fourth of exactly this kind. Fixed: the id is taken from
+`job["loop"]["id"]`, and the file exits rather than continuing if the create response carries no
+loop, since every leg below it is about that loop.
+
+**Its "did the work land" check looked in the agent worktree.** A run bound to a task works in the
+*task's* checkout, `.agentweave/tasks/<task id>/`, not `.agentweave/worktrees/<agent>/` — so the
+check printed `calc_082529.py exists in: NO worktree` for two files that were on disk, correct, and
+committed. Fixed to read the task checkout first and fall back to the worktree, naming which one it
+found. (The project's path comes from `working_directory` on the projects listing; the first
+version of the fix guessed `working_dir` and got `None` — the same mistake, inside the fix for it.)
+
+The file was also hard-wired to one night's fixture agent (`alpha`) with no override and no
+preconditions, the shape F137 and F138 already named. It now takes `AW_AGENT`/`AW_RUNNER`, asserts
+that the agent exists, is bound, and is idle, that a second bound agent exists for section E's
+non-author reviewer to resolve to, and that no job is already enabled — and it names its document
+and its target file after a per-run tag, so a second run does not find the first run's work already
+done and call that a pass.
+
+**Also driven and holding, in the same run:** the flow decomposed an approved document into two
+tasks in the loop's own queue; both were started in one firing on two agents, which is design D5's
+width working; each ran in its own task checkout with its own auto-snapshot commit; the job's
+history records one run row per dispatched task rather than one per firing; and `LEAVE NO JOB
+ENABLED` held — the job was disabled and archived, and `GET /jobs` returns `[]`.

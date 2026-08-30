@@ -17,8 +17,20 @@ import time
 from aw import api, show
 
 P = os.environ.get("AW_PROJECT") or "proj-dc4d43543bea"
-AGENT = "gamma"
-HAIKU = "runner-8d5eb04a4f25"
+# These were hard-wired to one night's fixture, so the file could only ever be run against that
+# project's agent and runner. Overridable now, with the preconditions the run needs asserted in
+# `preflight()` rather than assumed -- the F137 lesson.
+AGENT = os.environ.get("AW_AGENT") or "gamma"
+HAIKU = os.environ.get("AW_RUNNER") or "runner-8d5eb04a4f25"
+
+# A fixed filename contaminates the file's own next run: a CHECKPOINT_B.txt left in the worktree
+# by a previous run makes "the predecessor did not write it" fail and "the successor did the next
+# action" pass without the successor doing anything. Unique per run.
+RUN = os.environ.get("AW_RUN") or time.strftime("%H%M%S")
+FILE_A = f"CHECKPOINT_A_{RUN}.txt"
+FILE_B = f"CHECKPOINT_B_{RUN}.txt"
+WORD_A = f"ANCHOR{RUN}"
+WORD_B = f"RELAY{RUN}"
 
 VERDICTS = []
 
@@ -90,7 +102,40 @@ def summarise():
     print(f"\n  {len(VERDICTS) - len(bad)}/{len(VERDICTS)} held")
 
 
+def preflight():
+    """Assert what this file describes, rather than reporting on some other situation.
+
+    Every one of these has been a wrong verdict at least once: an archived agent read as the
+    product refusing, a warm queue read as this run's entry, an agent that turned out to have no
+    runner (or the wrong one) read as a product defect.
+    """
+    step("PRE. Preconditions this file's assertions depend on")
+    c, agents_ = api("GET", f"/projects/{P}/agents")
+    if c != 200:
+        sys.exit(f"cannot list agents on {P}: {c}")
+    row = next((a for a in agents_ if a["name"] == AGENT), None)
+    if row is None:
+        sys.exit(f"agent {AGENT!r} does not exist on {P} -- set AW_AGENT")
+    if row.get("archived"):
+        sys.exit(f"agent {AGENT!r} is archived; this file needs an open agent")
+    if row.get("status") != "idle":
+        sys.exit(f"agent {AGENT!r} is {row.get('status')!r}, not idle")
+    if row.get("runner_id") != HAIKU:
+        sys.exit(
+            f"agent {AGENT!r} is bound to {row.get('runner_id')!r}, not AW_RUNNER={HAIKU!r} -- "
+            "this file spends real provider tokens and must spend them on the cheap runner"
+        )
+    c, q = api("GET", f"/projects/{P}/queue/{AGENT}")
+    queued = [e for e in (q if isinstance(q, list) else []) if e.get("state") == "queued"]
+    if queued:
+        sys.exit(f"{AGENT} already has {len(queued)} queued entries; step 7 cannot tell them apart")
+    if read_in_worktree(FILE_A) is not None or read_in_worktree(FILE_B) is not None:
+        sys.exit(f"{FILE_A}/{FILE_B} already exist in the worktree -- pick a different AW_RUN")
+    print(f"  [OK ] {AGENT} exists, is open, idle, bound to {HAIKU}, queue empty, run tag {RUN}")
+
+
 def main():
+    preflight()
     step("0. Baseline -- no checkpoint runner is configured")
     c, settings0 = api("GET", f"/projects/{P}/settings")
     show("settings", c, settings0)
@@ -103,11 +148,11 @@ def main():
 
     step("1. A real Haiku turn that leaves a named next action it is told NOT to do")
     msg = (
-        "Create a file called CHECKPOINT_A.txt in your working directory whose entire contents "
-        "are the single word ANCHORONE. Then STOP. "
-        "Do not create any other file. In particular do NOT create CHECKPOINT_B.txt now. "
+        f"Create a file called {FILE_A} in your working directory whose entire contents "
+        f"are the single word {WORD_A}. Then STOP. "
+        f"Do not create any other file. In particular do NOT create {FILE_B} now. "
         "End your reply with exactly this line so the next step is on the record: "
-        "NEXT ACTION: create CHECKPOINT_B.txt containing the single word RELAYTWO."
+        f"NEXT ACTION: create {FILE_B} containing the single word {WORD_B}."
     )
     c, b = api(
         "POST",
@@ -120,12 +165,12 @@ def main():
         sys.exit(f"trigger refused {c}")
     wait_idle(AGENT)
 
-    a_text = read_in_worktree("CHECKPOINT_A.txt")
-    check("predecessor wrote CHECKPOINT_A.txt", a_text is not None, repr(a_text))
-    check("...with the anchor content", "ANCHORONE" in (a_text or "").upper(), repr(a_text))
+    a_text = read_in_worktree(FILE_A)
+    check(f"predecessor wrote {FILE_A}", a_text is not None, repr(a_text))
+    check("...with the anchor content", WORD_A in (a_text or "").upper(), repr(a_text))
     check(
-        "predecessor did NOT write CHECKPOINT_B.txt",
-        read_in_worktree("CHECKPOINT_B.txt") is None,
+        f"predecessor did NOT write {FILE_B}",
+        read_in_worktree(FILE_B) is None,
     )
 
     after = conversations("all")
@@ -174,12 +219,12 @@ def main():
     check("it has a body", bool(body.strip()), f"{len(body)} chars")
     check(
         "the body carries the next action across",
-        "RELAYTWO" in body,
-        "RELAYTWO present" if "RELAYTWO" in body else "ABSENT",
+        WORD_B in body,
+        f"{WORD_B} present" if WORD_B in body else "ABSENT",
     )
     check(
         "files_changed names the file the turn wrote",
-        any("CHECKPOINT_A" in str(f).upper() for f in (cp.get("files_changed") or [])),
+        any(FILE_A.upper() in str(f).upper() for f in (cp.get("files_changed") or [])),
         str(cp.get("files_changed"))[:200],
     )
 
@@ -190,7 +235,7 @@ def main():
     check("rendered returns 200", c == 200, str(c))
     check("rendered is non-empty", bool(rendered.strip()), f"{len(rendered)} chars")
     check("rendered names the agent", AGENT in rendered, "")
-    check("rendered carries the next action", "RELAYTWO" in rendered.upper())
+    check("rendered carries the next action", WORD_B in rendered.upper())
 
     step("5. Cut over")
     c, co = api("POST", f"/projects/{P}/checkpoints/{cp_id}/cutover", {})
@@ -268,13 +313,13 @@ def main():
     )
     wait_idle(AGENT, limit=420)
 
-    b_text = read_in_worktree("CHECKPOINT_B.txt")
+    b_text = read_in_worktree(FILE_B)
     check(
         "the SUCCESSOR did the next action the checkpoint carried",
         b_text is not None,
         repr(b_text),
     )
-    check("...with the relay content", "RELAYTWO" in (b_text or "").upper(), repr(b_text))
+    check("...with the relay content", WORD_B in (b_text or "").upper(), repr(b_text))
 
     c, q2 = api("GET", f"/projects/{P}/queue/{AGENT}")
     left = [e for e in (q2 if isinstance(q2, list) else []) if e.get("state") == "queued"]
