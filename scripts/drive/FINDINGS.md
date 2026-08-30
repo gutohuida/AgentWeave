@@ -10812,3 +10812,114 @@ AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 AW_AGENT=pe
 
 Exits unless the agent is idle, bound and there is no other open question. Costs one Haiku turn
 (the control's delivery wakes the agent) and declines anything it leaves open.
+
+---
+
+## F147 (B) — the startup pass that re-queues a crashed job firing writes that firing off as failed one line later, and nothing ever corrects it
+
+**Status:** open, filed not fixed under D5 — every repair changes when or how a firing is
+concluded, which is a design call. Reproduced live by `scripts/drive/t_row19_crash_job.py` on
+`proj-1964cdedffe2` / `driver` / Haiku, 8011.
+
+`reconcile_stale_job_runs` had never been driven by anything — its own docstring says so, and its
+correlation is a join by convention rather than by constraint, which **F121** already found bending.
+Driving it says the reconciliation itself is fine and the *history it leaves the operator* is wrong.
+
+### Measured
+
+A job is created and fired by hand; the Hub is force-killed mid-firing; the Hub restarts.
+
+```
+runs      run-a46a031d484f  conv-ea9c3ad574b3  interrupted  ended 09:15:11   <- the crash
+runs      run-3d282cf81379  conv-ea9c3ad574b3  completed    09:15:12 -> 09:15:23  exit 0
+job_runs  run-e584a6b1bee3  conv-ea9c3ad574b3  failed
+          error_summary = "Reconciled on Hub start: no live run behind this firing"
+```
+
+Same conversation on all three rows. **The firing's work ran to completion twelve seconds after the
+restart, on the firing's own conversation, exit 0 — and the job's history still reports that firing
+as failed.** No second `JobRun` is written for the run that succeeded, so `GET /jobs/{id}/history`
+shows the operator one entry and it says failure.
+
+### Why nothing corrects it
+
+The two startup passes are adjacent (`main.py:350-351`) and they work against each other:
+
+```python
+await reconcile_interrupted_runs()   # run_reconciliation.py:87 -> return_run_entries(db, run.id)
+await reconcile_stale_job_runs()     # run_reconciliation.py:221 -> job_run.status = "failed"
+```
+
+The first one **re-queues the crashed run's input** — that is what `return_run_entries` is for, and
+F145 measured the redelivery working end to end. So by the time the second one declares "no live
+run behind this firing", the firing's work is already queued to be retried and will be running
+within a second or two. The sentence is true at the instant it is written and false almost
+immediately after.
+
+The normal end-of-turn path cannot repair it, because it only looks at firings still in flight
+(`scheduler.py:1568-1576`):
+
+```python
+select(JobRun)
+  .where(JobRun.conversation_id == conversation_id, JobRun.status == "in_progress")
+```
+
+Reconciliation has already moved the row to `failed`, so the successful run's
+`finalize_job_run_for_conversation` matches nothing and returns silently. The row is `failed`
+forever.
+
+### A second, latent defect in the same function
+
+`reconcile_stale_job_runs` correlates with an **unordered** `.first()`:
+
+```python
+run_result = await db.execute(select(Run).where(Run.conversation_id == job_run.conversation_id))
+run = run_result.scalars().first()
+if run is not None and run.status == "running":
+    continue
+```
+
+At the moment this drive ran there was one `Run` on that conversation. There are now **two**, and
+after any redelivery there always will be. A second crash during a retried firing would therefore
+consult whichever row SQLite hands back first — quite possibly the older `interrupted` one — and
+write off a firing that is running. `finalize_job_run_for_conversation` orders its own version of
+this same correlation `fired_at.desc()` and explains why in its docstring; this one does not order
+at all.
+
+### The repairs, and why the choice is the operator's
+
+1. **Don't conclude what you just re-queued.** Skip a `JobRun` whose conversation has a queue entry
+   that `reconcile_interrupted_runs` just returned. Narrowest, and it needs the first pass to hand
+   the second one its returned entry ids — they are already computed (`run_reconciliation.py:87`).
+2. **Conclude it as interrupted, not failed,** and let the resumed run finalize it. Needs
+   `finalize_job_run_for_conversation` to accept `"interrupted"` as well as `"in_progress"`, and
+   needs `interrupted` to be a status the job history renders.
+3. **Write a second `JobRun` for the retry.** Truthful about both attempts and the closest to what
+   the last-ten-runs view is for, but it changes what "a firing" counts as, and F121 is already a
+   finding about one firing producing two rows.
+
+The `.first()` ordering is small and unambiguous enough to fix on its own, but it sits inside the
+function all three repairs rewrite, so it is filed with them rather than patched ahead of them.
+
+### The harness read 4/4 while getting this wrong
+
+Its verdicts were *"no JobRun is left in_progress"* and *"the crashed firing is recorded as
+failed"* — both true, both passing, and the second one asserts the defect as the expected outcome.
+The file now also asserts that the firing's work completed on the firing's own conversation (it
+did) and that the history says so (it does not), so the row that is wrong shows as `BAD` until it
+is fixed. That is the eighth harness defect of this sweep and the second of the species *"the
+assertion agreed with the bug"* (F143 was the first).
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_TICKET_SECRET=aw0830-ticket-secret \
+  AW_PROJECT=proj-1964cdedffe2 AW_AGENT=driver AW_PORT=8011 \
+  AW_DB="sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0830/aw0830.db" \
+  AW_HUBLOG="C:/Users/huida/AppData/Local/Temp/aw0830/hub_crash.log" \
+  PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row19_crash_job.py
+```
+
+It kills and restarts the Hub on the port you give it. **Do not pipe it through `head`** — SIGPIPE
+kills it before the `finally` that disables and archives the job. It now also exits unless the
+agent is idle and bound and no job is already enabled.
