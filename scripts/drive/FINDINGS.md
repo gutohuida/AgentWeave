@@ -462,8 +462,38 @@ which is what the operator actually needs to hear.
 
 ## F14 (B) — A task waiting on the operator still reads `in_progress`
 
-**Status:** partially fixed 7fcd172 (a derived `awaiting_answer_reason` reports the wait);
-**the task-state half is DECIDED 2026-08-30 and queued as a spec loop.**
+**Status: FIXED 2026-08-30**, `a-task-waits-while-its-run-waits` (three spec rounds, then eleven
+implementation groups: `bb3d3e7` … `3cec5a5`). The first half was `7fcd172`'s derived
+`awaiting_answer_reason`, which reported the wait beside a status that contradicted it; the
+task-state half is now the status itself.
+
+**What shipped.** The agent-facing question routes park the asking run's bound task *as the question
+is asked*, reusing `block_task_for_question` unchanged — so the ordinary wait is `blocked` with a
+`blocked_reason` naming the question, for the whole of the wait rather than only after the run ends.
+`awaiting_answer_reason` stays, and its four comments claiming a task parks only at the run's end
+are corrected: it now covers the two waits the status cannot carry — a task in `under_review`,
+`pending` or `assigned`, which `block_task_for_question` correctly refuses to park, and a batch whose
+first answer released the task while the run waits on the rest.
+
+**Confirmed live** (`scripts/drive/t_f14_f60_wait_parks_the_task.py`, Haiku, Hub on 8011 from
+source): the task read `blocked` while the asking agent's roster status read `running` — the two
+states this finding is about, which before this change could never coexist.
+
+**Three things the rounds found that the finding itself did not.**
+
+* `task_attribution` was never checked against blocked-while-running, and it is the module whose
+  entire job is answering who is on a task. For the whole wait the loop board called an agent that
+  was mid-turn on that exact task merely `assigned` to it — the same class of false statement as
+  this finding. Fixed in group 3a; the drive reads `agent_capacity: "working"` on the parked task.
+* The dependency gate refused `blocked -> in_progress`, deliberately and by a shipped rule, which
+  made the wait a window in which a regressed prerequisite could strand finished work. Ungated
+  (group 7), with both spec deltas, because `scheduler.candidate_is_startable` had already made the
+  opposite decision in its own words and the board and the gate contradicted each other at exactly
+  one edge.
+* `task-lifecycle-governance:445` forbids leaving the waiting status by assertion as well as
+  entering it, and only entering was enforced. Latent while `blocked` implied the asking run had
+  ended; ask-time parking removes exactly that protection. Guarded at the route (group 2b), and the
+  drive shows the 403 reaching a real agent's tool result verbatim.
 
 `ask_user` worked well: `builder` asked a structured question with two labelled options,
 `blocking: true`, `asker_waiting: true`, and the answer reached the agent, which then completed the
@@ -3205,11 +3235,45 @@ distinction F55's own live verification drew for `Checkpoint`.
 
 ## F60 (A) — An unanswered `ask_user` question that resolves itself mid-turn leaves the task reading `completed`, and the operator can still "answer" it afterward into a state that contradicts the code that shipped
 
-**Status:** partially fixed 033ec4c — the guard that refuses an answer whose asking run has ended
-predates the filing (`questions.py`, `_asker_is_gone`); the half that leaves the task reading
-`completed` **is no longer parked — the operator decided it 2026-08-30 as part (b) of F14's
-decision.** It ships with F14 rather than after it: a timed-out question whose agent proceeded
-anyway is recorded on the task, so the board can say a decision was made without the operator.
+**Status: FIXED 2026-08-30**, `a-task-waits-while-its-run-waits`, part (b), shipped with F14 in the
+same change. `033ec4c`'s `_asker_is_gone` guard predates the filing and stands.
+
+**What shipped.** `Question` records the deadline of the wait it starts and when that wait ended
+(migration `0099`). The deadline is computed **Hub-side** from the Hub's own inputs — the agent's
+`question_timeout_seconds`, the environment the Hub builds, and `_configured_wait`'s own default and
+range, restated with an agreeing test. Rounds 1 and 2 had the ask send `wait_seconds`; round 3
+overturned it, because that number would have arrived over the run's own credential and the refusal
+that keeps an expiry a report of a fact rather than a lever would have compared the report against a
+number the reporting party chose.
+
+`ask_user` reports its expiry to `POST /questions/wait-ended` — not an `@mcp.tool()`, so no model can
+be prompted into calling it — and the report releases the parked task. The run's **end also sweeps**,
+because rounds 1 and 2 had merged "the report was never sent" with "the report was sent and did not
+land": task 5.5 requires the second to be swallowed, so the agent proceeded and the task would sit
+`blocked` with its own agent unable to record the work. `expire_permission_request` in the same
+router already stated that design in one line — *"The run reports and the run's end sweeps"* — and
+this now takes both halves.
+
+The task then carries `proceeded_without_answer_reason`, **permanently**. That is the assertion this
+finding exists for: it measured the operator answering five minutes after the run ended, choosing the
+option the agent had not shipped. If the answer cleared the record, it would disappear at the exact
+moment it became most misleading.
+
+**Confirmed live** (`t_f14_f60_wait_parks_the_task.py`, phase B, agent timeout set to the Hub's
+minimum): the task parked, the wait ended on its own after ~9s, the task returned to `in_progress`,
+the agent's completion was no longer refused, the finished task read *"Proceeded without your answer:
+Which colour should the badge be?"*, the conversation rail stopped saying waiting — and answering the
+question afterwards did not erase the record.
+
+**One surface family the change had to correct on the way.** `wait_ended_at` introduces a state that
+did not exist — unanswered, undeclined, and nobody waiting — and five surfaces derived "somebody is
+waiting" from `answered = False`. Two were fixed by the predicate; round 3 found three more. The
+conversation rail and a loop's open-question count are excluded, because their audience is the
+operator; a checkpoint's `open_questions` **keeps** the entry and marks the wait as ended, because
+its audience is the successor agent, which needs to know a decision was taken without anybody.
+`scheduler._pending_loop_request` is a sixth reader with a real defect of its own (no `declined`
+exclusion at all) and is deliberately out of scope — it is about a loop's stop reason, not about who
+is waiting.
 
 Driven live (Q8), following the method's own directive to leave a question deliberately
 unanswered. `proj-8605b92d0028`'s `author` agent (Haiku, cheap runner) was told, honestly, to ask
