@@ -22,6 +22,7 @@ both decides and spawns would be impossible to test without one.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Dict, Iterable, NamedTuple, Optional, Tuple
 
 from sqlalchemy import select
@@ -725,6 +726,28 @@ async def release_block_for_question(
 
     release_reason(task)
     return task
+
+
+def wait_has_expired(question: Question, now: Optional[datetime] = None) -> bool:
+    """Has the wait this question started demonstrably ended without an answer?
+
+    The one predicate both signals share (design D4): the tool's report checks it before recording
+    an expiry, and the run-end sweep checks it before recording one the report never delivered. Two
+    spellings of it would be two chances to disagree about whether a wait ended.
+
+    Everything it compares is the Hub's own. `wait_expires_at` was stamped Hub-side while serving
+    the ask, so this is the Hub comparing its own clock against its own stamp — no cross-process
+    comparison, and nothing the reporting party supplied.
+
+    False when no deadline was ever recorded. A question nobody waited on cannot have stopped being
+    waited on, and that is what keeps this a report of a fact rather than a way to create one.
+    """
+    deadline = question.wait_expires_at
+    if deadline is None:
+        return False
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+    return deadline <= (now or datetime.now(timezone.utc))
 
 
 async def release_block_for_expired_wait(

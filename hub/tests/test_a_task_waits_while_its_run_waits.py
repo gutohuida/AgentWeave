@@ -860,3 +860,129 @@ def test_a_failed_report_still_returns_the_agent_its_answers(monkeypatch):
 
     assert result["success"] is True
     assert "went unanswered" in result["note"]
+
+
+# ---------------------------------------------------------------------------
+# 5a. The report is not the only signal (design D4)
+#
+# Rounds 1 and 2 merged "the report was never sent" with "the report was sent and did not land"
+# and concluded that a missing report means nobody proceeded. Task 5.5 requires the second to be
+# swallowed, so in that case somebody did — and the task would sit `blocked` with its own agent
+# unable to record the work. The shipped analogue in the same router already has both halves:
+# `expire_permission_request` — "The run reports and the run's end sweeps."
+# ---------------------------------------------------------------------------
+
+
+async def end_the_run(run_id: str = "run-waiter") -> None:
+    """The run boundary, reached the way the trigger path reaches it."""
+    from hub.run_divergence import evaluate_run_end
+
+    async with async_session_factory() as session:
+        run = await session.get(Run, run_id)
+        run.status = "completed"
+        await session.commit()
+    await evaluate_run_end(run_id)
+
+
+@pytest.mark.asyncio
+async def test_a_run_that_ends_after_a_lost_report_does_not_strand_its_task(app, monkeypatch):
+    """5a.1 → 5a.2. The honest reproduction: the report is sent and fails.
+
+    With group 2b in place the agent has no way out at all — `blocked -> completed` does not exist
+    and `blocked -> in_progress` is refused — which is the correct behaviour and exactly why this
+    sweep is required rather than optional.
+    """
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+    await expire_the_wait(question_id)
+
+    # The report never lands. The agent proceeds anyway, as `ask_user` tells it to, and is refused.
+    refused = await app.patch(
+        f"/api/v1/agent-actions/tasks/{task_id}", headers=headers, json={"status": "completed"}
+    )
+    assert refused.status_code == 409
+    assert (await task_row(task_id)).status == "blocked"
+
+    await end_the_run()
+
+    question = await question_row(question_id)
+    assert question.wait_ended_at is not None
+    assert question.answered is False
+    task = await task_row(task_id)
+    assert task.status == "in_progress"
+    assert task.blocked_reason is None
+
+
+@pytest.mark.asyncio
+async def test_the_sweep_never_fires_early(app):
+    """5a.4. A run that ends while its recorded deadline is still in the future leaves the task
+    waiting and sets nothing.
+
+    This is the guard against turning the sweep into the Hub-side timer design D4 rejected: a
+    sweep that fired on a clock would release a task while the tool was still waiting, because its
+    own deadline had not passed.
+    """
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+
+    await end_the_run()
+
+    assert (await question_row(asked.json()["id"])).wait_ended_at is None
+    assert (await task_row(task_id)).status == "blocked"
+
+
+@pytest.mark.asyncio
+async def test_the_sweep_is_idempotent_when_the_report_already_arrived(app):
+    """5a.3. Arriving second is the normal case for a report-plus-sweep pair, not an error — and
+    after 6.1 the sweep will not even see the question again, because its wait has ended."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+    await expire_the_wait(question_id)
+    await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+    recorded = (await question_row(question_id)).wait_ended_at
+
+    await end_the_run()
+
+    assert (await question_row(question_id)).wait_ended_at == recorded
+    async with async_session_factory() as session:
+        history = await history_for(session, task_id)
+    assert [row.to_status for row in history] == ["blocked", "in_progress"]
+
+
+@pytest.mark.asyncio
+async def test_a_swept_task_carries_the_same_record_as_a_reported_one(app):
+    """5a.5. A wait that ended is a wait that ended; how the Hub found out must not change the
+    record."""
+    await make_agent()
+    reported_task = await make_task("task-reported")
+    reporter = await make_run(run_id="run-reporter", task_id=reported_task)
+    first = await app.post("/api/v1/agent-actions/questions", headers=reporter, json=one())
+    await expire_the_wait(first.json()["id"])
+    await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=reporter,
+        json={"question_ids": [first.json()["id"]]},
+    )
+
+    swept_task = await make_task("task-swept")
+    sweeper = await make_run(run_id="run-sweeper", agent="other", task_id=swept_task)
+    second = await app.post("/api/v1/agent-actions/questions", headers=sweeper, json=one())
+    await expire_the_wait(second.json()["id"])
+    await end_the_run("run-sweeper")
+
+    reported_row = await question_row(first.json()["id"])
+    swept_row = await question_row(second.json()["id"])
+    assert (reported_row.wait_ended_at is not None) == (swept_row.wait_ended_at is not None) is True
+    assert (await task_row(reported_task)).status == (await task_row(swept_task)).status

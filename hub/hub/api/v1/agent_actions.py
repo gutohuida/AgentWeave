@@ -27,6 +27,7 @@ from ...run_task_binding import (
     announce_block,
     block_task_for_question,
     release_block_for_expired_wait,
+    wait_has_expired,
 )
 from ...schemas.common import RequestModel
 from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
@@ -657,12 +658,7 @@ async def report_wait_ended(
             # a report-plus-sweep pair, not an error.
             accepted.append(question_id)
             continue
-        deadline = question.wait_expires_at
-        if deadline is None:
-            continue
-        if deadline.tzinfo is None:
-            deadline = deadline.replace(tzinfo=timezone.utc)
-        if deadline > now:
+        if not wait_has_expired(question, now):
             continue
 
         question.wait_ended_at = now
