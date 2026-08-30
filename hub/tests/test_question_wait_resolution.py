@@ -36,7 +36,7 @@ def test_the_restated_bounds_and_default_agree_with_the_tool():
     assert QUESTION_WAIT_MAX == mcp_server.MAX_WAITING_SECONDS
     assert QUESTION_WAIT_ENV == "AW_QUESTION_TIMEOUT"
     # The tool's default, read from the module that owns it rather than restated a third time here.
-    assert QUESTION_WAIT_DEFAULT == mcp_server._configured_wait("AW_NO_SUCH_VAR", 240)
+    assert mcp_server._configured_wait("AW_NO_SUCH_VAR", 240) == QUESTION_WAIT_DEFAULT
 
 
 def test_the_agents_own_column_wins(monkeypatch):
