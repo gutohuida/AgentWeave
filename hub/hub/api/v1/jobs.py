@@ -379,10 +379,18 @@ async def _batch_loop_summaries(
         .subquery()
     )
     open_questions_by_job: Dict[str, int] = {}
+    # A count the operator reads as "these still need me", so it must not include a wait nobody is
+    # in (`a-task-waits-while-its-run-waits`, design D6). `wait_ended_at` names a question that is
+    # unanswered, undeclined, and finished being waited on: the run gave up, said so, and went back
+    # to work. Excluded here for the same reason `declined` is — both are settled, differently.
     questions_result = await session.execute(
         select(conv_subq.c.job_id, func.count(Question.id))
         .join(Question, Question.conversation_id == conv_subq.c.conversation_id)
-        .where(Question.answered.is_(False), Question.declined.is_(False))
+        .where(
+            Question.answered.is_(False),
+            Question.declined.is_(False),
+            Question.wait_ended_at.is_(None),
+        )
         .group_by(conv_subq.c.job_id)
     )
     for job_id, count in questions_result.all():

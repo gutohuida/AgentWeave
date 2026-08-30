@@ -419,9 +419,22 @@ async def conversation_attention(
         if cid:
             attention[cid] = "running"
 
+    # The two arms answer the same question and are now shaped alike. The permission arm has
+    # always selected `pending`, which excludes `expired`, because permission expiry has been a
+    # modelled state since `expire_permission_request` shipped; the question arm had no expired
+    # state to exclude until `wait_ended_at` (`a-task-waits-while-its-run-waits`, design D6).
+    #
+    # The exclusion matters most here of all the readers, because this requirement states its own
+    # reason and that reason expires with the wait: the waiting state must be distinguishable from
+    # the running one *"because a waiting run consumes its configured timeout while the operator is
+    # unaware of it"*. Once the timeout is spent and the run has gone back to work, the rail would
+    # say "waiting on the operator" — outranking `running`, deliberately — about a run that is
+    # running and waiting for nothing. That is F14's own defect, inverted, on the conversation rail.
     waiting_queries = (
         select(Question.conversation_id).where(
-            Question.conversation_id.in_(ids), Question.answered.is_(False)
+            Question.conversation_id.in_(ids),
+            Question.answered.is_(False),
+            Question.wait_ended_at.is_(None),
         ),
         select(PermissionRequest.conversation_id).where(
             PermissionRequest.conversation_id.in_(ids), PermissionRequest.status == "pending"

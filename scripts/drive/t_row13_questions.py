@@ -9,12 +9,17 @@ Setup only in this module; the assertions live in the row_* functions.
 """
 
 import json
+import os
 import sys
 
 from aw import api
 
-WORKDIR = "C:\\Users\\huida\\Documents\\drive-2026-08-29"
-PROJECT_NAME = "drive-2026-08-29"
+# Overridable, and it matters. The default names the 2026-08-29 drive's repository, which is
+# also F115's live reproduction — running this harness's agent turn against it writes a note
+# file into somebody else's evidence. Point AW_DRIVE_DIR at a throwaway directory instead;
+# the project name follows the directory's own name so two runs cannot collide on one row.
+WORKDIR = os.environ.get("AW_DRIVE_DIR", "C:\\Users\\huida\\Documents\\drive-2026-08-29")
+PROJECT_NAME = os.path.basename(WORKDIR.rstrip('\\/'))
 HAIKU = "claude-haiku-4-5-20251001"
 
 

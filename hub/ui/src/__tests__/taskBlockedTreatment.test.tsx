@@ -114,6 +114,26 @@ describe('a waiting task says so on the card', () => {
     expect(screen.queryByTestId('task-blocked-task-1')).toBeNull()
   })
 
+  it('renders one wait, not two, when the task is both parked and reporting a wait', () => {
+    /**
+     * Ask-time parking (F14) makes a task carry `blocked` *and* `awaiting_answer_reason` at the
+     * same moment: the status is the park, and the derived field still reports the run's live
+     * wait. No behaviour change was needed for that — the card already coalesces the two — but the
+     * reason it needed none is worth asserting rather than commenting, because a later edit that
+     * split them would tell the operator they owe two answers when they owe one.
+     */
+    renderCard(
+      makeTask({
+        status: 'blocked',
+        blocked_reason: 'Waiting on your answer: which colour?',
+        awaiting_answer_reason: 'Waiting on your answer: which colour?',
+      }),
+    )
+
+    expect(screen.getAllByTestId('task-blocked-task-1')).toHaveLength(1)
+    expect(screen.getAllByText('Waiting on your answer: which colour?')).toHaveLength(1)
+  })
+
   it('is not the same signal as stalled', () => {
     /**
      * Opposites: one is an agent that dropped the work, the other an agent that correctly refused
@@ -175,5 +195,48 @@ describe('parking a task by hand collects the reason first', () => {
     expect(updateTask).toHaveBeenCalledTimes(1)
     expect(updateTask.mock.calls[0][0]).toMatchObject({ id: 'task-1', status: 'in_progress' })
     expect(updateTask.mock.calls[0][0].blocked_reason).toBeUndefined()
+  })
+})
+
+describe('a task that went ahead without your answer says so, permanently', () => {
+  it('renders the record on a completed task', () => {
+    /**
+     * F60: the agent asked, waited out its deadline, chose for itself and finished the work. The
+     * question is still unanswered, and until this the completed card said nothing at all.
+     */
+    renderCard(
+      makeTask({
+        status: 'completed',
+        proceeded_without_answer_reason: 'Proceeded without your answer: which colour?',
+      }),
+    )
+
+    expect(screen.getByTestId('task-proceeded-task-1')).toBeTruthy()
+    expect(screen.getByText('Decided without you')).toBeTruthy()
+    expect(screen.getByText('Proceeded without your answer: which colour?')).toBeTruthy()
+  })
+
+  it('shows nothing of the sort on a task whose question was answered', () => {
+    renderCard(makeTask({ status: 'completed' }))
+
+    expect(screen.queryByTestId('task-proceeded-task-1')).toBeNull()
+  })
+
+  it('is drawn distinctly from a live wait, because they call for opposite things', () => {
+    /**
+     * A wait is an ask the operator can still answer; this is a decision already taken, and an
+     * answer would arrive too late to change it. A card carrying both is describing two different
+     * questions and must say so twice, not once.
+     */
+    renderCard(
+      makeTask({
+        status: 'blocked',
+        blocked_reason: 'Waiting on your answer: which database?',
+        proceeded_without_answer_reason: 'Proceeded without your answer: which colour?',
+      }),
+    )
+
+    expect(screen.getByTestId('task-blocked-task-1')).toBeTruthy()
+    expect(screen.getByTestId('task-proceeded-task-1')).toBeTruthy()
   })
 })

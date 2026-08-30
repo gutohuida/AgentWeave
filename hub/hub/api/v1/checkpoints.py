@@ -262,18 +262,56 @@ async def continue_conversation(
     A successor is handed its checkpoint as a queue entry, so it has everything it needs and
     nothing to say. Requiring the operator to type something to get it moving made the handover a
     dead end — this is the same act, named for what it does.
+
+    **`started` is about the conversation this request names, not about the agent** (F131). The
+    turn is the agent's: `schedule_agent` builds it from the oldest eligible entry across the
+    agent's whole queue, so the conversation that starts is frequently not the one addressed here.
+    `started` used to be `result.waiting_reason is None`, which answers "did a turn begin for this
+    agent" — indistinguishable from success to a caller watching one conversation, where no run,
+    no output and no error will ever appear. It is now the comparison `POST /agent/trigger`
+    already makes (`agent_trigger.py:1353`) for the refusal direction of the same rule.
+
+    The conversation that did start is reported separately as `started_conversation_id`, so a
+    caller answered as waiting can act on it rather than only retry.
     """
     project_id, _ = project
     conversation = await _conversation_or_404(session, project_id, conversation_id)
 
+    from ...inbound_queue import queued_entries
     from ...turn_scheduler import schedule_agent
 
     result = await schedule_agent(project_id, conversation.agent)
+    started_conversation_id = (
+        result.response.conversation_id if result.response is not None else None
+    )
+    started = started_conversation_id == conversation_id
+    waiting_reason = result.waiting_reason
+    if started_conversation_id is not None and not started:
+        # A turn began, in another conversation, so the scheduler has no `waiting_reason` to
+        # offer — it did not wait. Which reason is right depends on whether this conversation
+        # submitted anything: telling a caller with nothing queued that their input is "waiting
+        # behind other input" reports a queue position that does not exist, and directs them to
+        # wait for a delivery that will never arrive. Both are worded to be distinguishable from
+        # the scheduler's own "queue is empty", which is about the *agent*.
+        #
+        # Neither names the conversation that ran: `started_conversation_id` carries that, and
+        # saying it twice would leave the interface choosing which copy to render. This is the
+        # first caller to pass `queued_entries`' `conversation_id` parameter — the scheduler
+        # deliberately does not, because scoping *selection* to the addressed conversation would
+        # let a later-arriving entry overtake an earlier one. Asking here is a question about the
+        # answer, not about which turn runs.
+        waiting = await queued_entries(session, project_id, conversation.agent, conversation_id)
+        waiting_reason = (
+            "this conversation's input is waiting behind other input"
+            if waiting
+            else "this conversation had nothing queued"
+        )
     return {
         "agent": conversation.agent,
         "conversation_id": conversation_id,
-        "started": result.waiting_reason is None,
-        "waiting_reason": result.waiting_reason,
+        "started": started,
+        "started_conversation_id": started_conversation_id,
+        "waiting_reason": waiting_reason,
     }
 
 

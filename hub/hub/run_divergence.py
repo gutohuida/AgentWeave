@@ -47,11 +47,14 @@ from .run_task_binding import (
     POLICY_FLOW,
     POLICY_RETRY,
     POLICY_REVIEW,
+    announce_block,
     block_task_for_question,
     may_retry,
+    release_block_for_expired_wait,
     review_task_for_run,
     run_advanced_its_task,
     unanswered_blocking_question,
+    wait_has_expired,
 )
 from .sse import sse_manager
 from .task_transitions import ACTOR_RUN, STATUS_BLOCKED, allowed_targets
@@ -536,38 +539,6 @@ async def record_response_run(
         divergence.response_run_id = response_run_id
 
 
-async def _announce_block(
-    session: AsyncSession,
-    run: Run,
-    task: Task,
-    question: Question,
-) -> None:
-    """Tell the operator's board that a task is now waiting on them.
-
-    `info`, not `warn`. A divergence is `warn` because it wants attention on something that went
-    wrong; this is the mechanism working — the agent asked rather than guessed. Warning about it
-    would train the operator to read the one signal that means "someone did the right thing" as a
-    problem.
-    """
-    payload = {
-        "run_id": run.id,
-        "agent": run.agent,
-        "task_id": task.id,
-        "task_title": task.title,
-        "question_id": question.id,
-        "reason": task.blocked_reason,
-    }
-    await persist_event(
-        session,
-        run.project_id,
-        "task_blocked",
-        payload,
-        agent=run.agent,
-        severity="info",
-    )
-    await sse_manager.broadcast(run.project_id, "task_blocked", payload)
-
-
 async def note_turn_that_produced_nothing(session: AsyncSession, run: Run) -> bool:
     """Record a turn that was given a document to write, wrote none, and asked nothing (F38).
 
@@ -715,9 +686,33 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
         # divergence was recorded, and under `retry` the agent was started again while still
         # waiting on the same unanswered question.
         question = await unanswered_blocking_question(session, run)
+
+        # The report is not the only signal (design D4). `ask_user` tells the Hub the moment it
+        # stops waiting, and task 5.5 requires that report's failure to be *swallowed* — the agent
+        # is owed its answers whatever the Hub does with it. So "no report arrived" covers two
+        # opposite cases: the tool died and nobody proceeded, or the report was sent, failed, and
+        # the agent went on to do the work. In the second the task would sit `blocked` with its own
+        # agent unable to record anything, which is the stranding the resume ungating exists to
+        # prevent, arriving through a different door.
+        #
+        # So this follows `expire_permission_request`'s shipped design rather than half of it —
+        # *"The run reports and the run's end sweeps"* — and takes both halves. It can never fire
+        # early: it only runs at a boundary, and only for a deadline already passed.
+        #
+        # **Before 6.1's exclusion applies to it.** `unanswered_blocking_question` skips a question
+        # whose wait ended, so the sweep has to find its candidate first; once it has recorded one,
+        # the next boundary will not see it again, which is what makes arriving second harmless.
+        if question is not None and wait_has_expired(question):
+            question.wait_ended_at = question.wait_ended_at or datetime.now(timezone.utc)
+            await release_block_for_expired_wait(session, question, run)
+            await session.commit()
+            # Not a wait any more, so not a park. The run ended holding work it did not move, which
+            # is an ordinary divergence and is handled by the rest of this function.
+            question = None
+
         if question is not None and await block_task_for_question(session, run, task, question):
             await session.commit()
-            await _announce_block(session, run, task, question)
+            await announce_block(session, run, task, question)
             return None
 
         # Already parked, by this run's earlier turn or by the operator. Excluded on the task's

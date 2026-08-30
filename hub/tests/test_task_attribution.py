@@ -257,3 +257,67 @@ def test_staffing_reads_both_of_the_firings_answers():
     assert staffing.agent_for("t-sel") == "builder"
     assert staffing.agent_for("t-held") == "critic"
     assert staffing.agent_for("t-unknown") is None
+
+
+# ---------------------------------------------------------------------------
+# Who is on a blocked task while a run is on it
+# (`a-task-waits-while-its-run-waits`, group 3a, design D11)
+#
+# `LIVE_STATUSES` is deliberately NOT touched by that change, and the two answers differ on
+# purpose. `LIVE_STATUSES` asks *is anyone accountable for this work* — during a wait nobody is,
+# which is why `blocked` is out of it and why the roster's "active task" excludes it. This module
+# asks *who is on this task, and in what relation* — and during an ask-time wait an agent's process
+# is suspended inside a tool call bound to that task, which is a relation. Different questions,
+# different sources; leaving them consistent by accident is what produced the collision.
+# ---------------------------------------------------------------------------
+
+
+def test_a_blocked_task_with_a_running_bound_run_reads_working():
+    """3a.1 → 3a.4. The reproduction: a run mid-turn on the task it parked.
+
+    Before this, `live.task_ids` was consulted only inside the `unstaffable` branch — and a
+    `blocked` task is never unstaffable, because it is not claimable — so the fall-through reached
+    `assigned` without ever asking the runs. For the whole 240s of every wait the board stated, of
+    an agent mid-turn on that exact task, that it was merely assigned to it.
+    """
+    task = _task("t-parked", status="blocked", assignee="builder")
+
+    attribution = attribute(task, staffing=_staffing(), live=_live(task_ids=("t-parked",)))
+
+    assert (attribution.agent, attribution.capacity) == ("builder", CAPACITY_WORKING)
+
+
+def test_a_blocked_task_with_no_running_run_still_reads_assigned():
+    """3a.4, the other half. `assigned` keeps meaning what its own comment says — nothing is
+    running — which is still the case `agent-loops`' waiting-on-a-person scenario was written for:
+    a task left `blocked` after its run ended."""
+    task = _task("t-parked", status="blocked", assignee="builder")
+
+    attribution = attribute(task, staffing=_staffing(), live=_live())
+
+    assert (attribution.agent, attribution.capacity) == ("builder", CAPACITY_ASSIGNED)
+
+
+def test_the_runs_are_asked_only_about_the_task_they_name():
+    """The sources stay separate. A run bound to a *different* task says nothing about this one —
+    the over-reporting the agent-alone fallback used to cause, and which
+    `every-run-knows-its-task` made unnecessary."""
+    task = _task("t-parked", status="blocked", assignee="builder")
+
+    attribution = attribute(task, staffing=_staffing(), live=_live(task_ids=("t-elsewhere",)))
+
+    assert attribution.capacity == CAPACITY_ASSIGNED
+
+
+def test_a_selected_task_is_still_next_even_with_a_run_against_it():
+    """The new branch is a fall-through, below selection, not a new first question. A firing about
+    to hand the task to somebody is still the more current statement."""
+    task = _task("t-sel", status="pending", assignee="builder")
+
+    attribution = attribute(
+        task,
+        staffing=_staffing(selected={"t-sel": "critic"}),
+        live=_live(task_ids=("t-sel",)),
+    )
+
+    assert (attribution.agent, attribution.capacity) == ("critic", CAPACITY_NEXT)

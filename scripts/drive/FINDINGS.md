@@ -462,8 +462,38 @@ which is what the operator actually needs to hear.
 
 ## F14 (B) — A task waiting on the operator still reads `in_progress`
 
-**Status:** partially fixed 7fcd172 (a derived `awaiting_answer_reason` reports the wait);
-**the task-state half is DECIDED 2026-08-30 and queued as a spec loop.**
+**Status: FIXED 2026-08-30**, `a-task-waits-while-its-run-waits` (three spec rounds, then eleven
+implementation groups: `bb3d3e7` … `3cec5a5`). The first half was `7fcd172`'s derived
+`awaiting_answer_reason`, which reported the wait beside a status that contradicted it; the
+task-state half is now the status itself.
+
+**What shipped.** The agent-facing question routes park the asking run's bound task *as the question
+is asked*, reusing `block_task_for_question` unchanged — so the ordinary wait is `blocked` with a
+`blocked_reason` naming the question, for the whole of the wait rather than only after the run ends.
+`awaiting_answer_reason` stays, and its four comments claiming a task parks only at the run's end
+are corrected: it now covers the two waits the status cannot carry — a task in `under_review`,
+`pending` or `assigned`, which `block_task_for_question` correctly refuses to park, and a batch whose
+first answer released the task while the run waits on the rest.
+
+**Confirmed live** (`scripts/drive/t_f14_f60_wait_parks_the_task.py`, Haiku, Hub on 8011 from
+source): the task read `blocked` while the asking agent's roster status read `running` — the two
+states this finding is about, which before this change could never coexist.
+
+**Three things the rounds found that the finding itself did not.**
+
+* `task_attribution` was never checked against blocked-while-running, and it is the module whose
+  entire job is answering who is on a task. For the whole wait the loop board called an agent that
+  was mid-turn on that exact task merely `assigned` to it — the same class of false statement as
+  this finding. Fixed in group 3a; the drive reads `agent_capacity: "working"` on the parked task.
+* The dependency gate refused `blocked -> in_progress`, deliberately and by a shipped rule, which
+  made the wait a window in which a regressed prerequisite could strand finished work. Ungated
+  (group 7), with both spec deltas, because `scheduler.candidate_is_startable` had already made the
+  opposite decision in its own words and the board and the gate contradicted each other at exactly
+  one edge.
+* `task-lifecycle-governance:445` forbids leaving the waiting status by assertion as well as
+  entering it, and only entering was enforced. Latent while `blocked` implied the asking run had
+  ended; ask-time parking removes exactly that protection. Guarded at the route (group 2b), and the
+  drive shows the 403 reaching a real agent's tool result verbatim.
 
 `ask_user` worked well: `builder` asked a structured question with two labelled options,
 `blocking: true`, `asker_waiting: true`, and the answer reached the agent, which then completed the
@@ -3205,11 +3235,45 @@ distinction F55's own live verification drew for `Checkpoint`.
 
 ## F60 (A) — An unanswered `ask_user` question that resolves itself mid-turn leaves the task reading `completed`, and the operator can still "answer" it afterward into a state that contradicts the code that shipped
 
-**Status:** partially fixed 033ec4c — the guard that refuses an answer whose asking run has ended
-predates the filing (`questions.py`, `_asker_is_gone`); the half that leaves the task reading
-`completed` **is no longer parked — the operator decided it 2026-08-30 as part (b) of F14's
-decision.** It ships with F14 rather than after it: a timed-out question whose agent proceeded
-anyway is recorded on the task, so the board can say a decision was made without the operator.
+**Status: FIXED 2026-08-30**, `a-task-waits-while-its-run-waits`, part (b), shipped with F14 in the
+same change. `033ec4c`'s `_asker_is_gone` guard predates the filing and stands.
+
+**What shipped.** `Question` records the deadline of the wait it starts and when that wait ended
+(migration `0099`). The deadline is computed **Hub-side** from the Hub's own inputs — the agent's
+`question_timeout_seconds`, the environment the Hub builds, and `_configured_wait`'s own default and
+range, restated with an agreeing test. Rounds 1 and 2 had the ask send `wait_seconds`; round 3
+overturned it, because that number would have arrived over the run's own credential and the refusal
+that keeps an expiry a report of a fact rather than a lever would have compared the report against a
+number the reporting party chose.
+
+`ask_user` reports its expiry to `POST /questions/wait-ended` — not an `@mcp.tool()`, so no model can
+be prompted into calling it — and the report releases the parked task. The run's **end also sweeps**,
+because rounds 1 and 2 had merged "the report was never sent" with "the report was sent and did not
+land": task 5.5 requires the second to be swallowed, so the agent proceeded and the task would sit
+`blocked` with its own agent unable to record the work. `expire_permission_request` in the same
+router already stated that design in one line — *"The run reports and the run's end sweeps"* — and
+this now takes both halves.
+
+The task then carries `proceeded_without_answer_reason`, **permanently**. That is the assertion this
+finding exists for: it measured the operator answering five minutes after the run ended, choosing the
+option the agent had not shipped. If the answer cleared the record, it would disappear at the exact
+moment it became most misleading.
+
+**Confirmed live** (`t_f14_f60_wait_parks_the_task.py`, phase B, agent timeout set to the Hub's
+minimum): the task parked, the wait ended on its own after ~9s, the task returned to `in_progress`,
+the agent's completion was no longer refused, the finished task read *"Proceeded without your answer:
+Which colour should the badge be?"*, the conversation rail stopped saying waiting — and answering the
+question afterwards did not erase the record.
+
+**One surface family the change had to correct on the way.** `wait_ended_at` introduces a state that
+did not exist — unanswered, undeclined, and nobody waiting — and five surfaces derived "somebody is
+waiting" from `answered = False`. Two were fixed by the predicate; round 3 found three more. The
+conversation rail and a loop's open-question count are excluded, because their audience is the
+operator; a checkpoint's `open_questions` **keeps** the entry and marks the wait as ended, because
+its audience is the successor agent, which needs to know a decision was taken without anybody.
+`scheduler._pending_loop_request` is a sixth reader with a real defect of its own (no `declined`
+exclusion at all) and is deliberately out of scope — it is about a loop's stop reason, not about who
+is waiting.
 
 Driven live (Q8), following the method's own directive to leave a question deliberately
 unanswered. `proj-8605b92d0028`'s `author` agent (Haiku, cheap runner) was told, honestly, to ask
@@ -7728,6 +7792,49 @@ succeed. "Always use relative paths" is a request competing with a model that of
 reasons to resolve paths absolutely. The only real levers are an OS-enforced boundary or noticing
 after the fact.
 
+### Round 1 correction, 2026-08-30 — the default posture does constrain this, and the escape was an approval
+
+Written while proposing `openspec/changes/a-write-outside-the-workspace-is-recorded`. **The
+operator's decision above is unchanged and none of the four parts moves.** What is wrong is a
+premise this finding argued from, and the round discipline exists precisely for the case where the
+argument is wrong while everything it argues about is right.
+
+This finding says *"in the posture an operator is most likely to be running, nothing shows the path
+and nothing constrains it."* That is false. `DEFAULT_CLAUDE_PERMISSION_MODE = WORKSPACE_PERMISSION_MODE`
+(`hub/hub/runner_commands.py:66`) — the default posture for a non-yolo Claude run is `workspace`, which
+routes every call to `mcp_server.approve_tool_call`, and `_decide` (`hub/hub/mcp_server.py:864-916`)
+refuses a path outside `AW_WORKSPACE_DIR` on a `realpath` + `commonpath` comparison. There is a
+shipped requirement of record for it: `agent-run-sandboxing`, *"A posture exists in which the
+workspace boundary is enforced per tool call"*.
+
+Measured rather than read, against this checkout:
+
+```
+outside abs : {'allow': False, 'reason': "'...\aw-outside\drive-note.txt' is outside your workspace"}
+inside rel  : {'allow': True,  'reason': 'inside your workspace'}
+traverse .. : {'allow': False, 'reason': "'../drive-note.txt' is outside your workspace"}
+read outside: {'allow': False, 'reason': "'...\aw-outside\drive-note.txt' is outside your workspace"}
+default posture: workspace | without approver: acceptEdits
+```
+
+So the default posture refuses the exact call this finding reproduced — including the `..` traversal
+variant — and it checks reads as well as writes. And `run-72de0f5c6898`, the run that escaped, was
+**`manual`**: the posture in which the *operator* answers. The card named the tool and the full
+absolute path, and it was allowed. **The escape was an approval, not a hole in the default.**
+
+The gap therefore relocates rather than shrinking. It is not that the default posture is blind; it
+is that an outside-the-workspace write leaves **no trace in any posture where it is possible** —
+`manual` where the operator approved it, full access which checks nothing, and the `acceptEdits`
+fallback used where no Hub MCP server is configured to answer (`runner_commands.py:73`). Plus one
+that survives even under `workspace`: a shell command that builds its path at runtime, which
+`_decide` says of itself is *"a boundary, not a sandbox"*.
+
+**Consequence for part (4).** "The docs must say plainly that native mode does not confine and Docker
+mode does" cannot be written as stated, because it is false in both directions: native mode's default
+posture *does* check, and native mode's unchecked postures exist too. The proposal states it **per
+posture** instead, which serves part (4)'s intent — say plainly what is checked — with a sentence
+that is true.
+
 ---
 
 ## F116 (B) — the same API forbids an unknown field on one route and silently drops a safety-relevant one on another
@@ -8699,6 +8806,7 @@ caught in the wild, it caught within a day, in a harness that was not looking fo
 ## F126 (B) — a spent checkpoint can be cut over again, and the second press mints a second successor that does the work a second time
 
 **Status:** open, filed not fixed (iteration 8, `t_row15_cutover.py`, the one `[BAD]` of 36).
+**Still open, reproduced 2026-08-30 08:24 on this checkout** — the same file, now runnable against any fixture, was the one `[BAD]` of 37 again: `ckpt-e85b2f8ad366` cut over twice, successors `conv-8e14f60f8cd2` and `conv-509580740b71`, and the second successor's queue entry was delivered and burned a turn without `continue` ever being called on it.
 
 `POST /projects/{p}/checkpoints/{id}/cutover` has no guard against being called twice on the same
 checkpoint. Driven live against `ckpt-5acb5c671217`:
@@ -9091,6 +9199,12 @@ fixed that line goes red and says why.
 
 ## F131 — Continue on one conversation starts a different conversation's work, and reports success against the one you pressed
 
+**FIXED 2026-08-30** — `openspec/changes/continue-starts-what-it-names`, three spec-loop rounds
+then implementation. Driven live afterwards: **17/17**,
+`scripts/drive/t_f131_start_reported_to_its_own_input.py`. Two corrections this change established
+are recorded under "What the fix corrected in this finding" at the end; the account below is left
+as it was written so the two can be compared.
+
 **Found by driving the `continue` endpoint's unreached branches**
 (`scripts/drive/t_continue_branches.py`). Two of them are fine and are now covered: pressing Continue
 with nothing queued answers **200** with `started: false, waiting_reason: "queue is empty"`, and
@@ -9160,6 +9274,47 @@ indistinguishable from success.
 that agent to act as the wrongly-pressed one — the harness takes the first it finds. The F131
 assertions are written in the direction the product **actually behaves**, so the day it is fixed
 they go red and say why.
+
+**That day was 2026-08-30, and those assertions have been flipped** — see the comment at step 4 of
+`t_continue_branches.py`, which records that the flip is the fix rather than a regression.
+
+### What the fix corrected in this finding
+
+**1. The reproduction above is not the one that matters.** It presses Continue on a conversation
+with *nothing* queued for it, and that path is unreachable from the shipped UI: the button renders
+only when `queuedEntries.some(entry => entry.conversation_id === currentConversationId)`
+(`AgentOutputPanel.tsx:337-340,1064`). The severity is exactly what this finding says; the
+*reachable* path is different — the pressed conversation **has** a queued entry and another
+conversation of the same agent has an **older** one, so every client-side gate is satisfied and the
+substitution happens anyway. That is what
+`scripts/drive/t_f131_start_reported_to_its_own_input.py` builds, with two cutovers on
+auto-continue-off, which is the only operator act that queues without scheduling.
+
+It also means the two cases need **different answers**. Telling a conversation that queued nothing
+that its input is "waiting behind other input" reports a queue position that does not exist. Round
+3 of the spec loop found rounds 1 and 2 had collapsed them into one.
+
+**2. The rule was already shipped — for refusals — and merely unwritten for starts.**
+`agent-conversation-workspace` has carried *"A refusal is reported only to the input it is about"*
+since before this finding, and `POST /agent/trigger` implements it in both directions, comparing
+`scheduled.response.conversation_id` to the conversation it appended to (`agent_trigger.py:1353`).
+`continue` is the second conversation-addressed caller of `schedule_agent` and implemented neither
+half — it could be written without them because the requirement's *text* is about refusals. So this
+was not a missing decision. It was a decision stated in one direction, with the other half left to
+be re-derived by whoever wrote the next route. The change writes the start half down, and the
+implementation adds the test that pins `/agent/trigger` too, so the two routes cannot drift apart
+again. **That test is the one that would have caught this defect.**
+
+Fix shape 1 above ("report what actually started", keeping `started: true`) was **rejected** in
+design: truthful about what ran and still wrong about what the caller asked. Shape 2 (409) was
+rejected as an error answer to a case the shipped requirement already answers with *accepted,
+waiting*. What shipped is the comparison plus two distinct waiting reasons plus
+`started_conversation_id`, with turn selection deliberately untouched — the right work was always
+running.
+
+A third caller was corrected alongside: `checkpoint_cutover.py`'s `auto_continue` logged only
+`if result.waiting_reason:`, so the case where a turn started for a *different* conversation was
+**silent** while the successor did not start.
 
 ---
 
@@ -9233,3 +9388,1867 @@ Not proposed here — this wants a spec loop, and the clock ended this session b
 `grep -n "^@router\." hub/hub/api/v1/agent_actions.py`; `grep -rn "drift" hub/ui/src`;
 `hub/hub/requirement_gate.py:39,60-62,235`; `hub/hub/requirement_evidence.py:998-1058`;
 `hub/hub/api/v1/spec.py:921,942,974`.
+
+## F133 (B) — the operator's own message erases the reason their agent is stalled
+
+**Driven 2026-08-30, iteration 11, full-surface sweep. Reproduced live on the 8011 Hub against
+`proj-1964cdedffe2` (`drive-0830-sweep`), two Haiku agents, real turns.
+Harness: `scripts/drive/t_row18_budget_reason.py` — 10/11, and the one failure is this.**
+
+A project token budget pauses autonomous turns and lets the operator's own through. Two places
+decide whether a stalled turn counts as autonomous, and they decide it differently:
+
+| | predicate | scope |
+|---|---|---|
+| `turn_scheduler.schedule_agent` (`turn_scheduler.py:133-138`) | `initiator = "operator"` if any entry in **the selected turn** is operator-origin | the controlling entry's conversation, within hop budget, matching its kind, capped |
+| `GET /queue/{agent}/status` (`inbound_queue.py:145-149`) | `all(entry.origin_type != "operator")` | **every** queued entry for the agent, across every conversation |
+
+An operator message queued *beside* a blocked autonomous one satisfies the scheduler's predicate
+(the operator's entry is not in the turn the scheduler built) and fails the endpoint's (it is in the
+set the endpoint looks at). The scheduler still refuses; the endpoint stops saying why.
+
+### The reproduction, as it ran
+
+Budget set to 1 with 35,027 tokens already used, so `exhausted: true`. `peer` is triggered once and
+calls `send_message` to `driver`; the resulting agent-origin entry cannot start.
+
+```
+3. THE CONTROL -- only the autonomous entry queued
+--- GET /queue/driver/status  [200]
+{"agent":"driver","waiting_count":1,"running":false,
+ "waiting_reason":"token budget exhausted","delivery_attempts":0}
+
+4. the operator now sends their own message to the same agent
+--- POST /agent/trigger (operator)  [200]
+{"success":true,"status":"queued","conversation_id":"conv-329cb276f816",
+ "queue_entry_id":"entry-8157f49800d5","waiting_reason":"token budget exhausted"}
+   nothing started -- idle;  two entries now queued -- ["agent","operator"]
+
+5. read the reason again -- same stall, operator input added
+--- GET /queue/driver/status  [200]
+{"agent":"driver","waiting_count":2,"running":false,
+ "waiting_reason":null,"delivery_attempts":0}
+```
+
+### What the operator actually sees
+
+`AgentTimeline.tsx:341` is the only render of this field:
+
+```tsx
+{queueStatus.waiting_count} waiting{queueStatus.waiting_reason ? ` — ${queueStatus.waiting_reason}` : ''}
+```
+
+So the panel reads **"2 waiting"**, full stop. The transient half is `AgentOutputPanel.tsx:693` and
+`:763`, which show the *trigger response's* reason as a session notice — the operator is told
+"Not started — token budget exhausted" once, at the moment they press send, and the standing
+display beside the agent from then on says only how many.
+
+`waiting_count: 2, waiting_reason: null` is exactly the state `db/models.py:586` records as the
+defect the `waiting_reason` column was added to remove — *"reported to the operator as
+`waiting_count: 1, waiting_reason: null`"* — reproduced by the operator doing the one thing the
+panel invites them to do when an agent looks stuck: send it a message.
+
+### Why the reason is not merely stale, but gone
+
+Nothing persists it. `turn_scheduler.py:174` writes `entry.waiting_reason` only inside the
+`TriggerAgentError` handler; the four early returns — hop budget, token budget, no conversation,
+conversation unavailable — return a `ScheduleResult` and write nothing. So the endpoint's fallback
+at `inbound_queue.py:183` (*"what the last attempt was actually refused with"*) has no row to read,
+and the recomputation is the only answer there is.
+
+The Hub knew the reason one call earlier: `POST /agent/trigger` answered
+`waiting_reason: "token budget exhausted"` (step 4 above) because it reports
+`scheduled.waiting_reason` straight from the refusal. The operator is told once, in a response body,
+and the panel they will actually look at afterwards says nothing.
+
+### Precisely one branch diverges — the other three agree
+
+Worth stating, because the obvious next thought is that every branch has this shape and it does not.
+
+- **hop budget** — endpoint `all(entry.hop_depth > hop_budget)`; scheduler
+  `can_start = any(entry.hop_depth <= hop_budget)` over the *same* unfiltered set
+  (`turn_scheduler.py:93-95`). Exact complements. Agree.
+- **already running** and the launchability/workspace probes are read-only statements about the
+  agent, not about a turn's composition. No predicate to diverge from.
+- **token budget** — the only one whose scheduler side is computed over the *selected* turn rather
+  than the whole queue.
+
+### One defect, or a symptom
+
+A symptom. The endpoint re-derives, from a different set, a decision `schedule_agent` has already
+made — so the two can disagree about anything the selection step touches, and today they disagree
+about one thing. The narrow repair (mirror the selection in the endpoint) leaves the duplication
+that produced it; the clean one (factor the read-only selection out of `schedule_agent` so both
+callers ask the same function) is a refactor of the scheduler's hot path. **Filed, not fixed** —
+two defensible answers is decision D5's stated line for filing.
+
+Related but not the same as **F131**: F131 is about `Continue` reporting another conversation's
+start as its own. This needs no `Continue` and no checkpoint, and F131's fix
+(`openspec/changes/continue-starts-what-it-names`) does not touch `inbound_queue.py`'s predicate.
+Not covered by anything in `openspec/changes/`.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 \
+    PYTHONIOENCODING=utf-8 py -3.11 scripts/drive/t_row18_budget_reason.py
+```
+
+Clears the budget and drains the queue in a `finally`. Costs two Haiku turns.
+
+## F134 (B) — a charter with no content is injected as a bare heading, and the agent is reported fully configured
+
+**Driven 2026-08-30, iteration 11, full-surface sweep. Row 4 into row 3, on the 8011 Hub,
+`proj-1964cdedffe2`.**
+
+`POST /projects/{p}/charters` with `{"name": "sweep-empty", "content": ""}` answers **201**. Binding
+it to an agent answers **200**. The canonical context that every real turn is built from then ends
+like this — this is the literal last line of
+`GET /projects/{p}/agents/agent-context?agent=unbound-driver`:
+
+```
+## Charter: sweep-empty
+```
+
+Nothing under it. The document stops there.
+
+The code has a strictly better sentence for this situation and cannot reach it:
+
+```python
+if charter:
+    lines.append(f"## Charter: {charter.name}")
+    lines.append("")
+    lines.append(charter.content)      # ""
+    ...
+else:
+    lines.append("## Charter")
+    lines.append("")
+    lines.append("No charter is assigned to this agent.")
+    ...
+    missing.append("charter")
+```
+
+`hub/hub/api/v1/agents.py:1502-1513`
+
+`if charter:` tests the *row*, which is always truthy when one is bound, so an empty contract takes
+the first branch. Two consequences:
+
+1. **The agent reads a heading that promises a behaviour contract and finds nothing.** An agent
+   reasonably reads that as truncation. `_render_hub_agent_context` is not a reporting route — it is
+   materialised into the workspace immediately before command construction for *every* turn
+   (`agent_trigger.py:897-911`, *"an edited charter is therefore visible on the next run"*), so this
+   is what a real run receives.
+2. **`missing` stays `[]`.** The response reports the agent as wanting nothing, while its behaviour
+   contract is empty. The `else` branch appends `"charter"`; this branch cannot.
+
+### The corpus does not cover it
+
+`openspec/specs/agent-charter/spec.md:56-72` governs the neighbouring case and stops short:
+
+> An agent with no bound charter SHALL remain usable — its context response SHALL state plainly that
+> no charter is assigned rather than erroring **or fabricating behavior content**.
+
+A bound-but-empty charter is neither "resolves its bound charter" nor "has no bound charter". The
+requirement's own phrase is the right test and no scenario applies it here.
+
+### The asymmetry that produced it
+
+`hub/hub/schemas/charters.py:12-13` — `name: str = Field(min_length=1, max_length=256)` beside
+`content: str` with no constraint. The name of a behaviour contract is guarded; its text is not.
+
+### One defect, or a design gap
+
+A gap, with more than one defensible answer, so **filed, not fixed**: refuse empty content at the
+API (an operator mid-edit cannot save a blank draft), or render the no-charter notice and count it
+in `missing` (an empty charter and no charter become indistinguishable, which may be exactly right),
+or emit a third explicit statement. `PATCH` has the same hole — `content: Optional[str] = None`
+means an existing charter can be blanked the same way. Severity B rather than A: it degrades what an
+agent is told rather than stopping anything, and no seeded charter is empty (all 9 have content).
+
+**Reproduce:**
+
+```
+POST  /api/v1/projects/<p>/charters    {"name":"blank","content":""}      -> 201
+PATCH /api/v1/projects/<p>/agents/<a>  {"charter_id":"<id>"}              -> 200
+GET   /api/v1/projects/<p>/agents/agent-context?agent=<a>
+      -> .context ends "## Charter: blank" ; .missing == []
+```
+
+### Also driven this row, and held
+
+- `GET /fs/list` on a missing path, and on a *file*, answers 200 with `entries: []` **and a
+  `reason`** naming the OS error — it does not turn "I could not look" into "there was nothing
+  there". `DirectoryPicker.tsx:158-161` renders it: *"Can't read this directory: {reason}"*. The
+  seam this sweep expected to be broken is not.
+- Duplicate charter names are accepted (six rows named `sweep-charter` in this project). Not filed
+  as a defect: binding is by `charter_id` throughout, and no requirement claims names are unique.
+  Recorded so the next sweep does not re-derive it.
+- `GET /agents/agent-context` for an agent that does not exist answers 200 with onboarding context,
+  by design; an illegal agent name answers 400 `Invalid agent name`.
+
+## F135 (C) — the sweep harness reported its own wrong turn as a product defect, for the second time
+
+**Corrected 2026-08-30, iteration 11.** Recorded because `t_sweep_surface.py`'s own docstring
+already warns about exactly this — *"the first pass of this script guessed six of them and reported
+five false 404s"* — and it happened again in a different way.
+
+`probe(3, "canonical context", "GET", f"/projects/{P}/agents/context", expect=200)` called the
+**charter**-content route, which takes a required `charter` query parameter
+(`agents.py:2053-2056`), with no parameters. Its `422` was reported as an unexpected status for two
+runs. The canonical per-agent context the matrix row means is
+`GET /agents/agent-context?agent=<name>` (`agents.py:2077`), which answers 200.
+
+Fixed in place, with the two refusal probes the corrected route makes available (a name that does
+not exist, and a name that is not legal). Row 3 also hard-codes the agents `driver` and
+`unbound-driver` from an older fixture; on a fresh project its three archive/unarchive probes answer
+`404 Agent not found`, which is the harness's state and not the product's. Left as-is and stated
+here rather than made self-provisioning: creating agents inside a probe script is how a sweep starts
+testing its own setup code.
+
+## F115, reproduced independently — two identical triggers, one inside the boundary and one outside
+
+**Driven 2026-08-30, iteration 11, on the 8011 Hub, `proj-1964cdedffe2` (`drive-0830-sweep`), a
+fresh project created this morning. Not a new finding — the same defect F115 states, reached by a
+different route, and worth recording because the two runs differed with nothing else changed.**
+
+Row 14's harness triggers `asker` under `manual` posture with one instruction: *"Write the single
+line 'drive touched this' to a new file named `<tag>.txt` in the project root."* It was run twice,
+nine minutes apart, same agent, same runner, same posture, same sentence with only the filename tag
+different. The permission card's `tool_input.file_path` was:
+
+| run | tag | path the card offered |
+|---|---|---|
+| `run-dddadb7f817e` | `i11b` | `…\drive-0830-sweep\.agentweave\worktrees\asker\drive-note-i11b.txt` |
+| `run-0d750fe5d14d` | `i11c` | `…\drive-0830-sweep\drive-note-i11c.txt` |
+
+Both were approved. Both writes landed where the card said. So the operator's checkout now holds
+`drive-note-i11c.txt` as an untracked file on `main`, while `drive-note-i11b.txt` sits on
+`agentweave/asker` where it belongs:
+
+```
+$ git -C drive-0830-sweep status --porcelain
+?? .agentweave/
+?? drive-note-i11c.txt          <- outside the boundary
+$ ls drive-0830-sweep/.agentweave/worktrees/asker/
+calc.py  drive-note-i11b.txt    <- inside it
+```
+
+Nothing in the product distinguished the two. This is the phrase "project root" being genuinely
+ambiguous to an agent standing in a worktree — and the point is that the ambiguity is *load-bearing*,
+because whichever way it resolves the Hub proceeds identically.
+
+**What this adds to F115.** F115's proposal already covers the posture analysis and states that
+`manual`'s card "named the tool and the full absolute path". What it does not say is that the card
+names the path *and nothing else* — no marker that this one leaves the agent's workspace, no
+comparison against the boundary the Hub itself computed a moment earlier to launch the run. The
+operator approving that card is the last human who could have stopped it, and the card gives them
+nothing to notice with. Recorded here rather than proposed: the change's scope is settled (decision
+D3 — record it against the Run) and widening it to the approval surface is the operator's call, not
+an unattended run's. The relevant sentence for them is that `manual` is not a safer posture than the
+default here; it is the posture in which a human is asked to make a judgement they have not been
+given the inputs for.
+
+**Also driven, and held:** rows 13 and 14 both pass on Claude/Haiku. `ask_user` raised a real
+blocking question in ~20s, `PATCH /questions/{id}` answered it and it left the open list
+immediately; the `manual` posture raised a permission card in ~12s on both runs and
+`POST …/decide {"allow": true}` cleared it in under a poll. Neither row was passing when this
+iteration started — see F135 continued below for why the harness said otherwise.
+
+## F135, continued — three more of the sweep's own wrong turns, all in the live-turn harnesses
+
+Same class as F135 above; grouped with it rather than given new numbers, because none is a product
+defect and the pattern is the finding.
+
+1. **Row 13 answered somebody else's question and called itself passing.** `wait_for` matched *the
+   first open question in the project*, and an earlier drive in the same project had left one open
+   from a different agent (`from_agent: "peer"`, about a task called `Sweep B`). It appeared "after
+   ~0s", was answered, and row 13 reported PASS without `asker` having asked anything. Fixed: the
+   row now snapshots the open set before triggering and requires a question that is both new and
+   `from_agent == agent`. With the fix, the real question — *"Which colour should the badge be?"*,
+   from `asker` — appeared after ~20s and the row passes honestly.
+
+2. **Row 14 blamed the product for row 13's run still being alive.** Both rows trigger the same
+   agent and nothing waited between them, so row 14's trigger answered
+   `status: "queued", waiting_reason: "agent is already running"` — the Hub saying exactly what was
+   wrong — and the row spent 160 seconds waiting for a permission card that could not exist,
+   then reported *"no permission request was ever raised"*. Fixed: both rows wait for the agent to
+   go idle first, and row 14 returns `SKIPPED` rather than `FAIL` if it never does.
+
+3. **Row 14's decision body had the wrong shape.** It sent `{"decision": "allow"}`; the route takes
+   `{"allow": true}` (`PermissionDecision`, `hub/hub/api/v1/permissions.py:25-26`). The refusal is a
+   good one and is worth quoting as the counter-example to this file's usual complaint about
+   illegible 4xx — it names both halves of the mistake:
+
+   ```
+   422 {"detail":[{"type":"missing","loc":["body","allow"],"msg":"Field required"},
+                  {"type":"extra_forbidden","loc":["body","decision"],
+                   "msg":"Extra inputs are not permitted","input":"allow"}]}
+   ```
+
+4. **`t_row13_questions.py` hard-coded the 2026-08-29 drive's repository**, which is also F115's
+   live reproduction, with no way to point it elsewhere — so running row 13 would have written an
+   agent's note file into somebody else's evidence. It opened that project on the 8011 Hub before
+   this was noticed; nothing was written and the directory is intact (`README.md`, `calc.py`, and
+   yesterday's `drive-note-121250.txt`, all unchanged). `WORKDIR` now reads `AW_DRIVE_DIR` and
+   `PROJECT_NAME` follows the directory's own name.
+
+The through-line: **every one of these made the product look worse than it is**, and three of the
+four would have been filed as findings by a less suspicious reading. A harness that carries state
+between rows, or between runs in one project, is not a cheaper fixture — it is a source of false
+positives whose cost is paid by whoever reads the report.
+
+## F136 (B) — the fix that stopped the Hub naming a binary after your agent does not cover the agents that most need it
+
+**Driven 2026-08-30, iteration 12, on the 8011 Hub, `proj-1964cdedffe2` (`drive-0830-sweep`).
+Reproduced on two independent surfaces in the same request cycle.**
+
+An agent with **no runner bound at all** is reported as needing a command-line program named after
+itself:
+
+```
+GET /api/v1/projects/proj-1964cdedffe2/agents/launchability
+  "unbound-driver": {
+    "runner": "native",  "cli": "unbound-driver",  "present": false,
+    "runnable": false,
+    "reason": "Runner CLI 'unbound-driver' was not found in PATH.",
+    "collaboration_ready": null, "collaboration_reason": null
+  }
+
+GET /api/v1/projects/proj-1964cdedffe2/queue/unbound-driver/status
+  {"waiting_count": 3, "waiting_reason": "Runner CLI 'unbound-driver' was not found in PATH."}
+```
+
+The agent's row is `runner_id = NULL`, `config = {}`, and there is no `agents.unbound-driver` entry
+in session.json. Nothing anywhere says how to launch it. The operator is told to go install
+`unbound-driver`.
+
+### Why this is not simply F30 again
+
+`hub/hub/launchability.py:36-43` introduces `RUNNER_UNBOUND` **specifically to end this sentence**,
+and says so, citing the same measurement in the same words:
+
+> Measured on the trial Hub 2026-08-21: an agent with `runner_id IS NULL` was reported as
+> `Runner CLI 'probe-norunner' was not found in PATH`, sending the operator to look for a binary
+> named after their own agent.
+
+`get_agent_config`'s docstring (`launchability.py:369-375`) then states the repair as complete —
+*"Doing it here fixes both surfaces at once and gives the unbound case a name of its own"*. Both
+surfaces in that sentence are the two this finding reproduces on. They are not fixed.
+
+The reason is one clause at `hub/hub/launchability.py:418`:
+
+```python
+elif not agent_row.self_registered and "runner" not in meta:
+    meta["runner"] = RUNNER_UNBOUND
+```
+
+`self_registered` is set by `POST /projects/{p}/agents/register` (`agents.py:1696`, `agents.py:1709`)
+— the documented path by which an agent joins a roster on its own. So the branch that gives the
+unbound case an honest name is switched **off** for exactly the population that reaches the unbound
+state most easily, and stays on for the population that cannot: `POST /projects/{p}/agents`, the
+route the Hub UI's `useCreateAgent` calls (`hub/ui/src/api/agents.ts:330-335`), writes
+`self_registered=False` **and** requires a launchable runner up front (`agents.py:658-673`), so a
+UI-created agent is never unbound at birth.
+
+With the branch off, `meta` carries no `runner`, `probe_agent` defaults it to `"native"`
+(`launchability.py:57`), `RUNNER_CLI["native"]` is `None`, and `cli = RUNNER_CLI.get(runner) or name`
+(`launchability.py:82`) resolves to **the agent's own name**. That is the fallback the whole
+`RUNNER_UNBOUND` constant exists to stop being reachable.
+
+### The exemption's own justification is measurably false
+
+The guard is deliberate, and defended in prose at `launchability.py:377-378`:
+
+> A **self-registered** agent is exempt: it manages its own execution and legitimately has no
+> `Runner`, so calling it unbound would refuse something that works.
+
+It refuses nothing. `runnable` is already `false` on both sides of the change — `present` is false
+either way, because `shutil.which("unbound-driver")` finds nothing. Only the **sentence** changes.
+Worse, the fallback means an agent whose name collides with a real binary (`node`, `git`, `make`) is
+reported *runnable* on a program that has no idea what AgentWeave is.
+
+The comment at `launchability.py:424-425` then defends the exemption a second way — the Hub cannot
+trigger these agents, *"which is a separate verdict (`collaboration_ready`) that already says so"*.
+Measured above: `collaboration_ready` is **`null`**. It says nothing. And the test named as pinning
+it, `test_agent_with_no_bound_runner_has_no_collaboration_verdict`
+(`hub/tests/test_launchability.py:306-319`), configures its agent through `session/sync` with
+`{"runner": "claude"}` — so `"runner" in meta` is true and the second half of the `elif` already
+excludes it. That test does not exercise the `self_registered` guard at all.
+
+**Measured, not argued.** With line 418 reduced to `elif "runner" not in meta:` and nothing else
+changed:
+
+```
+py -3.11 -m pytest hub/tests/test_launchability.py -q                       -> 39 passed
+py -3.11 -m pytest hub/tests/test_agents_self_registered.py \
+    hub/tests/test_inbound_queue.py hub/tests/test_agents.py \
+    hub/tests/test_agent_trigger.py -q                                      -> 90 passed
+```
+
+129 tests, nothing pins the exemption. The file was restored afterwards; **this is filed, not
+fixed.**
+
+### Why it is filed rather than fixed
+
+Because deleting the guard answers the wrong half of the question. Dropping it makes every
+self-registered unbound agent say *"No runner is bound to this agent. Bind one in the Hub UI before
+it can run."* — right for a `contact_mode: "poll"` agent that nothing will ever launch, and wrong
+for a `contact_mode: "mcp"` agent with an `mcp_endpoint`, which drives itself and should not be sent
+to the roster to bind a runner it does not want. The honest repair probably needs a third reason,
+keyed on contact mode rather than on `self_registered`, and that is a design decision.
+
+What is not in question is that the current sentence is wrong for **both** of those agents. Whatever
+the third reason turns out to say, `cli = ... or name` at `launchability.py:82` should stop being
+reachable; the agent's name is not a program.
+
+### Reproduction
+
+Against the 8011 Hub with `AW_HUB` / `AW_KEY` / `AW_PROJECT` exported:
+
+1. `POST /projects/{p}/agents/register` with `{"name": "norunner-probe", "contact_mode": "poll"}`
+2. `PATCH /projects/{p}/agents/norunner-probe` with `{"runner_id": null}`
+3. `POST /projects/{p}/agent/trigger` with `{"agent": "norunner-probe", "message": "hi", "session_mode": "new"}`
+4. `GET /projects/{p}/queue/norunner-probe/status` — `waiting_reason` names the agent as a CLI
+5. `GET /projects/{p}/agents/launchability` — `agents["norunner-probe"].cli` is the agent's name
+
+`scripts/drive/t_sweep_queue.py` now reaches this on every run — see F137 for why it did not before.
+
+## F137 (C) — the harness that promised to spend no provider tokens had been spending them, and was measuring a different queue
+
+**Corrected 2026-08-30, iteration 12.** Three defects in `scripts/drive/t_sweep_queue.py`, all of
+the F135 class — the harness's own state, reported as the product's.
+
+**1. The agent was archived, so every probe answered 409.** The file names a fixed agent,
+`unbound-driver`, and never ensures it exists or is open. An earlier drive left that name archived,
+so the first run of this iteration produced three `UNEXPECTED` lines all reading
+*"unbound-driver is archived and cannot be triggered"* — which is the product behaving correctly at
+a boundary the harness had walked into. `POST /agents/register` is idempotent but does **not** reopen
+an archived row; the fix registers *and* unarchives.
+
+**2. The agent had a runner bound, so the file's entire premise was false.** The docstring's claim is
+that this row is free:
+
+> The trick that makes them free is the agent with no runner bound: every trigger for it queues
+> durably and nothing ever spawns, so the queue, the scheduler's attribution, withdrawal, release and
+> concurrent triggers are all reachable **without a single provider token**.
+
+Nothing enforced it. A later drive had bound `Haiku (cheap)` to that same name, so on the corrected
+run the first trigger came back `status: "running"` and the release probe answered *"already
+delivered"* — **five real Haiku turns were started by a file that says it starts none**, and the
+queued entries had to be withdrawn by hand to stop the cascade.
+
+The measurement damage is worse than the tokens. The `waiting_reason` the file exists to observe
+changed underneath it:
+
+| precondition | what row 6 reported as the reason a turn had not started |
+|---|---|
+| runner bound (silently) | `"agent is already running"` |
+| no runner (the stated premise) | `"Runner CLI 'unbound-driver' was not found in PATH."` |
+
+The first is a true statement about a situation the file was not written to examine. The second is
+**F136**, which had been sitting behind this all along and had never once been looked at.
+
+The fix asserts all three preconditions before any probe runs — exists, open, no runner — and
+`sys.exit(1)` with a stated reason if the unbind does not take, rather than reporting on a situation
+that is not the one described.
+
+**3. An absence reported as a collision.** The row-19 concurrency check counted `None` entry ids as
+duplicates, so four identical 409 refusals printed
+`<-- TWO REQUESTS WERE GIVEN THE SAME QUEUE ENTRY` — an alarm about collision raised by there being
+nothing to collide. It now filters the Nones and says plainly how many of the four triggers were
+accepted.
+
+**The general lesson, third time of asking.** A drive harness pinned to a named fixture is only as
+true as the fixture, and the fixture is shared, mutable, and edited by every other harness in this
+directory. A file whose docstring makes a claim about cost, or about what it is measuring, must
+*check* that claim at the top and refuse to run when it is false. Stating it in prose is what
+produced two iterations of confident, wrong output.
+
+### What held
+
+With the preconditions enforced, row 6 is clean and the whole of it passes: entries queue durably;
+`session_mode: "new"` mints a distinct conversation per request, including under four concurrent
+triggers (4 distinct entries, 4 distinct conversations, no collision); the third trigger's
+`conversation_id` is **its own**, not the first conversation's; withdrawal is idempotent-by-refusal
+(`409 "absent or has already been delivered/withdrawn"`); and `POST /queue/entries/{id}/release`
+declines an entry that is not hop-blocked with the best refusal in this file's collection —
+*"Queue entry is at hop 0, within the project's hop budget of 6, so the hop budget is not what is
+holding it. Check the agent's queue status for the reason it is waiting."* That sentence names the
+number, the budget, the conclusion and where to look next.
+
+Rows 5 and 15's API halves are also clean — `t_sweep_conversations.py`, 0 unexpected statuses.
+Archiving a conversation with input still queued is refused with the reason
+(*"Archiving it would strand them, because nothing delivers into an archived conversation"*),
+archive is idempotent, an empty title is refused, and a trigger into an archived conversation is a
+409 rather than a silent new one.
+
+### One thing worth an operator's eye, not filed
+
+`GET /projects/{p}/queue/{agent}/status` answers **200 with `waiting_count: 0`** for an agent that
+does not exist (`inbound_queue.py:108-125` never loads the `Agent` row). It is the "I could not
+look" / "there was nothing there" confusion this file complains about elsewhere, but nothing
+currently reaches it: there is no agent-rename route, so a name in the UI cannot go stale, and
+archiving is refused outright while entries are still queued (`agents.py:2124-2143`). Recorded so
+the next person who adds a rename knows the queue is keyed on the name string.
+
+## Row 5 driven live — the conversation thread holds together, 14 checks, 0 failures
+
+**Driven 2026-08-30, iteration 12, on the 8011 Hub, `proj-1964cdedffe2`, agent `driver` bound to
+Haiku. New harness `scripts/drive/t_row5_conversations.py`, two real turns.** Recorded because row 5
+had never been driven past its API half, and because everything below is only observable once a
+provider has actually replied.
+
+Turn 1 plants a codeword and is told to reply `OK`. The operator then renames the conversation and
+sends a second message asking for the codeword back. Every check passed:
+
+| what | result |
+|---|---|
+| trigger names a conversation, run starts | `conv-c0f582c3d4ae`, `status: "running"` |
+| the operator's own message is in the transcript | yes, as `kind: "operator_input"` |
+| the agent replied | `agent_output` / `output_kind: "text"` → `"OK"`, ~8s |
+| the conversation was given a title, not marked operator-set | yes, `title_set_by_operator: false` |
+| a provider session was recorded | `374666cc-…` |
+| rename accepted, title is exactly what was typed | yes |
+| rename flips `title_set_by_operator` | `true` |
+| second message stayed in the **same** conversation | yes, same id back |
+| **the agent still knew the codeword** | replied `TANGERINE-I12B` |
+| the operator's title survived the next turn | yes — the documented `name_conversation` no-op holds |
+| one provider session across both turns | `374666cc…` → `374666cc…`, unchanged |
+| conversation idle again, context usage measured | `attention: "idle"`, 17.69% of Haiku's window |
+
+The middle one is the row's whole point. Two triggers, separated by an operator rename, resumed the
+same provider session — so a conversation in this product is a real thread and not two runs sharing
+an id. Nothing in the API half could have shown that.
+
+**One cosmetic note, not filed.** With no `name_conversation` call the title is the first 115
+characters of the opening message, cut mid-word: `'…Reply with only the two characters OK. Do not'`.
+It is a placeholder doing its job, and the sidebar ellipsises it anyway; recorded only so the next
+person to look at titles knows nothing generates one.
+
+## F138 (B) — three drive harnesses are hard-wired to a forbidden project, and one of them writes
+
+**Found 2026-08-30, iteration 12, while reading `t_hop.py` before trusting it. Fixed in the same
+commit.** No damage occurred: the files were read, not run.
+
+`scripts/drive/` carries a standing rule, repeated in `STATE.json`'s limits and in three of the
+files' own docstrings — *"never `proj-5e960453` (this repo on the trial Hub) or `proj-18e5d4e0`"*.
+Five files enforce it with an explicit `FORBIDDEN` set. Three do the opposite:
+
+```
+scripts/drive/t_hop.py:8    P = "proj-18e5d4e0"
+scripts/drive/t_loop.py:8   P = "proj-18e5d4e0"
+scripts/drive/t_spec.py:5   P = "proj-18e5d4e0"
+```
+
+Hard-coded, with no `AW_PROJECT` override and no guard. And `aw.py:16-18` defaults `AW_HUB` to
+**`http://127.0.0.1:8010`** — the operator's own trial Hub — with a real key baked in as the
+default. So `py -3.11 scripts/drive/t_spec.py`, run with no environment at all, is a request
+against the operator's live Hub and their protected project. That is the *default* invocation; the
+protection has to be added by the caller, which is backwards.
+
+`t_hop.py` and `t_loop.py` only poll. **`t_spec.py` writes**:
+
+```python
+c, b = api("PUT", f"/projects/{P}/project/documents/{DOC}/content", {"document": payload})
+```
+
+`DOC` is `spec/changes/indigo-wyvern/spec.html` and `payload` is a fully-formed change-spec about a
+ledger library. Running that file replaces the content of that document in `proj-18e5d4e0` — a
+project this run is explicitly forbidden to touch — and the operator's only warning is a line five
+files down that they would have had to open the file to read.
+
+This is the same class as F137 but a step worse. F137 was a harness measuring the wrong thing.
+This is a harness whose *safe* invocation is the one nobody types.
+
+**Fixed**, using the shape the five compliant files already established, so there is one pattern
+rather than two:
+
+```python
+P = os.environ.get("AW_PROJECT", "")
+if P in ("proj-5e960453", "proj-18e5d4e0") or not P:
+    print("REFUSING TO RUN: set AW_PROJECT to a drive project. "
+          "proj-5e960453 (this repository) and proj-18e5d4e0 are off limits.")
+    sys.exit(1)
+```
+
+Verified by running each with `AW_PROJECT=proj-18e5d4e0` and with it unset: both exit 1 with the
+refusal and issue no request. Refusing the *empty* case as well is deliberate — an unset
+`AW_PROJECT` used to mean "use the hard-coded one", and silently falling back to a working default
+is how the hazard survived this long.
+
+**Left for the operator.** `aw.py`'s defaults are the other half of this and were not changed:
+`HUB` defaults to 8010 and `KEY` to a literal `aw_live_…` for that Hub. Every drive in this
+directory is run with all three variables exported, so the defaults serve nobody and point at the
+one instance the drive must not disturb. Removing them — or defaulting `HUB` to nothing and
+refusing — is a one-line change with no caller to break, but it changes how every file in the
+directory is invoked, so it is stated here rather than done unattended.
+
+## F139 (B) — the agent reached for the host's `SendMessage`, and reported AgentWeave's own roster as unreachable
+
+**Driven 2026-08-30, iteration 12, on the 8011 Hub, `proj-1964cdedffe2`, agent `driver` on
+Claude/Haiku. Non-deterministic: the identical instruction succeeded on the run nine minutes
+earlier and failed on this one, with nothing else changed.**
+
+`driver` was told, in the operator's own words, to *"use the send_message tool exactly once to send
+to the agent named 'peer'"*. Its transcript (`conv-fb23a8232711`):
+
+| # | tool called | outcome |
+|---|---|---|
+| 1 | **`SendMessage`** `{"to_agent": "peer", "subject": "ping", "content": …}` | tool failed |
+| 2 | `ToolSearch` `{"query": "select:SendMessage"}` | loaded the **host's** schema |
+| 3 | **`SendMessage`** `{"to": "peer", "recipient": "peer", "message": …}` | "tool completed" |
+| 4 | `ToolSearch` `{"query": "select:ListAgents"}` | loaded the **host's** roster tool |
+| 5 | **`ListAgents`** | listed Claude Code sessions |
+
+and then, as its final visible answer to the operator:
+
+> I cannot complete this task. The agent named 'peer' from the AgentWeave roster is not currently
+> reachable. `ListAgents` shows three peer sessions, but none of them is the 'peer' agent specified
+> in the instruction.
+>
+> The send_message call failed with "No agent named 'peer' is reachable."
+
+`peer` was on the roster, open, idle, and bound to a runner throughout. Nothing was ever sent. The
+Hub's queue for `peer` records no new entry, `driver`'s run completed `status: "Completed"`, and the
+operator is left with a confident, detailed, entirely wrong report that **their own roster is
+broken** — sourced from a different product's view of a different kind of agent.
+
+### The collision
+
+The Hub spawns Claude Code, which ships its own agent-messaging tool called **`SendMessage`** and its
+own roster tool called **`ListAgents`**. AgentWeave's are `mcp__agentweave__send_message` and the
+roster in the injected context. The names differ only by case and separator, and both describe
+"message another agent", so an agent told to *"use the send_message tool"* has two plausible
+referents and no way to rank them.
+
+The canonical context is already aware of the prefix, and says so once, in a header line
+(`GET /agents/agent-context?agent=driver`):
+
+> Names below are as injected; with an MCP surface they are prefixed `mcp__agentweave__`.
+
+— and then lists the tool bare:
+
+> - `send_message(to_agent, subject, content, message_type=message, task_id=None)` …
+
+So the context states the rule in one place and violates it in every call site beneath. A note that
+the reader must apply is weaker than a name that is already correct, and this transcript is what the
+difference costs. On the successful run nine minutes earlier the same agent's `ToolSearch` query was
+`select:send_message` and it landed on `mcp__agentweave__send_message`; here it was
+`select:SendMessage`. Nothing in the product decided which.
+
+### Why it is worse than a wrong tool call
+
+The host's `SendMessage` **succeeded** at step 3 — the Hub recorded `tool completed` — while
+carrying the message nowhere AgentWeave can see. And the host's `ListAgents` answered with real
+data about the wrong population, which is what gave the agent the confidence to write a diagnosis
+rather than ask. An agent that had simply failed would have said so; this one investigated, using
+tools that all worked, and reached a conclusion about the product that is false.
+
+There is no Hub-side signal at any point. The run is `Completed`, the queue is empty, and only
+reading the transcript reveals that the hop never happened.
+
+### The cheap mitigation, and why it is filed rather than applied
+
+Inject the fully-qualified names. `mcp__agentweave__send_message` does not collide with anything,
+and the header note becomes unnecessary rather than unheeded. That touches every tool name in the
+canonical context — a surface the agent-facing text tests pin (`hub/tests/test_agent_facing_text.py`)
+and one that other runners render differently, so "as injected" is genuinely runner-dependent and
+picking one spelling is a decision about which runner the text is written for. That is the
+operator's call.
+
+Two smaller things fall out of the same transcript, recorded and not filed separately:
+
+- The Hub renders a tool result as **`tool completed`** when the tool returned an error payload
+  (step 3 above: `"No agent named 'peer' is reachable"`). The word in the timeline describes whether
+  the call returned, not whether it worked, which is the opposite of what an operator scanning a
+  transcript will read it as.
+- Every AgentWeave tool call on Claude Code costs an extra round trip: the first call fails, the
+  agent runs `ToolSearch`, then it calls again. Both runs show it. Harmless, but it is two extra
+  provider requests per tool on every turn.
+
+### Reproduction
+
+Trigger any Claude-runner agent with an instruction naming `send_message` in prose and a peer to
+send to. Roughly one attempt in two picks the host tool. `scripts/drive/t_row6_hop_chain.py` is the
+harness; run it until the hop-1 check reports no new entry, then read the triggering agent's
+transcript rather than the queue — the queue shows nothing, which is the whole problem.
+
+## Row 6 driven live — the hop budget holds, and the operator can see and undo it. 12 checks, 0 failures
+
+**Driven 2026-08-30, iteration 12, on the 8011 Hub, `proj-1964cdedffe2`. New harness
+`scripts/drive/t_row6_hop_chain.py`. Three runs; the third is the clean one — see F139 for what the
+first two found instead, which is why they are not thrown away.**
+
+`t_sweep_queue.py` reaches row 6's mechanics for free by triggering an agent that can never launch.
+What that cannot produce is a **hop**: hop depth only increments when one agent's *turn* sends to
+another, so the mechanism that stops two agents talking to each other forever had never been driven
+from the agent side. The chain: operator → `driver` (hop 0) → `peer` (hop 1) → `driver` (hop 2),
+with `hop_budget` tightened to 1.
+
+| what | result |
+|---|---|
+| the budget can be tightened, and is restored on the way out | 6 → 1 → 6, including on failure |
+| `driver`'s message reaches `peer`'s queue at **hop 1** | yes, ~12s |
+| it is attributed to the *agent*, not the operator | `origin_type: "agent"`, `origin_agent: "driver"` |
+| `peer`'s reply arrives at `driver` at **hop 2** | yes, ~8s |
+| the over-budget entry is **held, not discarded** | `state: "queued"` |
+| the **timeline** marks it held | `kind: "inbound_peer"`, `hop_budget_exceeded: true` |
+| the queue status names the cause | `waiting_reason: "hop budget exhausted"` |
+| an **operator** message is accepted while the queue is hop-blocked | 200, `status: "running"` |
+| …and is not itself caught by the budget | delivered immediately, hop 0 |
+| `release` accepts the entry the budget is actually holding | 200, and it resets `hop_depth` to 0 |
+| the released message is then delivered | ~8s, content `PONG-I12E` |
+| an entry the queue is **holding** can be withdrawn, and never delivers | `state: "withdrawn"` |
+
+Two details worth keeping. First, the held flag lives on the **timeline**
+(`TimelineEntry.hop_budget_exceeded`, `agent_chat.py:85`/`206-208`) and not on the queue listing
+(`QueueEntryResponse`, `inbound_queue.py:24-42`), which is right — it is what draws the UI's
+"held / Continue" control (`AgentTimeline.tsx:815`) and the queue listing is not that surface. The
+first version of this harness read it from the queue route, got `None`, and reported a correctly-held
+entry as unmarked. Second, `release` **resets `hop_depth` to 0** rather than raising the budget, so
+one operator decision frees one message and the budget still bounds everything after it. That is the
+right shape and nothing said so anywhere; it is written down here now.
+
+**Withdrawal has to be driven against a queue that is actually holding.** Triggering an idle agent
+and withdrawing immediately loses the race — the entry is delivered inside the same second and the
+`409 "already delivered/withdrawn"` reads as a product failure. The harness now occupies the agent
+first and withdraws the entry that queues behind the running turn.
+
+---
+
+## F140 (A) — a flow's briefing tells the agent to "finish the task and stop", and never tells it, or the Hub, what finishing means
+
+**Status:** open, filed not fixed. Two defensible repairs exist and choosing between them is a
+design decision (decision D5's stated line for filing). Found driving **row 12, flows** — the first
+time that row has been reached by any sweep.
+
+**What was driven.** `scripts/drive/t_row12_flows.py` against `proj-1964cdedffe2` on the 8011 Hub:
+a `change-spec` document with two independent tasks, approved into a flow
+(`job-9079283b06cc` / `loop-10e08b3bbfab`, `spec_document_id` set, `stop_when_queue_empties: true`),
+then fired by hand twice, Haiku throughout.
+
+**Firing 1 did everything right.** Both tasks were claimed in the same firing and started in
+parallel, on two different agents:
+
+```
+task-a7e3ff434835  Add power(a, b) to calc_082529.py    in_progress  peer
+task-fb0635e03198  Add modulo(a, b) to calc_082529.py   in_progress  asker
+```
+
+Both agents did the work, in their own task checkouts, and it is on disk and committed:
+
+```
+drive-0830-sweep/.agentweave/tasks/task-a7e3ff434835/calc_082529.py  ->  def power(a, b): return a ** b
+drive-0830-sweep/.agentweave/tasks/task-fb0635e03198/calc_082529.py  ->  def modulo(a, b): return a % b
+```
+
+`peer` also called `record_evidence` for `FR-1` and `submit_checkpoint_notes`, both succeeding.
+`unresolved_requirements` is `[]`. By every measure the work is done.
+
+**Neither task ever left `in_progress`.** So firing 2 claimed the same two tasks again, briefed the
+same two agents for them again, and burned two more Haiku turns. `peer`'s second transcript is the
+evidence that this is waste and not progress:
+
+> *"Ah, evidence has already been recorded for FR-1 on this task. … So there was a prior peer's
+> turn on this task. The prior agent likely already recorded evidence for FR-1."*
+
+It then submitted checkpoint notes again and stopped again. The board after firing 2 is
+byte-identical to the board after firing 1.
+
+**Why it repeats, in the code.** `decide_firing` (`hub/hub/scheduler.py:1318-1322`) treats an
+`in_progress` task with an assignee as *resumption*, deliberately:
+
+```python
+if task.assignee:
+    # Already staffed; this firing is *resuming* it, not staffing it.
+    agent = task.assignee
+```
+
+That is correct behaviour for a task genuinely mid-flight. Nothing distinguishes it from a task
+whose work finished two firings ago, because the only thing that would — the status — is the thing
+that never moved.
+
+**Why the status never moves.** The flow briefing (`scheduler.py:1765-1775`) says:
+
+> **Finish the task below and stop.** Do not pick up the next item and do not hand the work to
+> anyone — routing is the flow's job, and the next firing decides who does what. Record what a
+> reviewer will need (see `submit_checkpoint_notes`); somebody else reads it.
+
+It names `submit_checkpoint_notes` explicitly, and **both agents called it.** It never names
+`update_task`, and **neither agent called it.** The canonical context is no better: `update_task`
+appears exactly once in the whole 10 kB document, as a bare line in a tool list —
+
+```
+- `update_task(task_id, status)` — status is required, one of `pending`, `assigned`,
+  `in_progress`, `completed`, `under_review`, `revision_needed`, `approved`, `rejected`.
+```
+
+— with nothing anywhere saying that moving a task to `completed` is how a flow learns work is
+finished. The agents obeyed the tool the product named and skipped the one it did not. That is not
+a model failure; it is the product declining to state its own contract at the one place the agent
+reliably reads, which is the same shape as design D8's own argument for putting the tier statement
+in the briefing: *"an agent that does not know to ask never asks."*
+
+**The cost is not one wasted turn — it is the whole second half of the feature.** The briefing's
+own first paragraph promises *"Finished work is claimed for review by an agent other than the one
+that did it."* That mechanism is gated on `REVIEWABLE_LOOP_TASK_STATUSES`, which is
+`REVIEWABLE_STATUSES` sorted, which is `completed` and nothing else (`scheduler.py:530-536`). A
+task that never reaches `completed` is never offered to a reviewer, so:
+
+- the reviewer ladder never runs, and `resolve_reviewer` is never consulted;
+- `stop_when_queue_empties` cannot fire — its band is `TERMINAL_FOR_BINDING`,
+  `{approved, rejected}` (`run_task_binding.py:465`, `task_transition_service.py:485`), two
+  transitions further on than the one that did not happen;
+- so a flow left on its cron re-briefs its agents for finished work **on every firing, forever**,
+  at one provider turn per task per firing, and reports itself busy the whole time.
+
+Row 12 is exactly the row an operator would leave running unattended overnight.
+
+**This is the same defect as F139 seen from the other side.** F139 was an agent reaching for the
+wrong tool when the product named a capability in prose without qualifying it. Here the product
+does not name the capability at all. Both come out of agent-facing text that was written as
+description rather than as instruction.
+
+### Two repairs, and why neither is obviously right
+
+1. **Say it in the briefing.** One sentence after the `submit_checkpoint_notes` line naming
+   `update_task(<task id>, status="completed")` and what it causes — the flow offers the work for
+   review. Cheap, local, and it matches the evidence: the tool the briefing names is the tool the
+   agent calls. But it makes the flow's progress depend on an agent choosing to make a tool call,
+   which is what F27 and F139 both say is not reliable.
+2. **Let the Hub conclude it.** A run that ends cleanly, bound to a loop task it was briefed for,
+   moves that task to `completed`. Reliable and agent-independent, but it asserts the work is
+   finished on the strength of the turn ending, which is precisely the inference the operator
+   retired the question-detection backstop for making (CLAUDE.md, 2026-08-20) — and a turn can end
+   because the agent gave up.
+
+A third shape exists — brief the agent *and* have the Hub surface "the turn ended with its task
+still `in_progress`" as a stall rather than silently re-briefing — and is probably the honest one,
+since it neither guesses nor depends on the agent. Choosing is the operator's.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 AW_AGENT=peer \
+    AW_RUNNER=runner-74060952df62 PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row12_flows.py
+```
+
+Sections D and E print the board before and after each firing; the two rows for `calc_<run>.py`
+read `in_progress` in both.
+
+### Two harness defects found in the same run, both fixed
+
+**`t_row12_flows.py` read the loop by the job's id.** `GET /projects/{p}/loops/{job_id}` answered
+`404 Loop not found` twice, which reads as "this job has no loop" — for a job whose own create
+response carries `loop: {"id": "loop-10e08b3bbfab", …}`. The route is keyed by the loop's id
+(`api/v1/loops.py:138`). Guessing a shape instead of reading the one in front of it is now the
+sixth harness defect of this drive and the fourth of exactly this kind. Fixed: the id is taken from
+`job["loop"]["id"]`, and the file exits rather than continuing if the create response carries no
+loop, since every leg below it is about that loop.
+
+**Its "did the work land" check looked in the agent worktree.** A run bound to a task works in the
+*task's* checkout, `.agentweave/tasks/<task id>/`, not `.agentweave/worktrees/<agent>/` — so the
+check printed `calc_082529.py exists in: NO worktree` for two files that were on disk, correct, and
+committed. Fixed to read the task checkout first and fall back to the worktree, naming which one it
+found. (The project's path comes from `working_directory` on the projects listing; the first
+version of the fix guessed `working_dir` and got `None` — the same mistake, inside the fix for it.)
+
+The file was also hard-wired to one night's fixture agent (`alpha`) with no override and no
+preconditions, the shape F137 and F138 already named. It now takes `AW_AGENT`/`AW_RUNNER`, asserts
+that the agent exists, is bound, and is idle, that a second bound agent exists for section E's
+non-author reviewer to resolve to, and that no job is already enabled — and it names its document
+and its target file after a per-run tag, so a second run does not find the first run's work already
+done and call that a pass.
+
+**Also driven and holding, in the same run:** the flow decomposed an approved document into two
+tasks in the loop's own queue; both were started in one firing on two agents, which is design D5's
+width working; each ran in its own task checkout with its own auto-snapshot commit; the job's
+history records one run row per dispatched task rather than one per firing; and `LEAVE NO JOB
+ENABLED` held — the job was disabled and archived, and `GET /jobs` returns `[]`.
+
+---
+
+## F141 (C) — the approval gate probes git, refuses, names the conflicting file, and then forgets it ever happened
+
+**Status:** open, filed not fixed. The repair is a choice between two surfaces and the code carries
+a written argument for the current behaviour, so it is the operator's. Found driving **row 17,
+integration**, which no previous sweep had reached.
+
+**The refusal itself is the best thing in this drive.** Two task branches on
+`proj-1964cdedffe2` both created `calc_082529.py` from nothing. Approving the first merged it into
+`main` cleanly. Approving the second answered:
+
+```
+PATCH /projects/proj-1964cdedffe2/tasks/task-fb0635e03198  {"status": "approved"}   409
+{"detail": {"code": "gate_unsatisfied",
+            "unmergeable": [{"commit_sha": "1f6869d249fb…",
+                             "source_branch": "agentweave/task/task-fb0635e03198",
+                             "target_branch": "main",
+                             "paths": ["calc_082529.py"]}],
+            "message": "This task's work does not merge cleanly into main: calc_082529.py.
+                        Resolve the conflict on the branch, then approve — approving is what
+                        merges it."}}
+```
+
+That is a real `git` probe (`requirement_gate._check_mergeable` →
+`task_integration.would_conflict`, `requirement_gate.py:154-193`) run *before* the transition, so
+the repository is never touched: `main` stayed at `f8bc7f99`, the task stayed `under_review`, and
+nothing was stranded. It names the commit, the branch, the path, and the way out. Almost nothing
+else in the product refuses this well.
+
+**Then it is gone.** Immediately after that refusal, in the same session:
+
+| where the operator would look | what it says |
+|---|---|
+| `GET /tasks/task-fb0635e03198` | `latest_integration: null` |
+| `GET /tasks/task-fb0635e03198/integrations` | `{"integrations": []}` |
+| `GET /tasks/task-fb0635e03198/integration-preview` | **`will_merge: true`, `reason: ""`** |
+| `GET /worktrees/conflicts` | the pair is gone — the merged task's checkout was released |
+
+So the 409's body is the *only* place the conflict exists. Dismiss the modal, reload, and the
+sentence beside the approve control says the work will merge — for a branch the Hub established
+minutes earlier that it will not. Press approve again and you get the same refusal again, which is
+the product being consistent about a thing it declines to remember.
+
+**The preview's silence is deliberate; the task's is not.** `task_integration_preview`'s own
+docstring (`api/v1/tasks.py:1041-1064`) says it is *"deliberately read-only and deliberately cheap:
+no git subprocess, no conflict probe — that is `requirement_gate`'s job at the moment of approval,
+where a refusal can still stop it. This is a sentence, not a second gate."* That argument is sound
+in isolation. It stops being sound once the gate **has already run** and produced an answer nobody
+kept: the second probe the docstring refuses to pay for is not needed, because the first one's
+result is sitting in a discarded HTTP response.
+
+And the sibling route was written for exactly this reader. `task_integrations`'s docstring:
+
+> *"My approved work is not on main" needs an answer, and a skipped merge with a stated reason is
+> that answer.*
+
+A skipped merge is recorded. A **refused** one is not — and the refused one is the case where the
+operator has to do something.
+
+### Two repairs, and why choosing is the operator's
+
+1. **Persist the refusal** as an integration row with an `outcome` like `refused`, so
+   `/integrations` and `latest_integration` answer the question the routes were written to answer.
+   Honest — it happened, and it is what the operator acted on — but it makes a *rejected transition*
+   write a row, which no other refusal in the product does, and the row would go stale the moment
+   somebody rebases the branch.
+2. **Let the preview say it**, by having it read the last refusal (not by running a second probe —
+   the docstring's objection stands and this repair does not breach it). Cheap and it lands where
+   the operator is already looking, but it is only as fresh as the last approval attempt, so a
+   preview that has never been refused still promises a merge it cannot guarantee.
+
+A third exists — `worktrees/conflicts` reporting branch-versus-`main`, not only workspace-versus-
+workspace — and would have caught this case before approve was ever pressed. It is also the largest
+of the three.
+
+**Reproduce:** two task branches that both touch one file, each with accepted evidence naming its
+head commit, then
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 \
+    AW_TASK_A=<first> AW_TASK_B=<second> AW_TASK_C=<one with no evidence> \
+    PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row17_integration.py
+```
+
+`t_row17_integration.py` asserts this in the direction the product behaves today, so the line goes
+red and says so on the day it is fixed.
+
+### Rows 16 and 17 otherwise held, and they are the strongest rows driven so far
+
+**Row 16, worktrees** (`t_row16_worktrees.py`, `driver` and `peer`, one file, parallel Haiku turns):
+
+| what | result |
+|---|---|
+| two task-bound turns run **at the same time** on one file | both started, both finished, no lock contention |
+| each works in its **own** checkout, not the agent worktree | `.agentweave/tasks/<task id>/`, `provisioned: true` |
+| the agent's workspace view lists the checkouts it holds | `task_checkouts[]` on `GET /worktrees/<agent>` |
+| `GET /worktrees/conflicts` finds the overlap | both pairs, by path — `calc.py` and `calc_082529.py` |
+
+The conflicts endpoint found the row-12 pair as well as its own, without being asked about it.
+
+**Row 17, integration**, everything except the paragraph above:
+
+| what | result |
+|---|---|
+| a task whose evidence names no commit previews honestly | `will_merge: false`, *"no accepted evidence names a commit, so there is nothing to merge"* |
+| evidence recorded by an agent is **not** accepted on arrival | the operator's `decision` route is what accepts it, and nothing merges before that |
+| once accepted, the preview names the commit it will write | `targets: [{commit_sha, source_branch}]` |
+| `completed → approved` is refused, and the refusal names the way through | *"From 'completed' the available transitions are: rejected, under_review."* |
+| approving the first task merges it | `outcome: "merged"`, `mechanism: "local"`, `actor_kind: "operator"` |
+| …and the **repository agrees** | `main` moved `5e74727d → f8bc7f99`, the evidence's commit is an ancestor of `main`, and `git show main:calc_082529.py` prints the function |
+| retrying an integration for a task that was never approved | `409`, *"only an approved task has work to integrate"* |
+
+**One harness defect, the same one as always.** The integration row's key is `outcome`
+(`api/v1/tasks.py:1094-1110`); the harness read `status` and reported `[None]` — "it did not report
+success" — for a row that said `"outcome": "merged"` four lines above in its own printed output.
+That is the seventh harness defect of this drive and the fifth of exactly this kind: guessing a
+shape with the real one on screen. The file also expected B to *attempt* an integration and record
+a failure, which made a refusal that is better than what was expected read as a silent nothing.
+Both corrected, and the whole file rewritten from raw response dumps to verdicts so the next run
+says which of these held rather than printing four thousand lines of JSON.
+
+---
+
+## F142 (A) — a task the operator marks finished can never be reviewed by its flow, and the stall blames the queue instead
+
+**Status:** open, filed not fixed. It changes which of F140's repairs is worth building, which is
+why it was worth establishing before the operator chooses. Found by
+`scripts/drive/t_row12_review_leg.py`, written to answer one question F140 left open: *what is
+waiting on the other side?*
+
+F140 leaves the operator holding a flow whose task sits in `in_progress` forever, and the obvious
+thing to do about it is to move the task to `completed` by hand. **That is the one way of
+completing it that the flow's review ladder refuses to act on**, and it says nothing about why.
+
+### Driven three ways, on one fixture, same document shape each time
+
+| who moved `in_progress -> completed` | evidence accepted | firing 2 |
+|---|---|---|
+| the **operator**, by hand | n/a — never reached | `409` *"loop queue is stalled: no claimable task among 1 open (1 completed)"* |
+| the **author agent**, `update_task` | none recorded | `409` *"task … has no recorded evidence, so there is no commit to review … no reviewer can be given anything to look at."* |
+| the **author agent**, `update_task` | one, accepted | **`200`** — `asker` staffed as reviewer, task `completed → under_review → approved`, 42s |
+
+The third row is the whole feature working, and it is the first time any sweep has reached it: a
+non-author reviewer resolved through design D4's ladder, ran in a detached checkout of the exact
+commit the evidence named, and issued a verdict. Nothing about the review leg is broken.
+
+The first row is the finding. `decide_firing`'s review arm (`hub/hub/scheduler.py:1363-1368`):
+
+```python
+author = await agent_that_completed(session, task.id)
+if author is None:
+    # Unattributable, and therefore offered to nobody
+    continue
+```
+
+and `agent_that_completed` (`task_transition_service.py:123-147`) reads `actor_agent` off the last
+transition into `completed`. The operator's transition writes NULL there — measured directly on the
+row:
+
+```
+sequence  from          to           actor_kind  actor_agent
+65        pending       assigned     operator    None
+66        assigned      in_progress  run         peer
+67        in_progress   completed    operator    None      <-- the operator's own repair
+```
+
+So the walk drops the task with a bare `continue`. **Not `unstaffed`, not `deferred`, not
+`in_flight`** — nothing is appended, so `_stall_reason_from_walk` describes the queue instead:
+
+> *loop queue is stalled: no claimable task among 1 open (1 completed)*
+
+That sentence is the F64 failure by another route. The comment two lines above `unstaffed` in this
+same function says it out loud: *"the queue is holding work which is ready this second, and what is
+missing is an agent permitted to take it. The two remedies are opposite — add tasks, or add an
+agent — and the operator acts on whichever the card names."* Here the remedy is a third thing
+again — *this task has no recorded completer* — and the card names none of them. F64's fix only
+reaches `unstaffed`, and this branch deliberately does not populate it.
+
+**And there is no way out from the operator's seat.** `completed` reaches only `rejected` and
+`under_review` (measured: the `409` in row 17 names exactly those two), so the operator cannot put
+it back for an agent to complete properly. Moving it to `under_review` by hand does not help
+either: the task then matches `WITH_REVIEWER_LOOP_TASK_STATUSES` with the *author* in `assignee`,
+and the wedged-review recovery on that path is itself gated on `agent_that_completed` returning the
+author — which is still `None`. The operator can push the task to `approved` themselves, but that
+is not the flow reviewing anything; it is the operator doing the review leg's job by hand and the
+flow never learning it happened.
+
+### Why this decides F140
+
+F140 offered three repairs. This measurement rules one of them out as written:
+
+- **Repair 1, brief the agent to call `update_task`** — produces `actor_agent = <the agent>`,
+  which is exactly what the ladder needs. Row three of the table above *is* repair 1, driven, and
+  it reaches `approved`. It also needs the agent to record evidence naming a commit, and the
+  operator to accept it, or the flow stalls one step later with a sentence that at least says so.
+- **Repair 2, let the Hub conclude the task is done when the run ends** — writes the transition as
+  the Hub, not as the agent. Unless it attributes the completion to the agent whose run it was, it
+  produces precisely the NULL-provenance dead end above: a flow that completes its own tasks and
+  can then never review them.
+- **Repair 3, surface it as a stall** — is the one thing this finding says is missing on *both*
+  paths, so it is complementary rather than alternative.
+
+### The smaller repair this needs on its own
+
+Whatever happens to F140, the `continue` should say something. `unstaffed.append((task.id, "this
+task has no recorded completing agent, so no reviewer can be excluded from it — a task completed by
+the operator cannot be routed for review"))` costs one line and turns a wrong sentence about the
+queue into a true one about the task. Filed rather than fixed only because the surrounding decision
+is the operator's and a lone diagnostic would read as endorsing the dead end.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 AW_AGENT=peer \
+    AW_COMPLETE_BY=operator PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row12_review_leg.py
+```
+
+`AW_COMPLETE_BY=agent` drives the working path for comparison. The file leaves no job enabled.
+
+---
+
+## F143 (B) — the reviewer is told to build the thing it is reviewing, and said so itself
+
+**Status:** open, filed not fixed. Found in the same run as F142's third row — the one where
+everything else worked.
+
+A flow's review firing composes the reviewer's queue entry through `_compose_loop_briefing`
+(`hub/hub/scheduler.py:1732`). Both of its call sites thread `is_review` into the *checkpoint*
+selection immediately above (`_briefing_checkpoint(..., is_review=is_review)`,
+`scheduler.py:2355-2360` and `2712`) and then **drop it**:
+
+```python
+prior_checkpoint = await _briefing_checkpoint(session, loop, task, is_review=is_review)
+briefing = await _compose_loop_briefing(session, loop, task, prior_checkpoint)
+```
+
+`_compose_loop_briefing` takes `(session, loop, claimed_task, prior_checkpoint)` and has no branch
+for a review, so the reviewer receives the implementation briefing verbatim. This is what `asker`
+was handed for a task `peer` had already finished:
+
+```
+**Finish the task below and stop.** …
+## Current task: Add triple(a) to reviewleg_084802.py
+Create reviewleg_084802.py in your working directory containing exactly one function,
+`triple(a)`, returning a * 3. Change nothing else. Do not run git.
+Queue: 1 open, 0 done
+Work the task you have been given. Keep the edit minimal.
+```
+
+The turn context, on the other channel, says the opposite (`api/v1/agents.py:1127`): *"This is a
+review turn. You are reviewing someone else's work, not doing your own."* The agent got both, and
+its own transcript is the finding:
+
+> *"But this is marked as 'This is a review turn. You are reviewing someone else's work, not doing
+> your own.' **This is confusing.** Let me read the context more carefully… The briefing describing
+> the task is just context for what was supposed to be built, not instructions for me to follow."*
+
+It resolved it correctly, on Haiku, after spending a visible stretch of the turn on it. Nothing in
+the product decided that — the same contradiction with a different model, or the same model on a
+longer briefing, resolves the other way, and the other way is a reviewer that re-implements the
+work it was supposed to check and then approves its own edit. `review_turn.py`'s own opening
+paragraph names that exact failure: *"the agent reviewing will helpfully fix the bug itself and
+report the work as verified."*
+
+The fix is small and local — pass `is_review` the extra six characters into
+`_compose_loop_briefing` and give it a review branch, the way the flow/non-flow tier statement
+already branches ten lines above. It is filed rather than fixed because what a review briefing
+should *say* (the commit, the branch, the requirement, the three verdicts, what not to touch) is
+new agent-facing text and overlaps what the turn context already states — deciding what goes where,
+and what stops being said twice, is a design call.
+
+**Caught only because the assertion was rewritten.** The harness first checked `"review" in
+content` and `TARGET in content`, and **both passed** — the first on the flow paragraph's generic
+sentence about somebody else reviewing, the second on the implementation task's own title. Two
+green checks for a briefing that says the opposite of what was being asserted. The file now asserts
+the implementation wording is present (F143's actual state) and that the review wording is not, so
+the day it is fixed the lines swap and say so.
+
+---
+
+## F144 (C) — row 13's other half holds, and the one red check was the harness looking for the note on a surface that cannot carry one
+
+**Status:** harness fixed in the same commit. Filed because the *product* result matters and
+because this is the sixth harness defect in four iterations, all the same species.
+
+`scripts/drive/t_row13_timeout.py` was written in iteration 13 and never finished — the run died
+mid-flight and left `driver.question_timeout_seconds = 60` behind (cleared before this run, which
+is why preflight could pass). Driven to completion here on `proj-1964cdedffe2` / `driver` / Haiku,
+`AW_TIMEOUT=60`: **16 of 17 checks held**, and the one that did not was the file's own.
+
+### The product half: the unanswered path is safe, and this is the first sweep to reach it
+
+Three sweeps recorded row 13's expiry half as "not reached". It is reached now, and every claim
+that decides whether an unattended project is safe held:
+
+| claim | measured |
+|---|---|
+| the question reaches the operator, blocking, with someone waiting | `q-1ef831008b68`, `from_agent=driver`, `blocking=true`, `asker_waiting=true`, after 12s |
+| the wait ends on its own rather than hanging | agent back to `idle` after **70s** against a 60s window |
+| …near the agent's own deadline, not the provider's | 70s vs 60s — the poll interval, not a four-minute default |
+| …cleanly | `idle`, not `error` |
+| afterwards: not answered, not declined, nobody waiting | `answered=false`, `declined=false`, `asker_waiting=false` |
+| the agent says what it decided without an answer | *"I asked the operator to choose … but the operator did not answer within the timeout. I decided on `report_095714.md`"* |
+
+The operator-side legibility of the leftover row is also already built, and reading
+`QuestionsPanel.tsx:22-26,52-64,150-151` against this data confirms it fires: `asker_waiting=false`
+drops the row out of the red **"Blocking — agents are waiting for your answer"** banner into plain
+*Unanswered*, and stamps it `no longer waiting` with the title *"The run that asked this has ended.
+Answering now would reach it as a new message, not as the answer it was waiting for."* An operator
+who slept through the question is not told to answer something nobody is holding for.
+
+### The harness half: the note is delivered, and no operator surface can show it
+
+The failing check searched the agent's `/output` transcript for the word `unanswered`, expecting
+`ask_user`'s note (`mcp_server.py:448-455`):
+
+> *"1 of 1 question(s) went unanswered within 60s. Continue as best you can and say plainly which
+> decisions you made without an answer."*
+
+It is not there — and it never could be. **F139 already established that the Hub records every tool
+result as the literal string `tool completed`**, and `/agent/{name}/chat` is built from the same
+`AgentOutput` rows (`agent_chat.py:645-700`), so there is no operator surface anywhere that carries
+a tool's return value. The check was reporting a known property of the transcript's *shape* as a
+fresh product defect — exactly F135's and F137's species, the sixth time in four iterations, and
+again in the direction that makes the product look worse than it is.
+
+The note did arrive. The proof is in the agent's own thinking, which names a number the turn prompt
+never mentions:
+
+> *"The operator did not answer within **60 seconds**. The result shows: - answered: false -
+> declined: false - answer: null. According to the `ask_user` documentation, this means 'nobody
+> responded within the timeout'."*
+
+`60` appears in exactly one place the agent can see: the note. So the assertion now checks that the
+agent repeats the window back, with the reasoning written down at the assertion so the next reader
+does not re-derive it. Re-running the file will re-prove delivery rather than re-file F139.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 AW_AGENT=driver \
+    AW_TIMEOUT=60 PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row13_timeout.py
+```
+
+Restores the agent's timeout in `finally` and declines its own leftover question. Costs one Haiku
+turn and about 90 seconds.
+
+---
+
+## F145 — row 19 driven at last: a hard Hub kill loses nothing, and the harness had been asking about the wrong process
+
+**Status:** no product defect. Harness fixed in the same commit. Filed because row 19 was recorded
+"not reached" in every sweep including all three earlier iterations of this one, and because the
+prediction this file was built on turns out to be **wrong in the product's favour** — which is the
+kind of thing that should be written down once rather than re-guessed.
+
+Driven twice on `proj-1964cdedffe2` / 8011 / Haiku — once on `peer`, then again on `asker` after
+the harness was corrected — by `scripts/drive/t_row19_crash.py`. Both runs: **4/4 PASS.**
+
+### What a `Stop-Process -Force` on the Hub actually costs
+
+| | `peer`, 10:04 | `asker`, 10:07 |
+|---|---|---|
+| Hub really dead (`GET /projects` → no connection) | PASS | PASS |
+| the run's recorded pid alive 3s after the kill | — *(measured on the wrong process, see below)* | **no** — `29100 claude.exe` gone |
+| run row after restart | `running → interrupted`, `ended_at` set | same |
+| agent wedged? | no — triggerable, `queued` behind the redelivery | no |
+| redelivered turn | `run-c19a984eabe6`, exit 0 | `run-da2cd3b51c1e`, exit 0 |
+| post-crash trigger | ran to `idle` | ran to `idle` |
+| accounting | interrupted turn counted as `unavailable_turns: 1`, not silently as zero | same |
+
+**The CLI dies with the Hub, and that is why nothing wedges.** The file was written expecting the
+opposite — *"On Windows nothing reaps a grandchild, so the honest expectation is YES"* — and it is
+measured `no` both times. The mechanism is visible in the descendant walk: a Claude run is a
+`PtySession`, so the Hub's child is an `OpenConsole.exe` ConPTY host and `claude.exe` is attached to
+the pseudoconsole it serves. Force-killing the Hub closes the pty handle, the host exits, and the
+client goes with it. This is load-bearing for `run_reconciliation.py:62` —
+`if run.pid is not None and pid_alive(run.pid): continue` — which would otherwise leave the run
+`running` forever and, per the file's own step 6, permanently refuse every later trigger for that
+agent. The wedging case the drive was written to find **cannot arise for a Claude runner on
+Windows**, and now there is a measurement saying so instead of an assumption saying the reverse.
+
+### Resume continuity, measured on the filesystem rather than on prose
+
+The turn writes `crash_before.txt`, then twelve numbered files one tool call at a time, then
+`crash_after.txt`. mtimes in `.agentweave/worktrees/asker/`:
+
+```
+crash_before.txt   10:07:28   <- the crashed run.  Hub killed 10:07:39, restarted 10:07:41
+crash_step_01.txt  10:07:50   <- the redelivered run picks up HERE
+...
+crash_step_12.txt  10:08:09
+crash_after.txt    10:08:11
+```
+
+`crash_before.txt` is not rewritten. The redelivered entry went to a resumed provider session that
+already knew step 1 was done, and `peer`'s transcript says the same thing out loud on the earlier
+run: *"The operator is reminding me about the multi-step instruction. I already completed Step 1."*
+An operator who loses the Hub mid-turn gets the turn finished, not restarted.
+
+### Two harness defects, and the seventh instance of the same species
+
+**1. It asked the orphan question about the console host.** `descendants()` returns
+`OpenConsole.exe` and `claude.exe` in whatever order WMI hands them over, and the file took
+`child_pid` as *the first one*. The `peer` run therefore reported `orphaned: False` having measured
+`10960 OpenConsole.exe` — right answer, wrong subject, and it would have read the same had the CLI
+been orphaned. Now it takes the pid the Hub itself recorded (`runs.pid`), which is exactly what
+`reconcile_interrupted_runs` consults; the descendant walk is kept as context only. The `asker` run
+above is the first authoritative measurement.
+
+**2. Its long step had stopped being long.** Step 2 asked for `sleep 90` through the Bash tool.
+Claude Code refuses a foreground sleep outright — *"To wait for a command you started, use
+`run_in_background: true`"* — so on the `peer` run that step failed in under a second and the turn
+was still `running` at the kill only because the model spent the interval explaining the refusal.
+A drive whose "the crash lands inside the turn" premise depends on the model being talkative is not
+driving what it says it is. Replaced with twelve sequential single-file writes, which the CLI has
+no objection to and which takes ~20s.
+
+**3. No preconditions.** Added: the file now exits unless the named agent exists, is unarchived,
+bound, and **idle** — a crash landing on somebody else's run reports on their turn — and unless a
+uvicorn is actually serving the port. This is the seventh harness defect in four iterations and the
+fourth of them fixed by asserting a precondition the file had only assumed.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_TICKET_SECRET=aw0830-ticket-secret \
+  AW_PROJECT=proj-1964cdedffe2 AW_AGENT=asker AW_PORT=8011 \
+  AW_DB="sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0830/aw0830.db" \
+  AW_HUBLOG="C:/Users/huida/AppData/Local/Temp/aw0830/hub_crash.log" \
+  PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row19_crash.py
+```
+
+It kills and restarts the Hub on the port you give it, so give it 8011 and never 8000 or 8010. Two
+Haiku turns, about 90 seconds, and it leaves the Hub running.
+
+---
+
+## F146 (B) — the operator's own question route accepts `blocking`, tells the panel an agent is waiting, and throws the answer away
+
+**Status:** open, filed not fixed under D5 — the clean repair changes what a public route accepts,
+which is the operator's call. Reproduced live by `scripts/drive/t_row13_operator_question.py`,
+**7/8**, the eighth being the file's own wrong expectation (corrected in place, see the end).
+
+Every sweep so far has reached row 13 through `ask_user`. That is the *agent*-facing half. There is
+an operator-facing half — `POST /projects/{p}/questions` — and it differs from the agent route in
+exactly one argument:
+
+| | route | `created_by_run_id` |
+|---|---|---|
+| agent | `agent_actions.py:545`, `/questions/batch` | `actor.run_id` |
+| **operator** | `questions.py:221-226` | **`None`, passed literally** |
+
+That argument decides whether the operator's answer is ever delivered (`questions.py:346-363`):
+
+```python
+asker_still_waiting = question.blocking and not await _asking_run_has_ended(session, question)
+...
+if not asker_still_waiting:
+    delivered = await _deliver_batch_if_complete(session, question, project_id)   # queue + wake
+```
+
+and `_asking_run_has_ended` (`questions.py:42-43`) returns **False** whenever `created_by_run_id`
+is unset. So for an operator-posted `blocking` question, `asker_still_waiting` is `True`, the
+delivery branch is skipped, and nothing is queued and nobody is woken.
+
+### Driven, with its own control
+
+Prediction written into the file before the run; both halves on `peer`, bound and idle, one
+project, back to back. The **non-blocking control runs first** so a broken delivery path cannot be
+misread as the finding:
+
+| posted by the operator | `asker_waiting` on create | answer accepted | queued for the agent |
+|---|---|---|---|
+| `blocking: false` | `true` (inert — see below) | `200` | **yes** — `entry-3b4da545e098`, `origin_type=operator`, `state=delivered`, content `"Question: … Answer: …"` |
+| `blocking: true` | `true` | `200`, `answered: true` | **nothing** |
+
+The operator gets a `200` with `answered: true` on a decision that reached no one. There is no
+error, no event, and no difference in the response between the delivered case and the dropped one.
+
+### And the panel points at it in red
+
+`asker_waiting` is `true` on that row, because it is derived from the same
+`_asking_run_has_ended` (`questions.py:268`). `QuestionsPanel.tsx:150` partitions on
+`question.blocking && stillWaiting(question)`, so the row lands under
+
+> **Blocking — agents are waiting for your answer**
+
+which is false twice over: no agent is waiting, and answering will not reach one. The
+`no longer waiting` badge that *would* have told the truth (`QuestionsPanel.tsx:57-64`) is gated on
+`asker_waiting === false` and never fires. The panel is honest about a crashed asker — F145 drove
+exactly that and it flips correctly — and wrong about this one, because the two states are computed
+from a column that cannot tell "the run ended" from "there was never a run".
+
+### Why this is not just the documented presumption
+
+`_asking_run_has_ended`'s docstring defends the `False` return, and for the case it names it is
+right:
+
+> *"An unrecorded asker (a row predating `created_by_run_id`, or a question posted through the
+> operator route rather than by a run) is left to the presumption. Guessing it had ended would
+> queue an answer the waiting agent already received as its tool result."*
+
+But the two cases it lumps together are not alike. A legacy row's asker is genuinely **unknown**,
+so presuming someone waits is the safe reading. An operator-route row's asker is **known to be
+nobody** — `questions.py:225` writes the `None` itself, one line of code away. The presumption is
+protecting against a duplicate turn that cannot occur, at the cost of losing the answer entirely,
+and the docstring's own justification ("the waiting agent already received it as its tool result")
+describes a tool result that was never opened.
+
+### The repairs, and why the choice is the operator's
+
+1. **Refuse it.** `blocking: true` means "a run is holding for this"; the operator route has no run,
+   so a `422` naming that is the honest answer. Smallest, and it changes what a public route
+   accepts.
+2. **Deliver it.** Treat "no `created_by_run_id`" as not-waiting *for delivery*, keeping the
+   presumption only for `asker_waiting`. Needs a way to tell an operator-route row from a legacy
+   one — a discriminator the schema does not have today.
+3. **Record the asker.** Give the operator route a sentinel origin instead of `None`, which fixes
+   the panel and the delivery together and is the cleanest, but is a migration.
+
+All three are defensible and (1) and (3) change stored or accepted shapes, so this is filed rather
+than fixed.
+
+### Two smaller things the drive turned up on the way
+
+- The route requires `header` and `multi_select` with no defaults (`schemas/questions.py:34-35`),
+  and the `422` names the missing field precisely each time — good refusals, but it took three
+  attempts to construct a valid body because they arrive one per round trip. Not filed separately;
+  the schema comment explains why they are mandatory and the reasoning is sound.
+- `asker_waiting` is `true` on the **non-blocking** row too. That is inert —
+  `QuestionsPanel.tsx:151` never consults it without `blocking` — and asserting `false` was this
+  harness's own wrong turn on its first green run. The file now asserts only on the blocking row,
+  where the field is load-bearing, with the reasoning at the assertion.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 AW_AGENT=peer \
+  AW_DB="sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0830/aw0830.db" \
+  PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row13_operator_question.py
+```
+
+Exits unless the agent is idle, bound and there is no other open question. Costs one Haiku turn
+(the control's delivery wakes the agent) and declines anything it leaves open.
+
+---
+
+## F147 (B) — the startup pass that re-queues a crashed job firing writes that firing off as failed one line later, and nothing ever corrects it
+
+**Status:** open, filed not fixed under D5 — every repair changes when or how a firing is
+concluded, which is a design call. Reproduced live by `scripts/drive/t_row19_crash_job.py` on
+`proj-1964cdedffe2` / `driver` / Haiku, 8011.
+
+`reconcile_stale_job_runs` had never been driven by anything — its own docstring says so, and its
+correlation is a join by convention rather than by constraint, which **F121** already found bending.
+Driving it says the reconciliation itself is fine and the *history it leaves the operator* is wrong.
+
+### Measured
+
+A job is created and fired by hand; the Hub is force-killed mid-firing; the Hub restarts.
+
+```
+runs      run-a46a031d484f  conv-ea9c3ad574b3  interrupted  ended 09:15:11   <- the crash
+runs      run-3d282cf81379  conv-ea9c3ad574b3  completed    09:15:12 -> 09:15:23  exit 0
+job_runs  run-e584a6b1bee3  conv-ea9c3ad574b3  failed
+          error_summary = "Reconciled on Hub start: no live run behind this firing"
+```
+
+Same conversation on all three rows. **The firing's work ran to completion twelve seconds after the
+restart, on the firing's own conversation, exit 0 — and the job's history still reports that firing
+as failed.** No second `JobRun` is written for the run that succeeded, so `GET /jobs/{id}/history`
+shows the operator one entry and it says failure.
+
+### Why nothing corrects it
+
+The two startup passes are adjacent (`main.py:350-351`) and they work against each other:
+
+```python
+await reconcile_interrupted_runs()   # run_reconciliation.py:87 -> return_run_entries(db, run.id)
+await reconcile_stale_job_runs()     # run_reconciliation.py:221 -> job_run.status = "failed"
+```
+
+The first one **re-queues the crashed run's input** — that is what `return_run_entries` is for, and
+F145 measured the redelivery working end to end. So by the time the second one declares "no live
+run behind this firing", the firing's work is already queued to be retried and will be running
+within a second or two. The sentence is true at the instant it is written and false almost
+immediately after.
+
+The normal end-of-turn path cannot repair it, because it only looks at firings still in flight
+(`scheduler.py:1568-1576`):
+
+```python
+select(JobRun)
+  .where(JobRun.conversation_id == conversation_id, JobRun.status == "in_progress")
+```
+
+Reconciliation has already moved the row to `failed`, so the successful run's
+`finalize_job_run_for_conversation` matches nothing and returns silently. The row is `failed`
+forever.
+
+### A second, latent defect in the same function
+
+`reconcile_stale_job_runs` correlates with an **unordered** `.first()`:
+
+```python
+run_result = await db.execute(select(Run).where(Run.conversation_id == job_run.conversation_id))
+run = run_result.scalars().first()
+if run is not None and run.status == "running":
+    continue
+```
+
+At the moment this drive ran there was one `Run` on that conversation. There are now **two**, and
+after any redelivery there always will be. A second crash during a retried firing would therefore
+consult whichever row SQLite hands back first — quite possibly the older `interrupted` one — and
+write off a firing that is running. `finalize_job_run_for_conversation` orders its own version of
+this same correlation `fired_at.desc()` and explains why in its docstring; this one does not order
+at all.
+
+### The repairs, and why the choice is the operator's
+
+1. **Don't conclude what you just re-queued.** Skip a `JobRun` whose conversation has a queue entry
+   that `reconcile_interrupted_runs` just returned. Narrowest, and it needs the first pass to hand
+   the second one its returned entry ids — they are already computed (`run_reconciliation.py:87`).
+2. **Conclude it as interrupted, not failed,** and let the resumed run finalize it. Needs
+   `finalize_job_run_for_conversation` to accept `"interrupted"` as well as `"in_progress"`, and
+   needs `interrupted` to be a status the job history renders.
+3. **Write a second `JobRun` for the retry.** Truthful about both attempts and the closest to what
+   the last-ten-runs view is for, but it changes what "a firing" counts as, and F121 is already a
+   finding about one firing producing two rows.
+
+The `.first()` ordering is small and unambiguous enough to fix on its own, but it sits inside the
+function all three repairs rewrite, so it is filed with them rather than patched ahead of them.
+
+### The harness read 4/4 while getting this wrong
+
+Its verdicts were *"no JobRun is left in_progress"* and *"the crashed firing is recorded as
+failed"* — both true, both passing, and the second one asserts the defect as the expected outcome.
+The file now also asserts that the firing's work completed on the firing's own conversation (it
+did) and that the history says so (it does not), so the row that is wrong shows as `BAD` until it
+is fixed. That is the eighth harness defect of this sweep and the second of the species *"the
+assertion agreed with the bug"* (F143 was the first).
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_TICKET_SECRET=aw0830-ticket-secret \
+  AW_PROJECT=proj-1964cdedffe2 AW_AGENT=driver AW_PORT=8011 \
+  AW_DB="sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0830/aw0830.db" \
+  AW_HUBLOG="C:/Users/huida/AppData/Local/Temp/aw0830/hub_crash.log" \
+  PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row19_crash_job.py
+```
+
+It kills and restarts the Hub on the port you give it. **Do not pipe it through `head`** — SIGPIPE
+kills it before the `finally` that disables and archives the job. It now also exits unless the
+agent is idle and bound and no job is already enabled.
+
+## F148 — the last two row-19 crosses drive clean: an expired card, and an input the Hub gives up on
+
+**Status:** no product defect. Filed as the coverage record that closes the full-surface sweep —
+these were the only two rows the plan still listed as "not reached", and both exercise reconciliation
+branches that had never run outside a unit test. Both harnesses were repointed at the live fixture,
+given precondition blocks and given a `finally` that leaves the fixture as it was found, in the same
+commit.
+
+Driven on `proj-1964cdedffe2` / port 8011 / Haiku, 2026-08-30 10:27 and 10:29.
+
+### Row 19 x row 14 — a permission card on screen when the Hub dies
+
+`scripts/drive/t_row19_crash_card.py`, **6/6 PASS**. This is the only exercise
+`expire_pending_for_run` (`hub/hub/permission_requests.py:21`, reached from
+`hub/hub/run_reconciliation.py:71`) has ever had outside its own tests.
+
+| what an operator would see | measured |
+|---|---|
+| card while the run is live | `perm-0b7159e2527d`, `tool=Write`, `status=pending` |
+| the same row after the Hub is force-killed and restarted | `status=expired`, `decided_at=None`, `decided_by=None` |
+| still on the operator's screen? | no — the list route hides it, and the card genuinely stopped waiting |
+| answering it anyway | **409** `"this request was already expired; the run has moved on"` |
+| the redelivered turn | `run-f1e2cb2fd55d`, resumed on the same conversation, asks **again** — `perm-c648f21bbcfe` |
+| allowing the fresh card | the write landed in the worktree, the agent went idle |
+
+`decided_at` staying NULL is load-bearing and correct: the model uses it to tell an answer from a
+timeout, so an expired card must not look decided. The harness's `open_cards()` keys on
+`status == "pending"` for exactly that reason, and says so.
+
+The one thing worth recording for later: nothing broadcasts on expiry — `expire_pending_for_run`
+writes the row and returns a count. That is **not** a defect, because
+`hub/ui/src/api/permissions.ts` polls on `refetchInterval: 3000` *and* fetches
+`include_expired=true`, so the operator sees the card turn expired within three seconds rather than
+watching it vanish. The hook's own comment states both choices deliberately. Checked before filing,
+so the next drive does not re-derive it.
+
+### Row 19 x row 8 — three crashes on one input until the Hub gives up
+
+`scripts/drive/t_row19_crash_task.py`, **9/9 PASS**. This is the only way to reach
+`run_reconciliation.py:95` — `if run.task_id and not returned_entry_ids` — because
+`returned_entry_ids` is empty only when `return_run_entries` abandoned the entry at
+`DELIVERY_ATTEMPT_LIMIT = 3` (`hub/hub/inbound_queue.py:178`).
+
+One entry, `entry-a50ce4e98cce`, task `task-9be066aa5aaf`, three force-kills:
+
+```
+crash 1  attempts 1  state delivered  provider_session_id 19d4848e-...  next delivery: resume
+crash 2  attempts 2  state delivered  provider_session_id None          next delivery: new
+crash 3  attempts 3  state withdrawn  "delivery failed 3 times; the Hub stopped retrying"
+```
+
+The session reset lands exactly at `RESUME_RETRY_LIMIT = 2` and the next delivery is genuinely a
+fresh session, not a flagged one — measured on `conversations.provider_session_id`, and confirmed by
+the `run_triggered` event flipping `session_mode` from `resume` to `new`.
+
+And the branch does what it exists to do. At the third crash:
+
+```
+09:30:47 run_interrupted  returned_entry_ids: []  abandoned_entry_ids: ['entry-a50ce4e98cce']
+09:30:47 run_diverged     div-2413cdad4090  run-997dfcbced85  task-9be066aa5aaf  in_progress  interrupted
+```
+
+`GET /tasks/divergences/recent` carries it (`policy_applied: surface`, `outcome: surfaced`,
+`resolved_at: null`), the task reads `has_open_divergence: true`, and the agent is idle with nothing
+queued. So the answer to the question the file was written to ask — *with the message gone, what is
+the operator shown about a task still `in_progress` and an agent now idle?* — is: an open divergence
+naming the run that dropped it, an interrupt event naming the entry that was abandoned, and a queue
+row carrying the reason in prose. Nothing is silent.
+
+The first two crashes correctly record **no** divergence: `evaluate_run_end`'s `input_returned`
+qualification (`hub/hub/run_divergence.py:644`) suppresses it while the work is about to be
+redelivered, which is the difference between "dropped" and "retried".
+
+### What was added to the harnesses, and why the greens are worth believing
+
+Both files asserted less than they printed. `t_row19_crash_task.py` printed the divergence list and
+the event stream and asserted neither, so it could have passed with the branch never firing — the
+one thing it exists to prove. It now asserts that a divergence names this task, that the divergence
+names a run, and that `abandoned_entry_ids` reached the event stream rather than only the database.
+Both files now refuse to start unless the agent is idle and bound, nothing is queued, no job is
+enabled and a Hub is actually serving the port; `t_row19_crash_card.py` also stamps its note
+filename per run, so it can never pass on a previous run's leftover file.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_TICKET_SECRET=aw0830-ticket-secret \
+  AW_PROJECT=proj-1964cdedffe2 AW_PORT=8011 \
+  AW_DB="sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0830/aw0830.db" \
+  AW_HUBLOG="C:/Users/huida/AppData/Local/Temp/aw0830/hub_crash.log" \
+  AW_AGENT=peer   py -3.11 -u scripts/drive/t_row19_crash_card.py
+  AW_AGENT=driver py -3.11 -u scripts/drive/t_row19_crash_task.py
+```
+
+Both kill and restart the Hub on the port given. Do not pipe either through `head` — SIGPIPE kills
+the `finally` that denies leftover cards and closes the drive's task.
+
+## F149 (C) — `job_fired` publishes a JobRun id under the key `run_id`, next to real run ids on the same stream
+
+**Status:** filed, not fixed. The fix is a rename on a published event payload, which is a
+compatibility decision (D5).
+
+Found by reading the activity log as an operator during F148's drive, and being misled by it. These
+two events are one second apart, describe one firing, and both key a `run-` id as `run_id`:
+
+```
+09:15:04 job_fired    {'job_id': 'job-c0d5d3a94a9e', 'agent': 'driver', 'run_id': 'run-e584a6b1bee3'}
+09:15:04 run_started  {'agent': 'driver', 'run_id': 'run-a46a031d484f', 'runner': 'claude'}
+```
+
+`run-e584a6b1bee3` is **not a run**. It does not exist in `runs` at all:
+
+```sql
+SELECT id FROM runs      WHERE id='run-e584a6b1bee3';  -- 0 rows
+SELECT id FROM job_runs  WHERE id='run-e584a6b1bee3';  -- 1 row, status=failed
+```
+
+It is a `JobRun` id. `hub/hub/scheduler.py:2100` and `:2697` both mint the JobRun primary key as
+`run_id = f"run-{short_id()}"`, and four payloads then publish it under the bare key `run_id`:
+`job_fired` at `:2469` (SSE) and `:2482` (persisted), and `job_run_skipped` at `:2130` and `:2314`.
+Every other event on the same stream — `run_started`, `run_triggered`, `run_interrupted`,
+`run_completed`, `run_diverged`, and the permission-request payloads — means `Run.id` by `run_id`.
+The two id spaces share the `run-` prefix, so nothing about the value distinguishes them.
+
+### What it costs today, honestly
+
+Nothing breaks. `hub/ui/src/hooks/useSSE.ts:514` reads only `id` out of `job_fired` and invalidates
+the jobs and loops queries; it never touches `run_id`. No route resolves a run by id in its path, so
+there is no dead link to click. The cost is confined to reading `GET /events/history` and the
+activity log built on it, where a firing appears to name a run that cannot be found — which is
+exactly the wrong impression to give about a job whose run really did fail, and is the same class of
+confusion as **F121** (one firing, two `JobRun` rows).
+
+### Why it is filed rather than patched
+
+`job_run_id` is the honest key, and `hub/hub/db/models.py` already calls the model `JobRun`. But
+`job_fired` is a broadcast contract with a UI listener and a test
+(`hub/ui/src/__tests__/useSSE.test.tsx:128`), and persisted rows in every existing database keep the
+old key forever — so a rename needs a decision about whether to emit both keys for a period, and
+whether the activity log should read either. That is the operator's call, not a drive's.
+
+**Evidence:** `hub/hub/scheduler.py:2100`, `:2130`, `:2314`, `:2469`, `:2482`, `:2697`, `:2756`,
+`:2766`; `hub/hub/db/models.py` `JobRun`; `hub/ui/src/hooks/useSSE.ts:514`. Live rows above from
+`C:/Users/huida/AppData/Local/Temp/aw0830/aw0830.db`, job `job-c0d5d3a94a9e`.
+
+---
+
+## F150 — the crash-ordering seam drives clean: a dead-window follow-up is delayed by exactly one turn, not stranded
+
+**Severity: none. This is a covered-and-correct record, not a defect.** It is written down because
+the seam has a docstring naming a failure it was built to end, and nothing had ever driven it with
+a real second message.
+
+`return_run_entries` (`hub/hub/inbound_queue.py`) deliberately preserves two fields on an entry it
+puts back, and says why:
+
+> every later input, including a request for a fresh conversation, queues behind the one doing the
+> killing
+
+`sequence` is kept so the operator's first message does not lose its place; `conversation_id` is
+kept because an entry belonging to no conversation cannot be scheduled at all. Both are right
+alone. Together they mean a message sent into the dead window — which `POST /agent/trigger` always
+puts on a **fresh** conversation — cannot ride on the redelivered turn, because `schedule_agent`
+filters the batch to `entry.conversation_id == conversation.id`. The open question was whether that
+is a delay or a strand.
+
+**Driven live, `scripts/drive/t_row19_crash_order.py`, 13/13 PASS**, on `driver`/Haiku against the
+8011 fixture. One crash, one follow-up POSTed as the first HTTP request the restarted Hub sees:
+
+```
+09:53:38  entry1 seq 141  conv A   delivered   run interrupted by the kill
+09:53:54  entry1 seq 141  conv A   delivered   attempts 1, NEW run, session_mode: resume
+09:53:54  entry2 seq 142  conv B   queued      "agent is already running"
+09:54:09  entry2 seq 142  conv B   delivered   own run, session_mode: new
+09:54:2x  agent reply text: SECOND-1788083634
+```
+
+**Fifteen seconds, not forever.** The follow-up is deferred for exactly the length of the
+redelivered turn and then runs on its own conversation, with its own words reaching the agent —
+asserted on that run's `agent_outputs` rows of `kind = "text"`, so it is the agent's reply and not
+its reasoning.
+
+While it waits the operator is told the truth: the trigger answers `status: queued` with
+`waiting_reason: "agent is already running"`, and `GET /queue/{agent}/status` independently reports
+`waiting_count: 1, running: true` with the same reason.
+
+### The one thing worth noticing
+
+**The operator's own follow-up is the request that restarts the turn it then waits behind.**
+Startup reconciliation cannot re-drain by itself — it runs inside `lifespan()`, before the Hub has
+served anything, so `bound_address` is empty and `_schedule_or_defer` parks the agent. The park is
+drained by `_observe_bound_address` from *the first request the Hub serves*. With a TCP-only
+liveness poll, that first request is the follow-up. Measured: by the time the POST response came
+back, entry one was already `delivered` with `delivery_attempts: 1` into a **different** run.
+
+Confirmed a second way once **F151** was fixed and the Hub could speak again — the drive was re-run
+and the Hub's own log now carries the line that had never been printed in this repo's history:
+
+```
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8011 (Press CTRL+C to quit)
+WARNI [hub.run_reconciliation] Draining 1 deferred post-reconciliation schedule(s) now the Hub's address is known
+```
+
+Exactly one deferred schedule, drained on the follow-up's own request. The verdict in the harness is
+still asserted on the queue state rather than on this line — a log level or a redirected stdout must
+not be able to turn a product verdict green or red — but the mechanism is now measured, not read.
+
+That is a good property, not a bad one — the answer the operator gets is accurate precisely because
+their own request had already un-parked the turn a moment earlier. Recorded so nobody reads the
+sequence as a race.
+
+**Together with F146** (three crashes on one input until `DELIVERY_ATTEMPT_LIMIT` abandons it) the
+docstring's whole argument is now driven: a blocker that recovers costs the follow-up one turn, and
+a blocker that never recovers is withdrawn after three attempts and stops blocking. Neither leg
+loses the second message.
+
+**Evidence:** `scripts/drive/t_row19_crash_order.py`; `hub/hub/inbound_queue.py`
+`return_run_entries`; `hub/hub/turn_scheduler.py` — `schedule_agent`'s conversation filter;
+`hub/hub/main.py` `_observe_bound_address`; `hub/hub/run_reconciliation.py` `_schedule_or_defer`
+and `drain_deferred_schedules`.
+
+---
+
+## F151 — running migrations at startup silences the Hub's logging, and uvicorn's, for the life of the process — FIXED
+
+**Severity B. Found while trying to read a Hub log, which is the only way this shows up.**
+
+`hub/hub/migrations/env.py:14` runs
+
+```python
+fileConfig(config.config_file_name)
+```
+
+`logging.config.fileConfig` defaults to **`disable_existing_loggers=True`**. It is called from
+`init_db()`, which is the first line of `lifespan()` — by which point every `hub.*` module logger
+has been created at import time and uvicorn's `uvicorn.error` and `uvicorn.access` loggers already
+exist. All of them are set `disabled = True` and stay that way until the process ends.
+
+Measured directly rather than inferred:
+
+```
+cd hub && py -3.11 -c "...fileConfig('hub/alembic.ini')..."
+
+WARNING:uvicorn.error:BEFORE: uvicorn.error speaks
+WARNING:hub.run_reconciliation:BEFORE: a hub module speaks
+uvicorn.error.disabled = False | hub logger disabled = False
+--- after fileConfig(alembic.ini) ---
+uvicorn.error.disabled = True  | hub logger disabled = True
+(neither AFTER line printed)
+```
+
+Confirmed against every Hub this run has started. `hub_crash.log` holds eleven process starts and
+each one is the same four lines, then silence:
+
+```
+INFO:     Started server process [22196]
+INFO:     Waiting for application startup.
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+```
+
+The alembic lines survive because `logger_alembic` is one of the loggers `alembic.ini` itself
+configures. Everything else is gone. **`Application startup complete.` and `Uvicorn running on
+http://...` never print** — the two lines an operator looks for to know the Hub is up. Neither does
+a single access log line, nor the shutdown lines.
+
+### What is actually lost
+
+Every `logger.warning` the Hub can emit, including:
+
+- `main.py`'s `_ui_staleness_warning()` — the warning that the committed UI bundle does not match
+  its source. It is emitted in `lifespan()` **after** `init_db()`, so it has never once been seen.
+- `run_reconciliation.py`'s `"Draining %d deferred post-reconciliation schedule(s)"` — the only
+  record that a restarted Hub re-drained an interrupted agent. Its absence is what sent F150's
+  investigation down a dead end; an assertion on that line would have read FAIL forever with the
+  product behaving correctly.
+- every uvicorn access line, and every unhandled-exception traceback uvicorn would log.
+
+An operator diagnosing a Hub that is misbehaving has, today, **no log at all** past the fourth line.
+`agentweave doctor` does not fill the gap: it inspects the environment, not the running process.
+
+### Scope
+
+Not specific to this drive's spawn command. `PYTHONUNBUFFERED=1` was set on the last two runs to
+rule buffering out, and changed nothing. Any path that reaches `init_db()` is affected, which is
+every path that starts the Hub — the console script, `agentweave hub_start`, the Docker image, and
+`python -m uvicorn hub.main:app` alike.
+
+### FIXED, 2026-08-30, reproduction first
+
+One keyword — `fileConfig(config.config_file_name, disable_existing_loggers=False)` — which is
+squarely inside D5's fix bucket: small, self-contained, no design decision, and it restores
+behaviour rather than choosing new behaviour. The Hub configures no logging of its own, so keeping
+the existing loggers overrides nothing.
+
+Order of work, in the discipline's order:
+
+1. **Reproduced before fixing.** `test_running_migrations_leaves_existing_loggers_enabled` in
+   `hub/tests/test_migrations.py` creates `uvicorn.error` and `hub.run_reconciliation`, runs a real
+   `alembic upgrade head` through the same `env.py` the Hub uses, and asserts neither ends up
+   `disabled`. Run against the *unfixed* `env.py` (stashed) it **FAILS**; with the fix it passes,
+   as do the other 75 tests in that file.
+2. **Verified on the product, not only in the suite.** The 8011 Hub was restarted from source and
+   its log read. Three kinds of line that had never appeared in eleven previous process starts are
+   now there:
+
+   ```
+   INFO:     Started server process [26628]
+   INFO:     Waiting for application startup.
+   INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+   INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+   INFO:     Application startup complete.
+   INFO:     Uvicorn running on http://127.0.0.1:8011 (Press CTRL+C to quit)
+   INFO:     127.0.0.1:56820 - "GET /api/v1/projects HTTP/1.1" 200 OK
+   ```
+
+   Startup confirmation, the bound address, and an access log — the three things an operator looks
+   for, none of which the Hub had ever printed.
+
+**Not verified, and worth a look next:** whether `_ui_staleness_warning()` now actually reaches the
+console. It only fires on a stale bundle, and this checkout's is current, so nothing here forced it.
+The mechanism that suppressed it is gone; that it now prints is inference, not measurement.
+
+**Evidence:** `hub/hub/migrations/env.py:14`; `hub/hub/alembic.ini` — `[loggers] keys = root,
+sqlalchemy, alembic`; `hub/hub/main.py` `lifespan()` ordering (`init_db()` first,
+`logger.warning(warning)` after); `C:/Users/huida/AppData/Local/Temp/aw0830/hub_crash.log`, eleven
+process starts, four lines each.

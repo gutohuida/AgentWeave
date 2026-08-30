@@ -284,6 +284,21 @@ async def _tasks_for_loop(db: AsyncSession, loop_id: str) -> Dict[str, Any]:
 
 
 async def _open_questions_for(db, conversation_id: str) -> List[Dict[str, Any]]:
+    """What the operator was asked and has not settled, for the successor agent.
+
+    **A question whose wait ended is kept, and marked** — the opposite decision from every other
+    reader of this idea (`a-task-waits-while-its-run-waits`, design D6). The conversation rail and
+    the loop's open-question count both stop saying somebody is waiting, because their audience is
+    the operator and a count they read as "these still need me" must not include waits nobody is
+    in. This list's audience is the successor *agent*, which needs to know the question was asked,
+    never answered, and decided without the operator — the most useful thing on the list, not the
+    thing to drop.
+
+    It also keeps `LIVE_STATUSES` honest. That collection deliberately excludes `blocked`, so a
+    checkpoint omits the task a wait parked, and the stated cover for that omission is this list.
+    If the ended wait were dropped here instead of marked, that omission would have no cover left
+    and the roster's "active task" derivation would have to be reopened.
+    """
     rows = list(
         (
             await db.execute(
@@ -304,6 +319,10 @@ async def _open_questions_for(db, conversation_id: str) -> List[Dict[str, Any]]:
             "question": row.question,
             "blocking": row.blocking,
             "asked_at": row.created_at.isoformat() if row.created_at else None,
+            # Named rather than omitted, and named rather than left to read as merely open: the
+            # successor must be able to tell "nobody has answered this yet" from "nobody answered
+            # this and your predecessor decided without them".
+            "wait_ended": row.wait_ended_at is not None,
         }
         for row in rows
     ]

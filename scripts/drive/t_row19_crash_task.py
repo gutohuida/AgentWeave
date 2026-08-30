@@ -30,14 +30,20 @@ import time
 
 from aw import api, show
 
-P = os.environ.get("AW_PROJECT") or "proj-dc4d43543bea"
-AGENT = os.environ.get("AW_AGENT") or "beta"
+P = os.environ.get("AW_PROJECT") or "proj-1964cdedffe2"
+AGENT = os.environ.get("AW_AGENT") or "driver"
 PORT = os.environ.get("AW_PORT") or "8011"
 DB = os.environ.get(
-    "AW_DB", "sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0829/aw0829.db"
+    "AW_DB", "sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0830/aw0830.db"
 )
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-LOG = os.environ.get("AW_HUBLOG", "C:/Users/huida/AppData/Local/Temp/aw0829/hub_crash.log")
+LOG = os.environ.get("AW_HUBLOG", "C:/Users/huida/AppData/Local/Temp/aw0830/hub_crash.log")
+TICKET_SECRET = os.environ.get("AW_TICKET_SECRET", "aw0830-ticket-secret")
+#: Unique per run. A task title reused between runs makes "is this the task I created?" ambiguous
+#: and lets a later drive read an earlier drive's divergence as its own.
+STAMP = str(int(time.time()))
+#: Set by `main` so the `finally` can close the task even when a step returns early.
+TASK_ID = None
 
 
 def step(label):
@@ -79,7 +85,7 @@ def start_hub():
             **os.environ,
             "DATABASE_URL": DB,
             "AW_BOOTSTRAP_API_KEY": os.environ.get("AW_KEY", ""),
-            "AW_TICKET_SECRET": os.environ.get("AW_TICKET_SECRET", "aw0829-ticket-secret"),
+            "AW_TICKET_SECRET": TICKET_SECRET,
         },
         stdout=open(LOG, "ab"),
         stderr=subprocess.STDOUT,
@@ -132,15 +138,73 @@ def wait_running(timeout=90):
     return False
 
 
+def preconditions():
+    """Refuse to start unless the fixture is in the state this drive assumes.
+
+    Copied from `t_row19_crash_job.py`, which is the harness that had one. Three crash harnesses
+    read a green-looking verdict off an already-dirty fixture before this block existed.
+    """
+    step("0a. Preconditions")
+    if not P or not AGENT or not DB:
+        raise SystemExit("set AW_PROJECT, AW_AGENT and AW_DB")
+    if not os.path.exists(DB.split("///", 1)[1]):
+        raise SystemExit(f"no database at {DB}")
+    _, roster = api("GET", f"/projects/{P}/agents")
+    roster = roster if isinstance(roster, list) else (roster or {}).get("agents", [])
+    pre = next((a for a in roster if a.get("name") == AGENT), None)
+    if pre is None or pre.get("archived") or not pre.get("runner_id"):
+        raise SystemExit(f"agent {AGENT!r} must exist, be open, and be bound to a runner")
+    if pre.get("status") != "idle":
+        raise SystemExit(f"agent {AGENT!r} is {pre.get('status')!r}, not idle")
+    _, jobs = api("GET", f"/projects/{P}/jobs")
+    jobs = jobs if isinstance(jobs, list) else (jobs or {}).get("jobs", [])
+    if any(j.get("enabled") for j in jobs):
+        raise SystemExit(f"a job is already enabled on {P}")
+    queued = sql("SELECT id,state FROM inbound_queue_entries WHERE agent = ? AND state = 'queued'",
+                 (AGENT,))
+    if queued:
+        raise SystemExit(f"{AGENT} already has queued input: {queued}")
+    if not hub_pids():
+        raise SystemExit(f"no uvicorn is serving --port {PORT}; there is nothing to crash")
+    print(f"  [OK ] {AGENT} idle and bound, nothing queued; no job enabled; a Hub serves {PORT}")
+
+
+def cleanup(task_id):
+    """Leave the fixture as it was found: the drive's task closed, nothing queued, agent idle."""
+    print("\n--- cleanup ---")
+    if task_id:
+        # `rejected`, not `cancelled`: there is no cancelled status, and `rejected` is the one
+        # target reachable by an operator from every status this task can be left in.
+        code, _ = api("PATCH", f"/projects/{P}/tasks/{task_id}", {"status": "rejected"})
+        print(f"  rejected {task_id} -> {code}")
+    end = time.time() + 180
+    while time.time() < end:
+        if agent_status() == "idle":
+            break
+        time.sleep(5)
+    print("  agent:", agent_status())
+    q = sql("SELECT id,state FROM inbound_queue_entries WHERE agent = ? AND state = 'queued'",
+            (AGENT,))
+    if q:
+        print(f"  WARNING: {len(q)} entries still queued for {AGENT}: {q}")
+        for row in q:
+            code, _ = api("DELETE", f"/projects/{P}/queue/{AGENT}/{row['id']}")
+            print(f"    withdraw {row['id']} -> {code}")
+    _, jobs = api("GET", f"/projects/{P}/jobs")
+    jobs = jobs if isinstance(jobs, list) else (jobs or {}).get("jobs", [])
+    print("  jobs:", [(j.get("id"), j.get("enabled")) for j in jobs])
+
+
 def main():
     verdicts = []
+    preconditions()
 
     step("0. A task for the agent, and a run bound to it")
     code, body = api(
         "POST",
         f"/projects/{P}/tasks",
         {
-            "title": "Document calc.py's power function",
+            "title": f"Document calc.py's power function ({STAMP})",
             "description": (
                 "Append a short docstring to the power() function in calc.py in your working "
                 "directory. Change nothing else. Do not run git."
@@ -153,6 +217,8 @@ def main():
     if code >= 300:
         return
     task_id = body["id"]
+    global TASK_ID
+    TASK_ID = task_id
 
     code, body = api(
         "POST",
@@ -207,9 +273,42 @@ def main():
     show("task", *api("GET", f"/projects/{P}/tasks/{task_id}"), limit=1800)
     print("  runs:", sql("SELECT id,status,task_id,ended_at FROM runs WHERE agent = ? "
                          "ORDER BY started_at DESC LIMIT 5", (AGENT,)))
-    show("divergences", *api("GET", f"/projects/{P}/tasks/divergences/recent"), limit=2000)
+    code, div_body = api("GET", f"/projects/{P}/tasks/divergences/recent")
+    show("divergences", code, div_body, limit=2000)
     code, body = api("GET", f"/projects/{P}/queue/{AGENT}")
     show("inbound queue", code, body, limit=1500)
+
+    # The verdicts the branch this file exists to reach actually turns on. Everything above proves
+    # the entry was abandoned; none of it proves the operator was told. `reconcile_interrupted_runs`
+    # only appends to `divergences_to_evaluate` when `returned_entry_ids` is empty, which is exactly
+    # what the third crash produces -- so if no divergence names this task, the branch either did
+    # not fire or fired and recorded nothing, and the task sits `in_progress` with nobody on it.
+    div_rows = div_body.get("divergences") if isinstance(div_body, dict) else div_body
+    mine = [d for d in (div_rows or []) if d.get("task_id") == task_id]
+    print("  divergences on this task:", mine)
+    verdicts.append(("the abandoned task-bound run recorded a divergence", bool(mine)))
+    verdicts.append((
+        "...and it names the run that ended holding the task",
+        bool(mine) and all(d.get("run_id") for d in mine),
+    ))
+    db_rows = sql("SELECT id,run_id,task_id,outcome,resolved_at FROM run_divergences "
+                  "WHERE task_id = ?", (task_id,))
+    print("  run_divergences rows:", db_rows)
+
+    # Was the drop itself put on the stream, or only in the database? An abandoned entry the
+    # operator can only find by reading SQL is a message the product lost quietly.
+    code, ev = api("GET", f"/projects/{P}/events/history?limit=80")
+    ev_rows = ev.get("events") if isinstance(ev, dict) else ev
+    abandoning = [
+        e for e in (ev_rows or [])
+        if e.get("type") == "run_interrupted" and (e.get("data") or {}).get("abandoned_entry_ids")
+    ]
+    print("  run_interrupted events naming an abandoned entry:", len(abandoning))
+    verdicts.append((
+        "the abandonment reached the event stream, not just the database",
+        any(entry_id in ((e.get("data") or {}).get("abandoned_entry_ids") or [])
+            for e in abandoning),
+    ))
 
     step("5. Events, the operator's actual view")
     code, body = api("GET", f"/projects/{P}/events/history?limit=60")
@@ -226,4 +325,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        cleanup(TASK_ID)

@@ -22,12 +22,14 @@ both decides and spawns would be impossible to test without one.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Dict, Iterable, NamedTuple, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import InboundQueueEntry, Question, Run, SpecDocument, Task, TaskTransition
+from .sse import sse_manager
 from .task_transition_service import (
     ORIGIN_ACTOR,
     ORIGIN_RUNTIME,
@@ -41,6 +43,7 @@ from .task_transitions import (
     operator,
     run_actor,
 )
+from .utils import persist_event
 
 # --------------------------------------------------------------------------------------
 # What a task says should happen when work bound to it is dropped
@@ -571,6 +574,22 @@ def reason_from_question(question: Question) -> str:
     return f"Waiting on your answer: {text}" if text else "Waiting on your answer."
 
 
+def proceeded_without_answer_reason(question: Question) -> str:
+    """The one sentence a card shows for work that went ahead without an answer to *question*.
+
+    A sibling of `reason_from_question` rather than a second spelling of it, trimmed by the same
+    limit, for the same reason: the wait and its ending are the same question read at two moments,
+    and two surfaces spelling them differently would read as two different situations.
+
+    Not "timed out" and not "expired". What matters to whoever reads the task later is not that a
+    clock ran out but that a decision was taken and the operator was not part of it.
+    """
+    text = " ".join((question.question or "").split())
+    if len(text) > _REASON_LIMIT:
+        text = text[: _REASON_LIMIT - 1].rstrip() + "…"
+    return f"Proceeded without your answer: {text}" if text else "Proceeded without your answer."
+
+
 async def unanswered_blocking_question(session: AsyncSession, run: Run) -> Optional[Question]:
     """The question this run asked and is still waiting on, if there is one.
 
@@ -587,6 +606,16 @@ async def unanswered_blocking_question(session: AsyncSession, run: Run) -> Optio
     a decline: the operator closes the question, the task is released, the run ends, and the task is
     parked again on the very question they just closed.
 
+    **Nor does a question whose wait has ended** (`a-task-waits-while-its-run-waits`, design D6).
+    `wait_ended_at` introduces a state that did not exist before it: unanswered, undeclined, and
+    nobody waiting. Without this exclusion a timed-out run would park its task at the boundary and
+    suppress a divergence that is real — the agent proceeded, then dropped the work, and the record
+    would say it was waiting on somebody.
+
+    Note the ordering this creates for the run-end sweep: the sweep has to find its candidate
+    *before* recording `wait_ended_at`, because after that this predicate will not return it again.
+    That is also what makes a sweep arriving after the tool's report harmless.
+
     Earliest first: a run that asked several is waiting on the first thing it got stuck on, which is
     the more useful thing to name on the card.
     """
@@ -596,6 +625,7 @@ async def unanswered_blocking_question(session: AsyncSession, run: Run) -> Optio
         .where(Question.blocking.is_(True))
         .where(Question.answered.is_(False))
         .where(Question.declined.is_(False))
+        .where(Question.wait_ended_at.is_(None))
         .order_by(Question.created_at, Question.batch_index)
         .limit(1)
     )
@@ -642,6 +672,43 @@ async def block_task_for_question(
     return transition
 
 
+async def announce_block(
+    session: AsyncSession,
+    run: Run,
+    task: Task,
+    question: Question,
+) -> None:
+    """Tell the operator's board that a task is now waiting on them.
+
+    `info`, not `warn`. A divergence is `warn` because it wants attention on something that went
+    wrong; this is the mechanism working — the agent asked rather than guessed. Warning about it
+    would train the operator to read the one signal that means "someone did the right thing" as a
+    problem.
+
+    Here rather than in `run_divergence`, where it started, because it now has two callers: the
+    ask-time park in the agent-facing questions route, and the run-end park below it. Beside
+    `block_task_for_question` so the announcement and the transition it announces cannot drift
+    apart.
+    """
+    payload = {
+        "run_id": run.id,
+        "agent": run.agent,
+        "task_id": task.id,
+        "task_title": task.title,
+        "question_id": question.id,
+        "reason": task.blocked_reason,
+    }
+    await persist_event(
+        session,
+        run.project_id,
+        "task_blocked",
+        payload,
+        agent=run.agent,
+        severity="info",
+    )
+    await sse_manager.broadcast(run.project_id, "task_blocked", payload)
+
+
 def release_reason(task: Task) -> None:
     """Clear what a task was waiting for, because it is no longer waiting.
 
@@ -682,6 +749,73 @@ async def release_block_for_question(
     try:
         await apply_transition(session, task, "in_progress", operator())
     except TransitionRefusedError:
+        return None
+
+    release_reason(task)
+    return task
+
+
+def wait_has_expired(question: Question, now: Optional[datetime] = None) -> bool:
+    """Has the wait this question started demonstrably ended without an answer?
+
+    The one predicate both signals share (design D4): the tool's report checks it before recording
+    an expiry, and the run-end sweep checks it before recording one the report never delivered. Two
+    spellings of it would be two chances to disagree about whether a wait ended.
+
+    Everything it compares is the Hub's own. `wait_expires_at` was stamped Hub-side while serving
+    the ask, so this is the Hub comparing its own clock against its own stamp — no cross-process
+    comparison, and nothing the reporting party supplied.
+
+    False when no deadline was ever recorded. A question nobody waited on cannot have stopped being
+    waited on, and that is what keeps this a report of a fact rather than a way to create one.
+    """
+    deadline = question.wait_expires_at
+    if deadline is None:
+        return False
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+    return deadline <= (now or datetime.now(timezone.utc))
+
+
+async def release_block_for_expired_wait(
+    session: AsyncSession,
+    question: Question,
+    run: Run,
+) -> Optional[Task]:
+    """The wait ended without an answer, so the task is no longer waiting. Returns the task, if one
+    was released.
+
+    The third exit from `blocked`, beside the operator's answer and their decline. Here rather than
+    folded into `release_block_for_question` because what settled it is different in the one way
+    that matters to the record: nobody answered. `release_block_for_question`'s docstring says the
+    other two differ only in what settled them; this one also differs in *who*.
+
+    Attributed to the **run**, with `origin=ORIGIN_RUNTIME`. The run is the party that stopped
+    waiting, and the runtime is what observed it — the same attribution `block_task_for_question`
+    uses for the park it undoes. `_guard_run_holds_the_task` takes its `run.task_id == task.id`
+    no-op branch here, because the run is already bound.
+
+    Silent when the task has moved on since, exactly as the other two are: the operator may have
+    rejected or reassigned it while it waited, and a wait ending afterwards must not drag it back.
+
+    Idempotent by the caller's construction, not this function's: both callers (the tool's report
+    and the run-end sweep) check `wait_ended_at` before reaching here, and the `status != BLOCKED`
+    guard below makes a second call a no-op regardless.
+    """
+    if not question.blocked_task_id:
+        return None
+
+    task = await session.get(Task, question.blocked_task_id)
+    if task is None or task.status != STATUS_BLOCKED:
+        return None
+
+    try:
+        await apply_transition(
+            session, task, "in_progress", run_actor(run.id, run.agent), origin=ORIGIN_RUNTIME
+        )
+    except TransitionRefusedError:
+        # Same reasoning as `block_task_for_question`: a refusal must leave the wait recorded and
+        # the task untouched, never turn the agent's report into a failed request.
         return None
 
     release_reason(task)

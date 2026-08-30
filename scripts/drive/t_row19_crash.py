@@ -9,9 +9,13 @@ What it asks, in order:
   1. A real Haiku turn is started and reaches `running` with a pid the Hub recorded.
   2. The Hub is killed with `Stop-Process -Force` -- no lifespan shutdown, so
      `terminate_all_active_runs()` never runs. This is a crash, not a bounce.
-  3. Is the spawned CLI still alive after its parent died?  On Windows nothing reaps a
-     grandchild, so the honest expectation is YES -- and `reconcile_interrupted_runs` skips
-     any run whose `pid_alive(run.pid)` is still true.
+  3. Is the spawned CLI still alive after its parent died?  This file predicted YES on the
+     reasoning that Windows reaps no grandchild -- and it is measured NO, twice, on
+     2026-08-30 (F145). A Claude run is spawned through a ConPTY whose host process is the
+     Hub's own child, so force-killing the Hub tears down the pseudoconsole and the attached
+     `claude.exe` goes with it. That matters because `reconcile_interrupted_runs` skips any
+     run whose `pid_alive(run.pid)` is still true: an orphan would be the wedging case, and
+     there is no orphan.
   4. The Hub is restarted on the same database. What does the operator see: is the run still
      `running`, is the agent still busy, and can that agent be triggered again?
 
@@ -161,6 +165,23 @@ def wait_for(label, predicate, timeout=90, interval=2):
 def main():
     verdicts = []
 
+    step("PRE. Preconditions")
+    if not P or not AGENT:
+        raise SystemExit("set AW_PROJECT and AW_AGENT -- this file must not fall back to a default")
+    pre = agent_row()
+    if pre is None:
+        raise SystemExit(f"agent {AGENT!r} does not exist on {P}")
+    if pre.get("archived") or not pre.get("runner_id"):
+        raise SystemExit(f"agent {AGENT!r} must be open and bound to a runner")
+    if pre.get("status") != "idle":
+        raise SystemExit(
+            f"agent {AGENT!r} is {pre.get('status')!r}, not idle -- a crash landing on somebody "
+            "else's run reports on their turn, not this one"
+        )
+    if not hub_pids():
+        raise SystemExit(f"no uvicorn is serving --port {PORT}; there is nothing to crash")
+    print(f"  [OK ] {AGENT} idle and bound; a Hub is serving {PORT}")
+
     step("0. Baseline: agent idle, Hub pids")
     a = agent_row()
     print(f"  agent {AGENT}: status={a and a.get('status')}")
@@ -175,15 +196,19 @@ def main():
         f"/projects/{P}/agent/trigger",
         {
             "agent": AGENT,
-            # A Haiku turn that writes three files finishes in 27 seconds -- measured, on the
-            # first attempt at this row. The crash has to land INSIDE the turn, so the turn is
-            # given one long deterministic step instead of many short ones.
+            # The crash has to land INSIDE the turn, so the turn needs a step that takes longer
+            # than the ~13s it takes this file to reach the kill. It used to ask for `sleep 90`
+            # through the Bash tool; Claude Code refuses a foreground sleep outright ("To wait for
+            # a command you started, use run_in_background: true"), so that step failed instantly
+            # and the turn was still running at the kill only by luck. A run of small sequential
+            # writes is slow for a reason the CLI will not argue with.
             "message": (
                 "Step 1: write the single line 'before the crash' to a new file named "
-                "crash_before.txt in the project root. Step 2: using the Bash tool, run "
-                "exactly this command and wait for it: sleep 90. Step 3: after it returns, "
-                "write the single line 'after the crash' to crash_after.txt. Do not skip a "
-                "step."
+                "crash_before.txt in the project root. Step 2: write TWELVE more files named "
+                "crash_step_01.txt through crash_step_12.txt, one tool call each, in order, "
+                "each containing only its own number spelled out in words. Do not batch them "
+                "and do not use a script. Step 3: only after all twelve exist, write the "
+                "single line 'after the crash' to crash_after.txt. Do not skip a step."
             ),
         },
     )
@@ -227,10 +252,17 @@ def main():
     verdicts.append(("hub is really dead", code == 0))
 
     step("3. Is the spawned CLI orphaned or reaped?")
-    child_state = alive(child_pid) if child_pid else "n/a"
-    print(f"  spawned pid {child_pid} alive: {child_state}")
+    # The subject is the pid the HUB RECORDED for this run, not the first process that happened to
+    # come back from a parentage walk. That walk returns the ConPTY host (`OpenConsole.exe`) as
+    # often as the CLI, and taking its first element answered this question about the console host
+    # for one whole drive (F145). `runs.pid` is what `reconcile_interrupted_runs` itself consults.
+    run_pid = next((r["pid"] for r in db_runs(6) if r["id"] == run_id), None)
+    child_state = alive(run_pid) if run_pid else "n/a"
+    print(f"  the run's own recorded pid {run_pid} alive: {child_state}")
+    if run_pid:
+        print("  ", proc_line(run_pid))
     if child_pid:
-        print("  ", proc_line(child_pid))
+        print(f"  (context) first descendant {child_pid} alive: {alive(child_pid)}")
     for row in db_runs():
         print("  runs table (hub dead):", row)
     orphaned = child_state == "yes"

@@ -15,6 +15,11 @@ AGENT's next queued entry, whatever conversation that belongs to -- and then rep
 `"conversation_id": conversation_id`, the one the operator pressed. Whether those can differ is the
 question; this asks the product rather than the code.
 
+That seam was F131, and it was fixed on 2026-08-30. Step 4's assertions have been flipped to the
+fixed direction; see the comment there. `started` no longer answers "did a turn begin for this
+agent" -- it answers "did the conversation you named start" -- and the answer carries
+`started_conversation_id` naming what did run.
+
 Real surface only. No row inserts. Haiku turns. Exact status codes.
 """
 
@@ -180,19 +185,35 @@ def main():
     wait_idle(AGENT)
     left = [e for e in queue() if e.get("state") == "queued"]
     print(f"  started={started}  queue left={[e.get('id') for e in left]}")
-    # F131, asserted in the direction the product actually behaves. The press reports started on the
-    # conversation it was pressed on, and what it actually started was the OTHER conversation's
-    # queued entry -- proved here by that entry being consumed, and by hand against the runs table:
-    # the only run in the window belongs to the successor, none to the pressed conversation.
+    # F131, FIXED 2026-08-30 (openspec/changes/continue-starts-what-it-names). These four
+    # assertions used to run in the opposite direction -- `started is True` and
+    # `waiting_reason is None` -- because F131 wrote them "in the direction the product actually
+    # behaves, so the day it is fixed they go red and say why". This is that day; the flip below
+    # IS the fix, not a regression in the harness.
+    #
+    # What still holds unchanged: the OTHER conversation's queued entry is consumed, because the
+    # fix deliberately did not change which turn runs. Only the answer changed.
     check(
-        "F131: the press started the OTHER conversation's queued work",
-        started is True and not left,
-        f"started={started} left={[e.get('id') for e in left]} pressed={spare} queued_for={succ}",
+        "F131: the press still started the OTHER conversation's queued work",
+        not left,
+        f"left={[e.get('id') for e in left]} pressed={spare} queued_for={succ}",
     )
     check(
-        "F131: and it reported success against the conversation that did nothing",
-        b.get("conversation_id") == spare and b.get("waiting_reason") is None,
-        f"reported {b.get('conversation_id')}, ran {succ}",
+        "F131: and it no longer reports success against the conversation that did nothing",
+        started is False,
+        f"started={started}, reported {b.get('conversation_id')}, ran {succ}",
+    )
+    check(
+        "F131: the answer names the conversation that actually began",
+        b.get("started_conversation_id") == succ,
+        f"started_conversation_id={b.get('started_conversation_id')!r}, ran {succ}",
+    )
+    # This is the pressed conversation with NOTHING queued for it -- F131's own reproduction --
+    # so "waiting behind other input" would report a queue position that does not exist.
+    check(
+        "F131: a conversation that queued nothing is not told its input is waiting",
+        b.get("waiting_reason") == "this conversation had nothing queued",
+        repr(b.get("waiting_reason")),
     )
 
     summarise()

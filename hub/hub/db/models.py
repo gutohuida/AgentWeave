@@ -978,6 +978,27 @@ class Question(Base):
         Boolean, default=False, server_default="0", nullable=False
     )
     declined_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    # When the run that asked this stops waiting for an answer, and when it actually stopped.
+    #
+    # **Stored rather than derived at read time** (`a-task-waits-while-its-run-waits`, design D3),
+    # which is the one place that change knowingly declines its own prefer-derived default. The
+    # wait belongs to the moment it started: `Agent.question_timeout_seconds` is operator-editable
+    # while the run waits, so a deadline recomputed afterwards from the current setting would
+    # describe a wait that never happened. It also gives the "proceeded without your answer"
+    # statement the honest number — how long the operator actually had.
+    #
+    # Written Hub-side while serving the ask, for blocking questions only, and never supplied by
+    # the caller: the refusal in `POST /questions/wait-ended` compares a report against this, and a
+    # threshold the reporting party chose would guard nothing.
+    wait_expires_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    # Set when the wait ended without an answer — reported by the tool as it stops waiting, or
+    # swept at the run's end when that report never landed. NULL on a question nobody waited on and
+    # on one still being waited on.
+    #
+    # A **declined** question never gets this: the tool returns early on a decline rather than
+    # waiting out the deadline, and a decline is a decision the operator made and handed back, not
+    # silence.
+    wait_ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="questions")
 

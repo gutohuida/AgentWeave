@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import Run, Task, TaskTransition
 from .task_transitions import (
+    STATUS_BLOCKED,
     Actor,
     allowed_targets,
     is_allowed,
@@ -368,14 +369,38 @@ async def apply_transition(
     # this move — rather than the gates below, which ask about the state of the work.
     await _guard_run_holds_the_task(session, task, to_status, actor)
 
-    # The dependency gate, on the `-> in_progress` edge only (`task-dependencies` design D1) — this
-    # covers `pending -> in_progress`, `assigned -> in_progress` and the `blocked -> in_progress`
-    # resume edge alike, since all three share this one `to_status`. Not `-> assigned` and not
-    # `-> rejected`: a whole wave can be routed ahead of time and each task starts only once its own
-    # prerequisites clear. Same placement reasoning as the requirement gate below — inside the
-    # service and before the history row, so every caller (operator route, agent HTTP, the tool
-    # surface, jobs and the run-binding runtime move) is covered without knowing this exists.
-    if to_status == "in_progress":
+    # The dependency gate, on the edges that *begin* work: `pending -> in_progress` and
+    # `assigned -> in_progress`. Not `-> assigned` and not `-> rejected`: a whole wave can be routed
+    # ahead of time and each task starts only once its own prerequisites clear. Same placement
+    # reasoning as the requirement gate below — inside the service and before the history row, so
+    # every caller (operator route, agent HTTP, the tool surface, jobs and the run-binding runtime
+    # move) is covered without knowing this exists.
+    #
+    # **`blocked -> in_progress` is exempt** (`a-task-waits-while-its-run-waits`, design D5), which
+    # reverses a shipped rule that used to be stated right here. Three facts carry it:
+    #
+    # 1. the gate asks whether work may *start*, and `blocked` is reachable only from
+    #    `in_progress` — so this work started, and this edge resumes it;
+    # 2. every refusal at this edge is necessarily a change that happened *after* the task started,
+    #    which the shipped `task-dependencies` requirement *A dependency that regresses after a
+    #    dependent has started does not halt it* already governs. Gating here breached that; the
+    #    exemption restores it rather than trading it away;
+    # 3. `scheduler.candidate_is_startable` already exempts `blocked` from this same call, in these
+    #    words: *"nothing is about to transition it either — it is waiting on a person. Gating it
+    #    would be asking whether work that is not about to start is allowed to start."* The board
+    #    and the gate contradicted each other at exactly one edge; this is what makes them agree.
+    #
+    # The cost, stated rather than left to be found: a dependency *declared* while a task waits no
+    # longer stops it resuming. Small, because the work is already under way, so the gate could not
+    # have prevented it — only the record of it. It surfaces as `running_on_regressed` on the task
+    # once the release lands, which is where a dependency problem on started work belongs.
+    #
+    # Derived from `from_status`, which `apply_transition` already captured, rather than from a flag
+    # the caller passes: a flag is one more thing a caller can forget and one more thing a caller
+    # can abuse, and the status at the transition already carries the whole fact. All three releases
+    # — the operator's answer, their decline, and the run's expired wait — get it that way, which is
+    # right: the reasoning does not distinguish them.
+    if to_status == "in_progress" and from_status != STATUS_BLOCKED:
         from .dependency_gate import evaluate as evaluate_dependencies
 
         dependency_refusal = await evaluate_dependencies(session, task)

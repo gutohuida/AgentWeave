@@ -48,8 +48,36 @@ def open_questions(project):
     return [q for q in (rows or []) if not q.get("answered") and not q.get("declined")]
 
 
+def agent_status(project, agent):
+    _, body = api("GET", f"/projects/{project}/agents")
+    for row in body if isinstance(body, list) else body.get("agents") or []:
+        if row.get("name") == agent:
+            return row.get("status")
+    return "?"
+
+
+def wait_idle(project, agent, limit=WAIT_LIMIT):
+    """Both rows trigger the same agent, and a busy agent's trigger only queues.
+
+    Row 14 read FAIL for 160 seconds on 2026-08-30 because row 13's run had not finished: its
+    trigger answered `status: "queued", waiting_reason: "agent is already running"`, so no
+    permission card could exist and the row blamed the product for the harness's sequencing.
+    """
+    for _ in range(limit):
+        if agent_status(project, agent) != "running":
+            return True
+        time.sleep(POLL_SECONDS)
+    return False
+
+
 def row13(project, agent):
     print("\n=== ROW 13 — Questions: ask_user blocks a run, an answer releases it ===")
+    # Every open question in the project, before this row asks for one. A drive that ran earlier
+    # in the same project leaves its own questions open, and matching "the first open question"
+    # answered a peer's question and called row 13 passing (2026-08-30). Openness is not enough:
+    # the question has to be NEW and it has to be from the agent under test.
+    already = {q["id"] for q in open_questions(project)}
+    wait_idle(project, agent)
     code, body = api(
         "POST",
         f"/projects/{project}/agent/trigger",
@@ -67,7 +95,15 @@ def row13(project, agent):
     if code >= 300:
         return "TRIGGER REFUSED"
 
-    q = wait_for("question appeared", lambda: (open_questions(project) or [None])[0])
+    def fresh_question():
+        rows = [
+            q
+            for q in open_questions(project)
+            if q["id"] not in already and q.get("from_agent") == agent
+        ]
+        return rows[0] if rows else None
+
+    q = wait_for("question appeared", fresh_question)
     if not q:
         return "FAIL — no question was ever raised"
     print("  question: {}".format(str(q.get("prompt") or q.get("text") or q)[:160]))
@@ -90,6 +126,8 @@ def row13(project, agent):
 
 def row14(project, agent):
     print("\n=== ROW 14 — Permissions: manual posture produces a decision card ===")
+    if not wait_idle(project, agent):
+        return "SKIPPED - the agent never went idle after row 13"
     code, body = api(
         "POST",
         f"/projects/{project}/agent/trigger",
@@ -123,7 +161,11 @@ def row14(project, agent):
     code, body = api(
         "POST",
         "/projects/{}/permission-requests/{}/decide".format(project, req["id"]),
-        {"decision": "allow"},
+        # `{"allow": true}` (`PermissionDecision`, permissions.py:25-26) - NOT
+        # `{"decision": "allow"}`, which this harness sent until 2026-08-30 and which the route
+        # correctly refuses 422 naming both the missing field and the forbidden one. The card
+        # itself had already appeared in 12s; only the decision was malformed.
+        {"allow": True},
     )
     show("POST decide allow", code, body)
     if code >= 300:

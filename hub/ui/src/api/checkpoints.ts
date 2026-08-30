@@ -90,7 +90,17 @@ export async function cutOver(
 export interface ContinueResult {
   agent: string
   conversation_id: string
+  /**
+   * Did *this* conversation's work start — not "did a turn begin for the agent" (F131).
+   *
+   * The turn is the agent's, and the Hub builds it from the oldest eligible input across the
+   * agent's whole queue, so the conversation that starts is frequently not the one asked about.
+   * This used to be the agent-level answer, and rendering it as success left the operator
+   * watching a conversation where no run, no output and no error would ever appear.
+   */
   started: boolean
+  /** The conversation whose input the turn actually carried, or null when nothing started. */
+  started_conversation_id?: string | null
   waiting_reason?: string | null
 }
 

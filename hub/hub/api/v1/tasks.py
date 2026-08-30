@@ -44,6 +44,7 @@ from ...requirement_evidence import REJECTED as EVIDENCE_REJECTED
 from ...requirement_links import LinkRefusedError, absorb_free_text, link, resolve_identifiers
 from ...run_task_binding import (
     TERMINAL_FOR_BINDING,
+    proceeded_without_answer_reason,
     reason_from_question,
     release_bindings_to,
     release_reason,
@@ -69,6 +70,7 @@ from ...task_transitions import (
     STATUS_BLOCKED,
     Actor,
     allowed_map_for,
+    allowed_targets,
     operator,
 )
 from ...utils import persist_event, short_id
@@ -315,10 +317,22 @@ async def _attach_dependencies(
             if p["status"] != dependency_gate.MET_STATUS
             and p["status"] != dependency_gate.PERMANENTLY_UNMET_STATUS
         ]
-        if response.status == "in_progress" and (rejected or unmet):
+        if response.status in ("in_progress", STATUS_BLOCKED) and (rejected or unmet):
             # Already started, and a prerequisite no longer clears the gate that let it start —
-            # design D8's "flagged, not stopped". The gate itself only guards `-> in_progress`, so
-            # this state is read-model-only: nothing in `task_transition_service` reacts to it.
+            # design D8's "flagged, not stopped". The gate itself only guards the edges that begin
+            # work, so this state is read-model-only: nothing in `task_transition_service` reacts
+            # to it.
+            #
+            # `blocked` counts too, and always should have: it is reachable only from
+            # `in_progress`, so a waiting task has always started, and rendering one `gated` said
+            # the work had not begun. Wrong before ask-time parking and only widened by it — before
+            # this change a task was `blocked` for the moments between its run ending and the
+            # operator answering, and now it is `blocked` for the whole of every wait.
+            #
+            # Coupled to the resume ungating in `task_transition_service`, in both directions
+            # (design D5): reading a waiting task as "flagged, not stopped" while the gate could
+            # still stop it permanently would make the board state something false, and ungating
+            # without this would leave a resumable task rendered `gated`. Neither half ships alone.
             response.dependency_state = "running_on_regressed"
         elif rejected:
             response.dependency_state = "gated_on_rejected"
@@ -334,26 +348,33 @@ async def _attach_awaiting_answer(
 ) -> List[TaskResponse]:
     """Say which tasks have a live run waiting on an unanswered question (F14).
 
-    A task only reaches `blocked` when the asking run *ends* with the question still open —
-    `block_task_for_question` is reached from `run_divergence.evaluate_run_end` and nowhere else.
-    That is the right moment to change a status, but it means the entire time an agent sits waiting
-    for the operator, which is the whole point of `ask_user`, the board reads `in_progress` with no
-    `blocked_reason`: it claims the work is progressing while nothing is happening and the answer
-    is on the operator's desk.
+    **The reason this field was added has been fixed, and this is what it is still for.** Until
+    `a-task-waits-while-its-run-waits`, a task reached `blocked` only when the asking run *ended*
+    with the question still open, so for the whole of every wait the board read `in_progress` with
+    no `blocked_reason` — it claimed the work was progressing while the answer sat on the
+    operator's desk. The agent-facing question routes now park the task at ask time, so the status
+    itself carries the ordinary case.
 
-    So this reports the wait without touching the status. Derived per request and never stored: the
-    durable record is the question row, and a second copy on the task would be one more thing that
-    can disagree with it — the same reasoning as `has_open_divergence` and `dependency_state`.
+    Two cases it does not carry, and this reports both (design D9):
+
+    * a run bound to a task that **cannot** park — `under_review`, `pending`, `assigned` — is still
+      waiting, and `block_task_for_question` correctly leaves that task alone;
+    * a batch where one question is answered releases the task while the run waits on the rest.
+
+    Derived per request and never stored: the durable record is the question row, and a second copy
+    on the task would be one more thing that can disagree with it — the same reasoning as
+    `has_open_divergence` and `dependency_state`.
 
     Two ways a task is waiting, both counted:
 
-    * a **running** run bound to the task asked it — the case the status cannot yet show;
+    * a **running** run bound to the task asked it — the case the status cannot show;
     * the question already names the task in `blocked_task_id` — the parked case, so a `blocked`
-      card and an `in_progress` one waiting on the same thing read alike.
+      card and a `under_review` one waiting on the same thing read alike.
 
-    Only `blocking=True`, unanswered, undeclined questions count, matching
-    `unanswered_blocking_question` exactly: a non-blocking `ask_user` is a note the agent left
-    while carrying on, and a declined question is one the operator has already closed.
+    Only `blocking=True`, unanswered, undeclined questions whose wait has not ended count,
+    matching `unanswered_blocking_question` exactly: a non-blocking `ask_user` is a note the agent
+    left while carrying on, a declined question is one the operator has already closed, and a
+    question whose wait ended is one nobody is waiting on any more (design D6).
     """
     task_ids = {response.id for response in responses}
     if not task_ids:
@@ -367,6 +388,7 @@ async def _attach_awaiting_answer(
             Question.blocking.is_(True),
             Question.answered.is_(False),
             Question.declined.is_(False),
+            Question.wait_ended_at.is_(None),
         )
         .where(
             Question.blocked_task_id.in_(task_ids)
@@ -387,6 +409,70 @@ async def _attach_awaiting_answer(
         question = waiting.get(response.id)
         if question is not None:
             response.awaiting_answer_reason = reason_from_question(question)
+    return responses
+
+
+async def _attach_proceeded_without_answer(
+    session: AsyncSession, responses: List[TaskResponse], *, project_id: str
+) -> List[TaskResponse]:
+    """Say which tasks were carried on without the operator's answer (F60).
+
+    Measured live: an agent asked four blocking questions, waited out its deadline, chose for
+    itself and completed the task. The question stayed unanswered and undeclined, the task read
+    `completed`, and nothing anywhere said a decision had been taken without anybody. The operator
+    answered five minutes later, choosing an option the agent had not shipped.
+
+    **No condition on `answered`** (design D7), and the reason belongs here rather than in the
+    proposal because it is the non-obvious half: an answer arriving afterwards must not clear this.
+    That is the exact moment the record becomes most misleading — the question would read answered,
+    the task would read clean, and the code would carry a decision neither of them names.
+
+    Two arms, the same shape `_attach_awaiting_answer` uses:
+
+    * the question names this task in `blocked_task_id` — the parked case;
+    * a run bound to this task asked it — the case that never parked, because
+      `block_task_for_question` records `blocked_task_id` only where the task was `in_progress` or
+      already `blocked`. A run bound to a task in `under_review` waits out the full deadline,
+      decides for itself and carries on, and keying on `blocked_task_id` alone would leave that
+      task carrying nothing. That is F60's own shape with a different starting status, and the
+      requirement is written as "where a task's wait for an answer ended without one", not "where a
+      task was parked".
+
+    The second arm drops `_attach_awaiting_answer`'s `Run.status == "running"` condition,
+    deliberately: that condition is there because a live wait needs a live run, and this record is
+    permanent and looks backwards.
+
+    A **declined** question never appears here, because `wait_ended_at` is never set on one: the
+    tool returns early on a decline rather than waiting out the deadline, and a decline is a
+    decision the operator made and handed back, not silence.
+    """
+    task_ids = {response.id for response in responses}
+    if not task_ids:
+        return responses
+
+    rows = await session.execute(
+        select(Question, Run.task_id)
+        .outerjoin(Run, Run.id == Question.created_by_run_id)
+        .where(
+            Question.project_id == project_id,
+            Question.blocking.is_(True),
+            Question.wait_ended_at.isnot(None),
+        )
+        .where(Question.blocked_task_id.in_(task_ids) | Run.task_id.in_(task_ids))
+        .order_by(Question.created_at, Question.batch_index)
+    )
+    # Earliest first and `setdefault`, matching `_attach_awaiting_answer`: a run that asked several
+    # and waited them all out names the first thing it got stuck on.
+    proceeded: dict = {}
+    for question, run_task_id in rows:
+        for candidate in (question.blocked_task_id, run_task_id):
+            if candidate in task_ids:
+                proceeded.setdefault(candidate, question)
+
+    for response in responses:
+        question = proceeded.get(response.id)
+        if question is not None:
+            response.proceeded_without_answer_reason = proceeded_without_answer_reason(question)
     return responses
 
 
@@ -729,6 +815,7 @@ async def create_task_for_actor(
         project_id=project_id,
     )
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_proceeded_without_answer(session, responses, project_id=project_id)
     responses = await _attach_assignee_liveness(session, responses, project_id=project_id)
     return responses[0]
 
@@ -816,6 +903,7 @@ async def list_tasks(
     )
     responses = await _attach_dependencies(session, responses, project_id=project_id)
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_proceeded_without_answer(session, responses, project_id=project_id)
     return await _attach_assignee_liveness(session, responses, project_id=project_id)
 
 
@@ -864,6 +952,7 @@ async def task_board(
     )
     responses = await _attach_dependencies(session, responses, project_id=project_id)
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_proceeded_without_answer(session, responses, project_id=project_id)
     responses = await _attach_assignee_liveness(session, responses, project_id=project_id)
     edges: List[dict] = []
     if task_ids:
@@ -1102,6 +1191,7 @@ async def get_task(
     )
     responses = await _attach_dependencies(session, responses, project_id=project_id)
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_proceeded_without_answer(session, responses, project_id=project_id)
     responses = await _attach_assignee_liveness(session, responses, project_id=project_id)
     return responses[0]
 
@@ -1166,6 +1256,48 @@ async def update_task_for_actor(
                     "A task is recorded as waiting on a person because AgentWeave saw the run end "
                     "with an unanswered blocking question, not because an agent said so. Use "
                     "ask_user to ask, and the task will be parked for you."
+                ),
+            )
+        if (
+            task.status == STATUS_BLOCKED
+            and not actor.is_operator
+            and body.status in allowed_targets(task.status, actor.kind)
+        ):
+            # The same rule as the guard above, read the other way.
+            # `task-lifecycle-governance:445` forbids a task entering **or leaving** the waiting
+            # status because an agent asserted that it should, and until this only entering was
+            # enforced. `TRANSITIONS["blocked"]["in_progress"]` is open to a run because the
+            # *runtime* takes that edge on the run's behalf when a wait actually ends; this is what
+            # stops the agent asking for it directly.
+            #
+            # Latent until ask-time parking, and no longer: a task used to reach `blocked` only
+            # once its asking run had ended, so the agent that could assert its way out was no
+            # longer running. Now the agent that waits out its deadline is refused
+            # `blocked -> completed` (the map withholds that edge) and finds `in_progress` in its
+            # own tool surface — which would reproduce F60 with no `wait_ended_at` and no statement
+            # on the task, bypassing everything the rest of this change records (design D10).
+            #
+            # Nothing legitimate is refused. The three real releases are the operator's answer and
+            # their decline (both `operator()`-attributed, and neither reaches this route), and the
+            # run's own expired-wait report (a runtime-origin transition, likewise not taken
+            # here — spelled in prose because `test_only_the_binding_module_may_record_a_runtime_
+            # transition` is a source scan and does not read comments differently from code). So the
+            # message names all three: a 403 an agent cannot act on is a worse failure than the
+            # move it refuses.
+            #
+            # Derived from `task.status` rather than `body.status`, and placed before
+            # `apply_transition`, so nothing is staged when it refuses.
+            #
+            # Scoped to edges the map would otherwise permit, so the two refusals stay
+            # distinguishable: `blocked -> completed` is a move that does not exist and stays the
+            # map's 409, and this 403 means "the edge is real and you are not who takes it".
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "A task waiting on a person is released when the wait actually ends — the "
+                    "operator answers or declines the question, or your own wait for it expires "
+                    "and ask_user reports that. An agent cannot move it out of 'blocked' by "
+                    "asking to."
                 ),
             )
         # Raises TransitionRefusedError — an illegal move, or one this actor may not make — which the
@@ -1267,6 +1399,7 @@ async def update_task_for_actor(
     )
     responses = await _attach_dependencies(session, responses, project_id=project_id)
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_proceeded_without_answer(session, responses, project_id=project_id)
     responses = await _attach_assignee_liveness(session, responses, project_id=project_id)
     return responses[0]
 

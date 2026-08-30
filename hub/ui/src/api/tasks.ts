@@ -34,13 +34,22 @@ export interface Task {
   blocked_reason?: string | null
   /**
    * What a run bound to this task is waiting on *you* to answer, right now — in the same words
-   * `blocked_reason` uses once the run ends and the task actually parks.
+   * `blocked_reason` uses on a task that parked.
    *
-   * The status deliberately does not move while the wait is on: `block_task_for_question` runs only
-   * when the asking run *ends*, so until then the board said `in_progress` about work that had
-   * stopped and was waiting on a person (F14). Derived per request, never stored.
+   * The ordinary wait now moves the status: the task parks the moment the agent asks (F14). This
+   * covers the two waits the status cannot — a task that could not park (`under_review`, `pending`,
+   * `assigned`), and a batch whose first answer released the task while the run waits on the rest.
+   * Derived per request, never stored.
    */
   awaiting_answer_reason?: string | null
+  /**
+   * This work went ahead without *your* answer to a question it stopped for (F60).
+   *
+   * Distinct from the wait above, and drawn distinctly: a wait is a live ask you can still answer,
+   * this is a decision already taken. Permanent — answering the question afterwards does not clear
+   * it, because that is the moment the record matters most.
+   */
+  proceeded_without_answer_reason?: string | null
   /** The specification document this work is against, and — where a document declared this task —
    *  the key it was declared under. */
   spec_document_id?: string | null

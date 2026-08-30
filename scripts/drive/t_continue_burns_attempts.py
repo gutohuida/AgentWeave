@@ -51,6 +51,9 @@ for click in range(1, 4):
     code, body = api("POST", f"/projects/{P}/conversations/{conv}/continue")
     time.sleep(0.4)
     state, attempts, reason = read()
+    # F131 (fixed 2026-08-30): `started` answers "did the conversation you named start". This
+    # agent cannot launch at all, so no turn begins for anybody and the value is False either
+    # way -- printed, never asserted on, and unaffected by the change.
     started = body.get("started") if isinstance(body, dict) else None
     print(f"  Continue click {click}: HTTP {code} started={started!r} "
           f"-> state={state!r} attempts={attempts}")

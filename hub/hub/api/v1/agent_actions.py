@@ -4,8 +4,9 @@ Capability routers are added here phase-by-phase. Keeping a distinct namespace m
 impossible to accidentally apply the project-key dependency to an agent operation.
 """
 
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+import logging
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
@@ -21,7 +22,13 @@ from ...checkpoint_access import (
 )
 from ...conversations import conversation_id_for_run
 from ...db.engine import get_session
-from ...db.models import CheckpointNote, Question
+from ...db.models import Agent, CheckpointNote, Question, Run, Task
+from ...run_task_binding import (
+    announce_block,
+    block_task_for_question,
+    release_block_for_expired_wait,
+    wait_has_expired,
+)
 from ...schemas.common import RequestModel
 from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
 from ...schemas.messages import _MESSAGE_TYPES, MessageCreate, MessageResponse
@@ -37,6 +44,7 @@ from ...schemas.tasks import (
 from ...sse import sse_manager
 from ...task_transitions import ENTRY_STATUSES, run_actor
 from ...utils import persist_event, short_id
+from .agent_trigger import effective_question_wait
 from .agents import AgentRequest, request_agent
 from .jobs import archive_job, create_job, delete_job, run_job, update_job
 from .messages import create_message_for_actor
@@ -49,6 +57,8 @@ from .tasks import (
     task_integrations,
     update_task_for_actor,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agent-actions", tags=["agent-actions"])
 
@@ -426,6 +436,98 @@ async def recall(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+async def _record_the_wait_and_park(
+    session: AsyncSession,
+    actor: AgentActor,
+    questions: Sequence[Question],
+) -> None:
+    """Record the deadline of the wait these questions start, and park the run's bound task.
+
+    One write for both, because they are one fact: this run has stopped, it is waiting on a person,
+    and this is how long it will wait.
+
+    F14: until this, a task only reached `blocked` when the asking run *ended*, so for the whole
+    length of every `ask_user` the board read `in_progress` with no reason — it claimed the work was
+    progressing while nothing was happening and the answer was on the operator's desk.
+
+    **Here rather than in `ask_question_for_actor`.** That helper is shared with the operator-facing
+    `POST /questions`, which has no run and no binding, and a park there would be a park with no
+    asker. It is the obvious wrong place, which is why this says so.
+
+    **Blocking only.** `ask_user(blocking=False)` is the agent leaving a note and carrying on, and a
+    task parked on a note would make the status mean "an agent mentioned something" — the rule
+    `unanswered_blocking_question` already states of itself.
+
+    **Its own commit.** `ask_question_for_actor` commits and refreshes before it returns
+    (`questions.py`), so the park is a second write with no transaction of its own to join; in the
+    batch route it would otherwise be flushed by accident by the next question's create.
+
+    **And it never costs the agent its question.** The question is committed by the time this runs
+    and the run is about to start waiting on it, so a park that raises must not turn a successful ask
+    into a failed one. Caught and logged. `run_divergence.evaluate_run_end` still parks at the run
+    boundary, and after this change that fallback's real remaining job is exactly this case.
+    """
+    blocking = [question for question in questions if question.blocking]
+    if not blocking or not actor.run_id:
+        return
+
+    try:
+        run = await session.get(Run, actor.run_id)
+        if run is None:
+            return
+
+        # The deadline, stamped Hub-side from the Hub's own inputs and never told to the Hub by
+        # anybody (design D3). Before the commit and before the response, so the tool's own
+        # `time.monotonic() + QUESTION_ANSWER_TIMEOUT` — computed after this request returns, with
+        # a poll interval before its first check — is always *later* than this. The refusal in
+        # `POST /questions/wait-ended` can therefore reject a forged early report and can never
+        # reject a genuine one, and no cross-process clock comparison is involved: the Hub compares
+        # its own `now` against its own stamp.
+        agent_row = (
+            await session.execute(
+                select(Agent).where(Agent.project_id == actor.project_id, Agent.name == actor.agent)
+            )
+        ).scalar_one_or_none()
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            seconds=effective_question_wait(agent_row)
+        )
+        for question in blocking:
+            question.wait_expires_at = expires_at
+
+        # Everything below is the park, and it only applies to a run that holds a task. A wait on a
+        # question asked by an unbound run is still recorded above: `ask_user` will report its
+        # expiry either way, and a question with no deadline could never be reported at all.
+        if not run.task_id:
+            await session.commit()
+            return
+        task = await session.get(Task, run.task_id)
+        if task is None:
+            await session.commit()
+            return
+        # Every question of the batch, in batch order. The first one that can park does; the rest
+        # take `block_task_for_question`'s already-blocked branch, which records `blocked_task_id`
+        # and changes nothing else. That is what makes a batch one wait rather than four, without a
+        # line of batch-specific logic here (design D2).
+        parked_on: Optional[Question] = None
+        for question in blocking:
+            if await block_task_for_question(session, run, task, question) is not None:
+                parked_on = parked_on or question
+        await session.commit()
+    except Exception:
+        logger.warning(
+            "Could not park task for a blocking question asked by run %s",
+            actor.run_id,
+            exc_info=True,
+        )
+        return
+
+    # Only when the transition actually happened, matching `evaluate_run_end`'s condition, so a
+    # batch of four announces once — and named with the question that parked it rather than the
+    # first of the batch, so the event and `blocked_reason` describe the same question.
+    if parked_on is not None:
+        await announce_block(session, run, task, parked_on)
+
+
 @router.post("/questions", response_model=QuestionResponse, status_code=status.HTTP_201_CREATED)
 async def ask_operator_question(
     body: AgentQuestionCreate,
@@ -440,13 +542,15 @@ async def ask_operator_question(
         header=body.header,
         multi_select=body.multi_select,
     )
-    return await ask_question_for_actor(
+    created = await ask_question_for_actor(
         question,
         project_id=actor.project_id,
         from_agent=actor.agent,
         created_by_run_id=actor.run_id,
         session=session,
     )
+    await _record_the_wait_and_park(session, actor, [created])
+    return created
 
 
 @router.post(
@@ -489,10 +593,95 @@ async def ask_operator_question_batch(
                 batch_size=total,
             )
         )
+    await _record_the_wait_and_park(session, actor, created)
     return AgentQuestionBatchResponse(
         batch_id=batch_id,
         questions=[QuestionResponse.model_validate(row) for row in created],
     )
+
+
+class WaitEndedReport(RequestModel):
+    """The ids of the questions this run has stopped waiting on.
+
+    No deadline, no duration and no timestamp: everything the refusal below compares against is
+    already the Hub's own (design D3). The caller states only *which* waits ended, never *when* or
+    *for how long*.
+    """
+
+    question_ids: List[str] = Field(min_length=1, max_length=8)
+
+
+@router.post("/questions/wait-ended")
+async def report_wait_ended(
+    body: WaitEndedReport,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Report that this run has stopped waiting for an answer.
+
+    Not a decision and not a release request — a report of a fact the Hub can check. The shipped
+    analogue is `expire_permission_request` below: the same fact, reported by the same kind of tool
+    over the same channel, and its docstring states the design in one line — *"The run reports and
+    the run's end sweeps"*. This change takes both halves; `run_divergence.evaluate_run_end` is the
+    other one.
+
+    **Deliberately not an `@mcp.tool()`** (design D4). It is not a capability, so it is not in the
+    agent's surface and no model can be prompted into calling it; `ask_user` calls it directly over
+    the credential it already holds.
+
+    Refused per question, silently skipped rather than erroring the batch, because a batch where
+    one question was answered and three expired is the ordinary case:
+
+    * not asked by the calling run — you may only report your own wait;
+    * no `wait_expires_at`, or one that has not passed — the report must describe a fact, not
+      create one. This is the refusal that keeps this a report rather than a lever, and it is only
+      worth anything because the deadline it compares against is the Hub's own;
+    * already answered or declined — nothing expired.
+
+    Returns which ids were accepted, so the tool's own behaviour is testable from the outside.
+    """
+    now = datetime.now(timezone.utc)
+    accepted: List[str] = []
+    run = await session.get(Run, actor.run_id) if actor.run_id else None
+
+    for question_id in body.question_ids:
+        question = await session.get(Question, question_id)
+        if question is None or question.project_id != actor.project_id:
+            continue
+        if run is None or question.created_by_run_id != run.id:
+            continue
+        if question.answered or question.declined:
+            continue
+        if question.wait_ended_at is not None:
+            # Already recorded, by an earlier call or by the run-end sweep. Reported as accepted:
+            # the fact the caller is asserting is true, and arriving second is the normal case for
+            # a report-plus-sweep pair, not an error.
+            accepted.append(question_id)
+            continue
+        if not wait_has_expired(question, now):
+            continue
+
+        question.wait_ended_at = now
+        try:
+            await release_block_for_expired_wait(session, question, run)
+            # Committed per question rather than once at the end, so a failure on the fourth
+            # cannot lose the three before it. Eight is the batch cap, so this is eight commits at
+            # the very worst and the ordinary case is one.
+            await session.commit()
+        except Exception:
+            # A refusal from one question's release must not lose the `wait_ended_at` writes for
+            # the others, and must not 500. The tool swallows a failed report and the agent
+            # proceeds either way, so a 500 here would be indistinguishable to the caller from the
+            # report never having been sent — which is the case the run-end sweep exists to catch,
+            # and it must not be asked to catch this one as well.
+            logger.warning(
+                "Could not release the task waiting on question %s", question_id, exc_info=True
+            )
+            await session.rollback()
+            continue
+        accepted.append(question_id)
+
+    return {"accepted": accepted}
 
 
 @router.get("/questions/{question_id}", response_model=QuestionResponse)

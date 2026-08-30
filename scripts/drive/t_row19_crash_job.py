@@ -100,6 +100,25 @@ def sql(q, a=()):
 def main():
     verdicts = []
     job_id = None
+
+    step("0. Preconditions")
+    if not P or not AGENT or not DB:
+        raise SystemExit("set AW_PROJECT, AW_AGENT and AW_DB")
+    _, roster = api("GET", f"/projects/{P}/agents")
+    pre = next((a for a in (roster or []) if a.get("name") == AGENT), None)
+    if pre is None or pre.get("archived") or not pre.get("runner_id"):
+        raise SystemExit(f"agent {AGENT!r} must exist, be open, and be bound to a runner")
+    if pre.get("status") != "idle":
+        raise SystemExit(f"agent {AGENT!r} is {pre.get('status')!r}, not idle")
+    _, existing = api("GET", f"/projects/{P}/jobs")
+    existing = existing if isinstance(existing, list) else (existing or {}).get("jobs", [])
+    if any(j.get("enabled") for j in existing):
+        raise SystemExit(f"a job is already enabled on {P}: "
+                         f"{[j['id'] for j in existing if j.get('enabled')]}")
+    if not hub_pids():
+        raise SystemExit(f"no uvicorn is serving --port {PORT}; there is nothing to crash")
+    print(f"  [OK ] {AGENT} idle and bound; no job enabled; a Hub is serving {PORT}")
+
     try:
         step("1. A job, fired by hand")
         code, body = api(
@@ -126,6 +145,7 @@ def main():
         show("fire", code, body, limit=500)
 
         t0 = time.time()
+        runs = []
         while time.time() - t0 < 90:
             runs = sql("SELECT id,status,pid,conversation_id FROM runs WHERE agent = ? "
                        "AND status = 'running'", (AGENT,))
@@ -172,10 +192,29 @@ def main():
             if not live:
                 break
             time.sleep(3)
-        print("  runs after:", sql("SELECT id,status,ended_at FROM runs WHERE agent = ? "
-                                   "ORDER BY started_at DESC LIMIT 3", (AGENT,)))
-        jr = sql("SELECT id,status,error_summary FROM job_runs WHERE job_id = ?", (job_id,))
+        after = sql("SELECT id,status,conversation_id,ended_at FROM runs WHERE agent = ? "
+                    "ORDER BY started_at DESC LIMIT 3", (AGENT,))
+        print("  runs after:", after)
+        jr = sql("SELECT id,status,conversation_id,error_summary FROM job_runs WHERE job_id = ?",
+                 (job_id,))
         print("  job_runs at the end:", jr)
+
+        # The two verdicts the file was missing, and the reason it read 4/4 while getting the
+        # operator's answer wrong (F147). `reconcile_interrupted_runs` RE-QUEUES the crashed
+        # firing's input one line before `reconcile_stale_job_runs` writes it off, so the work
+        # usually does complete -- on the firing's own conversation -- and the history still says
+        # it failed.
+        fired_conv = jr[0]["conversation_id"] if jr else None
+        finished = [r for r in after
+                    if r["conversation_id"] == fired_conv and r["status"] == "completed"]
+        verdicts.append((
+            "the crashed firing's work was redelivered and completed",
+            bool(finished),
+        ))
+        verdicts.append((
+            "...and the job's history says so rather than still reporting a failure",
+            bool(finished) and all(r["status"] != "failed" for r in jr),
+        ))
 
         step("VERDICTS")
         for label, ok in verdicts:

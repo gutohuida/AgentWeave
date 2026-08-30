@@ -84,10 +84,13 @@ timestamps.
 
 ### Requirement: A loop surfaces its current state without a caller assembling it by hand
 
-For a job that is a loop, the Hub SHALL surface: its stated purpose; its stop condition and, once
-stopped, the reason and time it stopped; a count of its queue's tasks by status; which task, if any,
-is its current item; and a count of unanswered, non-declined questions raised across its own firing
-history. A job that is not a loop SHALL surface none of this.
+
+For a job that is a loop, the Hub SHALL surface: its stated purpose; its stop condition and, once stopped, the reason and time it stopped; a count of its queue's tasks by status; which task, if any, is its current item; and a count of questions raised across its own firing history that are unanswered, non-declined, and still being waited on. A job that is not a loop SHALL surface none of this.
+
+The last clause is new and it narrows the count. A question whose bounded wait ended without an
+answer is unanswered and undeclined and always will be, because nothing ever answers it — but nobody
+is waiting on it, the agent proceeded, and the operator reading this number reads it as work that
+still needs them. A count that only ever grows is a count they stop reading.
 
 #### Scenario: A loop's state is visible on the same surface that already lists jobs
 
@@ -96,16 +99,11 @@ history. A job that is not a loop SHALL surface none of this.
   present in that same response
 - **AND** a plain job's response carries no loop state
 
-#### Scenario: The current item is the queue's own in-progress task, or its oldest pending one
+#### Scenario: A question whose wait ended is not counted as open
 
-- **WHEN** a loop's queue holds a task that is in progress or blocked
-- **THEN** that task is the loop's current item
-
-- **WHEN** a loop's queue holds no in-progress or blocked task but holds a pending one
-- **THEN** its oldest pending task, by creation order, is the loop's current item
-
-- **WHEN** a loop's queue holds no in-progress, blocked, or pending task
-- **THEN** the loop has no current item
+- **GIVEN** a loop whose firing asked a blocking question that went unanswered until its wait ended
+- **WHEN** the loop's state is read
+- **THEN** that question is not part of its open-question count
 
 ### Requirement: A loop's stop condition can only ever prevent a firing that was already going to happen
 
@@ -970,6 +968,7 @@ them.
 
 ### Requirement: An agent attributed to a task SHALL be attributed in a stated capacity
 
+
 Where a surface names the agent associated with a task, it SHALL state what that association means,
 and that meaning SHALL NOT vary silently with the task's status.
 
@@ -992,8 +991,17 @@ sufficient, because the next reader is not bound by the name; it SHALL NOT be re
 
 **Each capacity SHALL be derived from the source that answers it**, and no source SHALL be asked a
 question it does not answer. Whether an agent is mid-turn on a task is answered by the runs the
-system started, never by what a firing could or could not staff. What a firing would do next is
-answered by that firing's own selection. Who a task is assigned to is answered by the task.
+system started, never by what a firing could or could not staff, **and never by the task's own
+status**. What a firing would do next is answered by that firing's own selection. Who a task is
+assigned to is answered by the task.
+
+That last clause decides a case which used to be impossible. A task waiting on a person can now have
+a run of its own in flight, because a task is recorded as waiting from the moment its question is
+asked rather than when its run ends. The waiting status is therefore no longer evidence that nothing
+is running, and the runs SHALL be consulted for every attribution rather than only for the ones a
+firing could not staff. What the task is waiting for is carried by its status and its stated reason,
+which is where a reader already looks for it; borrowing the capacity column to say it a second time
+would cost the column its own meaning.
 
 The capacities SHALL be distinguishable and SHALL number four: an agent mid-turn on the task; an
 agent holding it that nothing is running and no firing can staff; an agent a firing would select
@@ -1013,9 +1021,14 @@ sense on the same word makes each unreadable.
 - **WHEN** the named agent is who the next firing would give the task to
 - **THEN** the surface SHALL present the name as prospective rather than current
 
-#### Scenario: A task waiting on a person
-- **WHEN** the task is blocked and the name is its own assignee
+#### Scenario: A task waiting on a person with nothing running
+- **WHEN** the task is blocked, no run of it is in progress, and the name is its own assignee
 - **THEN** the surface SHALL present the name as assigned rather than as working
+
+#### Scenario: A task waiting on a person whose run is still in flight
+- **WHEN** the task is blocked and a run bound to it is in progress
+- **THEN** the surface SHALL present the name as the current worker
+- **AND** what the task is waiting for is stated by the task rather than by the capacity
 
 #### Scenario: The capacity is not stated
 - **WHEN** a surface receives a name with no capacity
@@ -1039,6 +1052,3 @@ sense on the same word makes each unreadable.
 - **WHEN** any module other than the one that determines capacity is examined
 - **THEN** it does not read the firing decision's collection of work a firing cannot staff
 
-#### Scenario: A run mid-turn on a different task does not make this one read as working
-- **WHEN** an agent is mid-turn on one task and also holds a second task that nothing is running
-- **THEN** the second task is not presented as being worked
