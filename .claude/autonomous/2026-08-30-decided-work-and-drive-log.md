@@ -822,3 +822,127 @@ run, the app-server path), and on the Codex `fileChange` `changes` shape, which 
 off the summariser rather than a live transcript.
 
 If a fresh iteration reads this **after 08:00**, it does not start R2. It starts `E2E-DRIVE`.
+
+---
+
+## Iteration 9 — F115-R2 — 2026-08-30T06:50:15+01:00 → 08:05+01:00
+
+Branch verified against `STATE.json` before anything: `autonomous/2026-08-30-decided-work-and-drive`
+at `23467c8`, clean, matching `origin`. Heartbeat was 06:07, 43 minutes stale, so the branch was
+free. Claimed with a heartbeat commit, then straight into the round.
+
+The unit was **round 2 of the F115 spec loop** — an *independent* re-derivation of
+`openspec/changes/a-write-outside-the-workspace-is-recorded/` against the code, not a re-read of
+round 1's reasoning. The clock was checked at the start (06:50, stamped from PowerShell) rather than
+estimated: the 08:00 rule permits starting a round before 08:00 and forbids leaving a half-written
+proposal, and rounds in this loop have run 20–35 minutes. This one ran to 08:05, which is over — the
+rule was honoured by finishing rather than by abandoning, since a reverted round would have thrown
+away six corrections.
+
+### The two corrections that change what the change would have shipped
+
+**1. The change covered one of three transports, and the design's own carrier could not reach the
+other two.** Round 1 put `write_paths` on `ParsedLine` and classified it in `_flush_line`. Walking
+each transport instead of trusting that:
+
+| Transport | Builds events via | Reaches `_flush_line`? |
+|---|---|---|
+| Claude (PTY) | `parse_claude_line` → `ParsedLine` | yes (`agent_trigger.py:1890`) |
+| Codex `exec` (pipe) | `parse_codex_line`, `file_change` branch (`runner_parsing.py:486-499`) | yes, same line |
+| Codex `app-server` | `map_item_to_events` → `List[RunEvent]` (`codex_appserver.py:448-459`) | **no** |
+
+`_execute_run` hands the app-server case to `_execute_codex_appserver_run` at `agent_trigger.py:1738`
+and returns; that path's sink is `_on_event` (`:2474`), which never sees a `ParsedLine`. And there is
+no side channel: `run_turn`'s contract is `Callable[[RunEvent], Awaitable[None]]`
+(`codex_appserver.py:916`), so `_on_event` receives only the event, whose `payload["input"]` is the
+redacted, stringified, 8 KiB-truncated blob D2 had already ruled out as a source. Meanwhile the Codex
+transport that *does* reach `_flush_line` — `parse_codex_line`'s snake_case `file_change` branch —
+was named by no task in round 1 at all; task 2.5 named the camelCase app-server branch, the one that
+cannot carry the field.
+
+The fix moves the carrier to `RunEvent` (`runner_events.py:111-115`), populated inside
+`tool_use_event` itself before it redacts and truncates. One population site, three transports, and
+the field is never persisted — `record_agent_output` stores `kind` and `payload` only. `ParsedLine`
+is left alone entirely.
+
+**2. It breached a shipped requirement in the capability it adds to.** `agent-run-sandboxing`
+already contains, at `openspec/specs/agent-run-sandboxing/spec.md:321`:
+
+> Only refusals SHALL be recorded. An allowed action is the ordinary case, and an event per allowed
+> action buries the refusals among them.
+
+D5's operator notice is `persist_event(..., severity="warn")` for a write that was **allowed** —
+approved by the operator under `manual`, or never checked at all under full access. Round 1 wrote two
+ADDED requirements into that file and never cited the sentence next door constraining what may be
+recorded in it. This is the same shape round 2 of the F14 loop found, in the same position: the round
+that re-derives the argument is what finds a requirement the change did not think it was near.
+
+The change now carries a **MODIFIED** delta narrowing the sentence to "recorded *as refusals*" and
+stating what an allowed action must be to be recorded at all — not the ordinary case, not presented
+as a refusal, bounded. The volume argument survives as a constraint rather than being deleted, and
+the requirement's own fourth scenario (*"Allowed actions are not recorded **as refusals**"*) already
+read narrower than its prose, which is what makes the narrowing a correction rather than a weakening.
+
+### The other four
+
+3. **The write-tool list already exists twice in the product**, and round 1 proposed a third that
+   disagrees with both: `runner_commands.py:210` disallows exactly `Edit,Write,NotebookEdit` for a
+   read-only agent, `mcp_server.py:858` holds `_PATH_KEYS = ("file_path", "path", "notebook_path")`,
+   and round 1's list added `MultiEdit`, which nothing else in this codebase recognises. Dropped,
+   with a reconciliation test — restate-and-assert, since `mcp_server.py` may import only stdlib plus
+   fastmcp and so cannot import the new module.
+4. **D8's open question answered**, from a second source rather than the summariser: the Codex
+   `changes` element is `{"path": ..., "diff": ...}`, corroborated by `approval_subject` and
+   `test_permission_approver.py:588-604`, which came out of **F107** — found against a live item.
+   Its four malformed-input cases are copied into the tasks verbatim.
+5. **One migration, not two.** Round 1 asked for a migration at 4.2 and another at 5.2. Head is
+   `0099`; both columns ride `0100`, and the two head assertions are named by file and line
+   (`test_migrations.py:39`, `test_project_persistence.py:227`).
+6. **`_apply_footprint` cannot carry the fact on `Footprint`**, which is built from git alone while
+   this fact is database state on `Run` — `restamp_run_footprints` would have to fabricate it. An
+   explicit parameter instead.
+
+Plus line-number corrections: `_flush_line` is at `agent_trigger.py:1880` not `1877` (cited three
+times), `_apply_footprint` at `requirement_evidence.py:362` not `365`.
+
+### What round 2 re-derived and did *not* overturn
+
+Recorded because a round that only lists what it broke gives the next round no idea what was
+actually checked.
+
+- **Round 1's premise correction is itself right** — this was on the queue entry's list explicitly.
+  `DEFAULT_CLAUDE_PERMISSION_MODE = WORKSPACE_PERMISSION_MODE` (`runner_commands.py:66`), applied at
+  `:220`, with `DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER = "acceptEdits"` (`:73`) where no Hub
+  tool server is configured. The comment at `:56-65` reconstructs the same history independently.
+- **`work_dir` cannot differ from `AW_WORKSPACE_DIR` for a run.** `_execute_run` has exactly one
+  caller (`:1138`); `effective_work_dir` is assigned on four mutually exclusive branches and written
+  to all three of `Run.workspace_dir` (`:1095`), `AW_WORKSPACE_DIR` (`:1023`) and `work_dir`
+  (`:1146`). A review turn is one of those branches, not an exception — so a reviewer writing into
+  its own agent worktree *is* a write outside its workspace and is correctly recorded as one. Added
+  as an explicit task rather than left to be found as a surprise.
+- **`EventLog` has no `run_id` column** (`db/models.py:1005-1028`), so D5's argument for the column
+  over the event stream stands.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `openspec validate --strict` | valid |
+| `openspec list` | `a-write-outside-the-workspace-is-recorded  0/47 tasks` (was 40) |
+| MODIFIED requirement header verbatim | yes — sliced from `openspec/specs/` by line range with `sed`, not retyped |
+| Every correction measured against code | yes; each names the file and line it was read from |
+| Implementation written | **none**, by design — R2 re-derives and corrects the proposal |
+| Tree clean, committed, pushed | yes |
+
+### The next unit is the drive, not F115-R3
+
+The 08:00 rule is now past and it is unconditional: **`E2E-DRIVE`**, full-surface sweep, own Hub on
+8011, Haiku for every agent turn, D5 for fix-versus-file, no job left enabled. F115-R3 stays queued
+behind it and is the operator's to schedule.
+
+R3, when it runs, has a sharpened target rather than a blank one: the D9 narrowing is a judgement
+round 2 made, not a derivation — a record the operator never sees is not the record F115 asked for,
+but that is an argument, and R3 should attack it. The other two open items are whether anything
+constructs a `tool_use` `RunEvent` without going through `tool_use_event` (which would falsify D2's
+one-population-site claim), and whether the extractor really returns on the tool name before
+touching the input, since it now runs for every tool call of every run.
