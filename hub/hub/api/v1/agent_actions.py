@@ -23,7 +23,11 @@ from ...checkpoint_access import (
 from ...conversations import conversation_id_for_run
 from ...db.engine import get_session
 from ...db.models import Agent, CheckpointNote, Question, Run, Task
-from ...run_task_binding import announce_block, block_task_for_question
+from ...run_task_binding import (
+    announce_block,
+    block_task_for_question,
+    release_block_for_expired_wait,
+)
 from ...schemas.common import RequestModel
 from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
 from ...schemas.messages import _MESSAGE_TYPES, MessageCreate, MessageResponse
@@ -593,6 +597,95 @@ async def ask_operator_question_batch(
         batch_id=batch_id,
         questions=[QuestionResponse.model_validate(row) for row in created],
     )
+
+
+class WaitEndedReport(RequestModel):
+    """The ids of the questions this run has stopped waiting on.
+
+    No deadline, no duration and no timestamp: everything the refusal below compares against is
+    already the Hub's own (design D3). The caller states only *which* waits ended, never *when* or
+    *for how long*.
+    """
+
+    question_ids: List[str] = Field(min_length=1, max_length=8)
+
+
+@router.post("/questions/wait-ended")
+async def report_wait_ended(
+    body: WaitEndedReport,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Report that this run has stopped waiting for an answer.
+
+    Not a decision and not a release request — a report of a fact the Hub can check. The shipped
+    analogue is `expire_permission_request` below: the same fact, reported by the same kind of tool
+    over the same channel, and its docstring states the design in one line — *"The run reports and
+    the run's end sweeps"*. This change takes both halves; `run_divergence.evaluate_run_end` is the
+    other one.
+
+    **Deliberately not an `@mcp.tool()`** (design D4). It is not a capability, so it is not in the
+    agent's surface and no model can be prompted into calling it; `ask_user` calls it directly over
+    the credential it already holds.
+
+    Refused per question, silently skipped rather than erroring the batch, because a batch where
+    one question was answered and three expired is the ordinary case:
+
+    * not asked by the calling run — you may only report your own wait;
+    * no `wait_expires_at`, or one that has not passed — the report must describe a fact, not
+      create one. This is the refusal that keeps this a report rather than a lever, and it is only
+      worth anything because the deadline it compares against is the Hub's own;
+    * already answered or declined — nothing expired.
+
+    Returns which ids were accepted, so the tool's own behaviour is testable from the outside.
+    """
+    now = datetime.now(timezone.utc)
+    accepted: List[str] = []
+    run = await session.get(Run, actor.run_id) if actor.run_id else None
+
+    for question_id in body.question_ids:
+        question = await session.get(Question, question_id)
+        if question is None or question.project_id != actor.project_id:
+            continue
+        if run is None or question.created_by_run_id != run.id:
+            continue
+        if question.answered or question.declined:
+            continue
+        if question.wait_ended_at is not None:
+            # Already recorded, by an earlier call or by the run-end sweep. Reported as accepted:
+            # the fact the caller is asserting is true, and arriving second is the normal case for
+            # a report-plus-sweep pair, not an error.
+            accepted.append(question_id)
+            continue
+        deadline = question.wait_expires_at
+        if deadline is None:
+            continue
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        if deadline > now:
+            continue
+
+        question.wait_ended_at = now
+        try:
+            await release_block_for_expired_wait(session, question, run)
+            # Committed per question rather than once at the end, so a failure on the fourth
+            # cannot lose the three before it. Eight is the batch cap, so this is eight commits at
+            # the very worst and the ordinary case is one.
+            await session.commit()
+        except Exception:
+            # A refusal from one question's release must not lose the `wait_ended_at` writes for
+            # the others, and must not 500. The tool swallows a failed report and the agent
+            # proceeds either way, so a 500 here would be indistinguishable to the caller from the
+            # report never having been sent — which is the case the run-end sweep exists to catch,
+            # and it must not be asked to catch this one as well.
+            logger.warning(
+                "Could not release the task waiting on question %s", question_id, exc_info=True
+            )
+            await session.rollback()
+            continue
+        accepted.append(question_id)
+
+    return {"accepted": accepted}
 
 
 @router.get("/questions/{question_id}", response_model=QuestionResponse)

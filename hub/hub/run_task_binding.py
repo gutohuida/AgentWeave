@@ -727,6 +727,51 @@ async def release_block_for_question(
     return task
 
 
+async def release_block_for_expired_wait(
+    session: AsyncSession,
+    question: Question,
+    run: Run,
+) -> Optional[Task]:
+    """The wait ended without an answer, so the task is no longer waiting. Returns the task, if one
+    was released.
+
+    The third exit from `blocked`, beside the operator's answer and their decline. Here rather than
+    folded into `release_block_for_question` because what settled it is different in the one way
+    that matters to the record: nobody answered. `release_block_for_question`'s docstring says the
+    other two differ only in what settled them; this one also differs in *who*.
+
+    Attributed to the **run**, with `origin=ORIGIN_RUNTIME`. The run is the party that stopped
+    waiting, and the runtime is what observed it — the same attribution `block_task_for_question`
+    uses for the park it undoes. `_guard_run_holds_the_task` takes its `run.task_id == task.id`
+    no-op branch here, because the run is already bound.
+
+    Silent when the task has moved on since, exactly as the other two are: the operator may have
+    rejected or reassigned it while it waited, and a wait ending afterwards must not drag it back.
+
+    Idempotent by the caller's construction, not this function's: both callers (the tool's report
+    and the run-end sweep) check `wait_ended_at` before reaching here, and the `status != BLOCKED`
+    guard below makes a second call a no-op regardless.
+    """
+    if not question.blocked_task_id:
+        return None
+
+    task = await session.get(Task, question.blocked_task_id)
+    if task is None or task.status != STATUS_BLOCKED:
+        return None
+
+    try:
+        await apply_transition(
+            session, task, "in_progress", run_actor(run.id, run.agent), origin=ORIGIN_RUNTIME
+        )
+    except TransitionRefusedError:
+        # Same reasoning as `block_task_for_question`: a refusal must leave the wait recorded and
+        # the task untouched, never turn the agent's report into a failed request.
+        return None
+
+    release_reason(task)
+    return task
+
+
 # --------------------------------------------------------------------------------------
 # The boundary question
 # --------------------------------------------------------------------------------------

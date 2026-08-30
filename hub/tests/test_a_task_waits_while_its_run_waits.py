@@ -548,3 +548,315 @@ def test_the_tools_ask_is_unchanged_by_this_change():
     from hub import mcp_server
 
     assert "wait_seconds" not in inspect.signature(mcp_server.ask_user).parameters
+
+
+# ---------------------------------------------------------------------------
+# 5. The end of the wait
+# ---------------------------------------------------------------------------
+
+
+async def expire_the_wait(question_id: str) -> None:
+    """Move the recorded deadline into the past, which is the only thing time would have done."""
+    async with async_session_factory() as session:
+        question = await session.get(Question, question_id)
+        question.wait_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_reporting_an_expired_wait_releases_the_task_and_lets_the_work_land(app):
+    """5.6, and the completion of 1.2. The whole path, end to end.
+
+    The history assertion is the requirement this exists for: no history may state that a task was
+    completed while it was waiting on a person who never answered. `blocked -> completed` does not
+    exist, so the work passes back through `in_progress` and the record says the block ended before
+    the work did.
+    """
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+    assert (await task_row(task_id)).status == "blocked"
+    await expire_the_wait(question_id)
+
+    reported = await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+    assert reported.status_code == 200, reported.text
+    assert reported.json()["accepted"] == [question_id]
+
+    question = await question_row(question_id)
+    assert question.wait_ended_at is not None
+    assert question.answered is False
+
+    task = await task_row(task_id)
+    assert task.status == "in_progress"
+    assert task.blocked_reason is None
+
+    completed = await app.patch(
+        f"/api/v1/agent-actions/tasks/{task_id}", headers=headers, json={"status": "completed"}
+    )
+    assert completed.status_code == 200, completed.text
+
+    async with async_session_factory() as session:
+        history = await history_for(session, task_id)
+    assert [row.to_status for row in history] == ["blocked", "in_progress", "completed"]
+    assert [row.origin for row in history[:2]] == ["runtime", "runtime"]
+
+
+@pytest.mark.asyncio
+async def test_a_report_before_the_deadline_is_refused(app):
+    """5.7, and the refusal the whole design turns on. The report must describe a fact, not create
+    one — and it is only checkable because the deadline is the Hub's own (design D3)."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+
+    reported = await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [asked.json()["id"]]},
+    )
+    assert reported.status_code == 200
+    assert reported.json()["accepted"] == []
+    assert (await task_row(task_id)).status == "blocked"
+
+
+@pytest.mark.asyncio
+async def test_a_run_cannot_report_another_runs_wait(app):
+    """5.7. You may only report your own wait. Otherwise one agent could release another's task by
+    naming its question id."""
+    await make_agent()
+    task_id = await make_task()
+    asker = await make_run(run_id="run-asker", task_id=task_id)
+    stranger = await make_run(run_id="run-stranger", agent="other")
+
+    asked = await app.post("/api/v1/agent-actions/questions", headers=asker, json=one())
+    question_id = asked.json()["id"]
+    await expire_the_wait(question_id)
+
+    reported = await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=stranger,
+        json={"question_ids": [question_id]},
+    )
+    assert reported.json()["accepted"] == []
+    assert (await question_row(question_id)).wait_ended_at is None
+    assert (await task_row(task_id)).status == "blocked"
+
+
+@pytest.mark.asyncio
+async def test_an_answered_question_never_expired(app, auth_headers):
+    """5.7. Nothing expired, so nothing is recorded — which is what keeps the permanent statement
+    in group 8 from appearing on work the operator actually decided."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+    await expire_the_wait(question_id)
+
+    await app.patch(
+        f"/api/v1/projects/proj-test/questions/{question_id}",
+        headers=auth_headers,
+        json={"answer": "blue"},
+    )
+
+    reported = await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+    assert reported.json()["accepted"] == []
+    assert (await question_row(question_id)).wait_ended_at is None
+
+
+@pytest.mark.asyncio
+async def test_a_declined_question_never_expired(app, auth_headers):
+    """5.7, and design D7's reason it must not be marked: the tool returns early on a decline
+    rather than waiting out the deadline, so a decline is a decision handed back, not silence."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+    await expire_the_wait(question_id)
+
+    await app.post(
+        f"/api/v1/projects/proj-test/questions/{question_id}/decline", headers=auth_headers, json={}
+    )
+
+    reported = await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+    assert reported.json()["accepted"] == []
+    assert (await question_row(question_id)).wait_ended_at is None
+
+
+@pytest.mark.asyncio
+async def test_a_question_with_no_recorded_deadline_cannot_be_reported(app):
+    """5.7. A non-blocking note starts no wait, so there is nothing to have ended."""
+    await make_agent()
+    headers = await make_run()
+    asked = await app.post(
+        "/api/v1/agent-actions/questions", headers=headers, json=one(blocking=False)
+    )
+
+    reported = await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [asked.json()["id"]]},
+    )
+    assert reported.json()["accepted"] == []
+
+
+@pytest.mark.asyncio
+async def test_reporting_twice_is_accepted_and_changes_nothing(app):
+    """5.4's idempotence, from the outside. `expire_permission_request`'s own docstring names
+    arriving second as the normal case for a report-plus-sweep pair, not an error."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+    await expire_the_wait(question_id)
+
+    first = await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+    recorded = (await question_row(question_id)).wait_ended_at
+    second = await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+
+    assert first.json()["accepted"] == second.json()["accepted"] == [question_id]
+    assert (await question_row(question_id)).wait_ended_at == recorded
+
+    async with async_session_factory() as session:
+        history = await history_for(session, task_id)
+    assert [row.to_status for row in history] == ["blocked", "in_progress"]
+
+
+@pytest.mark.asyncio
+async def test_a_batch_reports_only_the_waits_that_expired(app, auth_headers):
+    """5.3. Refused per question, silently skipped rather than erroring the batch — because a
+    batch where one was answered and the rest expired is the ordinary case."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post(
+        "/api/v1/agent-actions/questions/batch",
+        headers=headers,
+        json={"questions": [one("first?"), one("second?")]},
+    )
+    first_id, second_id = [row["id"] for row in asked.json()["questions"]]
+    await expire_the_wait(first_id)
+    await expire_the_wait(second_id)
+    await app.patch(
+        f"/api/v1/projects/proj-test/questions/{first_id}",
+        headers=auth_headers,
+        json={"answer": "blue"},
+    )
+
+    reported = await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [first_id, second_id]},
+    )
+    assert reported.json()["accepted"] == [second_id]
+    assert (await question_row(first_id)).wait_ended_at is None
+    assert (await question_row(second_id)).wait_ended_at is not None
+
+
+@pytest.mark.asyncio
+async def test_a_wait_that_is_never_reported_leaves_the_task_waiting(app):
+    """5.7's unreported case, before the run ends. The task is still `blocked`, which is correct
+    while the run is still there — group 5a is what answers the run's *end*."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    await expire_the_wait(asked.json()["id"])
+
+    assert (await task_row(task_id)).status == "blocked"
+    assert (await question_row(asked.json()["id"])).wait_ended_at is None
+
+
+def test_the_wait_ended_report_is_not_in_the_agents_capability_surface():
+    """5.2, design D4. It is not a capability, so no model can be prompted into calling it —
+    `ask_user` calls it directly over the credential it already holds."""
+    from hub import mcp_server
+
+    exported = {name for name in dir(mcp_server) if not name.startswith("_")}
+    assert "report_wait_ended" not in exported
+    assert "wait_ended" not in exported
+
+
+def test_the_tool_reports_the_expired_waits_and_not_the_declined_ones(monkeypatch):
+    """5.5. `expired`, not `unanswered`. A decline left the wait early and is a decision the
+    operator made and handed back; reporting one as an expiry would mark the task as
+    proceeded-without-an-answer when an answer was in fact given."""
+    from hub import mcp_server
+
+    monkeypatch.delenv("AW_RUN_TOKEN", raising=False)
+    monkeypatch.setattr(mcp_server, "QUESTION_ANSWER_TIMEOUT", 0.05)
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
+    reported: list = []
+
+    def hub(method, path, body=None, *_a, **_k):
+        if method == "POST" and path == "/questions/batch":
+            return {"batch_id": "qb-1", "questions": [{"id": "q-declined"}, {"id": "q-expired"}]}
+        if method == "POST" and path == "/questions/wait-ended":
+            reported.append(body)
+            return {"accepted": (body or {}).get("question_ids", [])}
+        if path == "/questions/q-declined":
+            return {"answered": False, "declined": True, "question": "a?"}
+        return {"answered": False, "declined": False, "question": "b?"}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    result = mcp_server.ask_user(
+        [
+            {"question": "a?", "header": "H", "options": [{"label": "x"}, {"label": "y"}]},
+            {"question": "b?", "header": "H", "options": [{"label": "x"}, {"label": "y"}]},
+        ]
+    )
+
+    assert reported == [{"question_ids": ["q-expired"]}]
+    assert result["answered"] is False
+
+
+def test_a_failed_report_still_returns_the_agent_its_answers(monkeypatch):
+    """5.5. The agent is owed its answers whatever the Hub does with the report, and a turn dying
+    because a report did not land would be worse than the report being lost. This is also the case
+    that makes the run-end sweep required rather than optional (group 5a)."""
+    from hub import mcp_server
+
+    monkeypatch.delenv("AW_RUN_TOKEN", raising=False)
+    monkeypatch.setattr(mcp_server, "QUESTION_ANSWER_TIMEOUT", 0.05)
+    monkeypatch.setattr(mcp_server, "QUESTION_POLL_SECONDS", 0.01)
+
+    def hub(method, path, *_a, **_k):
+        if path == "/questions/wait-ended":
+            raise RuntimeError("the Hub was not reachable")
+        if method == "POST":
+            return {"batch_id": "qb-1", "questions": [{"id": "q-1"}]}
+        return {"answered": False, "declined": False, "question": "a?"}
+
+    monkeypatch.setattr(mcp_server, "_hub_request", hub)
+    result = mcp_server.ask_user(
+        [{"question": "a?", "header": "H", "options": [{"label": "x"}, {"label": "y"}]}]
+    )
+
+    assert result["success"] is True
+    assert "went unanswered" in result["note"]

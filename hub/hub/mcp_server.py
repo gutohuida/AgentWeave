@@ -409,6 +409,26 @@ def ask_user(
     unanswered = [entry for entry in ordered if not entry["answered"]]
     declined = [entry for entry in ordered if entry.get("declined")]
     expired = [entry for entry in unanswered if not entry.get("declined")]
+
+    if expired:
+        # Tell the Hub the wait is over, so the task it parked stops saying somebody is waiting and
+        # this run can record the work it is about to do anyway.
+        #
+        # `expired`, not `unanswered`: a decline left the wait early and is a decision the operator
+        # made and handed back, so reporting one as an expiry would mark the task as proceeded-
+        # without-an-answer when an answer was in fact given.
+        #
+        # Failure must not raise. The agent is owed its answers whatever the Hub does with this,
+        # and the whole turn dying because a report did not land would be a worse outcome than the
+        # report being lost. The Hub sweeps at the run's end for exactly this case.
+        try:  # noqa: SIM105 - kept explicit; contextlib.suppress hides how deliberate this is
+            _hub_request(
+                "POST",
+                "/questions/wait-ended",
+                {"question_ids": [entry["question_id"] for entry in expired]},
+            )
+        except Exception:  # noqa: BLE001 - the answers are owed regardless
+            pass
     payload: Dict[str, Any] = {
         "success": True,
         "question_ids": question_ids,
