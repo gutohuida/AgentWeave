@@ -7792,6 +7792,49 @@ succeed. "Always use relative paths" is a request competing with a model that of
 reasons to resolve paths absolutely. The only real levers are an OS-enforced boundary or noticing
 after the fact.
 
+### Round 1 correction, 2026-08-30 — the default posture does constrain this, and the escape was an approval
+
+Written while proposing `openspec/changes/a-write-outside-the-workspace-is-recorded`. **The
+operator's decision above is unchanged and none of the four parts moves.** What is wrong is a
+premise this finding argued from, and the round discipline exists precisely for the case where the
+argument is wrong while everything it argues about is right.
+
+This finding says *"in the posture an operator is most likely to be running, nothing shows the path
+and nothing constrains it."* That is false. `DEFAULT_CLAUDE_PERMISSION_MODE = WORKSPACE_PERMISSION_MODE`
+(`hub/hub/runner_commands.py:66`) — the default posture for a non-yolo Claude run is `workspace`, which
+routes every call to `mcp_server.approve_tool_call`, and `_decide` (`hub/hub/mcp_server.py:864-916`)
+refuses a path outside `AW_WORKSPACE_DIR` on a `realpath` + `commonpath` comparison. There is a
+shipped requirement of record for it: `agent-run-sandboxing`, *"A posture exists in which the
+workspace boundary is enforced per tool call"*.
+
+Measured rather than read, against this checkout:
+
+```
+outside abs : {'allow': False, 'reason': "'...\aw-outside\drive-note.txt' is outside your workspace"}
+inside rel  : {'allow': True,  'reason': 'inside your workspace'}
+traverse .. : {'allow': False, 'reason': "'../drive-note.txt' is outside your workspace"}
+read outside: {'allow': False, 'reason': "'...\aw-outside\drive-note.txt' is outside your workspace"}
+default posture: workspace | without approver: acceptEdits
+```
+
+So the default posture refuses the exact call this finding reproduced — including the `..` traversal
+variant — and it checks reads as well as writes. And `run-72de0f5c6898`, the run that escaped, was
+**`manual`**: the posture in which the *operator* answers. The card named the tool and the full
+absolute path, and it was allowed. **The escape was an approval, not a hole in the default.**
+
+The gap therefore relocates rather than shrinking. It is not that the default posture is blind; it
+is that an outside-the-workspace write leaves **no trace in any posture where it is possible** —
+`manual` where the operator approved it, full access which checks nothing, and the `acceptEdits`
+fallback used where no Hub MCP server is configured to answer (`runner_commands.py:73`). Plus one
+that survives even under `workspace`: a shell command that builds its path at runtime, which
+`_decide` says of itself is *"a boundary, not a sandbox"*.
+
+**Consequence for part (4).** "The docs must say plainly that native mode does not confine and Docker
+mode does" cannot be written as stated, because it is false in both directions: native mode's default
+posture *does* check, and native mode's unchecked postures exist too. The proposal states it **per
+posture** instead, which serves part (4)'s intent — say plainly what is checked — with a sentence
+that is true.
+
 ---
 
 ## F116 (B) — the same API forbids an unknown field on one route and silently drops a safety-relevant one on another
