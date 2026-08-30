@@ -30,12 +30,41 @@ truncates the input into `payload["input"]` (`hub/hub/runner_events.py:134-155`,
 the time an event exists the structured `file_path` may be gone, mangled or cut in half. Recovering
 it by re-parsing the payload string would be a guess with a truncation bug waiting in it.
 
-So: `ParsedLine` gains a field carrying the **write paths** the line's tool calls named — tool name,
-call id, and the raw path string, nothing else. `_flush_line` in `_execute_run`
-(`hub/hub/api/v1/agent_trigger.py:1877`) already has `work_dir`, `run_id`, `project_id` and `agent`
-in scope, and does the classifying.
+**Corrected in round 2: the carrier is `RunEvent`, not `ParsedLine`.** Round 1 put the field on
+`ParsedLine` (`runner_parsing.py:51`) and classified it in `_flush_line`. That reaches one of the
+three transports this product has, and round 2 found it by walking each of them:
 
-Not the whole tool input on `ParsedLine`: that would duplicate what the event already carries and
+| Transport | Builds events via | Reaches `_flush_line`? |
+|---|---|---|
+| Claude (PTY) | `parse_claude_line` -> `ParsedLine` | yes (`agent_trigger.py:1890`) |
+| Codex `exec` (pipe) | `parse_codex_line` -> `ParsedLine`, `file_change` branch at `runner_parsing.py:486-499` | yes, same line |
+| Codex `app-server` | `codex_appserver.map_item_to_events` -> `List[RunEvent]`, `fileChange` branch at `codex_appserver.py:448-459` | **no** |
+
+`_execute_run` hands the app-server case straight to `_execute_codex_appserver_run`
+(`agent_trigger.py:1738-1755`) and returns; that function's event sink is `_on_event`
+(`agent_trigger.py:2474`), which never touches `ParsedLine`. So a field on `ParsedLine` cannot reach
+it — and `run_turn`'s callback contract is `Callable[[RunEvent], Awaitable[None]]`
+(`codex_appserver.py:916`), so there is no side channel either. `_on_event` receives only the event,
+whose `payload["input"]` is the redacted, stringified, 8 KiB-truncated blob D2 has just finished
+ruling out.
+
+`RunEvent` is the one object all three transports produce and both sinks consume, and it is a
+four-field dataclass (`runner_events.py:111-115`). It gains
+
+```python
+write_paths: Tuple[WrittenPath, ...] = ()
+```
+
+populated inside `tool_use_event` itself, from the structured `input_data` it is handed *before* it
+redacts and truncates. One population site, three transports, and the field is never persisted —
+`record_agent_output` stores `event.kind` and `event.payload` only (`agent_trigger.py:2480-2489`), so
+this stays a transport-internal carrier and adds nothing to the stored payload.
+
+`ParsedLine` is then left alone entirely, and both sinks classify identically: `_flush_line`
+(`agent_trigger.py:1880`) and `_on_event` (`agent_trigger.py:2474`) each already have `work_dir`,
+`run_id`, `project_id` and `agent` in scope, for the same reason.
+
+Not the whole tool input on the event: that would duplicate what the payload already carries and
 invite a second consumer to grow a second opinion about what an input means.
 
 ## D3 — Which tools count, and why only writes
@@ -45,6 +74,22 @@ Only tools whose call *is* a write: Claude's `Write`, `Edit`, `MultiEdit`, `Note
 will attribute it, and a read leaves nothing behind. Recording reads would also make the record
 enormous and unreadable — an agent reads outside its workspace constantly and correctly (the
 project's own source, its dependencies, the standard library).
+
+**Round 2: the list already exists in the product, twice, and must not become a third.**
+`runner_commands.py:210` disallows exactly `Edit,Write,NotebookEdit` for a read-only agent — the
+product's own statement of which Claude tools write — and `mcp_server.py:858` holds
+`_PATH_KEYS = ("file_path", "path", "notebook_path")`, its statement of where a path lives. Round 1's
+list added `MultiEdit`, which nothing else in this codebase recognises. Adding it is harmless in
+isolation (an unknown tool extracts nothing) but a third, unreconciled list is precisely the
+"two opinions about one thing" this design refuses for the boundary.
+
+`mcp_server.py` may import **only** stdlib plus fastmcp, so it cannot import `workspace_writes.py`
+and the lists cannot literally be one object. The codebase's shipped answer to exactly this is
+restate-and-assert: `OPERATOR_POSTURE` is restated in `mcp_server.py` and
+`test_permission_approver.py` asserts the two agree; `test_mcp_server_stdio_surface.py:95` asserts
+import and spawn agree about the tool surface. `workspace_writes.py` follows it — it holds the list,
+and a test asserts that every tool it calls a writer appears in `runner_commands`'s disallowed set
+and that its path keys are a subset of `_PATH_KEYS`.
 
 This deliberately differs from `_decide`, which checks *every* tool including reads. That is right
 there and wrong here: refusing a read is a safety posture the operator chose, whereas recording a
@@ -152,8 +197,21 @@ disagree about what a footprint means.
 shape different from Claude's `file_path`. The requirement is provider-neutral and the extractor
 covers both, but the operator's decision of 2026-08-29 stands: **Codex is undrivable**, so the Codex
 half is verified by unit test against recorded item shapes only, and the change says so rather than
-claiming a live drive it did not do. Round 2 should confirm the exact `changes` element shape before
-implementation — it is read here from `_file_change_summary`'s caller, not from a live transcript.
+claiming a live drive it did not do.
+
+**Round 2 answered the shape question, from a second source rather than the summariser.** The element
+is a dict with a `path` key: `{"path": "a.py", "diff": "..."}`. The corroboration is
+`approval_subject`'s `paths` extraction and its test (`hub/tests/test_permission_approver.py:588-604`),
+which came out of **F107** — a defect found against a live Codex item, where the Hub held the item and
+showed the operator the string "a file change" anyway. That is an independent reader of the same
+shape, written from a real transcript rather than from `_file_change_summary`. Its malformed-input
+cases are worth copying verbatim: `None`, `{}`, `{"changes": "not-a-list"}` and
+`{"changes": [{"path": 1}, {}, None]}` must all extract nothing and must not raise.
+
+Note also that the two Codex transports spell the item type differently — `parse_codex_line` reads
+`file_change` (`runner_parsing.py:486`), `map_item_to_events` reads `fileChange`
+(`codex_appserver.py:448`) — which is why D2's correction routes both through `tool_use_event` rather
+than through either item mapper.
 
 ## Open questions for rounds 2 and 3
 
@@ -167,3 +225,107 @@ implementation — it is read here from `_file_change_summary`'s caller, not fro
   caught by realpath before comparison — assert it rather than assume it.)
 - Does anything today read `Run.workspace_dir` and treat it as a containment guarantee besides
   footprinting?
+
+## D9 — This change records an *allowed* action, and `agent-run-sandboxing` already says not to
+
+Found in round 2, in the capability this change adds to. The shipped requirement *A refusal is
+recorded wherever it is decided* (`openspec/specs/agent-run-sandboxing/spec.md:321`) contains:
+
+> Only refusals SHALL be recorded. An allowed action is the ordinary case, and an event per allowed
+> action buries the refusals among them.
+
+D5 emits `persist_event(..., severity="warn")` for a write that was **allowed** — approved by the
+operator under `manual`, or never checked at all under full access. Round 1 wrote two ADDED
+requirements into this file and never cited the sentence next door that constrains what may be
+recorded in it.
+
+It is not fatal, and the requirement is not wrong. Its own fourth scenario reads *"Allowed actions
+are not recorded **as refusals**"*, so the scenario is already narrower than the prose, and the
+argument the prose gives — burying the refusals — is about volume, which D5 already bounds to once
+per destination per run. But in this corpus the SHALL sentence is normative and the scenario is
+evidence rather than a limit on it; leaving the prose unqualified would ship a change whose own
+notification breaches a requirement in the file it ships into.
+
+So the change carries a **MODIFIED** delta for that requirement, narrowing the sentence to
+"recorded *as refusals*" and stating the conditions an allowed action must meet to be recorded at
+all — not ordinary, not presented as a refusal, bounded. That is the narrowest edit that makes the
+corpus true, and it does not weaken the original: the volume argument survives as a constraint
+rather than being deleted.
+
+This is the same failure shape round 2 of the F14 loop found — a change breaching a shipped
+requirement it did not think it was near — and it is why the round exists.
+
+## D10 — Two columns, one migration, and the numbers
+
+Head is `0099` (`hub/hub/migrations/versions/0099_question_wait_window.py`). The head assertions to
+bump are `hub/tests/test_migrations.py:39` (`HEAD_REVISION = "0099"`) and
+`hub/tests/test_project_persistence.py:227` (`assert version == "0099"`).
+
+Round 1's tasks asked for a migration at 4.2 and another at 5.2, which would be `0100` and `0101`
+and two head bumps in sequence for one change. Both columns are added by this change, neither is
+readable without the other, and a half-applied pair means an annotated footprint with nothing to
+annotate from. One migration, `0100`, adds both.
+
+## D11 — `_apply_footprint` maps a `Footprint`, which is git state
+
+Round 1's task 5.2 said to carry the outside-writes fact "through `_apply_footprint`". That function
+(`requirement_evidence.py:362`) takes `taken: Footprint` — a value built by `capture_footprint` from
+git alone — and writes its fields onto the row. The outside-writes fact is database state read from
+`Run`, not git state, so putting it on `Footprint` would make a git-derived value carry something
+git cannot derive, and `restamp_run_footprints` (`:845`, calling `_apply_footprint` at `:921`) would
+then have to fabricate it.
+
+`_apply_footprint` gains an explicit parameter instead, defaulting to "not observed", and both call
+sites (`:423` and `:921`) pass what they read from the run. The "one place maps a footprint onto a
+row" property the function's docstring is about survives, which is the point of routing through it
+at all.
+
+## Round 2 corrections, 2026-08-30
+
+Recorded rather than silently applied, in the order they were found.
+
+1. **The carrier was wrong and the Codex half unreachable.** `ParsedLine` -> `RunEvent`; the
+   app-server transport never reaches `_flush_line`, and `parse_codex_line`'s own `file_change`
+   branch — the Codex transport that *does* — was named by no task at all. See D2.
+2. **A shipped requirement in this very capability is breached.** *Only refusals SHALL be recorded.*
+   A MODIFIED delta now narrows it. See D9.
+3. **The write-tool list already exists twice in the product** and round 1 proposed a third that
+   disagrees with both (`MultiEdit`). See D3.
+4. **D8's open question is answered**, from F107's live-derived reader rather than the summariser:
+   `{"path": ..., "diff": ...}`. See D8.
+5. **One migration, not two**, and the head is `0099` with two assertions to bump. See D10.
+6. **`_apply_footprint` cannot carry the fact on `Footprint`.** See D11.
+7. **Line-number corrections.** `_flush_line` is at `agent_trigger.py:1880`, not `1877` (cited three
+   times); `_apply_footprint` is at `requirement_evidence.py:362`, not `365`; the Codex `fileChange`
+   branch is `codex_appserver.py:448-459`, not `449-459`.
+
+### What round 2 re-derived and did *not* overturn
+
+8. **Round 1's premise correction is itself right.** `DEFAULT_CLAUDE_PERMISSION_MODE =
+   WORKSPACE_PERMISSION_MODE` (`runner_commands.py:66`), applied at `:220`, with
+   `DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER = "acceptEdits"` (`:73`) as the fallback where no
+   Hub tool server is configured. The comment at `:56-65` records the same history the correction
+   reconstructed, independently. Nothing to overturn.
+9. **`work_dir` cannot differ from `AW_WORKSPACE_DIR` for a run.** Checked rather than assumed, and
+   it survives. `_execute_run` has exactly one caller (`agent_trigger.py:1138`); `effective_work_dir`
+   is assigned on four mutually exclusive branches (the explicit `work_dir` case at `:809`, the
+   review checkout at `:824`, the isolated worktree at `:889`, and the non-isolated fallback) and is
+   then written to all of `Run.workspace_dir` (`:1095`), `AW_WORKSPACE_DIR` (`:1023`) and
+   `_execute_run(work_dir=...)` (`:1146`). A review turn is one of those branches rather than an
+   exception to them: a review run's workspace *is* the detached review checkout, so a reviewer
+   writing into its own agent worktree is correctly recorded as a write outside its workspace. That
+   is right, and it deserves an explicit test rather than being discovered as a surprise.
+10. **`EventLog` has no `run_id` column** — re-checked at `db/models.py:1005-1028`. D5's argument for
+    the column over the event stream stands.
+
+### For round 3
+
+- The MODIFIED delta in D9 is the piece most worth attacking: is narrowing the shipped sentence the
+  right call, or should this change emit no operator notification at all and live only on the run
+  row? Round 2 chose to narrow, because a record the operator never sees is not the record F115
+  asked for — but that is a judgement, not a derivation.
+- `tool_use_event` is called by every transport for **every** tool, not only writers. Confirm the
+  extractor returns on the tool name before it looks at anything else, so the overwhelming majority
+  of calls pay nothing.
+- Does anything else construct a `RunEvent` of kind `tool_use` without going through
+  `tool_use_event`? If so, D2's "one population site" claim is false and round 3 should say so.

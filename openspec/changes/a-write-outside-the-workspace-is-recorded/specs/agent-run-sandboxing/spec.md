@@ -122,3 +122,58 @@ rather than prevented.
 - **WHEN** the documentation describes native execution
 - **THEN** it does not claim that native mode confines a run's writes
 - **AND** it does not claim that native mode leaves them entirely unchecked
+
+## MODIFIED Requirements
+
+### Requirement: A refusal is recorded wherever it is decided
+
+The system SHALL record a durable event when it refuses an agent's action, regardless of which runtime decided the refusal.
+
+An operator reading the activity of a run needs to know an agent was blocked. A refusal that exists
+only in the agent's own prose account is one the operator will not find, and the agent's summary of
+its own failure is a claim rather than a record.
+
+Recording SHALL cover refusals a runtime decides on its own, not only those the operator was asked
+about. The refusals an operator never saw are precisely the ones they cannot otherwise learn of.
+
+A refusal SHALL be recorded once. A decision the operator already answered is already recorded, and
+recording it again tells them it happened twice.
+
+Only refusals SHALL be recorded **as refusals**. An allowed action is the ordinary case, and an
+event per allowed action buries the refusals among them.
+
+This constrains the refusal record, and it does not forbid every other durable event about a run.
+An event about an action that was allowed SHALL be recorded only where the action is not the
+ordinary case, SHALL NOT be presented as a refusal, and SHALL be bounded so that it cannot bury the
+refusals it sits beside. A file write leaving the run's workspace is the case this admits: it is
+rare rather than ordinary, it is recorded whether it was allowed by an operator or never checked at
+all, and it is notified once per destination per run rather than once per call.
+
+The recorded event SHALL name the refused action in terms the operator can read.
+
+#### Scenario: A runtime refuses an action on its own
+
+- **WHEN** a runtime refuses an agent's action without asking the operator
+- **THEN** the refusal appears in the project's activity
+
+#### Scenario: An operator-answered refusal is recorded once
+
+- **WHEN** the operator is asked about an action and refuses it
+- **THEN** exactly one refusal is recorded
+
+#### Scenario: Allowed actions are not recorded as refusals
+
+- **WHEN** a runtime allows an agent's action
+- **THEN** no refusal is recorded
+
+#### Scenario: The refused action is readable
+
+- **WHEN** a refusal is recorded
+- **THEN** the action it names is readable rather than an internal method name
+
+#### Scenario: An allowed action that is not ordinary may still be recorded
+
+- **WHEN** a run is recorded as having written outside its own workspace
+- **THEN** that record is not a refusal
+- **AND** it does not claim the action was refused
+

@@ -23,20 +23,43 @@
   It owns the two halves that must not drift apart — which tools write, and where a path belongs.
 - [ ] 2.2 `written_paths(tool: str, input_data: Any) -> tuple[str, ...]` — the declared path
   argument(s) of a file-*writing* tool call, empty for everything else. Claude: `Write`, `Edit`,
-  `MultiEdit`, `NotebookEdit`. Codex: `apply_patch`. Reads (`Read`, `Glob`, `Grep`, `LS`) return
-  empty, per design D3. An unknown tool returns empty rather than guessing from key names: a
-  detector that invents coverage is the failure mode this whole change is careful about.
-- [ ] 2.3 Cover the multi-path case. `MultiEdit` and `NotebookEdit` must be read from their real
-  input shapes, not assumed — round 2 owes an answer on whether one call can name more than one
-  file, and this function returns a tuple so that it can.
-- [ ] 2.4 Add `write_paths` to `ParsedLine` (`hub/hub/runner_parsing.py:51`), carrying tool name,
-  call id and the raw path string — nothing else. Populate it in `parse_claude_line`'s `tool_use`
-  branch from `block.get("input", {})`, **before** `tool_use_event` is called, because that
-  constructor redacts, stringifies and truncates at 8 KiB and the structured path may not survive it
-  (design D2).
-- [ ] 2.5 Populate the same field on the Codex side for the `fileChange` item
-  (`hub/hub/codex_appserver.py:449-459`). Verify the `changes` element's real shape from a recorded
-  Codex item before writing the extractor; do not read it off `_file_change_summary`.
+  `NotebookEdit`. Codex: `apply_patch`. Reads (`Read`, `Glob`, `Grep`, `LS`) return empty, per design
+  D3. An unknown tool returns empty rather than guessing from key names: a detector that invents
+  coverage is the failure mode this whole change is careful about. Return on the tool name **before**
+  looking at the input — this runs for every tool call of every run, and the overwhelming majority
+  are not writes.
+- [ ] 2.2b Reconcile the list with the two the product already has, per round 2's correction to D3.
+  Add a test asserting that every Claude tool `written_paths` treats as a writer appears in
+  `runner_commands.py:210`'s `--disallowedTools Edit,Write,NotebookEdit`, and that its path keys are
+  a subset of `mcp_server.py:858`'s `_PATH_KEYS`. `mcp_server.py` may import only stdlib plus
+  fastmcp, so this is restate-and-assert, the same shape `test_permission_approver.py` uses for
+  `OPERATOR_POSTURE`. Round 1's list included `MultiEdit`, which nothing else in this codebase
+  recognises; it is dropped.
+- [ ] 2.3 Cover the multi-path case. Round 2's answer: of the tools that survive 2.2b, `NotebookEdit`
+  names one file under `notebook_path` and Codex's `apply_patch` names several under
+  `changes[].path`, so the tuple return is load-bearing for the Codex side and one-element for
+  Claude's. `MultiEdit` is dropped, so its shape is no longer a question this change has to answer.
+- [ ] 2.4 Add `write_paths` to **`RunEvent`** (`hub/hub/runner_events.py:111-115`), not to
+  `ParsedLine` — see round 2's correction to D2. Carry tool name, call id and the raw path string,
+  nothing else, defaulting to `()`. Populate it inside `tool_use_event`
+  (`hub/hub/runner_events.py:134`) from the `input_data` it is handed **before** it redacts,
+  stringifies and truncates at 8 KiB, because the structured path may not survive that. One
+  population site serves all three transports, and the field is never persisted:
+  `record_agent_output` stores `kind` and `payload` only.
+- [ ] 2.5 Assert the field arrives on all three transports, since this is what round 1 got wrong.
+  `parse_claude_line`'s `tool_use` branch (`runner_parsing.py:264-272`);
+  `parse_codex_line`'s **`file_change`** branch (`runner_parsing.py:486-499`, snake_case — the Codex
+  `exec` transport, which round 1 named nowhere); and `map_item_to_events`'s **`fileChange`** branch
+  (`codex_appserver.py:448-459`, camelCase). All three call `tool_use_event`, so all three should
+  need no change of their own — a test per transport is what proves it.
+- [ ] 2.5b Use F107's shape for the Codex `changes` element — `{"path": ..., "diff": ...}`,
+  corroborated by `approval_subject` and `hub/tests/test_permission_approver.py:588-604`, which was
+  written against a live item rather than off `_file_change_summary`. Copy its malformed-input cases
+  verbatim: `None`, `{}`, `{"changes": "not-a-list"}`, `{"changes": [{"path": 1}, {}, None]}` — all
+  extract nothing, none raise.
+- [ ] 2.5c Confirm nothing else constructs a `tool_use` `RunEvent` without going through
+  `tool_use_event`. If something does, D2's one-population-site claim is false and the design needs
+  correcting before this is built.
 - [ ] 2.6 Assert the parser stays pure: no workspace argument, no filesystem access, no import of
   anything that touches the database. A test that imports `runner_parsing` in isolation is enough to
   keep this honest.
@@ -68,13 +91,19 @@
   *observed, nothing left*. Do not backfill — migration `0096`'s own precedent for `workspace_dir`
   and `0043`'s for `snapshot_commit_sha`. A backfilled `[]` would claim every historical run was
   watched and found clean.
-- [ ] 4.2 New migration in `hub/hub/migrations/versions/`, guarded for a missing table the way
-  `0033`/`0034`/`0075`/`0095`/`0096` are. Bump the head assertions in
-  `hub/tests/test_migrations.py` **and** `hub/tests/test_project_persistence.py`.
-- [ ] 4.3 In `_flush_line` (`hub/hub/api/v1/agent_trigger.py:1877`), classify each of
-  `parsed.write_paths` against `work_dir` and the project root, and append the outside ones to the
-  run. `work_dir`, `AW_WORKSPACE_DIR` and `Run.workspace_dir` are all `effective_work_dir` — use the
-  value already in scope, never a workspace recomputed from the agent's name (design D4).
+- [ ] 4.2 **One** migration `0100` for both this column and task 5.2's, guarded for a missing table
+  the way `0033`/`0034`/`0075`/`0095`/`0096` are — design D10. Head today is `0099`
+  (`0099_question_wait_window.py`). Bump `hub/tests/test_migrations.py:39`
+  (`HEAD_REVISION = "0099"`) **and** `hub/tests/test_project_persistence.py:227`
+  (`assert version == "0099"`).
+- [ ] 4.3 In `_flush_line` (`hub/hub/api/v1/agent_trigger.py:1880`), classify each event's
+  `write_paths` against `work_dir` and the project root, and append the outside ones to the run.
+  `work_dir`, `AW_WORKSPACE_DIR` and `Run.workspace_dir` are all `effective_work_dir` — use the value
+  already in scope, never a workspace recomputed from the agent's name (design D4).
+- [ ] 4.3b Do the same in `_on_event` (`hub/hub/api/v1/agent_trigger.py:2474`), the Codex app-server
+  sink, which never reaches `_flush_line` and has the same four values in scope. Without this the
+  change covers two of three transports; round 1 covered one. Factor the classify-and-record step so
+  the two sinks call one function rather than growing two opinions about it.
 - [ ] 4.4 Bound the list at 20 entries plus a total count. An unbounded column on a run that writes
   in a loop is a column nobody can read.
 - [ ] 4.5 Emit `persist_event(..., "agent_wrote_outside_workspace", severity="warn")` naming the run,
@@ -94,8 +123,12 @@
 - [ ] 5.1 Add `outside_writes_for_run(session, run_id)` beside `recorded_workspace_dir`
   (`hub/hub/requirement_evidence.py:343`) — the same one-row read, on the same row.
 - [ ] 5.2 Carry the fact onto `EvidenceFootprint` through `_apply_footprint`
-  (`hub/hub/requirement_evidence.py:365`) and nowhere else, so capture and re-capture cannot come to
-  disagree about what a footprint means. Column, migration and head bumps as in 4.2.
+  (`hub/hub/requirement_evidence.py:362`) and nowhere else, so capture and re-capture cannot come to
+  disagree about what a footprint means. As an **explicit parameter**, not a field on `Footprint`:
+  that value is built from git alone and this fact is database state on `Run`, so `Footprint` cannot
+  derive it and `restamp_run_footprints` (`:845`, `_apply_footprint` at `:921`) would have to
+  fabricate it — design D11. Both call sites (`:423`, `:921`) pass what they read from the run. The
+  column rides migration `0100` from task 4.2; there is no second migration and no second head bump.
 - [ ] 5.3 Do **not** change which directory the footprint is taken from, and do **not** refuse the
   evidence. Design D7 rules both out; add a test that asserts the footprint root is unchanged for a
   run that wrote outside, so a later reader cannot "fix" this by moving it.
@@ -144,6 +177,24 @@
   absolute-path `Write` outside its worktree, under a posture that permits it. Assert the run row and
   the activity event, not just the test. A passing suite is not proof of behaviour, and this change
   exists because a live drive found what the suite could not.
-- [ ] 9.5 `openspec validate --strict` on the change, then sync all three deltas into
-  `openspec/specs/` by verbatim header, then archive. `--strict` does not compare capabilities, so a
+- [ ] 9.5 `openspec validate --strict` on the change, then sync all **four** deltas into
+  `openspec/specs/` by verbatim header — three ADDED capabilities plus the MODIFIED requirement
+  *A refusal is recorded wherever it is decided* in `agent-run-sandboxing` (design D9), then archive. `--strict` does not compare capabilities, so a
   missed delta validates clean — verify the sync by grep, not by exit code.
+
+
+## 10. What round 2 added
+
+- [ ] 10.1 Modify the shipped requirement *A refusal is recorded wherever it is decided*
+  (`openspec/specs/agent-run-sandboxing/spec.md:321`), whose sentence *"Only refusals SHALL be
+  recorded"* this change's own operator notification breaches — it records a write that was
+  **allowed**. The delta narrows it to "recorded *as refusals*" and states what an allowed action
+  must be to be recorded at all: not the ordinary case, not presented as a refusal, bounded. Design
+  D9. Do not delete the volume argument; it survives as a constraint.
+- [ ] 10.2 Add the scenario that pins it: a run recorded as having written outside its workspace is
+  not a refusal and does not claim the action was refused. Assert it against the event payload, so
+  the label check in task 8.3 has something to fail against.
+- [ ] 10.3 Test the review-turn case explicitly. A review run's workspace *is* the detached review
+  checkout (`agent_trigger.py:824`), so a reviewer writing into its own agent worktree is a write
+  outside its workspace and is recorded as one. That is correct and it should be a test rather than
+  a surprise found later.

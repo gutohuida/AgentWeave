@@ -83,6 +83,24 @@ this change.
   it launders work through the wrong identity. Nothing in `git status` ever shows an operator that
   alice did it.
 
+### Round 2, 2026-08-30: what an independent re-derivation changed
+
+Round 2 read the code fresh against this proposal rather than re-reading round 1. The premise
+correction above **survives** — `DEFAULT_CLAUDE_PERMISSION_MODE = WORKSPACE_PERMISSION_MODE`
+(`runner_commands.py:66`, applied at `:220`), so the default posture really does check — and so does
+the argument that `work_dir` and `AW_WORKSPACE_DIR` are one value. Six things did not survive; the
+two that matter to a reader of this proposal are:
+
+- **The change as written covered one of three transports.** The field was on `ParsedLine`, and the
+  Codex app-server path never reaches `_flush_line` at all. The carrier moves to `RunEvent`, which
+  all three transports produce — design D2.
+- **It breached a shipped requirement in the capability it adds to.** `agent-run-sandboxing` already
+  says *"Only refusals SHALL be recorded"*, and this change's operator notification records a write
+  that was **allowed**. A MODIFIED delta now narrows that sentence — design D9.
+
+The full list, with what was re-derived and left standing, is in `design.md` under
+*Round 2 corrections, 2026-08-30*.
+
 ## What changes
 
 Four parts, all decided. Nothing here re-litigates whether native mode should confine: it should not.
@@ -96,7 +114,7 @@ promise, so a reader is free to conclude the wrong thing, and F71's footprinting
 **(2) A file tool writing outside the run's workspace is detected and recorded, in every posture.**
 At the **observation** path, not the approval path. Every `tool_use` block is parsed with its full
 structured input to build the transcript — `runner_parsing.py:264-272` for Claude,
-`codex_appserver.py:425-511` for Codex — and that parse runs regardless of posture, regardless of
+`codex_appserver.py:448-459` for Codex — and that parse runs regardless of posture, regardless of
 whether a card was raised, and regardless of how the operator answered it. F115's escaping run was a
 `Write` with an absolute `file_path`: exactly the shape this parse already sees.
 
