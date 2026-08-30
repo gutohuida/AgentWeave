@@ -10387,3 +10387,160 @@ shape with the real one on screen. The file also expected B to *attempt* an inte
 a failure, which made a refusal that is better than what was expected read as a silent nothing.
 Both corrected, and the whole file rewritten from raw response dumps to verdicts so the next run
 says which of these held rather than printing four thousand lines of JSON.
+
+---
+
+## F142 (A) — a task the operator marks finished can never be reviewed by its flow, and the stall blames the queue instead
+
+**Status:** open, filed not fixed. It changes which of F140's repairs is worth building, which is
+why it was worth establishing before the operator chooses. Found by
+`scripts/drive/t_row12_review_leg.py`, written to answer one question F140 left open: *what is
+waiting on the other side?*
+
+F140 leaves the operator holding a flow whose task sits in `in_progress` forever, and the obvious
+thing to do about it is to move the task to `completed` by hand. **That is the one way of
+completing it that the flow's review ladder refuses to act on**, and it says nothing about why.
+
+### Driven three ways, on one fixture, same document shape each time
+
+| who moved `in_progress -> completed` | evidence accepted | firing 2 |
+|---|---|---|
+| the **operator**, by hand | n/a — never reached | `409` *"loop queue is stalled: no claimable task among 1 open (1 completed)"* |
+| the **author agent**, `update_task` | none recorded | `409` *"task … has no recorded evidence, so there is no commit to review … no reviewer can be given anything to look at."* |
+| the **author agent**, `update_task` | one, accepted | **`200`** — `asker` staffed as reviewer, task `completed → under_review → approved`, 42s |
+
+The third row is the whole feature working, and it is the first time any sweep has reached it: a
+non-author reviewer resolved through design D4's ladder, ran in a detached checkout of the exact
+commit the evidence named, and issued a verdict. Nothing about the review leg is broken.
+
+The first row is the finding. `decide_firing`'s review arm (`hub/hub/scheduler.py:1363-1368`):
+
+```python
+author = await agent_that_completed(session, task.id)
+if author is None:
+    # Unattributable, and therefore offered to nobody
+    continue
+```
+
+and `agent_that_completed` (`task_transition_service.py:123-147`) reads `actor_agent` off the last
+transition into `completed`. The operator's transition writes NULL there — measured directly on the
+row:
+
+```
+sequence  from          to           actor_kind  actor_agent
+65        pending       assigned     operator    None
+66        assigned      in_progress  run         peer
+67        in_progress   completed    operator    None      <-- the operator's own repair
+```
+
+So the walk drops the task with a bare `continue`. **Not `unstaffed`, not `deferred`, not
+`in_flight`** — nothing is appended, so `_stall_reason_from_walk` describes the queue instead:
+
+> *loop queue is stalled: no claimable task among 1 open (1 completed)*
+
+That sentence is the F64 failure by another route. The comment two lines above `unstaffed` in this
+same function says it out loud: *"the queue is holding work which is ready this second, and what is
+missing is an agent permitted to take it. The two remedies are opposite — add tasks, or add an
+agent — and the operator acts on whichever the card names."* Here the remedy is a third thing
+again — *this task has no recorded completer* — and the card names none of them. F64's fix only
+reaches `unstaffed`, and this branch deliberately does not populate it.
+
+**And there is no way out from the operator's seat.** `completed` reaches only `rejected` and
+`under_review` (measured: the `409` in row 17 names exactly those two), so the operator cannot put
+it back for an agent to complete properly. Moving it to `under_review` by hand does not help
+either: the task then matches `WITH_REVIEWER_LOOP_TASK_STATUSES` with the *author* in `assignee`,
+and the wedged-review recovery on that path is itself gated on `agent_that_completed` returning the
+author — which is still `None`. The operator can push the task to `approved` themselves, but that
+is not the flow reviewing anything; it is the operator doing the review leg's job by hand and the
+flow never learning it happened.
+
+### Why this decides F140
+
+F140 offered three repairs. This measurement rules one of them out as written:
+
+- **Repair 1, brief the agent to call `update_task`** — produces `actor_agent = <the agent>`,
+  which is exactly what the ladder needs. Row three of the table above *is* repair 1, driven, and
+  it reaches `approved`. It also needs the agent to record evidence naming a commit, and the
+  operator to accept it, or the flow stalls one step later with a sentence that at least says so.
+- **Repair 2, let the Hub conclude the task is done when the run ends** — writes the transition as
+  the Hub, not as the agent. Unless it attributes the completion to the agent whose run it was, it
+  produces precisely the NULL-provenance dead end above: a flow that completes its own tasks and
+  can then never review them.
+- **Repair 3, surface it as a stall** — is the one thing this finding says is missing on *both*
+  paths, so it is complementary rather than alternative.
+
+### The smaller repair this needs on its own
+
+Whatever happens to F140, the `continue` should say something. `unstaffed.append((task.id, "this
+task has no recorded completing agent, so no reviewer can be excluded from it — a task completed by
+the operator cannot be routed for review"))` costs one line and turns a wrong sentence about the
+queue into a true one about the task. Filed rather than fixed only because the surrounding decision
+is the operator's and a lone diagnostic would read as endorsing the dead end.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 AW_AGENT=peer \
+    AW_COMPLETE_BY=operator PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row12_review_leg.py
+```
+
+`AW_COMPLETE_BY=agent` drives the working path for comparison. The file leaves no job enabled.
+
+---
+
+## F143 (B) — the reviewer is told to build the thing it is reviewing, and said so itself
+
+**Status:** open, filed not fixed. Found in the same run as F142's third row — the one where
+everything else worked.
+
+A flow's review firing composes the reviewer's queue entry through `_compose_loop_briefing`
+(`hub/hub/scheduler.py:1732`). Both of its call sites thread `is_review` into the *checkpoint*
+selection immediately above (`_briefing_checkpoint(..., is_review=is_review)`,
+`scheduler.py:2355-2360` and `2712`) and then **drop it**:
+
+```python
+prior_checkpoint = await _briefing_checkpoint(session, loop, task, is_review=is_review)
+briefing = await _compose_loop_briefing(session, loop, task, prior_checkpoint)
+```
+
+`_compose_loop_briefing` takes `(session, loop, claimed_task, prior_checkpoint)` and has no branch
+for a review, so the reviewer receives the implementation briefing verbatim. This is what `asker`
+was handed for a task `peer` had already finished:
+
+```
+**Finish the task below and stop.** …
+## Current task: Add triple(a) to reviewleg_084802.py
+Create reviewleg_084802.py in your working directory containing exactly one function,
+`triple(a)`, returning a * 3. Change nothing else. Do not run git.
+Queue: 1 open, 0 done
+Work the task you have been given. Keep the edit minimal.
+```
+
+The turn context, on the other channel, says the opposite (`api/v1/agents.py:1127`): *"This is a
+review turn. You are reviewing someone else's work, not doing your own."* The agent got both, and
+its own transcript is the finding:
+
+> *"But this is marked as 'This is a review turn. You are reviewing someone else's work, not doing
+> your own.' **This is confusing.** Let me read the context more carefully… The briefing describing
+> the task is just context for what was supposed to be built, not instructions for me to follow."*
+
+It resolved it correctly, on Haiku, after spending a visible stretch of the turn on it. Nothing in
+the product decided that — the same contradiction with a different model, or the same model on a
+longer briefing, resolves the other way, and the other way is a reviewer that re-implements the
+work it was supposed to check and then approves its own edit. `review_turn.py`'s own opening
+paragraph names that exact failure: *"the agent reviewing will helpfully fix the bug itself and
+report the work as verified."*
+
+The fix is small and local — pass `is_review` the extra six characters into
+`_compose_loop_briefing` and give it a review branch, the way the flow/non-flow tier statement
+already branches ten lines above. It is filed rather than fixed because what a review briefing
+should *say* (the commit, the branch, the requirement, the three verdicts, what not to touch) is
+new agent-facing text and overlaps what the turn context already states — deciding what goes where,
+and what stops being said twice, is a design call.
+
+**Caught only because the assertion was rewritten.** The harness first checked `"review" in
+content` and `TARGET in content`, and **both passed** — the first on the flow paragraph's generic
+sentence about somebody else reviewing, the second on the implementation task's own title. Two
+green checks for a briefing that says the opposite of what was being asserted. The file now asserts
+the implementation wording is present (F143's actual state) and that the review wording is not, so
+the day it is fixed the lines swap and say so.
