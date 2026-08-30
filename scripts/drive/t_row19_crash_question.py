@@ -117,9 +117,26 @@ def wait_for(label, predicate, timeout=120, interval=2):
 def main():
     verdicts = []
 
-    step("0. Any question already open would confuse this; list them")
-    for q in open_questions():
+    step("0. Preconditions")
+    # Listing a pre-existing open question and carrying on regardless is how a sweep ends up
+    # reporting on somebody else's row (F135, F137, F145). Step 1 selects "the first open question
+    # with asker_waiting", so ANY open question here is one this file could mistake for its own.
+    stale = open_questions()
+    for q in stale:
         print(f"  pre-existing: {q['id']} waiting={q.get('asker_waiting')} {q.get('question','')[:60]}")
+    if stale:
+        raise SystemExit(
+            f"{len(stale)} question(s) are already open on {P}; this file cannot tell them from "
+            "its own. Answer or decline them first."
+        )
+    pre = next((a for a in (api("GET", f"/projects/{P}/agents")[1] or []) if a.get("name") == AGENT), None)
+    if pre is None or pre.get("archived") or not pre.get("runner_id"):
+        raise SystemExit(f"agent {AGENT!r} must exist, be open, and be bound to a runner")
+    if pre.get("status") != "idle":
+        raise SystemExit(f"agent {AGENT!r} is {pre.get('status')!r}, not idle")
+    if not hub_pids():
+        raise SystemExit(f"no uvicorn is serving --port {PORT}; there is nothing to crash")
+    print(f"  [OK ] no open question; {AGENT} idle and bound; a Hub is serving {PORT}")
 
     step("1. A run that blocks on ask_user")
     code, body = api(

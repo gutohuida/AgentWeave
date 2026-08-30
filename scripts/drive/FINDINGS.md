@@ -10702,3 +10702,113 @@ AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_TICKET_SECRET=aw0830-ticket-secret \
 
 It kills and restarts the Hub on the port you give it, so give it 8011 and never 8000 or 8010. Two
 Haiku turns, about 90 seconds, and it leaves the Hub running.
+
+---
+
+## F146 (B) — the operator's own question route accepts `blocking`, tells the panel an agent is waiting, and throws the answer away
+
+**Status:** open, filed not fixed under D5 — the clean repair changes what a public route accepts,
+which is the operator's call. Reproduced live by `scripts/drive/t_row13_operator_question.py`,
+**7/8**, the eighth being the file's own wrong expectation (corrected in place, see the end).
+
+Every sweep so far has reached row 13 through `ask_user`. That is the *agent*-facing half. There is
+an operator-facing half — `POST /projects/{p}/questions` — and it differs from the agent route in
+exactly one argument:
+
+| | route | `created_by_run_id` |
+|---|---|---|
+| agent | `agent_actions.py:545`, `/questions/batch` | `actor.run_id` |
+| **operator** | `questions.py:221-226` | **`None`, passed literally** |
+
+That argument decides whether the operator's answer is ever delivered (`questions.py:346-363`):
+
+```python
+asker_still_waiting = question.blocking and not await _asking_run_has_ended(session, question)
+...
+if not asker_still_waiting:
+    delivered = await _deliver_batch_if_complete(session, question, project_id)   # queue + wake
+```
+
+and `_asking_run_has_ended` (`questions.py:42-43`) returns **False** whenever `created_by_run_id`
+is unset. So for an operator-posted `blocking` question, `asker_still_waiting` is `True`, the
+delivery branch is skipped, and nothing is queued and nobody is woken.
+
+### Driven, with its own control
+
+Prediction written into the file before the run; both halves on `peer`, bound and idle, one
+project, back to back. The **non-blocking control runs first** so a broken delivery path cannot be
+misread as the finding:
+
+| posted by the operator | `asker_waiting` on create | answer accepted | queued for the agent |
+|---|---|---|---|
+| `blocking: false` | `true` (inert — see below) | `200` | **yes** — `entry-3b4da545e098`, `origin_type=operator`, `state=delivered`, content `"Question: … Answer: …"` |
+| `blocking: true` | `true` | `200`, `answered: true` | **nothing** |
+
+The operator gets a `200` with `answered: true` on a decision that reached no one. There is no
+error, no event, and no difference in the response between the delivered case and the dropped one.
+
+### And the panel points at it in red
+
+`asker_waiting` is `true` on that row, because it is derived from the same
+`_asking_run_has_ended` (`questions.py:268`). `QuestionsPanel.tsx:150` partitions on
+`question.blocking && stillWaiting(question)`, so the row lands under
+
+> **Blocking — agents are waiting for your answer**
+
+which is false twice over: no agent is waiting, and answering will not reach one. The
+`no longer waiting` badge that *would* have told the truth (`QuestionsPanel.tsx:57-64`) is gated on
+`asker_waiting === false` and never fires. The panel is honest about a crashed asker — F145 drove
+exactly that and it flips correctly — and wrong about this one, because the two states are computed
+from a column that cannot tell "the run ended" from "there was never a run".
+
+### Why this is not just the documented presumption
+
+`_asking_run_has_ended`'s docstring defends the `False` return, and for the case it names it is
+right:
+
+> *"An unrecorded asker (a row predating `created_by_run_id`, or a question posted through the
+> operator route rather than by a run) is left to the presumption. Guessing it had ended would
+> queue an answer the waiting agent already received as its tool result."*
+
+But the two cases it lumps together are not alike. A legacy row's asker is genuinely **unknown**,
+so presuming someone waits is the safe reading. An operator-route row's asker is **known to be
+nobody** — `questions.py:225` writes the `None` itself, one line of code away. The presumption is
+protecting against a duplicate turn that cannot occur, at the cost of losing the answer entirely,
+and the docstring's own justification ("the waiting agent already received it as its tool result")
+describes a tool result that was never opened.
+
+### The repairs, and why the choice is the operator's
+
+1. **Refuse it.** `blocking: true` means "a run is holding for this"; the operator route has no run,
+   so a `422` naming that is the honest answer. Smallest, and it changes what a public route
+   accepts.
+2. **Deliver it.** Treat "no `created_by_run_id`" as not-waiting *for delivery*, keeping the
+   presumption only for `asker_waiting`. Needs a way to tell an operator-route row from a legacy
+   one — a discriminator the schema does not have today.
+3. **Record the asker.** Give the operator route a sentinel origin instead of `None`, which fixes
+   the panel and the delivery together and is the cleanest, but is a migration.
+
+All three are defensible and (1) and (3) change stored or accepted shapes, so this is filed rather
+than fixed.
+
+### Two smaller things the drive turned up on the way
+
+- The route requires `header` and `multi_select` with no defaults (`schemas/questions.py:34-35`),
+  and the `422` names the missing field precisely each time — good refusals, but it took three
+  attempts to construct a valid body because they arrive one per round trip. Not filed separately;
+  the schema comment explains why they are mandatory and the reasoning is sound.
+- `asker_waiting` is `true` on the **non-blocking** row too. That is inert —
+  `QuestionsPanel.tsx:151` never consults it without `blocking` — and asserting `false` was this
+  harness's own wrong turn on its first green run. The file now asserts only on the blocking row,
+  where the field is load-bearing, with the reasoning at the assertion.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 AW_AGENT=peer \
+  AW_DB="sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0830/aw0830.db" \
+  PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row13_operator_question.py
+```
+
+Exits unless the agent is idle, bound and there is no other open question. Costs one Haiku turn
+(the control's delivery wakes the agent) and declines anything it leaves open.
