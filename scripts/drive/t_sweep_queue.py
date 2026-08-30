@@ -156,6 +156,18 @@ if len(set(convs)) != len(convs):
     print("  <-- TWO 'session_mode: new' REQUESTS SHARED A CONVERSATION")
 queue_state("after four concurrent")
 
+# Drain on the way out. Nothing will ever deliver these — the agent has no runner, which is the
+# whole premise — so every run used to leave another six behind, and the next run's "entries
+# already queued" line grew without anyone deciding it should.
+_drained = 0
+_, _leftover = api("GET", f"/projects/{P}/queue/{AGENT}")
+for _entry in (_leftover if isinstance(_leftover, list) else _leftover.get("entries", [])) or []:
+    if _entry.get("state") == "queued":
+        api("DELETE", f"/projects/{P}/queue/entries/{_entry['id']}")
+        _drained += 1
+print(f"
+drained {_drained} leftover entr{'y' if _drained == 1 else 'ies'} for {AGENT}")
+
 print()
 print("=" * 78)
 print("SUMMARY")

@@ -9981,3 +9981,134 @@ directory is run with all three variables exported, so the defaults serve nobody
 one instance the drive must not disturb. Removing them — or defaulting `HUB` to nothing and
 refusing — is a one-line change with no caller to break, but it changes how every file in the
 directory is invoked, so it is stated here rather than done unattended.
+
+## F139 (B) — the agent reached for the host's `SendMessage`, and reported AgentWeave's own roster as unreachable
+
+**Driven 2026-08-30, iteration 12, on the 8011 Hub, `proj-1964cdedffe2`, agent `driver` on
+Claude/Haiku. Non-deterministic: the identical instruction succeeded on the run nine minutes
+earlier and failed on this one, with nothing else changed.**
+
+`driver` was told, in the operator's own words, to *"use the send_message tool exactly once to send
+to the agent named 'peer'"*. Its transcript (`conv-fb23a8232711`):
+
+| # | tool called | outcome |
+|---|---|---|
+| 1 | **`SendMessage`** `{"to_agent": "peer", "subject": "ping", "content": …}` | tool failed |
+| 2 | `ToolSearch` `{"query": "select:SendMessage"}` | loaded the **host's** schema |
+| 3 | **`SendMessage`** `{"to": "peer", "recipient": "peer", "message": …}` | "tool completed" |
+| 4 | `ToolSearch` `{"query": "select:ListAgents"}` | loaded the **host's** roster tool |
+| 5 | **`ListAgents`** | listed Claude Code sessions |
+
+and then, as its final visible answer to the operator:
+
+> I cannot complete this task. The agent named 'peer' from the AgentWeave roster is not currently
+> reachable. `ListAgents` shows three peer sessions, but none of them is the 'peer' agent specified
+> in the instruction.
+>
+> The send_message call failed with "No agent named 'peer' is reachable."
+
+`peer` was on the roster, open, idle, and bound to a runner throughout. Nothing was ever sent. The
+Hub's queue for `peer` records no new entry, `driver`'s run completed `status: "Completed"`, and the
+operator is left with a confident, detailed, entirely wrong report that **their own roster is
+broken** — sourced from a different product's view of a different kind of agent.
+
+### The collision
+
+The Hub spawns Claude Code, which ships its own agent-messaging tool called **`SendMessage`** and its
+own roster tool called **`ListAgents`**. AgentWeave's are `mcp__agentweave__send_message` and the
+roster in the injected context. The names differ only by case and separator, and both describe
+"message another agent", so an agent told to *"use the send_message tool"* has two plausible
+referents and no way to rank them.
+
+The canonical context is already aware of the prefix, and says so once, in a header line
+(`GET /agents/agent-context?agent=driver`):
+
+> Names below are as injected; with an MCP surface they are prefixed `mcp__agentweave__`.
+
+— and then lists the tool bare:
+
+> - `send_message(to_agent, subject, content, message_type=message, task_id=None)` …
+
+So the context states the rule in one place and violates it in every call site beneath. A note that
+the reader must apply is weaker than a name that is already correct, and this transcript is what the
+difference costs. On the successful run nine minutes earlier the same agent's `ToolSearch` query was
+`select:send_message` and it landed on `mcp__agentweave__send_message`; here it was
+`select:SendMessage`. Nothing in the product decided which.
+
+### Why it is worse than a wrong tool call
+
+The host's `SendMessage` **succeeded** at step 3 — the Hub recorded `tool completed` — while
+carrying the message nowhere AgentWeave can see. And the host's `ListAgents` answered with real
+data about the wrong population, which is what gave the agent the confidence to write a diagnosis
+rather than ask. An agent that had simply failed would have said so; this one investigated, using
+tools that all worked, and reached a conclusion about the product that is false.
+
+There is no Hub-side signal at any point. The run is `Completed`, the queue is empty, and only
+reading the transcript reveals that the hop never happened.
+
+### The cheap mitigation, and why it is filed rather than applied
+
+Inject the fully-qualified names. `mcp__agentweave__send_message` does not collide with anything,
+and the header note becomes unnecessary rather than unheeded. That touches every tool name in the
+canonical context — a surface the agent-facing text tests pin (`hub/tests/test_agent_facing_text.py`)
+and one that other runners render differently, so "as injected" is genuinely runner-dependent and
+picking one spelling is a decision about which runner the text is written for. That is the
+operator's call.
+
+Two smaller things fall out of the same transcript, recorded and not filed separately:
+
+- The Hub renders a tool result as **`tool completed`** when the tool returned an error payload
+  (step 3 above: `"No agent named 'peer' is reachable"`). The word in the timeline describes whether
+  the call returned, not whether it worked, which is the opposite of what an operator scanning a
+  transcript will read it as.
+- Every AgentWeave tool call on Claude Code costs an extra round trip: the first call fails, the
+  agent runs `ToolSearch`, then it calls again. Both runs show it. Harmless, but it is two extra
+  provider requests per tool on every turn.
+
+### Reproduction
+
+Trigger any Claude-runner agent with an instruction naming `send_message` in prose and a peer to
+send to. Roughly one attempt in two picks the host tool. `scripts/drive/t_row6_hop_chain.py` is the
+harness; run it until the hop-1 check reports no new entry, then read the triggering agent's
+transcript rather than the queue — the queue shows nothing, which is the whole problem.
+
+## Row 6 driven live — the hop budget holds, and the operator can see and undo it. 12 checks, 0 failures
+
+**Driven 2026-08-30, iteration 12, on the 8011 Hub, `proj-1964cdedffe2`. New harness
+`scripts/drive/t_row6_hop_chain.py`. Three runs; the third is the clean one — see F139 for what the
+first two found instead, which is why they are not thrown away.**
+
+`t_sweep_queue.py` reaches row 6's mechanics for free by triggering an agent that can never launch.
+What that cannot produce is a **hop**: hop depth only increments when one agent's *turn* sends to
+another, so the mechanism that stops two agents talking to each other forever had never been driven
+from the agent side. The chain: operator → `driver` (hop 0) → `peer` (hop 1) → `driver` (hop 2),
+with `hop_budget` tightened to 1.
+
+| what | result |
+|---|---|
+| the budget can be tightened, and is restored on the way out | 6 → 1 → 6, including on failure |
+| `driver`'s message reaches `peer`'s queue at **hop 1** | yes, ~12s |
+| it is attributed to the *agent*, not the operator | `origin_type: "agent"`, `origin_agent: "driver"` |
+| `peer`'s reply arrives at `driver` at **hop 2** | yes, ~8s |
+| the over-budget entry is **held, not discarded** | `state: "queued"` |
+| the **timeline** marks it held | `kind: "inbound_peer"`, `hop_budget_exceeded: true` |
+| the queue status names the cause | `waiting_reason: "hop budget exhausted"` |
+| an **operator** message is accepted while the queue is hop-blocked | 200, `status: "running"` |
+| …and is not itself caught by the budget | delivered immediately, hop 0 |
+| `release` accepts the entry the budget is actually holding | 200, and it resets `hop_depth` to 0 |
+| the released message is then delivered | ~8s, content `PONG-I12E` |
+| an entry the queue is **holding** can be withdrawn, and never delivers | `state: "withdrawn"` |
+
+Two details worth keeping. First, the held flag lives on the **timeline**
+(`TimelineEntry.hop_budget_exceeded`, `agent_chat.py:85`/`206-208`) and not on the queue listing
+(`QueueEntryResponse`, `inbound_queue.py:24-42`), which is right — it is what draws the UI's
+"held / Continue" control (`AgentTimeline.tsx:815`) and the queue listing is not that surface. The
+first version of this harness read it from the queue route, got `None`, and reported a correctly-held
+entry as unmarked. Second, `release` **resets `hop_depth` to 0** rather than raising the budget, so
+one operator decision frees one message and the budget still bounds everything after it. That is the
+right shape and nothing said so anywhere; it is written down here now.
+
+**Withdrawal has to be driven against a queue that is actually holding.** Triggering an idle agent
+and withdrawing immediately loses the race — the entry is delivered inside the same second and the
+`409 "already delivered/withdrawn"` reads as a product failure. The harness now occupies the agent
+first and withdraws the entry that queues behind the running turn.
