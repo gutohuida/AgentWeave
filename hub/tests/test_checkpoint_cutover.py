@@ -7,7 +7,10 @@ checkpoint, and the predecessor is closed. Doing the third without the second st
 doing the second without the third leaves two open conversations both looking current.
 """
 
+import logging
 import subprocess
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import select
@@ -32,6 +35,8 @@ from hub.db.models import (
     Run,
     Runner,
 )
+from hub.inbound_queue import deliver_entries_with_run, new_entry
+from hub.turn_scheduler import ScheduleResult, TurnRefusal
 
 from .test_checkpoint_generation import GOOD_BODY, _claude_stdout
 
@@ -973,3 +978,133 @@ async def test_a_dismissed_conversation_is_not_asked_for_notes(app, monkeypatch)
 
     assert entries == []
     assert conversation.checkpoint_warning == "dismissed"
+
+
+# --------------------------------------------------------- the auto-continue diagnostic (F131)
+
+
+async def _other_open_conversation(db, conversation_id):
+    return await _conversation(db, conversation_id=conversation_id, title="Something else")
+
+
+@pytest.mark.asyncio
+async def test_a_turn_that_started_elsewhere_is_recorded_against_the_successor(app, caplog):
+    """4.1/4.4 — the case that used to be silent, and the reason this group exists.
+
+    `auto_continue` calls the agent-scoped scheduler, which builds its turn from the oldest
+    eligible entry across the agent's whole queue. Another conversation's entry is older than the
+    one this cutover just created, so a turn begins — for that conversation. `waiting_reason` is
+    then `None`, the log branch was skipped, and nothing recorded that the successor did not
+    start. `cutover_to_successor` reports no auto-continue outcome either, so this log is the
+    only record there is.
+    """
+    other_id = "conv-f131-cutover-other"
+    async with async_session_factory() as db:
+        await _other_open_conversation(db, other_id)
+        db.add(
+            new_entry(
+                project_id=PROJECT,
+                agent=AGENT,
+                origin_type="operator",
+                content="arrived before the cutover",
+                hop_depth=0,
+                conversation_id=other_id,
+            )
+        )
+        await _conversation(db)
+        await db.commit()
+
+    async def _trigger(*, project_id, agent, conversation_id, session, queue_entry_ids=None, **kw):
+        run = Run(
+            id="run-f131-cutover",
+            project_id=project_id,
+            agent=agent,
+            conversation_id=conversation_id,
+            status="running",
+        )
+        await deliver_entries_with_run(
+            session,
+            project_id=project_id,
+            agent=agent,
+            entry_ids=queue_entry_ids,
+            run=run,
+        )
+        return SimpleNamespace(conversation_id=conversation_id, run_id=run.id)
+
+    async with async_session_factory() as db:
+        predecessor = await get_conversation_by_id(db, "conv-1")
+        checkpoint = await _ready_checkpoint(db, predecessor)
+        with (
+            patch(
+                "hub.api.v1.agent_trigger.trigger_agent_directly", AsyncMock(side_effect=_trigger)
+            ),
+            caplog.at_level(logging.INFO, logger="hub.checkpoint_cutover"),
+        ):
+            successor, _ = await cut_over(db, predecessor, checkpoint, auto_continue=True)
+
+    async with async_session_factory() as db:
+        runs = (await db.execute(select(Run))).scalars().all()
+    assert [run.conversation_id for run in runs] == [
+        other_id
+    ], "the older entry's conversation is the one the scheduler took"
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        successor.id in message and other_id in message and "did not start" in message
+        for message in messages
+    ), f"nothing recorded that {successor.id} did not start; logged: {messages}"
+
+
+@pytest.mark.asyncio
+async def test_a_reason_belonging_to_other_input_is_not_read_as_the_successors(app, caplog):
+    """4.2/4.4 — the truthy branch. No turn started, and the refusal names entries that are not
+    the successor's, so the record says the agent refused other input rather than attributing the
+    sentence to a conversation it was never about."""
+    async with async_session_factory() as db:
+        predecessor = await _conversation(db)
+        checkpoint = await _ready_checkpoint(db, predecessor)
+
+        async def _refused_elsewhere(project_id, agent):
+            return ScheduleResult(
+                waiting_reason="Could not prepare isolated worktree for claude-1",
+                refusal=TurnRefusal(
+                    status_code=409,
+                    detail="Could not prepare isolated worktree for claude-1",
+                    entry_ids=("entry-somebody-else",),
+                ),
+            )
+
+        with (
+            patch("hub.turn_scheduler.schedule_agent", _refused_elsewhere),
+            caplog.at_level(logging.INFO, logger="hub.checkpoint_cutover"),
+        ):
+            successor, _ = await cut_over(db, predecessor, checkpoint, auto_continue=True)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        successor.id in message and "refused other input" in message for message in messages
+    ), f"logged: {messages}"
+
+
+@pytest.mark.asyncio
+async def test_a_reason_about_the_agent_is_still_reported_plainly(app, caplog):
+    """4.2 — and the population the branch above must not touch. "agent is already running"
+    carries no refusal, so there is nothing to say it belongs elsewhere, and the plain sentence
+    is what the operator needs."""
+    async with async_session_factory() as db:
+        predecessor = await _conversation(db)
+        checkpoint = await _ready_checkpoint(db, predecessor)
+
+        async def _agent_busy(project_id, agent):
+            return ScheduleResult(waiting_reason="agent is already running", terminal_failure=False)
+
+        with (
+            patch("hub.turn_scheduler.schedule_agent", _agent_busy),
+            caplog.at_level(logging.INFO, logger="hub.checkpoint_cutover"),
+        ):
+            successor, _ = await cut_over(db, predecessor, checkpoint, auto_continue=True)
+
+    assert any(
+        f"successor {successor.id} did not start immediately: agent is already running" == message
+        for message in (record.getMessage() for record in caplog.records)
+    )

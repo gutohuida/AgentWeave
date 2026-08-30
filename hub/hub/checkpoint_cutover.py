@@ -136,11 +136,47 @@ async def cut_over(
         from .turn_scheduler import schedule_agent
 
         result = await schedule_agent(predecessor.project_id, predecessor.agent)
-        if result.waiting_reason:
+        # The third conversation-addressed use of `schedule_agent`, and it obeys the same rule as
+        # the two routes: a start is reported only to the input it is about (F131). The turn is
+        # the *agent's*, built from the oldest eligible entry across its whole queue, so the
+        # conversation that starts is frequently not the successor this cutover just created.
+        #
+        # The diagnostic scenario of "A start is reported only to the input it is about" is the
+        # only thing covering `auto_continue`: `cutover_to_successor` returns no auto-continue
+        # outcome at all, so this log is the entire record of whether the handover moved.
+        started = getattr(result.response, "conversation_id", None)
+        if started is not None and started != successor.id:
+            # The case that used to be silent. A turn began, so `waiting_reason` is `None` and the
+            # branch below was skipped — while the successor did not start and nothing said so.
+            logger.info(
+                "successor %s did not start immediately: the turn that started carried "
+                "conversation %s",
+                successor.id,
+                started,
+            )
+        elif result.waiting_reason:
             # Not an error: the queue entry is durable, so the work is not lost — it simply has
             # not started yet, and the operator can start it themselves.
-            logger.info(
-                "successor %s did not start immediately: %s", successor.id, result.waiting_reason
-            )
+            #
+            # What this must not do is claim the *reason* is the successor's. No turn started, but
+            # the scheduler still built its attempt from the oldest eligible entry across the
+            # agent's whole queue, so the reason it returns frequently describes input from a
+            # conversation this cutover never touched. `TurnRefusal.entry_ids` is the one thing
+            # that settles it — the same mechanism `agent_trigger.py:1357` uses for the same
+            # attribution question — so where it exists and the successor's own entry is not among
+            # them, say the refusal was about other input rather than guess.
+            refusal = result.refusal
+            if refusal is not None and entry.id not in refusal.entry_ids:
+                logger.info(
+                    "successor %s did not start immediately: the agent refused other input (%s)",
+                    successor.id,
+                    result.waiting_reason,
+                )
+            else:
+                logger.info(
+                    "successor %s did not start immediately: %s",
+                    successor.id,
+                    result.waiting_reason,
+                )
 
     return successor, entry.id

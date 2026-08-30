@@ -23,10 +23,10 @@
 
 ## 4. Correct the cutover diagnostic
 
-- [ ] 4.1 In `checkpoint_cutover.py:136-145`, record the case that is currently **silent**: a turn started for a different conversation, so `waiting_reason` is `None`, the branch is skipped, and nothing says the successor did not start. Log it, naming both the successor and the conversation that ran.
-- [ ] 4.2 In the existing truthy branch, name the conversation the `waiting_reason` belongs to rather than attributing it to `successor.id` unconditionally. Keep both as logs — `cutover_to_successor` reports no auto-continue outcome (`checkpoints.py:305-312`) and this change does not add one.
-- [ ] 4.3 Add a comment recording why it is here: same rule as the route above, and the diagnostic scenario of the new requirement is the only thing covering `auto_continue`, which no shipped requirement governs.
-- [ ] 4.4 Add a test with `caplog` for both branches — the silent one is the reason this task group exists, so it is the one that must fail before the fix.
+- [x] 4.1 In `checkpoint_cutover.py:136-145`, record the case that is currently **silent**: a turn started for a different conversation, so `waiting_reason` is `None`, the branch is skipped, and nothing says the successor did not start. Log it, naming both the successor and the conversation that ran.
+- [x] 4.2 In the existing truthy branch, name the conversation the `waiting_reason` belongs to rather than attributing it to `successor.id` unconditionally. Keep both as logs — `cutover_to_successor` reports no auto-continue outcome (`checkpoints.py:305-312`) and this change does not add one.
+- [x] 4.3 Add a comment recording why it is here: same rule as the route above, and the diagnostic scenario of the new requirement is the only thing covering `auto_continue`, which no shipped requirement governs.
+- [x] 4.4 Add a test with `caplog` for both branches — the silent one is the reason this task group exists, so it is the one that must fail before the fix.
 
 ## 5. Tell the operator
 
