@@ -64,7 +64,16 @@ print()
 print("=" * 78)
 print("ROW 3 — agents")
 print("=" * 78)
-probe(3, "canonical context", "GET", f"/projects/{P}/agents/context", expect=200)
+# `/agents/context` is the *charter*-content route and requires `?charter=<id>`; the
+# canonical per-agent context the matrix means is `/agents/agent-context?agent=<name>`.
+# The first version of this probe called the former with no query and reported its 422 as a
+# product defect. Corrected 2026-08-30.
+probe(3, "canonical context", "GET", f"/projects/{P}/agents/agent-context?agent=driver",
+      expect=200)
+probe(3, "canonical context for an agent that does not exist", "GET",
+      f"/projects/{P}/agents/agent-context?agent=ghost-agent", expect=200)
+probe(3, "canonical context for an illegal agent name", "GET",
+      f"/projects/{P}/agents/agent-context?agent=not%20a%20name")
 probe(3, "timeline for driver", "GET", f"/projects/{P}/agents/driver/timeline", expect=200)
 probe(3, "archive an agent holding queued input", "POST",
       f"/projects/{P}/agents/unbound-driver/archive")

@@ -9387,3 +9387,206 @@ Not proposed here — this wants a spec loop, and the clock ended this session b
 `grep -n "^@router\." hub/hub/api/v1/agent_actions.py`; `grep -rn "drift" hub/ui/src`;
 `hub/hub/requirement_gate.py:39,60-62,235`; `hub/hub/requirement_evidence.py:998-1058`;
 `hub/hub/api/v1/spec.py:921,942,974`.
+
+## F133 (B) — the operator's own message erases the reason their agent is stalled
+
+**Driven 2026-08-30, iteration 11, full-surface sweep. Reproduced live on the 8011 Hub against
+`proj-1964cdedffe2` (`drive-0830-sweep`), two Haiku agents, real turns.
+Harness: `scripts/drive/t_row18_budget_reason.py` — 10/11, and the one failure is this.**
+
+A project token budget pauses autonomous turns and lets the operator's own through. Two places
+decide whether a stalled turn counts as autonomous, and they decide it differently:
+
+| | predicate | scope |
+|---|---|---|
+| `turn_scheduler.schedule_agent` (`turn_scheduler.py:133-138`) | `initiator = "operator"` if any entry in **the selected turn** is operator-origin | the controlling entry's conversation, within hop budget, matching its kind, capped |
+| `GET /queue/{agent}/status` (`inbound_queue.py:145-149`) | `all(entry.origin_type != "operator")` | **every** queued entry for the agent, across every conversation |
+
+An operator message queued *beside* a blocked autonomous one satisfies the scheduler's predicate
+(the operator's entry is not in the turn the scheduler built) and fails the endpoint's (it is in the
+set the endpoint looks at). The scheduler still refuses; the endpoint stops saying why.
+
+### The reproduction, as it ran
+
+Budget set to 1 with 35,027 tokens already used, so `exhausted: true`. `peer` is triggered once and
+calls `send_message` to `driver`; the resulting agent-origin entry cannot start.
+
+```
+3. THE CONTROL -- only the autonomous entry queued
+--- GET /queue/driver/status  [200]
+{"agent":"driver","waiting_count":1,"running":false,
+ "waiting_reason":"token budget exhausted","delivery_attempts":0}
+
+4. the operator now sends their own message to the same agent
+--- POST /agent/trigger (operator)  [200]
+{"success":true,"status":"queued","conversation_id":"conv-329cb276f816",
+ "queue_entry_id":"entry-8157f49800d5","waiting_reason":"token budget exhausted"}
+   nothing started -- idle;  two entries now queued -- ["agent","operator"]
+
+5. read the reason again -- same stall, operator input added
+--- GET /queue/driver/status  [200]
+{"agent":"driver","waiting_count":2,"running":false,
+ "waiting_reason":null,"delivery_attempts":0}
+```
+
+`waiting_count: 2, waiting_reason: null` is exactly the state `db/models.py:586` records as the
+defect the `waiting_reason` column was added to remove — *"reported to the operator as
+`waiting_count: 1, waiting_reason: null`"* — reproduced by the operator doing the one thing the
+panel invites them to do when an agent looks stuck: send it a message.
+
+### Why the reason is not merely stale, but gone
+
+Nothing persists it. `turn_scheduler.py:174` writes `entry.waiting_reason` only inside the
+`TriggerAgentError` handler; the four early returns — hop budget, token budget, no conversation,
+conversation unavailable — return a `ScheduleResult` and write nothing. So the endpoint's fallback
+at `inbound_queue.py:183` (*"what the last attempt was actually refused with"*) has no row to read,
+and the recomputation is the only answer there is.
+
+The Hub knew the reason one call earlier: `POST /agent/trigger` answered
+`waiting_reason: "token budget exhausted"` (step 4 above) because it reports
+`scheduled.waiting_reason` straight from the refusal. The operator is told once, in a response body,
+and the panel they will actually look at afterwards says nothing.
+
+### Precisely one branch diverges — the other three agree
+
+Worth stating, because the obvious next thought is that every branch has this shape and it does not.
+
+- **hop budget** — endpoint `all(entry.hop_depth > hop_budget)`; scheduler
+  `can_start = any(entry.hop_depth <= hop_budget)` over the *same* unfiltered set
+  (`turn_scheduler.py:93-95`). Exact complements. Agree.
+- **already running** and the launchability/workspace probes are read-only statements about the
+  agent, not about a turn's composition. No predicate to diverge from.
+- **token budget** — the only one whose scheduler side is computed over the *selected* turn rather
+  than the whole queue.
+
+### One defect, or a symptom
+
+A symptom. The endpoint re-derives, from a different set, a decision `schedule_agent` has already
+made — so the two can disagree about anything the selection step touches, and today they disagree
+about one thing. The narrow repair (mirror the selection in the endpoint) leaves the duplication
+that produced it; the clean one (factor the read-only selection out of `schedule_agent` so both
+callers ask the same function) is a refactor of the scheduler's hot path. **Filed, not fixed** —
+two defensible answers is decision D5's stated line for filing.
+
+Related but not the same as **F131**: F131 is about `Continue` reporting another conversation's
+start as its own. This needs no `Continue` and no checkpoint, and F131's fix
+(`openspec/changes/continue-starts-what-it-names`) does not touch `inbound_queue.py`'s predicate.
+Not covered by anything in `openspec/changes/`.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 \
+    PYTHONIOENCODING=utf-8 py -3.11 scripts/drive/t_row18_budget_reason.py
+```
+
+Clears the budget and drains the queue in a `finally`. Costs two Haiku turns.
+
+## F134 (B) — a charter with no content is injected as a bare heading, and the agent is reported fully configured
+
+**Driven 2026-08-30, iteration 11, full-surface sweep. Row 4 into row 3, on the 8011 Hub,
+`proj-1964cdedffe2`.**
+
+`POST /projects/{p}/charters` with `{"name": "sweep-empty", "content": ""}` answers **201**. Binding
+it to an agent answers **200**. The canonical context that every real turn is built from then ends
+like this — this is the literal last line of
+`GET /projects/{p}/agents/agent-context?agent=unbound-driver`:
+
+```
+## Charter: sweep-empty
+```
+
+Nothing under it. The document stops there.
+
+The code has a strictly better sentence for this situation and cannot reach it:
+
+```python
+if charter:
+    lines.append(f"## Charter: {charter.name}")
+    lines.append("")
+    lines.append(charter.content)      # ""
+    ...
+else:
+    lines.append("## Charter")
+    lines.append("")
+    lines.append("No charter is assigned to this agent.")
+    ...
+    missing.append("charter")
+```
+
+`hub/hub/api/v1/agents.py:1502-1513`
+
+`if charter:` tests the *row*, which is always truthy when one is bound, so an empty contract takes
+the first branch. Two consequences:
+
+1. **The agent reads a heading that promises a behaviour contract and finds nothing.** An agent
+   reasonably reads that as truncation. `_render_hub_agent_context` is not a reporting route — it is
+   materialised into the workspace immediately before command construction for *every* turn
+   (`agent_trigger.py:897-911`, *"an edited charter is therefore visible on the next run"*), so this
+   is what a real run receives.
+2. **`missing` stays `[]`.** The response reports the agent as wanting nothing, while its behaviour
+   contract is empty. The `else` branch appends `"charter"`; this branch cannot.
+
+### The corpus does not cover it
+
+`openspec/specs/agent-charter/spec.md:56-72` governs the neighbouring case and stops short:
+
+> An agent with no bound charter SHALL remain usable — its context response SHALL state plainly that
+> no charter is assigned rather than erroring **or fabricating behavior content**.
+
+A bound-but-empty charter is neither "resolves its bound charter" nor "has no bound charter". The
+requirement's own phrase is the right test and no scenario applies it here.
+
+### The asymmetry that produced it
+
+`hub/hub/schemas/charters.py:12-13` — `name: str = Field(min_length=1, max_length=256)` beside
+`content: str` with no constraint. The name of a behaviour contract is guarded; its text is not.
+
+### One defect, or a design gap
+
+A gap, with more than one defensible answer, so **filed, not fixed**: refuse empty content at the
+API (an operator mid-edit cannot save a blank draft), or render the no-charter notice and count it
+in `missing` (an empty charter and no charter become indistinguishable, which may be exactly right),
+or emit a third explicit statement. `PATCH` has the same hole — `content: Optional[str] = None`
+means an existing charter can be blanked the same way. Severity B rather than A: it degrades what an
+agent is told rather than stopping anything, and no seeded charter is empty (all 9 have content).
+
+**Reproduce:**
+
+```
+POST  /api/v1/projects/<p>/charters    {"name":"blank","content":""}      -> 201
+PATCH /api/v1/projects/<p>/agents/<a>  {"charter_id":"<id>"}              -> 200
+GET   /api/v1/projects/<p>/agents/agent-context?agent=<a>
+      -> .context ends "## Charter: blank" ; .missing == []
+```
+
+### Also driven this row, and held
+
+- `GET /fs/list` on a missing path, and on a *file*, answers 200 with `entries: []` **and a
+  `reason`** naming the OS error — it does not turn "I could not look" into "there was nothing
+  there". `DirectoryPicker.tsx:158-161` renders it: *"Can't read this directory: {reason}"*. The
+  seam this sweep expected to be broken is not.
+- Duplicate charter names are accepted (six rows named `sweep-charter` in this project). Not filed
+  as a defect: binding is by `charter_id` throughout, and no requirement claims names are unique.
+  Recorded so the next sweep does not re-derive it.
+- `GET /agents/agent-context` for an agent that does not exist answers 200 with onboarding context,
+  by design; an illegal agent name answers 400 `Invalid agent name`.
+
+## F135 (C) — the sweep harness reported its own wrong turn as a product defect, for the second time
+
+**Corrected 2026-08-30, iteration 11.** Recorded because `t_sweep_surface.py`'s own docstring
+already warns about exactly this — *"the first pass of this script guessed six of them and reported
+five false 404s"* — and it happened again in a different way.
+
+`probe(3, "canonical context", "GET", f"/projects/{P}/agents/context", expect=200)` called the
+**charter**-content route, which takes a required `charter` query parameter
+(`agents.py:2053-2056`), with no parameters. Its `422` was reported as an unexpected status for two
+runs. The canonical per-agent context the matrix row means is
+`GET /agents/agent-context?agent=<name>` (`agents.py:2077`), which answers 200.
+
+Fixed in place, with the two refusal probes the corrected route makes available (a name that does
+not exist, and a name that is not legal). Row 3 also hard-codes the agents `driver` and
+`unbound-driver` from an older fixture; on a fresh project its three archive/unarchive probes answer
+`404 Agent not found`, which is the harness's state and not the product's. Left as-is and stated
+here rather than made self-provisioning: creating agents inside a probe script is how a sweep starts
+testing its own setup code.
