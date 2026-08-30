@@ -9091,6 +9091,12 @@ fixed that line goes red and says why.
 
 ## F131 — Continue on one conversation starts a different conversation's work, and reports success against the one you pressed
 
+**FIXED 2026-08-30** — `openspec/changes/continue-starts-what-it-names`, three spec-loop rounds
+then implementation. Driven live afterwards: **17/17**,
+`scripts/drive/t_f131_start_reported_to_its_own_input.py`. Two corrections this change established
+are recorded under "What the fix corrected in this finding" at the end; the account below is left
+as it was written so the two can be compared.
+
 **Found by driving the `continue` endpoint's unreached branches**
 (`scripts/drive/t_continue_branches.py`). Two of them are fine and are now covered: pressing Continue
 with nothing queued answers **200** with `started: false, waiting_reason: "queue is empty"`, and
@@ -9160,6 +9166,47 @@ indistinguishable from success.
 that agent to act as the wrongly-pressed one — the harness takes the first it finds. The F131
 assertions are written in the direction the product **actually behaves**, so the day it is fixed
 they go red and say why.
+
+**That day was 2026-08-30, and those assertions have been flipped** — see the comment at step 4 of
+`t_continue_branches.py`, which records that the flip is the fix rather than a regression.
+
+### What the fix corrected in this finding
+
+**1. The reproduction above is not the one that matters.** It presses Continue on a conversation
+with *nothing* queued for it, and that path is unreachable from the shipped UI: the button renders
+only when `queuedEntries.some(entry => entry.conversation_id === currentConversationId)`
+(`AgentOutputPanel.tsx:337-340,1064`). The severity is exactly what this finding says; the
+*reachable* path is different — the pressed conversation **has** a queued entry and another
+conversation of the same agent has an **older** one, so every client-side gate is satisfied and the
+substitution happens anyway. That is what
+`scripts/drive/t_f131_start_reported_to_its_own_input.py` builds, with two cutovers on
+auto-continue-off, which is the only operator act that queues without scheduling.
+
+It also means the two cases need **different answers**. Telling a conversation that queued nothing
+that its input is "waiting behind other input" reports a queue position that does not exist. Round
+3 of the spec loop found rounds 1 and 2 had collapsed them into one.
+
+**2. The rule was already shipped — for refusals — and merely unwritten for starts.**
+`agent-conversation-workspace` has carried *"A refusal is reported only to the input it is about"*
+since before this finding, and `POST /agent/trigger` implements it in both directions, comparing
+`scheduled.response.conversation_id` to the conversation it appended to (`agent_trigger.py:1353`).
+`continue` is the second conversation-addressed caller of `schedule_agent` and implemented neither
+half — it could be written without them because the requirement's *text* is about refusals. So this
+was not a missing decision. It was a decision stated in one direction, with the other half left to
+be re-derived by whoever wrote the next route. The change writes the start half down, and the
+implementation adds the test that pins `/agent/trigger` too, so the two routes cannot drift apart
+again. **That test is the one that would have caught this defect.**
+
+Fix shape 1 above ("report what actually started", keeping `started: true`) was **rejected** in
+design: truthful about what ran and still wrong about what the caller asked. Shape 2 (409) was
+rejected as an error answer to a case the shipped requirement already answers with *accepted,
+waiting*. What shipped is the comparison plus two distinct waiting reasons plus
+`started_conversation_id`, with turn selection deliberately untouched — the right work was always
+running.
+
+A third caller was corrected alongside: `checkpoint_cutover.py`'s `auto_continue` logged only
+`if result.waiting_reason:`, so the case where a turn started for a *different* conversation was
+**silent** while the successor did not start.
 
 ---
 
