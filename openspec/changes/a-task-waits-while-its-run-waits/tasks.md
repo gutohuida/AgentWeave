@@ -44,12 +44,12 @@ not reproductions; they must pass before and after.
 
 Round 3 (design D11). The one row the proposal's table did not have.
 
-- [ ] 3a.1 Reproduce: a task parked at ask time with its run still `running`, read through the loop summary. `attribution.capacity` is `assigned` today — "nothing is running" — about an agent mid-turn on that task.
-- [ ] 3a.2 In `hub/hub/task_attribution.py`, consult `live.task_ids` before the final `CAPACITY_ASSIGNED` fall-through, not only inside the `unstaffable` branch. Keep the sources separate — `live` is the runs table, `staffing` is the firing — because `agent-loops` requires that no source is asked a question it does not answer.
-- [ ] 3a.3 Correct `CAPACITY_ASSIGNED`'s comment, which says "this is the `blocked` case". After this it is the blocked case *with nothing running*, which is the case the requirement was written for.
-- [ ] 3a.4 Test both halves: blocked with a running bound run reads `working`; blocked with no running run still reads `assigned`. And the existing capacity tests still pass — this must not re-merge anything.
-- [ ] 3a.5 The `agent-loops` delta splits the shipped scenario in two. Do not archive without it.
-- [ ] 3a.6 `LIVE_STATUSES` is **not** touched. Record in the test module why the two answers differ: `LIVE_STATUSES` asks whether anyone is accountable for the work, `task_attribution` asks who is on the task and in what relation. Leaving them consistent-by-accident is what produced the collision.
+- [x] 3a.1 Reproduce: a task parked at ask time with its run still `running`, read through the loop summary. `attribution.capacity` is `assigned` today — "nothing is running" — about an agent mid-turn on that task.
+- [x] 3a.2 In `hub/hub/task_attribution.py`, consult `live.task_ids` before the final `CAPACITY_ASSIGNED` fall-through, not only inside the `unstaffable` branch. Keep the sources separate — `live` is the runs table, `staffing` is the firing — because `agent-loops` requires that no source is asked a question it does not answer.
+- [x] 3a.3 Correct `CAPACITY_ASSIGNED`'s comment, which says "this is the `blocked` case". After this it is the blocked case *with nothing running*, which is the case the requirement was written for.
+- [x] 3a.4 Test both halves: blocked with a running bound run reads `working`; blocked with no running run still reads `assigned`. And the existing capacity tests still pass — this must not re-merge anything.
+- [x] 3a.5 The `agent-loops` delta splits the shipped scenario in two. Do not archive without it.
+- [x] 3a.6 `LIVE_STATUSES` is **not** touched. Record in the test module why the two answers differ: `LIVE_STATUSES` asks whether anyone is accountable for the work, `task_attribution` asks who is on the task and in what relation. Leaving them consistent-by-accident is what produced the collision.
 
 ## 4. The wait's deadline, recorded
 

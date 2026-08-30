@@ -60,7 +60,12 @@ CAPACITY_HELD = "held"
 #: that did the work (finding F26).
 CAPACITY_NEXT = "next"
 #: Nobody is being selected and nothing is running; this is the row's own assignee. The `blocked`
-#: case, waiting on a person.
+#: case **with nothing running** — a task left waiting after its run ended, which is the case
+#: `agent-loops`' *A task waiting on a person* scenario was written for. Since ask-time parking
+#: (`a-task-waits-while-its-run-waits`, design D11) a `blocked` task can also have a run suspended
+#: mid-turn inside the very tool call that parked it, and that is `working`: the requirement names
+#: the runs as the source that answers whether an agent is mid-turn, and a run is running and bound
+#: to this task.
 CAPACITY_ASSIGNED = "assigned"
 
 CAPACITIES = (CAPACITY_WORKING, CAPACITY_HELD, CAPACITY_NEXT, CAPACITY_ASSIGNED)
@@ -162,6 +167,7 @@ def attribute(
     - the firing cannot staff it, and something is running against it → `working`;
     - the firing cannot staff it, and nothing is running → `held`;
     - the firing selected it → `next`;
+    - neither, and something is running against it → `working`;
     - neither, and the task names an assignee → `assigned`.
 
     `working` is answered from `live.task_ids` alone — the runs table's own `task_id`, which is
@@ -183,5 +189,20 @@ def attribute(
 
     if task.id in staffing.selected:
         return Attribution(agent, CAPACITY_NEXT)
+
+    # The runs are consulted here too, not only inside the `unstaffable` branch above (design D11).
+    # A `blocked` task is not claimable, so a firing never records it as unstaffable, and the
+    # non-flow path passes empty staffing besides — so before ask-time parking this fall-through
+    # reached `assigned` without ever asking the runs. That was harmless only because `blocked`
+    # implied the asking run had ended. It no longer does: a run now sits suspended inside the tool
+    # call that parked the task, for the whole wait, and the board said its agent was merely
+    # `assigned` to work it was mid-turn on — the same class of false statement as F14 itself.
+    #
+    # The sources stay separate, which is what `agent-loops` requires ("no source SHALL be asked a
+    # question it does not answer"): `live.task_ids` is the runs table and answers *is anything
+    # running against this task*; `staffing` is the firing and answers *who would it go to*. This
+    # asks each only its own question.
+    if task.id in live.task_ids:
+        return Attribution(agent, CAPACITY_WORKING)
 
     return Attribution(agent, CAPACITY_ASSIGNED)
