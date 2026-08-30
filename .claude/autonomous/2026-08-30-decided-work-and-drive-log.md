@@ -690,3 +690,135 @@ Gates re-run at this head rather than trusted: `ruff check src/ hub/ tests/` cle
 
 **F14 and F60 are done.** Next is `F115-R1`, and the 08:00 rule still governs: if a fresh iteration
 reads this after 08:00, it starts `E2E-DRIVE` instead.
+
+---
+
+## Iteration 8 — F115-R1 — 2026-08-30T06:35:23+01:00 → 06:46:20+01:00
+
+Branch verified against `STATE.json` before anything: `autonomous/2026-08-30-decided-work-and-drive`
+at `480b927`, clean, matching `origin`. Claimed with a heartbeat commit, then straight into the
+round.
+
+The unit was **round 1 of the F115 spec loop** — explore the code, then write the proposal. No
+implementation. Written at `openspec/changes/a-write-outside-the-workspace-is-recorded/`: proposal,
+design (D1–D8, plus five questions handed to rounds 2 and 3), `tasks.md` (40 tasks in 9 groups,
+reproduction first), and **three** spec deltas.
+
+### What round 1 found, which is a defect in the finding's argument
+
+F115 argues from a premise that is false, and the premise is load-bearing for where the fix belongs.
+The finding says *"in the posture an operator is most likely to be running, nothing shows the path
+and nothing constrains it."*
+
+`DEFAULT_CLAUDE_PERMISSION_MODE = WORKSPACE_PERMISSION_MODE` (`hub/hub/runner_commands.py:66`). The
+default posture routes every tool call to `mcp_server.approve_tool_call`, and `_decide`
+(`hub/hub/mcp_server.py:864-916`) refuses anything resolving outside `AW_WORKSPACE_DIR` on a
+`realpath` + `commonpath` + `normcase` comparison. There is a shipped requirement of record for it —
+`agent-run-sandboxing`, *"A posture exists in which the workspace boundary is enforced per tool
+call"*.
+
+**Measured, not read**, by importing the module and calling it against this checkout:
+
+```
+outside abs : {'allow': False, 'reason': "'...\aw-outside\drive-note.txt' is outside your workspace"}
+inside rel  : {'allow': True,  'reason': 'inside your workspace'}
+traverse .. : {'allow': False, 'reason': "'../drive-note.txt' is outside your workspace"}
+read outside: {'allow': False, 'reason': "'...\aw-outside\drive-note.txt' is outside your workspace"}
+default posture: workspace | without approver: acceptEdits
+```
+
+So the default posture refuses the exact call F115 reproduced, including the `..` traversal variant,
+and checks reads as well as writes. And `run-72de0f5c6898` — the run that escaped — was **`manual`**,
+the posture in which the *operator* answers. The card named the tool and the full absolute path, and
+it was allowed. **The escape was an approval, not a hole in the default.**
+
+This is the sharper variant CLAUDE.md names: an argument can be wrong while everything it argues
+about is right. The operator's four decided parts do not move. What moves is the gap's location — not
+"the default posture is blind" but "an outside write leaves no trace in **any** posture where it is
+possible": `manual` where the operator approved it, full access which checks nothing, and the
+`acceptEdits` fallback used where no Hub MCP server is configured to answer
+(`runner_commands.py:73`). Plus one surviving even under `workspace` — a shell command that builds
+its path at runtime, which `_decide` says of itself is *"a boundary, not a sandbox"*.
+
+**Part (4) could not be written as the operator worded it.** "Native does not confine, Docker does"
+is false in both directions: native's default posture *does* check, and native's unchecked postures
+exist too. The proposal states it **per posture**, which serves part (4)'s intent — say plainly what
+is checked — with a sentence that is true. Per the run's limits, the contradiction is recorded rather
+than silently re-decided: a new section `### Round 1 correction, 2026-08-30` sits under F115 in
+`scripts/drive/FINDINGS.md`, keeping the decision and correcting the premise.
+
+### The other things the exploration settled
+
+- **Detection cannot happen downstream of `tool_use_event`.** That constructor redacts, stringifies
+  and truncates the input to 8 KiB into `payload["input"]` (`hub/hub/runner_events.py:134-155`), so
+  by the time an event exists the structured `file_path` may be gone or cut in half. The parse point
+  (`runner_parsing.py:264-272`) has `block.get("input", {})` intact. This answers in advance the
+  question the R2 queue entry was written to ask.
+- **The parser cannot classify, only extract.** Naming *which* workspace was written into needs the
+  project root, which a pure line-parser has no business holding. So `ParsedLine` carries the write
+  paths and `_flush_line` (`agent_trigger.py:1877`) — which already has `work_dir`, `run_id`,
+  `project_id`, `agent` in scope — does the classifying.
+- **One boundary, not two.** `AW_WORKSPACE_DIR`, `Run.workspace_dir` and `_execute_run`'s `work_dir`
+  are all `effective_work_dir` (`agent_trigger.py:1023`, `:1095`, `:1146`). The detector must use
+  that same value; recomputing a workspace from the agent's name would give the product a second
+  boundary able to disagree with the first, which `agent-run-sandboxing` already forbids in the
+  enforcement case.
+- **The kind-and-name vocabulary already exists** (`WorkspaceBranch`, and `workspace-isolation`'s
+  *"A reported workspace says which namespace it belongs to"*), and the whole layout is derivable
+  from pure helpers in `worktrees.py` — `worktree_path`, `task_worktree_path`, `review_path`. So the
+  cross-worktree destination is classifiable with no database and no git.
+- **D3 answered without a new table.** The fact goes on `Run` as a nullable JSON column, because
+  F71's footprinting reads per run and `EventLog` has no `run_id` column — a run id lives in its JSON
+  `data`, so making footprinting read it would be an unindexed scan of a project's whole activity
+  history to answer a question about one run. The operator's notice follows the shipped
+  `turn_produced_nothing` precedent (`run_divergence.py:622-635`): `persist_event(...,
+  severity="warn")`, once per destination per run. `NULL` means *not observed*, `[]` means *observed
+  and clean* — no backfill, on migration `0096`'s own precedent.
+- **Part (3) annotates, it does not move the footprint.** Footprinting the other tree would be the
+  *"silently describes a tree other than the one named"* failure the shipped requirement already
+  calls worse than absent evidence, with a choice attached; refusing the evidence would turn an
+  observation into the containment this change is forbidden to build, arriving through the evidence
+  door.
+
+### Deltas
+
+| Capability | Shape |
+|---|---|
+| `agent-run-sandboxing` | ADDED ×2 — the detection requirement (every posture, names the destination, bounded, records nothing on an unestablished boundary, with the two out-of-scope vectors written *into* the requirement so the label cannot read as coverage it lacks); and the postures documented by what they check |
+| `workspace-isolation` | ADDED — a run's recorded directory says where it started, not where its writes landed |
+| `requirement-traceability` | MODIFIED — *"A changed implementation raises a candidate, never an edit"*, taken verbatim and extended: the footprint reports that its run wrote outside it, without moving and without refusing |
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `openspec validate --strict` | valid |
+| `openspec list` | `a-write-outside-the-workspace-is-recorded  0/40 tasks` |
+| Round-1 correction measured, not asserted | yes — `_decide` called directly, four cases |
+| MODIFIED requirement header verbatim | yes, sliced from `openspec/specs/` by line range rather than retyped |
+| Implementation written | **none**, by design — R1 explores and proposes |
+| Tree clean, committed, pushed | yes |
+
+### The next unit is F115-R2, and the clock was checked rather than assumed
+
+Round 1 finished at **06:46**, stamped from PowerShell. An earlier draft of this entry said ~07:40
+and concluded from it that nothing more could be started before the 08:00 rule bites; that estimate
+was made by counting tool calls instead of reading a clock, and it was an hour out. Corrected here
+rather than quietly, because the wrong number would have handed the next iteration a decision that
+was never actually forced: it would have started the drive with 74 minutes of round-2 time thrown
+away.
+
+So the next unit is **`F115-R2`**, and the 08:00 rule still governs it. Rounds 2 and 3 in this loop
+have each taken roughly 20–35 minutes (iterations 3–5), so one fits. It must be an *independent*
+re-derivation against the code — a fresh process reading the code, not a re-read of this entry's
+reasoning, which is the whole reason round 1 stops here instead of continuing into round 2 in the
+same context.
+
+R2 already has more to attack than the queue entry anticipated. Its stated question — does the
+`tool_use` path carry a usable structured input at the point you would hook — is answered in the
+proposal, so R2 should spend its independence elsewhere: on design D5's two-writes split, on whether
+`work_dir` can ever differ from `AW_WORKSPACE_DIR` for the same run (a review checkout, a resumed
+run, the app-server path), and on the Codex `fileChange` `changes` shape, which D8 admits was read
+off the summariser rather than a live transcript.
+
+If a fresh iteration reads this **after 08:00**, it does not start R2. It starts `E2E-DRIVE`.
