@@ -10613,3 +10613,92 @@ AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 AW_AGENT=dr
 
 Restores the agent's timeout in `finally` and declines its own leftover question. Costs one Haiku
 turn and about 90 seconds.
+
+---
+
+## F145 — row 19 driven at last: a hard Hub kill loses nothing, and the harness had been asking about the wrong process
+
+**Status:** no product defect. Harness fixed in the same commit. Filed because row 19 was recorded
+"not reached" in every sweep including all three earlier iterations of this one, and because the
+prediction this file was built on turns out to be **wrong in the product's favour** — which is the
+kind of thing that should be written down once rather than re-guessed.
+
+Driven twice on `proj-1964cdedffe2` / 8011 / Haiku — once on `peer`, then again on `asker` after
+the harness was corrected — by `scripts/drive/t_row19_crash.py`. Both runs: **4/4 PASS.**
+
+### What a `Stop-Process -Force` on the Hub actually costs
+
+| | `peer`, 10:04 | `asker`, 10:07 |
+|---|---|---|
+| Hub really dead (`GET /projects` → no connection) | PASS | PASS |
+| the run's recorded pid alive 3s after the kill | — *(measured on the wrong process, see below)* | **no** — `29100 claude.exe` gone |
+| run row after restart | `running → interrupted`, `ended_at` set | same |
+| agent wedged? | no — triggerable, `queued` behind the redelivery | no |
+| redelivered turn | `run-c19a984eabe6`, exit 0 | `run-da2cd3b51c1e`, exit 0 |
+| post-crash trigger | ran to `idle` | ran to `idle` |
+| accounting | interrupted turn counted as `unavailable_turns: 1`, not silently as zero | same |
+
+**The CLI dies with the Hub, and that is why nothing wedges.** The file was written expecting the
+opposite — *"On Windows nothing reaps a grandchild, so the honest expectation is YES"* — and it is
+measured `no` both times. The mechanism is visible in the descendant walk: a Claude run is a
+`PtySession`, so the Hub's child is an `OpenConsole.exe` ConPTY host and `claude.exe` is attached to
+the pseudoconsole it serves. Force-killing the Hub closes the pty handle, the host exits, and the
+client goes with it. This is load-bearing for `run_reconciliation.py:62` —
+`if run.pid is not None and pid_alive(run.pid): continue` — which would otherwise leave the run
+`running` forever and, per the file's own step 6, permanently refuse every later trigger for that
+agent. The wedging case the drive was written to find **cannot arise for a Claude runner on
+Windows**, and now there is a measurement saying so instead of an assumption saying the reverse.
+
+### Resume continuity, measured on the filesystem rather than on prose
+
+The turn writes `crash_before.txt`, then twelve numbered files one tool call at a time, then
+`crash_after.txt`. mtimes in `.agentweave/worktrees/asker/`:
+
+```
+crash_before.txt   10:07:28   <- the crashed run.  Hub killed 10:07:39, restarted 10:07:41
+crash_step_01.txt  10:07:50   <- the redelivered run picks up HERE
+...
+crash_step_12.txt  10:08:09
+crash_after.txt    10:08:11
+```
+
+`crash_before.txt` is not rewritten. The redelivered entry went to a resumed provider session that
+already knew step 1 was done, and `peer`'s transcript says the same thing out loud on the earlier
+run: *"The operator is reminding me about the multi-step instruction. I already completed Step 1."*
+An operator who loses the Hub mid-turn gets the turn finished, not restarted.
+
+### Two harness defects, and the seventh instance of the same species
+
+**1. It asked the orphan question about the console host.** `descendants()` returns
+`OpenConsole.exe` and `claude.exe` in whatever order WMI hands them over, and the file took
+`child_pid` as *the first one*. The `peer` run therefore reported `orphaned: False` having measured
+`10960 OpenConsole.exe` — right answer, wrong subject, and it would have read the same had the CLI
+been orphaned. Now it takes the pid the Hub itself recorded (`runs.pid`), which is exactly what
+`reconcile_interrupted_runs` consults; the descendant walk is kept as context only. The `asker` run
+above is the first authoritative measurement.
+
+**2. Its long step had stopped being long.** Step 2 asked for `sleep 90` through the Bash tool.
+Claude Code refuses a foreground sleep outright — *"To wait for a command you started, use
+`run_in_background: true`"* — so on the `peer` run that step failed in under a second and the turn
+was still `running` at the kill only because the model spent the interval explaining the refusal.
+A drive whose "the crash lands inside the turn" premise depends on the model being talkative is not
+driving what it says it is. Replaced with twelve sequential single-file writes, which the CLI has
+no objection to and which takes ~20s.
+
+**3. No preconditions.** Added: the file now exits unless the named agent exists, is unarchived,
+bound, and **idle** — a crash landing on somebody else's run reports on their turn — and unless a
+uvicorn is actually serving the port. This is the seventh harness defect in four iterations and the
+fourth of them fixed by asserting a precondition the file had only assumed.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_TICKET_SECRET=aw0830-ticket-secret \
+  AW_PROJECT=proj-1964cdedffe2 AW_AGENT=asker AW_PORT=8011 \
+  AW_DB="sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0830/aw0830.db" \
+  AW_HUBLOG="C:/Users/huida/AppData/Local/Temp/aw0830/hub_crash.log" \
+  PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row19_crash.py
+```
+
+It kills and restarts the Hub on the port you give it, so give it 8011 and never 8000 or 8010. Two
+Haiku turns, about 90 seconds, and it leaves the Hub running.
