@@ -956,3 +956,188 @@ Two smaller ones, both of which would falsify something round 2 asserted: does a
 one-population-site claim, now the whole basis of the three-transport fix), and does the extractor
 really return on the tool name before touching the input, now that it runs for every tool call of
 every run rather than only inside a parser?
+
+
+---
+
+## Iteration 10 — 2026-08-30 07:05 to 07:20 — F115-R3, the second independent re-derivation
+
+Branch verified against `STATE.json` before claiming it: `autonomous/2026-08-30-decided-work-and-drive`
+at `50bacba`, clean tree, matching what iteration 9 recorded. Clock read from PowerShell at 07:05,
+07:09 and 07:16 — the 08:00 rule never came close, and R3 took fifteen minutes against R2's nine.
+
+Round 3 read the code against the proposal without re-reading round 2's reasoning. **Six
+corrections.** The change is still not implemented; `F115-IMPL` stays queued.
+
+### 1. The D9 crux — the thing this round was pointed at, and the premise was false
+
+Round 2 found that `agent-run-sandboxing` says *"Only refusals SHALL be recorded"*, concluded this
+change's `severity="warn"` notification breaches it because it records an **allowed** write, and
+carried a MODIFIED delta narrowing the sentence. `next_action` called that a judgement, not a
+derivation, and told R3 to attack it.
+
+The judgement survives. The argument does not, and the delta it produced was three times the size
+the correct argument supports.
+
+The reading is disproved by measuring the product rather than re-reading the sentence.
+`persist_event` is called 55 times across `hub/hub`, carrying **44 distinct event types**. Exactly
+one — `permission_denied` — is a refusal. The other 43 record allowed things: `queue_entry_delivered`,
+`question_answered`, `task_created`, `job_fired`, `agent_heartbeat`, `run_interrupted`,
+`project_adopted`, `checkpoint_notes_submitted`, and so on. Under round 2's reading the shipped Hub
+breaches its own requirement forty-three ways, and has since the requirement was written. A reading
+that convicts the entire activity log is not the reading.
+
+Three things agree with the measurement. The requirement's **title** is *A refusal is recorded
+wherever it is decided*. Every other sentence in it is about the refusal record. And its own fourth
+scenario already says the narrow thing — *"Allowed actions are not recorded **as refusals**"*. Round
+2 saw that scenario and argued past it (*"the SHALL sentence is normative and the scenario is
+evidence rather than a limit on it"*), which inverts openspec's structure and was only needed because
+the prose had been read out of its subject.
+
+So round 2's own question for R3 — narrow the sentence, or drop the operator notification entirely —
+was **never a real fork**. Nothing in the corpus forbade the notification, so "live only on the run
+row" was never the price of compliance; it would have been a straight downgrade bought to satisfy a
+requirement that does not object. The notification stays.
+
+The delta is not deleted, because the prose and its own scenario genuinely disagree by two words and
+this change is the reader that tripped over the gap. It keeps *"as refusals"* plus one sentence of
+scope. Removed: the paragraph legislating "an allowed action that is not ordinary", which wrote this
+change's policy into a requirement about refusals and made it carry a general rule nothing enforces;
+and its scenario, which moved to this change's own ADDED requirement as *The record is not a refusal*.
+
+**The shape worth carrying forward.** Round 2 was right to go looking for a breached requirement —
+that is the failure the F14 loop found — but on finding a candidate it edited the corpus to fit the
+change. The cheaper move was available and not made: read the sentence against the product, and if
+the product already breaches it, the reading is wrong rather than the product.
+
+### 2. The detector would have mis-resolved every relative path
+
+D4 described the comparison as `realpath` + `commonpath` + `normcase`, "the same construction
+`_decide` uses". Both earlier rounds omitted `_decide`'s **first** line (`mcp_server.py:901`):
+
+```python
+absolute = candidate if os.path.isabs(candidate) else os.path.join(root, candidate)
+```
+
+Round 1's open question said the `..` case "should be caught by realpath before comparison — assert
+it rather than assume it"; round 2 left it open. It is not caught by realpath. `os.path.realpath`
+resolves a relative path against the **calling process's** cwd, and the two callers do not share one:
+`_decide` *is* the spawned MCP server, whose cwd is the run's workspace — its own shell-branch comment
+depends on exactly that — while the detector runs in the Hub, which serves many projects from
+wherever uvicorn was started. Without the join, the delta's own scenario *A relative path that
+traverses outside is caught* resolves `../../x` against the Hub's launch directory and classifies at
+random. Task 3.2 now names the join as load-bearing and requires the test to run from a cwd other
+than the fixture workspace, or it proves nothing.
+
+### 3. `.agentweave/` is not "the project's directory"
+
+Both rounds folded everything under the project root that is not a worktree into kind `project`, and
+then justified `project` as the mild destination on the grounds that a write there *sits there
+visibly*. That is inverted for `<root>/.agentweave/`. `repo_hygiene.EXCLUDE_PATTERNS`
+(`hub/hub/repo_hygiene.py:59-80`) lists `.agentweave/worktrees|reviews|tasks|logs|evidence|context`,
+and `seed_repo_excludes` writes them into the repository's `info/exclude` on **every turn** —
+`resolve_agent_workspace` calls it as its first statement (`worktrees.py:627`). The Hub has told git
+to hide that subtree. A write into `.agentweave/evidence/` is a run writing into the Hub's own
+record-keeping about runs, appears in no `git status` anywhere, and would have been reported to the
+operator as the destination that sits visibly. New `hub` destination kind, in both spec deltas, plus
+a test that walks `EXCLUDE_PATTERNS` and asserts no `.agentweave/` pattern ever classifies `project`.
+
+### 4. D3 reconciled the write-tool list against the wrong source
+
+Round 2: *"the list already exists in the product, twice"*, and dropped `MultiEdit` because *"nothing
+else in this codebase recognises"* it. Both halves are false.
+
+It exists **three** times, and the third is the concept match: `WRITING_TOOLS` in
+`hub/ui/src/components/agents/AgentTimeline.tsx:573` — `{Edit, MultiEdit, Write, NotebookEdit,
+apply_patch}` — both providers, already driving the "wrote to N files" summary an operator reads.
+`MultiEdit` is also at `AgentTimeline.tsx:558`, `lib/editDiff.ts:20`, and in a test against a real
+`MultiEdit`-shaped payload (`agentTimeline.test.tsx:801-827`). It goes back in.
+
+And `runner_commands.py:210` is not a statement of which tools write. Read in place it is
+`restrict_spec_writes` — F4/D6, *which tools exist at all* for a spec-authoring agent, applied
+unconditionally including under yolo. It is a `--disallowedTools` argument, so Claude-only by
+construction: round 2's proposed assertion that every writer appears in it is **false for
+`apply_patch`** and would have forced `MultiEdit` out for a reason that does not hold. Filed
+separately (task 2.2c, not fixed here): `restrict_spec_writes` omits `MultiEdit` while the UI counts
+it as a write, so a spec-restricted agent may be able to write through it.
+
+### 5. D5 had no accumulator and no write point, and the obvious answer loses the record
+
+"At most 20 entries plus a total count" and "once per distinct destination per run" are per-*run*
+facts; the only sites that see the calls are per-*event* callbacks each opening their own session.
+Neither round said where the state lives or when the column is written.
+
+The precedent D5 cites points at the wrong answer. `turn_produced_nothing` fires from
+`evaluate_run_end` (`run_divergence.py:672`) — at the run boundary, having read the whole run back.
+Flushing this column the same way is the natural reading of D5 as written, and it loses the entire
+record for a run that is killed or whose Hub restarts, which is exactly the population whose stray
+writes matter. Decided: accumulate in the enclosing closure (the `nonlocal` shape `sequence` and
+`accounting_sample` already use in both functions, serial within a run), and write the column **on
+first sight of each destination**, in the same transaction that emits the event. At most one write
+per destination, bounded by the same 20; a killed run keeps every destination and the first path into
+each; only the exact call count is best-effort.
+
+### 6. New D12 — the detector is structurally silent for a whole class of run
+
+Neither round asked. `resolve_agent_workspace` returns `repo_root` itself on three branches
+(`worktrees.py:607-636`): a read-only agent, a project that is not a git repository, and a machine
+with no git. `resolve_turn_workspace` routes through it whenever `takes_task_workspace` is false, and
+`agent_trigger.py:891` records the consequence in its own words —
+`isolated_workspace = workspace if workspace != repo_root else None`.
+
+For such a run the boundary is the whole project, so **nothing inside it is ever an outside write** —
+including a write into another agent's worktree, the case this change calls the worst one. Not a
+defect to fix here: inventing a narrower boundary for those runs would create the second boundary D4
+exists to prevent, and the record is honest. What must not stand is the claim of coverage. D5 makes
+`[]` mean *observed, nothing left* — and for a root-workspace run that is simultaneously true and the
+least informative sentence the product could emit: the least confined run it has, reporting clean.
+The requirement now says so, and D12 records the open product question (should a non-repository run
+get a boundary at all?) as not this change's to answer.
+
+### What R3 re-derived and did **not** overturn
+
+- **D2's one-population-site claim holds.** `kind="tool_use"` is constructed in exactly one place in
+  `hub/hub` — `runner_events.py:154`, inside `tool_use_event`. Task 2.5c goes from a conditional to
+  an answered item with a regression test. One boundary stated: `POST .../output` accepts a
+  `tool_use` kind from an agent the Hub did not spawn, which has no `RunEvent` and no workspace.
+- **`write_paths` is never persisted.** `record_agent_output` takes `content`, `kind`, `payload`,
+  `run_id`, `sequence` and the ids off the event and nothing else.
+- **`work_dir` is in scope at both sinks** — `Optional[str]` on `_execute_run` (`:1720-1740`) and
+  `_execute_codex_appserver_run` (`:2389-2406`). Round 2's list was right and **incomplete**: D4 also
+  needs the project root, and `repo_root` occurs **zero** times in either function (measured across
+  lines 1720-2274 and 2389-2752). Both take a new parameter; tasks 4.3/4.3b were written as if it
+  were already there.
+- **Round 1's default-posture premise correction survives a third reading.**
+  `DEFAULT_CLAUDE_PERMISSION_MODE = WORKSPACE_PERMISSION_MODE` (`runner_commands.py:66`), with
+  `acceptEdits` as the no-approver fallback (`:73`).
+- **The cost objection is moot** (new D13). `tool_use_event` already runs `redact_secrets` and
+  `json.dumps(sort_keys=True)` over every input unconditionally (`runner_events.py:142-143`), so a
+  membership test is not measurable beside it. Keep the early return because it is what the function
+  *is*; drop performance as the reason, or the next reader relaxes it when the cost argument stops
+  applying.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `openspec validate --strict` | valid |
+| Every correction measured against code | yes; each names the file and line it was read from |
+| D9 disproof | measured, not argued — 44 `persist_event` types enumerated, 1 refusal |
+| MODIFIED delta first line still carries SHALL | yes, unchanged; `--strict` reads only line 1 |
+| Files touched | the five change artefacts only; **no code** |
+| Implementation written | **none**, by design — R3 corrects the proposal and stops |
+| Tree clean, committed, pushed | yes |
+
+### The next unit is F115-IMPL, unless the clock says otherwise
+
+The F115 spec loop is **complete**: three rounds, and each of the three found a real defect. R3
+finished at 07:20, so there is roughly forty minutes before the 08:00 rule. `F115-IMPL` is a
+substantial implementation — a new module, a migration, two sinks, an evidence change and a live
+drive — and it will **not** fit in forty minutes. Starting it and parking it half-done is the one
+thing the 08:00 rule forbids.
+
+So a fresh iteration reading this should go **straight to `E2E-DRIVE`** and leave `F115-IMPL` queued
+for the operator or a later run. Read the `E2E-DRIVE` queue entry in full: full-surface sweep, own
+Hub on **8011** (never 8000, never 8010), Haiku bound for every real agent turn, decision D5 for
+fix-versus-file, and **leave no job enabled**. The drive then has the whole window rather than a
+remainder of it.
