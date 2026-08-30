@@ -245,3 +245,126 @@ Both were read end to end as delivered — briefing plus `job.message` — not m
 ### Next
 
 `B-R1`: propose `a-review-a-flow-cannot-staff-is-named` (break 4, F142).
+
+---
+
+## Iteration 2 — 2026-08-31 00:04–00:2x (+01:00) — B-R1, round 1 of `a-review-a-flow-cannot-staff-is-named`
+
+**Reconciliation.** `STATE.json` claimed iteration 1 complete on `b34ece5` with `next_action =
+B-R1`. Branch, `git log` and working tree all agreed; nothing to reconcile. Heartbeat claimed at
+00:04 and the branch taken.
+
+### One item, one round
+
+`B-R1` only. The proposal is written; **no code was touched**, which is the round discipline working
+rather than a shortfall. `openspec validate a-review-a-flow-cannot-staff-is-named --strict` passes.
+
+### What round 1 establishes
+
+The queue item named the minimum repair — `scheduler.py:1364-1368` drops an unattributable task with
+a bare `continue` and that breaches `agent-flows:189-195` — and left the judgement half open. Both
+are now settled on the page for rounds 2 and 3 to attack.
+
+**The enforcement half is not a judgement.** `agent-flows`' *"No eligible agent surfaces rather than
+stalling silently"* scenario requires the operator to be notified naming the task when no agent can
+be resolved or found for one. Nothing is recorded, so nothing is notified. It goes under either
+answer below.
+
+**The judgement half, and this proposal's position: a flow MAY staff a review for work the operator
+completed.** Recorded with the argument *against* stated at equal length in `design.md` D4, because
+round 3's job is to re-derive it rather than inherit it — and D4 names the specific weakness to
+attack, that `requirement-traceability:158` is about *evidence acceptance* falling to the operator
+and is being stretched to cover task completion.
+
+### The two things round 1 found that the queue item did not name
+
+**1. `None` is two worlds and they cost nothing to separate.** `Actor.__post_init__`
+(`task_transitions.py:64-67`) makes an actor of kind `run` without an agent unconstructible, and one
+of kind `operator` with an agent equally so. `task_transition_service.py:431` is the only production
+writer of the table. So on a `→ completed` row, `actor_agent IS NULL` ⟺ *the operator made the move*
+— one extra column in a query the walk already runs. No migration, no column, no second round trip.
+
+Recorded as a rejected alternative because it looks like the fix and is not: filtering the existing
+query to `actor_kind = 'run'` is a **no-op**, since a run row always carries an agent. That is itself
+the proof the ambiguity lives in what the *caller* concludes from `None`, not in the query.
+
+**2. The obvious repair is a self-approval route — this is round 1's real finding.** The arm calls
+`resolve_reviewer(..., exclude={author})`, so `author is None` invites `exclude=set()`. In F140's own
+drive the builder did the work, recorded evidence, never called `update_task`, and is still in
+`task.assignee` — with an empty exclusion it is an eligible reviewer of its own work, and **nothing
+downstream catches it**: `_guard_author_is_not_reviewer` and `_guard_reviewer_is_not_the_author` both
+permit when the completer is unknown, deliberately and at length. That is `task_is_claimable_by`'s
+own warning — *"self-approval reached by two permissive defaults agreeing"* — arriving through a new
+door.
+
+So the change carries `agents_that_worked()` (distinct non-null `actor_agent` over the task's
+transitions) as the exclusion for that arm. Without it this change would ship a regression worse than
+the bug it fixes. Task 1.4 writes that trap as a reproduction *before* building the arm that would
+walk into it.
+
+### All seven callers, enumerated in round 1 rather than deferred to round 2
+
+The queue item asked round 2 to do this. Doing it in round 1 is what decided the shape: four of the
+seven read `None` correctly and are argued at length in their own docstrings, so
+`agent_that_completed` keeps its exact signature and becomes a wrapper over a new
+`completion_attribution()`. Changing a return type four correct callers depend on, to serve three, is
+the wrong direction. Round 2 still owns verifying the table.
+
+| # | Site | Reads `None` as | Change |
+|---|---|---|---|
+| 1 | `_guard_author_is_not_reviewer` (`task_transition_service.py:168`) | permit | none |
+| 2 | `_guard_reviewer_is_not_the_author` (`:220`) | permit | none |
+| 3 | `task_is_claimable_by` (`scheduler.py:589`) | refuse to offer | **yes** |
+| 4 | wedged-review branch (`scheduler.py:1280`) | not wedged → `in_flight` | **yes** |
+| 5 | review arm (`scheduler.py:1364`) | drop silently | **yes** |
+| 6 | `run_divergence.py:415` | nobody to bar | none |
+| 7 | `agent_trigger.py:445` | permit the dispatch | none |
+
+### Scope the round grew, each for a reason in the code
+
+- **`task_is_claimable_by`** moves with the review arm, or the flow walk and the per-agent walk
+  answer opposite things about one task — which `agent-flows:59`'s third scenario, *"Claimability and
+  the approval guard agree"*, forbids.
+- **The wedged-review branch** (`scheduler.py:1279-1284`) moves too. F142 measured it as the
+  operator's only manual escape and it is gated on the same function; a task in `under_review` whose
+  assignee is the agent that wrote the code is recorded `in_flight` — *"a reviewer holds this"* —
+  which is exactly the false statement `task-lifecycle-governance:313` exists to prevent.
+
+### A shipped, undocumented divergence found on the way
+
+`agent-loops:815` requires a stall reason to *"name how many tasks are open and in which statuses"*.
+`scheduler.py:1438-1457` replaces that with `unstaffed[0][1]` whenever the walk named an unstaffable
+task — F64's fix, which is right, and **no requirement licenses it.** The corpus was searched; the
+only neighbouring clause is the gated-stall carve-out, which is about dependency gates.
+
+This change makes that override fire on a new class of queue, so reconciling it is this change's job
+rather than a tidy-up someone else inherits. `agent-loops` gets the general clause: the histogram is
+the reason of last resort, and where the walk attributed the stall to a specific task with a remedy,
+that names the stall.
+
+### Verification
+
+- `openspec validate a-review-a-flow-cannot-staff-is-named --strict` — valid.
+- Every requirement citation in the proposal was opened and read, not recalled. One was wrong and was
+  corrected: the *"a supported way to work, not a degraded one"* clause is
+  `requirement-traceability:158`, not `:117` as the exploration has it.
+- `task_transition_service.py:431` confirmed as the only production writer of `task_transitions`, so
+  D2's invariant holds in production. Tests construct rows directly
+  (`test_project_delete_api.py:390`, `test_task_transition_service.py:213`), which is why task 2.3
+  asserts the invariant through `Actor.__post_init__` rather than through the table.
+- No code changed, so no suite was run. That is correct for a round-1 item.
+
+### Next
+
+`B-R2`: a fresh comparison of this proposal against the code. The queue item's own list still stands
+— re-verify all seven callers rather than accepting the table above, and check the wedged-review
+recovery at `scheduler.py:1280`. Two things round 1 asks round 2 to attack specifically:
+
+1. **`commit_for_task_review` does not require acceptance** (`requirement_evidence.py:736-795`) — it
+   needs an evidence row with a non-empty `commit_sha` on its footprint. If that reads correctly,
+   then in F140's own shape (agent records evidence, operator completes the card) this change staffs
+   a **real** review in a default project. F142's working row happened to have *accepted* evidence,
+   and concluding acceptance was load-bearing when it was incidental is the easy mistake here.
+2. **Whether the wedged-review widening is safe.** A flow that starts reporting reviews in progress
+   as unstaffable would be worse than the bug. Task 5.4 is the guard; check the predicate reaches
+   only the intended rows.

@@ -53,7 +53,7 @@
     },
     {
       "id": "B-R1",
-      "status": "pending",
+      "status": "done",
       "title": "Round 1: propose `a-review-a-flow-cannot-staff-is-named` (break 4; F142)",
       "detail": "scheduler.py:1365-1369 drops an unattributable task with a bare `continue` that records nothing - not unstaffed, not deferred, not in_flight, not gated, no log, no event. This BREACHES agent-flows:134's scenario 'WHEN no agent can be resolved or found for a task THEN the operator is notified, naming the task'. So the minimum repair is enforcement, not new design: append to `unstaffed` with a reason naming the task. The deeper half is a judgement: `agent_that_completed` (task_transition_service.py:123-147) does not filter on actor_kind, so an operator's completion returns None, ambiguous with 'nobody completed this', and seven callers read None three different ways. Decide in the proposal whether to disambiguate it (a second function, or a richer return) and whether a flow may staff a review for work the OPERATOR completed - and if so, who counts as the author to exclude. task-lifecycle-governance:313 was written assuming a name is returned and has no clause for None; the exploration section 5 records that as a gap in the requirement, not only in the code."
     },
@@ -142,8 +142,8 @@
       "detail": "py -3.11 -m pytest hub/tests/ -q in the BACKGROUND with NO drive running beside it - it exceeds the 600s command cap and contends badly with live agent spawns. Then py -3.11 -m pytest tests/ -q. Then ruff check src/ hub/ tests/ and black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/. Push. Do NOT merge to master - the operator merges."
     }
   ],
-  "current": "Change A (`a-flow-briefing-names-its-contract`) is COMPLETE and committed: three rounds (7da91a3, e828add, fae6939) plus implementation (1b4c730). Reproduction was run against unmodified code first and both defects confirmed. 451 passed / 14 skipped across flow, loop, briefing, scheduler, handover, divergence and job tests; ruff and black clean. NOT yet driven - whether a real agent acts on the new text is DRIVE-1's question, and t_row12_flows.py now carries a mechanical pass condition for it.",
-  "next_action": "Begin B-R1: propose `a-review-a-flow-cannot-staff-is-named` (break 4, F142). Read openspec/explorations/2026-08-30-why-a-flow-cannot-land-its-work.md section 3 break 4 and section 5 first. Create with `openspec new change a-review-a-flow-cannot-staff-is-named` (no date prefix). The minimum repair is enforcement of agent-flows:134 - scheduler.py:1365-1369 drops an unattributable task with a bare `continue` recording nothing; append to `unstaffed` with a reason naming the task. The judgement half is whether `agent_that_completed` should disambiguate 'nobody completed this' from 'the operator did', and whether a flow may staff a review for work the OPERATOR completed. Decisions D6 and D7 in decisions_for_user apply.",
+  "current": "Change B (`a-review-a-flow-cannot-staff-is-named`) is PROPOSED (round 1 only, commit pending). proposal.md, design.md (D1-D12), tasks.md and three spec deltas - agent-flows (1 MODIFIED, 2 ADDED), task-lifecycle-governance (1 MODIFIED), agent-loops (1 MODIFIED). `openspec validate --strict` passes. No code touched. Round 1 settled the judgement half in favour of allowing a flow to staff a review for operator-completed work, and found the trap: the obvious repair (exclude=set()) is a self-approval route, so the arm excludes `agents_that_worked` instead. Change A remains complete and undriven.",
+  "next_action": "Begin B-R2: a FRESH comparison of openspec/changes/a-review-a-flow-cannot-staff-is-named against the code - not a re-read of round 1. Re-verify all seven callers of `agent_that_completed` independently rather than accepting design.md D3's table. Two things round 1 asks round 2 to attack specifically: (1) `commit_for_task_review` (requirement_evidence.py:736-795) appears NOT to require acceptance - only an evidence row with a non-empty commit_sha footprint. If that holds, this change staffs a real review in F140's own shape in a DEFAULT project, and F142's working row having accepted evidence was incidental. Verify against the code. (2) Whether widening the wedged-review branch (scheduler.py:1279-1284) is safe - a flow that reports reviews in progress as unstaffable would be worse than the bug; check the predicate reaches only the intended rows (tasks.md 5.4). Also check the agent-loops:815 delta is the right reconciliation of F64's shipped override rather than a new claim.",
   "limits": [
     "Never point a Hub you are editing at this repo. The trial Hub on 8011 is a separate instance; port 8000 is the operator's REAL usage and must never be touched.",
     "Never drive against proj-5e960453 (this repo) or proj-18e5d4e0. Create a fresh project for every drive.",
@@ -221,5 +221,5 @@
     "fastapi>=0.110 is unbounded and has produced two CI-only failures via Starlette major bumps. Worth pinning; not this run's job.",
     "The feature freeze's parameters are still unsettled."
   ],
-  "last_heartbeat": "2026-08-31T00:04:41+01:00"
+  "last_heartbeat": "2026-08-31T00:15:24+01:00"
 }
