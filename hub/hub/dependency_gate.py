@@ -4,9 +4,17 @@ Lives beside `requirement_gate` for the same reason that one does: a second enfo
 second thing to bypass, so this is called from inside `task_transition_service.apply_transition`,
 before the history row is written, rather than from each of its callers.
 
-**On `-> in_progress` only, including the `blocked -> in_progress` resume edge** (`task-dependencies`
-design D1). Not `-> assigned`: a whole wave can be routed ahead of time and each task starts only
-once its own prerequisites clear — gating assignment would make assigning ahead impossible.
+**On the edges that begin work: `pending -> in_progress` and `assigned -> in_progress`**
+(`task-dependencies` design D1). Not `-> assigned`: a whole wave can be routed ahead of time and
+each task starts only once its own prerequisites clear — gating assignment would make assigning
+ahead impossible.
+
+**Not the `blocked -> in_progress` resume edge**, which it used to cover
+(`a-task-waits-while-its-run-waits`, design D5). `blocked` is reachable only from `in_progress`, so
+that work started and this gate has already been through once; every refusal there is necessarily a
+post-start change, which the shipped *A dependency that regresses after a dependent has started does
+not halt it* governs instead. `scheduler.candidate_is_startable` had already made the same
+exemption, so this is also what stops the board and the gate contradicting each other.
 
 **Met at `approved`, nothing earlier** (design D2, and `TaskDependency`'s own docstring: "may not
 start until `depends_on_task_id` is `approved`"). A dependency chain therefore cannot advance with a

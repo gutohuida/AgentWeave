@@ -316,10 +316,22 @@ async def _attach_dependencies(
             if p["status"] != dependency_gate.MET_STATUS
             and p["status"] != dependency_gate.PERMANENTLY_UNMET_STATUS
         ]
-        if response.status == "in_progress" and (rejected or unmet):
+        if response.status in ("in_progress", STATUS_BLOCKED) and (rejected or unmet):
             # Already started, and a prerequisite no longer clears the gate that let it start —
-            # design D8's "flagged, not stopped". The gate itself only guards `-> in_progress`, so
-            # this state is read-model-only: nothing in `task_transition_service` reacts to it.
+            # design D8's "flagged, not stopped". The gate itself only guards the edges that begin
+            # work, so this state is read-model-only: nothing in `task_transition_service` reacts
+            # to it.
+            #
+            # `blocked` counts too, and always should have: it is reachable only from
+            # `in_progress`, so a waiting task has always started, and rendering one `gated` said
+            # the work had not begun. Wrong before ask-time parking and only widened by it — before
+            # this change a task was `blocked` for the moments between its run ending and the
+            # operator answering, and now it is `blocked` for the whole of every wait.
+            #
+            # Coupled to the resume ungating in `task_transition_service`, in both directions
+            # (design D5): reading a waiting task as "flagged, not stopped" while the gate could
+            # still stop it permanently would make the board state something false, and ungating
+            # without this would leave a resumable task rendered `gated`. Neither half ships alone.
             response.dependency_state = "running_on_regressed"
         elif rejected:
             response.dependency_state = "gated_on_rejected"

@@ -38,7 +38,7 @@ not reproductions; they must pass before and after.
 - [ ] 3.2 A loop firing does not claim a task parked at ask time, and the loop's board still shows it as the current item (`jobs.py:354`).
 - [ ] 3.3 A second run binding to a task parked at ask time leaves it parked (`run-task-binding:618`).
 - [ ] 3.4 `_free_agents` still excludes the agent whose run is waiting.
-- [ ] 3.5 **Do this with group 7, not without it** (design D5): a board that reads a waiting task as "flagged, not stopped" while the gate can still stop it permanently states something false, and ungating without this leaves a resumable task rendered `gated`. Fix `dependency_state` in `hub/hub/api/v1/tasks.py:317`: `running_on_regressed` is derived from `response.status == "in_progress"` and must also hold for `blocked`, which is reachable only from `in_progress` and therefore has always started. Add a test for a parked task with a regressed prerequisite, and a comment recording that this was already wrong before ask-time parking and is only widened by it.
+- [x] 3.5 **Do this with group 7, not without it** (design D5): a board that reads a waiting task as "flagged, not stopped" while the gate can still stop it permanently states something false, and ungating without this leaves a resumable task rendered `gated`. Fix `dependency_state` in `hub/hub/api/v1/tasks.py:317`: `running_on_regressed` is derived from `response.status == "in_progress"` and must also hold for `blocked`, which is reachable only from `in_progress` and therefore has always started. Add a test for a parked task with a regressed prerequisite, and a comment recording that this was already wrong before ask-time parking and is only widened by it.
 
 ## 3a. Who is on a blocked task while a run is on it
 
@@ -97,12 +97,12 @@ already has both halves — `expire_permission_request`: *"The run reports and t
 
 ## 7. Ungate the resume
 
-- [ ] 7.1 In `hub/hub/task_transition_service.py:371-383`, skip the dependency gate for `blocked -> in_progress`. Derive it from the task's status at the transition rather than from a flag the caller passes, so no caller can forget it and no caller can abuse it.
-- [ ] 7.2 Comment it with design D5's reasoning: the gate asks whether work may *start*, `blocked` is reachable only from `in_progress`, so this work started and this edge resumes it.
-- [ ] 7.3 Test all three releases — answer, decline, expiry — against a task whose prerequisite regressed while it waited. All three release; none is refused. The expiry case is the one that would otherwise leave an agent unable to complete finished work.
-- [ ] 7.4 Test that the gate still refuses `pending -> in_progress` and `assigned -> in_progress` unchanged, so this does not read as a general weakening.
-- [ ] 7.5 Overturn the shipped test that asserts the old rule, rather than working around it: `hub/tests/test_dependency_gate.py:185` `test_the_blocked_resume_edge_is_gated_the_same_way` must become its inverse, and the module docstring (`:6-7`) and section comment (`:155`) must stop saying "including the `blocked -> in_progress` resume edge". Its sibling `test_the_blocked_resume_edge_succeeds_once_the_prerequisite_is_approved` stays true and stays. Also correct the gate's own two docstrings, which state the old rule in prose: `hub/hub/dependency_gate.py:7-9` and `hub/hub/task_transition_service.py:370-378`.
-- [ ] 7.6 Add the case round 2 named that no earlier round did: a dependency **declared** on a task while it is waiting (`task-dependencies:262`) no longer stops it resuming, and the unmet prerequisite is reported against the task instead. This is the honest cost of the ungating and it must have a test rather than only a paragraph.
+- [x] 7.1 In `hub/hub/task_transition_service.py:371-383`, skip the dependency gate for `blocked -> in_progress`. Derive it from the task's status at the transition rather than from a flag the caller passes, so no caller can forget it and no caller can abuse it.
+- [x] 7.2 Comment it with design D5's reasoning: the gate asks whether work may *start*, `blocked` is reachable only from `in_progress`, so this work started and this edge resumes it.
+- [x] 7.3 Test all three releases — answer, decline, expiry — against a task whose prerequisite regressed while it waited. All three release; none is refused. The expiry case is the one that would otherwise leave an agent unable to complete finished work.
+- [x] 7.4 Test that the gate still refuses `pending -> in_progress` and `assigned -> in_progress` unchanged, so this does not read as a general weakening.
+- [x] 7.5 Overturn the shipped test that asserts the old rule, rather than working around it: `hub/tests/test_dependency_gate.py:185` `test_the_blocked_resume_edge_is_gated_the_same_way` must become its inverse, and the module docstring (`:6-7`) and section comment (`:155`) must stop saying "including the `blocked -> in_progress` resume edge". Its sibling `test_the_blocked_resume_edge_succeeds_once_the_prerequisite_is_approved` stays true and stays. Also correct the gate's own two docstrings, which state the old rule in prose: `hub/hub/dependency_gate.py:7-9` and `hub/hub/task_transition_service.py:370-378`.
+- [x] 7.6 Add the case round 2 named that no earlier round did: a dependency **declared** on a task while it is waiting (`task-dependencies:262`) no longer stops it resuming, and the unmet prerequisite is reported against the task instead. This is the honest cost of the ungating and it must have a test rather than only a paragraph.
 
 ## 8. Say it on the task, permanently
 

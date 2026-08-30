@@ -1155,3 +1155,138 @@ def test_the_loops_stop_reason_is_deliberately_out_of_scope():
     source = inspect.getsource(scheduler._pending_loop_request)
     assert "declined" not in source
     assert "wait_ended_at" not in source
+
+
+# ---------------------------------------------------------------------------
+# 7 + 3.5. Ungating the resume, and the board that has to agree with it
+#
+# Coupled in both directions (design D5). Teaching the board to read a waiting task as "flagged,
+# not stopped" while the gate could still stop it permanently would make the board state something
+# false; ungating without the board fix leaves a resumable task rendered `gated`. Neither ships
+# alone, so they are tested together.
+# ---------------------------------------------------------------------------
+
+
+async def regress_a_prerequisite(task_id: str, prereq_id: str = "task-prereq") -> None:
+    """A prerequisite that was approved when the task started, and is not any more.
+
+    This is the only shape in which the resume edge can meet an unmet prerequisite at all: the way
+    *into* `in_progress` is the gated edge, so a waiting task cleared the gate on the way in.
+    """
+    from hub.db.models import TaskDependency
+
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id=prereq_id,
+                project_id="proj-test",
+                title="the thing this depends on",
+                status="revision_needed",
+            )
+        )
+        session.add(
+            TaskDependency(
+                id=f"dep-{prereq_id}",
+                project_id="proj-test",
+                task_id=task_id,
+                depends_on_task_id=prereq_id,
+            )
+        )
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_an_answer_releases_a_waiting_task_whose_prerequisite_regressed(app, auth_headers):
+    """7.3, first of three. Before the ungating `release_block_for_question` swallowed the refusal,
+    so an answer could silently fail to release the task it settled."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    await regress_a_prerequisite(task_id)
+
+    await app.patch(
+        f"/api/v1/projects/proj-test/questions/{asked.json()['id']}",
+        headers=auth_headers,
+        json={"answer": "blue"},
+    )
+
+    assert (await task_row(task_id)).status == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_a_decline_releases_a_waiting_task_whose_prerequisite_regressed(app, auth_headers):
+    """7.3, second. The reasoning does not distinguish the three releases, so leaving two of them
+    gated would be an inconsistency nobody could explain later."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    await regress_a_prerequisite(task_id)
+
+    await app.post(
+        f"/api/v1/projects/proj-test/questions/{asked.json()['id']}/decline",
+        headers=auth_headers,
+        json={},
+    )
+
+    assert (await task_row(task_id)).status == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_an_expiry_releases_a_waiting_task_whose_prerequisite_regressed(app):
+    """7.3, third, and the one that would otherwise leave an agent unable to complete finished
+    work: refused the resume, its `update_task(completed)` comes back from `blocked` for work it
+    has genuinely done, with no action available to it."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+    await regress_a_prerequisite(task_id)
+    await expire_the_wait(question_id)
+
+    reported = await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+    assert reported.json()["accepted"] == [question_id]
+    assert (await task_row(task_id)).status == "in_progress"
+
+    completed = await app.patch(
+        f"/api/v1/agent-actions/tasks/{task_id}", headers=headers, json={"status": "completed"}
+    )
+    assert completed.status_code == 200, completed.text
+
+
+@pytest.mark.asyncio
+async def test_a_waiting_task_with_a_regressed_prerequisite_reads_flagged_not_stopped(app):
+    """3.5. The board half of the same decision.
+
+    `dependency_state` derived `running_on_regressed` from `status == "in_progress"` alone, so a
+    `blocked` task with a regressed prerequisite rendered `gated` — "this has not started". It has:
+    `blocked` is reachable only from `in_progress`. Wrong before ask-time parking, for the moments
+    between a run ending and the operator answering, and only widened by it to the whole wait.
+    """
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    await regress_a_prerequisite(task_id)
+
+    body = await read_task(app, headers, task_id)
+    assert body["status"] == "blocked"
+    assert body["dependency_state"] == "running_on_regressed"
+
+
+@pytest.mark.asyncio
+async def test_a_task_that_never_started_still_reads_gated(app, auth_headers):
+    """The other side of 3.5: the board's `gated` still means what it says. A widened read that
+    called everything `running_on_regressed` would be the same defect pointing the other way."""
+    await make_agent()
+    task_id = await make_task("task-not-started", status="pending", assignee=None)
+    await regress_a_prerequisite(task_id, "task-prereq-unstarted")
+
+    response = await app.get(f"/api/v1/projects/proj-test/tasks/{task_id}", headers=auth_headers)
+    assert response.json()["dependency_state"] == "gated"
