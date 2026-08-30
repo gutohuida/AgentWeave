@@ -340,3 +340,136 @@ async def test_the_park_announces_once_for_a_batch(app):
     assert len(events) == 1
     assert events[0].severity == "info"
     assert events[0].data["task_id"] == task_id
+
+
+# ---------------------------------------------------------------------------
+# 2b. The way out that needs no report (design D10)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_run_cannot_assert_its_own_task_out_of_the_waiting_status(app):
+    """2b.1 → 2b.5. `task-lifecycle-governance:445` forbids leaving the waiting status by
+    assertion as well as entering it. Only entering was enforced.
+
+    Reproduced first against group 2 and unmodified `tasks.py`, where both calls below succeeded:
+    the agent that waits out its deadline is refused `blocked -> completed`, sees `in_progress` in
+    its own tool surface, moves itself there and completes — reproducing F60 through the door
+    ask-time parking opens, with `wait_ended_at` never set and no statement on the task.
+
+    Latent before this change because `blocked` implied the asking run had already ended. Ask-time
+    parking removes exactly that protection, which is why the guard ships here rather than
+    separately.
+    """
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+
+    await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    assert (await task_row(task_id)).status == "blocked"
+
+    refused = await app.patch(
+        f"/api/v1/agent-actions/tasks/{task_id}", headers=headers, json={"status": "in_progress"}
+    )
+    assert refused.status_code == 403, refused.text
+    # The message must name what actually ends a wait, or the agent is left guessing at a 403.
+    detail = refused.json()["detail"]
+    assert "answer" in detail and "decline" in detail
+
+    # And the illegal edge stays illegal, distinguishably: 409 is the map refusing a move that does
+    # not exist, 403 is this guard refusing one that does.
+    illegal = await app.patch(
+        f"/api/v1/agent-actions/tasks/{task_id}", headers=headers, json={"status": "completed"}
+    )
+    assert illegal.status_code == 409, illegal.text
+
+    assert (await task_row(task_id)).status == "blocked"
+
+
+@pytest.mark.asyncio
+async def test_the_operator_still_releases_a_waiting_task_by_hand(app, auth_headers):
+    """2b.4. Exempt by `actor.is_operator`, which is the whole shape of the entering guard read
+    the other way. Nothing legitimate is refused, because no legitimate agent-asserted release
+    exists."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+
+    released = await app.patch(
+        f"/api/v1/projects/proj-test/tasks/{task_id}",
+        headers=auth_headers,
+        json={"status": "in_progress"},
+    )
+    assert released.status_code == 200, released.text
+    task = await task_row(task_id)
+    assert task.status == "in_progress"
+    assert task.blocked_reason is None
+
+
+@pytest.mark.asyncio
+async def test_an_answer_releases_the_task_without_going_through_the_route(app, auth_headers):
+    """2b.4. `release_block_for_question` uses `operator()` and does not touch the PATCH route at
+    all, so the guard cannot reach it. Asserted by actor rather than by inspection."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+
+    answered = await app.patch(
+        f"/api/v1/projects/proj-test/questions/{question_id}",
+        headers=auth_headers,
+        json={"answer": "blue"},
+    )
+    assert answered.status_code == 200, answered.text
+
+    task = await task_row(task_id)
+    assert task.status == "in_progress"
+    assert task.blocked_reason is None
+
+
+@pytest.mark.asyncio
+async def test_a_decline_releases_the_task_too(app, auth_headers):
+    """2b.4, third path. Settled means answered *or* declined — a block released one way but not
+    the other is the bug `2026-08-11-declining-a-question` D3 guards."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+
+    declined = await app.post(
+        f"/api/v1/projects/proj-test/questions/{question_id}/decline", headers=auth_headers, json={}
+    )
+    assert declined.status_code == 200, declined.text
+    assert (await task_row(task_id)).status == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_the_operators_transition_map_still_offers_the_release(app, auth_headers):
+    """2b.6. `GET /tasks/transitions/allowed` is hardcoded to `ACTOR_OPERATOR` — the operator's own
+    view of the map — and the operator is exactly who this guard exempts.
+
+    Asserted rather than assumed, because a guard that made the operator's own status control offer
+    a move that then fails would be a worse defect than the one it fixes.
+    """
+    response = await app.get(
+        "/api/v1/projects/proj-test/tasks/transitions/allowed", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["transitions"]["blocked"] == ["assigned", "in_progress", "rejected"]
+
+
+def test_the_tool_surface_still_withholds_blocked_and_still_offers_in_progress():
+    """2b.7. `mcp_server` needs no change and must not get one.
+
+    `TaskStatus` already withholds `blocked` — the second layer behind the entering guard — and
+    `in_progress` must stay in it, because it is the ordinary claim. The refusal belongs at the
+    route, which is where the entering one is and for the reason its docstring gives.
+    """
+    from hub import mcp_server
+
+    statuses = set(mcp_server.TaskStatus.__args__)  # type: ignore[attr-defined]
+    assert "blocked" not in statuses
+    assert "in_progress" in statuses

@@ -69,6 +69,7 @@ from ...task_transitions import (
     STATUS_BLOCKED,
     Actor,
     allowed_map_for,
+    allowed_targets,
     operator,
 )
 from ...utils import persist_event, short_id
@@ -1172,6 +1173,48 @@ async def update_task_for_actor(
                     "A task is recorded as waiting on a person because AgentWeave saw the run end "
                     "with an unanswered blocking question, not because an agent said so. Use "
                     "ask_user to ask, and the task will be parked for you."
+                ),
+            )
+        if (
+            task.status == STATUS_BLOCKED
+            and not actor.is_operator
+            and body.status in allowed_targets(task.status, actor.kind)
+        ):
+            # The same rule as the guard above, read the other way.
+            # `task-lifecycle-governance:445` forbids a task entering **or leaving** the waiting
+            # status because an agent asserted that it should, and until this only entering was
+            # enforced. `TRANSITIONS["blocked"]["in_progress"]` is open to a run because the
+            # *runtime* takes that edge on the run's behalf when a wait actually ends; this is what
+            # stops the agent asking for it directly.
+            #
+            # Latent until ask-time parking, and no longer: a task used to reach `blocked` only
+            # once its asking run had ended, so the agent that could assert its way out was no
+            # longer running. Now the agent that waits out its deadline is refused
+            # `blocked -> completed` (the map withholds that edge) and finds `in_progress` in its
+            # own tool surface — which would reproduce F60 with no `wait_ended_at` and no statement
+            # on the task, bypassing everything the rest of this change records (design D10).
+            #
+            # Nothing legitimate is refused. The three real releases are the operator's answer and
+            # their decline (both `operator()`-attributed, and neither reaches this route), and the
+            # run's own expired-wait report (a runtime-origin transition, likewise not taken
+            # here — spelled in prose because `test_only_the_binding_module_may_record_a_runtime_
+            # transition` is a source scan and does not read comments differently from code). So the
+            # message names all three: a 403 an agent cannot act on is a worse failure than the
+            # move it refuses.
+            #
+            # Derived from `task.status` rather than `body.status`, and placed before
+            # `apply_transition`, so nothing is staged when it refuses.
+            #
+            # Scoped to edges the map would otherwise permit, so the two refusals stay
+            # distinguishable: `blocked -> completed` is a move that does not exist and stays the
+            # map's 409, and this 403 means "the edge is real and you are not who takes it".
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "A task waiting on a person is released when the wait actually ends — the "
+                    "operator answers or declines the question, or your own wait for it expires "
+                    "and ask_user reports that. An agent cannot move it out of 'blocked' by "
+                    "asking to."
                 ),
             )
         # Raises TransitionRefusedError — an illegal move, or one this actor may not make — which the
