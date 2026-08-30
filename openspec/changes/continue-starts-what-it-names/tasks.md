@@ -1,9 +1,9 @@
 ## 1. Reproduce the defect as a failing test first
 
-- [ ] 1.1 Add `hub/tests/test_a_start_is_reported_to_its_own_input.py`. Build the mismatch deliberately: one agent, two open conversations, a queued entry on conversation B with the **lower** `sequence`, a second entry on conversation A.
-- [ ] 1.2 `POST …/conversations/{A}/continue`, then assert the run that appears is bound to **B** — query `Run` by `conversation_id`, never by recency, so the assertion cannot pass on a stale row.
-- [ ] 1.3 Assert the current answer: `started: true`, `conversation_id == A`, no field naming B. Write the failure message so it says which conversation actually started.
-- [ ] 1.4 Run the file against unmodified code and confirm it passes — a reproduction that does not pass first is not a reproduction.
+- [x] 1.1 Add `hub/tests/test_a_start_is_reported_to_its_own_input.py`. Build the mismatch deliberately: one agent, two open conversations, a queued entry on conversation B with the **lower** `sequence`, a second entry on conversation A.
+- [x] 1.2 `POST …/conversations/{A}/continue`, then assert the run that appears is bound to **B** — query `Run` by `conversation_id`, never by recency, so the assertion cannot pass on a stale row.
+- [x] 1.3 Assert the current answer: `started: true`, `conversation_id == A`, no field naming B. Write the failure message so it says which conversation actually started.
+- [x] 1.4 Run the file against unmodified code and confirm it passes — a reproduction that does not pass first is not a reproduction.
 
 ## 2. Report the start against the input it is about
 
