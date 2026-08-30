@@ -184,7 +184,7 @@ async def test_the_briefing_for_a_collection_of_one_is_unchanged(app):
         fresh_loop = await _fresh_loop(db, job.id)
         claimed = await _claim_loop_task(db, fresh_loop, agent="claim-probe")
         prior = await latest_checkpoint_for_loop(db, fresh_loop.id)
-        briefing = await _compose_loop_briefing(db, fresh_loop, claimed[0], prior)
+        briefing = await _compose_loop_briefing(db, fresh_loop, claimed[0], prior, is_review=False)
 
     assert briefing.startswith("# Loop briefing")
     assert "Purpose: brief me" in briefing

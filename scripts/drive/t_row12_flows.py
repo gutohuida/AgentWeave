@@ -30,6 +30,17 @@ TARGET = f"calc_{RUN}.py"
 BASE = f"/projects/{P}/project"
 
 
+VERDICTS = []
+
+
+def check(label, ok, detail=""):
+    """Recorded, not just printed. This file used to end with prose an operator had to read; a
+    verdict list is what makes a re-drive after a fix answerable in one line."""
+    VERDICTS.append((label, bool(ok), detail))
+    print(f"  [{'OK ' if ok else 'BAD'}] {label}" + (f" -- {detail}" if detail else ""))
+    return bool(ok)
+
+
 def step(label, method, path, body=None, expect=None, show=False, limit=900):
     code, out = api(method, path, body)
     ok = expect is None or code in (expect if isinstance(expect, tuple) else (expect,))
@@ -281,7 +292,28 @@ def main():
              show=True, limit=3000)
         step("loop detail", "GET", f"/projects/{P}/loops/{loop_id}", expect=200,
              show=True, limit=3000)
-        head("F. Did the work actually land?")
+        head("F. F140: did the tasks actually MOVE, or was firing 2 a re-run of firing 1?")
+        # The whole point of `a-flow-briefing-names-its-contract`. Before it, both tasks sat in
+        # `in_progress` after firing 1, firing 2 re-claimed and re-briefed the same two agents for
+        # finished work, and the board after firing 2 was byte-identical to the board after firing
+        # 1. Nothing in the transcript distinguished that from progress -- which is why the pass
+        # condition is a status, not a reading.
+        #
+        # `completed` is the minimum. A task that went further (`under_review`, `approved`) has
+        # moved through it, so the check is "left the active band", not "is exactly completed".
+        MOVED = {"completed", "under_review", "approved", "revision_needed", "rejected"}
+        rows = [t for t in board() if TARGET in t["title"]]
+        stuck = [t["id"] for t in rows if t["status"] not in MOVED]
+        print(f"      statuses: {[(t['id'], t['status']) for t in rows]}")
+        if not check(
+            "F140: every task the flow worked has left the active band",
+            bool(rows) and not stuck,
+            f"still active: {stuck}" if stuck else f"{len(rows)} moved",
+        ):
+            print("      ^ this is F140 reproducing: the agent was never told what finishing is,")
+            print("        so the next firing will claim these same tasks again, forever.")
+
+        head("G. Did the work actually land?")
         # A run bound to a task works in that task's OWN checkout, not the agent's worktree --
         # `.agentweave/tasks/<task id>/`. Looking only in the worktree reported "NO worktree" for
         # work that was sitting on disk, correct and committed, two directories away.
@@ -307,6 +339,11 @@ def main():
         step("disable", "PATCH", f"/projects/{P}/jobs/{job_id}", {"enabled": False})
         step("archive", "POST", f"/projects/{P}/jobs/{job_id}/archive", {})
         step("jobs now", "GET", f"/projects/{P}/jobs", expect=200, show=True, limit=1500)
+        head("VERDICTS")
+        bad = [v for v in VERDICTS if not v[1]]
+        for label, ok, detail in VERDICTS:
+            print(f"  [{'OK ' if ok else 'BAD'}] {label}" + (f" -- {detail}" if detail else ""))
+        print(f"\n  {len(VERDICTS) - len(bad)}/{len(VERDICTS)} held")
 
 
 if __name__ == "__main__":

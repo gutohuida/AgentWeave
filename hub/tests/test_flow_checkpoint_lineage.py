@@ -113,7 +113,7 @@ async def test_a_second_agents_briefing_carries_the_first_agents_checkpoint(app)
         await _checkpoint_by(db, loop, FIRST, "The ledger reconciles except for row 42.")
 
         prior = await latest_checkpoint_for_loop(db, loop.id)
-        briefing = await _compose_loop_briefing(db, loop, task, prior)
+        briefing = await _compose_loop_briefing(db, loop, task, prior, is_review=False)
 
     assert "row 42" in briefing
     assert f"Agent: {FIRST}" in briefing
@@ -129,7 +129,7 @@ async def test_the_briefing_carries_the_newest_checkpoint_whoever_wrote_it(app):
         await _checkpoint_by(db, loop, SECOND, "Row 42 was a rounding error in the importer.")
 
         prior = await latest_checkpoint_for_loop(db, loop.id)
-        briefing = await _compose_loop_briefing(db, loop, task, prior)
+        briefing = await _compose_loop_briefing(db, loop, task, prior, is_review=False)
 
     assert "rounding error" in briefing
     assert "First pass done" not in briefing
@@ -147,7 +147,7 @@ async def test_a_checkpoint_from_a_different_loop_is_not_carried(app):
         await _checkpoint_by(db, loop_b, SECOND, "Belongs to the other loop entirely.")
 
         prior = await latest_checkpoint_for_loop(db, loop_a.id)
-        briefing = await _compose_loop_briefing(db, loop_a, task, prior)
+        briefing = await _compose_loop_briefing(db, loop_a, task, prior, is_review=False)
 
     assert prior is None
     assert "other loop entirely" not in briefing

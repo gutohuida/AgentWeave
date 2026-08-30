@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional, Set
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import dependency_gate, requirement_evidence
+from . import dependency_gate, requirement_evidence, requirement_links
 from .checkpoint_generation import render_checkpoint
 from .checkpoints import checkpoint_by_task_author, latest_checkpoint_for_loop
 from .conversations import (
@@ -1729,11 +1729,108 @@ async def _briefing_checkpoint(
     return await latest_checkpoint_for_loop(session, loop.id)
 
 
+def _briefing_completion_lines(task: Task, *, is_flow: bool) -> list[str]:
+    """What finishing this task is, named as a call rather than left to be inferred (F140).
+
+    **The hops come from the status, not from a two-case branch.** A firing claims from any status
+    in `BAND_AGENT_ACTIONABLE`, and `enter_selected_task` moves only `pending -> assigned` -- so a
+    task returned for revision arrives here at `revision_needed`, from which `TRANSITIONS` offers
+    `in_progress` and nothing else but operator rejection. Naming `completed` as the next call from
+    either `assigned` or `revision_needed` would describe a call the machine refuses, which is the
+    defect this whole change exists to remove.
+
+    `submit_checkpoint_notes` is asked for **here** rather than in the tier paragraph, beside the
+    transition that delivers it. The old wording asked for notes "somebody else reads it", and
+    nobody did: `consider_handover` declines unless the run recorded a `completed` transition, so
+    every note written by a run whose task never moved was recorded and never consumed.
+    """
+
+    def move(status: str) -> str:
+        return f'`update_task("{task.id}", status="{status}")`'
+
+    sentence = "**Finishing means moving the task.**"
+    if task.status == "in_progress":
+        sentence += f" It is `in_progress` now; call {move('completed')} when the work is done."
+    else:
+        sentence += (
+            f" It is `{task.status}` now; call {move('in_progress')} when you start and "
+            f"{move('completed')} when the work is done."
+        )
+    sentence += (
+        " Nothing else moves it, and a turn that ends with the task unmoved leaves the next "
+        "firing to claim the same task and ask somebody to do the same work again."
+    )
+    if is_flow:
+        sentence += (
+            " Record what whoever checks this work will need before you move it (see "
+            "`submit_checkpoint_notes`) -- those notes are delivered only when the task reaches "
+            "`completed`."
+        )
+    return [sentence, ""]
+
+
+def _briefing_verdict_lines(task: Task) -> list[str]:
+    """How a review turn ends, on the channel that drives tool calls.
+
+    Deliberately duplicated with `api/v1/agents.py`, which says the same thing in the turn context
+    (the F45 fix). F140 measured that agents call the tool the *briefing* names and skip the one
+    named only in the inventory; F45 measured the other side -- with the context channel already
+    saying how, no flow-dispatched reviewer had ever recorded a verdict. The two must agree, so the
+    wording here is the context channel's rather than a second phrasing of it.
+
+    The commit under review is **not** named. It is resolved one step later, at spawn, by
+    `commit_for_task_review`; naming it here would be a second copy of a fact that can disagree
+    with the checkout the reviewer is standing in, which is the case `ReviewContext.work_moved`
+    already exists to handle on the channel that resolved it.
+    """
+    return [
+        f"**End the review with a verdict, using `update_task`.** The task is `{task.status}`: "
+        "set it to `approved` if the work is right, or `revision_needed` if it is not. Leaving "
+        "it where it is ends your turn without a review having happened, and the work waits for "
+        "a person.",
+        "",
+    ]
+
+
+async def _briefing_evidence_lines(
+    session: AsyncSession, task: Task, *, is_review: bool
+) -> list[str]:
+    """The requirements this task serves, by identifier, or nothing at all.
+
+    Named from the link table rather than described in general, because an agent told to record
+    evidence against a requirement that does not exist is refused when it follows the instruction
+    (the agent route answers `404` for an unknown identifier), and a document-less loop has no
+    requirements at all.
+
+    Worded to survive `approval-refuses-unaccepted-evidence`. `record_evidence`'s own tool-surface
+    line says approving a task integrates nothing until evidence is accepted; that is true today
+    and false the moment approval is refused outright instead. What holds under both regimes is
+    that the row enters `awaiting` and somebody else decides on it.
+    """
+    if is_review:
+        # A reviewer records a verdict, not evidence for work it did not do.
+        return []
+    requirements = await requirement_links.for_task(session, task.id)
+    if not requirements:
+        return []
+    named = ", ".join(f"`{row.identifier}`" for row in requirements)
+    first = requirements[0].identifier
+    each = "each one" if len(requirements) > 1 else "it"
+    return [
+        f"**This task serves {named}.** Record what demonstrates {each} with "
+        f'`record_evidence("{first}", summary)`. What you record enters `awaiting`: somebody '
+        "else decides on it, and the work cannot land until they do.",
+        "",
+    ]
+
+
 async def _compose_loop_briefing(
     session: AsyncSession,
     loop: Loop,
     claimed_task: Optional[Task],
     prior_checkpoint: Optional[Checkpoint],
+    *,
+    is_review: bool,
 ) -> str:
     """The context a loop firing gets ahead of the operator's own message (design D5): purpose,
     the claimed queue item, the prior firing's checkpoint if one exists, and a one-line queue
@@ -1758,6 +1855,26 @@ async def _compose_loop_briefing(
     Telling a single-agent loop that somebody will review its work is the false claim task 8.2
     exists to prevent, and it is false for a document-less loop that happens to be alone in its
     project. See `design.md`'s open question on whether the tier should gate behaviour at all.
+
+    **`is_review` is the third statement of that same rule** (`a-flow-briefing-names-its-contract`,
+    F143). It used to be computed at both call sites, passed to `_briefing_checkpoint` on one line
+    and dropped on the next, so a reviewer received the implementation briefing verbatim -- *"Finish
+    the task below and stop"* followed by the implementation description -- while the turn context
+    said *"You are reviewing someone else's work, not doing your own."* An agent measured on
+    2026-08-30 wrote *"This is confusing"* into its own transcript and resolved it correctly by
+    luck; the other resolution is a reviewer that re-implements the work it was meant to check and
+    approves its own edit. Keyword-only and **without a default**, like `_briefing_checkpoint`
+    above: a default would let a future call site reintroduce exactly that.
+
+    **What finishing is, said here rather than left to the tool inventory** (F140). The briefing
+    named `submit_checkpoint_notes`, which both measured agents called, and never named
+    `update_task`, which neither did -- so no task reached `completed`, no reviewer was ever
+    staffed, `stop_when_queue_empties` could not fire, and the flow re-briefed both agents for
+    finished work on every firing. `update_task` was in the context channel's tool inventory the
+    whole time; an inventory says a capability exists, and this says that using it is how the
+    firing's work is concluded. Stated for a loop as well as a flow, because the lifecycle is the
+    same in both -- but *what completing causes* is stated only where it is true, which is the same
+    split the tier statement above already draws.
     """
     lines: list[str] = ["# Loop briefing", ""]
 
@@ -1768,27 +1885,61 @@ async def _compose_loop_briefing(
             "review by an agent other than the one that did it."
         )
         lines.append("")
-        lines.append(
-            "**Finish the task below and stop.** Do not pick up the next item and do not hand "
-            "the work to anyone — routing is the flow's job, and the next firing decides who does "
-            "what. Record what a reviewer will need (see `submit_checkpoint_notes`); somebody "
-            "else reads it."
-        )
+        if is_review:
+            lines.append(
+                "**This turn is a review.** Somebody else finished the task below; you are "
+                "checking their work, not doing it. Do not pick up anything else — routing is "
+                "the flow's job, and the next firing decides who does what."
+            )
+        else:
+            lines.append(
+                "**Finish the task below and stop.** Do not pick up the next item and do not hand "
+                "the work to anyone — routing is the flow's job, and the next firing decides who "
+                "does what."
+            )
         lines.append("")
     else:
-        lines.append(
-            "**Finish the task below and stop.** Do not pick up the next item — the next firing "
-            "claims it."
-        )
+        if is_review:
+            lines.append(
+                "**This turn is a review.** Somebody else finished the task below; you are "
+                "checking their work, not doing it. Do not pick up the next item — the next "
+                "firing claims it."
+            )
+        else:
+            lines.append(
+                "**Finish the task below and stop.** Do not pick up the next item — the next "
+                "firing claims it."
+            )
         lines.append("")
+
+    # **The contract, stated where the agent reads it** (F140/F143). Above `Purpose:` and above the
+    # prior checkpoint for the same reason the tier statement is: §257 truncates checkpoint content
+    # in place, and an instruction about how a turn ends must not survive or not depending on how
+    # much the previous agent happened to write.
+    if claimed_task is not None:
+        lines.extend(
+            _briefing_verdict_lines(claimed_task)
+            if is_review
+            else _briefing_completion_lines(claimed_task, is_flow=bool(loop.spec_document_id))
+        )
+        lines.extend(await _briefing_evidence_lines(session, claimed_task, is_review=is_review))
 
     if loop.purpose:
         lines.append(f"Purpose: {loop.purpose}")
         lines.append("")
 
     if claimed_task is not None:
-        lines.append(f"## Current task: {claimed_task.title}")
-        lines.append("")
+        if is_review:
+            lines.append(f"## Under review: {claimed_task.title}")
+            lines.append("")
+            lines.append(
+                "What the author was asked to build. This is the standard you check their work "
+                "against, not an instruction to you."
+            )
+            lines.append("")
+        else:
+            lines.append(f"## Current task: {claimed_task.title}")
+            lines.append("")
         if claimed_task.description:
             lines.append(claimed_task.description)
             lines.append("")
@@ -1829,6 +1980,20 @@ async def _compose_loop_briefing(
             open_count += count
     lines.append(f"Queue: {open_count} open, {done_count} done")
     lines.append("")
+
+    if is_review:
+        # `_do_fire_job` and `_stage_selection` both deliver `job.message` immediately after this,
+        # and it is authored once for every firing -- in F143's own transcript a reviewer was
+        # handed "Work the task you have been given. Keep the edit minimal." right here. The
+        # message is never rewritten: it is the durable record of what its author said. Said as a
+        # statement of what the text *is*, never as an instruction to disregard it, because a
+        # loop's message may itself be written to address a review, and that instruction would be
+        # wrong exactly where its author thought hardest.
+        lines.append(
+            "Below this line is the loop's standing message, delivered on every firing. It was "
+            "not written for this turn in particular."
+        )
+        lines.append("")
 
     return "\n".join(lines)
 
@@ -2362,7 +2527,11 @@ class JobScheduler:
                     is_review=bool(selection is not None and selection.is_review),
                 )
                 briefing = await _compose_loop_briefing(
-                    session, loop, claimed_task, prior_checkpoint
+                    session,
+                    loop,
+                    claimed_task,
+                    prior_checkpoint,
+                    is_review=bool(selection is not None and selection.is_review),
                 )
                 content = f"{briefing}\n{job.message}"
 
@@ -2711,7 +2880,9 @@ class JobScheduler:
         session.add(run)
 
         prior_checkpoint = await _briefing_checkpoint(session, loop, task, is_review=is_review)
-        briefing = await _compose_loop_briefing(session, loop, task, prior_checkpoint)
+        briefing = await _compose_loop_briefing(
+            session, loop, task, prior_checkpoint, is_review=is_review
+        )
         entry = new_entry(
             project_id=job.project_id,
             agent=agent,

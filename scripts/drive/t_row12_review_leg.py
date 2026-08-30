@@ -311,27 +311,58 @@ def main():
             content = (latest or {}).get("content", "")
             print("      " + content[:1500].replace(chr(10), chr(10) + "      "))
             check("the reviewer got a briefing at all", bool(content), str(len(content)))
-            # These two were written as `"review" in content` and `TARGET in content`, and both
+            # These were written as `"review" in content` and `TARGET in content`, and both
             # passed -- for the wrong reason. "review" matches the flow paragraph's generic
             # sentence about somebody else reviewing, and TARGET matches the implementation task's
-            # own title. Neither says anything about THIS turn being a review, which is the claim
-            # being tested. Asserted properly below, and it fails: see F143.
+            # own title. Neither said anything about THIS turn being a review, which is the claim
+            # being tested. They were then rewritten to assert F143's actual state, deliberately,
+            # "so the day it is fixed the lines swap and say so".
+            #
+            # `a-flow-briefing-names-its-contract` is that day. The three below are the swapped
+            # form: the implementation wording must be GONE, the review wording must be PRESENT,
+            # and the queue entry the flow composed must not contradict the turn context.
             check(
-                "F143: the briefing tells the reviewer to BUILD the thing it is meant to check",
-                "Finish the task below and stop" in content
-                and "Work the task you have been given" in content,
-                content[-140:].replace(chr(10), " | "),
+                "F143 fixed: the reviewer is no longer told to BUILD the thing it checks",
+                "Finish the task below and stop" not in content,
+                content[:200].replace(chr(10), " | "),
             )
             check(
                 "the briefing says this turn is a review",
-                "this is a review" in content.lower()
-                or "you are reviewing" in content.lower(),
-                content[:160].replace(chr(10), " | "),
+                "this turn is a review" in content.lower()
+                or "you are reviewing" in content.lower()
+                or "checking their work" in content.lower(),
+                content[:200].replace(chr(10), " | "),
             )
             check(
-                "the briefing names the commit under review",
-                "commit" in content.lower(),
-                content[:160].replace(chr(10), " | "),
+                "the briefing names both verdicts, with the tool that records them",
+                "update_task" in content
+                and "approved" in content
+                and "revision_needed" in content,
+                content[:260].replace(chr(10), " | "),
+            )
+            # Round 2 of the change (design D9) settled that the briefing must NOT name the
+            # commit, and this check was the reason it had to be settled rather than assumed. The
+            # briefing is composed at firing time; the commit is resolved one step later, at
+            # spawn, by `commit_for_task_review`. Naming it here would be a second copy of a fact
+            # that can disagree with the checkout the reviewer is actually standing in -- which is
+            # exactly the case `ReviewContext.work_moved` exists to handle, on the channel that
+            # resolved it. The commit belongs to the turn CONTEXT, not to this queue entry.
+            check(
+                "the briefing does NOT name a commit -- that is the context channel's to state",
+                "commit" not in content.lower(),
+                content[:200].replace(chr(10), " | "),
+            )
+            # The loop's own message is delivered immediately after the briefing, unchanged, and
+            # was authored for the loop's ordinary firings -- in the run that found F143 a reviewer
+            # was handed "Work the task you have been given" right here. The briefing says what
+            # that text IS. It must not tell the agent to ignore it: a loop's message may itself
+            # address a review, and that instruction would be wrong exactly there.
+            check(
+                "the briefing identifies the loop's standing message without disowning it",
+                "standing message" in content.lower()
+                and "ignore" not in content.lower()
+                and "disregard" not in content.lower(),
+                content[-260:].replace(chr(10), " | "),
             )
 
         head("F. Where the loop thinks it is")

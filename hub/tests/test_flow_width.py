@@ -565,7 +565,7 @@ async def test_a_review_left_over_after_the_agents_are_taken_is_deferred_not_uns
 async def _briefing_for(loop, task):
     async with async_session_factory() as db:
         fresh_loop = (await db.execute(select(Loop).where(Loop.id == loop.id))).scalar_one()
-        return await _compose_loop_briefing(db, fresh_loop, task, None)
+        return await _compose_loop_briefing(db, fresh_loop, task, None, is_review=False)
 
 
 async def test_a_flows_briefing_says_the_flow_routes_the_work_onward(app):
@@ -631,7 +631,7 @@ async def test_the_tier_statement_survives_an_oversized_checkpoint(app):
             loop=loop,
         )
         fresh_loop = (await db.execute(select(Loop).where(Loop.id == loop.id))).scalar_one()
-        briefing = await _compose_loop_briefing(db, fresh_loop, task, checkpoint)
+        briefing = await _compose_loop_briefing(db, fresh_loop, task, checkpoint, is_review=False)
 
     assert "Finish the task below and stop." in briefing
     assert briefing.index("routing is the flow's job") < briefing.index("## Prior checkpoint")
