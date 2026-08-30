@@ -29,25 +29,25 @@
   "queue": [
     {
       "id": "A-R1",
-      "status": "pending",
+      "status": "done",
       "title": "Round 1: propose `a-flow-briefing-names-its-contract` (breaks 2 and 3; F140, F143)",
       "detail": "The exploration IS round 1's exploration - do not re-explore, write the proposal. Two defects, one change: (a) `_compose_loop_briefing` (scheduler.py:1732-1833) never names `update_task`, never names a target status, and never uses the word `completed`, so an agent is told 'finish and stop' and is never told what finishing is; (b) `is_review` is computed at scheduler.py:2356-2366 and :2713, passed to `_briefing_checkpoint`, and dropped on the next line, so a reviewer receives the implementation briefing verbatim while the context channel tells it the opposite. Create with `openspec new change a-flow-briefing-names-its-contract` (NO date prefix - archiving applies it; a name starting with a digit is refused). Spec deltas: agent-flows almost certainly needs a new requirement stating what a flow's briefing must tell an implementation turn about finishing, and that a review turn's briefing is review-shaped. Note the corpus silence recorded in the exploration section 5: NO requirement defines what causes in_progress -> completed, so you are adding one, not satisfying one. `openspec validate --strict` must pass."
     },
     {
       "id": "A-R2",
-      "status": "pending",
+      "status": "done",
       "title": "Round 2: re-derive A against the code",
       "detail": "A FRESH comparison of the proposal against what the code actually does - not a re-read of round 1's reasoning. Check at minimum: does the wording you propose survive `format_turn_prompt` and the inbound-queue wrapper (inbound_queue.py:98-122) intact? Does naming `update_task` in the briefing conflict with anything in agents.py's tool inventory, which deliberately excludes `submit_checkpoint_notes` (agents.py:835-838)? Does the review briefing you propose duplicate what agents.py:1121-1172 already says on the context channel, and if so is duplication right or wrong? Fix the proposal where it is wrong."
     },
     {
       "id": "A-R3",
-      "status": "pending",
+      "status": "done",
       "title": "Round 3: independent re-derivation of A",
       "detail": "A second INDEPENDENT comparison against the code, not a review of round 2. The failure this round exists to catch is an argument that is wrong while everything it argues about is right. Specifically re-derive: is the briefing actually the right place for the fix, or does the real defect live in the tool surface (there is no `finish_turn` tool; ending a turn is ending the process)? Would a machine-readable completion contract be cleaner than better prose? Record the rejected alternative with its reason so it is not re-proposed."
     },
     {
       "id": "A-IMPL",
-      "status": "pending",
+      "status": "done",
       "title": "Implement A, reproduction test first",
       "detail": "Write the failing test before the fix, as the discipline requires. A reproduction for (b) is cheap and deterministic: assert that a review selection's briefing differs from an implementation selection's. Then implement. Run the touched test files plus hub/tests/test_scheduler*.py and anything matching briefing/flow. ruff + black --target-version py311 before committing. Commit with the finding ids in the message."
     },
@@ -142,8 +142,8 @@
       "detail": "py -3.11 -m pytest hub/tests/ -q in the BACKGROUND with NO drive running beside it - it exceeds the 600s command cap and contends badly with live agent spawns. Then py -3.11 -m pytest tests/ -q. Then ruff check src/ hub/ tests/ and black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/. Push. Do NOT merge to master - the operator merges."
     }
   ],
-  "current": "Iteration 1: A-R1 in progress - proposal for a-flow-briefing-names-its-contract.",
-  "next_action": "FIRST: read openspec/explorations/2026-08-30-why-a-flow-cannot-land-its-work.md end to end - it is the analysis this entire run is built on and it will save you hours. Then cut the branch autonomous/2026-08-31-the-flow-lands-its-work from master at 3a274a2, and begin A-R1: write the proposal for `a-flow-briefing-names-its-contract`. Create the change with `openspec new change a-flow-briefing-names-its-contract` - no date prefix, archiving applies it.",
+  "current": "Change A (`a-flow-briefing-names-its-contract`) is COMPLETE and committed: three rounds (7da91a3, e828add, fae6939) plus implementation (1b4c730). Reproduction was run against unmodified code first and both defects confirmed. 451 passed / 14 skipped across flow, loop, briefing, scheduler, handover, divergence and job tests; ruff and black clean. NOT yet driven - whether a real agent acts on the new text is DRIVE-1's question, and t_row12_flows.py now carries a mechanical pass condition for it.",
+  "next_action": "Begin B-R1: propose `a-review-a-flow-cannot-staff-is-named` (break 4, F142). Read openspec/explorations/2026-08-30-why-a-flow-cannot-land-its-work.md section 3 break 4 and section 5 first. Create with `openspec new change a-review-a-flow-cannot-staff-is-named` (no date prefix). The minimum repair is enforcement of agent-flows:134 - scheduler.py:1365-1369 drops an unattributable task with a bare `continue` recording nothing; append to `unstaffed` with a reason naming the task. The judgement half is whether `agent_that_completed` should disambiguate 'nobody completed this' from 'the operator did', and whether a flow may staff a review for work the OPERATOR completed. Decisions D6 and D7 in decisions_for_user apply.",
   "limits": [
     "Never point a Hub you are editing at this repo. The trial Hub on 8011 is a separate instance; port 8000 is the operator's REAL usage and must never be touched.",
     "Never drive against proj-5e960453 (this repo) or proj-18e5d4e0. Create a fresh project for every drive.",
@@ -211,6 +211,8 @@
     }
   ],
   "carried_open_questions": [
+    "FOUND IN ITERATION 1 (round 3 of change A), filed here not fixed: F140 silently disabled the WHOLE handover feature, not only review dispatch. `consider_handover` declines unless the run recorded a `completed` transition, so in F140's drive both agents' checkpoint notes were recorded and never consumed, and agent-flows:379 and :412 were unreachable in a real flow. Change A should make them reachable; DRIVE-1 must CHECK that a handover checkpoint is actually generated, because its unit tests are green while the feature never fired in production.",
+    "FOUND IN ITERATION 1 (round 3, design D13): this change is the FIRST HALF of the product's own rule. The second half - a turn that ends without moving its task being VISIBLE rather than silently re-briefed - is unfixed. run_divergence.py:793-800 grades it severity='info', indistinguishable from healthy multi-turn work, and POLICY_RETRY -> POLICY_FLOW makes the flow's own re-brief the remedy. Belongs in loop-firing-accountability. If DRIVE-1 shows the briefing fix did not close F140, this is the next change and it is not optional.",
     "F77 - an agent has no way to address the operator. Filed, unfixed, not queued here.",
     "F53's _adopt_document_tasks orphaning half and F65's review-briefing retry are open and queued as Q4-SPEC. Not this run's job.",
     "F129+F132 - requirement drift is unreachable from both surfaces. Round 1 proposal exists; the operator has not reviewed it. Not this run's job.",
@@ -219,5 +221,5 @@
     "fastapi>=0.110 is unbounded and has produced two CI-only failures via Starlette major bumps. Worth pinning; not this run's job.",
     "The feature freeze's parameters are still unsettled."
   ],
-  "last_heartbeat": "2026-08-30T23:24:32+01:00"
+  "last_heartbeat": "2026-08-30T23:59:13+01:00"
 }
