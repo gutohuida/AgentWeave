@@ -76,3 +76,124 @@ then F129+F132 **round 1 only**, then the drive. Ordered so stopping anywhere le
 changes rather than half-written proposals.
 
 **Ready.** Nothing is waiting on the operator.
+
+---
+
+## Iteration 1 — 2026-08-30 02:10 → 03:0x — F131-IMPL
+
+**Queue item:** `F131-IMPL`. Its spec loop was already complete on master
+(`openspec/changes/continue-starts-what-it-names`), so this was implementation only, working
+`tasks.md` in order. Seven task groups, seven commits, all pushed.
+
+### What was wrong
+
+`POST /conversations/{id}/continue` is addressed to one conversation and derived
+`started = result.waiting_reason is None` — which answers *"did a turn begin for this agent"*.
+`schedule_agent` builds its turn from the oldest eligible entry across the agent's **whole** queue,
+so the conversation that starts is frequently not the one addressed. The operator pressed Continue
+on A, was told A started, and B ran: no run, no output, no error in A, and the obvious next act is
+to press it again.
+
+### What shipped
+
+| Group | What |
+|---|---|
+| 1 | The reproduction, passing against unmodified code |
+| 2–3 | The route: compare `result.response.conversation_id` to the addressed one, mirroring `agent_trigger.py:1353`; `started_conversation_id` as its own field; **two** distinct waiting reasons |
+| 4 | `checkpoint_cutover.py`'s `auto_continue` diagnostic — the silent case, and the misattributed one |
+| 5 | The UI's third case: the server's reason, plus the conversation that ran, **by label** |
+| 6 | The drive harnesses flipped to the fixed direction |
+| 7 | Gates, the full suites, and a live drive |
+
+### The reproduction that matters is not the one F131 filed
+
+F131 pressed Continue on a conversation with **nothing** queued for it. That path is unreachable
+from the shipped UI — the button renders only when a queued entry names the conversation on screen.
+The reachable path is the one the new test and the new drive build: the pressed conversation **has**
+an entry and another conversation of the same agent has an **older** one, so every client-side gate
+is satisfied and the substitution happens anyway. The two cases also need different answers, because
+telling a conversation that queued nothing that its input is "waiting behind other input" reports a
+queue position that does not exist. Both are now recorded in `FINDINGS.md` under F131.
+
+### Getting two entries queued at once is the whole difficulty of driving this
+
+Every ordinary route into the queue schedules the agent immediately, and every run end re-drains it,
+so an entry cannot simply be parked next to another. **A cutover with auto-continue off is the one
+operator act that queues without scheduling.** Two of them, on two predecessors of the same agent,
+build the state exactly. That is what
+`scripts/drive/t_f131_start_reported_to_its_own_input.py` does, and it is worth remembering for any
+future drive that needs a queue that is not moving.
+
+### The drive found the harness wrong, not the product
+
+First live run: **14/15**. The failing assertion was "no run for the conversation that was pressed",
+checked *after* waiting for idle — by which time the re-drain had correctly delivered that entry and
+run it. Correct behaviour, wrong assertion. It is now measured at the instant of the press, and the
+delivery afterwards is asserted **on purpose** as step 6: the wait ending is what made "waiting
+behind other input" a true statement rather than a polite one. Second run: **17/17**.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Live drive, `t_f131_start_reported_to_its_own_input.py`, own Hub on 8011 | **17/17** |
+| New backend tests fail without the fix | 4 of 5 in the new file, 2 of 3 in `test_checkpoint_cutover.py` |
+| New UI test fails without the fix | 1 of 3 (the new case) |
+| `ruff` / `black` / `mypy` / `npm run lint` | clean |
+| CLI suite | 440 passed / 3 skipped |
+| UI suite | 1449 passed across 140 files |
+| Hub suite | filled in below when it returned |
+| `openspec validate --strict` | change and capability both valid |
+
+**The Hub on 8011 was restarted before the drive.** It had been up since 2026-08-29 18:06, so it was
+serving code older than this iteration's edits. A drive against a stale build attributes behaviour
+to code you did not change — the most expensive failure mode there is here.
+
+---
+
+## Iteration 2 — 2026-08-30 03:05 → 03:3x — finishing F131-IMPL's tail
+
+**Takeover.** Iteration 1 ended mid-closeout: the driver log records it holding at 02:36 with the
+Hub suite at 55%, and it never came back. Its seven implementation commits are all on the branch and
+pushed; what died with it was the last row of `tasks.md` — the suite result, the gates, the archive
+— plus an uncommitted spec sync and an uncommitted log entry. This iteration is that tail, nothing
+more. `next_action` still said "start F131-IMPL"; the work was done, the closing was not.
+
+### Reconciliation
+
+| Claim in STATE.json | Actual | Verdict |
+|---|---|---|
+| branch `autonomous/2026-08-30-decided-work-and-drive` | same | ✓ |
+| `iteration: 1`, `current: F131-IMPL` | HEAD `ec80d7a`, seven F131 commits | ✓ work done, state not advanced |
+| working tree | dirty: log entry, heartbeat, and the spec sync | expected mid-closeout debris, kept |
+
+### I re-drove it rather than trusting the claim
+
+Iteration 1 reported 17/17 and then died, so the number had no witness. **The Hub on 8011 was gone**
+— the process died with its parent — so this was not even a stale-build question; there was nothing
+serving. Started a fresh one from source at `ec80d7a` and ran the harness again:
+**17/17**, with real conversations (`conv-2687025b6656` starting while `conv-a8ea44ca2beb` was
+pressed), a real run for the one *not* pressed, none for the one that was, and the pressed entry
+still queued at the instant of the press. Iteration 1's claim stands, now on its own evidence.
+
+### The unfinished tasks, closed
+
+| Task | Result |
+|---|---|
+| 7.1 Hub suite | **3563 passed / 84 skipped / 1 xpassed / 0 failed** in 22:05. Baseline was 3555 passed — the difference is exactly the eight tests this change added, and nothing regressed. The F109 flake did not fire |
+| 7.3 gates | `ruff` clean · `black` 521 unchanged · `mypy` clean · `npm run lint` clean |
+| 7.5 live drive | **17/17**, re-driven this iteration on a Hub started from current source |
+| 7.6 `FINDINGS.md` | already written by iteration 1 (`ec80d7a`); verified present, both corrections recorded |
+| 7.7 validate, sync, archive | `continue-starts-what-it-names` valid · `agent-conversation-workspace` valid · delta synced · archived as `2026-08-30-continue-starts-what-it-names` |
+
+Also re-run rather than inherited: CLI suite **440 passed / 3 skipped**, UI suite **1449 passed
+across 140 files**, and `AW_CHECK_UI_BUNDLE=1 test_ui_build_stamp.py` **13 passed** — the strict
+form, which is what actually proves `hub/hub/static/ui` was built from the committed source rather
+than merely carrying a stamp.
+
+### One thing worth carrying
+
+`pytest --timeout=300` is not available here — `pytest-timeout` is not installed, and the run exits
+`4` with *"unrecognized arguments"* before a single test runs. Cost one wasted suite launch. Bound a
+long suite with the tool's own backgrounding, not with a plugin flag this repo does not have.
+

@@ -9,7 +9,7 @@
   "parent_sha_note": "master at 2dcff93, pushed - the commit that carries this STATE.json. Contains: the 2026-08-29 overnight run's 63 commits, the CI fix for the strictness probe, the F14/F115/F66 decision write-ups, and the COMPLETED F131 spec loop under openspec/changes/continue-starts-what-it-names/. That last one matters: F131-IMPL is the first queue item and its proposal, design, spec delta and tasks.md are all on master already. Do not re-propose it.",
   "stop_at": "2026-08-30T12:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 1,
+  "iteration": 2,
   "log_file": ".claude/autonomous/2026-08-30-decided-work-and-drive-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "green_at_arming": {
@@ -37,8 +37,8 @@
     {
       "id": "F131-IMPL",
       "title": "F131 implementation - continue reports the start against the input it is about",
-      "status": "pending",
-      "detail": "THE SPEC LOOP IS ALREADY DONE, all three rounds, on master at openspec/changes/continue-starts-what-it-names/. Read proposal.md, design.md, specs/agent-conversation-workspace/spec.md and tasks.md, then work tasks.md in order. Do NOT re-propose or re-review; round 3 already overturned rounds 1 and 2 twice and the current text is the settled answer. Core of it: POST /conversations/{id}/continue derives `started` from result.waiting_reason alone, so it answers `started: true` against the conversation the caller named while schedule_agent may have started a DIFFERENT conversation's queued entry. The fix mirrors agent_trigger.py:1353 - compare result.response.conversation_id to the addressed conversation - and answers `started: false` with one of two distinct reasons when they differ (waiting behind other input / nothing was queued for it). No new ScheduleResult fields; turn_scheduler.py is untouched. Task group 1 writes the reproduction FIRST and it must pass against unmodified code before anything else happens."
+      "status": "done",
+      "detail": "THE SPEC LOOP IS ALREADY DONE, all three rounds, on master at openspec/changes/continue-starts-what-it-names/. Read proposal.md, design.md, specs/agent-conversation-workspace/spec.md and tasks.md, then work tasks.md in order. Do NOT re-propose or re-review; round 3 already overturned rounds 1 and 2 twice and the current text is the settled answer. Core of it: POST /conversations/{id}/continue derives `started` from result.waiting_reason alone, so it answers `started: true` against the conversation the caller named while schedule_agent may have started a DIFFERENT conversation's queued entry. The fix mirrors agent_trigger.py:1353 - compare result.response.conversation_id to the addressed conversation - and answers `started: false` with one of two distinct reasons when they differ (waiting behind other input / nothing was queued for it). No new ScheduleResult fields; turn_scheduler.py is untouched. Task group 1 writes the reproduction FIRST and it must pass against unmodified code before anything else happens. || DONE 2026-08-30. Implemented in iteration 1 (seven commits, ec80d7a and its six predecessors); closed out in iteration 2, which took over after iteration 1 died mid-closeout with the Hub suite at 55%. Verified: hub suite 3563 passed / 84 skipped / 1 xpassed / 0 failed (baseline 3555 - the eight new tests, nothing regressed); CLI 440/3; UI 1449 across 140 files; ruff/black/mypy/eslint clean; AW_CHECK_UI_BUNDLE=1 stamp test 13 passed; live drive t_f131_start_reported_to_its_own_input.py 17/17 RE-DRIVEN in iteration 2 against a Hub freshly started from source, so the number has a witness that outlived the process that first claimed it. Delta synced into openspec/specs/agent-conversation-workspace/spec.md and the change archived as openspec/changes/archive/2026-08-30-continue-starts-what-it-names."
     },
     {
       "id": "F14-R1",
@@ -197,8 +197,8 @@
       "detail": "THIS IS HALF THE ASK AND IT IS TIME-GUARANTEED, NOT CONDITIONAL - see the 08:00 rule in limits. Invoke the e2e-loop skill and run it as a FULL-SURFACE SWEEP, not scoped to one change. Drive the product the way an operator would: real Hub, real agents, real runs. Bind Haiku for every real agent turn (standing operator directive - 'On testing with claude always use cheap models'); there is no token-budget gate and no coverage row is off limits for cost. Use your own Hub on 8011 per environment above, and a test project OUTSIDE this repo or under testbed/ - never proj-5e960453 or proj-18e5d4e0. File everything you find in scripts/drive/FINDINGS.md continuing the F-number sequence (F133 onward), each with a reproduction and file-and-line evidence. FIX what is small, self-contained and unambiguous; for anything that needs a design decision, FILE it and move on rather than guessing. Lessons from earlier drives, do not relearn them: name conversation_id explicitly on /agent/trigger or you open a NEW conversation; a helper that swallows a 404 into an empty list turns 'I could not look' into 'there was nothing there'; a loop delivers ONE task at a time; a drive prompt naming a fixed filename contaminates its own next run, so use a unique name per run; check questions unfiltered before calling a missing row a finding. LEAVE NO JOB ENABLED."
     }
   ],
-  "current": "F131-IMPL",
-  "next_action": "Iteration 1: cut branch autonomous/2026-08-30-decided-work-and-drive from master at 7224d42, then start F131-IMPL. Its spec loop is ALREADY COMPLETE on master at openspec/changes/continue-starts-what-it-names/ - read proposal.md, design.md, specs/agent-conversation-workspace/spec.md and tasks.md and work tasks.md in order. Do not re-propose or re-review it. Task group 1 writes the reproduction first and it must PASS against unmodified code before anything else happens; a reproduction that does not pass first is not a reproduction. Commit and push every completed task group.",
+  "current": "F14-R1",
+  "next_action": "Iteration 3: start F14-R1, the first round of the F14+F60 spec loop. EXPLORE THE CODE FIRST, then write the proposal under openspec/changes/. The operator's decision is already recorded in FINDINGS.md under F14 'The decision, 2026-08-30' and is NOT open - park the task at ask time AND flag the timeout outcome, both in one change. Read the F14-R1 queue entry's detail in full before starting; it names the two halves, the files, and the two things round 1 MUST settle rather than assume (a task `blocked` while its run is `running` is a combination that does not exist today, and the blocked -> completed timeout path is the crux). This is round 1 of three; do NOT implement anything. Finish the round, commit and push it, then stop at that clean boundary. F131-IMPL is fully closed - do not revisit it.",
   "limits": [
     "Push, do not open PRs. - standing operator directive",
     "DO NOT MERGE TO MASTER. Push this branch and leave the merge to the operator. Precedent set 2026-08-29: the operator merges with --no-ff when present and CI is green.",
@@ -263,5 +263,5 @@
     "The feature freeze's parameters are still unsettled.",
     "Whether /review-iteration ever runs over the 2026-08-27 overnight run's iterations 1-15."
   ],
-  "last_heartbeat": "2026-08-30T02:10:32+01:00"
+  "last_heartbeat": "2026-08-30T03:32:48+01:00"
 }
