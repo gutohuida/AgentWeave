@@ -37,8 +37,14 @@ Two halves, one change, per the operator's decision of 2026-08-30 recorded under
 
 **(a) The park moves to the moment the question blocks.** A blocking question asked by a run bound
 to a task parks that task then, not at the run's end. The run-end park stays as the fallback it
-already is — it still covers a question asked in an earlier turn, and a task that was not
-`in_progress` at ask time.
+already is — for a task that was not `in_progress` at ask time, and, more usefully, for an ask-time
+park that failed and was swallowed so as not to cost the agent the question it just asked.
+
+Rounds 1 and 2 also claimed the fallback covers "a question asked in an earlier turn". **It does
+not, by design.** `unanswered_blocking_question` selects `created_by_run_id == run.id`, and its own
+docstring gives the reason: *"A question another run left unanswered is not evidence that this run
+stopped for it."* An earlier turn is an earlier run, so that question is excluded from this run's
+boundary check and always was.
 
 **(b) A wait that ends without an answer is recorded, and returns the task to its work.** When the
 tool's wait expires and the agent proceeds anyway, the Hub is told, the task returns to
@@ -83,10 +89,16 @@ The fourth row is the only moment the Hub cannot observe for itself. The Hub kno
 running and the question is unanswered; it does not know whether the tool is still waiting. Only
 `ask_user` knows, because the deadline is its own (`hub/hub/mcp_server.py:354`).
 
-So **the tool reports both ends of its wait**:
+So **the tool reports the end of its wait**: when the deadline passes with the question unanswered,
+it says so before returning to the agent.
 
-* at ask time it sends how long it will wait, and the Hub records the deadline on the question;
-* when the deadline passes with the question unanswered, it says so before returning to the agent.
+**The deadline is the Hub's own, not the tool's report of it.** Rounds 1 and 2 had the ask carry a
+`wait_seconds`; round 3 removed it, because the Hub already resolves that number itself — it writes
+`AW_QUESTION_TIMEOUT` into the run's environment from `Agent.question_timeout_seconds`
+(`agent_trigger.py:973-974`) and owns the 240 default and `[10, 600]` range the tool falls back to.
+A deadline taken from the ask would have arrived over the run's own credential, so the refusal below
+would have checked the report against a number the reporting party chose. It is computed Hub-side
+while serving the ask and stored on the question. Design D3.
 
 The Hub refuses a report that arrives before the deadline it recorded, which is what keeps this a
 report of a fact rather than a lever. Nothing here is the *agent* asserting anything: `ask_user` is
@@ -96,9 +108,49 @@ matters because `task-lifecycle-governance:445-447` forbids exactly the other th
 
 > A task SHALL NOT enter or leave the waiting status because an agent asserted that it should.
 
-**If the report never arrives** — the tool process died, the run was killed — the task simply stays
+— and that sentence needs more than this endpoint to be true. See the next section.
+
+**If the report is never sent** — the tool process died, the run was killed — the task simply stays
 `blocked` and the run ends. That is today's behaviour, and it is the correct one for that case:
-nobody proceeded. The failure mode of a missed report is the old behaviour, not a new wrong one.
+nobody proceeded.
+
+**If the report is sent and does not land**, that is a different case, and rounds 1 and 2 merged it
+with the one above. Task 5.5 requires the tool to swallow a failed report so the agent still gets
+its answers, which is right — but the agent then *proceeds* with its task left `blocked`, and its
+`update_task(completed)` is refused from a status with no edge to a finished one. That is the exact
+stranding the ungated resume exists to prevent, arriving through a different door, and it is not
+"today's behaviour": today the task was never parked and the agent completed it.
+
+So the report is not the only signal, following the shipped design for the identical problem one
+router away. `expire_permission_request` says it in a line: *"The run reports and the run's end
+sweeps, so arriving second is the normal case, not an error."* `evaluate_run_end` already loads the
+run's outstanding blocking question; where that question's recorded deadline has passed and it is
+neither answered nor declined, the wait has demonstrably ended, and the run-end path records that
+and releases exactly as the report would have. It cannot fire early, because it only runs at a
+boundary already past the deadline it checks.
+
+## An agent can already leave the waiting status by asking, and this change makes that the obvious move
+
+`task-lifecycle-governance:445` forbids both directions — *"enter **or leave**"* — and the code
+enforces one. `tasks.py:1157` refuses a non-operator setting `status: blocked`, and
+`mcp_server.py`'s `TaskStatus` literal withholds `blocked` from the tool surface as a second layer.
+Nothing guards the way out: `TRANSITIONS["blocked"]["in_progress"]` is `_BOTH`, the PATCH route
+applies no equivalent check, and `in_progress` is in `TaskStatus` and named in `update_task`'s
+docstring as an ordinary option.
+
+Today that breach is latent, because a task only reaches `blocked` once its run has ended — the
+agent that could assert its way out is no longer running. **Ask-time parking removes precisely that
+protection**, and puts an incentive behind it: the agent waits out 240s, is told by the tool to
+"continue as best you can", does the work, is refused `blocked -> completed` with a 409, and finds
+`update_task(task_id, "in_progress")` in its own tool surface. The task then completes with no
+`wait_ended_at` and no statement that a decision was made without an answer — F60, reproduced
+through the door this change opens, bypassing the refused endpoint, the recorded deadline and the
+permanent mark alike.
+
+So the guard is mirrored on the way out, in the same place and with the same sentence as the one on
+the way in. Nothing legitimate is refused: the three real releases are the operator's answer and
+decline, both operator-attributed, and the expiry release, which is run-attributed with
+`origin=runtime`. Design D10.
 
 ## What a task `blocked` while its run is `running` breaks
 
@@ -114,8 +166,10 @@ are already right, and the reasons are worth recording so a later round does not
 | `_free_agents` (`scheduler.py:945`) | **safe.** The agent is excluded by the running-run query regardless of its task's status |
 | `scheduler.py:642` dependency-gate bypass | **safe.** Already reads `("in_progress", "blocked")` together |
 | `dependency_state` (`tasks.py:317`) | **wrong, and this change widens it.** `running_on_regressed` is derived from `response.status == "in_progress"`, so a parked task whose prerequisite regressed reads `gated` — "has not started" — about work that has started and is waiting. `blocked` is reachable only from `in_progress`, so it has always started |
-| `LIVE_STATUSES` → `agents._ACTIVE_TASK_STATUSES`, `checkpoints._LIVE_TASK_STATUSES` | **unchanged in kind, widened in window.** `blocked` is deliberately outside `LIVE_STATUSES`, so a checkpoint taken during the wait omits the task. It already did once the run ended; the window is now the whole wait. Left alone — the band classification is a decided answer and `open_questions` covers the checkpoint case |
+| `LIVE_STATUSES` → `agents._ACTIVE_TASK_STATUSES`, `checkpoints._LIVE_TASK_STATUSES` | **unchanged in kind, widened in window.** `blocked` is deliberately outside `LIVE_STATUSES`, so a checkpoint taken during the wait omits the task. It already did once the run ended; the window is now the whole wait. Left alone — the band classification is a decided answer — but only because the checkpoint's own question list is corrected to say the wait ended (see below); that was the stated cover for this row and round 3 found it broken |
+| `task_attribution.attribute` (`task_attribution.py:176-188`) | **wrong, and rounds 1–2 did not check it.** It consults `live.task_ids` only inside its `unstaffable` branch, and a `blocked` task is never unstaffable, so the fall-through reports `CAPACITY_ASSIGNED` — "nothing is running" — for the whole wait about an agent that is mid-turn on that exact task. `agent-loops` states both halves of the collision and this change decides it. Design D11 |
 | the dependency gate on `blocked -> in_progress` (`task_transition_service.py:371-383`) | **newly load-bearing.** See below |
+| leaving `blocked` through `PATCH /tasks/{id}` | **unguarded, and this change puts pressure on it.** See "An agent can already leave the waiting status by asking" above |
 
 ### The gate on the way out, and the shipped requirement that governs it
 
@@ -178,6 +232,25 @@ had already ended, and suppressing a divergence that is real. So both readers of
 the run-end park and `tasks.py`'s `_attach_awaiting_answer` — must exclude a question whose wait has
 ended.
 
+**That predicate has two readers; the idea behind it has five.** `wait_ended_at` creates a state
+that did not exist — unanswered, undeclined, and nobody waiting — and every surface deriving
+"somebody is waiting" from `answered = False` now describes it wrongly. Three more do:
+
+* `conversations.py:424` — navigation's attention state, which marks the conversation **waiting on
+  the operator** and, by its own docstring, lets that outrank `running`. The shipped requirement
+  states its own reason and that reason expires with the wait: *"because a waiting run consumes its
+  configured timeout while the operator is unaware of it."* Excluded, with an
+  `agent-conversation-workspace` delta. Note the same function's permission arm already models this
+  exactly right — `status == "pending"` excludes `expired` — and only the question arm lacked an
+  expired state to exclude.
+* `jobs.py:385` — a loop's open-question count, which the operator reads as "these still need me".
+  Excluded, with an `agent-loops` delta.
+* `checkpoints.py:293` — a checkpoint's `open_questions`, read by the *successor agent*. **Kept, and
+  marked**: dropping it would lose the most useful thing on that list, but calling it merely open
+  would tell the successor a decision is still pending when one was already taken without an answer.
+  This is also what makes leaving `LIVE_STATUSES` alone honest, since `open_questions` is the stated
+  cover for the task a checkpoint omits during the wait.
+
 ## A batch of questions parks once, and releases on the first answer
 
 `ask_user` carries up to four questions sharing one deadline, created as separate rows sharing a
@@ -200,6 +273,15 @@ Nothing re-parks. When the remaining questions' wait expires, the release is a n
 already `in_progress`, and half (b)'s mark applies to each expired question as normal.
 
 ## What (b) puts on the board
+
+The statement is not scoped to tasks that parked. Keying it on `blocked_task_id` alone — which
+rounds 1 and 2 did — would miss a run bound to a task in `under_review`, which waits out the full
+deadline, decides for itself, and gets no mark, because `block_task_for_question` records
+`blocked_task_id` only where the task transitioned or was already `blocked`. That is F60 with a
+different starting status, and the requirement is written about a wait rather than about a park. So
+the derivation takes the two-arm shape `_attach_awaiting_answer` already uses — the question named
+the task, **or** the asking run was bound to it — without that function's `Run.status == "running"`
+condition, which belongs to a live wait rather than to a permanent record.
 
 The durable record is the question row, as it already is for every other fact in this area, and the
 task-side statement is derived per request — the same choice `awaiting_answer_reason`,

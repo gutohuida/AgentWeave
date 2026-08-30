@@ -10,17 +10,30 @@ end of it describes the wait after it has stopped mattering. During that interva
 states that work is under way about work that has stopped and is waiting on a person.
 
 The system SHALL still make the same move at the end of a run bound to a task that is not already
-waiting and that has an unanswered blocking question outstanding. That covers a question asked in an
-earlier turn of the same thread, and a task that was not in the in-progress status at the moment the
-question was asked and so could not be moved then.
+waiting and that has an unanswered blocking question outstanding. That covers a task that was not in
+the in-progress status at the moment the question was asked and so could not be moved then, and a
+move at ask time that failed — the ask must not be lost because the park was, so a park that fails
+is recorded and left to this boundary rather than raised at the asking agent.
+
+It does not cover a question asked by an earlier run. The boundary check considers only questions
+the ending run itself asked, because a question another run left unanswered is not evidence that
+this run stopped for it.
 
 The system SHALL move it back out when that question is answered.
 
-A task SHALL NOT enter or leave the waiting status because an agent asserted that it should. An
-agent that could declare itself blocked could claim to be waiting on a person it never asked, which
-is the one claim a completion gate would most reward. A report by the system's own tooling that a
-wait has begun or ended is not such an assertion: it describes what the tool did, and the system
-accepts it only about the reporting run's own questions.
+A task SHALL NOT enter or leave the waiting status because an agent asserted that it should, and
+**both directions SHALL be refused where the request is made**. An agent that could declare itself
+blocked could claim to be waiting on a person it never asked, which is the one claim a completion
+gate would most reward; an agent that could declare itself unblocked could undo a wait it is
+recorded as being in and finish the work without the record of the wait ever completing. A report by
+the system's own tooling that a wait has begun or ended is not such an assertion: it describes what
+the tool did, and the system accepts it only about the reporting run's own questions.
+
+Refusing only the way in is not sufficient, and was sufficient in practice only for as long as a
+task could not be waiting while its own run was still going. Once it can, the agent that waited out
+its question, was refused the finished status directly from the waiting one, and moved itself back
+to in-progress would end with the work recorded as done and nothing recording that it proceeded
+without an answer — the whole of what the wait was for.
 
 #### Scenario: Asking a blocking question leaves the task waiting immediately
 
@@ -52,6 +65,19 @@ accepts it only about the reporting run's own questions.
 
 - **WHEN** an agent requests the waiting status for its own task
 - **THEN** the request is refused
+
+#### Scenario: An agent cannot declare itself no longer waiting
+
+- **GIVEN** a task recorded as waiting
+- **WHEN** the agent whose run is bound to it requests the in-progress status for it
+- **THEN** the request is refused
+- **AND** the refusal states what does end the wait
+
+#### Scenario: The system's own release is not refused by that rule
+
+- **GIVEN** a task recorded as waiting whose run reports that its wait expired
+- **WHEN** the system returns the task to the in-progress status on that report
+- **THEN** the return succeeds
 
 #### Scenario: The operator may block and release directly
 
@@ -150,8 +176,20 @@ asked by the reporting run, whose recorded wait has expired, and that are neithe
 declined. A report that does not describe a wait the system recorded SHALL be refused, so that the
 end of a wait remains an observation rather than a lever.
 
-Where no such report arrives — the tool did not survive to send it, or the run was killed — the task
+**The recorded wait SHALL be the system's own determination of how long the run will wait, not a
+duration supplied with the ask.** The system sets that duration for the run in the first place, so
+it can record it without being told; a deadline supplied by the party the refusal exists to check
+would let that party choose the threshold it is checked against, which is not a check.
+
+Where the report is not sent — the tool did not survive to send it, or the run was killed — the task
 SHALL remain waiting. Nobody proceeded, so nothing has changed about what the task is waiting for.
+
+Where the report is sent and does not arrive, somebody did proceed, and the system SHALL NOT leave
+that task waiting indefinitely on the strength of a message it never received. At the end of a run
+bound to a waiting task, where that task's wait has demonstrably expired and the question is still
+neither answered nor declined, the system SHALL record the wait as ended and release the task as the
+report would have. That determination is the system's own and is made only at a boundary already
+past the deadline, so it can never end a wait early.
 
 A wait ended by the operator answering or declining SHALL NOT be recorded as ended unanswered.
 Declining is a decision the operator made and handed back; silence is not.
@@ -181,11 +219,25 @@ Declining is a decision the operator made and handed back; silence is not.
 - **THEN** the report is refused
 - **AND** the task is unchanged
 
-#### Scenario: An unreported wait leaves the task waiting
+#### Scenario: An unreported wait that could not have expired leaves the task waiting
 
-- **GIVEN** a task recorded as waiting on a blocking question
+- **GIVEN** a task recorded as waiting on a blocking question whose recorded wait has not elapsed
 - **WHEN** the asking run ends without reporting anything about its wait
 - **THEN** the task is still waiting
+
+#### Scenario: A wait that expired but was never reported is swept at the run's end
+
+- **GIVEN** a task recorded as waiting on a blocking question whose recorded wait has elapsed
+- **AND** the question is neither answered nor declined
+- **WHEN** the asking run ends having reported nothing
+- **THEN** the question records that its wait ended unanswered
+- **AND** the task returns to the in-progress status
+
+#### Scenario: The recorded wait is not taken from the ask
+
+- **WHEN** a run asks a blocking question
+- **THEN** the recorded deadline is derived from the wait the system configured for that run
+- **AND** no duration carried on the ask can change it
 
 #### Scenario: A declined question is not recorded as an unanswered wait
 
@@ -215,6 +267,11 @@ neither of them names.
 The statement SHALL be derived from the durable record of the wait rather than stored a second time
 on the task, so that the two cannot disagree.
 
+It SHALL be stated for any task whose run's wait ended unanswered, not only for one that was recorded
+as waiting. A run bound to a task that could not be moved into the waiting status still waits, still
+proceeds without an answer, and the decision it took alone is no less unrecorded for the task having
+been somewhere else in its lifecycle at the time.
+
 #### Scenario: A completed task that shipped on an unanswered question says so
 
 - **GIVEN** a task whose wait for an answer ended unanswered
@@ -242,3 +299,9 @@ on the task, so that the two cannot disagree.
 
 - **WHEN** the operator declines a blocking question and the agent decides for itself
 - **THEN** the task states nothing about having proceeded without an answer
+
+#### Scenario: A task that never entered the waiting status is still marked
+
+- **GIVEN** a run bound to a task that cannot be moved into the waiting status
+- **WHEN** that run's wait for a blocking question ends unanswered
+- **THEN** that task states that the work proceeded without the operator's answer
