@@ -52,6 +52,24 @@ the product decided that. The other resolution is a reviewer that re-implements 
 meant to check and then approves its own edit — which `review_turn.py`'s own opening paragraph
 names as the failure the whole review boundary exists to prevent.
 
+### And the notes nobody reads — found in round 3
+
+Neither of the two rounds above asked what *else* depends on the transition that never happens. It is
+more than the review dispatch.
+
+`consider_handover` declines at its second gate (`checkpoint_handover.py:203-206`) when
+`_task_this_run_completed` finds no `completed` transition attributed to the run. In F140's drive
+**both agents called `submit_checkpoint_notes` and neither task reached `completed`** — so no
+handover checkpoint was ever generated, and the notes both agents wrote are unconsumed to this day.
+
+`agent-flows:379` — *"A flow generates the author's handover briefing"* — and `agent-flows:412` —
+*"A reviewer is briefed by the author of the work it is reviewing"* — are therefore both shipped,
+both tested, and **both unreachable in a real flow.**
+
+The sharpest form of it: the briefing's own existing sentence, *"Record what a reviewer will need
+(see `submit_checkpoint_notes`); somebody else reads it"*, **is false today.** Nobody reads it. The
+briefing asks for a record and never asks for the thing that delivers it.
+
 ### Both are one defect
 
 The briefing is written as **description**, and the two channels that build agent-facing text —
@@ -119,6 +137,23 @@ in `design.md` D7-D12; the short form:
 | **D11** | `test_flow_width.py:600-604` asserts `"review"` and `"flow"` are absent from a *whole* document-less loop briefing. Every word the loop branch gains has to clear both. Not weakened — it is `agent-flows:314`'s second scenario in executable form. |
 | **D12** | Round 1's evidence wording becomes **false** when change C ships. Reworded so it is true under both regimes. |
 
+### Round 3 corrections — an independent re-derivation of the argument
+
+Round 3 re-asked whether the briefing is the right place at all. It is, and the derivation is now
+stronger than round 1's: the product already decided this question in writing, about `ask_user`
+(design D13). Three further changes:
+
+| # | Correction |
+|---|---|
+| **D14** | F140 does not only block review dispatch — it silently disables the **whole handover feature**, leaving `agent-flows:379` and `:412` unreachable in a real flow. The requirement gains a clause: a briefing that asks for a record for a later reader must name what delivers it. |
+| **D15** | "Let the Hub conclude it" is not merely undesirable — its obvious implementation is **foreclosed by `task-lifecycle-governance:359`**, which forbids a third actor kind. Round 1 rejected it on other grounds; this is an independent second reason, recorded so it is not re-proposed as cheap. |
+| **D16** | Round 2's **own** new requirement over-reached. Telling a reviewer that the loop's message "does not describe this turn" is wrong exactly where its author thought hardest — a standing message may be written to address a review. Narrowed to identifying it as the standing message, with instructing the agent to disregard it now forbidden. |
+
+Also re-derived and rejected on their merits, so they are not proposed again: a `finish_turn` tool
+(a second writer of a fact `apply_transition` owns, and it does not solve the problem — an agent
+never told to call `update_task` would not be told to call `finish_turn` either), and splitting the
+review branch into a second function (three shared sections duplicated to avoid one conditional).
+
 Verified and holding: the claim precedes the briefing on the same ORM row, so the status the briefing
 reads is the post-claim one; `requirement_links` creates no import cycle, so round 1's fallback query
 is dropped; the briefing reaches the agent untruncated; and the tool inventory's exclusion of
@@ -130,11 +165,16 @@ is dropped; the briefing reaches the agent untruncated; and the tool inventory's
   work is finished on the strength of the process exiting, which is precisely the inference the
   operator retired the question-detection backstop for making (`CLAUDE.md`, 2026-08-20) — and a
   turn can end because the agent gave up.
-- **Escalating a repeated divergence.** `run_divergence.py:743-752` already detects that a run did
-  not advance its task, routes `POLICY_RETRY → POLICY_FLOW`, and grades it `severity = "info"` —
-  indistinguishable from healthy multi-turn work (`:793-800`). That grading is what makes the waste
-  loop look like health, and it should change; it is `loop-firing-accountability`'s subject, not the
-  briefing's, and folding it in here would make one change out of two.
+- **Escalating a repeated divergence — and round 3 says plainly that this leaves the change half
+  finished.** `run_divergence.py:743-752` already detects that a run did not advance its task, routes
+  `POLICY_RETRY → POLICY_FLOW`, and grades it `severity = "info"` — indistinguishable from healthy
+  multi-turn work (`:793-800`). The product's own rule for this class of thing, written about the
+  retired question backstop, has two halves: *"An agent that needs an answer calls `ask_user`; a turn
+  that ends without calling it has ended."* **This change is the first half.** The second — a turn
+  that ends without the call being visible rather than silently re-briefed — is
+  `loop-firing-accountability`'s subject, in another module, and folding it in would make one change
+  out of two. It is named here so the operator reads this as half a statement rather than a whole
+  one.
 - **Anything about integration or evidence acceptance.** Changes B, C and D.
 
 ## Impact

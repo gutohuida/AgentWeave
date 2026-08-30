@@ -272,3 +272,127 @@ outright while evidence sits unaccepted, rather than approving and merging nothi
 The briefing must be worded so that it is true before and after: what is recorded enters `awaiting`,
 somebody else decides on it, and the work cannot land until they do. That claim holds under both
 regimes and needs no second edit when C ships.
+
+---
+
+# Round 3 — an independent re-derivation
+
+Not a review of round 2. This round re-derives the *argument* — the failure it exists to catch is an
+argument that is wrong while everything it argues about is right. It re-asked, from the code: **is
+the briefing the right place for this fix at all?**
+
+The answer is yes, and the derivation found one consequence neither earlier round saw, one
+over-reach in round 2's own new requirement, and a second independent reason to reject the
+alternative round 1 rejected on other grounds.
+
+## D13 — the product's own philosophy already decides briefing-versus-machinery
+
+The strongest case against this change is that it fixes prose where the defect is structural: there
+is no `finish_turn` tool, ending a turn is ending the process, and so the flow's progress hangs on an
+agent choosing to make a general-purpose call. Round 1 answered that with *"it already does,
+unavoidably."* That answer is true but weak — it says the alternative is unavailable, not that this
+one is right.
+
+The stronger answer is that the product has already decided this exact question, in writing, about a
+different capability. `CLAUDE.md`, on the retired question-detection backstop:
+
+> An agent that needs an answer calls `ask_user`; a turn that ends without calling it has ended.
+
+That is a two-part rule: **name the call, and let a turn that does not make it be a turn that did not
+do the thing.** It was chosen over inferring intent from prose, deliberately, at the operator's
+request. Applied here it reads: an agent that finished its task calls `update_task`; a turn that ends
+without it has not finished.
+
+So the briefing is the right place — and **this change is only the first half of that rule.** The
+second half is that a turn ending without the call must be *visible*, and today it is graded
+`severity = "info"` and remedied by the flow re-briefing the same agent
+(`run_divergence.py:743-752`, `:793-800`). Rounds 1 and 2 recorded that as a follow-up worth doing.
+Round 3 raises it: it is not an adjacent improvement, it is the other half of the rule this change
+relies on. It stays out of scope — it is a different module and a different capability — but the
+proposal now says so in those terms, so the operator reads this as half a statement rather than a
+whole one.
+
+## D14 — F140 silently disables the entire handover feature, and nobody had noticed
+
+Neither earlier round asked what *else* depends on the transition that never happens. It is more than
+the review dispatch.
+
+`consider_handover` (`checkpoint_handover.py:191-206`) declines at its second gate:
+
+```python
+completed_task_id = await _task_this_run_completed(db, run)
+if completed_task_id is None:
+    _declined(run_id, "this run completed no task")
+    return None
+```
+
+and `_task_this_run_completed` reads the transition table for a row with
+`to_status == "completed"` and `run_id == run.id` (`:93-99`).
+
+In F140's drive **both agents called `submit_checkpoint_notes` and neither task reached
+`completed`.** So no handover checkpoint was generated, and the notes both agents recorded are
+unconsumed to this day. Which means `agent-flows:379` — *"A flow generates the author's handover
+briefing"* — and `agent-flows:412` — *"A reviewer is briefed by the author of the work it is
+reviewing"* — are both shipped, both tested, and **both unreachable in a real flow.**
+
+The sharpest form of it: the briefing's own existing sentence
+
+> Record what a reviewer will need (see `submit_checkpoint_notes`); somebody else reads it.
+
+**is false today.** Nobody reads it. The briefing asks for a record and does not ask for the thing
+that delivers it. That is one defect, not two, and it is a stronger statement of why this change is
+worth making than either earlier round had.
+
+It also adds a clause to the requirement, since it generalises: a briefing that asks an agent to
+record something for a later reader must name what makes that record reach one.
+
+## D15 — a second, independent reason to reject "let the Hub conclude it"
+
+Round 1 rejected the Hub inferring completion from a clean turn end, on the operator's own grounds:
+it asserts the work is finished on the strength of the process exiting. That argument stands.
+
+Round 3 finds it is also **blocked by a shipped requirement**, which round 1 did not know. A
+Hub-authored completion has to author a `TaskTransition` — `_task_this_run_completed` reads that
+table and nothing else, so a completion that skipped it would not even reach the handover it is
+meant to enable. Every transition carries an actor, and `task-lifecycle-governance:359` states there
+SHALL NOT be a third actor kind, with a scenario pinning the enumeration to agent-run and operator
+and `test_task_transitions.py:55-59` asserting it over the whole map.
+
+So the Hub would have to author the completion **as** the run — which is `origin="runtime"`, itself
+restricted by a source scan (`test_task_transitions.py:473-496`) to two modules, neither of them the
+run-boundary path. The alternative is not merely undesirable; the obvious implementation of it is
+foreclosed. Recorded here so it is not re-proposed as though it were cheap.
+
+## D16 — round 2's own new requirement over-reached, and is narrowed
+
+D8 required a review briefing to state that the text following it *"does not describe this turn."*
+That is wrong in the case where the operator has thought hardest. A loop's message may itself be
+written to address a review — *"if you are reviewing, check the error paths"* is a perfectly ordinary
+thing to put in a loop's standing message — and a briefing that told the agent to disregard it would
+be wrong precisely there.
+
+Narrowed to what is true of every loop message without exception: it is the loop's **standing**
+message, delivered on every firing, not written for this turn in particular. The agent is told what
+the text is, and left to judge whether it applies. The requirement now also forbids instructing the
+agent to disregard it.
+
+## Checked and holding
+
+**`agent-flows:363` is not put at risk by naming transitions in the briefing.** Its second clause —
+*"A review turn's context SHALL NOT name a transition that the task's status does not offer"* — is
+not breached today, because the briefing names no transition at all. After this change it names
+`approved` and `revision_needed`, and `enter_selected_task` puts a review's task at `under_review`
+before the turn begins (`scheduler.py:794-795`), from which `TRANSITIONS` offers both
+(`task_transitions.py:138-142`). The change moves the briefing from silent to correct.
+
+**One function with a branch, not two functions.** Re-derived rather than inherited: the tier
+statement, the prior checkpoint and the queue counts are shared by both shapes, and the tier
+statement already branches inside this function. Two functions would duplicate three sections to
+avoid one conditional.
+
+**A `finish_turn` tool is the wrong shape, on its own merits.** It would be a second writer of a fact
+`apply_transition` already owns, with one guard set — so either a thin alias, which gains nothing, or
+a parallel path, which is the class of defect `TERMINAL_STATUSES`-declared-twice already
+demonstrates in this codebase. And it does not solve the problem: an agent that was never told to
+call `update_task` would not be told to call `finish_turn` either. The missing thing is the sentence,
+not the affordance.

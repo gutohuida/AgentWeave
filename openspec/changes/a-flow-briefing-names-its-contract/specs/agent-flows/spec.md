@@ -26,9 +26,13 @@ requirement that does not exist is refused when followed, which is worse than si
 
 The turn context's inventory of callable tools SHALL NOT be read as satisfying this. An inventory
 states that a capability exists; this states that using it is how the firing's work is concluded.
-Measured on 2026-08-30, two agents in a flow each called the tool the briefing named and neither
-called the tool named only in the inventory, and the flow re-briefed both for finished work on every
-subsequent firing.
+Measured, agents in a flow called the tool the briefing named and did not call the tool named only in
+the inventory, and the flow re-briefed them for finished work on every subsequent firing.
+
+A briefing that asks an agent to record something for a later reader SHALL name what makes that
+record reach one. Notes recorded for a reviewer are consumed at the boundary of a run that moved its
+task to the finished status; a briefing that asks for the notes and not for the transition asks for a
+record nobody will ever read.
 
 #### Scenario: The briefing names the transition that finishes the work
 
@@ -44,6 +48,11 @@ subsequent firing.
 - **WHEN** a loop that declares no document fires an agent for a task
 - **THEN** the briefing still names how the task is finished
 - **AND** does not state that anything routes its work onward
+
+#### Scenario: What is recorded for a later reader is asked for together with what delivers it
+
+- **WHEN** a briefing asks an agent to record notes for whoever reviews the work
+- **THEN** it also names the transition that causes those notes to be delivered
 
 #### Scenario: A turn that ends without moving the task is named as a cost
 
@@ -87,10 +96,11 @@ A review briefing SHALL still state the tier the agent is working inside, and SH
 the turn ends rather than continuing into other work.
 
 Where text the firing did not compose is delivered after the briefing in the same turn, a review
-briefing SHALL state that such text is addressed to the loop's ordinary firings and does not
-describe this turn. A loop's own message is authored once and delivered on every firing, so on a
-review firing it speaks to the wrong turn; it SHALL NOT be rewritten to fix that, because it is the
-durable record of what its author said.
+briefing SHALL identify it as the loop's standing message, delivered on every firing and not written
+for this turn in particular. It SHALL NOT instruct the agent to disregard that text: a loop's message
+may itself be written to address a review, and a briefing that told the agent to ignore it would be
+wrong in exactly the cases where its author had thought hardest. The message SHALL NOT be rewritten
+either, because it is the durable record of what its author said.
 
 #### Scenario: A reviewer is not told to build what it is reviewing
 
@@ -115,7 +125,8 @@ durable record of what its author said.
 #### Scenario: The loop's standing message is not mistaken for this turn's instruction
 
 - **WHEN** an agent is briefed for a review turn and the loop's own message follows the briefing
-- **THEN** the briefing states that the text following it speaks to the loop's ordinary firings
+- **THEN** the briefing identifies the text following it as the loop's standing message
+- **AND** does not instruct the agent to disregard it
 - **AND** the loop's message itself is delivered unchanged
 
 #### Scenario: An implementation firing is unaffected

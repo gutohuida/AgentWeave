@@ -81,6 +81,12 @@
   drift the queue group-by's own comment warns about.
 - [ ] 4.4 Test both halves: a task with links names them; a task with none says nothing about
   evidence.
+- [ ] 4.5 **Keep `submit_checkpoint_notes` and `update_task` in the same breath (round 3, D14).** The
+  flow branch already asks for notes *"somebody else reads it"*, and that is false today: nobody
+  does, because `consider_handover` declines when `_task_this_run_completed` finds no `completed`
+  transition for the run (`checkpoint_handover.py:203-206`, `:93-99`). The completion sentence must
+  sit with the notes sentence rather than in a separate block, so the briefing asks for the record
+  and for the thing that delivers it together.
 
 ## 5. The review branch
 
@@ -102,13 +108,15 @@
   `prepare_review_turn`. Naming it here is a second copy of a fact that can disagree with the
   checkout the reviewer is standing in -- which is the case `ReviewContext.work_moved` already exists
   to handle, on the channel that resolved it.
-- [ ] 5.5 **Pre-empt the loop's own message (round 2, design D8).** The delivered text is
-  `briefing` followed by `job.message` at both call sites (`scheduler.py:2367`, `:2719`), and
-  `job.message` is the operator's standing text for every firing -- in F143's own transcript it read
-  *"Work the task you have been given. Keep the edit minimal."*, delivered to a reviewer. Add one
-  sentence at the end of the review branch saying that what follows is the loop's standing message to
-  its ordinary firings and does not describe this turn. Do **not** rewrite `job.message`: it is the
-  durable record of what its author said.
+- [ ] 5.5 **Identify the loop's own message, without telling the agent to ignore it (round 2 D8, as
+  narrowed by round 3 D16).** The delivered text is `briefing` followed by `job.message` at both call
+  sites (`scheduler.py:2367`, `:2719`), and `job.message` is the operator's standing text for every
+  firing -- in F143's own transcript it read *"Work the task you have been given. Keep the edit
+  minimal."*, delivered to a reviewer. Add one sentence at the end of the review branch saying that
+  what follows is the loop's **standing** message, delivered on every firing and not written for this
+  turn in particular. Do **not** say it does not apply: a loop's message may itself address a review,
+  and that instruction would be wrong exactly where its author thought hardest. Do **not** rewrite
+  `job.message` either: it is the durable record of what its author said.
 - [ ] 5.6 Test: a review briefing states it is a review, does not contain the implementation
   instruction, names both verdicts, and does not present the task under a heading that reads as an
   instruction. Test: the implementation briefing still does contain it — the two must be measured
@@ -137,6 +145,10 @@
   hub/tests/test_scheduler.py -q` — the new file plus everything that composes a briefing.
 - [ ] 7.2 `py -3.11 -m pytest hub/tests/ -q -k "flow or loop or brief or scheduler"` for anything the
   list above missed.
+- [ ] 7.2a Run `hub/tests/test_handover_briefs_the_reviewer.py` explicitly and read what it proves.
+  Round 3 (D14) establishes the feature it covers is unreachable in a real flow; if its tests are
+  green while the drive shows no checkpoint generated, that gap is itself worth a finding at
+  `DRIVE-1` rather than a silent pass.
 - [ ] 7.3 `ruff check src/ hub/ tests/` and
   `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`.
 - [ ] 7.4 Commit naming F140 and F143. The drive is `DRIVE-1`, not part of this change — but note in
