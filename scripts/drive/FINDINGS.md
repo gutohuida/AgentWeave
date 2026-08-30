@@ -10923,3 +10923,148 @@ AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_TICKET_SECRET=aw0830-ticket-secret \
 It kills and restarts the Hub on the port you give it. **Do not pipe it through `head`** — SIGPIPE
 kills it before the `finally` that disables and archives the job. It now also exits unless the
 agent is idle and bound and no job is already enabled.
+
+## F148 — the last two row-19 crosses drive clean: an expired card, and an input the Hub gives up on
+
+**Status:** no product defect. Filed as the coverage record that closes the full-surface sweep —
+these were the only two rows the plan still listed as "not reached", and both exercise reconciliation
+branches that had never run outside a unit test. Both harnesses were repointed at the live fixture,
+given precondition blocks and given a `finally` that leaves the fixture as it was found, in the same
+commit.
+
+Driven on `proj-1964cdedffe2` / port 8011 / Haiku, 2026-08-30 10:27 and 10:29.
+
+### Row 19 x row 14 — a permission card on screen when the Hub dies
+
+`scripts/drive/t_row19_crash_card.py`, **6/6 PASS**. This is the only exercise
+`expire_pending_for_run` (`hub/hub/permission_requests.py:21`, reached from
+`hub/hub/run_reconciliation.py:71`) has ever had outside its own tests.
+
+| what an operator would see | measured |
+|---|---|
+| card while the run is live | `perm-0b7159e2527d`, `tool=Write`, `status=pending` |
+| the same row after the Hub is force-killed and restarted | `status=expired`, `decided_at=None`, `decided_by=None` |
+| still on the operator's screen? | no — the list route hides it, and the card genuinely stopped waiting |
+| answering it anyway | **409** `"this request was already expired; the run has moved on"` |
+| the redelivered turn | `run-f1e2cb2fd55d`, resumed on the same conversation, asks **again** — `perm-c648f21bbcfe` |
+| allowing the fresh card | the write landed in the worktree, the agent went idle |
+
+`decided_at` staying NULL is load-bearing and correct: the model uses it to tell an answer from a
+timeout, so an expired card must not look decided. The harness's `open_cards()` keys on
+`status == "pending"` for exactly that reason, and says so.
+
+The one thing worth recording for later: nothing broadcasts on expiry — `expire_pending_for_run`
+writes the row and returns a count. That is **not** a defect, because
+`hub/ui/src/api/permissions.ts` polls on `refetchInterval: 3000` *and* fetches
+`include_expired=true`, so the operator sees the card turn expired within three seconds rather than
+watching it vanish. The hook's own comment states both choices deliberately. Checked before filing,
+so the next drive does not re-derive it.
+
+### Row 19 x row 8 — three crashes on one input until the Hub gives up
+
+`scripts/drive/t_row19_crash_task.py`, **9/9 PASS**. This is the only way to reach
+`run_reconciliation.py:95` — `if run.task_id and not returned_entry_ids` — because
+`returned_entry_ids` is empty only when `return_run_entries` abandoned the entry at
+`DELIVERY_ATTEMPT_LIMIT = 3` (`hub/hub/inbound_queue.py:178`).
+
+One entry, `entry-a50ce4e98cce`, task `task-9be066aa5aaf`, three force-kills:
+
+```
+crash 1  attempts 1  state delivered  provider_session_id 19d4848e-...  next delivery: resume
+crash 2  attempts 2  state delivered  provider_session_id None          next delivery: new
+crash 3  attempts 3  state withdrawn  "delivery failed 3 times; the Hub stopped retrying"
+```
+
+The session reset lands exactly at `RESUME_RETRY_LIMIT = 2` and the next delivery is genuinely a
+fresh session, not a flagged one — measured on `conversations.provider_session_id`, and confirmed by
+the `run_triggered` event flipping `session_mode` from `resume` to `new`.
+
+And the branch does what it exists to do. At the third crash:
+
+```
+09:30:47 run_interrupted  returned_entry_ids: []  abandoned_entry_ids: ['entry-a50ce4e98cce']
+09:30:47 run_diverged     div-2413cdad4090  run-997dfcbced85  task-9be066aa5aaf  in_progress  interrupted
+```
+
+`GET /tasks/divergences/recent` carries it (`policy_applied: surface`, `outcome: surfaced`,
+`resolved_at: null`), the task reads `has_open_divergence: true`, and the agent is idle with nothing
+queued. So the answer to the question the file was written to ask — *with the message gone, what is
+the operator shown about a task still `in_progress` and an agent now idle?* — is: an open divergence
+naming the run that dropped it, an interrupt event naming the entry that was abandoned, and a queue
+row carrying the reason in prose. Nothing is silent.
+
+The first two crashes correctly record **no** divergence: `evaluate_run_end`'s `input_returned`
+qualification (`hub/hub/run_divergence.py:644`) suppresses it while the work is about to be
+redelivered, which is the difference between "dropped" and "retried".
+
+### What was added to the harnesses, and why the greens are worth believing
+
+Both files asserted less than they printed. `t_row19_crash_task.py` printed the divergence list and
+the event stream and asserted neither, so it could have passed with the branch never firing — the
+one thing it exists to prove. It now asserts that a divergence names this task, that the divergence
+names a run, and that `abandoned_entry_ids` reached the event stream rather than only the database.
+Both files now refuse to start unless the agent is idle and bound, nothing is queued, no job is
+enabled and a Hub is actually serving the port; `t_row19_crash_card.py` also stamps its note
+filename per run, so it can never pass on a previous run's leftover file.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_TICKET_SECRET=aw0830-ticket-secret \
+  AW_PROJECT=proj-1964cdedffe2 AW_PORT=8011 \
+  AW_DB="sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0830/aw0830.db" \
+  AW_HUBLOG="C:/Users/huida/AppData/Local/Temp/aw0830/hub_crash.log" \
+  AW_AGENT=peer   py -3.11 -u scripts/drive/t_row19_crash_card.py
+  AW_AGENT=driver py -3.11 -u scripts/drive/t_row19_crash_task.py
+```
+
+Both kill and restart the Hub on the port given. Do not pipe either through `head` — SIGPIPE kills
+the `finally` that denies leftover cards and closes the drive's task.
+
+## F149 (C) — `job_fired` publishes a JobRun id under the key `run_id`, next to real run ids on the same stream
+
+**Status:** filed, not fixed. The fix is a rename on a published event payload, which is a
+compatibility decision (D5).
+
+Found by reading the activity log as an operator during F148's drive, and being misled by it. These
+two events are one second apart, describe one firing, and both key a `run-` id as `run_id`:
+
+```
+09:15:04 job_fired    {'job_id': 'job-c0d5d3a94a9e', 'agent': 'driver', 'run_id': 'run-e584a6b1bee3'}
+09:15:04 run_started  {'agent': 'driver', 'run_id': 'run-a46a031d484f', 'runner': 'claude'}
+```
+
+`run-e584a6b1bee3` is **not a run**. It does not exist in `runs` at all:
+
+```sql
+SELECT id FROM runs      WHERE id='run-e584a6b1bee3';  -- 0 rows
+SELECT id FROM job_runs  WHERE id='run-e584a6b1bee3';  -- 1 row, status=failed
+```
+
+It is a `JobRun` id. `hub/hub/scheduler.py:2100` and `:2697` both mint the JobRun primary key as
+`run_id = f"run-{short_id()}"`, and four payloads then publish it under the bare key `run_id`:
+`job_fired` at `:2469` (SSE) and `:2482` (persisted), and `job_run_skipped` at `:2130` and `:2314`.
+Every other event on the same stream — `run_started`, `run_triggered`, `run_interrupted`,
+`run_completed`, `run_diverged`, and the permission-request payloads — means `Run.id` by `run_id`.
+The two id spaces share the `run-` prefix, so nothing about the value distinguishes them.
+
+### What it costs today, honestly
+
+Nothing breaks. `hub/ui/src/hooks/useSSE.ts:514` reads only `id` out of `job_fired` and invalidates
+the jobs and loops queries; it never touches `run_id`. No route resolves a run by id in its path, so
+there is no dead link to click. The cost is confined to reading `GET /events/history` and the
+activity log built on it, where a firing appears to name a run that cannot be found — which is
+exactly the wrong impression to give about a job whose run really did fail, and is the same class of
+confusion as **F121** (one firing, two `JobRun` rows).
+
+### Why it is filed rather than patched
+
+`job_run_id` is the honest key, and `hub/hub/db/models.py` already calls the model `JobRun`. But
+`job_fired` is a broadcast contract with a UI listener and a test
+(`hub/ui/src/__tests__/useSSE.test.tsx:128`), and persisted rows in every existing database keep the
+old key forever — so a rename needs a decision about whether to emit both keys for a period, and
+whether the activity log should read either. That is the operator's call, not a drive's.
+
+**Evidence:** `hub/hub/scheduler.py:2100`, `:2130`, `:2314`, `:2469`, `:2482`, `:2697`, `:2756`,
+`:2766`; `hub/hub/db/models.py` `JobRun`; `hub/ui/src/hooks/useSSE.ts:514`. Live rows above from
+`C:/Users/huida/AppData/Local/Temp/aw0830/aw0830.db`, job `job-c0d5d3a94a9e`.
