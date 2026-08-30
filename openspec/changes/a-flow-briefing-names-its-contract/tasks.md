@@ -40,32 +40,45 @@
   contract: the task's current status from `claimed_task.status`, the call
   `update_task("<task id>", status="completed")`, and what a turn that ends with the task unmoved
   costs — the next firing claims the same task and briefs somebody for the same work again.
-- [ ] 3.2 Where the task is at `assigned`, name both hops (`in_progress`, then `completed`) rather
-  than only the last. `TRANSITIONS` has no `assigned → completed` edge (`task_transitions.py:107`),
-  so a briefing that names only the target describes a call that is refused. `enter_selected_task`
-  moves `pending → assigned` and leaves an already-active task alone (`scheduler.py:750-751`), so
-  both `assigned` and `in_progress` are real arrival states.
+- [ ] 3.2 **Derive the hops from the task's actual status — round 2 correction, design D7.** There
+  are *three* arrival states, not two: `CLAIMABLE_STATUSES` is `_statuses_in(BAND_AGENT_ACTIONABLE)`
+  = `{pending, assigned, in_progress, revision_needed}` (`task_transitions.py:219-222, 286`) and
+  `enter_selected_task` moves only `pending -> assigned` (`scheduler.py:796-797`), so a task returned
+  for revision is briefed at `revision_needed`. `TRANSITIONS` has no `assigned -> completed` and no
+  `revision_needed -> completed` edge; both offer `in_progress` first. Write it as one condition --
+  *is the task already `in_progress`?* -- which is correct for all three and cannot drift from the
+  map.
+- [ ] 3.2a Test the `revision_needed` arrival explicitly. It is the case round 1 got wrong, so it is
+  the case most likely to be got wrong again.
 - [ ] 3.3 State what completing *causes* only where true (design D2): the flow branch says the work
   is offered for review by another agent; the loop branch says nothing about routing. Reuse the
   existing branch on `loop.spec_document_id` rather than adding a second one.
 - [ ] 3.4 Test: implementation briefing for a flow names `update_task`, `completed`, the task's id,
   and its current status. Test: the loop branch names the same transition and does **not** claim
   review routing.
+- [ ] 3.5 **Every word the loop branch gains must clear two existing absence assertions (round 2,
+  design D11).** `test_flow_width.py:600-604` asserts `"review" not in briefing.lower()` and
+  `"flow" not in briefing.lower()` over a document-less loop's *entire* briefing -- it is the
+  executable form of `agent-flows:314`'s second scenario and must not be weakened to make room. So:
+  no *"enters review"*, no *"review_state"*, no *"workflow"* on that branch. Run that file early
+  rather than at the end.
 
 ## 4. Requirements and evidence, named only when they exist
 
 - [ ] 4.1 In the same claimed-task block, read `requirement_links.for_task(session, claimed_task.id)`
-  and, when it returns rows, name the identifiers and `record_evidence(identifier, summary)`, stating
-  that approved work merges nothing until the evidence is accepted — which is `record_evidence`'s own
-  tool-surface wording (`api/v1/agents.py:938`), so the two channels say the same thing.
+  and, when it returns rows, name the identifiers and `record_evidence(identifier, summary)`.
+  **Word it so change C does not falsify it (round 2, design D12):** what is recorded enters
+  `awaiting`, somebody else decides on it, and the work cannot land until they do. Do *not* copy
+  `record_evidence`'s tool-surface phrasing *"approving a task integrates nothing until evidence …
+  has been accepted"* (`api/v1/agents.py:938`) — that sentence becomes false the moment C refuses
+  approval outright, and this one stays true under both regimes.
 - [ ] 4.2 Emit nothing about evidence when there are no links. A guessed identifier is refused by
   `agent_actions.py:1041` with `404`, and a document-less loop has no requirements at all, so an
   unconditional instruction is an instruction to fail (design D3).
-- [ ] 4.3 Import discipline: check whether `scheduler.py` already imports `requirement_links`, and if
-  not, whether adding it creates a cycle. If it does, the fallback is a direct
-  `select(SpecRequirement.identifier).join(TaskRequirementLink)` in the scheduler — the same
-  precedent the queue group-by already set, whose comment records that an api-layer cross-import was
-  rejected for a query this small.
+- [ ] 4.3 Import `requirement_links` into `scheduler.py`. **Round 2 verified there is no cycle** --
+  `scheduler` is not reachable from `requirement_links`' transitive first-party imports -- so the
+  hand-written-join fallback round 1 proposed is dropped. A second copy of that join is exactly the
+  drift the queue group-by's own comment warns about.
 - [ ] 4.4 Test both halves: a task with links names them; a task with none says nothing about
   evidence.
 
@@ -84,7 +97,19 @@
   test suite, or not fixing what is found. Those are properties of the workspace, which is the
   context channel's subject; the briefing's subject is the firing. Only the verdict is deliberately
   said twice, and only for the reason recorded in D5.
-- [ ] 5.4 Test: a review briefing states it is a review, does not contain the implementation
+- [ ] 5.4 **Do not name the commit under review (round 2, design D9).** The briefing is composed at
+  firing time; the commit is resolved one step later, at spawn, by `commit_for_task_review` inside
+  `prepare_review_turn`. Naming it here is a second copy of a fact that can disagree with the
+  checkout the reviewer is standing in -- which is the case `ReviewContext.work_moved` already exists
+  to handle, on the channel that resolved it.
+- [ ] 5.5 **Pre-empt the loop's own message (round 2, design D8).** The delivered text is
+  `briefing` followed by `job.message` at both call sites (`scheduler.py:2367`, `:2719`), and
+  `job.message` is the operator's standing text for every firing -- in F143's own transcript it read
+  *"Work the task you have been given. Keep the edit minimal."*, delivered to a reviewer. Add one
+  sentence at the end of the review branch saying that what follows is the loop's standing message to
+  its ordinary firings and does not describe this turn. Do **not** rewrite `job.message`: it is the
+  durable record of what its author said.
+- [ ] 5.6 Test: a review briefing states it is a review, does not contain the implementation
   instruction, names both verdicts, and does not present the task under a heading that reads as an
   instruction. Test: the implementation briefing still does contain it — the two must be measured
   against each other, since 1.2's reproduction is that they are the same string.
@@ -96,6 +121,10 @@
   and say so."* Swap them. Read the file's own comment first: it records that an earlier version
   passed two checks on a briefing that said the opposite of what was asserted, so the new assertions
   must be specific strings, not `"review" in content`.
+- [ ] 6.1a **Correct, rather than satisfy, its "the briefing names the commit under review" check**
+  (`t_row12_review_leg.py:331-334`). Round 2 (design D9) establishes the briefing must not name the
+  commit. Replace the check with one asserting the briefing points the reviewer at its checkout
+  without naming a commit, and note in the file that the commit is the context channel's to state.
 - [ ] 6.2 Add the F140 half to the same harness: after the implementation firing, assert the task's
   status is `completed` rather than `in_progress`. This is the check that makes `DRIVE-1`'s pass
   condition mechanical instead of a reading of the transcript.

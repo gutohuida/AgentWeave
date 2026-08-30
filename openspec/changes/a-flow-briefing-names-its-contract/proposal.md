@@ -105,6 +105,25 @@ channel from saying the opposite at the same moment. That is what the second new
    currently asserts F143's state — implementation wording present, review wording absent — so that
    the day this is fixed the checks swap and say so. This change is that day.
 
+### Round 2 corrections — what a fresh read of the code changed
+
+Round 2 re-derived the proposal against the code rather than against round 1's reasoning. Two of
+round 1's claims were **wrong**, and three constraints it did not know about were found. Full record
+in `design.md` D7-D12; the short form:
+
+| # | Correction |
+|---|---|
+| **D7** | Round 1 named two arrival states. There are **three** — `revision_needed` is claimable, and `completed` is not reachable from it in one step. A briefing written to round 1's rule would have described a refused call, which is the defect this change removes. |
+| **D8** | The briefing is **not** the whole delivered text: `job.message` follows it on both paths, and in F143's own transcript that message read *"Work the task you have been given"* — to a reviewer. The review branch pre-empts it in one sentence; the operator's text stays untouched. |
+| **D9** | The harness check demanding the briefing *"names the commit under review"* is **wrong** and is corrected rather than satisfied. The commit is resolved one step later, at spawn, and `ReviewContext.work_moved` already handles the case where the two disagree. |
+| **D11** | `test_flow_width.py:600-604` asserts `"review"` and `"flow"` are absent from a *whole* document-less loop briefing. Every word the loop branch gains has to clear both. Not weakened — it is `agent-flows:314`'s second scenario in executable form. |
+| **D12** | Round 1's evidence wording becomes **false** when change C ships. Reworded so it is true under both regimes. |
+
+Verified and holding: the claim precedes the briefing on the same ORM row, so the status the briefing
+reads is the post-claim one; `requirement_links` creates no import cycle, so round 1's fallback query
+is dropped; the briefing reaches the agent untruncated; and the tool inventory's exclusion of
+`submit_checkpoint_notes` is a **precedent** for naming a tool where it applies, not an obstacle.
+
 **Deliberately not in this change**, each with its reason:
 
 - **The Hub concluding `completed` from a clean turn end.** F140's second repair. It asserts the

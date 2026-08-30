@@ -4,8 +4,11 @@
 
 A firing's briefing SHALL name the call that moves the claimed task to the status that means the work is finished, SHALL name that status, and SHALL state what a turn that ends without it costs.
 
-The briefing SHALL state the status the task is in at the moment the agent receives it, so that a
-transition needing more than one step is visible as more than one step rather than implied as one.
+The briefing SHALL state the status the task is in at the moment the agent receives it, and the
+transitions it names SHALL be legal from that status. A firing claims a task from any status in
+which firing an agent makes progress possible, which includes one returned for revision; the status
+that means the work is finished is not reachable in one step from every one of them, so a briefing
+that names only the target describes a call that is refused.
 
 This SHALL be stated for every firing that claims a task, whether or not the loop declares a
 specification document. A task's lifecycle is the same in both, and a queue drains on the same band
@@ -55,6 +58,12 @@ subsequent firing.
 - **WHEN** a firing claims a task that serves no requirement of record
 - **THEN** the briefing says nothing about recording evidence
 
+#### Scenario: A task returned for revision is told the step it must actually take first
+
+- **WHEN** a firing claims a task that was returned for revision
+- **THEN** the briefing names the transition that is legal from that status
+- **AND** does not name the finished status as reachable in one step
+
 #### Scenario: A firing that claims no task states no completion contract
 
 - **WHEN** a firing proceeds with no task claimed
@@ -77,6 +86,12 @@ the condition under which no flow-dispatched review had ever recorded a verdict.
 A review briefing SHALL still state the tier the agent is working inside, and SHALL still state that
 the turn ends rather than continuing into other work.
 
+Where text the firing did not compose is delivered after the briefing in the same turn, a review
+briefing SHALL state that such text is addressed to the loop's ordinary firings and does not
+describe this turn. A loop's own message is authored once and delivered on every firing, so on a
+review firing it speaks to the wrong turn; it SHALL NOT be rewritten to fix that, because it is the
+durable record of what its author said.
+
 #### Scenario: A reviewer is not told to build what it is reviewing
 
 - **WHEN** a flow staffs an agent to review a completed task
@@ -96,6 +111,12 @@ the turn ends rather than continuing into other work.
 - **WHEN** an agent is briefed for a review turn
 - **THEN** the briefing and the turn context do not give contradictory instructions about whether
   the agent is doing the work or checking it
+
+#### Scenario: The loop's standing message is not mistaken for this turn's instruction
+
+- **WHEN** an agent is briefed for a review turn and the loop's own message follows the briefing
+- **THEN** the briefing states that the text following it speaks to the loop's ordinary firings
+- **AND** the loop's message itself is delivered unchanged
 
 #### Scenario: An implementation firing is unaffected
 
