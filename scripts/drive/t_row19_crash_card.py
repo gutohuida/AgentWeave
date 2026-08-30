@@ -21,20 +21,24 @@ import time
 
 from aw import api, show
 
-P = os.environ.get("AW_PROJECT") or "proj-dc4d43543bea"
-AGENT = os.environ.get("AW_AGENT") or "gamma"
+P = os.environ.get("AW_PROJECT") or "proj-1964cdedffe2"
+AGENT = os.environ.get("AW_AGENT") or "peer"
 PORT = os.environ.get("AW_PORT") or "8011"
 DB = os.environ.get(
-    "AW_DB", "sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0829/aw0829.db"
+    "AW_DB", "sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0830/aw0830.db"
 )
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-LOG = os.environ.get("AW_HUBLOG", "C:/Users/huida/AppData/Local/Temp/aw0829/hub_crash.log")
-NOTE = os.environ.get("AW_NOTE", "card_crash_note.txt")
+LOG = os.environ.get("AW_HUBLOG", "C:/Users/huida/AppData/Local/Temp/aw0830/hub_crash.log")
+TICKET_SECRET = os.environ.get("AW_TICKET_SECRET", "aw0830-ticket-secret")
+#: Unique per run. A drive prompt that names a fixed filename contaminates its own next run --
+#: the second run's "did the file appear?" check passes on the first run's leftover.
+NOTE = os.environ.get("AW_NOTE") or f"card_crash_note_{int(time.time())}.txt"
 #: Where the agent's write lands. Per-agent worktree, not the project root -- proving the write
 #: happened means looking where the agent actually works.
 WORKSPACE = os.environ.get(
     "AW_WORKSPACE",
-    f"C:/Users/huida/Documents/drive-wt-0829/.agentweave/worktrees/{os.environ.get('AW_AGENT', 'gamma')}",
+    "C:/Users/huida/Documents/drive-0830-sweep/.agentweave/worktrees/"
+    + (os.environ.get("AW_AGENT") or "peer"),
 )
 
 
@@ -68,7 +72,7 @@ def start_hub():
             **os.environ,
             "DATABASE_URL": DB,
             "AW_BOOTSTRAP_API_KEY": os.environ.get("AW_KEY", ""),
-            "AW_TICKET_SECRET": os.environ.get("AW_TICKET_SECRET", "aw0829-ticket-secret"),
+            "AW_TICKET_SECRET": TICKET_SECRET,
         },
         stdout=open(LOG, "ab"),
         stderr=subprocess.STDOUT,
@@ -129,8 +133,59 @@ def wait_for(label, predicate, timeout=90, interval=2):
     return None
 
 
+def preconditions():
+    """Refuse to start unless the fixture is in the state this drive assumes.
+
+    Copied from `t_row19_crash_job.py`. Three of the four crash harnesses read a green-looking
+    verdict off a fixture that was already dirty before this block existed.
+    """
+    step("0. Preconditions")
+    if not P or not AGENT or not DB:
+        raise SystemExit("set AW_PROJECT, AW_AGENT and AW_DB")
+    if not os.path.exists(DB.split("///", 1)[1]):
+        raise SystemExit(f"no database at {DB}")
+    pre = agent_row()
+    if pre is None or pre.get("archived") or not pre.get("runner_id"):
+        raise SystemExit(f"agent {AGENT!r} must exist, be open, and be bound to a runner")
+    if pre.get("status") != "idle":
+        raise SystemExit(f"agent {AGENT!r} is {pre.get('status')!r}, not idle")
+    if open_cards():
+        raise SystemExit(f"a permission card is already open: {[c['id'] for c in open_cards()]}")
+    _, jobs = api("GET", f"/projects/{P}/jobs")
+    jobs = jobs if isinstance(jobs, list) else (jobs or {}).get("jobs", [])
+    if any(j.get("enabled") for j in jobs):
+        raise SystemExit(f"a job is already enabled on {P}")
+    if not hub_pids():
+        raise SystemExit(f"no uvicorn is serving --port {PORT}; there is nothing to crash")
+    if not os.path.isdir(WORKSPACE):
+        raise SystemExit(f"no worktree at {WORKSPACE}; the write check would be unfalsifiable")
+    if os.path.exists(os.path.join(WORKSPACE, NOTE)):
+        raise SystemExit(f"{NOTE} already exists in the worktree; pick another AW_NOTE")
+    print(f"  [OK ] {AGENT} idle and bound; no card, no job; a Hub is serving {PORT}")
+    print(f"  [OK ] worktree {WORKSPACE} exists and does not already hold {NOTE}")
+
+
+def cleanup():
+    """Leave the fixture as it was found: no open card, no run in flight, nothing queued."""
+    print("\n--- cleanup ---")
+    for c in open_cards():
+        code, _ = api("POST", f"/projects/{P}/permission-requests/{c['id']}/decide",
+                      {"allow": False})
+        print(f"  denied leftover card {c['id']} -> {code}")
+    settled = wait_for("agent back to idle", lambda: (lambda a: a and a.get("status") == "idle")(agent_row()),
+                       timeout=180, interval=5)
+    if not settled:
+        print("  WARNING: agent is not idle; the fixture is NOT clean")
+    q = sql("SELECT id,state FROM inbound_queue_entries WHERE agent = ? AND state = 'queued'",
+            (AGENT,))
+    if q:
+        print(f"  WARNING: {len(q)} entries still queued for {AGENT}: {q}")
+    print("  cards now:", [(c["id"], c.get("status")) for c in cards()[1]][:6])
+
+
 def main():
     verdicts = []
+    preconditions()
 
     step("1. A run in manual posture, so a card goes on screen")
     code, body = api(
@@ -238,4 +293,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        cleanup()
