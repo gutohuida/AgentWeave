@@ -199,7 +199,7 @@
       "detail": "THIS IS HALF THE ASK AND IT IS TIME-GUARANTEED, NOT CONDITIONAL - see the 08:00 rule in limits. Invoke the e2e-loop skill and run it as a FULL-SURFACE SWEEP, not scoped to one change. Drive the product the way an operator would: real Hub, real agents, real runs. Bind Haiku for every real agent turn (standing operator directive - 'On testing with claude always use cheap models'); there is no token-budget gate and no coverage row is off limits for cost. Use your own Hub on 8011 per environment above, and a test project OUTSIDE this repo or under testbed/ - never proj-5e960453 or proj-18e5d4e0. File everything you find in scripts/drive/FINDINGS.md continuing the F-number sequence (F133 onward), each with a reproduction and file-and-line evidence. FIX what is small, self-contained and unambiguous; for anything that needs a design decision, FILE it and move on rather than guessing. Lessons from earlier drives, do not relearn them: name conversation_id explicitly on /agent/trigger or you open a NEW conversation; a helper that swallows a 404 into an empty list turns 'I could not look' into 'there was nothing there'; a loop delivers ONE task at a time; a drive prompt naming a fixed filename contaminates its own next run, so use a unique name per run; check questions unfiltered before calling a missing row a finding. LEAVE NO JOB ENABLED."
     }
   ],
-  "current": "F14-IMPL closed out and archived. Nothing in flight; the next unit is F115-R1, or E2E-DRIVE if it is past 08:00.",
+  "current": "Iteration 8 in progress: F115-R1, round 1 of the F115 spec loop. Started 06:35 local; the 08:00 rule governs - finish or revert before 08:00.",
   "next_action": "Iteration 8: F115-R1 - round 1 of the F115 spec loop (explore the code, then write the proposal) at a NEW change under openspec/changes/. Read the F115-R1 queue entry in full first; the operator's decision is recorded in scripts/drive/FINDINGS.md under F115 and is not open. Round 1 explores and proposes; rounds 2 and 3 are separate iterations and must each re-derive the argument against the code rather than re-read round 1. Do not implement anything in this iteration. D3 in decisions_for_user is the open question this round has to settle or flag. HONOUR THE 08:00 RULE: if it is already past 08:00 local when you read this, do NOT start F115-R1 - go straight to E2E-DRIVE, which the operator extended the stop to 12:00 specifically to make room for. If you start the round before 08:00 and it is not finished by then, park it: a half-written proposal is the one thing the rule forbids leaving behind, so either finish it or revert it and start the drive.",
   "limits": [
     "Push, do not open PRs. - standing operator directive",
@@ -277,5 +277,5 @@
     "The feature freeze's parameters are still unsettled.",
     "Whether /review-iteration ever runs over the 2026-08-27 overnight run's iterations 1-15."
   ],
-  "last_heartbeat": "2026-08-30T05:52:37+01:00"
+  "last_heartbeat": "2026-08-30T06:35:23+01:00"
 }
