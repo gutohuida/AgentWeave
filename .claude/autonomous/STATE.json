@@ -222,5 +222,5 @@
     "fastapi>=0.110 is unbounded and has produced two CI-only failures via Starlette major bumps. Worth pinning; not this run's job.",
     "The feature freeze's parameters are still unsettled."
   ],
-  "last_heartbeat": "2026-08-31T00:31:53+01:00"
+  "last_heartbeat": "2026-08-30T23:52:21+01:00"
 }
