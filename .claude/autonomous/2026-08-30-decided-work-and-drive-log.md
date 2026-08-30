@@ -1342,3 +1342,144 @@ continue, cut over; F126 and F130 already filed here), **17** (integration), **1
 (worktrees), **19** (resilience), and within row 13 the timeout half. Read any harness before
 believing it — that is now five harness defects in two iterations, and every one of them made the
 product look worse than it is.
+
+---
+
+## Iteration 13 - reconstructed, not written by the process that did the work
+
+Iteration 13 pushed **three commits** and then died without writing a log entry or rewriting
+`STATE.json`. Reconstructed here from the commits and from state it left behind, so the record is
+not a hole:
+
+- `4f9c096` drive(e2e): row 15 live end to end, row 12 flows driven, and **F140**
+- `3621cef` drive(e2e): rows 16 and 17 driven live, and **F141**
+- `7ec409c` drive(e2e): what is on the other side of F140 - **F142** and **F143**
+
+So rows **12, 15, 16 and 17** were reached and four findings filed. What it did *not* finish:
+
+- `scripts/drive/t_row13_timeout.py` was written and committed but **never run to completion**. The
+  proof is that it left `driver.question_timeout_seconds = 60` on the 8011 fixture - a value only
+  its step 1 writes and only its `finally` restores. Cleared before this iteration's run so the
+  file could capture the true original (`None`) and restore it.
+- `STATE.json` was left dirty in the working tree with `last_heartbeat` bumped to `08:48` and no
+  other change, and with its trailing newline stripped. Both repaired here.
+
+No product state was left inconsistent: no job enabled, no open question, all agents idle.
+
+---
+
+## Iteration 14 - 2026-08-30, 09:55 -> 10:20 - E2E-DRIVE, rows 13-timeout and 19
+
+**Unit of work:** `E2E-DRIVE`, continued, exactly as `next_action` instructed. The 08:00 rule was
+in force throughout, so no queue item was opened and no spec-loop round was started. The clock was
+read from PowerShell seven times.
+
+**Reconciliation:** branch and `git log` matched `STATE.json`'s claims about the branch, but
+`STATE.json` itself was **behind its own repository** - see the iteration 13 entry above. Its
+`current` and `queue[E2E-DRIVE].progress` both still described iteration 11's position while three
+of iteration 13's commits sat on the branch. Corrected in this iteration's rewrite.
+
+**The Hub, and the check that it was mine.** `127.0.0.1:8011`, PID 19460, started 05:27:03 on
+`.../Temp/aw0830/aw0830.db`. `find hub/hub src -name '*.py' -newermt "2026-08-30 05:27:03"`
+returned one file - `hub/hub/launchability.py` - which `git status` reports **clean**: its mtime is
+iteration 12's F136 experiment, measured then reverted, so its content is identical to what the
+process loaded. No restart needed on that account. The drives below then killed and restarted 8011
+three times by design, each time from source in `hub/` on the same database. 8000 and 8010 were
+never touched.
+
+### What was driven
+
+| Row | Verdict |
+|---|---|
+| **13 Questions - the expiry half** | **PASS, 16/17.** First sweep ever to reach it. The one red check was the harness's (F144) |
+| **13 Questions - the operator's own route** | **F146** - a blocking question posted by the operator is answered into the void |
+| **19 Resilience - crash with a run in flight** | **PASS 4/4, twice** (`peer`, then `asker` after the harness was corrected) - F145 |
+| **19 x 13 - crash with `ask_user` blocking** | **PASS 6/6** |
+| **19 x 11 - crash mid job firing** | **F147** - reconciliation is right, the history it leaves is wrong |
+
+Row 19 was recorded "not reached" in every prior sweep including iterations 11-13 of this one. It
+is reached now, three ways.
+
+### Four findings
+
+**F144 (C)** - row 13's expiry half holds completely: the question blocks, the wait ends at 70s
+against a 60s window, the run ends `idle` not `error`, and afterwards the row is
+`answered=false / declined=false / asker_waiting=false`, which is exactly what
+`QuestionsPanel.tsx` needs to drop it out of the red banner and stamp it "no longer waiting". The
+single failing check was looking for `ask_user`'s expiry note in the agent's `/output` transcript -
+a surface **F139 already established cannot carry a tool result** (`tool completed`, always). The
+note *was* delivered: the agent's own thinking says "the operator did not answer within 60
+seconds", and `60` appears nowhere it can see except the note. Assertion rewritten to check that.
+
+**F145** - no product defect, and a prediction corrected. `t_row19_crash.py` was built on "On
+Windows nothing reaps a grandchild, so the honest expectation is YES [orphaned]". Measured **no**,
+twice: a Claude run is a `PtySession`, its ConPTY host is the Hub's own child, and force-killing
+the Hub tears down the pseudoconsole and the attached `claude.exe` with it. That is what makes
+`run_reconciliation.py:62` safe - the wedging case (`pid_alive` true forever, every later trigger
+refused) cannot arise for a Claude runner on Windows. Resume continuity measured on the filesystem
+rather than on prose: `crash_before.txt` keeps its pre-crash mtime while the redelivered run picks
+up at step 2.
+
+**F146 (B)** - driven with its own control, prediction written before the run. `POST
+/projects/{p}/questions` passes `created_by_run_id=None` literally, and `_asking_run_has_ended`
+returns `False` for an unset asker, so `asker_still_waiting` is `True` and the delivery branch is
+skipped. Measured: the non-blocking control queues `entry-3b4da545e098` and wakes the agent; the
+blocking one answers `200 / answered: true` and queues **nothing**. Meanwhile `asker_waiting=true`
+puts that row under "Blocking - agents are waiting for your answer". Three repairs, all changing an
+accepted or stored shape, so filed.
+
+**F147 (B)** - `reconcile_stale_job_runs` had never been driven by anything. It works; what it
+leaves the operator does not. `reconcile_interrupted_runs()` **re-queues** the crashed firing's
+input, and `reconcile_stale_job_runs()` on the very next line writes that firing off as
+`failed / "no live run behind this firing"`. Twelve seconds later the re-queued work completed on
+the firing's own conversation, exit 0 - and `finalize_job_run_for_conversation` only matches rows
+still `in_progress`, so nothing corrects the history. Also spotted in the same function: an
+**unordered `.first()`** on a correlation that now has two rows per conversation, where
+`finalize_job_run_for_conversation` orders its own version `fired_at.desc()` and says why.
+
+### Harness defects - three more, running total eight for this sweep
+
+1. **F144** - asserted the expiry note on a surface that structurally cannot carry it.
+2. **F145** - asked "is the spawned CLI orphaned?" about the **ConPTY host**, because
+   `descendants()` returns `OpenConsole.exe` and `claude.exe` in WMI's order and the file took the
+   first. Now uses `runs.pid`, which is what the reconciliation itself consults. Its "long step"
+   had also stopped being long: Claude Code refuses a foreground `sleep 90` outright, so the crash
+   landed inside the turn only because the model spent the interval explaining the refusal.
+   Replaced with twelve sequential writes.
+3. **F147** - its verdicts were "no JobRun is left in_progress" and "the crashed firing is recorded
+   as failed": both passing, and the second asserts the defect as the desired outcome. Second
+   instance of "the assertion agreed with the bug" after F143.
+
+Preconditions added to **four** harnesses (`t_row19_crash.py`, `t_row19_crash_question.py`,
+`t_row19_crash_job.py`, and the new `t_row13_operator_question.py`): agent exists, unarchived,
+bound, **idle**; no question already open; no job already enabled; a uvicorn actually serving the
+port. Every one of them previously either listed the hazard and carried on or did not look.
+
+### What held, and is worth not re-deriving
+
+- A hard `Stop-Process -Force` on the Hub costs the operator nothing: the run becomes
+  `interrupted` with `ended_at` set, the agent is not wedged, the queued input is redelivered to a
+  resumed session that knows what it already did, and accounting records the lost turn as
+  `unavailable_turns: 1` rather than as zero.
+- Answering a question whose asking run died is handled, not dropped: `questions.py:346-363` queues
+  it as an operator entry and calls `schedule_agent`, which is exactly what `QuestionsPanel.tsx`'s
+  "Answering now would reach it as a new message" tooltip promises.
+- `POST /questions` requires `header` and `multi_select` with no defaults, and the `422` names the
+  missing field precisely. It took three attempts to build a valid body, but each refusal was
+  correct and the schema comment explains why they are mandatory.
+
+### Cleanup
+
+Fixture left exactly as found: five agents idle, `unbound-driver` **still unbound**, no job
+(`crash-drive` disabled and archived by its own `finally`), no token budget, no open question
+except the declined one, `driver.question_timeout_seconds` back to `None`. 8011 up and answering
+`/health`. Tree clean, four commits pushed.
+
+### Next
+
+`E2E-DRIVE` continues. Still unreached: **row 19 x row 14** (`t_row19_crash_card.py`, a permission
+card on screen when the Hub dies - the only exercise of `expire_pending_for_run` there is) and
+**row 19 x row 8** (`t_row19_crash_task.py`, three crashes on one input until
+`DELIVERY_ATTEMPT_LIMIT` abandons it). Both have harnesses already written against the 0829 fixture
+and both need the same `AW_DB` / `AW_HUBLOG` / `AW_TICKET_SECRET` overrides and the same
+precondition treatment the other three got. The 8011 fixture is warm and clean.
