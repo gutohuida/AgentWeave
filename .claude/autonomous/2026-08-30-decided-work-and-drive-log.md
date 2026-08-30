@@ -564,3 +564,129 @@ names. Task 9.5 now names all five and says what to grep for after archiving.
 
 **F14-IMPL is now materially bigger** than when it was queued: eleven task groups rather than eight,
 three of them added by this round. The operator sees this before it is built.
+
+---
+
+## Iteration 6 — F14-IMPL — 2026-08-30T04:29–05:37+01:00 — reconstructed
+
+Iteration 6 left no entry of its own: it implemented the whole change and then died at 05:37 with
+the Hub suite still running, so the closeout never happened. What follows is reconstructed from its
+own commits and its final report in `driver.log`, and is marked as such — the claims below were
+verified independently in iteration 7 rather than inherited.
+
+Eighteen commits, `bb3d3e7` … `3cec5a5`, one per task group:
+
+| Group | What shipped |
+|---|---|
+| 1 | Both defects reproduced against unmodified code, passing first |
+| 2 | A blocking ask parks its run's task as it is asked |
+| 2b | A run cannot assert its own task out of `blocked` |
+| 3 | Four guards for blocked-while-running |
+| 3a | A run mid-turn on a blocked task reads `working`, not `assigned` |
+| 4 | `wait_expires_at`/`wait_ended_at`, migration `0099`, Hub-side deadline resolver |
+| 5 | `POST /questions/wait-ended`, and the release it causes |
+| 5a | The run's end sweeps the wait the report never delivered |
+| 6 | Five surfaces: two excluded, one kept and marked, one deliberately untouched |
+| 7 + 3.5 | The resume edge ungated, and the board that had to agree with it |
+| 8 | The permanent "proceeded without your answer" record, backend and UI |
+
+Two things it got wrong and corrected mid-flight, both worth the operator seeing: the 2b guard
+initially swallowed `blocked -> completed` into a 403, destroying the "two refusals are
+distinguishable" requirement — it is now scoped to edges the map already permits; and the
+wait-ended endpoint first rolled back inside its loop, which would have lost earlier questions'
+writes, so it now commits per question.
+
+Left open: **9.2** (the full Hub suite) and **9.5** (sync the five deltas and archive).
+
+---
+
+## Iteration 7 — F14-IMPL closeout, 9.2 and 9.5 — 2026-08-30T06:04:52+01:00
+
+**Unit of work:** the tail iteration 6 did not reach. Commits `f860fce` (sync) and `20ff1e8`
+(archive). Branch and `git log` matched STATE.json; the only reconciliation needed was that
+STATE.json still named iteration 6's `next_action` as if nothing had been built, while 76 of the 78
+tasks were already ticked. Nothing was re-run on that account — the two unticked tasks were the work.
+
+### 9.2 — the suite, with the difference counted rather than totalled
+
+The task says the difference "must be exactly the tests this change adds", which a pair of totals
+cannot show: a total that moves by the right amount is equally consistent with one test added and
+one unrelated test lost. So the **node IDs** were diffed, against a throwaway worktree of the F131
+close-out commit `2e5586c`:
+
+| | |
+|---|---|
+| baseline | 3648 collected = 3563 passed / 84 skipped / 1 xpassed |
+| now | 3726 collected = **3641 passed / 84 skipped / 1 xpassed / 0 failed**, 22:46 |
+
+Added, 79: `test_a_task_waits_while_its_run_waits.py` +56, `test_question_wait_resolution.py` +15,
+`test_task_attribution.py` +4 (3a), `test_dependency_gate.py` +3 (group 7). Removed, 1:
+`test_dependency_gate.py::test_the_blocked_resume_edge_is_gated_the_same_way`, deleted on purpose
+because group 7 ungates precisely that edge. Net +78.
+
+**The seventy-ninth was worth the trouble of counting this way.** Per-file arithmetic said 77;
+the suite said 78. The extra one is
+`test_no_console_flash.py::test_every_spawn_reaches_console_suppression[0099_question_wait_window.py]`
+— a parametrisation over the migrations directory, in a file this change never edited, which picked
+up group 4's new migration by itself. It is this change's test, arrived at without this change
+writing it. A totals-only check would have shown 78 against an expected 77 and had nothing to say
+about which of the two numbers was wrong.
+
+Skips and xpasses unchanged; F109 did not fire.
+
+### 9.5 — five deltas, synced mechanically because `--strict` cannot check this
+
+The task's own warning is that `openspec validate --strict` does not compare capabilities, so a
+missed delta validates clean. The sync was therefore done by a script that locates each `MODIFIED`
+requirement by its **verbatim** header and refuses rather than guesses if the header is absent, then
+appends each `ADDED` one; a dry run printed every replacement and its size before anything was
+written. All eight resolved: three MODIFIED + two ADDED in `task-lifecycle-governance`, two MODIFIED
+in `agent-loops`, one MODIFIED each in `task-dependencies` and `agent-conversation-workspace`, one
+ADDED in `conversation-checkpoint`.
+
+Then the four greps 9.5 names, all of which pass: `"Resuming is gated"` gone from the whole corpus;
+`"unanswered, non-declined questions"` gone from `agent-loops`; `"holds an unanswered question"`
+gone from `agent-conversation-workspace`; and `agent-loops` carrying **two** waiting-on-a-person
+capacity scenarios rather than one.
+
+Archived as `openspec/changes/archive/2026-08-30-a-task-waits-while-its-run-waits`, with the
+`.openspec.yaml` every other archived change carries and this one had never been given.
+`openspec list`: no active changes. `openspec validate --specs --strict`: 43 passed, 0 failed.
+
+**One environment note worth keeping.** `git mv` of the change directory failed with `Permission
+denied` twice. The cause was two `find /` processes left running from a badly-scoped search earlier
+in this iteration, holding a handle under that path; killing them made the move succeed first try.
+On Windows a stray recursive search is not merely slow, it locks directories against `git mv`.
+
+### Verified rather than inherited
+
+The drive was **re-run**, not carried over, on the F131 precedent that a number whose process died
+has no witness:
+
+* `t_f14_f60_wait_parks_the_task.py`, **all 15 checks**, against the 8011 Hub confirmed to serve this
+  code — process started 05:27:03, newest edited file under `hub/hub` 05:22:44.
+* Phase A: the task parked at ask time and read `blocked` while its asker read `running`; the loop
+  board read `agent_capacity: "working"`; the rail read `waiting`; a second run's attempt to assert
+  the task out of `blocked` was refused; answering released it and left no mark.
+* Phase B: the wait expired by itself after ~9s, the agent's completion landed, and the finished
+  task carried *"Proceeded without your answer: Which colour should the badge be?"* — which
+  answering afterwards did not erase.
+* No job left enabled (`Phase A loop`, `enabled=false`, re-checked over the API).
+
+Gates re-run at this head rather than trusted: `ruff check src/ hub/ tests/` clean, `black --check
+--target-version py311` 524 files unchanged, `mypy src/` clean.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Hub suite | 3641 passed / 84 skipped / 1 xpassed / **0 failed** |
+| Test-count difference attributed test by test | yes, by node-ID diff against `2e5586c` |
+| Five deltas synced | yes, header-verbatim; four post-sync greps pass |
+| Corpus validates | `--specs --strict`, 43 passed / 0 failed |
+| Live drive | 15/15, re-driven against a Hub confirmed to serve this code |
+| Jobs left enabled | none |
+| Tree clean, committed, pushed | `f860fce`, `20ff1e8` |
+
+**F14 and F60 are done.** Next is `F115-R1`, and the 08:00 rule still governs: if a fresh iteration
+reads this after 08:00, it starts `E2E-DRIVE` instead.
