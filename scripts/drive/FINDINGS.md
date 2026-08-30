@@ -11119,6 +11119,19 @@ drained by `_observe_bound_address` from *the first request the Hub serves*. Wit
 liveness poll, that first request is the follow-up. Measured: by the time the POST response came
 back, entry one was already `delivered` with `delivery_attempts: 1` into a **different** run.
 
+Confirmed a second way once **F151** was fixed and the Hub could speak again — the drive was re-run
+and the Hub's own log now carries the line that had never been printed in this repo's history:
+
+```
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8011 (Press CTRL+C to quit)
+WARNI [hub.run_reconciliation] Draining 1 deferred post-reconciliation schedule(s) now the Hub's address is known
+```
+
+Exactly one deferred schedule, drained on the follow-up's own request. The verdict in the harness is
+still asserted on the queue state rather than on this line — a log level or a redirected stdout must
+not be able to turn a product verdict green or red — but the mechanism is now measured, not read.
+
 That is a good property, not a bad one — the answer the operator gets is accurate precisely because
 their own request had already un-parked the turn a moment earlier. Recorded so nobody reads the
 sequence as a race.
