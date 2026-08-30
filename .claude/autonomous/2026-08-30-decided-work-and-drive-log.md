@@ -1141,3 +1141,90 @@ for the operator or a later run. Read the `E2E-DRIVE` queue entry in full: full-
 Hub on **8011** (never 8000, never 8010), Haiku bound for every real agent turn, decision D5 for
 fix-versus-file, and **leave no job enabled**. The drive then has the whole window rather than a
 remainder of it.
+
+---
+
+## Iteration 11 — 2026-08-30, 07:20 → 07:45 — E2E-DRIVE, first slice
+
+**Unit of work:** `E2E-DRIVE`, the full-surface sweep. Started immediately rather than F115-IMPL,
+exactly as iteration 10's `next_action` instructed. The clock was read from PowerShell four times
+during the iteration, not inferred from tool-call count.
+
+### The Hub, and the check that it was mine
+
+`http://127.0.0.1:8011`, PID 19460, started 05:27 on `…/Temp/aw0830/aw0830.db`, migration head
+`0099`. Confirmed it serves this checkout before trusting a single result:
+`find hub/hub src -newermt "2026-08-30 05:27:03" -name '*.py'` returns **nothing**, so no Python
+under test has moved since the process started. 8000 and 8010 were never touched.
+
+Test project: **`drive-0830-sweep`** = `proj-1964cdedffe2`, a git repo created this morning at
+`C:\Users\huida\Documents\drive-0830-sweep`, outside this repo. Neither protected project was
+opened. Every agent turn bound `claude-haiku-4-5-20251001`.
+
+### What was driven
+
+| Row | Verdict |
+|---|---|
+| 1 Projects · 2 Runners · 3 Agents · 4 Charters | driven, `t_sweep_surface.py`, **0 unexpected** after the harness's own probe was corrected |
+| 7 Tasks · 8 Dependencies · 13 Questions (API) · 18 Accounting (API) | driven, same run, 0 unexpected |
+| 9 Spec · 10 Evidence · 11 Jobs (API) | driven, `t_sweep_spec.py`, 0 unexpected; F113 re-confirmed |
+| **13 Questions (live)** | **PASS** — `ask_user` blocked a real turn in ~20s, the answer released it |
+| **14 Permissions (live, Claude)** | **PASS** — `manual` raised a card in ~12s on two runs, `{"allow": true}` cleared it |
+| **18 Accounting (live, exhaustion)** | **F133** |
+| 5, 6, 12, 15, 16, 17, 19 | not reached this iteration |
+
+### Three findings, all filed rather than fixed
+
+**F133 (B)** — reproduced live, new harness `t_row18_budget_reason.py` (10/11, two Haiku turns).
+The scheduler and the queue-status endpoint disagree about which stalled turns count as autonomous:
+the scheduler asks whether *the turn it built* holds an operator entry, the endpoint asks whether
+*any queued entry for the agent* is operator-origin. So an operator message queued beside a blocked
+autonomous one leaves the scheduler still refusing and the panel saying **"2 waiting"** and nothing
+else — the exact state `db/models.py:586` records as the defect the `waiting_reason` column exists
+to remove. Filed under D5: the narrow repair duplicates the selection logic and the clean one
+refactors `schedule_agent`'s hot path, which is two defensible answers.
+
+**F134 (B)** — `{"name":"x","content":""}` on a charter answers 201, and the canonical context every
+real turn is built from then ends at a bare `## Charter: x` with nothing beneath it, while `missing`
+still reads `[]`. The `else` branch one line down has the better sentence (*"No charter is assigned
+to this agent."*, plus `missing.append("charter")`) and cannot be reached, because `if charter:`
+tests the row rather than its content. `openspec/specs/agent-charter/spec.md:56-72` governs the
+neighbouring case and stops short of this one.
+
+**F135 (C), and its continuation** — four of the sweep's own wrong turns, three of which would have
+been filed as product defects by a less suspicious reading. The canonical-context probe called the
+charter route with no query parameter; row 13 answered a question a different agent had left open
+and called itself passing; row 14 blamed the product for row 13's run still being alive; row 14's
+decision body had the wrong shape. All four corrected in place.
+
+**F115 reproduced independently.** Two identical row-14 triggers nine minutes apart wrote to
+`.agentweave/worktrees/asker/` once and to the project root once. Both permission cards offered the
+absolute path; nothing marked which one left the boundary. Appended to F115 rather than filed anew —
+the change's scope is settled (D3) and widening it to the approval surface is the operator's call.
+
+### What held, and is worth not re-deriving
+
+- `GET /fs/list` on a missing path answers 200 with `entries: []` **and a `reason`**, and
+  `DirectoryPicker.tsx:158-161` renders it. The "swallowed 404" seam the sweep expected is not there.
+- `name_conversation` is a documented no-op once a conversation has a title, so an operator's rename
+  survives their next message (`conversations.py:139-149`).
+- Clearing a token budget re-drains the queue, from **all three** routes that can change it —
+  `accounting.py:61-72`, `inbound_queue.py:96-108`, `projects.py:525-527`.
+- The `422` on a malformed permission decision names both the missing field and the forbidden one.
+  It is this file's best counter-example to its own usual complaint about illegible 4xx.
+
+### Cleanup
+
+No job enabled anywhere on 8011 (the two that exist are `enabled=False` from iteration 7's F14
+drive). No project carries a token budget. All three agents idle, no pending permission card, both
+open questions settled. `C:/Users/huida/Documents/drive-2026-08-29` — F115's evidence — was opened
+as a project on 8011 by the un-overridable harness before that was fixed, and is **intact**: its
+`README.md`, `calc.py` and yesterday's note file are all unchanged and nothing was written to it.
+
+### Next
+
+`E2E-DRIVE` continues. Rows **5, 6, 12, 15, 16, 17 and 19** are unreached, and within row 13 the
+timeout half — letting a question expire rather than answering it — was never driven; a question
+with `asker_waiting: false` was observed on a completed run, which is the state that half would
+examine. The fixture is warm and cheap to reuse: `proj-1964cdedffe2`, three Haiku agents
+(`asker`, `driver`, `peer`), worktrees already provisioned for all three.
