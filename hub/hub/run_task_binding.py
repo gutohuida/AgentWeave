@@ -574,6 +574,22 @@ def reason_from_question(question: Question) -> str:
     return f"Waiting on your answer: {text}" if text else "Waiting on your answer."
 
 
+def proceeded_without_answer_reason(question: Question) -> str:
+    """The one sentence a card shows for work that went ahead without an answer to *question*.
+
+    A sibling of `reason_from_question` rather than a second spelling of it, trimmed by the same
+    limit, for the same reason: the wait and its ending are the same question read at two moments,
+    and two surfaces spelling them differently would read as two different situations.
+
+    Not "timed out" and not "expired". What matters to whoever reads the task later is not that a
+    clock ran out but that a decision was taken and the operator was not part of it.
+    """
+    text = " ".join((question.question or "").split())
+    if len(text) > _REASON_LIMIT:
+        text = text[: _REASON_LIMIT - 1].rstrip() + "…"
+    return f"Proceeded without your answer: {text}" if text else "Proceeded without your answer."
+
+
 async def unanswered_blocking_question(session: AsyncSession, run: Run) -> Optional[Question]:
     """The question this run asked and is still waiting on, if there is one.
 

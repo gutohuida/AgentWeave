@@ -1290,3 +1290,201 @@ async def test_a_task_that_never_started_still_reads_gated(app, auth_headers):
 
     response = await app.get(f"/api/v1/projects/proj-test/tasks/{task_id}", headers=auth_headers)
     assert response.json()["dependency_state"] == "gated"
+
+
+# ---------------------------------------------------------------------------
+# 8. Say it on the task, permanently (design D7)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_completed_task_says_the_decision_was_taken_without_an_answer(app):
+    """8.6, and the inversion of 1.2. F60's whole point in one assertion."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+    await expire_the_wait(question_id)
+    await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+    await app.patch(
+        f"/api/v1/agent-actions/tasks/{task_id}", headers=headers, json={"status": "completed"}
+    )
+
+    body = await read_task(app, headers, task_id)
+    assert body["status"] == "completed"
+    assert body["proceeded_without_answer_reason"] == (
+        "Proceeded without your answer: which colour?"
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_statement_survives_review_and_approval(app, auth_headers):
+    """8.6. It describes how the work was done, so it must outlive the statuses the work passes
+    through afterwards."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+    await expire_the_wait(question_id)
+    await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+    await app.patch(
+        f"/api/v1/agent-actions/tasks/{task_id}", headers=headers, json={"status": "completed"}
+    )
+
+    # Cleared first: `_guard_reviewer_is_not_the_author` refuses `-> under_review` while the task
+    # still names the agent that completed it, which is unrelated to this assertion.
+    for status, extra in (("under_review", {"assignee": None}), ("approved", {})):
+        moved = await app.patch(
+            f"/api/v1/projects/proj-test/tasks/{task_id}",
+            headers=auth_headers,
+            json={"status": status, **extra},
+        )
+        assert moved.status_code == 200, moved.text
+        assert moved.json()["proceeded_without_answer_reason"] is not None
+
+
+@pytest.mark.asyncio
+async def test_the_statement_is_still_there_after_the_operator_answers(app, auth_headers):
+    """8.6, and the assertion this requirement exists for.
+
+    F60 measured the operator answering five minutes after the run ended, choosing the option the
+    agent did *not* ship. If an answer cleared this, the record of the unilateral call would
+    disappear at the exact moment it became most misleading — the question would read answered, the
+    task would read clean, and the code would carry a decision neither of them names.
+    """
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+    await expire_the_wait(question_id)
+    await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+    await app.patch(
+        f"/api/v1/agent-actions/tasks/{task_id}", headers=headers, json={"status": "completed"}
+    )
+
+    answered = await app.patch(
+        f"/api/v1/projects/proj-test/questions/{question_id}",
+        headers=auth_headers,
+        json={"answer": "green"},
+    )
+    assert answered.status_code == 200, answered.text
+
+    body = await read_task(app, headers, task_id)
+    assert body["proceeded_without_answer_reason"] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_task_that_never_parked_still_carries_the_statement(app):
+    """8.3a. The second arm on its own — round 3's widening.
+
+    A run bound to a task in `under_review` asks, waits out the full deadline, decides for itself
+    and carries on. `block_task_for_question` correctly never parked it, so `blocked_task_id` is
+    null, and keying the derivation on that alone would leave this task carrying nothing. It is
+    F60's own shape with a different starting status.
+    """
+    await make_agent()
+    task_id = await make_task("task-in-review", status="under_review")
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question_id = asked.json()["id"]
+    await expire_the_wait(question_id)
+
+    reported = await app.post(
+        "/api/v1/agent-actions/questions/wait-ended",
+        headers=headers,
+        json={"question_ids": [question_id]},
+    )
+    assert reported.json()["accepted"] == [question_id]
+
+    assert (await question_row(question_id)).blocked_task_id is None
+    body = await read_task(app, headers, task_id)
+    assert body["status"] == "under_review"
+    assert body["proceeded_without_answer_reason"] is not None
+
+
+@pytest.mark.asyncio
+async def test_an_answered_wait_leaves_no_statement(app, auth_headers):
+    """The statement must mean something. A task whose question the operator answered inside the
+    deadline carries nothing — `wait_ended_at` was never set."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    await app.patch(
+        f"/api/v1/projects/proj-test/questions/{asked.json()['id']}",
+        headers=auth_headers,
+        json={"answer": "blue"},
+    )
+
+    assert (await read_task(app, headers, task_id))["proceeded_without_answer_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_declined_question_leaves_no_statement(app, auth_headers):
+    """Design D7. A decline is a decision the operator made and handed back, not silence — and the
+    tool returns early on one rather than waiting out the deadline, so `wait_ended_at` is never
+    set."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    await app.post(
+        f"/api/v1/projects/proj-test/questions/{asked.json()['id']}/decline",
+        headers=auth_headers,
+        json={},
+    )
+
+    assert (await read_task(app, headers, task_id))["proceeded_without_answer_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_swept_wait_produces_the_same_statement_as_a_reported_one(app):
+    """5a.5's other half, asserted on the statement itself: how the Hub found out must not change
+    the record."""
+    await make_agent()
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    await expire_the_wait(asked.json()["id"])
+
+    await end_the_run()
+
+    # Read as the operator, because the run's credential is spent once the run has ended — which is
+    # the whole situation this record exists for: the agent is gone and the task has to say what
+    # happened on its own.
+    response = await app.get(f"/api/v1/projects/proj-test/tasks/{task_id}", headers=AUTH)
+    assert response.status_code == 200, response.text
+    assert response.json()["proceeded_without_answer_reason"] == (
+        "Proceeded without your answer: which colour?"
+    )
+
+
+def test_the_two_statements_are_spelled_by_one_module():
+    """8.1. The wait and its ending are the same question read at two moments. Two spellings would
+    read as two different situations, which is the defect `reason_from_question` was made public
+    to prevent in the first place."""
+    from hub.run_task_binding import _REASON_LIMIT, proceeded_without_answer_reason
+
+    long_question = Question(id="q-long", project_id="proj-test", question="x" * 400)
+    text = proceeded_without_answer_reason(long_question)
+    assert text.startswith("Proceeded without your answer: ")
+    assert text.endswith("…")
+    assert len(text) <= len("Proceeded without your answer: ") + _REASON_LIMIT
+
+    empty = Question(id="q-empty", project_id="proj-test", question="")
+    assert proceeded_without_answer_reason(empty) == "Proceeded without your answer."

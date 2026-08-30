@@ -42,6 +42,14 @@ export interface Task {
    * Derived per request, never stored.
    */
   awaiting_answer_reason?: string | null
+  /**
+   * This work went ahead without *your* answer to a question it stopped for (F60).
+   *
+   * Distinct from the wait above, and drawn distinctly: a wait is a live ask you can still answer,
+   * this is a decision already taken. Permanent — answering the question afterwards does not clear
+   * it, because that is the moment the record matters most.
+   */
+  proceeded_without_answer_reason?: string | null
   /** The specification document this work is against, and — where a document declared this task —
    *  the key it was declared under. */
   spec_document_id?: string | null

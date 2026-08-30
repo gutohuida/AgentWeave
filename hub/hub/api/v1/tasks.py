@@ -44,6 +44,7 @@ from ...requirement_evidence import REJECTED as EVIDENCE_REJECTED
 from ...requirement_links import LinkRefusedError, absorb_free_text, link, resolve_identifiers
 from ...run_task_binding import (
     TERMINAL_FOR_BINDING,
+    proceeded_without_answer_reason,
     reason_from_question,
     release_bindings_to,
     release_reason,
@@ -411,6 +412,70 @@ async def _attach_awaiting_answer(
     return responses
 
 
+async def _attach_proceeded_without_answer(
+    session: AsyncSession, responses: List[TaskResponse], *, project_id: str
+) -> List[TaskResponse]:
+    """Say which tasks were carried on without the operator's answer (F60).
+
+    Measured live: an agent asked four blocking questions, waited out its deadline, chose for
+    itself and completed the task. The question stayed unanswered and undeclined, the task read
+    `completed`, and nothing anywhere said a decision had been taken without anybody. The operator
+    answered five minutes later, choosing an option the agent had not shipped.
+
+    **No condition on `answered`** (design D7), and the reason belongs here rather than in the
+    proposal because it is the non-obvious half: an answer arriving afterwards must not clear this.
+    That is the exact moment the record becomes most misleading — the question would read answered,
+    the task would read clean, and the code would carry a decision neither of them names.
+
+    Two arms, the same shape `_attach_awaiting_answer` uses:
+
+    * the question names this task in `blocked_task_id` — the parked case;
+    * a run bound to this task asked it — the case that never parked, because
+      `block_task_for_question` records `blocked_task_id` only where the task was `in_progress` or
+      already `blocked`. A run bound to a task in `under_review` waits out the full deadline,
+      decides for itself and carries on, and keying on `blocked_task_id` alone would leave that
+      task carrying nothing. That is F60's own shape with a different starting status, and the
+      requirement is written as "where a task's wait for an answer ended without one", not "where a
+      task was parked".
+
+    The second arm drops `_attach_awaiting_answer`'s `Run.status == "running"` condition,
+    deliberately: that condition is there because a live wait needs a live run, and this record is
+    permanent and looks backwards.
+
+    A **declined** question never appears here, because `wait_ended_at` is never set on one: the
+    tool returns early on a decline rather than waiting out the deadline, and a decline is a
+    decision the operator made and handed back, not silence.
+    """
+    task_ids = {response.id for response in responses}
+    if not task_ids:
+        return responses
+
+    rows = await session.execute(
+        select(Question, Run.task_id)
+        .outerjoin(Run, Run.id == Question.created_by_run_id)
+        .where(
+            Question.project_id == project_id,
+            Question.blocking.is_(True),
+            Question.wait_ended_at.isnot(None),
+        )
+        .where(Question.blocked_task_id.in_(task_ids) | Run.task_id.in_(task_ids))
+        .order_by(Question.created_at, Question.batch_index)
+    )
+    # Earliest first and `setdefault`, matching `_attach_awaiting_answer`: a run that asked several
+    # and waited them all out names the first thing it got stuck on.
+    proceeded: dict = {}
+    for question, run_task_id in rows:
+        for candidate in (question.blocked_task_id, run_task_id):
+            if candidate in task_ids:
+                proceeded.setdefault(candidate, question)
+
+    for response in responses:
+        question = proceeded.get(response.id)
+        if question is not None:
+            response.proceeded_without_answer_reason = proceeded_without_answer_reason(question)
+    return responses
+
+
 async def _attach_assignee_liveness(
     session: AsyncSession, responses: List[TaskResponse], *, project_id: str
 ) -> List[TaskResponse]:
@@ -750,6 +815,7 @@ async def create_task_for_actor(
         project_id=project_id,
     )
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_proceeded_without_answer(session, responses, project_id=project_id)
     responses = await _attach_assignee_liveness(session, responses, project_id=project_id)
     return responses[0]
 
@@ -837,6 +903,7 @@ async def list_tasks(
     )
     responses = await _attach_dependencies(session, responses, project_id=project_id)
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_proceeded_without_answer(session, responses, project_id=project_id)
     return await _attach_assignee_liveness(session, responses, project_id=project_id)
 
 
@@ -885,6 +952,7 @@ async def task_board(
     )
     responses = await _attach_dependencies(session, responses, project_id=project_id)
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_proceeded_without_answer(session, responses, project_id=project_id)
     responses = await _attach_assignee_liveness(session, responses, project_id=project_id)
     edges: List[dict] = []
     if task_ids:
@@ -1123,6 +1191,7 @@ async def get_task(
     )
     responses = await _attach_dependencies(session, responses, project_id=project_id)
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_proceeded_without_answer(session, responses, project_id=project_id)
     responses = await _attach_assignee_liveness(session, responses, project_id=project_id)
     return responses[0]
 
@@ -1330,6 +1399,7 @@ async def update_task_for_actor(
     )
     responses = await _attach_dependencies(session, responses, project_id=project_id)
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
+    responses = await _attach_proceeded_without_answer(session, responses, project_id=project_id)
     responses = await _attach_assignee_liveness(session, responses, project_id=project_id)
     return responses[0]
 

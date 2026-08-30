@@ -125,6 +125,13 @@ export function TaskCard({
   const isWaitingOnOperator = isBlocked || Boolean(awaitingAnswer)
   const waitingReason = task.blocked_reason ?? awaitingAnswer
 
+  // F60: the wait ended and nobody answered, so the agent decided for itself. Drawn separately
+  // from the waiting treatment above and never instead of it: waiting is a live ask the operator
+  // can still answer, this is a decision already taken and the answer would arrive too late to
+  // change it. Amber rather than purple for exactly that reason — purple is "someone did the right
+  // thing and stopped", and this is the outcome when nobody was there to stop for.
+  const proceededWithoutAnswer = task.proceeded_without_answer_reason ?? null
+
   // A rejected card is the *cause* of every `gated_on_rejected` card downstream of it, and on the
   // dependency board the red edges pointed at a card that looked like any other. Stated on the card
   // itself rather than only on that board: a rejected task reads the same wherever it is drawn, and
@@ -347,6 +354,30 @@ export function TaskCard({
                   {waitingReason}
                 </p>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* A decision taken without the operator. Below the waiting treatment rather than instead
+            of it: a task can be waiting on a second question while carrying the record of a first
+            one nobody answered, and those are two different things to say. */}
+        {proceededWithoutAnswer && (
+          <div
+            data-testid={`task-proceeded-${task.id}`}
+            className="mt-2 flex items-start gap-2 rounded px-2 py-1.5"
+            style={{
+              background: 'color-mix(in srgb, var(--amber) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--amber) 25%, transparent)',
+            }}
+          >
+            <Icon name="alert_triangle" size={14} style={{ color: 'var(--amber)', marginTop: 2 }} />
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium" style={{ color: 'var(--amber)' }}>
+                Decided without you
+              </p>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-2)' }}>
+                {proceededWithoutAnswer}
+              </p>
             </div>
           </div>
         )}

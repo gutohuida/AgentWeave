@@ -436,6 +436,23 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
           </p>
         )}
 
+        {/* F60: the record that this work went ahead without an answer. Above the description
+            because it changes how everything below it should be read. */}
+        {task.proceeded_without_answer_reason && (
+          <div
+            data-testid={`task-proceeded-detail-${task.id}`}
+            className="text-[11px] p-2 rounded"
+            style={{
+              color: 'var(--text-2)',
+              background: 'color-mix(in srgb, var(--amber) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--amber) 25%, transparent)',
+            }}
+          >
+            <p className="font-medium" style={{ color: 'var(--amber)' }}>Decided without you</p>
+            <p className="mt-0.5">{task.proceeded_without_answer_reason}</p>
+          </div>
+        )}
+
         {/* Full description */}
         {task.description && (
           <div>

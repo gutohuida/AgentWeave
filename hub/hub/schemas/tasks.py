@@ -321,6 +321,19 @@ class TaskResponse(BaseModel):
     # while the run waits on the rest. Computed per request, never stored — the question row is the
     # record.
     awaiting_answer_reason: Optional[str] = Field(default=None, max_length=2000)
+    # This work went ahead without the operator's answer to a question it stopped for (F60).
+    #
+    # Derived, like the field above and like `has_open_divergence` and `dependency_state`: the
+    # durable record is `Question.wait_ended_at`, and a copy on the task is a second thing that can
+    # disagree with it.
+    #
+    # **Permanent, not clearable.** The condition is `wait_ended_at IS NOT NULL` alone — not "and
+    # still unanswered". F60 measured the operator answering five minutes after the run ended, and
+    # choosing the option the agent had not shipped. An answer that cleared this would erase the
+    # record of the unilateral call at the exact moment it became most misleading: the question
+    # would read answered, the task would read clean, and the code would carry a decision neither
+    # of them names.
+    proceeded_without_answer_reason: Optional[str] = Field(default=None, max_length=2000)
     # Which document this work is against, and — for a task the document itself declared — which of
     # its declared units this is. Written since migration `0071` and exposed nowhere, so nothing
     # above the database layer could tell a declared task from a hand-made one, or get from a task
