@@ -310,3 +310,119 @@ such rather than dressed up:
 
 **Not verified, on purpose:** nothing was run. Rounds 2 and 3 exist to attack the argument above,
 and `F14-IMPL` is where a reproduction has to pass against unmodified code before anything changes.
+
+## Iteration 4 — 2026-08-30 03:50 → 04:1x — F14-R2
+
+**Queue item:** `F14-R2`, round 2 of three. An independent re-derivation of
+`openspec/changes/a-task-waits-while-its-run-waits/` against the code — not a re-read of round 1.
+Committed at `19f5af2`. No code touched, which is what a proposal round should leave behind.
+
+### Reconciliation
+
+| Claim in STATE.json | Actual | Verdict |
+|---|---|---|
+| branch `autonomous/2026-08-30-decided-work-and-drive` | same | ✓ |
+| `iteration: 3`, HEAD `3b2330e` "release the branch after iteration 3" | same, tree clean | ✓ |
+| `next_action`: F14-R2, round 2 only, do not implement or start R3 | done as stated | ✓ |
+
+Time at start 03:50, so the 08:00 rule did not apply.
+
+### The finding that pays for the round
+
+**The proposal ungates `blocked -> in_progress` and breaches a shipped requirement in a capability
+it does not touch.** `task-dependencies` carries the scenario *Resuming is gated the same way as
+starting* (`openspec/specs/task-dependencies/spec.md:76-80`) under the requirement *An unmet
+dependency prevents starting and nothing else* (`:42`), and its archived design D1 draws the edge
+into the diagram explicitly. Round 1 modified the **duplicate** statement of the same rule — the
+placement half in `task-lifecycle-governance:1193` — and left the original standing. Archived as it
+was, the corpus would have said the resumption is refused in one capability and "SHALL NOT be gated"
+in another.
+
+`openspec validate --strict` passed on it in round 1 and passes on it now: **it does not compare
+capabilities.** That is the mechanism by which this class of defect survives a round, and it is
+worth remembering for every future loop — a green `--strict` says nothing about whether a delta
+contradicts a capability it did not edit.
+
+Fixed by adding `specs/task-dependencies/spec.md` to the change, MODIFYing that requirement, and
+rewriting design D5 to say a shipped rule is being reversed rather than a gap being filled.
+
+### The rule survives, with an argument round 1 did not have
+
+Round 1's justification was one sentence: the gate asks whether work may *start*, and `blocked` is
+reachable only from `in_progress`. True, and the weakest of the three arguments available.
+
+1. **Every refusal at that edge is necessarily a change that happened after the task started.** The
+   way *into* `in_progress` is the gated edge, so a waiting task cleared the gate on the way in. A
+   prerequisite can only be unmet on the way out because it left `approved` during the wait, or was
+   declared during the wait. The first is the shipped requirement *A dependency that regresses after
+   a dependent has started does not halt it* (`task-dependencies:105`) — "the dependent SHALL
+   continue". **The current code breaches that requirement at this edge.** So the ungating restores
+   a shipped requirement rather than trading one away, which inverts round 1's framing of its own
+   change.
+2. **The scheduler already decided this, the other way from the transition service.**
+   `scheduler.candidate_is_startable` (`hub/hub/scheduler.py:619-625`) exempts `blocked` from the
+   very same `dependency_gate.evaluate` call, in round 1's own words: *"Gating it would be asking
+   whether work that is not about to start is allowed to start."* Board and gate contradict each
+   other today at exactly one edge, and `task-dependencies` human check 13.1 is that the firing and
+   the board never disagree about a queue item.
+3. **The cost, now stated instead of discovered later.** A dependency *declared* while a task waits
+   (`task-dependencies:262` — "the existing gate SHALL apply to B unchanged") will no longer stop it
+   resuming. Small — the work is already under way, so the gate could only have prevented the record
+   of it, not the work — but it is a real consequence and it now has a task (7.6) and a scenario.
+
+### Seven more corrections
+
+* **Task 2.8 asserted the opposite of what the code does.** It said an `under_review` task's
+  blocking question records `blocked_task_id` without transitioning. `block_task_for_question`
+  records it on the non-transitioning branch *only* when the task is already `blocked`
+  (`run_task_binding.py:625-628`) — and that is correct, because `run-task-binding:663` is scoped to
+  a task *already waiting*. Assertion inverted; design D2's "reused unchanged" survives intact.
+* **Tasks 3.5 and group 7 are coupled in both directions.** Teaching the board to read a waiting
+  task as `running_on_regressed` — "flagged, not stopped" — while the gate can still stop it
+  permanently makes the board state something false; ungating without the board fix leaves a
+  resumable task drawn as `gated`. Neither half is shippable alone.
+* **Four comments state the retired fact, not two.** Round 1 named the two backend ones and missed
+  `hub/ui/src/api/tasks.ts:34-43` and `hub/ui/src/components/tasks/TaskCard.tsx:115-119`.
+* **The park has no commit.** `ask_question_for_actor` commits and refreshes before returning
+  (`questions.py:193-195`), so the park is a second write; in the batch route it would have been
+  flushed by accident by the next question's create. And nothing said what the route returns if the
+  park raises — the question is committed by then, so a failed park must not cost the agent its
+  question. Both written into 2.2.
+* **A shipped test asserts the old rule.** `hub/tests/test_dependency_gate.py:185`
+  `test_the_blocked_resume_edge_is_gated_the_same_way`, plus that module's docstring and section
+  comment, plus two gate docstrings (`dependency_gate.py:7-9`,
+  `task_transition_service.py:370-378`). Named in a new task 7.5 so implementation overturns it
+  deliberately rather than meeting a red suite.
+* **The two clocks cannot cross, and D4's refusal depends on it.** The Hub stamps `wait_expires_at`
+  while serving the ask; the tool computes its deadline *after* that request returns
+  (`mcp_server.py:354`) and sleeps before its first poll. So the tool's real expiry is always later
+  than the Hub's recorded one, and "refuse a report that arrives before the deadline" is safe rather
+  than a race. Round 1 relied on this without stating it.
+* **The UI needs no behavioural change for half (a)**, and the reason deserves a test rather than an
+  assumption: `TaskCard` already coalesces (`blocked_reason ?? awaitingAnswer`), so a task that is
+  now both `blocked` and carrying `awaiting_answer_reason` renders one wait, not two. New task 2.6a.
+
+### Confirmed rather than rebuilt
+
+So round 3 spends its budget on something else: the transition map needs no edit and
+`blocked -> completed` stays absent; `_guard_run_holds_the_task` fires only on `-> in_progress` and
+`-> completed`, so it does not touch the park and takes its no-op branch on the expiry release
+because the run is already bound; the batch parks once and records the rest through the
+already-blocked branch; `release_reason` is reached on both existing exits (`tasks.py:1183`, shared
+by the operator and agent PATCH routes, and `run_task_binding.py:687`); `expired` rather than
+`unanswered` is the right list at `mcp_server.py:411`, and a decline leaves the wait early so it is
+never marked; and all seven "safe" rows of the blocked-while-running table re-derived and hold.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `openspec validate a-task-waits-while-its-run-waits --strict` | valid, with both deltas |
+| Every claim read at source | yes — `run_task_binding.py`, `task_transition_service.py`, `task_transitions.py`, `dependency_gate.py`, `scheduler.py`, `jobs.py`, `mcp_server.py`, `questions.py`, `agent_actions.py`, `tasks.py`, `models.py`, `TaskCard.tsx`, `api/tasks.ts`, `test_dependency_gate.py` |
+| Shipped requirements read before contradicting them | `task-dependencies` 42/76/105/262, `task-lifecycle-governance` 413/1193, `run-task-binding` 594/618/639/663 |
+| Cited line numbers re-checked after writing | yes — two were off by one and were corrected |
+| Code changed | none, deliberately — this is a proposal round |
+| Tree clean, committed, pushed | `19f5af2` |
+
+**Flagged for the operator as `D6` in `decisions_for_user`:** this change now modifies a shipped
+requirement in a second capability. R3 sees it next, and the operator sees it before `F14-IMPL`.
