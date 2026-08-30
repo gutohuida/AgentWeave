@@ -453,6 +453,66 @@ async def review_dispatch_refusal(
     return None
 
 
+# Bounds and default of a question wait, restated from `mcp_server.py`.
+#
+# Restated rather than imported, in the direction that is possible: `mcp_server` is spawned
+# standalone and may import only stdlib and fastmcp, so it cannot import from here and already
+# restates `MIN_WAITING_SECONDS`/`MAX_WAITING_SECONDS` under a comment ending "A test asserts the
+# two agree". `test_question_wait_resolution.py` is that test for these.
+QUESTION_WAIT_ENV = "AW_QUESTION_TIMEOUT"
+QUESTION_WAIT_DEFAULT = 240
+QUESTION_WAIT_MIN = 10
+QUESTION_WAIT_MAX = 600
+
+
+def _parse_question_wait(raw: Optional[str]) -> int:
+    """`mcp_server._configured_wait`'s rules, Hub-side.
+
+    Anything absent, unparseable or out of range falls back to the default rather than raising —
+    the tool will take exactly that fallback, and the Hub's recorded deadline has to describe the
+    wait the tool actually performs, not the one the setting intended.
+    """
+    if not raw:
+        return QUESTION_WAIT_DEFAULT
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return QUESTION_WAIT_DEFAULT
+    return value if QUESTION_WAIT_MIN <= value <= QUESTION_WAIT_MAX else QUESTION_WAIT_DEFAULT
+
+
+def effective_question_wait(agent_row: Optional[Agent]) -> int:
+    """How long *agent_row*'s next run will wait for an answer, in seconds.
+
+    **The Hub owns every input to this, which is why the ask carries nothing** (design D3). Rounds
+    1 and 2 of this change had the ask send `wait_seconds` on the agent-facing schema, on the
+    stated ground that the Hub could not compute the deadline. It can, and the alternative was not
+    merely more expensive but wrong: `wait_seconds` would arrive over the run's own credential, so
+    the refusal in `POST /questions/wait-ended` — the thing that keeps an expiry a report of a fact
+    rather than a lever — would have compared the report against a number the reporting party
+    chose.
+
+    Resolved in the order the spawn below writes the environment, so the two cannot disagree:
+
+    1. the agent's own resolved `env_vars`, which `resolve_agent_env` merges over the Hub's
+       environment;
+    2. the Hub's own environment, which is what an unconfigured run inherits;
+    3. `Agent.question_timeout_seconds`, which this function's caller writes **last** and which
+       therefore overrides both;
+
+    then `_configured_wait`'s parse, because the tool applies it to whatever ends up there.
+    """
+    raw: Optional[str] = None
+    env_vars = ((agent_row.config if agent_row is not None else None) or {}).get("env_vars") or {}
+    if QUESTION_WAIT_ENV in env_vars:
+        raw = str(env_vars[QUESTION_WAIT_ENV])
+    else:
+        raw = os.environ.get(QUESTION_WAIT_ENV)
+    if agent_row is not None and agent_row.question_timeout_seconds is not None:
+        raw = str(agent_row.question_timeout_seconds)
+    return _parse_question_wait(raw)
+
+
 async def trigger_agent_directly(
     *,
     project_id: str,

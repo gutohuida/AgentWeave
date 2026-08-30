@@ -10,6 +10,8 @@ rather than as a pair of files disagreeing about what the product does.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from sqlalchemy import select
 
@@ -473,3 +475,76 @@ def test_the_tool_surface_still_withholds_blocked_and_still_offers_in_progress()
     statuses = set(mcp_server.TaskStatus.__args__)  # type: ignore[attr-defined]
     assert "blocked" not in statuses
     assert "in_progress" in statuses
+
+
+# ---------------------------------------------------------------------------
+# 4. The wait's deadline, recorded
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_ask_records_the_deadline_of_the_wait_it_starts(app):
+    """4.3a. Stamped Hub-side, in the same write as the park, for blocking questions only.
+
+    `test_question_wait_resolution.py` covers which number is chosen and that the tool agrees; this
+    covers that it is written at all, and that the ask carries nothing that could influence it.
+    """
+    await make_agent(question_timeout_seconds=90)
+    task_id = await make_task()
+    headers = await make_run(task_id=task_id)
+
+    before = datetime.now(timezone.utc)
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    question = await question_row(asked.json()["id"])
+
+    assert question.wait_expires_at is not None
+    recorded = question.wait_expires_at
+    if recorded.tzinfo is None:
+        recorded = recorded.replace(tzinfo=timezone.utc)
+    # 90s from the agent's own column, not the 240s default.
+    assert timedelta(seconds=85) <= recorded - before <= timedelta(seconds=95)
+    assert question.wait_ended_at is None
+
+
+@pytest.mark.asyncio
+async def test_a_note_starts_no_wait_and_records_no_deadline(app):
+    """A non-blocking ask is the agent carrying on. There is no wait, so there is no deadline —
+    and a question with no deadline can never be reported as expired."""
+    await make_agent()
+    headers = await make_run()
+
+    asked = await app.post(
+        "/api/v1/agent-actions/questions", headers=headers, json=one(blocking=False)
+    )
+    assert (await question_row(asked.json()["id"])).wait_expires_at is None
+
+
+@pytest.mark.asyncio
+async def test_an_unbound_runs_wait_is_recorded_even_though_nothing_parks(app):
+    """The deadline is about the run's wait, not about a task. A conversation turn that asks and
+    waits has a real deadline and must be able to report its expiry."""
+    await make_agent()
+    headers = await make_run(run_id="run-chat")
+
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    assert (await question_row(asked.json()["id"])).wait_expires_at is not None
+
+
+def test_the_ask_schema_carries_no_wait_seconds():
+    """4.3, design D3. Round 3 removed it deliberately: `wait_seconds` would arrive over the run's
+    own credential, so the refusal that keeps an expiry a report of a fact rather than a lever
+    would compare the report against a number the reporting party chose."""
+    from hub.api.v1.agent_actions import AgentQuestionBatchCreate, AgentQuestionCreate
+
+    assert "wait_seconds" not in AgentQuestionCreate.model_fields
+    assert "wait_seconds" not in AgentQuestionBatchCreate.model_fields
+
+
+def test_the_tools_ask_is_unchanged_by_this_change():
+    """4.4. Round 3 deleted the task that would have changed it. The only edit this change makes
+    to `mcp_server.py` is the expiry report `ask_user` sends after its wait loop (5.5)."""
+    import inspect
+
+    from hub import mcp_server
+
+    assert "wait_seconds" not in inspect.signature(mcp_server.ask_user).parameters

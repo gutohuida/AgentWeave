@@ -5,7 +5,7 @@ impossible to accidentally apply the project-key dependency to an agent operatio
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -22,7 +22,7 @@ from ...checkpoint_access import (
 )
 from ...conversations import conversation_id_for_run
 from ...db.engine import get_session
-from ...db.models import CheckpointNote, Question, Run, Task
+from ...db.models import Agent, CheckpointNote, Question, Run, Task
 from ...run_task_binding import announce_block, block_task_for_question
 from ...schemas.common import RequestModel
 from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
@@ -39,6 +39,7 @@ from ...schemas.tasks import (
 from ...sse import sse_manager
 from ...task_transitions import ENTRY_STATUSES, run_actor
 from ...utils import persist_event, short_id
+from .agent_trigger import effective_question_wait
 from .agents import AgentRequest, request_agent
 from .jobs import archive_job, create_job, delete_job, run_job, update_job
 from .messages import create_message_for_actor
@@ -430,12 +431,15 @@ async def recall(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-async def _park_asking_runs_task(
+async def _record_the_wait_and_park(
     session: AsyncSession,
     actor: AgentActor,
     questions: Sequence[Question],
 ) -> None:
-    """Park the asking run's bound task, because the run has stopped and is waiting on a person.
+    """Record the deadline of the wait these questions start, and park the run's bound task.
+
+    One write for both, because they are one fact: this run has stopped, it is waiting on a person,
+    and this is how long it will wait.
 
     F14: until this, a task only reached `blocked` when the asking run *ended*, so for the whole
     length of every `ask_user` the board read `in_progress` with no reason — it claimed the work was
@@ -464,10 +468,36 @@ async def _park_asking_runs_task(
 
     try:
         run = await session.get(Run, actor.run_id)
-        if run is None or not run.task_id:
+        if run is None:
+            return
+
+        # The deadline, stamped Hub-side from the Hub's own inputs and never told to the Hub by
+        # anybody (design D3). Before the commit and before the response, so the tool's own
+        # `time.monotonic() + QUESTION_ANSWER_TIMEOUT` — computed after this request returns, with
+        # a poll interval before its first check — is always *later* than this. The refusal in
+        # `POST /questions/wait-ended` can therefore reject a forged early report and can never
+        # reject a genuine one, and no cross-process clock comparison is involved: the Hub compares
+        # its own `now` against its own stamp.
+        agent_row = (
+            await session.execute(
+                select(Agent).where(Agent.project_id == actor.project_id, Agent.name == actor.agent)
+            )
+        ).scalar_one_or_none()
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            seconds=effective_question_wait(agent_row)
+        )
+        for question in blocking:
+            question.wait_expires_at = expires_at
+
+        # Everything below is the park, and it only applies to a run that holds a task. A wait on a
+        # question asked by an unbound run is still recorded above: `ask_user` will report its
+        # expiry either way, and a question with no deadline could never be reported at all.
+        if not run.task_id:
+            await session.commit()
             return
         task = await session.get(Task, run.task_id)
         if task is None:
+            await session.commit()
             return
         # Every question of the batch, in batch order. The first one that can park does; the rest
         # take `block_task_for_question`'s already-blocked branch, which records `blocked_task_id`
@@ -514,7 +544,7 @@ async def ask_operator_question(
         created_by_run_id=actor.run_id,
         session=session,
     )
-    await _park_asking_runs_task(session, actor, [created])
+    await _record_the_wait_and_park(session, actor, [created])
     return created
 
 
@@ -558,7 +588,7 @@ async def ask_operator_question_batch(
                 batch_size=total,
             )
         )
-    await _park_asking_runs_task(session, actor, created)
+    await _record_the_wait_and_park(session, actor, created)
     return AgentQuestionBatchResponse(
         batch_id=batch_id,
         questions=[QuestionResponse.model_validate(row) for row in created],
