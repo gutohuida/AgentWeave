@@ -114,6 +114,26 @@ describe('a waiting task says so on the card', () => {
     expect(screen.queryByTestId('task-blocked-task-1')).toBeNull()
   })
 
+  it('renders one wait, not two, when the task is both parked and reporting a wait', () => {
+    /**
+     * Ask-time parking (F14) makes a task carry `blocked` *and* `awaiting_answer_reason` at the
+     * same moment: the status is the park, and the derived field still reports the run's live
+     * wait. No behaviour change was needed for that — the card already coalesces the two — but the
+     * reason it needed none is worth asserting rather than commenting, because a later edit that
+     * split them would tell the operator they owe two answers when they owe one.
+     */
+    renderCard(
+      makeTask({
+        status: 'blocked',
+        blocked_reason: 'Waiting on your answer: which colour?',
+        awaiting_answer_reason: 'Waiting on your answer: which colour?',
+      }),
+    )
+
+    expect(screen.getAllByTestId('task-blocked-task-1')).toHaveLength(1)
+    expect(screen.getAllByText('Waiting on your answer: which colour?')).toHaveLength(1)
+  })
+
   it('is not the same signal as stalled', () => {
     /**
      * Opposites: one is an agent that dropped the work, the other an agent that correctly refused

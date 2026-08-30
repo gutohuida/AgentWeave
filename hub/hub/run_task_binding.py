@@ -28,6 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import InboundQueueEntry, Question, Run, SpecDocument, Task, TaskTransition
+from .sse import sse_manager
 from .task_transition_service import (
     ORIGIN_ACTOR,
     ORIGIN_RUNTIME,
@@ -41,6 +42,7 @@ from .task_transitions import (
     operator,
     run_actor,
 )
+from .utils import persist_event
 
 # --------------------------------------------------------------------------------------
 # What a task says should happen when work bound to it is dropped
@@ -640,6 +642,43 @@ async def block_task_for_question(
     task.blocked_reason = reason_from_question(question)
     question.blocked_task_id = task.id
     return transition
+
+
+async def announce_block(
+    session: AsyncSession,
+    run: Run,
+    task: Task,
+    question: Question,
+) -> None:
+    """Tell the operator's board that a task is now waiting on them.
+
+    `info`, not `warn`. A divergence is `warn` because it wants attention on something that went
+    wrong; this is the mechanism working — the agent asked rather than guessed. Warning about it
+    would train the operator to read the one signal that means "someone did the right thing" as a
+    problem.
+
+    Here rather than in `run_divergence`, where it started, because it now has two callers: the
+    ask-time park in the agent-facing questions route, and the run-end park below it. Beside
+    `block_task_for_question` so the announcement and the transition it announces cannot drift
+    apart.
+    """
+    payload = {
+        "run_id": run.id,
+        "agent": run.agent,
+        "task_id": task.id,
+        "task_title": task.title,
+        "question_id": question.id,
+        "reason": task.blocked_reason,
+    }
+    await persist_event(
+        session,
+        run.project_id,
+        "task_blocked",
+        payload,
+        agent=run.agent,
+        severity="info",
+    )
+    await sse_manager.broadcast(run.project_id, "task_blocked", payload)
 
 
 def release_reason(task: Task) -> None:

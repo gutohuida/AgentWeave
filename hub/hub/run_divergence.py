@@ -47,6 +47,7 @@ from .run_task_binding import (
     POLICY_FLOW,
     POLICY_RETRY,
     POLICY_REVIEW,
+    announce_block,
     block_task_for_question,
     may_retry,
     review_task_for_run,
@@ -536,38 +537,6 @@ async def record_response_run(
         divergence.response_run_id = response_run_id
 
 
-async def _announce_block(
-    session: AsyncSession,
-    run: Run,
-    task: Task,
-    question: Question,
-) -> None:
-    """Tell the operator's board that a task is now waiting on them.
-
-    `info`, not `warn`. A divergence is `warn` because it wants attention on something that went
-    wrong; this is the mechanism working — the agent asked rather than guessed. Warning about it
-    would train the operator to read the one signal that means "someone did the right thing" as a
-    problem.
-    """
-    payload = {
-        "run_id": run.id,
-        "agent": run.agent,
-        "task_id": task.id,
-        "task_title": task.title,
-        "question_id": question.id,
-        "reason": task.blocked_reason,
-    }
-    await persist_event(
-        session,
-        run.project_id,
-        "task_blocked",
-        payload,
-        agent=run.agent,
-        severity="info",
-    )
-    await sse_manager.broadcast(run.project_id, "task_blocked", payload)
-
-
 async def note_turn_that_produced_nothing(session: AsyncSession, run: Run) -> bool:
     """Record a turn that was given a document to write, wrote none, and asked nothing (F38).
 
@@ -717,7 +686,7 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
         question = await unanswered_blocking_question(session, run)
         if question is not None and await block_task_for_question(session, run, task, question):
             await session.commit()
-            await _announce_block(session, run, task, question)
+            await announce_block(session, run, task, question)
             return None
 
         # Already parked, by this run's earlier turn or by the operator. Excluded on the task's

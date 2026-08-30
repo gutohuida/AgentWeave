@@ -113,11 +113,14 @@ export function TaskCard({
   const isBlocked = task.status === 'blocked'
   const blockedAccent = 'var(--purple)'
 
-  // F14: the same fact, one status earlier. A run waiting on `ask_user` does not park its task
-  // until it *ends* — so for the whole of the wait, which is the entire point of asking, the card
-  // read `in_progress` with nothing to say. Drawn identically to a parked card because it is
-  // identically true: the work has stopped and the answer is on the operator's desk. The status is
-  // deliberately untouched; only the card is honest about it.
+  // F14: the same fact, where the status cannot carry it. A blocking `ask_user` now parks its
+  // run's task as it is asked, so the ordinary wait arrives here as `blocked`. What is left are the
+  // waits that cannot park — a task in `under_review`, `pending` or `assigned` — and a batch whose
+  // first answer released the task while the run waits on the rest.
+  //
+  // Coalesced rather than drawn twice: a task that is both `blocked` and carrying
+  // `awaiting_answer_reason` is one wait, and rendering two would say the operator owes two
+  // answers. Asserted in `taskBlockedTreatment.test.tsx`.
   const awaitingAnswer = task.awaiting_answer_reason ?? null
   const isWaitingOnOperator = isBlocked || Boolean(awaitingAnswer)
   const waitingReason = task.blocked_reason ?? awaitingAnswer

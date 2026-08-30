@@ -334,22 +334,28 @@ async def _attach_awaiting_answer(
 ) -> List[TaskResponse]:
     """Say which tasks have a live run waiting on an unanswered question (F14).
 
-    A task only reaches `blocked` when the asking run *ends* with the question still open —
-    `block_task_for_question` is reached from `run_divergence.evaluate_run_end` and nowhere else.
-    That is the right moment to change a status, but it means the entire time an agent sits waiting
-    for the operator, which is the whole point of `ask_user`, the board reads `in_progress` with no
-    `blocked_reason`: it claims the work is progressing while nothing is happening and the answer
-    is on the operator's desk.
+    **The reason this field was added has been fixed, and this is what it is still for.** Until
+    `a-task-waits-while-its-run-waits`, a task reached `blocked` only when the asking run *ended*
+    with the question still open, so for the whole of every wait the board read `in_progress` with
+    no `blocked_reason` — it claimed the work was progressing while the answer sat on the
+    operator's desk. The agent-facing question routes now park the task at ask time, so the status
+    itself carries the ordinary case.
 
-    So this reports the wait without touching the status. Derived per request and never stored: the
-    durable record is the question row, and a second copy on the task would be one more thing that
-    can disagree with it — the same reasoning as `has_open_divergence` and `dependency_state`.
+    Two cases it does not carry, and this reports both (design D9):
+
+    * a run bound to a task that **cannot** park — `under_review`, `pending`, `assigned` — is still
+      waiting, and `block_task_for_question` correctly leaves that task alone;
+    * a batch where one question is answered releases the task while the run waits on the rest.
+
+    Derived per request and never stored: the durable record is the question row, and a second copy
+    on the task would be one more thing that can disagree with it — the same reasoning as
+    `has_open_divergence` and `dependency_state`.
 
     Two ways a task is waiting, both counted:
 
-    * a **running** run bound to the task asked it — the case the status cannot yet show;
+    * a **running** run bound to the task asked it — the case the status cannot show;
     * the question already names the task in `blocked_task_id` — the parked case, so a `blocked`
-      card and an `in_progress` one waiting on the same thing read alike.
+      card and a `under_review` one waiting on the same thing read alike.
 
     Only `blocking=True`, unanswered, undeclined questions count, matching
     `unanswered_blocking_question` exactly: a non-blocking `ask_user` is a note the agent left

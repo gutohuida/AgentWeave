@@ -4,8 +4,9 @@ Capability routers are added here phase-by-phase. Keeping a distinct namespace m
 impossible to accidentally apply the project-key dependency to an agent operation.
 """
 
+import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
@@ -21,7 +22,8 @@ from ...checkpoint_access import (
 )
 from ...conversations import conversation_id_for_run
 from ...db.engine import get_session
-from ...db.models import CheckpointNote, Question
+from ...db.models import CheckpointNote, Question, Run, Task
+from ...run_task_binding import announce_block, block_task_for_question
 from ...schemas.common import RequestModel
 from ...schemas.jobs import JobCreate, JobResponse, JobUpdate
 from ...schemas.messages import _MESSAGE_TYPES, MessageCreate, MessageResponse
@@ -49,6 +51,8 @@ from .tasks import (
     task_integrations,
     update_task_for_actor,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agent-actions", tags=["agent-actions"])
 
@@ -426,6 +430,69 @@ async def recall(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+async def _park_asking_runs_task(
+    session: AsyncSession,
+    actor: AgentActor,
+    questions: Sequence[Question],
+) -> None:
+    """Park the asking run's bound task, because the run has stopped and is waiting on a person.
+
+    F14: until this, a task only reached `blocked` when the asking run *ended*, so for the whole
+    length of every `ask_user` the board read `in_progress` with no reason — it claimed the work was
+    progressing while nothing was happening and the answer was on the operator's desk.
+
+    **Here rather than in `ask_question_for_actor`.** That helper is shared with the operator-facing
+    `POST /questions`, which has no run and no binding, and a park there would be a park with no
+    asker. It is the obvious wrong place, which is why this says so.
+
+    **Blocking only.** `ask_user(blocking=False)` is the agent leaving a note and carrying on, and a
+    task parked on a note would make the status mean "an agent mentioned something" — the rule
+    `unanswered_blocking_question` already states of itself.
+
+    **Its own commit.** `ask_question_for_actor` commits and refreshes before it returns
+    (`questions.py`), so the park is a second write with no transaction of its own to join; in the
+    batch route it would otherwise be flushed by accident by the next question's create.
+
+    **And it never costs the agent its question.** The question is committed by the time this runs
+    and the run is about to start waiting on it, so a park that raises must not turn a successful ask
+    into a failed one. Caught and logged. `run_divergence.evaluate_run_end` still parks at the run
+    boundary, and after this change that fallback's real remaining job is exactly this case.
+    """
+    blocking = [question for question in questions if question.blocking]
+    if not blocking or not actor.run_id:
+        return
+
+    try:
+        run = await session.get(Run, actor.run_id)
+        if run is None or not run.task_id:
+            return
+        task = await session.get(Task, run.task_id)
+        if task is None:
+            return
+        # Every question of the batch, in batch order. The first one that can park does; the rest
+        # take `block_task_for_question`'s already-blocked branch, which records `blocked_task_id`
+        # and changes nothing else. That is what makes a batch one wait rather than four, without a
+        # line of batch-specific logic here (design D2).
+        parked_on: Optional[Question] = None
+        for question in blocking:
+            if await block_task_for_question(session, run, task, question) is not None:
+                parked_on = parked_on or question
+        await session.commit()
+    except Exception:
+        logger.warning(
+            "Could not park task for a blocking question asked by run %s",
+            actor.run_id,
+            exc_info=True,
+        )
+        return
+
+    # Only when the transition actually happened, matching `evaluate_run_end`'s condition, so a
+    # batch of four announces once — and named with the question that parked it rather than the
+    # first of the batch, so the event and `blocked_reason` describe the same question.
+    if parked_on is not None:
+        await announce_block(session, run, task, parked_on)
+
+
 @router.post("/questions", response_model=QuestionResponse, status_code=status.HTTP_201_CREATED)
 async def ask_operator_question(
     body: AgentQuestionCreate,
@@ -440,13 +507,15 @@ async def ask_operator_question(
         header=body.header,
         multi_select=body.multi_select,
     )
-    return await ask_question_for_actor(
+    created = await ask_question_for_actor(
         question,
         project_id=actor.project_id,
         from_agent=actor.agent,
         created_by_run_id=actor.run_id,
         session=session,
     )
+    await _park_asking_runs_task(session, actor, [created])
+    return created
 
 
 @router.post(
@@ -489,6 +558,7 @@ async def ask_operator_question_batch(
                 batch_size=total,
             )
         )
+    await _park_asking_runs_task(session, actor, created)
     return AgentQuestionBatchResponse(
         batch_id=batch_id,
         questions=[QuestionResponse.model_validate(row) for row in created],
