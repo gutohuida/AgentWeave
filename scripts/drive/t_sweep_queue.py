@@ -24,6 +24,34 @@ from aw import P, api  # noqa: E402
 AGENT = "unbound-driver"
 RESULTS = []
 
+# Three preconditions, each of which was silently false on a reused fixture and each of which
+# changes what this file measures.
+#
+# 1. The agent must EXIST. `register` is idempotent, so calling it costs nothing.
+# 2. It must be UNARCHIVED. An earlier drive left this name archived, and every trigger below then
+#    answered 409 "…is archived" — three UNEXPECTED lines that read as a queue defect and were the
+#    harness forgetting its own setup. `register` does not reopen an archived row.
+# 3. It must have NO RUNNER. This is the premise the docstring above rests on: "nothing ever
+#    spawns, so … not a single provider token". A later drive bound Haiku to this same name, and
+#    the file went on claiming to be free while starting real turns — and, worse, silently swapped
+#    what it was observing: the waiting_reason it reported was "agent is already running" rather
+#    than the never-launchable case it exists to probe. Unbind, and refuse to continue if the
+#    unbind did not take, rather than reporting on a situation that is not the one described.
+api("POST", f"/projects/{P}/agents/register", {"name": AGENT, "contact_mode": "poll"})
+api("POST", f"/projects/{P}/agents/{AGENT}/unarchive")
+api("PATCH", f"/projects/{P}/agents/{AGENT}", {"runner_id": None})
+_code, _roster = api("GET", f"/projects/{P}/agents")
+_row = next(
+    (a for a in (_roster if isinstance(_roster, list) else _roster.get("agents", []))
+     if a.get("name") == AGENT),
+    None,
+)
+if _row is None or _row.get("runner_id") is not None:
+    print(f"REFUSING TO RUN: {AGENT} still has runner_id={_row and _row.get('runner_id')!r}. "
+          "Every probe below would spend real provider turns and measure the wrong queue state.")
+    sys.exit(1)
+print(f"precondition ok: {AGENT} exists, is open, and has no runner bound")
+
 
 def probe(row, label, method, path, body=None, expect=None):
     code, out = api(method, path, body)
@@ -113,10 +141,15 @@ for i, (code, out) in enumerate(outcomes):
     eid = out.get("queue_entry_id") if isinstance(out, dict) else None
     cid = out.get("conversation_id") if isinstance(out, dict) else None
     print(f"  trigger {i}: {code} entry={eid} conversation={cid}")
-ids = [o.get("queue_entry_id") for _, o in outcomes if isinstance(o, dict)]
-convs = [o.get("conversation_id") for _, o in outcomes if isinstance(o, dict)]
+# Drop the Nones first. A refused trigger returns no id at all, and counting those as duplicates
+# made four identical 409s read as "TWO REQUESTS WERE GIVEN THE SAME QUEUE ENTRY" — an alarm about
+# collision raised by an absence of anything to collide.
+ids = [o.get("queue_entry_id") for _, o in outcomes if isinstance(o, dict) and o.get("queue_entry_id")]
+convs = [o.get("conversation_id") for _, o in outcomes if isinstance(o, dict) and o.get("conversation_id")]
 print(f"  distinct entries: {len(set(ids))} of {len(ids)}   "
       f"distinct conversations: {len(set(convs))} of {len(convs)}")
+if len(ids) != len(outcomes):
+    print(f"  <-- ONLY {len(ids)} OF {len(outcomes)} CONCURRENT TRIGGERS WERE ACCEPTED")
 if len(set(ids)) != len(ids):
     print("  <-- TWO REQUESTS WERE GIVEN THE SAME QUEUE ENTRY")
 if len(set(convs)) != len(convs):

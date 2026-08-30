@@ -9695,3 +9695,197 @@ The through-line: **every one of these made the product look worse than it is**,
 four would have been filed as findings by a less suspicious reading. A harness that carries state
 between rows, or between runs in one project, is not a cheaper fixture — it is a source of false
 positives whose cost is paid by whoever reads the report.
+
+## F136 (B) — the fix that stopped the Hub naming a binary after your agent does not cover the agents that most need it
+
+**Driven 2026-08-30, iteration 12, on the 8011 Hub, `proj-1964cdedffe2` (`drive-0830-sweep`).
+Reproduced on two independent surfaces in the same request cycle.**
+
+An agent with **no runner bound at all** is reported as needing a command-line program named after
+itself:
+
+```
+GET /api/v1/projects/proj-1964cdedffe2/agents/launchability
+  "unbound-driver": {
+    "runner": "native",  "cli": "unbound-driver",  "present": false,
+    "runnable": false,
+    "reason": "Runner CLI 'unbound-driver' was not found in PATH.",
+    "collaboration_ready": null, "collaboration_reason": null
+  }
+
+GET /api/v1/projects/proj-1964cdedffe2/queue/unbound-driver/status
+  {"waiting_count": 3, "waiting_reason": "Runner CLI 'unbound-driver' was not found in PATH."}
+```
+
+The agent's row is `runner_id = NULL`, `config = {}`, and there is no `agents.unbound-driver` entry
+in session.json. Nothing anywhere says how to launch it. The operator is told to go install
+`unbound-driver`.
+
+### Why this is not simply F30 again
+
+`hub/hub/launchability.py:36-43` introduces `RUNNER_UNBOUND` **specifically to end this sentence**,
+and says so, citing the same measurement in the same words:
+
+> Measured on the trial Hub 2026-08-21: an agent with `runner_id IS NULL` was reported as
+> `Runner CLI 'probe-norunner' was not found in PATH`, sending the operator to look for a binary
+> named after their own agent.
+
+`get_agent_config`'s docstring (`launchability.py:369-375`) then states the repair as complete —
+*"Doing it here fixes both surfaces at once and gives the unbound case a name of its own"*. Both
+surfaces in that sentence are the two this finding reproduces on. They are not fixed.
+
+The reason is one clause at `hub/hub/launchability.py:418`:
+
+```python
+elif not agent_row.self_registered and "runner" not in meta:
+    meta["runner"] = RUNNER_UNBOUND
+```
+
+`self_registered` is set by `POST /projects/{p}/agents/register` (`agents.py:1696`, `agents.py:1709`)
+— the documented path by which an agent joins a roster on its own. So the branch that gives the
+unbound case an honest name is switched **off** for exactly the population that reaches the unbound
+state most easily, and stays on for the population that cannot: `POST /projects/{p}/agents`, the
+route the Hub UI's `useCreateAgent` calls (`hub/ui/src/api/agents.ts:330-335`), writes
+`self_registered=False` **and** requires a launchable runner up front (`agents.py:658-673`), so a
+UI-created agent is never unbound at birth.
+
+With the branch off, `meta` carries no `runner`, `probe_agent` defaults it to `"native"`
+(`launchability.py:57`), `RUNNER_CLI["native"]` is `None`, and `cli = RUNNER_CLI.get(runner) or name`
+(`launchability.py:82`) resolves to **the agent's own name**. That is the fallback the whole
+`RUNNER_UNBOUND` constant exists to stop being reachable.
+
+### The exemption's own justification is measurably false
+
+The guard is deliberate, and defended in prose at `launchability.py:377-378`:
+
+> A **self-registered** agent is exempt: it manages its own execution and legitimately has no
+> `Runner`, so calling it unbound would refuse something that works.
+
+It refuses nothing. `runnable` is already `false` on both sides of the change — `present` is false
+either way, because `shutil.which("unbound-driver")` finds nothing. Only the **sentence** changes.
+Worse, the fallback means an agent whose name collides with a real binary (`node`, `git`, `make`) is
+reported *runnable* on a program that has no idea what AgentWeave is.
+
+The comment at `launchability.py:424-425` then defends the exemption a second way — the Hub cannot
+trigger these agents, *"which is a separate verdict (`collaboration_ready`) that already says so"*.
+Measured above: `collaboration_ready` is **`null`**. It says nothing. And the test named as pinning
+it, `test_agent_with_no_bound_runner_has_no_collaboration_verdict`
+(`hub/tests/test_launchability.py:306-319`), configures its agent through `session/sync` with
+`{"runner": "claude"}` — so `"runner" in meta` is true and the second half of the `elif` already
+excludes it. That test does not exercise the `self_registered` guard at all.
+
+**Measured, not argued.** With line 418 reduced to `elif "runner" not in meta:` and nothing else
+changed:
+
+```
+py -3.11 -m pytest hub/tests/test_launchability.py -q                       -> 39 passed
+py -3.11 -m pytest hub/tests/test_agents_self_registered.py \
+    hub/tests/test_inbound_queue.py hub/tests/test_agents.py \
+    hub/tests/test_agent_trigger.py -q                                      -> 90 passed
+```
+
+129 tests, nothing pins the exemption. The file was restored afterwards; **this is filed, not
+fixed.**
+
+### Why it is filed rather than fixed
+
+Because deleting the guard answers the wrong half of the question. Dropping it makes every
+self-registered unbound agent say *"No runner is bound to this agent. Bind one in the Hub UI before
+it can run."* — right for a `contact_mode: "poll"` agent that nothing will ever launch, and wrong
+for a `contact_mode: "mcp"` agent with an `mcp_endpoint`, which drives itself and should not be sent
+to the roster to bind a runner it does not want. The honest repair probably needs a third reason,
+keyed on contact mode rather than on `self_registered`, and that is a design decision.
+
+What is not in question is that the current sentence is wrong for **both** of those agents. Whatever
+the third reason turns out to say, `cli = ... or name` at `launchability.py:82` should stop being
+reachable; the agent's name is not a program.
+
+### Reproduction
+
+Against the 8011 Hub with `AW_HUB` / `AW_KEY` / `AW_PROJECT` exported:
+
+1. `POST /projects/{p}/agents/register` with `{"name": "norunner-probe", "contact_mode": "poll"}`
+2. `PATCH /projects/{p}/agents/norunner-probe` with `{"runner_id": null}`
+3. `POST /projects/{p}/agent/trigger` with `{"agent": "norunner-probe", "message": "hi", "session_mode": "new"}`
+4. `GET /projects/{p}/queue/norunner-probe/status` — `waiting_reason` names the agent as a CLI
+5. `GET /projects/{p}/agents/launchability` — `agents["norunner-probe"].cli` is the agent's name
+
+`scripts/drive/t_sweep_queue.py` now reaches this on every run — see F137 for why it did not before.
+
+## F137 (C) — the harness that promised to spend no provider tokens had been spending them, and was measuring a different queue
+
+**Corrected 2026-08-30, iteration 12.** Three defects in `scripts/drive/t_sweep_queue.py`, all of
+the F135 class — the harness's own state, reported as the product's.
+
+**1. The agent was archived, so every probe answered 409.** The file names a fixed agent,
+`unbound-driver`, and never ensures it exists or is open. An earlier drive left that name archived,
+so the first run of this iteration produced three `UNEXPECTED` lines all reading
+*"unbound-driver is archived and cannot be triggered"* — which is the product behaving correctly at
+a boundary the harness had walked into. `POST /agents/register` is idempotent but does **not** reopen
+an archived row; the fix registers *and* unarchives.
+
+**2. The agent had a runner bound, so the file's entire premise was false.** The docstring's claim is
+that this row is free:
+
+> The trick that makes them free is the agent with no runner bound: every trigger for it queues
+> durably and nothing ever spawns, so the queue, the scheduler's attribution, withdrawal, release and
+> concurrent triggers are all reachable **without a single provider token**.
+
+Nothing enforced it. A later drive had bound `Haiku (cheap)` to that same name, so on the corrected
+run the first trigger came back `status: "running"` and the release probe answered *"already
+delivered"* — **five real Haiku turns were started by a file that says it starts none**, and the
+queued entries had to be withdrawn by hand to stop the cascade.
+
+The measurement damage is worse than the tokens. The `waiting_reason` the file exists to observe
+changed underneath it:
+
+| precondition | what row 6 reported as the reason a turn had not started |
+|---|---|
+| runner bound (silently) | `"agent is already running"` |
+| no runner (the stated premise) | `"Runner CLI 'unbound-driver' was not found in PATH."` |
+
+The first is a true statement about a situation the file was not written to examine. The second is
+**F136**, which had been sitting behind this all along and had never once been looked at.
+
+The fix asserts all three preconditions before any probe runs — exists, open, no runner — and
+`sys.exit(1)` with a stated reason if the unbind does not take, rather than reporting on a situation
+that is not the one described.
+
+**3. An absence reported as a collision.** The row-19 concurrency check counted `None` entry ids as
+duplicates, so four identical 409 refusals printed
+`<-- TWO REQUESTS WERE GIVEN THE SAME QUEUE ENTRY` — an alarm about collision raised by there being
+nothing to collide. It now filters the Nones and says plainly how many of the four triggers were
+accepted.
+
+**The general lesson, third time of asking.** A drive harness pinned to a named fixture is only as
+true as the fixture, and the fixture is shared, mutable, and edited by every other harness in this
+directory. A file whose docstring makes a claim about cost, or about what it is measuring, must
+*check* that claim at the top and refuse to run when it is false. Stating it in prose is what
+produced two iterations of confident, wrong output.
+
+### What held
+
+With the preconditions enforced, row 6 is clean and the whole of it passes: entries queue durably;
+`session_mode: "new"` mints a distinct conversation per request, including under four concurrent
+triggers (4 distinct entries, 4 distinct conversations, no collision); the third trigger's
+`conversation_id` is **its own**, not the first conversation's; withdrawal is idempotent-by-refusal
+(`409 "absent or has already been delivered/withdrawn"`); and `POST /queue/entries/{id}/release`
+declines an entry that is not hop-blocked with the best refusal in this file's collection —
+*"Queue entry is at hop 0, within the project's hop budget of 6, so the hop budget is not what is
+holding it. Check the agent's queue status for the reason it is waiting."* That sentence names the
+number, the budget, the conclusion and where to look next.
+
+Rows 5 and 15's API halves are also clean — `t_sweep_conversations.py`, 0 unexpected statuses.
+Archiving a conversation with input still queued is refused with the reason
+(*"Archiving it would strand them, because nothing delivers into an archived conversation"*),
+archive is idempotent, an empty title is refused, and a trigger into an archived conversation is a
+409 rather than a silent new one.
+
+### One thing worth an operator's eye, not filed
+
+`GET /projects/{p}/queue/{agent}/status` answers **200 with `waiting_count: 0`** for an agent that
+does not exist (`inbound_queue.py:108-125` never loads the `Agent` row). It is the "I could not
+look" / "there was nothing there" confusion this file complains about elsewhere, but nothing
+currently reaches it: there is no agent-rename route, so a name in the UI cannot go stale, and
+archiving is refused outright while entries are still queued (`agents.py:2124-2143`). Recorded so
+the next person who adds a rename knows the queue is keyed on the name string.
