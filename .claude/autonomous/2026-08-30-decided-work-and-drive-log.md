@@ -825,7 +825,7 @@ If a fresh iteration reads this **after 08:00**, it does not start R2. It starts
 
 ---
 
-## Iteration 9 — F115-R2 — 2026-08-30T06:50:15+01:00 → 08:05+01:00
+## Iteration 9 — F115-R2 — 2026-08-30T06:50:15+01:00 → 06:59:35+01:00
 
 Branch verified against `STATE.json` before anything: `autonomous/2026-08-30-decided-work-and-drive`
 at `23467c8`, clean, matching `origin`. Heartbeat was 06:07, 43 minutes stale, so the branch was
@@ -833,11 +833,15 @@ free. Claimed with a heartbeat commit, then straight into the round.
 
 The unit was **round 2 of the F115 spec loop** — an *independent* re-derivation of
 `openspec/changes/a-write-outside-the-workspace-is-recorded/` against the code, not a re-read of
-round 1's reasoning. The clock was checked at the start (06:50, stamped from PowerShell) rather than
-estimated: the 08:00 rule permits starting a round before 08:00 and forbids leaving a half-written
-proposal, and rounds in this loop have run 20–35 minutes. This one ran to 08:05, which is over — the
-rule was honoured by finishing rather than by abandoning, since a reverted round would have thrown
-away six corrections.
+round 1's reasoning. The round ran **06:50 → 06:59**, both stamped from PowerShell: nine minutes,
+against the 20–35 that rounds in this loop have taken.
+
+A draft of this entry said it ended at 08:05 and queued `E2E-DRIVE` on the strength of that, which
+would have thrown away an hour of round-3 time. It was wrong by 66 minutes, and it was wrong the
+same way iteration 8's draft was wrong by an hour: **time was estimated by counting tool calls
+instead of reading a clock.** Corrected here rather than quietly, and worth saying twice in
+consecutive entries because the failure repeated within one night despite being written down. Read
+the clock; do not feel the clock.
 
 ### The two corrections that change what the change would have shipped
 
@@ -934,15 +938,21 @@ actually checked.
 | Implementation written | **none**, by design — R2 re-derives and corrects the proposal |
 | Tree clean, committed, pushed | yes |
 
-### The next unit is the drive, not F115-R3
+### The next unit is F115-R3, and there is an hour for it
 
-The 08:00 rule is now past and it is unconditional: **`E2E-DRIVE`**, full-surface sweep, own Hub on
-8011, Haiku for every agent turn, D5 for fix-versus-file, no job left enabled. F115-R3 stays queued
-behind it and is the operator's to schedule.
+It is 06:59. The 08:00 rule has **not** bitten, and round 3 has a full hour against a nine-minute
+round 2 — so the next unit is `F115-R3`, not the drive. A fresh iteration that reads this **after
+08:00** starts `E2E-DRIVE` instead and leaves R3 queued.
 
-R3, when it runs, has a sharpened target rather than a blank one: the D9 narrowing is a judgement
-round 2 made, not a derivation — a record the operator never sees is not the record F115 asked for,
-but that is an argument, and R3 should attack it. The other two open items are whether anything
-constructs a `tool_use` `RunEvent` without going through `tool_use_event` (which would falsify D2's
-one-population-site claim), and whether the extractor really returns on the tool name before
-touching the input, since it now runs for every tool call of every run.
+R3 has a sharpened target rather than a blank one. The **D9 narrowing is the piece most worth
+attacking**: it is a judgement round 2 made, not a derivation. Narrowing a shipped requirement so a
+new change stops breaching it is exactly the move that deserves a hostile reading, and the
+alternative — emit no operator notification at all, and let the fact live only on the run row — is
+defensible. Round 2 rejected it because a record the operator never sees is not the record F115
+asked for, but that is an argument.
+
+Two smaller ones, both of which would falsify something round 2 asserted: does anything construct a
+`tool_use` `RunEvent` without going through `tool_use_event` (which would break D2's
+one-population-site claim, now the whole basis of the three-transport fix), and does the extractor
+really return on the tool name before touching the input, now that it runs for every tool call of
+every run rather than only inside a parser?
