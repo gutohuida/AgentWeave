@@ -9,7 +9,7 @@
   "parent_sha_note": "master at arming, carrying the exploration document this run is built on. Cut the branch from here, never from a previous autonomous branch.",
   "stop_at": "2026-08-31T08:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 0,
+  "iteration": 1,
   "log_file": ".claude/autonomous/2026-08-31-the-flow-lands-its-work-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "green_at_arming": "CI green on c6cdf9e, all nine jobs (run 33310555286). The only commits since are two docs-only commits (345c149, 3a274a2), so no product code has moved. The full hub suite was last run green at 894d5b2: 3555 passed / 84 skipped / 1 xpassed. The suite was NOT re-run at arming - it takes ~14 minutes. Run it before offering the branch for merge, not before starting.",
@@ -142,7 +142,7 @@
       "detail": "py -3.11 -m pytest hub/tests/ -q in the BACKGROUND with NO drive running beside it - it exceeds the 600s command cap and contends badly with live agent spawns. Then py -3.11 -m pytest tests/ -q. Then ruff check src/ hub/ tests/ and black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/. Push. Do NOT merge to master - the operator merges."
     }
   ],
-  "current": "Not started. Iteration 1 claims the branch and begins at A-R1.",
+  "current": "Iteration 1: A-R1 in progress - proposal for a-flow-briefing-names-its-contract.",
   "next_action": "FIRST: read openspec/explorations/2026-08-30-why-a-flow-cannot-land-its-work.md end to end - it is the analysis this entire run is built on and it will save you hours. Then cut the branch autonomous/2026-08-31-the-flow-lands-its-work from master at 3a274a2, and begin A-R1: write the proposal for `a-flow-briefing-names-its-contract`. Create the change with `openspec new change a-flow-briefing-names-its-contract` - no date prefix, archiving applies it.",
   "limits": [
     "Never point a Hub you are editing at this repo. The trial Hub on 8011 is a separate instance; port 8000 is the operator's REAL usage and must never be touched.",
@@ -219,5 +219,5 @@
     "fastapi>=0.110 is unbounded and has produced two CI-only failures via Starlette major bumps. Worth pinning; not this run's job.",
     "The feature freeze's parameters are still unsettled."
   ],
-  "last_heartbeat": null
+  "last_heartbeat": "2026-08-30T23:24:32+01:00"
 }
