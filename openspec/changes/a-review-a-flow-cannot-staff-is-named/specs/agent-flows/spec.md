@@ -15,12 +15,18 @@ treating it as unattributable withholds review from precisely the work the opera
 themselves in.
 
 Where the operator is recorded as completing a task, the Hub SHALL allow it to be claimed by any
-agent that has not acted on that task, and SHALL NOT allow it to be claimed by an agent that has. No
+agent that has not worked on that task, and SHALL NOT allow it to be claimed by an agent that has. No
 agent completed such a task, so no agent's own sign-off is at stake; but an agent may still have
 produced the work, and offering it that work to review is self-approval reached by a different route.
-The agents that have acted on a task SHALL be determined from its recorded transitions rather than
-from which agent currently holds it, because who holds a task is overwritten by every reassignment
-and the history is not.
+
+**The agents that have worked a task SHALL be determined from its recorded transitions together with
+the agent it is assigned to, and SHALL NOT be determined from either alone.** The history is required
+because who holds a task is overwritten by every reassignment, so a task returned for revision and
+picked up by a second agent has two authors and only the history names both. The assignee is required
+because an agent takes a transition only when it *changes* a task's status: an agent working a task
+that is already in progress records nothing, so a task the operator started by hand and then marked
+finished can carry a full history that names no agent while an agent produced all of the work. Either
+term alone leaves a task whose author the Hub can rule out and does not.
 
 Where no completion is recorded at all, the task SHALL remain claimable by nobody. Nothing rules any
 agent out, so nothing rules the author out either.
@@ -53,6 +59,12 @@ agent out, so nothing rules the author out either.
 
 - **WHEN** a task's most recent completion was recorded by the operator, and an agent is recorded on
   one of that task's earlier transitions
+- **THEN** that agent is not fired for it
+
+#### Scenario: An agent that worked the task without moving it may not take it either
+
+- **WHEN** a task's most recent completion was recorded by the operator, and the task is assigned to
+  an agent that no transition on that task names
 - **THEN** that agent is not fired for it
 
 #### Scenario: A task with no recorded completion stays claimable by nobody
@@ -108,18 +120,27 @@ question from whether it is right. Withholding review from it removes the flow's
 the moment the operator involved themselves, and leaves them no way forward: such a task can reach
 only `rejected` or `under_review`, and moving it to `under_review` by hand offers it to nobody.
 
-**The ladder SHALL exclude every agent recorded on that task's transitions**, and SHALL do so in place
-of excluding the agent that completed it, since no agent did. An agent that produced work the operator
+**The ladder SHALL exclude every agent that has worked the task**, and SHALL do so in place of
+excluding the agent that completed it, since no agent did. An agent that produced work the operator
 then marked finished is that work's author in every sense the review boundary is about, and the
 transition guards permit its verdict precisely because they cannot attribute the completion — so an
 exclusion derived only from the completion would let two permissive rules agree on a self-approval.
+The exclusion SHALL be the same determination claimability uses, or a task the flow offers an agent
+is one the flow would then refuse to staff onto it.
 
 Everything else about the resolution SHALL be unchanged: the declaration outranks availability, an
 unresolvable declaration is surfaced and never substituted, and a task with nothing to check out is
 surfaced with that as its reason rather than with a reason about who completed it.
 
 Where the exclusion leaves nobody, the flow SHALL surface that it could not staff the review, naming
-the task, exactly as it does when the author is known.
+the task, as it does when the author is known.
+
+**A surfaced reason SHALL NOT state that an excluded agent completed the task where no agent
+completed it.** The reason a flow surfaces for an unstaffable review is the reason the operator is
+shown in place of the queue's status breakdown, so it is the whole of what this specification puts in
+front of them; a reason that misattributes the completion trades a fact about the queue for an untrue
+fact about the task. Where the exclusion is the set of agents that worked the task, the reason SHALL
+say so.
 
 #### Scenario: Operator-completed work is offered to an agent that did not work it
 
@@ -137,6 +158,12 @@ the task, exactly as it does when the author is known.
 - **WHEN** the only agent in the project is one recorded on that task's transitions
 - **THEN** no agent is fired for the review
 - **AND** the flow surfaces that it could not staff the review, naming the task
+
+#### Scenario: The surfaced reason does not claim an agent completed the work
+
+- **WHEN** a flow cannot staff a review for a task the operator moved to `completed`
+- **THEN** the surfaced reason states that the excluded agents worked on the task
+- **AND** it does not state that any of them completed it
 
 #### Scenario: The missing-commit reason still wins where it applies
 

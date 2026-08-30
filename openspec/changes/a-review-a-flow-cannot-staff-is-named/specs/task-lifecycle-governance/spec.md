@@ -16,6 +16,13 @@ which is the false statement this requirement exists to prevent, reached one cas
 live: an operator who moved a stuck task to `under_review` by hand, following the only route the
 lifecycle offers them, produced exactly that.
 
+**This determination SHALL NOT include the agent the task is assigned to**, and that is the one place
+it differs from the determination used to exclude an agent from reviewing. The question here is
+whether the assignee is one of the agents that produced the work; an assignee counted as a producer
+by definition answers yes for every task that has one, and every review genuinely in progress would
+be reported as one nobody is doing. A reviewer legitimately staffed onto a task is absent from its
+transitions, and that absence is what carries the distinction.
+
 Where nothing is recorded as completing the task at all, the ladder SHALL surface it rather than
 staff it, naming the task. Recovery is not possible for such a task — no agent can be ruled out as its
 author — and saying so is what this requirement asks for in place of reporting a reviewer that is not
@@ -42,6 +49,13 @@ in review, and only who holds it was wrong.
   its earlier transitions as its assignee
 - **THEN** it is not reported as held by a reviewer
 - **AND** a reviewer is resolved for it through the ordinary ladder
+
+#### Scenario: A review genuinely in progress is still reported as held
+
+- **WHEN** a task the operator moved to `completed` is in `under_review` and is assigned to a
+  reviewer that no transition on that task names
+- **THEN** it is reported as held by that reviewer
+- **AND** no reviewer is resolved for it
 
 #### Scenario: A task with no recorded completion is surfaced, not restaffed
 

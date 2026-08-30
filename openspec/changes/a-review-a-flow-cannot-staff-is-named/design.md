@@ -104,7 +104,12 @@ it.**
 - **The provenance is genuinely thinner.** With an agent completion the Hub knows who did the work.
   With an operator completion it is *inferring* authorship from transition history, and that
   inference can be wrong — an agent that moved a task to `in_progress` and then did nothing is in
-  `agents_that_worked` and is barred from reviewing work it never wrote.
+  `agents_that_worked` and is barred from reviewing work it never wrote. **Round 2 adds the case
+  round 1 missed:** an agent that already *reviewed* this task is on the record too, because
+  `under_review -> revision_needed` is attributed to the reviewer's run. So a task rejected once,
+  reworked, and then completed by the operator cannot go back to the reviewer that knows it best.
+  That is the same cost — one eligible reviewer fewer, surfaced at rung 3 — and it is paid on the
+  unattributed arm only.
 
 ### Why the third bullet against is a cost worth paying
 
@@ -137,8 +142,44 @@ Why that set and not `{task.assignee}`:
 - It is empty exactly when it should be: a task no agent ever touched excludes nobody, and every
   agent is eligible, which is correct.
 
-`assignee` is still *in* the set whenever it matters, because an agent holding a task moved it to
-`in_progress` through `apply_transition` and is on the record.
+### Round 2: `assignee` is a member of the set, not a consequence of it
+
+Round 1 closed this section with *"`assignee` is still in the set whenever it matters, because an
+agent holding a task moved it to `in_progress` through `apply_transition` and is on the record."*
+**That is false, and it is the one sentence in this change that had to be true for the repair to be
+safe.**
+
+`bind_run_to_task` (`run_task_binding.py:432-436`) records the `-> in_progress` transition only when
+the edge is legal:
+
+```python
+if "in_progress" not in allowed_targets(task.status, actor.kind):
+    return None
+```
+
+`TRANSITIONS["in_progress"]` is `{completed, assigned, blocked, rejected}` — there is **no
+`in_progress -> in_progress` edge**. So an agent whose run binds to a task that is already
+`in_progress` takes no edge, records no row, and never enters `agents_that_worked`.
+
+Two reachable routes to that state, and the first is ordinary operator behaviour:
+
+1. **The operator moves the card to `in_progress` by hand**, the flow staffs it
+   (`enter_selected_task` leaves a non-`pending` status alone, `scheduler.py:794-797`), the agent
+   does the work, and the operator marks it done. Every transition on the task is
+   operator-attributed. `agents_that_worked` is **empty**, the exclusion is empty, and the agent that
+   wrote the code is offered its own work to review. This is exactly the trap D5 exists to close,
+   arriving inside the repair.
+2. **A task left `in_progress` with its `assignee` cleared or never set**, restaffed to a second
+   agent — a state `decide_firing`'s own comment (`scheduler.py:1298-1300`) names as reachable.
+
+So the exclusion is `agents_that_worked(session, task.id) | ({task.assignee} if task.assignee else
+set())`. `assignee` is not a *replacement* for the transition set — round 1's three reasons against
+that stand, and a task returned for revision still has two authors only the history names — it is the
+term that covers the agent the history does not.
+
+**The union belongs to the exclusion and not to the wedge predicate.** D8 asks *"is the assignee one
+of the agents that worked this?"*, and `assignee` is trivially a member of `worked | {assignee}`,
+which would wedge every review in progress. Two questions, two sets; see D8.
 
 ## D6 — the wider exclusion applies only to the unattributed arm
 
@@ -199,8 +240,17 @@ false, and is the exact condition `task-lifecycle-governance:313` exists to stop
 staffed. F142 measured this as the reason moving the task to `under_review` by hand does not help.
 
 Repaired with the same attribution: where no agent is recorded as completing the task and the
-assignee is in `agents_that_worked`, the task is wedged. It then carries to the ladder, which now has
-an arm for it.
+assignee is in `agents_that_worked` — **the transitions-only set, never the union D5 hands the
+ladder** — the task is wedged. It then carries to the ladder, which now has an arm for it.
+
+The set matters here more than anywhere else in the change, and getting it wrong is the risk task 5.4
+measures. With the union the predicate is true of every task that has an assignee at all, so **every
+review in flight would be reported unstaffable**, which is worse than the bug. With the
+transitions-only set a legitimate flow-staffed reviewer is absent by construction:
+`enter_selected_task` writes `completed -> under_review` as the *operator* (`scheduler.py:795`), and
+the reviewer's own run then binds to a task already in `under_review`, an edge `TRANSITIONS` does not
+offer, so it records nothing. Verified rather than assumed — the reviewer first appears on the record
+when it writes its verdict, by which time the task has left `under_review`.
 
 Note the interaction: for the *nothing recorded* world the task is wedged, carries to the ladder, and
 the ladder records it `unstaffed` with the reason from D1. That is the right outcome —
@@ -219,9 +269,14 @@ actionable fact, and the existing wording is already driven.
 Verified by reading `commit_for_task_review` (`requirement_evidence.py:736-795`): it requires an
 evidence row with a non-empty `commit_sha` on its footprint and **does not require acceptance**. So
 in F140's own scenario — agent records evidence, operator completes the card — the review target
-resolves and this change staffs a real review. Round 2 must confirm this against the code rather than
-inherit it, because F142's working row happened to have accepted evidence and it is easy to conclude
-acceptance was load-bearing when it was incidental.
+resolves and this change staffs a real review.
+
+**Round 2 re-derived this from the function rather than from the paragraph above, and it holds.** The
+query selects `RequirementEvidence` joined to `EvidenceFootprint` on `task_id`, orders by
+`produced_at`, and filters `naming_a_commit` on `footprint.commit_sha` being non-empty. There is no
+`review_state` term anywhere in it. F142's working row having accepted evidence was therefore
+incidental, and the judgement half of this change is not confined to projects that have granted an
+agent acceptance capability — it fires in a default project, in F140's own shape.
 
 ## D10 — the stall reason override has no requirement, and this change widens it
 
@@ -276,3 +331,41 @@ prerequisite, not the queue's own status breakdown"* — the same argument, one 
 - **`_loop_candidates` order** decides which `unstaffed` entry becomes the stall reason
   (`unstaffed[0][1]`). A test asserting a specific sentence on a multi-task queue is asserting the
   queue order too.
+
+## D13 — the ladder's refusal sentences must not assert a completion that did not happen
+
+Found in round 2. `resolve_reviewer` states *why* an agent was excluded, in two places, and both
+sentences hard-code the attributed world:
+
+- rung 1b (`scheduler.py:1074-1083`): *"this task names `X` as its reviewer, and that agent is the
+  one that completed the work."*
+- rung 3 (`scheduler.py:1111-1118`): *"... or is the one that completed this task and so may not
+  review it."*
+
+Under D5's exclusion both are **false**: the operator completed the task, and the excluded agent
+merely worked it. This is not cosmetic. Rung 3's sentence is the one `decide_firing` promotes to
+`stall_reason` (`scheduler.py:1457`) and `_emit_review_unstaffed` broadcasts, so it is the exact text
+this change exists to put in front of the operator in place of the histogram. Shipping the fact about
+the task in a sentence that misattributes the completion reproduces F142's defect in a new register —
+and the spec delta as round 1 wrote it *required* it, by saying the flow surfaces "exactly as it does
+when the author is known".
+
+So the clause becomes a parameter:
+
+```python
+async def resolve_reviewer(..., exclude: set[str],
+                           excluded_because: str = "is the one that completed this task") -> ...
+```
+
+used by both messages. The operator-completed arm passes `"has worked on this task"`. Rung 1b's
+wording shifts by two words — *"the one that completed the work"* becomes *"the one that completed
+this task"* — which is the price of one clause serving both sentences, and is a smaller cost than a
+second parameter for a second template.
+
+Rejected: composing the whole reason at the call site and passing it in. `resolve_reviewer` owns the
+ladder's vocabulary — rung 1b's *"the flow will not substitute somebody else for a named reviewer"*
+is the ladder's argument, not the caller's — and moving the sentences out would let two callers drift
+into two accounts of the same rung.
+
+`agent_trigger`'s manual dispatch is untouched: it never calls `resolve_reviewer`, and its own 403
+names the completing agent only where one is recorded (`agent_trigger.py:445-455`), which stays true.

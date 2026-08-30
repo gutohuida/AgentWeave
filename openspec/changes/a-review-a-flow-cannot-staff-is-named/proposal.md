@@ -105,9 +105,22 @@ agreeing"* — arriving through a new door.
 
 So allowing it requires a different notion of the author: not *who recorded the completion* but
 **which agents worked this task**, read as the distinct non-null `actor_agent` over the task's
-transitions. That set contains the builder in F140's scenario and is empty for a task no agent ever
-touched. It is what makes the permissive direction safe, and without it this change would ship a
-regression worse than the bug.
+transitions, **together with the agent the task is assigned to**. That set contains the builder in
+F140's scenario and is empty for a task no agent ever touched. It is what makes the permissive
+direction safe, and without it this change would ship a regression worse than the bug.
+
+**Round 2 found the assignee term is load-bearing rather than belt-and-braces**, and round 1's
+argument for leaving it out was wrong. Round 1 held that *"`assignee` is still in the set whenever it
+matters, because an agent holding a task moved it to `in_progress` through `apply_transition` and is
+on the record."* It is not. `bind_run_to_task` (`run_task_binding.py:432-436`) records a
+`→ in_progress` transition only when that edge is legal, and `TRANSITIONS` has no
+`in_progress → in_progress` edge — so an agent whose run binds to a task **already** in `in_progress`
+takes no edge and leaves no row. An operator who moves a card to `in_progress` by hand, lets a flow
+staff it, and then marks it done produces a task whose transition history names **no agent at all**
+while an agent wrote every line of the work. Transitions alone would then exclude nobody and offer
+that agent its own work to review — the trap this paragraph exists to close, surviving in the repair.
+The walk's own comment already names that state as reachable (*"a task left `in_progress` with its
+`assignee` cleared or never set"*, `scheduler.py:1298-1300`).
 
 ## What Changes
 
@@ -121,8 +134,12 @@ regression worse than the bug.
    written and this change must not reach them.
 
 2. **`agents_that_worked(session, task_id)`** — the distinct non-null `actor_agent` over a task's
-   transitions. The honest answer to *"which agents have acted on this task"* when no completion
-   names one.
+   transitions. The honest answer to *"which agents are recorded as having moved this task"* when no
+   completion names one. The **exclusion** the ladder is given is that set together with
+   `task.assignee`, because moving a task and working it are not the same event (design D5).
+   The **wedge predicate** of item 4 uses the transitions-only set and must not use the union, or
+   `assignee ∈ ({…} ∪ {assignee})` is true of every assigned task and every review in progress
+   becomes wedged (design D8).
 
 3. **The review arm splits into three, and none of them is silent.**
 
@@ -134,6 +151,10 @@ regression worse than the bug.
 
    The order of the existing gates is untouched, so an operator-completed task with no evidence still
    meets `commit_for_task_review`'s existing, better sentence rather than a new one (design D9).
+   Confirmed in round 2 by reading `requirement_evidence.py:736-795`: it filters on a non-empty
+   `commit_sha` on the footprint and on nothing else — **evidence acceptance is not required** — so
+   this change staffs a *real* review in F140's own shape, not only in F142's row whose evidence
+   happened to be accepted.
 
 4. **The wedged-review branch (`scheduler.py:1279-1284`) uses the same attribution.** It is the
    operator's only manual escape from row one, F142 measured it as broken by the same root cause, and
@@ -146,7 +167,16 @@ regression worse than the bug.
    `agents_that_worked` is precisely the thing that rules them out, so the same argument now permits
    it.
 
-6. **The stall-reason substitution is reconciled with `agent-loops:815`.** That requirement says the
+6. **The ladder's own refusal sentences stop asserting a completion that did not happen.**
+   `resolve_reviewer` hard-codes *"that agent is the one that completed the work"* (rung 1b,
+   `scheduler.py:1074-1083`) and *"or is the one that completed this task and so may not review it"*
+   (rung 3, `:1111-1118`). Both are false under a wider exclusion — the operator completed it — and
+   rung 3's is the sentence this change routes to the operator as the stall reason. A change whose
+   entire subject is that the operator is told a fact about the queue instead of a fact about the
+   task cannot ship the fact about the task in a sentence that is untrue. The excluded-because clause
+   becomes a parameter (design D13).
+
+7. **The stall-reason substitution is reconciled with `agent-loops:815`.** That requirement says the
    reason SHALL name *"how many tasks are open and in which statuses"*; F64 already replaces it with
    `unstaffed[0][1]` and **no requirement licenses that**. This change makes the override fire on a
    new class of queue, so it is this change's job to write the clause rather than widen an
@@ -179,7 +209,8 @@ regression worse than the bug.
     stall the walk can attribute to one task names that task instead of the histogram. This
     reconciles F64's shipped behaviour as well as this change's.
 - **Code:** `hub/hub/task_transition_service.py` (two new functions, `agent_that_completed` becomes a
-  wrapper), `hub/hub/scheduler.py` (the review arm, the wedged-review branch, `task_is_claimable_by`).
+  wrapper), `hub/hub/scheduler.py` (the review arm, the wedged-review branch, `task_is_claimable_by`,
+  and `resolve_reviewer`'s two refusal sentences).
 - **Tests:** `hub/tests/test_actor_aware_claimability.py`, `test_flow_fires_a_review_turn.py`,
   `test_flow_chain_end_to_end.py`, `test_reviewer_is_not_the_author.py`, plus a new reproduction
   file.

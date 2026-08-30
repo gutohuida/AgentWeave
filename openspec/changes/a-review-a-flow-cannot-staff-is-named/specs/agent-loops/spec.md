@@ -11,8 +11,8 @@ distinguish an unmet prerequisite from a rejected one. That reason names counts 
 than statuses, and this requirement SHALL NOT be read to demand both of it: the operator's remedy
 there is the prerequisite, not the queue's own status breakdown.
 
-**Where the firing's own walk attributed the stall to a specific task and named what the operator can
-do about it, that SHALL be the recorded reason in place of the status breakdown.** The breakdown is
+**Where the firing's own walk attributed the stall to a specific task, that SHALL be the recorded
+reason in place of the status breakdown.** The breakdown is
 the reason of last resort — it is what the queue can say about itself when nothing more specific was
 established — and the same argument the gated case makes applies here unchanged: the operator's
 remedy is the named task, not a count. A firing that established a specific cause and then reported a
@@ -38,7 +38,7 @@ action.
 #### Scenario: An attributed stall names its task rather than the queue
 
 - **WHEN** a loop's job fires, nothing is claimable, and the walk recorded a staffing outcome naming
-  a task and a remedy
+  a task
 - **THEN** the firing is refused
 - **AND** the recorded reason is that outcome rather than the queue's status breakdown
 

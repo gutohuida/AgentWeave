@@ -368,3 +368,127 @@ recovery at `scheduler.py:1280`. Two things round 1 asks round 2 to attack speci
 2. **Whether the wedged-review widening is safe.** A flow that starts reporting reviews in progress
    as unstaffable would be worse than the bug. Task 5.4 is the guard; check the predicate reaches
    only the intended rows.
+
+## Iteration 3 — 2026-08-31 00:19–01:0x (+01:00) — B-R2, round 2 of `a-review-a-flow-cannot-staff-is-named`
+
+**Reconciliation.** `STATE.json` claimed iteration 2 complete on `8a5a7d6` with `next_action = B-R2`.
+Branch, `git log` and working tree all agreed; nothing to reconcile. Heartbeat claimed at 00:19.
+
+### One item, one round
+
+`B-R2` only. **No code was touched** — this is a spec round. Six files changed, all inside
+`openspec/changes/a-review-a-flow-cannot-staff-is-named/`. `openspec validate --strict` passes.
+
+Round 2 was run as the discipline asks: a fresh comparison of the proposal against what the code
+does, opening each cited function rather than re-reading round 1's argument. Every one of round 1's
+seven callers was re-derived from `grep` rather than from `design.md` D3's table.
+
+### What held
+
+- **All seven callers of `agent_that_completed`, verified independently.** The table is right on
+  sites, line numbers, and how each reads `None`. Sites 1, 2 (`task_transition_service.py:168`,
+  `:220`), 6 (`run_divergence.py:415`) and 7 (`agent_trigger.py:445`) all read `None` as *permit* and
+  are correct as written; 3, 4, 5 change. No eighth caller exists.
+- **`commit_for_task_review` does not require acceptance** — the thing round 1 asked round 2 to
+  attack first. `requirement_evidence.py:736-795` joins `RequirementEvidence` to `EvidenceFootprint`
+  on `task_id` and filters on a non-empty `commit_sha`; there is no `review_state` term in the query.
+  So F142's working row having *accepted* evidence was incidental, and this change staffs a real
+  review in F140's own shape, in a default project. D9 was right and now says so from the code.
+- **D2's invariant.** `Actor.__post_init__` (`task_transitions.py:58-67`) raises for `run` without an
+  agent and for `operator` with one. `actor_agent IS NULL ⟺ operator` holds on any `→ completed` row.
+- **The `unstaffed` event fires whatever the firing does.** `_do_fire_job` loops
+  `decision.unstaffed` at `scheduler.py:2402-2405`, before it branches on `decision.kind`. Task 6.1's
+  "no code change expected" is correct.
+- **Every test line reference cited in D12 and in tasks 1.2/4.3/4.4 resolves to what it claims.**
+
+### Finding 1 — the safety argument had a hole, and it is the one the change turns on
+
+Round 1's D5 ended: *"`assignee` is still in the set whenever it matters, because an agent holding a
+task moved it to `in_progress` through `apply_transition` and is on the record."* **That sentence is
+false**, and it is the sentence the whole permissive direction rests on.
+
+`bind_run_to_task` (`run_task_binding.py:432-436`) records `→ in_progress` only if the edge is legal,
+and `TRANSITIONS["in_progress"]` is `{completed, assigned, blocked, rejected}` — **there is no
+`in_progress → in_progress` edge**. An agent whose run binds to a task already `in_progress` takes no
+edge and records nothing.
+
+So: the operator moves a card to `in_progress` by hand, the flow staffs it (`enter_selected_task`
+leaves a non-`pending` status alone), the agent writes every line of the work, the operator marks it
+done. Every transition on that task is operator-attributed. `agents_that_worked` is **empty**, the
+exclusion is empty, and the arm this change adds offers the agent its own work to review — the exact
+self-approval route round 1 identified as its "real finding", surviving inside the repair for it.
+And it lands in the change's own target fixture: an operator hand-driving the board is why F140's
+card was completed by hand in the first place.
+
+The correction: the exclusion is `agents_that_worked | {task.assignee}`. `assignee` is not a
+replacement for the transition set — round 1's three reasons against that all stand — it is the term
+that covers the agent the history does not.
+
+**And the union must not reach the wedge predicate.** D8 asks *"is the assignee one of the agents
+that worked this?"*; with the union that is true of every task with an assignee, so every review in
+flight would be reported unstaffable — which is precisely the "worse than the bug" outcome the queue
+item told round 2 to check for. Two questions, two sets, and tasks 2.5/5.1 now name which is which.
+Verified that the transitions-only set is safe there: a legitimately staffed reviewer is absent by
+construction, because `enter_selected_task` writes `completed → under_review` as the *operator*
+(`scheduler.py:795`) and the reviewer's own binding onto an `under_review` task is not a legal edge
+either, so it records nothing until it writes its verdict.
+
+### Finding 2 — the change would have shipped its headline sentence untrue
+
+`resolve_reviewer` hard-codes why an agent was excluded, twice: rung 1b says *"that agent is the one
+that completed the work"* (`scheduler.py:1074-1083`), rung 3 says *"or is the one that completed this
+task and so may not review it"* (`:1111-1118`). Under a wider exclusion both are **false** — the
+operator completed it and the excluded agent merely worked it.
+
+Rung 3's is not any sentence. It is the one `decide_firing` promotes to `stall_reason`
+(`scheduler.py:1457`) and `_emit_review_unstaffed` broadcasts — the exact text this change exists to
+put in front of the operator in place of F142's histogram. And round 1's spec delta *required* the
+falsehood, by saying the flow surfaces "exactly as it does when the author is known".
+
+Fixed as design D13: `excluded_because` becomes a parameter with today's clause as its default, the
+operator arm passes `"has worked on this task"`, and `agent-flows` gains a requirement that a
+surfaced reason SHALL NOT say an agent completed a task no agent completed, with a scenario asserting
+the absence of the claim rather than only the presence of the new one.
+
+### Finding 3 — a delta clause that retroactively made shipped behaviour non-compliant
+
+`agent-loops`' new clause required an attributed stall reason to have *"named what the operator can
+do about it"*. F64's shipped rung-3 sentence names causes, not a remedy, so as written the delta made
+correct shipped code fail its own reconciliation. Narrowed to attribution alone; the remedy demand
+stays in `agent-flows`, where task 3.2 implements it.
+
+### Also recorded, not fixed
+
+`_emit_review_unstaffed` persists an event on **every** firing with no dedup. This change routes a
+*permanently* unresolvable condition through it (a task with no provenance can never gain any), so a
+cron-ticking flow will accrue one row per tick forever. Pre-existing for rung 3 and out of scope for
+`agent-loops`' "records only what is new", which is scoped to execution history rather than the event
+log — but new in kind, because the other cases can all be resolved. Carried as an open question.
+
+### Verification
+
+- `openspec validate a-review-a-flow-cannot-staff-is-named --strict` — valid.
+- `git status` shows six files, all inside the change directory. No code, no tests, no suite run —
+  correct for a round-2 item.
+- Every claim above was read off the code in this session. The three MODIFIED deltas were diffed
+  against the originals in `openspec/specs/` to confirm they restate rather than silently drop.
+
+### Next
+
+`B-R3`: the second **independent** re-derivation, not a review of round 2. The failure it exists to
+catch is an argument that is wrong while everything it argues about is right — and round 2 just found
+exactly that shape twice, so the round is earning its keep on this change specifically. What round 3
+should attack, in order:
+
+1. **The judgement itself, re-derived rather than inherited.** D4 says a flow MAY staff a review for
+   operator-completed work. The specific weakness named for round 3 stands untouched by round 2:
+   whether `requirement-traceability:158` is being stretched, since it is about *evidence acceptance*
+   falling to the operator and not about task completion.
+2. **Whether `worked ∪ {assignee}` is now too wide.** Round 2 widened the exclusion; round 3 should
+   ask what it costs. A reviewer that rejected the task once is already in the set via
+   `under_review → revision_needed`, and the assignee term adds anyone the operator parked the card
+   on. A single-agent-plus-reviewer project may now reach rung 3 where it used to staff.
+3. **Whether the whole thing belongs in `decide_firing` at all**, or whether the honest fix is that
+   `bind_run_to_task` should record the agent's turn on a task it did not move — which would make
+   `agents_that_worked` true to its name and delete the assignee term. Round 2 chose the cheaper
+   repair deliberately; round 3 should say whether that was right.
