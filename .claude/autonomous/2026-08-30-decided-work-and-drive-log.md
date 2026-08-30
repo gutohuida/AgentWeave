@@ -426,3 +426,141 @@ never marked; and all seven "safe" rows of the blocked-while-running table re-de
 
 **Flagged for the operator as `D6` in `decisions_for_user`:** this change now modifies a shipped
 requirement in a second capability. R3 sees it next, and the operator sees it before `F14-IMPL`.
+
+---
+
+## Iteration 5 — F14-R3 — 2026-08-30T04:25:39+01:00
+
+**Unit of work:** round 3 of the F14+F60 spec loop, at
+`openspec/changes/a-task-waits-while-its-run-waits/`. Independent re-derivation against the code,
+not a re-read of round 2. Commit `ff16cd8`. No code changed — this is a proposal round.
+
+Started 04:05 local, well inside the 08:00 rule. Branch and `git log` matched STATE.json exactly
+(`6d03795` at head, tree clean); nothing to reconcile.
+
+### The three that change the shape of the change
+
+**1. The guard's threshold was supplied by the party the guard exists to check.** D3 had the ask
+carry `wait_seconds`, justified by "the Hub does not know the effective value and cannot compute the
+deadline". That is false. `agent_trigger.py:955` builds the child environment from the Hub's own
+`os.environ`, `:973-974` overwrite `AW_QUESTION_TIMEOUT` from `Agent.question_timeout_seconds` when
+set, and `mcp_server.py:834`'s `_configured_wait` falls back to 240 and to 240 again for anything
+outside `[10, 600]` — every input is Hub-side. And `mcp_server.py:801-802` already restates two
+constants under the comment "A test asserts the two agree", which is this codebase's sanctioned
+answer to the stdlib-only import rule, so the stated cost of restating was not a real objection
+either.
+
+The sharper half is not the cost. `wait_seconds` would have arrived on the **agent-facing** ask
+schema, over the run's own credential — the same channel and the same caller as the expiry report.
+A run wanting to park and instantly unpark sends the floor and reports immediately. The proposal's
+crux says the refusal "is what keeps this a report of a fact rather than a lever" and
+`task-lifecycle-governance:445` is the requirement it keeps; a threshold chosen by the guarded party
+keeps neither. Now computed Hub-side while serving the ask. Tasks 4.3/4.4 replaced; `mcp_server.py`'s
+ask is untouched by this change.
+
+The column survives, and round 3 gave it the reason it never had: `Agent.question_timeout_seconds`
+is operator-editable while the run waits, so a deadline recomputed later would describe a wait that
+never happened. That is the one place this change knowingly declines D2's prefer-derived default,
+and it now says so.
+
+**2. One tool call bypasses the entire change.** `task-lifecycle-governance:445` forbids leaving the
+waiting status by assertion as well as entering it. Only entering is enforced — `tasks.py:1157`
+refuses a non-operator setting `blocked`, and `mcp_server.py`'s `TaskStatus` withholds it. Nothing
+guards the way out: `TRANSITIONS["blocked"]["in_progress"]` is `_BOTH`, the PATCH route applies no
+check, and `in_progress` is in `TaskStatus` and named in `update_task`'s docstring as an ordinary
+option.
+
+Today that is latent, because a task reaches `blocked` only once its run has ended — the agent that
+could assert its way out is gone. **Ask-time parking removes precisely that protection**, and the
+tool's own closing line ("Continue as best you can") supplies the motive: wait out 240s, do the work,
+get a 409 on `blocked -> completed`, then call `update_task(in_progress)` and complete. The task
+finishes with no `wait_ended_at` and no statement — F60, through the door this change opens, past
+the refused endpoint, the recorded deadline and the permanent mark alike. Group 7's ungating removes
+the last incidental obstacle, since the dependency gate was the only thing that ever refused this
+edge. New D10, new group 2b, two new scenarios.
+
+This is the same shape as 2026-08-28: rounds 1 and 2 both breached a requirement that had already
+shipped, and the breach was in what the code *permits*, not in what the proposal *says*.
+
+**3. "Every reader of task status was checked" missed the module whose whole job is that question.**
+`task_attribution` is not in the proposal's blocked-while-running table, and it is the one surface
+with a shipped scenario keyed on `blocked` by name (`agent-loops`, *A task waiting on a person*).
+`attribute` (`task_attribution.py:176-188`) consults `live.task_ids` **only inside its `unstaffable`
+branch**; a `blocked` task is never unstaffable and `jobs.py:352` passes empty staffing besides, so
+the fall-through reaches `CAPACITY_ASSIGNED` — whose own comment reads "nothing is running" — for the
+whole wait, about an agent mid-turn on that exact task. The requirement contains both halves of the
+collision: "whether an agent is mid-turn on a task is answered by the runs the system started" and
+the blocked scenario. They cannot collide today. Decided for `working`, with the scenario split in
+two. New D11, new group 3a.
+
+### Four more
+
+* **Two different cases merged into "the report never arrives".** The proposal and the ADDED
+  requirement both name two causes — tool died, run killed — and conclude "nobody proceeded". There
+  is a third: **sent and did not land**, which task 5.5 *requires* be swallowed. Then the agent did
+  proceed, the task is left `blocked`, and `update_task(completed)` is refused — which is not
+  "today's behaviour" and is the stranding D5 ungates the resume to prevent, arriving by a different
+  door. `expire_permission_request` (`agent_actions.py:766`) solves the identical problem one router
+  away and states the design in a line: *"The run reports and the run's end sweeps."* This change
+  took one half. New group 5a adds the sweep, at a boundary already past the deadline so it can
+  never fire early.
+* **The predicate has two readers; the concept has five.** D6 added `wait_ended_at IS NULL` to
+  `unanswered_blocking_question` and `_attach_awaiting_answer` and stopped. Three more derive
+  "somebody is waiting" from `answered = False`: `conversations.py:424` (navigation's attention
+  state, which by its own docstring outranks `running`, and whose shipped rationale is *"because a
+  waiting run consumes its configured timeout while the operator is unaware of it"* — spent, once
+  the run goes back to work), `jobs.py:385` (a loop's open-question count) and `checkpoints.py:293`
+  (`open_questions`, read by the successor *agent*). Decided separately: the first two excluded, the
+  third **kept and marked**, because a successor must know a decision was already taken without the
+  operator. `conversation_attention` contains its own answer — its permission arm already excludes
+  `expired` and only the question arm had no expired state to exclude.
+* **The mark was narrower than its own requirement.** Keyed on `blocked_task_id`, which
+  `block_task_for_question` records only where the task parked. A run bound to an `under_review`
+  task waits out the full deadline, decides for itself, and the task carries nothing — F60 with a
+  different starting status. Widened to `_attach_awaiting_answer`'s two-arm shape, minus its
+  `Run.status == "running"` condition, which belongs to a live wait rather than a permanent record.
+* **The run-end fallback does not cover "a question asked in an earlier turn".**
+  `unanswered_blocking_question` selects `created_by_run_id == run.id`, and its docstring says why:
+  *"A question another run left unanswered is not evidence that this run stopped for it."* An
+  earlier turn is an earlier run. The other stated case — a task not `in_progress` at ask time — is
+  near-unreachable, since binding drives a task to `in_progress` and the statuses that refuse the
+  park have no way back without the operator. The fallback's real remaining job is the one nobody
+  listed: a park that raised and was swallowed (task 2.2).
+
+### Confirmed against the code, not overturned
+
+The two soft spots STATE.json named for this round both survive, and one of them properly:
+
+* **the batch releasing on the first answer** is genuinely covered by `awaiting_answer_reason`.
+  `block_task_for_question`'s already-blocked branch records `blocked_task_id` on every later
+  question of the batch, and `_attach_awaiting_answer`'s first arm (`tasks.py:372`) matches on
+  exactly that, with `setdefault` over `ORDER BY created_at, batch_index` naming the earliest still
+  unanswered. Round 2's claim holds.
+* **`blocked` outside `LIVE_STATUSES`** stays untouched — but the *reason* was broken. The proposal
+  left it because "`open_questions` covers the checkpoint case", and D6 has just found that
+  `open_questions` will itself misdescribe an expired wait. The two are now linked in writing: if
+  6.6 is dropped, this row reopens.
+* `_guard_run_holds_the_task` takes its `run.task_id == task.id` no-op branch on the expiry release,
+  so a run-attributed `blocked -> in_progress` is not refused there.
+* `GET /tasks/transitions/allowed` is hardcoded to `ACTOR_OPERATOR` (`tasks.py:1301`), so group 2b's
+  guard does not make the operator's status control offer a move that then fails. Written into 2b.6
+  as an assertion rather than left as an assumption.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `openspec validate a-task-waits-while-its-run-waits --strict` | valid, with **five** deltas |
+| Every `## MODIFIED` header matches a requirement in the corpus verbatim | checked mechanically, all five; the three non-matches are all under `## ADDED` |
+| Every claim read at source | `agent_trigger.py`, `launchability.py`, `mcp_server.py`, `agent_actions.py`, `questions.py`, `tasks.py`, `task_attribution.py`, `task_transitions.py`, `task_transition_service.py`, `dependency_gate.py`, `run_task_binding.py`, `run_divergence.py`, `scheduler.py`, `jobs.py`, `conversations.py`, `checkpoints.py`, `test_dependency_gate.py`, `test_task_transitions_api.py` |
+| Shipped requirements read before contradicting them | `agent-loops` (capacity, loop state), `agent-conversation-workspace` (attention state), `conversation-checkpoint`, `run-task-binding` 594/618/663, `task-lifecycle-governance` 413/445, `task-dependencies` |
+| Cited line numbers re-checked after writing | yes — `mcp_server.py:354`, `tasks.py:1157`, `task_attribution.py:176-188`, `run_task_binding.py:628/687`, `agent_actions.py:766`, `scheduler.py:377-382` |
+| Code changed | none, deliberately |
+| Tree clean, committed, pushed | `ff16cd8` |
+
+**The change grew from two deltas to five.** That is the honest consequence of round 2's own lesson
+— `--strict` does not compare capabilities — applied to the concepts rather than the capability
+names. Task 9.5 now names all five and says what to grep for after archiving.
+
+**F14-IMPL is now materially bigger** than when it was queued: eleven task groups rather than eight,
+three of them added by this round. The operator sees this before it is built.
