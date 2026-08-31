@@ -116,23 +116,39 @@ Round 2 answered this at the source (design D9): **it does.** `_targets` does no
 
 ## 6. One action lands a loop's work
 
-- [ ] 6.1 Test the `agent-loops` landing scenarios: one action reaches `approved` and merges; each
+- [x] 6.1 Test the `agent-loops` landing scenarios: one action reaches `approved` and merges; each
   transition is recorded and attributed to the operator; the action is refused while the turn is
   live; a refused landing leaves holder, status and integration record untouched.
-- [ ] 6.2 Implement it as a composition of the existing transitions (design D6). Do not add
+- [x] 6.2 Implement it as a composition of the existing transitions (design D6). Do not add
   `completed -> approved` to `TRANSITIONS`.
-- [ ] 6.3 Evaluate the gate before performing any transition (design D7) — **and perform all three
+- [x] 6.3 Evaluate the gate before performing any transition (design D7) — **and perform all three
   in one handler under one commit** (round 3). `apply_transition` does not commit; the routes in
   `api/v1/tasks.py` do (`:1173`, `:1397`, `:1564`). The transaction is what makes "refused for any
   reason leaves nothing half-applied" true; the pre-check only makes the *message* the one approval
   would have given. Test a refusal raised on step two — `_guard_reviewer_is_not_the_author` on
   `-> under_review` — and assert the author's hold is still in place afterwards.
-- [ ] 6.5 Record all three transitions as **actor-caused**, not `ORIGIN_RUNTIME`
+- [x] 6.5 Record all three transitions as **actor-caused**, not `ORIGIN_RUNTIME`
   (`task-lifecycle-governance:168`, round 3). Nothing here is a move the runtime made from something
   it observed; the operator asked for every step, in one word instead of three. Assert the recorded
   cause, not only the actor kind.
-- [ ] 6.4 Add the UI affordance that issues it, and render the live-turn refusal where the operator
+- [x] 6.4 Add the UI affordance that issues it, and render the live-turn refusal where the operator
   takes the action.
+
+**6.1 note.** The "each transition is recorded" arm records **two** rows, not three. `TaskTransition`
+has no `assignee` column — the release of the author's hold is a task write folded into the same
+handler, the way the ordinary route folds it into the same request. The delta and design D6 were
+corrected to say so.
+
+**6.3 note.** The refusal on step two is **forced**, not provoked, and that is stated in the test.
+Releasing the hold first means `_guard_reviewer_is_not_the_author` can never fire here — it returns
+immediately for a task nobody holds. Verified by removal: a `session.commit()` inserted after the
+assignee write fails that test with `assert None == 'builder'`.
+
+**6.3 note, second.** The gate pre-check is invisible from outside — measured by deleting it, which
+leaves every black-box assertion passing (step three raises the same error and the transaction rolls
+back) and fails only `test_the_gate_is_decided_before_anything_is_attempted`. Kept for ordering;
+design D7 says so rather than claiming a guarantee it does not provide.
+
 
 ## 7. Prove it end to end
 

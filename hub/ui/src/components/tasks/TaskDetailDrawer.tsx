@@ -8,6 +8,7 @@ import {
   DivergencePolicy,
   Task,
   useAllowedTransitions,
+  useLandTask,
   useSetDivergenceHandling,
   useTaskIntegrationPreview,
   useUpdateTask,
@@ -144,6 +145,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
 
   const { data: allowed } = useAllowedTransitions()
   const updateTask = useUpdateTask()
+  const landTask = useLandTask()
   const setHandling = useSetDivergenceHandling()
   const { data: agents } = useAgents()
   const { data: specDocuments } = useSpecDocuments()
@@ -309,6 +311,43 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                 },
                   }))}
                 />
+              )}
+              {/* F163. Completed work is the operator's to land, and the route to it was three
+                  calls of which two begin as refusals: the task is still held by the agent that
+                  completed it, and `completed` does not reach `approved`. Both refusals are
+                  correct and neither is the operator's mistake, so the product offers the sequence
+                  instead of making them rediscover it.
+
+                  A button rather than another entry in the status menu: that menu offers the moves
+                  the map declares, one at a time, and this is not one of them — it is one act the
+                  Hub composes out of three. Refusals land in the same place a refused move does,
+                  including the live-turn one, which is the whole of F162 reached through this
+                  door. */}
+              {task.status === 'completed' && (
+                <button
+                  type="button"
+                  data-testid={`task-land-${task.id}`}
+                  disabled={landTask.isPending}
+                  title="Release the author's hold, take it through review, and approve it"
+                  className="text-[11px] px-2 py-0.5 rounded"
+                  style={{
+                    color: 'var(--green)',
+                    background: 'color-mix(in srgb, var(--green) 12%, transparent)',
+                    border: '1px solid color-mix(in srgb, var(--green) 30%, transparent)',
+                  }}
+                  onClick={() => {
+                    setRefusal(null)
+                    landTask.mutate(
+                      { id: task.id },
+                      {
+                        onError: (error: unknown) =>
+                          setRefusal(readableApiError(error, 'The Hub refused this landing.')),
+                      },
+                    )
+                  }}
+                >
+                  {landTask.isPending ? 'Landing…' : 'Land it'}
+                </button>
               )}
             </div>
             <ApprovalWritesNote taskId={task.id} canApprove={moves.includes('approved')} />

@@ -312,6 +312,30 @@ export function useUpdateTask() {
 }
 
 /**
+ * Land completed work: release the author's hold, pass it through review, approve it — one call.
+ *
+ * Separate from `useUpdateTask` because it is not a status change the operator picks off the map.
+ * It is one action the Hub composes out of three transitions, and it is refused on approval's own
+ * terms — including while the task's agent still has a turn running. Sharing the mutation would put
+ * both under one pending state and make "Land it" look like a move to `under_review` in flight.
+ */
+export function useLandTask() {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) =>
+      postJson<Task>(`/api/v1/projects/${projectId}/tasks/${id}/land`),
+    onSuccess: (_task, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'tasks'] })
+      // The merge is the point of the action, and the note that reports it reads a different key.
+      queryClient.invalidateQueries({
+        queryKey: ['project', projectId, 'task', id, 'integrations'],
+      })
+    },
+  })
+}
+
+/**
  * How this task's neglect should be answered.
  *
  * Separate from `useUpdateTask` because it is a different kind of act: that one moves the task

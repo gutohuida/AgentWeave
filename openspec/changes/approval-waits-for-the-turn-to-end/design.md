@@ -414,6 +414,23 @@ They are **actor-caused, all three**: `ORIGIN_RUNTIME` exists for moves the runt
 consequence of something it observed, and nothing here is observed — the operator asked for every
 step of this, in one word instead of three. The delta now says so.
 
+**Implementation found one thing D6 and the delta both asserted and the schema cannot hold.** The
+delta said the history records *"the release of its author's hold, the move into review, and the
+approval"*, and task 6.5 said to record *all three* as actor-caused. There is no third row and there
+cannot be: `TaskTransition` records a move from one **status** to another (`db/models.py:768-799`),
+and `assignee` has no history table at all. The release is a column write folded into the same
+handler, exactly as the ordinary PATCH route folds it into the same request (F70's ordering,
+`api/v1/tasks.py:1262`). So two rows are recorded, both actor-caused, and what remains checkable
+about the release is the task itself. The delta now says that; `test_the_history_records_every_
+transition_as_the_operators_own` asserts the two rows and the cleared holder together.
+
+**And one consequence of the ordering that is worth stating rather than rediscovering.** Because the
+hold is released *first*, `_guard_reviewer_is_not_the_author` can never refuse step two of this
+composition — it returns immediately for a task nobody holds, which is that guard's own first
+permitted case. Task 6.3 asked for a test of a refusal raised by that guard; through the real route
+there is no such refusal to raise. The test forces one instead, which is the stronger reading of what
+the delta claims anyway: *for any reason*, not for the reasons the composition can foresee.
+
 ### D7 — a refused landing leaves nothing half-applied, and one transaction is what guarantees it
 
 Refused means nothing happened: no cleared assignee, no review row, no integration record. A
@@ -435,6 +452,20 @@ raised by any of them leaves the session uncommitted with nothing written. The g
 kept, and its purpose is stated correctly: it is what makes the *refusal message* the one approval
 would have given, rather than a failure discovered two steps in. Atomicity is the transaction's job;
 the pre-check is the message's.
+
+**Measured at implementation: the pre-check is invisible from outside, and both halves of that
+sentence matter.** Removing the three lines that evaluate the gate before the composition starts
+leaves a gate-refused landing answering with the *identical* body — step three evaluates the same
+gate, raises the same `GateUnsatisfiedError`, and the transaction rolls the staged `under_review`
+back. Every black-box assertion in `test_one_action_lands_the_work.py` passes with the pre-check
+deleted; only `test_the_gate_is_decided_before_anything_is_attempted`, which observes the call
+sequence, fails. So D7's claim that the pre-check *"is what makes the refusal message the one
+approval would have given"* is, as built, already true without it.
+
+It is kept, and the reason is ordering rather than the response: the moment a fourth step joins the
+sequence, or a step that can refuse on non-gate terms is added before the approval, the difference
+between "refused before anything moved" and "refused two steps in" becomes visible. An unobserved
+line rots, so the ordering test and the code comment both say what it does and what it does not.
 
 ### D8 — the reproduction is written before the fix, in the drive's shape
 
