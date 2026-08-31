@@ -1020,16 +1020,21 @@ async def test_loop_whose_tasks_are_all_completed_but_unapproved_skips_instead_o
         assert len(job_runs) == 1
         assert job_runs[0].tick_count == 3
         assert {r.status for r in job_runs} == {"skipped"}
-        # **The reason names the task, not the queue** (F142, `agent-loops`' "An attributed stall
-        # names its task rather than the queue"). This asserted `"stalled"` and `"2 completed"` --
-        # the status histogram -- until the walk stopped dropping an unattributable completed task
-        # in silence. These two are constructed directly at `completed`, so no completion is
-        # recorded for either, and the walk now surfaces the first of them by name with the remedy.
-        # The histogram is the reason of last resort and this queue no longer needs it: the
-        # operator's remedy here is the named task, and a firing that established a specific cause
-        # and then reported a count has discarded the only part of what it knows they can act on.
-        assert all("no recorded completion" in r.error_summary for r in job_runs)
-        assert all("Reviewing it directly" in r.error_summary for r in job_runs)
+        # **The reason names the work and the remedy, not the queue's shape.** This asserted
+        # `"stalled"` and `"2 completed"` -- the status histogram -- until F142 stopped the walk
+        # dropping an unattributable completed task in silence, and then `"no recorded completion"`
+        # until `approval-waits-for-the-turn-to-end` (design D5).
+        #
+        # **This loop is genuinely a loop, so its expectation changes with the requirement rather
+        # than its fixture gaining a document** (task 5.5). It declares no specification document,
+        # so it no longer enters the review arm at all -- which is where both earlier sentences came
+        # from. What replaces them is not the histogram either: the operator is told their finished
+        # work is waiting on them, which is both true here and the actual remedy, where "no recorded
+        # completion" described a property of rows this test constructs directly and offered a
+        # review the loop was never going to staff.
+        assert all("waiting for you to land them" in r.error_summary for r in job_runs)
+        assert all("2 finished tasks are" in r.error_summary for r in job_runs)
+        assert all("no claimable task" not in r.error_summary for r in job_runs)
 
         conversations = (
             (await db.execute(select(Conversation).where(Conversation.agent == job.agent)))

@@ -20,8 +20,6 @@ from sqlalchemy import func, select
 from hub.db.engine import async_session_factory
 from hub.db.models import AIJob, JobRun, Loop, Task
 from hub.scheduler import JobScheduler
-from hub.task_transition_service import apply_transition
-from hub.task_transitions import run_actor
 
 pytestmark = pytest.mark.asyncio
 
@@ -124,13 +122,17 @@ async def test_the_first_refusal_writes_a_row_reading_one(app):
 async def test_a_stall_whose_reason_changes_starts_a_new_row(app):
     """Incrementing on a *changed* reason would hide the change inside a growing number.
 
-    **How the reason is made to change moved with F142.** It used to be a second unclaimable task,
-    which changed the count in the queue's status histogram. The histogram is now the reason of last
-    resort: where the walk attributes the stall to a specific task, that is what the operator is
-    told, and adding a second unstaffable task leaves the first one's sentence exactly as it was.
-    So the reason is changed the way it now actually changes — by changing what is true of the task
-    the reason is about. Recording an agent as completing it moves the walk past the *no recorded
-    completion* arm and into the evidence gate, whose sentence is a different one.
+    **How the reason is made to change has moved twice.** It was originally a second unclaimable
+    task, which changed the count in the queue's status histogram; F142 made the histogram the reason
+    of last resort, so a second task stopped changing anything and the test switched to recording an
+    agent as completing the task — which moved the walk from the *no recorded completion* arm into
+    the evidence gate.
+
+    `approval-waits-for-the-turn-to-end` (design D5) removes both of those arms for this fixture,
+    which builds a **loop**: it declares no document, so its finished work is not reviewed at all and
+    the reason names the work waiting for the operator. That sentence counts what it names, so the
+    original mechanism is the one that works again — a second finished task genuinely changes what
+    the operator is told, from one waiting task to two.
     """
     async with async_session_factory() as db:
         job, loop, _task = await _stalled_loop(db, suffix="reason")
@@ -142,14 +144,17 @@ async def test_a_stall_whose_reason_changes_starts_a_new_row(app):
         first_rows = await _runs(db, job.id)
         assert len(first_rows) == 1
         first_reason = first_rows[0].error_summary
-        assert "no recorded completion" in first_reason
+        assert "1 finished task is waiting for you to land it" in first_reason
         assert first_rows[0].tick_count == 2
 
-        task = await db.get(Task, "task-stall-reason")
-        task.status = "in_progress"
-        await db.commit()
-        await apply_transition(
-            db, task, "completed", run_actor(run_id="run-stall-reason", agent="worker")
+        db.add(
+            Task(
+                id="task-stall-reason-2",
+                project_id="proj-test",
+                title="a second finished task",
+                status="completed",
+                loop_id=loop.id,
+            )
         )
         await db.commit()
 
@@ -161,6 +166,7 @@ async def test_a_stall_whose_reason_changes_starts_a_new_row(app):
         assert rows[0].error_summary == first_reason
         assert rows[0].tick_count == 2, "the earlier stall keeps its own count"
         assert rows[1].error_summary != first_reason
+        assert "2 finished tasks are waiting for you to land them" in rows[1].error_summary
         assert rows[1].tick_count == 1
 
 

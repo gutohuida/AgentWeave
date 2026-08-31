@@ -32,6 +32,7 @@ from hub.db.models import (
     Loop,
     Project,
     Run,
+    SpecDocument,
     Task,
     TaskDependency,
     TurnUsage,
@@ -50,7 +51,14 @@ SECOND = "width-second"
 THIRD = "width-third"
 
 
-async def _flow(db, *, suffix, agent=OWNER, stop_at=None):
+async def _flow(db, *, suffix, agent=OWNER, stop_at=None, declares_document=True):
+    """A flow and its job.
+
+    **It declares a document, and that is what makes it a flow** (`agent-flows:13`). Until
+    `approval-waits-for-the-turn-to-end` (design D5) this built a documentless `Loop`, so the
+    review arm was being exercised through a row the product does not treat as a flow. The arm
+    now reads the declaration; the fixture states what these tests always meant.
+    """
     job = AIJob(
         id=f"job-width-{suffix}",
         project_id="proj-test",
@@ -63,12 +71,25 @@ async def _flow(db, *, suffix, agent=OWNER, stop_at=None):
     )
     db.add(job)
     await db.commit()
+    if declares_document:
+        db.add(
+            SpecDocument(
+                id=f"doc-width-{suffix}",
+                project_id="proj-test",
+                path=f"spec/width-{suffix}.html",
+                title=f"Width {suffix}",
+                phase="current",
+                kind="capability",
+            )
+        )
+        await db.commit()
     loop = Loop(
         id=f"loop-width-{suffix}",
         project_id="proj-test",
         job_id=job.id,
         purpose=f"width {suffix}",
         stop_at=stop_at,
+        spec_document_id=f"doc-width-{suffix}" if declares_document else None,
     )
     db.add(loop)
     await db.commit()
@@ -588,12 +609,17 @@ async def test_a_flows_briefing_says_the_flow_routes_the_work_onward(app):
 
 
 async def test_a_loops_briefing_never_claims_someone_will_review_the_work(app):
-    """Task 8.2, on the true split rather than the stated one — see the group 8 review block. A
-    document-less loop still gets width and review when other agents exist, so the briefing does not
-    pretend the tier is what decides that; what it must never do is tell an agent alone in its
-    project that somebody will check its work."""
+    """Task 8.2, on the true split rather than the stated one — see the group 8 review block.
+
+    **A loop, deliberately** (task 5.5 of `approval-waits-for-the-turn-to-end`): the subject here is
+    what a document-less loop is told, so its fixture declares nothing where every other flow in
+    this file now does. The claim this used to rest on — that a document-less loop *"still gets
+    width and review when other agents exist"* — is half retired by design D5: it still gets width,
+    and it no longer gets review at all. The wording is unchanged and is now true of the scheduler
+    rather than merely safe for it.
+    """
     async with async_session_factory() as db:
-        _job, loop = await _flow(db, suffix="tier-loop")
+        _job, loop = await _flow(db, suffix="tier-loop", declares_document=False)
         assert loop.spec_document_id is None
         task = await _task(db, loop, "tier-loop")
 
@@ -616,8 +642,6 @@ async def test_the_tier_statement_survives_an_oversized_checkpoint(app):
 
     async with async_session_factory() as db:
         _job, loop = await _flow(db, suffix="tier-big")
-        loop.spec_document_id = "doc-tier-big"
-        await db.commit()
         task = await _task(db, loop, "tier-big")
         conversation = new_conversation(project_id="proj-test", agent=OWNER, origin="job")
         db.add(conversation)

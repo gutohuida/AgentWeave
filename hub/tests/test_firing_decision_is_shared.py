@@ -109,12 +109,15 @@ async def test_a_stalled_queue_claims_nothing_and_the_board_offers_no_claimable_
 
     assert decision.kind == DECISION_STALLED
     assert decision.selections == ()
-    # The reason names the task, not the queue (F142). This asserted the word "stalled" -- the
-    # histogram's own prefix -- while the fixture builds its task directly at `completed`, so no
-    # completion is recorded and the walk now surfaces it by name with the remedy instead of
-    # dropping it in silence and falling back to a count.
-    assert decision.stall_reason and "no recorded completion" in decision.stall_reason
-    assert [task_id for task_id, _ in decision.unstaffed] == ["task-dec-done"]
+    # **The reason names the work and its remedy, not the queue's shape.** This asserted the word
+    # "stalled" -- the histogram's own prefix -- until F142, then "no recorded completion" until
+    # `approval-waits-for-the-turn-to-end` (design D5). `_loop_with` builds a **loop**: it declares
+    # no document, so it no longer enters the review arm, which is where both earlier sentences
+    # came from. The property under test is untouched -- the board's label is whatever string the
+    # firing would refuse with -- and `unstaffed` is now empty because nothing was attempted:
+    # finished work waiting on the operator is not a step the queue failed at (task 5.3).
+    assert decision.stall_reason and "waiting for you to land it" in decision.stall_reason
+    assert decision.unstaffed == ()
     assert current == []
 
 
@@ -225,9 +228,9 @@ async def test_a_stalled_loop_reports_why_on_its_summary(app):
 
     assert summary.stall_reason is not None
     # Same substitution as above, and the property under test is unchanged: the board's label is
-    # the *same string* the firing would refuse with, whichever of the two reasons that is.
-    assert "no recorded completion" in summary.stall_reason
-    assert "Reviewing it directly" in summary.stall_reason
+    # the *same string* the firing would refuse with, whichever of the reasons that is.
+    assert "waiting for you to land it" in summary.stall_reason
+    assert "approving is what puts it in the product" in summary.stall_reason
 
 
 async def test_a_loop_that_would_fire_reports_no_stall_reason(app):

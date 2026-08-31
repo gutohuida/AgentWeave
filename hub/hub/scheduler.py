@@ -1268,6 +1268,12 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     deferred: "list[tuple[str, str]]" = []
     in_flight: "list[tuple[str, str]]" = []
     selections: "list[LoopSelection]" = []
+    # The tasks a documentless loop finished and will not review (design D5). Not `unstaffed`:
+    # nothing here failed to be staffed, and the walk did not try. It is carried out of the walk
+    # only so the stall sentence can name the operator's landing action instead of falling to
+    # `_stall_reason_from_walk`'s "no claimable task among 1 open (1 completed)" -- the sentence
+    # this change removes for flows and would otherwise re-earn for loops on the same day.
+    awaiting_landing: "list[str]" = []
     # Design D6, and the only mutable state the walk carries. An agent selected twice in one firing
     # would be started twice concurrently; `schedule_agent` refuses the second and drops it without
     # a word, so the collision is decided here where it can be recorded instead.
@@ -1427,6 +1433,32 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             taken.add(agent)
             continue
 
+        # **A loop that declares no document does not staff a review at all** (design D5,
+        # finding F161). Not a trim of behaviour the corpus never covered -- `agent-flows:13` says
+        # a loop declaring no document "SHALL be unaffected by [that capability's requirements] and
+        # SHALL behave exactly as it does today", and that capability's own Purpose enumerates
+        # "reviewer resolution, review dispatch and its handover briefings" among what it owns. The
+        # arm below applies all three to a documentless loop, so this restores the corpus rather
+        # than trimming behaviour the corpus never covered.
+        #
+        # And it is unstaffable in practice as well as forbidden in principle: a loop has one agent
+        # and no second party, so every reviewer this arm could resolve is the author, whom
+        # `_guard_reviewer_is_not_the_author` refuses on arrival. What the operator saw (F161) was
+        # a firing reporting a missing commit to review, on every firing, for finished work.
+        #
+        # **The fresh-review branch only.** A `wedged_review` row is an `under_review` task carried
+        # here by the F70 recovery so a real reviewer replaces the author wedged in `assignee`.
+        # That is `task-lifecycle-governance:317`'s reassignment, not a new review, and the
+        # recovery path deliberately records no `in_flight` entry (`:1349`) -- so excluding it here
+        # would drop the row out of the walk recording nothing at all, which is F23's silence
+        # arriving through a third door, in a change whose purpose is to end a stall nobody sees.
+        #
+        # The operator's own dispatch is untouched: this removes a loop's *selection*, never the
+        # by-hand review that `task-lifecycle-governance:1481` requires to stay staffable.
+        if not wedged_review and not loop.spec_document_id:
+            awaiting_landing.append(task.id)
+            continue
+
         # Finished work. **The ladder decides, always** — not "the job's agent if it happens to be
         # eligible". A declared reviewer that resolves outranks the job's own agent, or the
         # declaration would be advisory; and D4 is the one statement of who reviews.
@@ -1575,6 +1607,18 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         # reviews they are unstaffable for the same reason, and a card is a line rather than a
         # report. The event stream still carries one entry per task.
         stall_reason = unstaffed[0][1]
+    elif awaiting_landing:
+        # **Quiet is not the same as absent** (design D5). With the review arm gone, a loop whose
+        # only open task is `completed` walks to the end and falls to the generic sentence -- the
+        # one the arm above records as measured live on 2026-08-30 and wrong for precisely this
+        # shape: it describes a property of the queue where the cause is a property of one task,
+        # and it names no remedy. Here the cause is fully known and the remedy is the operator's,
+        # so the firing says so.
+        #
+        # It outranks the gated sentence `_stall_reason_from_walk` may have produced, because a
+        # prerequisite awaiting approval is cleared by exactly this action; and it yields to
+        # `unstaffed`, which by F64's rule names a step the flow tried to take and could not.
+        stall_reason = _landing_stall_reason(len(awaiting_landing))
     return FiringDecision(
         kind=DECISION_STALLED,
         stall_reason=stall_reason,
@@ -1630,6 +1674,21 @@ async def _loop_stall_reason(session: AsyncSession, loop: Loop, *, agent: str) -
     """
     _, gated = await _first_startable_candidate(session, loop, agent=agent)
     return await _stall_reason_from_walk(session, loop, gated)
+
+
+def _landing_stall_reason(count: int) -> str:
+    """What a documentless loop says when its finished work is waiting on the operator (D5).
+
+    A queue-level stall rather than an `unstaffed` entry, because that is what it is: no step
+    failed, and the loop is not short of an agent. It names the action, because the sentence it
+    replaces named none and left the operator with nothing to do.
+    """
+    subject = "1 finished task is" if count == 1 else f"{count} finished tasks are"
+    them = "it" if count == 1 else "them"
+    return (
+        f"loop queue is stalled: {subject} waiting for you to land {them}. A loop does not review "
+        f"its own agent's work, so approving is what puts it in the product."
+    )
 
 
 async def _stall_reason_from_walk(
@@ -1967,14 +2026,18 @@ async def _compose_loop_briefing(
     survive or not depending on how much the previous agent wrote, which is the one thing an
     instruction about stopping must not depend on.
 
-    **What separates the two wordings is what is true, not which tool created the loop.** Nothing in
-    `decide_firing` or `resolve_reviewer` consults `spec_document_id` — width and review by a
-    non-author apply to every loop, and rung 2 of the ladder is written to work with nothing
-    configured. So "finish and stop" is stated for *all* of them, because it is true of all of them,
+    **What separates the two wordings is what is true, not which tool created the loop.** So "finish and stop" is stated for *all* of them, because it is true of all of them,
     and only a flow is told its work comes from a document and will be reviewed by somebody else.
     Telling a single-agent loop that somebody will review its work is the false claim task 8.2
     exists to prevent, and it is false for a document-less loop that happens to be alone in its
     project. See `design.md`'s open question on whether the tier should gate behaviour at all.
+
+    **That used to rest on `decide_firing` consulting nothing, and no longer does**
+    (`approval-waits-for-the-turn-to-end`, design D5). Its review arm is now reached only by a
+    loop that declares a document, so the wording above is not merely *true of* a documentless
+    loop — it is what the scheduler does. The `is_review` arm below stays reachable for one
+    anyway: the F70 recovery carries a wedged `under_review` row to the ladder whatever the
+    loop declares, and a reviewer staffed that way reads this briefing.
 
     **`is_review` is the third statement of that same rule** (`a-flow-briefing-names-its-contract`,
     F143). It used to be computed at both call sites, passed to `_briefing_checkpoint` on one line

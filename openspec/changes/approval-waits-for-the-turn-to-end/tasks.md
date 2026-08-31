@@ -85,23 +85,23 @@ Round 2 answered this at the source (design D9): **it does.** `_targets` does no
 
 ## 5. A loop stops entering the review arm
 
-- [ ] 5.1 Test the `agent-loops` scenarios: a loop's completed task is not selected for review; no
+- [x] 5.1 Test the `agent-loops` scenarios: a loop's completed task is not selected for review; no
   firing reports a missing commit to review; the unstaffed report stays empty for it; a flow's
   review leg is unchanged.
-- [ ] 5.2 Implement the exclusion at the selection site in `scheduler.py` (design D5), not inside
+- [x] 5.2 Implement the exclusion at the selection site in `scheduler.py` (design D5), not inside
   `commit_for_task_review`. **On the fresh-review branch only** (round 3): the same block is reached
   by `wedged_review` rows carried down from `scheduler.py:1299-1356`, which is the F70 recovery of a
   task already in `under_review` under its own author's name. That path deliberately records no
   `in_flight` entry (`:1349`), so a wholesale exclusion would drop such a row out of the walk in
   total silence.
-- [ ] 5.3 Make sure the loop's completed task does not reach `unstaffed` — it is not a step anything
+- [x] 5.3 Make sure the loop's completed task does not reach `unstaffed` — it is not a step anything
   failed at.
-- [ ] 5.4 **And does not fall to the generic stall sentence either** (round 3). Without the arm,
+- [x] 5.4 **And does not fall to the generic stall sentence either** (round 3). Without the arm,
   `_stall_reason_from_walk` emits *"no claimable task among 1 open (1 completed)"*
   (`scheduler.py:1668`) — F142's measured-live sentence, re-earned for loops on the day it is removed
   for flows. Give the firing a stall reason that names the completed work as waiting for the
   operator's landing action. Test it.
-- [ ] 5.5 **Move the flow fixtures onto documents** (round 3, and this is the item task 5.4 used to
+- [x] 5.5 **Move the flow fixtures onto documents** (round 3, and this is the item task 5.4 used to
   understate). Five test files construct `Loop(...)` with no `spec_document_id` and assert the review
   arm through `decide_firing`: `test_actor_aware_claimability.py` (`:428`),
   `test_a_flow_names_what_it_cannot_staff.py`, `test_review_dispatch_staffs_the_task.py`,
@@ -109,7 +109,7 @@ Round 2 answered this at the source (design D9): **it does.** `_targets` does no
   subject is a **flow** requirement, the fixture declares a document — the exclusion is not weakened
   to keep a fixture passing. Where the subject is genuinely a loop, the expectation changes with this
   requirement. Say in each which of the two it was.
-- [ ] 5.6 Assert the two things D5 does **not** remove (round 3): the operator can still start a
+- [x] 5.6 Assert the two things D5 does **not** remove (round 3): the operator can still start a
   review of a loop's completed task by hand (`task-lifecycle-governance:1481`), and a loop's
   `under_review` row wedged under its own author still recovers through the ladder without moving
   status (`:317`).
