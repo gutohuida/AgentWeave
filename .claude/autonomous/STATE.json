@@ -12,7 +12,7 @@
   "iteration": 10,
   "log_file": ".claude/autonomous/2026-08-31-the-turn-must-end-first-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
-  "green_at_arming": "Iteration 10 ran the WHOLE hub suite in two file chunks, `pytest tests/` (440 passed, 3 skipped), `npx vitest run` whole (142 files, 1469 passed), mypy src/ (22 files clean), and all three gating linters plus eslint. See the log entry for the chunk numbers. The tree is green.",
+  "green_at_arming": "Iteration 10 ran the WHOLE hub suite in THREE file chunks: 3,806 passed, 12 skipped, 1 xpassed, 0 failed -- iteration 6's 3,783 plus exactly the 23 tests this iteration added. Plus `pytest tests/` 440 passed / 3 skipped, `hub/tests/browser` 72 skipped (no browser here), `npx vitest run` WHOLE 142 files / 1,469 passed, `mypy src/` clean, and all three gating linters plus eslint. TWO MEASUREMENT TRAPS, both hit and both recorded in the log: a range-based chunk split (`sed -n '61,200p'`) silently dropped 40 of 240 files and reported a plausible total that only failed to reconcile against iteration 6's number -- use an unbounded upper bound; and running two pytest processes CONCURRENTLY produced one F109-shaped failure (test_agent_trigger.py::test_spawn_failure_marks_run_failed) that does not reproduce serially or at file scope. The in-memory database makes concurrency safe, not free.",
   "known_flakes": [
     "F109: the hub suite shares one database connection per session and the retry chain can stall on it. If a test fails once and passes alone, suspect this before suspecting your change.",
     "test_relocate_repairs_and_redrains_queued_work was flaky and was fixed (d916861). A recurrence is a real finding."
@@ -215,5 +215,5 @@
     "The feature freeze's parameters, still unsettled.",
     "The release roadmap's Phase 1 decision list still offers F122's 'change nothing, surface it loudly' option, which is NOT viable -- it leaves task-lifecycle-governance:638 breached. The published artifact at https://claude.ai/code/artifact/5f126f3b-01a7-49a2-ac7c-180570aa8c81 has not been corrected."
   ],
-  "last_heartbeat": "2026-08-31T15:15:26+0100"
+  "last_heartbeat": "2026-08-31T15:36:09+0100"
 }

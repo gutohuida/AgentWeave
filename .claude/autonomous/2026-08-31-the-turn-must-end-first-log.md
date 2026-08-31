@@ -1336,10 +1336,40 @@ layer down.
 | `ruff check src/ hub/ tests/` | clean |
 | `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` | 534 files unchanged |
 | `hub/tests` — gate + integration chunk (6 files) | 119 passed |
-| Whole hub suite, in two file chunks | see below |
+| Whole hub suite, in three file chunks (see below) | **3,806 passed, 12 skipped, 1 xpassed, 0 failed** |
 | `cd hub/ui && npm run lint` | clean |
 | `cd hub/ui && npx vitest run` | 142 files, **1469 passed**, 0 failed |
 | `t_f155_conflict_remedy.py` against 8011 from this branch | **23/23** |
+
+### The suite numbers, and a counting error worth not repeating
+
+Whole hub suite, **3,806 passed, 12 skipped, 1 xpassed, 0 failed** — which is iteration 6's 3,783
+plus exactly the 23 tests this iteration added.
+
+| Chunk | Files | Result |
+|---|---|---|
+| 1 (`test_a*`–`test_l*`) | 60 | 929 passed, 1 xpassed |
+| 2 | 140 | 2,245 passed, 10 skipped |
+| 3 | 40 | 632 passed, 2 skipped |
+| `hub/tests/browser` | 11 | 72 skipped (no browser on this machine) |
+| `pytest tests/` | — | 440 passed, 3 skipped |
+
+**Two mistakes in how that was measured, both mine, both caught before they became a false claim.**
+
+**The chunk split silently dropped 40 files.** `sed -n '61,200p'` was written against a guess at the
+file count; there are 240. Chunks 1 and 2 therefore covered 200 of 240 and reported a total that
+looked plausible — 3,173 — and the only thing that exposed it was the arithmetic not reconciling
+against iteration 6's 3,783. A range-based split needs its upper bound to be unbounded (`'201,999p'`),
+or it reports coverage it did not have. **This is the same failure shape as everything else this
+iteration found: a plausible number that nobody checked against the thing it was supposed to equal.**
+
+**Chunks 1 and 2 were run concurrently, and chunk 1 produced one failure that does not reproduce.**
+`test_agent_trigger.py::test_spawn_failure_marks_run_failed` failed in the concurrent run, passed
+alone, and passed at file scope (44 passed). Re-run serially, chunk 1 is **929 passed, 0 failed**.
+That is the F109 pattern the STATE file warns about, and running two pytest processes at once is
+what invited it. The in-memory database makes concurrency *safe*, not *free*: a spawn-failure test
+is timing-shaped. Chunk 1's serial number is the one reported above; the concurrent run is recorded
+here rather than quietly discarded.
 
 ### Where the branch stands
 
