@@ -150,6 +150,23 @@ Six pieces. Four are small.
 | **P5** | A cycle-branch rule (below), enforced by the FILL run's first iteration | small |
 | **P6** | The DECIDE session's own skill, so "today's review" is one command | medium |
 | **P7** | `AgentWeaveResearch` — a third task, `ai-digest`-patterned, in `auto` mode (D8) | medium |
+| **P8** | `arm-cycle.ps1` + two persistent arming tasks — without them this is not a loop (D9) | medium |
+
+### D9 — the windows are armed daily by two more tasks, taken 2026-09-01 while building
+
+The design above quietly assumed the two windows would keep firing. They will not: the iteration
+driver **unregisters itself** at its stop time, which is correct for the one-off overnight runs it
+was built for and fatal for a daily cycle. Without something to arm them again, "every day" is a
+manual ritual — the exact thing the operator asked to be rid of.
+
+So the loop is **five** tasks, not three: three persistent (`AgentWeaveResearch`,
+`AgentWeaveArmDay`, `AgentWeaveArmNight`) and two transient windows that the arming tasks register
+and that unregister themselves. Keeping the windows transient is what stops a dead loop from firing
+into an empty queue forever.
+
+*Rejected:* making the driver's trigger daily and dropping the self-unregister. It is a smaller
+diff and it removes the one mechanism that reliably stops a broken run — measured behaviour that
+28 previous runs depend on.
 
 ### D8 — research is a separate task, taken 2026-09-01 while building
 
