@@ -224,6 +224,6 @@ and it is what settles the judgement half of this change.*
 - [x] 8.5a Grep the hub suite for `"the one that completed"` after 3a lands. Any assertion still
   expecting that clause on an operator-completed path is a sentence this change was supposed to fix
   and did not.
-- [ ] 8.6 Commit naming F142. Note in the message that the string assertions are not proof of the
+- [x] 8.6 Commit naming F142. Note in the message that the string assertions are not proof of the
   judgement half — whether staffing a review for operator-completed work is right is settled by
   `DRIVE-1`, not by a green suite.

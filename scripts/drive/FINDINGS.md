@@ -11834,16 +11834,67 @@ records `ALREADY_INTEGRATED` — which `is_retryable` classifies as **not retrya
 ("describes a fact a repeat cannot alter"). The work is then stranded: the task is `approved`, the
 integration row says the commit was already in, and the screen offers no button.
 
-**What is measured and what is not.** The window is measured — twice, at 6-second polling
-granularity, on both lanes. The consequence above is **read from the code, not driven**: on both
-runs the approval inside the window was refused for an unrelated reason (the 403/409 pair below), so
-no integration row was written. Driving it means approving while the agent is still mid-turn, which
-is the next thing to do to this finding.
+### DRIVEN 2026-08-31 — the consequence reproduces exactly as read, and the window is agent-controlled
 
-**How likely is an approval in that window?** By hand, unlikely. By a flow's next firing, no —
-firings are minutes apart. The realistic route is an operator watching the board react to a task
-flipping to `completed` and pressing approve, and any automation that approves on a status change.
-The window is one turn-teardown wide, seconds to tens of seconds.
+`t_f162_window.py`, two lanes against `proj-60c8c49372ce` on 8011, on a Hub restarted from this
+branch. Everything above this section was inference from the code; everything below it was measured.
+
+**Lane 1 — the consequence. 11/11 held, outcome `REPRODUCED`.** A loop with the declaration
+omitted, one task, fired by hand, `GET /tasks` polled every **1 second**, and the instant the task
+read `completed` the three transitions F163 documents were fired back to back with no settle:
+
+```
+t+ 45.78s  task reads 'completed'  tip=4be8dba25c1d (== the base commit)  busy=['alpha']
+t+ 45.81s  hop 1 assignee -> null   200
+t+ 45.84s  hop 2 -> under_review    200
+t+ 46.42s  hop 3 -> approved        200      <- the transition that integrates
+```
+
+**Nothing refused it.** All three hops answered 200 with `alpha` still mid-turn; the 403/409 pair
+that blocked the two earlier attempts was an artefact of doing them in one PATCH, not a guard on a
+live run. The integration row the approval wrote:
+
+```json
+{"commit_sha": "4be8dba25c1dba86f9731554bee4b78b5d7ea960",
+ "source_branch": "agentweave/task/task-a062baa837f4", "target_branch": "master",
+ "outcome": "skipped", "reason": "4be8dba25c1d is already in master; there was nothing to merge",
+ "retryable": false}
+```
+
+`4be8dba25c1d` **is** the base commit — the merge target resolved to the commit the branch was cut
+from, exactly as the paragraph above predicted. Then the turn ended, the snapshot landed, and the
+repository was asked rather than the row: branch tip `26978ce7bd78`, and `git show master:f162_*.py`
+answers **absent**. The task sits at `approved`, `retryable` is `false`, and there is no button.
+**The work is stranded, and it is stranded silently — the screen shows an approved task.**
+
+**Lane 2 — how wide is the window. 4/4 held.** Lane 1's window was under a second, because there
+the agent's *last* act was `update_task` and the snapshot followed immediately. That is the narrow
+end and it is not the interesting one. The window runs from `update_task(completed)` to the **end of
+the turn**, so its width is whatever the agent does next — which the product does not constrain at
+all. Lane 2 asked for an ordinary three-step turn (build the file, mark the task done, then write a
+second file and read both back):
+
+```
+t+  17.48s  task reads 'completed'   tip=4be8dba25c1d (== base)   busy=['alpha']
+t+  27.95s  the snapshot arrived     tip 60a227c0e9cf
+```
+
+**10.5 seconds**, the whole of it with the task readable as `completed` and approvable by anyone
+looking at the board. Nothing bounds it: an agent that marks its task done and then spends two
+minutes tidying holds the window open for two minutes. Approving after the turn ended merged
+`60a227c0e9cf` normally, so the ordinary path is unaffected — the defect is entirely in the window.
+
+**So the likelihood assessment above was too kind.** It is not a sub-second race an operator would
+have to be lucky to hit; it is a window the *agent* sizes, in which the board says the task is
+finished and approval is accepted without complaint. Any automation approving on a status change
+hits it every time.
+
+**Where the repair belongs is not settled here.** Three candidates, none driven: refuse the
+`-> approved` transition while the task's agent has a live run (cheapest, but it makes approval
+depend on run state, which nothing else does); resolve the merge target *after* the turn's snapshot
+rather than at transition time; or make `ALREADY_INTEGRATED` retryable when the source branch has
+moved since the row was written (narrowest, and it leaves the operator holding a button they have
+no reason to press).
 
 ## F163 (D) — landing a loop's work costs the operator three hand transitions, and two of them are refusals
 

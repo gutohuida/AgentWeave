@@ -218,7 +218,7 @@
 - [x] 7.6 `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/
   hub/tests/ tests/`.
 - [x] 7.7 `openspec validate approval-refuses-unaccepted-evidence --strict`.
-- [ ] 7.8 Commit.
+- [x] 7.8 Commit.
 
 ## 8. Not in this change — recorded so it is not silently absorbed
 

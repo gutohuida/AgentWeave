@@ -2104,3 +2104,141 @@ in `test_task_worktrees.py`/`test_tasks.py` — and then **every file from there
 standing alone: 235 passed, 2 skipped, in 84 seconds.** So the tail is not broken; it stalls only
 behind the other 3600. Then the whole suite was run again from scratch, and that run is the green
 one above. A single green full run is the claim, not two partial ones stitched together.
+
+---
+
+## Iteration 16 — 2026-08-31 06:39 to 07:0x (+01:00) — `F162-DRIVE`: **the window is real, and the agent sizes it**
+
+**Item:** `F162-DRIVE`, the last thing in the queue. **Status: done. Outcome: REPRODUCED** — the
+consequence F162 read off the code happens exactly as read, and lane 2 found the finding's own
+likelihood assessment had been too kind to the product.
+
+### The Hub on 8011 was fresh, for the first time in three iterations
+
+PID 28908, started **05:10**, and **zero** `.py` files under `hub/hub` or `src/` are newer than it.
+Iteration 15 restarted it after D-IMPL and nothing has touched product code since. Checked first,
+as the state file demands; this time it was already right.
+
+### `t_f162_window.py` — two lanes, 11/11 and 4/4
+
+New harness, reusing `t_drive2_loop_lands.py`'s helpers, against the same fresh project
+`proj-60c8c49372ce`. Both lanes on a loop with the declaration **omitted**, because that is the
+population where `merge_targets` resolves the branch tip — which is exactly the thing F162 says is
+stale inside the window.
+
+**LANE 1 — the consequence. `REPRODUCED`.** `create_loop` driven by a real `alpha` turn, one task,
+fired by hand, `GET /tasks` polled every **1 second**, and the instant the task read `completed` the
+three transitions F163 documents were fired back to back with no settle in between:
+
+```
+t+ 45.78s  task reads 'completed'  tip=4be8dba25c1d (== the base commit)  busy=['alpha']
+t+ 45.81s  hop 1 assignee -> null   200
+t+ 45.84s  hop 2 -> under_review    200
+t+ 46.42s  hop 3 -> approved        200      <- the transition that integrates
+```
+
+**Nothing refused it.** All three answered 200 with `alpha` still mid-turn, so the second of the
+three possible outcomes — *the product already guards this* — is dead. The 403/409 pair that
+blocked the two earlier attempts came from doing the hops in one PATCH, not from a guard on a live
+run. The integration row the approval wrote names `4be8dba25c1d`, which **is** the base commit:
+`"outcome": "skipped", "reason": "4be8dba25c1d is already in master; there was nothing to merge",
+"retryable": false`. Then the turn ended, the snapshot landed, and the **repository** was asked
+rather than the row: branch tip `26978ce7bd78`, `git show master:f162_064157.py` → **absent**. The
+task sits at `approved`, and there is no button. The work is stranded, silently, behind a screen
+that says approved.
+
+**LANE 2 — how wide is the window, which nobody had measured.** Lane 1's window was under a second,
+because there the agent's *last* act was `update_task` and the snapshot followed immediately. That
+is the narrow end and it is not the interesting one. The window runs from `update_task(completed)`
+to the **end of the turn**, so its width is whatever the agent does next — and the product
+constrains that not at all. Lane 2 asked for an ordinary three-step turn (build the file, mark the
+task done, *then* write a second file and read both back) and polled the git ref every second:
+
+```
+t+  17.48s  task reads 'completed'   tip=4be8dba25c1d (== base)   busy=['alpha']
+t+  27.95s  the snapshot arrived     tip 60a227c0e9cf
+```
+
+**10.5 seconds**, every one of them with the task readable as `completed` and approvable by anyone
+looking at the board. Approving after the turn ended merged `60a227c0e9cf` normally, so the ordinary
+path is untouched — the defect lives entirely in the window.
+
+### What that changes about the finding
+
+F162's own paragraph said an approval in the window was *"by hand, unlikely"*. That was written when
+the window was assumed to be one turn-teardown wide. It is not: it is **agent-sized**, and an agent
+that marks its task done and then spends two minutes tidying holds it open for two minutes. Any
+automation that approves on a status change hits it every time. The finding is rewritten with both
+lanes' evidence and three candidate repairs, **none driven and none implemented** — where the repair
+belongs is a design question (refuse the transition while a run is live / resolve the merge target
+after the snapshot / make `ALREADY_INTEGRATED` retryable when the source branch has moved), and this
+run does not have the rounds left to settle it.
+
+### Housekeeping
+
+`openspec validate --strict` is valid on **all four** changes on this branch. Two genuinely-done
+bookkeeping tasks were ticked (`approval-refuses-unaccepted-evidence` 7.8 *Commit*, and
+`a-review-a-flow-cannot-staff-is-named` 8.6 *Commit naming F142* — both commits exist on the
+branch). The three items still unticked in `approval-refuses-unaccepted-evidence` section 8 are
+**deliberate scope markers** headed *"Not in this change"*, not unfinished work; 8.3 is the one with
+anything left in it, and it is an observation to make during a UI drive.
+
+Fixture left clean: both jobs archived, both agents idle, checkout clean, nothing queued, no
+permission card pending, and `master` in the fixture carries the lane-2 merge.
+
+---
+
+## The branch, offered
+
+**`autonomous/2026-08-31-the-flow-lands-its-work` is ready for the operator.** Everything queued is
+done, the suite is green, and the headline is driven rather than argued.
+
+**What it does.** The exploration `openspec/explorations/2026-08-30-why-a-flow-cannot-land-its-work.md`
+named seven breaks between a flow's approval and the main branch. This branch closes all seven,
+across four openspec changes, each through the full three-round discipline before a line was
+implemented:
+
+| Change | Breaks | Findings |
+|---|---|---|
+| `a-flow-briefing-names-its-contract` | 2, 3 | F140, F143 |
+| `a-review-a-flow-cannot-staff-is-named` | 4 | F142 |
+| `approval-refuses-unaccepted-evidence` | 5, 6 | F122, F152 |
+| `a-loop-declares-whether-it-needs-evidence` | 1, 7 | F124 |
+
+All four validate `--strict`. Every task is ticked except three deliberate *"not in this change"*
+markers.
+
+**What was proven, in the repository rather than in the Hub's account of itself.** Two end-to-end
+drives on fresh projects, every real agent turn on Haiku:
+
+- **A flow lands its work.** `t_drive1_flow_lands.py`: document → materialised task → staffed →
+  worked → evidence naming a commit → reviewed by a **non-author** → approved by its reviewer with
+  nobody's hand on it → merged into `master`.
+- **A loop lands its work.** `t_drive2_loop_lands.py`, 29/29: declaration omitted → `NULL` on the
+  row → branch tip merged → `def power` present in `git show master:...`; declaration `True` →
+  nothing merges and the reason is the **evidence** one, not the no-branch one; the operator's route
+  refuses the field on a non-loop and on any PATCH; and the retry button driven **both** ways in one
+  lane. F124 is dead.
+
+**Suite at the offer.** `hub/tests/` 3751 passed / 84 skipped / 1 xpassed (20:43); `tests/` 440
+passed / 3 skipped; `ruff`, `black --target-version py311` and `mypy src/` clean. Green on the
+second attempt — the first stalled at 95% with zero CPU movement, which is **F109**, the known
+flake, firing for the first time in three full runs.
+
+**What the operator inherits, unfixed and filed with evidence.** None of these is a regression this
+branch introduced; all were found by driving it.
+
+- **F154** — a reviewer that loops on `ToolSearch`, writes its verdict in prose and never calls
+  `update_task`, after which every firing answers a false-healthy 409 with both agents idle and the
+  task wedged at `under_review`. **Two consecutive drives**, so its cause is no longer fairly called
+  intermittent.
+- **F155** — two parallel tasks appending to one file is the *shape* of a flow's work. Whichever
+  lands first makes the other unmergeable, and the refusal's remedy (*"resolve the conflict on the
+  branch, then approve"*) cannot be followed by anybody.
+- **F162** — driven this iteration, above. Agent-sized window, silent strand.
+- **F161** — a loop declaring its work needs no evidence still stalls staffing a review, because
+  `commit_for_task_review` resolves the review commit from evidence and nothing else.
+- **F163** — landing a loop's work costs three hand transitions, two discovered as refusals.
+- **F156**, **F157**, **F158**, **F164** — as filed.
+
+**This run does not merge.** The branch is pushed; the merge is the operator's.
