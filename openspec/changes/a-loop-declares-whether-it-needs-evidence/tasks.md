@@ -61,24 +61,24 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
 
 ## 3. The declaration on the way in
 
-- [ ] 3.1 `JobCreate.work_needs_evidence: Optional[bool] = None` in `hub/hub/schemas/jobs.py`, beside
+- [x] 3.1 `JobCreate.work_needs_evidence: Optional[bool] = None` in `hub/hub/schemas/jobs.py`, beside
   the three loop-opt-in fields, with a comment saying it is a loop field that does **not** opt a job
   in (design D4).
-- [ ] 3.2 `hub/hub/api/v1/jobs.py` `create_job`: write it onto the `Loop` row inside the existing
+- [x] 3.2 `hub/hub/api/v1/jobs.py` `create_job`: write it onto the `Loop` row inside the existing
   `if _loop_opts_in(...)` block. **Do not touch `_loop_opts_in` itself** (`jobs.py:103-105`).
-- [ ] 3.3 Same route: **refuse** the field where it is supplied and the job is not opting into a
+- [x] 3.3 Same route: **refuse** the field where it is supplied and the job is not opting into a
   loop (design D4). There is no existing check to extend — `create_job` reads `spec_document_id` only
   inside `if _loop_opts_in(...)`, so a loop field on a non-loop create is silently dropped today, and
   only the `PATCH` path rejects. Write the refusal here, and do **not** change how
   `spec_document_id` is treated; if that asymmetry looks wrong while implementing, file it.
-- [ ] 3.4 `JobUpdate.work_needs_evidence: Optional[bool] = None` **and a refusal in the PATCH route**
+- [x] 3.4 `JobUpdate.work_needs_evidence: Optional[bool] = None` **and a refusal in the PATCH route**
   (design D3), naming why the declaration is fixed at creation. Accepting it silently, or 422-ing on
   an unexpected field, are both worse: the first changes what approval writes mid-queue, the second
   says nothing about what to do instead.
-- [ ] 3.5 `LoopSummary` in `hub/hub/schemas/jobs.py` gains `work_needs_evidence: Optional[bool] =
+- [x] 3.5 `LoopSummary` in `hub/hub/schemas/jobs.py` gains `work_needs_evidence: Optional[bool] =
   None`, populated by `_batch_loop_summaries` — the operator cannot see a fact that decides what their
   main branch receives unless it is on the shape every loop route already returns.
-- [ ] 3.6 Tests in `hub/tests/test_jobs_crud.py`: created with `True`, with `False`, and omitted (NULL
+- [x] 3.6 Tests in `hub/tests/test_jobs_crud.py`: created with `True`, with `False`, and omitted (NULL
   in all three columns' sense — assert the stored value is `None`, not `False`); the PATCH refusal;
   the not-a-loop refusal.
 
