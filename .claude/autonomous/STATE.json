@@ -220,5 +220,5 @@
     "The release roadmap's Phase 1 decision list still offers F122's 'change nothing, surface it loudly' option, which is NOT viable -- it leaves task-lifecycle-governance:638 breached. The published artifact at https://claude.ai/code/artifact/5f126f3b-01a7-49a2-ac7c-180570aa8c81 has not been corrected.",
     "F165's SECOND bound, measured 2026-08-31 (iteration 16, at the source): the 'unknown line of work' sentinel has two spellings. read_footprint's `at` arm yields \"\" via _branch_at; its no-`at` arm yields the literal \"HEAD\" on a detached HEAD. detect_drift (requirement_evidence.py:1064-1069) unifies both; integration_targets (task_integration.py:283-286) guards neither, so they reach the merge reduction as two distinct keys. This answers the prior iteration's open unknown: the branch-unknown class IS reachable through the plain agent route, not only F71's named-sha route -- and that arm never calls _branch_at, so a repair scoped to that function cannot reach it. Still severity B, still unfixed, still unqueued."
   ],
-  "last_heartbeat": "2026-08-31T16:26:13+0100"
+  "last_heartbeat": "2026-08-31T15:46:30+0100"
 }
