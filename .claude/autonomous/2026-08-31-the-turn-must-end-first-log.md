@@ -1092,3 +1092,121 @@ whether the scenarios are drivable. One thing round 2 checked in passing and rou
 to re-derive: `evaluate` excludes the acting run from the liveness check (`requirement_gate.py:468`),
 so an agent approving inside its own turn is not refused as `unfinished` — the new scenarios are
 drivable in a single turn.
+
+---
+
+## Iteration 9 — 2026-08-31T14:41+01:00 — F155-R3: the repair reproduced the defect twice
+
+**Position on arrival.** Branch `autonomous/2026-08-31-the-turn-must-end-first` at `5d51c3f`, tree
+clean, `git log` matching STATE.json exactly — iteration 8's round 2 at `8035b5f`, branch released.
+Clock read **14:34**, inside the 15:30 window, so `next_action` was startable as written.
+
+**One unit of work.** `F155-R3` — round 3 on `a-conflict-refusal-names-what-clears-it`. A spec round
+only. No product code moved: the diff is four markdown files, 210 insertions.
+
+### (a) Does the modified requirement breach the shipped corpus? — No, but it must not land first
+
+Checked at the three places round 3 was pointed at, plus one it was not.
+
+| Shipped/pending requirement | Verdict |
+|---|---|
+| `:638 Approval integrates the approved work` — *"SHALL be the commit named by the task's accepted evidence footprints … and SHALL NOT be the agent's branch"* | **No breach.** The branch-tip route merges *the task's* branch, and `a-loop-declares-whether-it-needs-evidence` draws exactly that distinction itself: *"SHALL NOT merge any branch belonging to an agent"*, and *"Where evidence governs a task, this requirement SHALL NOT apply to it."* |
+| `:720 An integration that cannot proceed does not block approval` | **No breach.** Its enumeration of permitted excuses is about integration being *unattemptable*; a conflict is a separate shipped requirement and this change alters neither which approvals are refused nor why. |
+| `approval-refuses-unaccepted-evidence`'s ACCEPT_OR_GRANT rule | **No breach — and it turned into finding 2.** Reusing `ACCEPT_OR_GRANT` verbatim is what that requirement asks for. But the requirement beside it says something rounds 1 and 2 did not carry over. See below. |
+
+**What is real is an ordering constraint, now design D9 and task 6.4a.** The modified requirement's
+whole discriminator is *where the judged commit came from*, and one of its two answers is the task's
+own branch tip. **No shipped requirement in `openspec/specs/` describes that route** — it is ADDED by
+`a-loop-declares-whether-it-needs-evidence`, which is implemented in code (`merge_targets` has both
+routes, `task_integration.py:385-409`) but still sits unarchived. Synced first, this change would
+state a rule naming a route the corpus does not establish, beside `:638` which appears to forbid it,
+legible only to a reader who knows to go and read an unarchived change.
+
+### (b) Is prose alone enough? — Yes, and two more keys the gate already holds
+
+Round 3's answer to the question round 2 was asked to leave open: the gate needs **no new query and
+no new join**. Everything the reader needs is already on `Target`. But two of those fields are being
+dropped on the floor, and the change as written keeps dropping them.
+
+**Finding 1 — the remedy tells the reader to put the resolution on `master`.** Round 2's delta says
+the refusal *"SHALL say that the resolved commit must be on the branch it names"*. `_merge_detail`
+reads exactly one branch key, `target_branch` (`requirement_gate.py:172`), which `_check_mergeable`
+sets to `situation.main_branch` (`:346`). `source_branch` is written into the structured half
+(`:345`) and **never reaches the prose**. So today the only branch that sentence names is the main
+branch, and a reader taking round 2's phrase at its word is being told to do the opposite of the
+remedy — the change reproducing its own defect, one layer down, for the second consecutive round.
+Now design D8: the requirement requires the source branch be named distinctly, and phrases the
+condition against that one rather than an ambiguous "it". Round 2 had put the naming into a
+*scenario*; a scenario checks behaviour a requirement states, it is not where the statement lives.
+
+**Finding 2 — the branch may not be the reader's, and the module already knows.** `_targets` reaches
+evidence through `TaskRequirementLink` (`task_integration.py:244`), and says so in its own docstring:
+*"if that evidence were accepted, it is this task's integration that would merge its commit"*
+(`:228-230`). So the judged commit may have been recorded by **another task**, on a branch that under
+per-task isolation the reader has no checkout of. `_check_unaccepted` carries `recorded_by_task` and
+`recorded_by_another_task` for precisely this (`requirement_gate.py:383-386`) and
+`_unaccepted_detail` renders it (`:198-199`); `approval-refuses-unaccepted-evidence` states it as a
+requirement, and states it **in terms of integration rather than acceptance** — *"that evidence's
+commit is part of what this task's approval merges … a fact with no route back to its cause."*
+`_check_mergeable` carries neither key. That cost nothing while the sentence asked for nothing
+branch-specific; **this change is what makes it cost something**, because the new remedy asks the
+reader to resolve *on* that branch and record *from* it. Unfollowable a third time, in the change
+about unfollowable remedies. Now design D7 and tasks 2.2a/2.2b/3.3b — two keys from
+`Target.task_id`, and a deliberate refusal to prescribe whom the reader should then approach, since
+that judgement is not the refusal's to make.
+
+### Distrusting round 2's own material
+
+D6's two properties re-derived and **both hold** — `newest[target.branch]` keys on branch alone
+(`task_integration.py:283-286`) and `observed_at` is untouched by `_apply_footprint`. D2a's facts 1
+and 3 hold as written.
+
+**D2a fact 2 does not, quite — finding 3.** Round 2 wrote that an agent's footprint is *"always"*
+`abbrev-ref HEAD` *"in the worktree it was given — which is checked out on the task branch"*. Which
+directory that is, is `footprint_root`'s answer, and it has three
+(`requirement_evidence.py:334-340`): the recorded run directory **only while it still exists**, then
+the per-agent checkout, then `workspace.root` — which is on the **main** branch. Its own docstring
+names both fallbacks as live, including *"a task checkout that has since been released, whose
+directory is gone by design"*. On either, the fresh footprint carries a branch the stale row does
+not, `newest` gains a second key instead of overwriting, and the refusal stands — round 2's operator
+failure, reached from the agent route it declared safe.
+
+This does not overturn round 2's remedy; it is *why* that remedy is a condition on where the
+recording is done from. What it overturns is what may be **claimed**: nothing may tell an agent the
+branch takes care of itself, and no test may assert it as an invariant. The live drive cleared the
+refusal because the agent was mid-turn on the task it was approving, so its worktree existed — a fact
+about that drive, not a guarantee. Now D2a's new subsection and task 1.3c.
+
+### (c) Are the scenarios drivable?
+
+All of them, and the two that needed a precondition named now have one. *Following the stated remedy
+clears the refusal* depends on finding 3's precondition, which 1.3c holds separately. *A judged
+commit that has left its branch* is reachable exactly as the drive reached it — `reset --hard` then
+`rebase` leaves the accepted commit orphaned while it still conflicts with master. *An undeterminable
+branch* is `_branch_at`'s `""`. Round 2's note that `evaluate` excludes the acting run
+(`requirement_gate.py:468`) was taken as given and not re-derived, as instructed.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `openspec validate a-conflict-refusal-names-what-clears-it --strict` | valid |
+| Every new `file:line` citation, resolved against the source | 16 checked; **2 corrected** — `_targets`' `TaskRequirementLink` join is at `:244`, not `:236-243`, and its docstring sentence at `:228-230`, not `:227-229` |
+| Product code moved | none — `git diff --name-only` matches no path under `src/`, `hub/hub/`, `hub/ui/` or `scripts/` |
+| `git status` | clean after commit |
+
+Linters and the suite were not run: no Python or TypeScript moved and CI lints no markdown.
+Iteration 6's whole-suite run (3,783 passed, 0 failed) still describes this tree.
+
+### Where the branch stands
+
+`approval-waits-for-the-turn-to-end` remains complete, driven and offered. **`F155` now has all
+three rounds and is ready to implement.** Implementation is `F155-IMPL` and belongs to a later
+firing; the 15:30 rule forbids starting an implementation group after that hour, and the operator's
+instruction is that the remaining time belongs to a drive rather than to more spec work.
+
+Three things the implementer must not lose: the two new keys come from data already on `Target` and
+need no query (D7); the source branch must reach the **prose**, not only the structured half (D8);
+and nothing written may claim an agent's evidence lands on the task branch automatically (D2a). One
+constraint on landing: not into `openspec/specs/` before
+`a-loop-declares-whether-it-needs-evidence` is archived (D9, task 6.4a).

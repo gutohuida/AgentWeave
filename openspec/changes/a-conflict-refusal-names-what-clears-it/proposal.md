@@ -74,6 +74,17 @@ single-task fixture. That is why three rounds of spec review and 3,783 unit test
   commit on the branch the refusal names, the evidence recorded from that branch — which is what an
   agent does by construction and what an operator naming a sha in the locator has to arrange. See
   design D2a.
+- **The refusal names whose branch it is talking about — both of them, and which task recorded the
+  commit.** Round 3's two findings, and they are the same defect the change is about, reproduced in
+  its own repair. First: `_merge_detail` puts only `target_branch` into the prose
+  (`requirement_gate.py:172`), and that is the **main** branch — so round 2's *"the resolved commit
+  must be on the branch it names"* reads, to a reader taking it at its word, as an instruction to put
+  the resolution on `master`. The source branch has to be named, distinctly. Second: `_targets`
+  reaches evidence through `TaskRequirementLink`, so the judged commit may have been recorded by
+  **another task**, on a branch this reader has no checkout of — and a remedy that asks them to act
+  on it is unfollowable for a third reason. The gate already knows (`Target.task_id`) and the sibling
+  refusal already says it (`:383-386`), on a stated reason that is about integration rather than
+  acceptance. See design D7 and D8.
 - **The discriminator is a fact about the target, not about the project.** `Target.evidence_id` is
   populated on the evidence route by `_targets` (`task_integration.py:219-267`) and left `None` on
   the branch-tip route by construction (`merge_targets`, `:405-409`, whose comment says so). The
@@ -108,6 +119,12 @@ Stated explicitly, not by omission:
   this one is answerable for. If the rounds find that this change alters that answer, record it.
 - **F154 is not in scope**, and neither is the review briefing's silence about the evidence route.
   What an agent is told *before* it hits the gate is a real gap and a different change.
+- **The prose is not made to promise the branch takes care of itself.** Round 2 wrote that an
+  agent's footprint lands on the task branch by construction; round 3 found that is a precondition —
+  `footprint_root` falls back to the per-agent checkout and then to the project checkout, which is on
+  the main branch (`requirement_evidence.py:334-340`), and its own docstring names a released task
+  worktree as a live case. The remedy stays as round 2 wrote it, a condition on where the recording
+  is done from; what changes is that nothing may claim it is automatic. See design D2a.
 - **No new surface, no new route, no schema change.** `GateRefusal.unmergeable` is
   `List[Dict[str, Any]]` already and gains keys, not a type.
 

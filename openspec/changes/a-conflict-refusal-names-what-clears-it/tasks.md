@@ -27,6 +27,13 @@ Round 1 wrote these. Rounds 2 and 3 may rewrite any of them; nothing here is imp
 - [ ] 1.3b Assert the two properties D6 rests on, because the sentence is only true if they hold:
   fresh evidence for a **different** requirement on the same branch also supersedes, and a restamp
   of the stale row does not move it in the `observed_at` ordering.
+- [ ] 1.3c Assert round 3's correction to D2a, because round 2 stated it as a construction and it is
+  a precondition: with `Run.workspace_dir` absent or pointing at a released directory,
+  `footprint_root` (`requirement_evidence.py:334-340`) falls back to the per-agent checkout and then
+  to `workspace.root`, which is on the **main** branch. Record fresh evidence in that state and
+  assert it does **not** supersede -- `newest` gains a second key rather than replacing the first.
+  This is the same non-guarantee as 1.3a reached from the agent route, and the wording must not
+  promise it away. If it proves unreachable, delete it and say so.
 - [ ] 1.4 Confirm 1.1 and 1.2 fail for the stated reason by reading the failure output, not by
   assuming.
 
@@ -38,6 +45,13 @@ Round 1 wrote these. Rounds 2 and 3 may rewrite any of them; nothing here is imp
 - [ ] 2.2 Add the two keys in `_check_mergeable` (`hub/hub/requirement_gate.py:342-350`) from
   `Target.evidence_id`, with a comment naming `merge_targets`' two routes and why the provenance is
   per-target rather than per-project (design D1).
+- [ ] 2.2a Add `recorded_by_task` and `recorded_by_another_task` to the same entry, from
+  `Target.task_id` (`task_integration.py:263`), on the same terms `_check_unaccepted` already does
+  (`requirement_gate.py:383-386`) -- design D7. No new query: the value is already on the target.
+- [ ] 2.2b Test the attribution directly: evidence recorded by this task sets
+  `recorded_by_another_task` false; evidence recorded by a **different** task against a shared
+  requirement sets it true and carries that task's id. Build the shared-requirement shape for real
+  rather than by patching the flag -- the population is what is in doubt, not the boolean.
 - [ ] 2.3 Confirm no consumer breaks on the wider entry. Round 2 corrected round 1 here: no
   **product-code** consumer reads a key off `unmergeable`, but
   `scripts/drive/t_row17_integration.py:273-282` reads `commit_sha` and `paths` off the refusal
@@ -57,6 +71,16 @@ Round 1 wrote these. Rounds 2 and 3 may rewrite any of them; nothing here is imp
 - [ ] 3.3 Keep the branch-tip sentence's existing wording, and leave a comment saying it is
   deliberately unchanged because it is true on that route — so a later reader does not "fix" it into
   agreement with the other one.
+- [ ] 3.3a Name the **source** branch in the prose as well as the main branch, and phrase the
+  remedy's condition against the source branch rather than an ambiguous "the branch" (design D8).
+  Today `_merge_detail` reads only `target_branch` (`requirement_gate.py:172`), which is
+  `situation.main_branch`, so without this the remedy reads as an instruction to put the resolved
+  commit on the main branch. Test that both branch names appear and that the remedy's clause is
+  attached to the source one.
+- [ ] 3.3b Render the attribution where `recorded_by_another_task` is true, and word the remedy so it
+  does not address the reader as though the branch were theirs (design D7). Assert the same-task case
+  names no other task. Do **not** invent an instruction about whom to approach; the requirement
+  forbids it.
 - [ ] 3.4 Guard each optional piece independently (design D4); a missing `commit_sha` degrades to a
   sentence without one and never prints an empty sha.
 - [ ] 3.5 Update `hub/ui/src/__tests__/taskIntegration.test.ts:43-56`'s fixture message to the new
@@ -95,5 +119,12 @@ Round 1 wrote these. Rounds 2 and 3 may rewrite any of them; nothing here is imp
 - [ ] 6.2 `ruff check src/ hub/ tests/`; `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`; `mypy src/`.
 - [ ] 6.3 The Hub suite in chunks, and `cd hub/ui && npm run lint && npx vitest run` for the changed
   UI test.
+- [ ] 6.4a Do **not** sync or archive this change into `openspec/specs/` before
+  `a-loop-declares-whether-it-needs-evidence` is archived (design D9). This requirement's
+  discriminator names the branch-tip route, which that change ADDS and which no shipped requirement
+  describes today; landed first, it would sit beside
+  `openspec/specs/task-lifecycle-governance/spec.md:638` -- *"SHALL NOT be the agent's branch"* --
+  with the reconciliation only in an unarchived change. Round 3 checked and found no breach, only
+  this ordering.
 - [ ] 6.4 No UI source changed beyond a test fixture, so no bundle rebuild — confirm that rather than
   assume it.

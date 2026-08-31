@@ -101,7 +101,36 @@ at=…)`, never reaches `_branch_at`, and its branch is always `rev-parse --abbr
 worktree it was given — which is checked out on the task branch, the same value the stale row
 carries. `restamp_run_footprints` re-points the row at turn end with the same
 `abbrev-ref HEAD` (`:908`). Both writes agree, `newest[target.branch]` collapses them, the stale row
-is superseded. **Open question 1 is answered *yes* for the agent.**
+is superseded. **Open question 1 is answered *yes* for the agent** — but only while the
+precondition in 2a holds, which round 2 did not state.
+
+**2a. Round 3: that is a precondition, not a construction.** Round 2 wrote that an agent's branch is
+*"always"* `abbrev-ref HEAD` *"in the worktree it was given — which is checked out on the task
+branch"*. Which directory that is, is decided by `footprint_root`
+(`requirement_evidence.py:299-340`), and it has three answers:
+
+| Answer | When | Branch the footprint gets |
+|---|---|---|
+| `Path(recorded_dir)` (`:334-336`) | `Run.workspace_dir` was recorded **and the directory still exists** | the **task** branch — what the remedy needs |
+| `worktrees.existing_worktree(root, actor)` (`:340`) | no usable recorded dir | the **per-agent** checkout's branch |
+| `workspace.root` (`:340`, the `or`) | no per-agent worktree either | the **project** checkout, which is on the **main** branch |
+
+`footprint_root`'s own docstring names both fallbacks as live rather than theoretical: *"a run
+predating the column (never recorded), and a task checkout that has since been **released**, whose
+directory is gone by design (D5)"*. On either of them the fresh footprint carries a branch the stale
+row does not, so `newest: Dict[Optional[str], Target]` (`task_integration.py:283-286`) gains a
+**second key** instead of overwriting the first — both targets survive and the refusal stands. That
+is the same failure round 2 found on the operator route, reached from the agent route it declared
+safe. The third answer is the worst: the project checkout is on the main branch, so the fresh target
+is a commit that merges trivially and displaces nothing, while the stale one goes on refusing.
+
+This does not change the remedy. It is *why* the remedy is a condition on **where the recording is
+done from** rather than a promise that the branch takes care of itself — so round 2's rewrite
+survives its own correction. What it changes is what the change may claim: the wording must not tell
+an agent this is automatic, and no test may assert it as an invariant. In the population F155 was
+measured on the precondition does hold — the agent is mid-turn on the task it is approving, so its
+task worktree exists — which is why the live drive cleared the refusal. That is a fact about that
+drive, not a guarantee. Task 1.3c holds the distinction.
 
 **3. On the operator route it is not automatic, and that is the route the round-1 wording described
 most literally.** An operator whose `locator` is the resolved sha — exactly what *"record evidence
@@ -182,6 +211,94 @@ The reduction keys on `target.branch` alone, over every accepted footprint the t
 `TaskRequirementLink`. So the remedy does not require re-demonstrating the requirement the stale row
 demonstrated. The delta deliberately does not promise the narrower thing, because a reader who
 believed the requirement had to match would think themselves blocked where they are not.
+
+### D7 — The refusal says whose branch it is naming (round 3)
+
+**The remedy tells the reader to act on a branch that may not be theirs, and does not say so.**
+
+`_targets` reaches evidence through `TaskRequirementLink` (`task_integration.py:244`), so a
+requirement served by two tasks puts *another task's* footprint into this task's
+`integration_targets` — its own docstring says so: *"if that evidence were accepted, it is this
+task's integration that would merge its commit"* (`:228-230`). The `Target` that comes back carries
+`task_id=evidence.task_id` (`:263`). So the gate already knows, on every entry, which task recorded
+the commit it is refusing over.
+
+`_check_unaccepted` uses that. Its entries carry `recorded_by_task` and `recorded_by_another_task`
+(`requirement_gate.py:383-386`) with a comment giving the reason — *"A requirement may be served by
+more than one task, and this task's integration is what would merge that other task's commit — so
+the refusal has to say whose it is"* — and `_unaccepted_detail` renders it (`:198-199`).
+`approval-refuses-unaccepted-evidence` states it as a requirement, and states it in terms that are
+about **integration**, not about acceptance: *"a task can be refused over evidence recorded by
+another one — and would be, since that evidence's commit is part of what this task's approval
+merges … Naming only the requirement and the commit would show the reader a fact with no route back
+to its cause."*
+
+`_check_mergeable` (`:342-349`) carries neither key, and today that costs little, because today's
+sentence asks for nothing branch-specific. **This change is what makes it cost something.** The new
+remedy asks the reader to resolve a conflict *on the branch the refusal names* and to record
+evidence *from a checkout of it*. Where that branch belongs to another task, per-task isolation
+means the reader does not have it checked out and, in the ordinary case, has no worktree on it at
+all — so the remedy is unfollowable again, for a third reason, in the change about unfollowable
+remedies. Rounds 1 and 2 both wrote the remedy without noticing the population.
+
+So the entry carries `recorded_by_task` and `recorded_by_another_task` on the same terms the sibling
+category already does, and the sentence names the recording task where it is not this one. The
+wording stops short of prescribing what the reader should then do — that is a judgement between
+asking the other task's holder and asking the operator, and inventing a rule for it here would be
+this change guessing where it has just finished arguing that guessing is the defect. **Naming it is
+what this change owes; deciding it is not.** What the sentence must not do is address the reader as
+though the branch were theirs.
+
+Two keys, from data already on the `Target`. No new query, no new join, and the same shape as the
+category twenty lines below it.
+
+**Cost if wrong:** one clause on a refusal, in a case the sibling refusal already judged worth a
+clause.
+
+### D8 — "The branch the refusal names" has to be an unambiguous phrase (round 3)
+
+The delta round 2 wrote says the refusal *"SHALL say that the resolved commit must be on the branch
+it names"*. **Today the only branch that sentence names is the main branch.** `_merge_detail`
+(`:166-179`) reads exactly one branch key, `target_branch` (`:172`), which `_check_mergeable` sets
+to `situation.main_branch` (`:346`); `source_branch` is written into the structured half (`:345`)
+and never reaches the prose. So a reader who takes "the branch it names" at its word is being told
+to put the resolved commit on `master` — the opposite of the remedy, and precisely the failure mode
+this change exists to remove, reproduced inside its own repair.
+
+The requirement therefore has to do two things it currently only implies: require that the refusal
+**name the source branch** as well as the main branch, and phrase the condition against that one
+rather than against an ambiguous "it". Round 2 did put the naming into a scenario — *"THEN the
+refusal names the branch the resolved commit must be on"* — but a scenario is a check on behaviour
+the requirement states, not a place to introduce it, and the requirement's own prose is what a later
+reader will quote.
+
+**Cost if wrong:** a longer sentence naming two branches, which it must distinguish anyway.
+
+### D9 — This change is archived after `a-loop-declares-whether-it-needs-evidence`, not before (round 3)
+
+The modified requirement's discriminator is *where the judged commit came from*, and one of its two
+answers is the task's own branch tip. **No shipped requirement in `openspec/specs/` describes that
+route.** It is ADDED by `a-loop-declares-whether-it-needs-evidence`, which is implemented —
+`merge_targets` has both routes (`task_integration.py:385-409`) — but still sits unarchived in
+`openspec/changes/`. The requirement immediately above the one this change modifies,
+*Approval integrates the approved work* (`openspec/specs/task-lifecycle-governance/spec.md:638`),
+still reads *"What is merged SHALL be the commit named by the task's accepted evidence footprints
+… and SHALL NOT be the agent's branch."*
+
+Round 3 checked whether that is a **breach** and it is not. The ADDED requirement reconciles the two
+itself, in the same distinction: it merges *the task's* branch, explicitly *"SHALL NOT merge any
+branch belonging to an agent"*, and it explicitly disclaims the evidence route — *"Where evidence
+governs a task, this requirement SHALL NOT apply to it."* It even owns the branch-tip conflict
+refusal already: *"Before approval is granted, the system SHALL test the commit it would merge for
+conflicts with the main branch on the same terms it tests a commit named by evidence, and SHALL
+refuse approval where it would not merge cleanly."* This change adds words to that refusal; it does
+not contradict it.
+
+What is real is an **ordering constraint**. Synced into the corpus first, this change would leave
+`task-lifecycle-governance` stating a rule whose central discriminator names a route no shipped
+requirement establishes, beside one that appears to forbid it — legible only to a reader who knows
+to go and read an unarchived change. Recorded here rather than left to be discovered at archive
+time; see task 6.5.
 
 ## Risks / Trade-offs
 
