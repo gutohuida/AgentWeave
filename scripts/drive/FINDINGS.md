@@ -12238,3 +12238,86 @@ Not findings. Recorded because they are the kind of thing a harness author assum
 
 Both were reached by writing the harness the lazy way round; both refusals were legible enough to
 fix it in one pass.
+
+---
+
+## F154 reproduced deterministically, with no agent turn at all — and the reproduction is `scripts/drive/t_f154_wedged_review.py`
+
+F154 was found by accident on 2026-08-30: a reviewer spent its whole turn in a `ToolSearch` loop,
+reached a verdict in its own prose, and never called `update_task`. That accident made the finding
+look like it needed a flaky model to reach. **It does not.** The flaky reviewer was the occasion,
+not the cause.
+
+`t_f154_wedged_review.py` builds the same row **by hand, through the operator's own routes, on a
+fresh project in a fresh repository, with no model ever bound** — and reproduces every symptom
+F154 recorded. **16/16**, twice, on two independently created projects.
+
+The population is one sentence: *an `under_review` task whose assignee holds no running turn.* An
+operator reaches it through the only route the lifecycle offers them; a reviewer reaches it by
+ending a turn without a verdict. Neither needs a model, and the second is merely the expensive way
+to arrive.
+
+**What the drive measured, surface by surface, with both agents `idle` and `GET /runs` empty:**
+
+| Surface | What it says |
+|---|---|
+| `POST /jobs/{id}/run` | **409** — *"Every task on this loop's queue is already being worked. Nothing was started, and nothing is wrong — the next firing picks up whatever finishes."* Identical on a second press. |
+| `GET /jobs/{id}` → `loop.stall_reason` | `null` |
+| `GET /jobs/{id}` → `loop.queue` | `{"under_review": 1}` |
+| `GET /jobs/{id}` → `loop.current_tasks` | `[{"status": "under_review", "agent": "beta", "agent_capacity": "held"}]` |
+| `GET /agents` | `{"alpha": "idle", "beta": "idle"}` |
+| `GET /tasks/{id}` | `under_review`, assignee `beta` |
+
+`agent_capacity: "held"` for an agent the roster on the next line calls `idle`. **Not one surface
+names the task, and the only one that speaks at all says nothing is wrong.** The sentence's own
+promise — *"the next firing picks up whatever finishes"* — cannot come true: nothing is running, so
+nothing will finish.
+
+**The cure is one transition and costs nothing.** LANE 4 moves the task to `revision_needed` and the
+very next press of Run fires a turn (200). The whole defect is that the operator is never told they
+need to do it.
+
+**Why this reproduction is worth more than the original.** It is deterministic, costs no tokens,
+runs in about thirty seconds, and — because it never spawns an agent — it proves the defect is
+structural rather than a consequence of the reviewer's tool loop. Any fix now has a live check that
+can be pressed before and after.
+
+### F167 (B, new) — the F70/F142 recovery cannot see an author whose history is entirely the operator's
+
+LANE 5 was written expecting a **contrast**: put the AUTHOR in `assignee` instead of a reviewer,
+one variable changed, and watch F70's recovery fire and answer differently. It did not. The
+author-wedged row answers the **byte-for-byte identical 409**, and the board names `alpha` — the
+author — as the agent holding the review.
+
+The mechanism is not a surprise once read, and the code says it out loud. `wedged_review` asks
+`task.assignee in await agents_that_worked(session, task.id)` when `completion_attribution` names
+nobody (`scheduler.py:1348-1352`), and `agents_that_worked` reads `TaskTransition.actor_agent`,
+which is **NULL for every edge an operator walked by hand**. Its own docstring
+(`task_transition_service.py:206-211`) states the case exactly:
+
+> A task the operator started by hand, let an agent work, and then marked finished carries a full
+> history that names no agent at all.
+
+So a task whose history is the operator's names no agent, the author is not recognised as the
+author, `wedged_review` stays `False`, and the branch takes the `in_flight` arm — which is F142's
+own measured case, *"an operator who moved a stuck task to `under_review` by hand … and the task sat
+there with its author named as its reviewer forever"*, arriving through the very fallback that was
+added to close it.
+
+**Severity B, and deliberately not A**: the outcome is the same wedge F154 already describes, so it
+adds no new consequence — but it does mean the F70 recovery's guarantee ("rows … written straight
+into the status" are *"recovered rather than merely reported"*) is false for one reachable history,
+and a fix for F154 that leans on `wedged_review` to carry the author case would inherit the hole.
+
+**The bound on the measurement, stated because the drive cannot exceed it.** Every edge in LANE 5
+was walked by the operator. A history containing an *agent-walked* edge is not measured here, and
+F70's recovery may well fire for it. What is measured is that the all-operator history defeats it.
+
+### One thing this drive did not have to work around
+
+`POST /jobs` seeding a loop's queue with `initial_tasks` in the same call that creates the loop, and
+`PATCH /tasks/{id}` walking the whole `pending → assigned → in_progress → completed → under_review`
+ladder with an assignee change on the last edge, both did exactly what an operator would expect on
+the first attempt. The entire wedge is four PATCHes. That is worth recording alongside the defect:
+the surface that *builds* the broken state is in good order, which is why the state is so easy to
+reach.

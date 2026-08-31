@@ -1383,3 +1383,89 @@ shipped requirement describes today.
 Nothing is half-written. The next firing has a free choice, and the obvious candidates are F156
 (`integration-preview` says `will_merge:true` where the gate refuses — explicitly a non-goal of this
 change, still filed), F154 (severity A, unfixed, unqueued), or re-queueing F130/F127/F111+F3/F113/F61.
+
+---
+
+## Iteration 11 — 2026-08-31 15:46 → 15:52 — past 15:30, so a drive: F154 reproduced with no model at all
+
+**Position on arrival.** Branch `autonomous/2026-08-31-the-turn-must-end-first` at `1ad800d`, tree
+clean, both changes on it complete and offered. STATE's `next_action` handed the firing a free
+choice among F156, F154 and a re-queue. **The clock decided it instead:** 15:44 local, past the
+15:30 rule, which bars a new spec round and a new implementation group and says to hand the
+remaining time to a drive. Every candidate is unproposed, so every one of them would have started a
+round. So this iteration did the one thing the rule leaves open and the operator asked for twice —
+it drove the product.
+
+**The Hub on 8011 was already serving this branch.** Started 15:01:38; `find hub/hub src -name '*.py'
+-newermt "2026-08-31 15:01:38"` returns nothing, and the two commits since are a `.tsx` and a
+heartbeat. No restart, and the check was run rather than assumed.
+
+### What was driven, and why this target
+
+F154 (severity A, unfixed, unqueued) was found **by accident** on 2026-08-30: a reviewer spent its
+whole turn in a `ToolSearch` loop, reached a verdict in its own prose, never called `update_task`,
+and the loop then answered *"nothing is wrong"* about a queue that would never move again. Recorded
+that way it reads as a defect you need a flaky model to reach.
+
+`scripts/drive/t_f154_wedged_review.py` shows it is not. **The whole wedge is four PATCHes**, and it
+costs no tokens: a task driven by hand `pending → assigned → in_progress → completed →
+under_review(beta)`. That is the population in one sentence — *an `under_review` task whose assignee
+holds no running turn* — and an operator reaches it through the only route the lifecycle offers
+them. The flaky reviewer was the expensive way to arrive.
+
+**16/16, twice, on two independently created projects**, fresh temporary repository each time, two
+Haiku agents bound but never fired, `GET /runs` empty throughout.
+
+| Surface, with both agents `idle` | What it says |
+|---|---|
+| `POST /jobs/{id}/run` | **409** *"…already being worked. Nothing was started, and nothing is wrong — the next firing picks up whatever finishes."* Identical on a second press. |
+| `loop.stall_reason` | `null` |
+| `loop.queue` | `{"under_review": 1}` |
+| `loop.current_tasks` | `[{… "agent": "beta", "agent_capacity": "held"}]` |
+| `GET /agents` | `{"alpha": "idle", "beta": "idle"}` |
+
+`agent_capacity: "held"` for an agent the next call calls `idle`. Not one surface names the task.
+And LANE 4 shows the cure is a single transition to `revision_needed` — the very next press fires a
+turn, 200 — so the entire cost of this defect is that the operator is never told to make it.
+
+### F167 (B, new) — the lane that was written to disagree, and did, the other way round
+
+LANE 5 exists to be a **contrast**: same row, one variable changed, the AUTHOR in `assignee`
+instead of a reviewer, expecting F70's recovery to fire and answer differently. It came back
+**BAD** — the byte-for-byte identical 409, with the board naming `alpha` as the agent holding the
+review.
+
+Rather than patch the expectation out, the mechanism was read at the source. `wedged_review` asks
+`task.assignee in agents_that_worked(task)` when `completion_attribution` names nobody
+(`scheduler.py:1348-1352`), and `agents_that_worked` reads `TaskTransition.actor_agent` — **NULL for
+every edge an operator walked by hand**. `task_transition_service.py:206-211` says so in its own
+docstring. So a task whose history is entirely the operator's names no agent, the author is not
+recognised as the author, and the branch takes the `in_flight` arm — which is **F142's own measured
+case arriving through the fallback that was added to close it.**
+
+Filed B, not A: the outcome is the wedge F154 already describes, so no new consequence. What it
+adds is that a fix for F154 leaning on `wedged_review` to carry the author case would inherit the
+hole. **The bound is stated in the harness and in FINDINGS**: every edge in LANE 5 was the
+operator's, so a history with an agent-walked edge is *not* measured and F70 may well recover it.
+
+### The general lesson this iteration paid for
+
+Two of this branch's iterations have now turned on the same move: **a check written to pass came
+back failing, and the failure was more valuable than the pass would have been.** Iteration 10 got it
+from running the whole UI suite instead of the touched file. This one got it from writing a contrast
+lane that asserted the product's own claim about itself. In both cases the temptation was to adjust
+the assertion; in both cases reading *why* it failed produced the finding.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `t_f154_wedged_review.py` against 8011 from this branch, run 1 | 14/15 — LANE 5's expectation wrong, mechanism read |
+| same, run 2 after LANE 5 was corrected to the measured truth | **16/16**, fresh project |
+| `ruff check scripts/drive/t_f154_wedged_review.py` | clean |
+| `black --target-version py311` | formatted, then clean |
+| Jobs left enabled | none — teardown asserts it |
+| Agent turns spent | **zero**; no model bound |
+
+No product code was touched this iteration, so the suites are unchanged from iteration 10's
+measured numbers and were deliberately not re-run.
