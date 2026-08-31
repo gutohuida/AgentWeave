@@ -65,6 +65,24 @@ its two repository-aware checks sit **above** the early return for projects with
 same place for the same reason: a documentless loop is exactly the population that reaches that
 early return.
 
+**But not inside the same block** — round 2's correction. Those two checks are nested under
+`if situation is not None`, and `_merge_situation` returns `None` for any project with no configured
+main branch, an unresolvable workspace, a non-repository directory, or no branch by that name
+(`requirement_gate.py:255-283`). Liveness is not a question about the repository, so nesting it there
+would make the refusal silently absent from exactly the projects whose state is least understood.
+The check is a third statement in `evaluate`, above the early return and beside the
+`situation is not None` block rather than within it.
+
+`task_transition_service` evaluates the gate **before** `task.status = to_status` and before the
+`TaskTransition` row is added (`task_transition_service.py:552-572`), and integration runs later
+still — so the delta's *"status is unchanged, no integration attempted or recorded"* is a property of
+where the gate already sits, not something this change has to arrange.
+
+The category must be added in **four** places, not one: the `GateRefusal` field, the `refuses`
+property (`:112`), `detail()`'s composition (`:120`), and `to_dict()` (`:193`). A field added without
+`refuses` is a category that never refuses; one added without `to_dict` is a refusal no surface can
+render.
+
 Precedent is explicit. `2026-08-13-approved-means-it-is-in-the-product`: *"Mergeability joins the
 gate. A branch that conflicts with main is refused before approval, in the same typed refusal… not
 discovered halfway through a merge."*
@@ -130,8 +148,66 @@ have).
 
 **Import direction is a live risk:** `requirement_gate` currently imports only
 `requirement_coverage`, `spec_rigor` and models (`:33-34`). Importing `api/v1/agent_trigger` from it
-would invert the layering and probably cycle. The predicate belongs in a small module both can
-import, or on `agent_lifecycle`, which already asks a similar question (`agent_lifecycle.py:39`).
+would invert the layering and probably cycle.
+
+**Open question 2 is answered: a new module, `hub/hub/run_liveness.py`, which owns the two
+registries.** `agent_trigger` registers into it instead of holding them itself; `requirement_gate`
+imports it directly. Round 2 checked the graph rather than assuming it: `pty_runner` imports only
+stdlib and `subprocess_windows` (`pty_runner.py:19-30`), and `requirement_gate` already imports
+`db.models`, so `run_liveness` → (`pty_runner`, `db.models`) closes no cycle and no function-local
+import is needed. The registries are referenced nowhere outside `agent_trigger` and five test files
+(`test_agent_trigger`, `test_agent_trigger_overrides`, `test_conversation_contract`,
+`test_lifespan_shutdown`), whose references move with them.
+
+*Rejected: `agent_lifecycle`.* It asks a similar question and answers it the way this change must
+not — `archivable` reads `Run.status == "running"` alone (`agent_lifecycle.py:34-42`), which is the
+crash-wedge D3 exists to avoid. Putting a process-tested predicate beside a column-read one, both
+about liveness, is how two answers to one question drift. (That `archivable` carries the same
+exposure is a separate, unqueued observation — an agent whose Hub crashed mid-run cannot be archived
+until the Hub restarts. Not fixed here.)
+
+*Not a fourth answer.* The risk list below worried that this would make three answers to *"is this
+agent working"* into four. It does not: `agent_status.heartbeat_is_stale` (`agent_status.py:15-25`)
+tests an `AgentHeartbeat` row against a watchdog health window — a question about whether an agent
+process is *reporting in*, not about whether a run is live — and takes no run at all. The answers
+that are genuinely about a run are two, `Run.status` and the registry, and this predicate is the one
+place that combines them.
+
+### D10 — the acting run is excluded from the predicate, or this change breaks every flow review
+
+**Round 2's finding, and the one that would have shipped a regression worse than the defect.**
+
+A reviewer approves the work it has just read by calling `update_task(approved)` **from inside its
+own turn**. Since migration `0092_review_divergence_regime`, that turn is bound to the very task it
+is approving: `run_task_binding.task_named_by` returns `entry.task_id or entry.review_task_id`
+(`run_task_binding.py:170-189`) and `_bind` writes `run.task_id = task.id` (`:427`). The migration's
+own note says why it had to — *"Until now every review run was unbound… no run records having caused"*
+those `under_review → approved` transitions.
+
+So a predicate reading *"a run bound to this task, status `running`, process alive"* matches the
+reviewer's own run, and the gate refuses the approval the review exists to produce. Every flow review
+in the product dies — including the one path that has ever been observed carrying a flow's work to a
+main branch (F153, 2026-08-31). The change would close a 10.5-second window by permanently closing
+the door beside it.
+
+It is also **F155's failure mode exactly**, which D4 already names as the standing warning: the
+refusal's only remedy is *wait for the turn to end*, handed to the turn that would have to end. There
+is no action the refused actor can take. A refusal that cannot be cleared by the party it is given to
+is the defect this project has already driven an agent into `git reset --hard` over.
+
+**Decision: `evaluate` takes the acting run's id and excludes it.** `transition_task` already holds
+it — `actor.run_id` is on the actor it builds every transition from
+(`task_transition_service.py:571`) — so the signature widens by one keyword-only argument with a
+`None` default, and the operator routes that pass nothing get today's behaviour with nothing
+excluded. The rule states cleanly: **a turn is never blocked by itself.**
+
+*Alternative considered and rejected for scope:* excluding review-bound runs structurally, by joining
+`InboundQueueEntry.review_task_id`. It cannot be done from the `Run` row — `review_task_id` lives on
+`InboundQueueEntry` (`db/models.py:618`) and `Run` carries only the collapsed `task_id`
+(`:1102`) — so it costs a join and a second place that decides what a review binding is. The residual
+it would remove is small and self-clearing: an **operator** approving while some *other* run bound to
+the task is live gets a refusal that lasts until that run ends. Where that run is a reviewer, waiting
+is arguably the right answer anyway. Named here so it is a known gap rather than an oversight.
 
 ### D4 — the refusal names the agent and says nothing about the work
 
@@ -157,6 +233,18 @@ work at all.
 The flow's arm is untouched. The requirements governing reviewer resolution are already written
 about a flow (`agent-flows:134`, whose scenarios all begin *"WHEN a flow fires"*); nothing in the
 corpus says a loop staffs a review. This is code being brought back inside its spec.
+
+**What round 2 observed about the populations, for round 3 to confirm or overturn (task 5.4).** The
+discriminator is `loop.spec_document_id` — the scheduler already uses exactly it
+(`scheduler.py:2043`, `is_flow=bool(loop.spec_document_id)`), so the exclusion has a discriminator to
+hand and does not need a new one. Reaching a *staffed* review today requires all three of
+`completion_attribution.recorded` (`:1444`), `commit_for_task_review(...).resolved` — which reads
+evidence rows and nothing else (`:1472`) — and a reviewer the ladder can resolve excluding the
+author. A single-agent loop fails the third by construction, and a loop that declared it needs no
+evidence fails the second, which is F161. **The population that could lose something is therefore
+narrow and specific: a documentless loop, in a project with a second eligible agent, whose agent
+recorded evidence naming a commit.** Round 3 is to establish whether that population exists in the
+corpus's own terms and whether any test covers it; this is an observation, not a clearance.
 
 **The unstaffed report must also stay quiet.** `unstaffed` entries surface to the operator as steps
 the flow could not take (`scheduler.py:1445-1480`); a loop's completed task is not a step anything
@@ -192,16 +280,39 @@ with no settle, and assert the refusal — not a stranded `approved`. A unit-lev
 reproduce the *window*, not merely a state, or it will pass against code that still resolves the
 base commit.
 
-### D9 — whether the evidence route shares the exposure is for R2/R3 to determine
+### D9 — the evidence route shares the exposure. Answered by round 2: **yes.**
 
-Hypothesis: approving mid-turn on the evidence route merges the **stale pre-turn commit** named by
-an accepted evidence row, with `restamp_run_footprints` correcting the row only after the merge has
-happened. `_targets` (`task_integration.py:219`) does not filter on `reachable_from_main`, so the
-stale sha would be handed straight to `integrate`.
+Round 1 left this as a hypothesis. Read at the source, it holds, and round 1's *other* sentence — that
+the evidence route "survives the window because it has three defences" — does not.
 
-The refusal is unconditional either way — it is a statement about when work is knowable, not about
-which route resolves it. What the answer changes is whether a second reproduction is owed and
-whether the requirement's rationale should name both routes.
+- `_targets` (`task_integration.py:219-266`) filters on `TaskRequirementLink.task_id`,
+  `review_state`, `kind == "git"` and a non-empty `commit_sha`. It does **not** filter on
+  `reachable_from_main`. So an accepted footprint's sha goes to `integrate` whatever it points at.
+- A footprint recorded mid-turn points at the pre-turn commit *by construction* —
+  `restamp_run_footprints`' own docstring: *"`read_footprint` can only ever name the commit the
+  branch pointed at when the turn started"* (`requirement_evidence.py:856`).
+- The restamp that corrects it runs at turn **end**, inside `_execute_run`'s finalize block
+  (`agent_trigger.py:2041-2050`), and re-points rows. It merges nothing and re-attempts no
+  integration. An approval that landed before it fires has already merged the stale sha and recorded
+  the outcome.
+- Nothing sequences acceptance after the turn. `decide_evidence` is callable at any moment, so
+  "a human acceptance step" is a step in the *order of states*, not in the order of *time*, and it
+  is time that this window is made of.
+
+The docstring even states the consequence in the words of the defect: *"the pre-turn commit is
+usually already on the main line, so the row is written `reachable_from_main=True` and evidence for
+code that does not exist reads as already shipped."* Handed to `integrate`, that is
+`ALREADY_INTEGRATED` — F162 reached by the other door.
+
+**Consequences.** The refusal stays unconditional, which it would have anyway (D2 of the operator's
+answers). The requirement's rationale names both routes rather than the branch-tip one. Task 4 stops
+being a determination and becomes a test: the same refusal, exercised through an accepted-evidence
+task. And the difference between the routes is stated accurately — the evidence route recovers its
+*record*, it never prevented the *merge*.
+
+One incidental, filed rather than chased: `restamp_run_footprints` says
+*"`task_integration.integration_targets` merges on exactly this field"* of `reachable_from_main`.
+`_targets` does not read that field at all. The docstring is stale about the code beneath it.
 
 ## Risks / Trade-offs
 
@@ -218,9 +329,17 @@ whether the requirement's rationale should name both routes.
   then transitions, nothing half-applied.
 - **An unbound run doing a task's work is not covered** by a `Run.task_id == task.id` predicate. Same
   residual exposure D18 named for evidence authorship. Narrow: the ordinary path binds the run.
-- **Three answers to "is this agent working"** would exist after this (`_active_ptys`, `Run.status`,
-  `agent_status.heartbeat_is_stale`). → R2 should decide whether the predicate belongs beside one of
-  them rather than becoming a fourth.
+- ~~**Three answers to "is this agent working"**~~ → **answered in D3.** `heartbeat_is_stale` is a
+  different question (a watchdog window on an `AgentHeartbeat` row, taking no run), so the answers
+  genuinely about a run are two, and the predicate is the single place that combines them.
+- **The reviewer's own turn is bound to the task it approves**, so the predicate would refuse the
+  review leg it was never aimed at. → D10: the acting run is excluded. This is the change's largest
+  regression risk and `t_drive1_flow_lands.py` is what proves it did not happen.
+- **The predicate is silent for a project `_merge_situation` cannot resolve** if it is nested under
+  that block. → D1: it is a separate statement in `evaluate`, not nested.
+- **Round 1 credited the evidence route with defences it does not have.** → D9. The lesson is the
+  one CLAUDE.md records: an argument can be wrong while everything it argues about is right, and
+  only a round that re-derives the argument finds it.
 
 ## Migration Plan
 
@@ -232,10 +351,11 @@ other four unchanged (`GateRefusal.detail`, `:115-124`).
 
 ## Open Questions
 
-1. **Does the evidence route share the window?** (D9.) R2 or R3 answers by reading `_targets` and
-   `restamp_run_footprints` together; a drive answers it definitively.
-2. **Where does the liveness predicate live** so that `requirement_gate` need not import
-   `api/v1/agent_trigger`? (D3.) Candidates: a new small module, or `agent_lifecycle`.
+1. ~~**Does the evidence route share the window?**~~ **Answered by round 2: yes.** See D9. Task group
+   4 becomes a test rather than a determination.
+2. ~~**Where does the liveness predicate live?**~~ **Answered by round 2: a new module,
+   `hub/hub/run_liveness.py`, owning the registries.** See D3; the import graph was checked, not
+   assumed, and `agent_lifecycle` was rejected with a reason.
 3. **Should the landing action exist for a flow's task too?** The three-hop cost is a loop's because
    a flow staffs its own reviewer. If a flow's review is unstaffable, the operator is in the same
    position — but that is F142's territory, already shipped, and widening scope here is how a change

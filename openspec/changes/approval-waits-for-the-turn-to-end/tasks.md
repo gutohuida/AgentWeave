@@ -13,13 +13,20 @@
 - [ ] 2.1 Test the predicate directly: a run this Hub process owns and holds a live handle for reads
   live; a run recorded `running` with no handle in this process reads **not** live; an
   app-server run in `_active_app_server_runs` reads live.
-- [ ] 2.2 Implement the predicate in a module `requirement_gate` can import without importing
-  `api/v1/agent_trigger` (design D3, open question 2). Registry first; absence means not live.
+- [ ] 2.2 Implement the predicate in `hub/hub/run_liveness.py`, which owns `active_ptys` and
+  `active_app_server_runs`; `agent_trigger` registers into it and `requirement_gate` imports it
+  (design D3, open question 2 answered). Registry first; absence means not live. Move the five test
+  files' references with it.
 - [ ] 2.3 Do not use `pid_alive` as the sole test, and record why in a comment citing its own
   docstring's warning about a caller that checks a process this same Hub killed
   (`pty_runner.py:150-156`).
 - [ ] 2.4 Scope it to runs bound to this task (`Run.task_id`), and note the unbound-run residual in
   a comment so it is a known gap rather than an oversight.
+- [ ] 2.5 **Exclude the acting run** (design D10). Widen `evaluate` by a keyword-only
+  `acting_run_id=None` and pass `actor.run_id` from `task_transition_service`. Test it directly: a
+  run bound to the task approving *itself* is permitted; a *second* live run bound to the same task
+  still refuses. Comment it with why — `run_task_binding.task_named_by` binds a review run to the
+  task it inspects (`:170-189`, migration `0092`), so without this every flow review is refused.
 
 ## 3. The gate refuses a live turn
 
@@ -27,9 +34,14 @@
   permitted after it; not refused when the process is gone; unaffected with no run; refused
   identically at `sketch` and `gate` rigor.
 - [ ] 3.2 Add the fifth `GateRefusal` category with the comment its four siblings each have, stating
-  what kind of claim it is and why it is not one of the others.
-- [ ] 3.3 Implement the check in `evaluate`, **above** the `if not enforced` early return, for the
-  same reason the two repository-aware checks sit there (`requirement_gate.py:392-398`).
+  what kind of claim it is and why it is not one of the others — and add it in **all four** places:
+  the field, `refuses` (`:112`), `detail()` (`:120`) and `to_dict()` (`:193`). A field missing from
+  `refuses` is a category that never refuses; one missing from `to_dict` is a refusal no surface can
+  render.
+- [ ] 3.3 Implement the check in `evaluate`, **above** the `if not enforced` early return, and
+  **beside** the `if situation is not None` block rather than inside it (design D1, round 2):
+  `_merge_situation` returns `None` for any project with no main branch or unresolvable workspace,
+  and liveness is not a question about the repository.
 - [ ] 3.4 Compose its sentence in `detail()` alongside the others — never as an early return
   (`requirement_gate.py:115-124` records why that mattered once already).
 - [ ] 3.5 Write the refusal sentence so it names the agent, states that the turn is still running,
@@ -38,14 +50,22 @@
 - [ ] 3.6 Verify the sentence survives the UI's error path the way F152's fix did — check
   `readableApiError` renders it as prose, not a dict repr.
 - [ ] 3.7 Re-run task 1's reproduction; it must now assert the refusal.
+- [ ] 3.8 Add a regression test that a flow's reviewer can still approve the task it reviewed — the
+  populated shape, with the review run bound to that task. This is the change's largest regression
+  risk (design D10).
 
-## 4. Determine whether the evidence route shares the window
+## 4. The evidence route shares the window — cover it
 
-- [ ] 4.1 Read `_targets` (`task_integration.py:219`) and `restamp_run_footprints`
-  (`requirement_evidence.py:846`) together and state, in the design's D9, whether approving mid-turn
-  on the evidence route merges a stale commit.
-- [ ] 4.2 If it does, add a test covering the evidence route through the same refusal, and say so in
-  the requirement's rationale. If it does not, record what prevents it.
+Round 2 answered this at the source (design D9): **it does.** `_targets` does not filter on
+`reachable_from_main`, a footprint recorded mid-turn names the pre-turn commit by construction, and
+`restamp_run_footprints` runs at turn end and re-merges nothing. What remains is proving it.
+
+- [x] 4.1 Determine whether approving mid-turn on the evidence route merges a stale commit. Answered
+  in design D9: yes, by the same mechanism, through the other door.
+- [ ] 4.2 Add a test covering the evidence route through the same refusal: a task whose accepted
+  evidence names a commit, approved while the run that recorded it is still live, refused.
+- [ ] 4.3 The requirement's rationale names both routes rather than the branch-tip one alone (already
+  written into the delta by round 2 — confirm it still reads true after implementation).
 
 ## 5. A loop stops entering the review arm
 
