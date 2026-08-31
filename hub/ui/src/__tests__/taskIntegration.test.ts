@@ -55,6 +55,39 @@ describe('readableApiError', () => {
     expect(readable).toContain('main')
   })
 
+  it('surfaces the waiting evidence when approval is refused for want of a decision', () => {
+    const detail = {
+      code: 'gate_unsatisfied',
+      blocking: [],
+      diagnostics: [],
+      unmergeable: [],
+      unaccepted: [
+        {
+          kind: 'awaiting_evidence',
+          evidence_id: 'ev-4c1f',
+          identifier: 'FR-14',
+          commit_sha: '0123456789abcdef',
+          source_branch: 'agentweave/builder',
+          target_branch: 'main',
+          recorded_by_task: 'task-9f21',
+          recorded_by_another_task: false,
+        },
+      ],
+      message:
+        "This task's work has been recorded and nobody has judged it: FR-14 at 0123456789ab. " +
+        'Approving now would record that the work is good and merge none of it, because only ' +
+        'accepted evidence is merged. To land it, accept the evidence, or grant an agent the ' +
+        "capability to accept it — both are the operator's, so an agent reading this has to ask " +
+        'for one rather than take it.',
+    }
+    const readable = readableApiError(refusal(detail), 'The Hub refused this change.')
+    expect(readable).toContain('FR-14')
+    expect(readable).toContain('0123456789ab')
+    expect(readable).toContain('accept the evidence')
+    expect(readable).toContain('grant an agent')
+    expect(readable).not.toBe('The Hub refused this change.')
+  })
+
   it('falls back when a structured detail carries no sentence', () => {
     const readable = readableApiError(refusal({ code: 'something_else' }), 'fallback')
     expect(readable).toBe('fallback')
