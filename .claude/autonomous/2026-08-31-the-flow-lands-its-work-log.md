@@ -648,3 +648,141 @@ that check proves nothing. Then DRIVE-1.
 
 Carried, unfixed: `_emit_review_unstaffed` has no dedup and change B routes a permanently
 unresolvable condition through it (iteration 3's finding, still open).
+
+## Iteration 5 — 2026-08-31 00:49 to 01:19 (+01:00)
+
+Branch `autonomous/2026-08-31-the-flow-lands-its-work` at `2163fd8`, tree clean, `git log` matching
+STATE.json. Nothing to reconcile. Heartbeat claimed at 00:49.
+
+### One item: `B-IMPL`
+
+`a-review-a-flow-cannot-staff-is-named` implemented reproduction-first, in `tasks.md`'s order. 46 of
+47 tasks closed; the open one is 8.6, the commit itself. Group 7's harness edits are written and
+compiled but **not driven** — that is `DRIVE-1`, and `tasks.md` now says so above group 7 rather
+than leaving a checked box to imply otherwise.
+
+### The reproductions were run first, against unmodified code, and all seven passed
+
+Written as a transient `test_zz_repro_f142.py` asserting **today's** behaviour, run, then deleted;
+its permanent form is the inverted assertions in `test_a_flow_names_what_it_cannot_staff.py`. It
+inlined its own transitions query rather than importing `agents_that_worked`, so it did not depend
+on the correctness of anything this change was about to add.
+
+- **1.3** — fixture (b), operator-completed with accepted evidence: `selections == ()`,
+  `unstaffed == ()`, `deferred == ()`, `_cannot_staff == ()`, stall reason
+  `"no claimable task among"`. The silent drop, measured.
+- **1.3b** — fixture (c), same silence.
+- **1.5** — fixture (d): `agents_that_worked` empty while an agent wrote every line.
+- **1.5a** — fixture (e): `worked | {assignee}` is `{builder}`; the bound runs are
+  `{builder, builder-2}`; **`builder-2` is in neither of round 2's two terms.**
+- **1.5a's consequence**, and this is the round-3 gate the queue named: with round 2's exact
+  two-term exclusion passed to `resolve_reviewer`, **the ladder returns `builder-2` for its own
+  work.** Seen to happen, not argued. That is what the third term closes.
+- **1.6** — (b) moved to `under_review` by hand lands in `_cannot_staff`: a false *"a reviewer holds
+  this"*.
+- claimability refuses (b) outright.
+
+Two fixture defects were found by running them, and fixed before anything was asserted on behaviour:
+(e) had no `Run` row for the first agent (its transitions were faked with a bare actor rather than a
+binding), and both (d) and (e) left their runs `status='running'`, which would have excluded the
+agent from the free pool and made every exclusion assertion below pass **without the exclusion
+existing**. Both fixtures now go through `bind_run_to_task` and end their runs.
+
+### What shipped
+
+`task_transition_service.py` — `CompletionAttribution` + `completion_attribution()`;
+`agent_that_completed` is now a wrapper with its signature and semantics unchanged;
+`agents_that_worked`, `agents_of_runs_bound_to`, and the union behind one named helper,
+`agents_that_may_have_authored`. The two set-valued functions' docstrings state **which question
+each answers** — *"which agents moved this task?"* versus *"might this agent be the author?"* —
+because a call site picking the wrong one is how round 2's union nearly shipped a self-approval and
+how D8's predicate would wedge every review in flight.
+
+`scheduler.py` — the review arm's three-way split; `resolve_reviewer` gains `excluded_because`, used
+by both refusal sentences; the wedged-review predicate reads the completion where one names an agent
+and the **transitions-only** set where it does not; `task_is_claimable_by` gains the operator arm and
+calls the same helper the arm excludes with, rather than recomposing three terms a second time.
+
+`task_is_claimable_by`'s two false docstring sentences are **corrected**, not extended (4.2a / D17).
+
+### Three suite tests changed deliberately, each because this change's specified behaviour moved
+
+Not discovered in the run — grepped for first (3a.4), then read, then changed with the reason written
+into the test:
+
+1. `test_scheduler.py::test_loop_whose_tasks_are_all_completed_but_unapproved_skips_instead_of_spinning`
+   asserted `"stalled"` and `"2 completed"` in `error_summary`. Its two tasks are built directly at
+   `completed` — case (c) — so the walk now names the first of them with the remedy. This is
+   `agent-loops`' *"An attributed stall names its task rather than the queue"*, which is the
+   requirement this change wrote.
+2. `test_firing_decision_is_shared.py` — the same substitution, twice. The property under test is
+   unchanged: the board's label is the same string the firing would refuse with, whichever reason
+   that is.
+3. `test_loop_stall_ticks_in_place.py::test_a_stall_whose_reason_changes_starts_a_new_row` changed
+   its reason by adding a second unclaimable task, which used to move the histogram's count. The
+   histogram is now the reason of last resort, so a second unstaffable task leaves the first one's
+   sentence identical and the row correctly increments. The reason is now changed the way it
+   actually changes — by changing what is true of the task the reason is about.
+
+`test_flow_chain_end_to_end.py:344-355`'s set equality (tripwire 8.3) is **untouched** and green.
+
+### Finding, fixed: the delta's own scenario was wider than its requirement (D18)
+
+`task-lifecycle-governance`'s scenario *"A task with no recorded completion is surfaced, not
+restaffed"* was keyed on nothing but the absence of a completion. Implemented literally it reports a
+**real, in-progress review** as one nobody is doing: reaching `under_review` with an assignee and no
+recorded completion is a *supported* route, because `agent_trigger` bars a hand-dispatched reviewer
+only where an agent is *recorded* as completing the task, and dispatching staffs it. That is 5.4's
+own risk arriving through the requirement instead of through the code.
+
+The requirement's prose was already right — *"when that task's assignee is an agent that produced
+the work"* — and `tasks.md` 5.1 was right. Only the scenario disagreed. Corrected, plus a second
+scenario for the hand-dispatched case, plus
+`test_a_hand_dispatched_review_on_an_unattributed_task_is_still_held`.
+
+Worth recording *how it survived three rounds*: every round checked the wedge predicate against being
+given the **wider** set (D8, D14), which is a real hazard and was caught three times. Nobody checked
+it against the narrower direction — what the requirement says when the set is empty. The exclusion
+was re-derived three times and the scenario once.
+
+### Finding, filed not fixed: `RequirementEvidence.actor` is a fourth record (D19)
+
+`record_evidence` takes `task_id` as a free parameter and does not require the calling run to be
+bound to it. So an agent can work a task on an **unbound** run, record evidence naming its commit,
+and appear in none of the three terms — no transition, no `assignee`, no `run.task_id` — while
+`RequirementEvidence.actor` names it, and the review arm requires that very row to exist before it
+resolves a reviewer at all. The same shape as D14's second agent, one source further out.
+
+**Not added.** The delta enumerates three sources by name, and adding a fourth that no round
+re-derived is precisely the move this change exists to argue against. Queued for the operator, and
+row four of the drive harness (`AW_COMPLETE_BY=untouched`) drives exactly this shape live, so
+`DRIVE-1` will show whether the agent that recorded the evidence is offered its own work.
+
+### Harness (group 7)
+
+`t_row12_review_leg.py`: the stale docstring claim that the two modes disagree is now history rather
+than the finding; row one's expectation inverts with **specific strings** — the refusal must not
+contain `"no claimable task among"`, and where there is a refusal it must name the task; and row
+four (`AW_COMPLETE_BY=untouched`) is added, running the agent on a turn triggered **without**
+`task_id` so no run binds, then walking the task by hand. Compiled, not driven.
+
+### Verification
+
+- The seven reproductions, green against unmodified code, before a line of the fix.
+- `test_a_flow_names_what_it_cannot_staff.py` — 24 tests, green.
+- Task 8.1's file list plus the three changed suite files and `test_reviewer_ladder.py` —
+  **220 passed**.
+- Task 8.2, `-k "flow or loop or review or transition or scheduler or claim"` —
+  **669 passed, 11 skipped**.
+- `ruff check src/ hub/ tests/` clean; `black --check --target-version py311` clean.
+- `openspec validate a-review-a-flow-cannot-staff-is-named --strict` — valid.
+- 8.5a's grep: the only surviving *"the one that completed"* strings are the default parameter, the
+  attributed arm that passes it, and the test asserting it stays on that arm.
+- The full hub suite was **not** run — that is the `SUITE` item, and running it beside anything else
+  is what STATE.json forbids.
+
+### Next
+
+**`C-R1`.** Change B is implemented and committed; change A is implemented and undriven. The queue's
+order puts C's three rounds before `DRIVE-1`, and `DRIVE-1` is the item that settles the judgement
+half of both A and B — string assertions do not.
