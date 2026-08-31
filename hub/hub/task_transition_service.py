@@ -554,7 +554,9 @@ async def apply_transition(
     if to_status == "approved":
         from .requirement_gate import evaluate
 
-        refusal, policy = await evaluate(session, task)
+        # The acting run, excluded from the gate's liveness check: a turn is never blocked by
+        # itself (design D10). `None` for the operator, which excludes nothing.
+        refusal, policy = await evaluate(session, task, acting_run_id=actor.run_id)
         if refusal.refuses:
             raise GateUnsatisfiedError(refusal)
         # `contract` never refuses, so its unmet and rejected requirements have nowhere to surface

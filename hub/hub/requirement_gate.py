@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import requirement_coverage, spec_rigor
+from . import requirement_coverage, run_liveness, spec_rigor
 from .db.models import SpecDocument, SpecRequirement, Task, TaskRequirementLink
 
 # The state a `gate` requirement must be in. Deliberately one value: `verified` means the same at
@@ -102,6 +102,14 @@ class GateRefusal:
     # standing in the way of it. `sketch` never reaches here at all (task 5.5 of
     # `2026-08-13-a-gate-that-only-evidence-opens`).
     reported: List[Dict[str, str]] = field(default_factory=list)
+    # A turn that is still producing the work. A fifth kind of claim: not "this is unproven", not
+    # "this cannot go in", not "something is waiting to be judged", but **"what would go in is not
+    # knowable yet"**. The agent recorded `completed` during its turn; the commit that holds its
+    # edits is made when the turn ends, so until then the task's branch points at the commit it was
+    # cut from and every answer to "which commit is this task's work?" names one containing none of
+    # it. An operator told the requirement is unverified, or that the branch conflicts, would go
+    # looking for something to fix; there is nothing to fix, only a moment to wait through.
+    unfinished: List[Dict[str, str]] = field(default_factory=list)
     # Evidence still awaiting review on a task that *does* have accepted evidence naming a commit.
     # Approval succeeds there and merges what was accepted, so this is a report rather than a
     # refusal — deliberately absent from `refuses` and from `detail()`. Refusing would block work
@@ -110,7 +118,13 @@ class GateRefusal:
 
     @property
     def refuses(self) -> bool:
-        return bool(self.blocking or self.diagnostics or self.unmergeable or self.unaccepted)
+        return bool(
+            self.blocking
+            or self.diagnostics
+            or self.unmergeable
+            or self.unaccepted
+            or self.unfinished
+        )
 
     def detail(self) -> str:
         """One sentence per category that has anything to say, composed explicitly.
@@ -127,6 +141,7 @@ class GateRefusal:
                 self._unverified_detail(),
                 self._merge_detail(),
                 self._unaccepted_detail(),
+                self._unfinished_detail(),
             )
             if sentence
         )
@@ -190,6 +205,27 @@ class GateRefusal:
             f"only accepted evidence is merged. To land it, {ACCEPT_OR_GRANT}."
         )
 
+    def _unfinished_detail(self) -> str:
+        """Name the agent, say the turn is still running, and say the refusal clears itself.
+
+        The remedy is **waiting**, and it has to be said, or an operator told only "refused" goes
+        looking for a defect in work that has none (design D4). F155 is the standing warning: a
+        refusal naming a remedy the refused party could not take drove a reviewer to
+        `git reset --hard` on a branch holding the only copy of an agent's work. So this says what
+        clears it, that it clears itself, and that the operator has a second lever if the turn is
+        one they no longer want — `POST /agent/{agent}/stop` (`agent_trigger.stop_agent_run`).
+        """
+        if not self.unfinished:
+            return ""
+        agent = str(self.unfinished[0].get("agent") or "an agent")
+        return (
+            f"{agent} is still running the turn that produces this task's work, so what approving "
+            f"would merge is not knowable yet — the task's branch still points at the commit the "
+            f"turn started from. Nothing is wrong with the work. Approve once the turn has ended: "
+            f"this clears itself, with nothing for anyone to do. Stopping the agent's run ends the "
+            f"turn too."
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "code": "gate_unsatisfied",
@@ -197,6 +233,7 @@ class GateRefusal:
             "diagnostics": list(self.diagnostics),
             "unmergeable": list(self.unmergeable),
             "unaccepted": list(self.unaccepted),
+            "unfinished": list(self.unfinished),
             "reported": list(self.reported),
             "message": self.detail(),
         }
@@ -363,6 +400,44 @@ async def _check_unaccepted(
     refusal.unaccepted.extend(entries)
 
 
+async def _check_live_turn(
+    session: AsyncSession, task: Task, refusal: GateRefusal, *, acting_run_id: Optional[str]
+) -> None:
+    """Refuse while a turn bound to this task is still running (F162).
+
+    **Deliberately not nested under `_merge_situation`**, unlike the two checks above it, and that
+    is a departure from a principle this module states in words. `_MergeSituation`'s docstring says
+    of its four preconditions that each is *"a reason to not know, never a reason to refuse ...
+    because a refusal that fired where the merge would have been skipped anyway would block every
+    task in such a project behind a remedy that changes nothing"* (`:230-238`). Placing this check
+    outside that block makes it fire in exactly those projects. Three reasons it is right anyway:
+
+    1. **It is not one of the four.** That rule binds checks asking *what would merge*. This asks
+       whether the work exists yet, which is answerable in a directory that is not a repository.
+    2. **The remedy is not "a remedy that changes nothing".** The clause exists to prevent a
+       refusal whose stated fix is unavailable; this one clears itself when the turn ends, without
+       anybody doing anything.
+    3. **`approved` is a judgement about work, not only an instruction to merge.** Where nothing
+       can merge, approving mid-turn still records that unfinished work is good — a statement as
+       false in a non-repository project as in a repository one.
+
+    Rigor-independent for the reason `_check_mergeable` is, and the reason is sharper here: the
+    default rigor is `sketch`, `_enforced_requirements` filters `sketch` out entirely, and the
+    population this defect was measured on is a documentless loop, which has no requirements at all.
+
+    `task-lifecycle-governance:720` — *"An integration that cannot proceed does not block
+    approval"* — reads at first like a prohibition on this. It is not: `evaluate`'s
+    enforced-requirements walk below is already unconditional on `situation`, so `blocking` and
+    `diagnostics` have refused approval in unresolvable projects since the gate shipped. That
+    requirement governs *integration* as a blocker of approval, and its scenarios speak about their
+    own cause.
+    """
+    live = await run_liveness.live_turn_for_task(session, task, acting_run_id=acting_run_id)
+    if live is None:
+        return
+    refusal.unfinished.append({"agent": live.agent, "run_id": live.run_id})
+
+
 async def _identifiers_for(session: AsyncSession, requirement_ids: List[Any]) -> Dict[str, str]:
     """`{spec_requirements.id: identifier}` for the rows a sentence has to name.
 
@@ -381,12 +456,19 @@ async def _identifiers_for(session: AsyncSession, requirement_ids: List[Any]) ->
     return {row.id: row.identifier for row in rows}
 
 
-async def evaluate(session: AsyncSession, task: Task) -> tuple[GateRefusal, str]:
+async def evaluate(
+    session: AsyncSession, task: Task, *, acting_run_id: Optional[str] = None
+) -> tuple[GateRefusal, str]:
     """`(refusal, policy_digest)` for moving this task to `approved`.
 
     A task linked to nothing is unaffected, and so is one whose documents are all
     sketches — the default blocks nothing, and it has to, or the change would
     arrive as a barrier nobody asked for.
+
+    *acting_run_id* is the run performing the transition, `None` for the operator. It is excluded
+    from the liveness check below: **a turn is never blocked by itself** (design D10). Widening the
+    signature keeps no second surface in step — `task_transition_service.py:555` is the only caller,
+    checked rather than assumed.
     """
     refusal = GateRefusal()
     # Both repository-aware checks, and both **above** the early return two statements down. That
@@ -396,6 +478,11 @@ async def evaluate(session: AsyncSession, task: Task) -> tuple[GateRefusal, str]
     if situation is not None:
         await _check_mergeable(session, task, refusal, situation)
         await _check_unaccepted(session, task, refusal, situation)
+
+    # Beside that block rather than inside it, and above the early return for the same reason both
+    # of the above are. Liveness is not a question about the repository — see `_check_live_turn`,
+    # which argues the departure rather than leaving it to be re-derived.
+    await _check_live_turn(session, task, refusal, acting_run_id=acting_run_id)
 
     enforced, rigors = await _enforced_requirements(session, task)
     if not enforced:

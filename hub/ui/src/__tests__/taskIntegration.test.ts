@@ -88,6 +88,29 @@ describe('readableApiError', () => {
     expect(readable).not.toBe('The Hub refused this change.')
   })
 
+  it('surfaces the live turn when approval is refused because the work is still being produced', () => {
+    const detail = {
+      code: 'gate_unsatisfied',
+      blocking: [],
+      diagnostics: [],
+      unmergeable: [],
+      unaccepted: [],
+      unfinished: [{ agent: 'builder', run_id: 'run-4c1f' }],
+      message:
+        "builder is still running the turn that produces this task's work, so what approving " +
+        "would merge is not knowable yet — the task's branch still points at the commit the " +
+        'turn started from. Nothing is wrong with the work. Approve once the turn has ended: this ' +
+        "clears itself, with nothing for anyone to do. Stopping the agent's run ends the turn too.",
+    }
+    const readable = readableApiError(refusal(detail), 'The Hub refused this change.')
+    // The three things the requirement says the sentence must carry: who, that the turn is still
+    // running, and that waiting is the whole remedy.
+    expect(readable).toContain('builder')
+    expect(readable).toContain('still running the turn')
+    expect(readable).toContain('clears itself')
+    expect(readable).not.toBe('The Hub refused this change.')
+  })
+
   it('falls back when a structured detail carries no sentence', () => {
     const readable = readableApiError(refusal({ code: 'something_else' }), 'fallback')
     expect(readable).toBe('fallback')

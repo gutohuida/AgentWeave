@@ -8,9 +8,9 @@ construction, so `integrate` records `ALREADY_INTEGRATED` — *"there was nothin
 `is_retryable` classifies as a fact a repeat cannot alter. The task reads `approved`, the work sits
 unmerged on its branch, and no surface offers a remedy.
 
-**This file is written before the fix and asserts today's wrong behaviour**, the way
-`test_loop_lands_its_work.py` was (its own docstring records the commit where its measurement
-lives). Group 3 of `approval-waits-for-the-turn-to-end` flips it.
+**The reproduction was committed before the fix, asserting that wrong behaviour**, the way
+`test_loop_lands_its_work.py` was — commit `9f9f18d` is where the measurement lives. Group 3 of
+`approval-waits-for-the-turn-to-end` flipped it, and the flipped form is what is here now.
 
 **It reproduces the window, not merely a state** (design D8). A test that only left the branch
 empty would pass against code that resolves the base commit for an entirely different reason. What
@@ -27,13 +27,17 @@ from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Run, Task
 
-from .test_loop_lands_its_work import loop_task, make_loop
+from .test_loop_lands_its_work import commit_on_task_branch, loop_task, make_loop
 from .test_task_integration import (
+    BASE,
+    PATH,
     TASKS,
     approve,
     commits_on,
     git,
     integrations,
+    linked_task,
+    make_document,
     make_repo,
     set_main_branch,
 )
@@ -102,6 +106,17 @@ def go_live(run_id: str) -> LiveTurn:
     return session
 
 
+def end_the_turn(run_id: str) -> None:
+    """What `_execute_run`'s `finally` does (`agent_trigger.py:2257`): the registry entry goes.
+
+    The `Run` row's status is deliberately left alone. The predicate does not read it, and a test
+    that tidied both would not distinguish a fix that reads the registry from one that reads the
+    column — which is the distinction the crash case turns on.
+    """
+    run_liveness.active_ptys.pop(run_id, None)
+    run_liveness.active_app_server_runs.discard(run_id)
+
+
 def branch_the_task_without_committing(root, task_id):
     """The worktree branch a turn is given, at the commit it was cut from.
 
@@ -115,17 +130,19 @@ def branch_the_task_without_committing(root, task_id):
 
 
 # ---------------------------------------------------------------------------
-# 1.1 / 1.2 — the reproduction
+# 1.1 / 1.2 / 3.7 — the reproduction, flipped
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_approving_inside_the_turn_strands_the_work(app, auth_headers, turn, tmp_path):
-    """Tasks 1.1 and 1.2: the window, and the consequence — not only the state.
+async def test_approval_inside_the_turn_is_refused(app, auth_headers, turn, tmp_path):
+    """Tasks 1.1, 1.2 and 3.7: the window is refused, and the refusal costs the task nothing.
 
-    Four assertions, and the last two are the ones that matter. That the skip is recorded against
-    the **base** commit is the mechanism; that the turn's real commit never reaches `main` and the
-    record is unretryable is the damage.
+    As committed at `9f9f18d` this asserted the defect — a `200`, the task reading `approved`, a
+    `skipped` integration naming the **base** commit with `ALREADY_INTEGRATED`, and the turn's real
+    commit never reaching `main` with no retry able to alter it. Every one of those is now the
+    opposite, and the last block is what makes it a fix rather than a block: once the turn has
+    ended, the same task approves and merges the commit that actually holds the work.
     """
     base = make_repo(tmp_path)
     await set_main_branch("main")
@@ -138,41 +155,41 @@ async def test_approving_inside_the_turn_strands_the_work(app, auth_headers, tur
     assert tip == base, "the window requires the task's branch to hold none of the turn's work"
 
     # Both halves of "live", read back rather than assumed: the recorded status and the handle this
-    # Hub process holds. The fix's predicate reads exactly these two.
+    # Hub process holds. The predicate reads exactly these two.
     async with async_session_factory() as session:
         run = await session.get(Run, turn)
         assert run.task_id == task and run.status == "running"
     go_live(turn)
     assert turn in run_liveness.active_ptys
 
-    approved = await approve(app, auth_headers, task)
-    assert approved.status_code == 200, approved.text
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["code"] == "gate_unsatisfied"
+    assert detail["unfinished"] == [{"agent": "builder", "run_id": turn}]
 
+    # Status unchanged, and no integration attempted or recorded — both properties of where the
+    # gate already sits, before `task.status = to_status` and before the history row.
     async with async_session_factory() as session:
-        assert (await session.get(Task, task)).status == "approved"
+        assert (await session.get(Task, task)).status == "under_review"
+    assert await integrations(app, auth_headers, task) == []
 
-    recorded = await integrations(app, auth_headers, task)
-    assert [row["outcome"] for row in recorded] == [task_integration.SKIPPED]
-    assert recorded[0]["commit_sha"] == base
-    assert recorded[0]["reason"] == task_integration.ALREADY_INTEGRATED.format(
-        commit=base[:12], target="main"
-    )
-
-    # The turn ends and commits its work — after the approval, which is the whole point.
+    # The turn ends: its work is committed, and the registry entry goes with it.
     git(tmp_path, "checkout", "-q", worktrees.task_branch_name(task))
     (tmp_path / "feature.py").write_text("print('hi')\n", encoding="utf-8")
     git(tmp_path, "add", "feature.py")
     git(tmp_path, "commit", "-q", "-m", "the turn's work")
     work = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
     git(tmp_path, "checkout", "-q", "main")
+    end_the_turn(turn)
 
-    assert work != base
-    assert work not in commits_on(
-        tmp_path, "main"
-    ), "the task reads approved and its work is not in the product — this is F162"
-    assert not task_integration.is_retryable(
-        recorded[0]["outcome"], recorded[0]["reason"]
-    ), "and no retry can alter it: ALREADY_INTEGRATED describes a fact about the base commit"
+    approved = await app.patch(f"{TASKS}/{task}", json={"status": "approved"}, headers=auth_headers)
+    assert approved.status_code == 200, approved.text
+
+    recorded = await integrations(app, auth_headers, task)
+    assert [row["outcome"] for row in recorded] == [task_integration.MERGED]
+    assert recorded[0]["commit_sha"] == work
+    assert work in commits_on(tmp_path, "main"), "the commit that holds the work is what merged"
 
 
 # ---------------------------------------------------------------------------
@@ -327,3 +344,179 @@ async def test_the_acting_run_exclusion_cannot_tell_a_working_turn_from_a_review
     assert (
         await live_turn(task, acting_run_id=turn) is None
     ), "a working turn is excluded on the same terms as a review turn — the known residual"
+
+
+# ---------------------------------------------------------------------------
+# 3.1 / 3.8 / 3.9 — the gate's scenarios
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_run_whose_process_died_does_not_block_approval(app, auth_headers, turn, tmp_path):
+    """A crashed agent leaves `Run.status == "running"` until the Hub next starts, because
+    `reconcile_interrupted_runs` runs only in `lifespan()` (`main.py:350`). A gate reading that
+    column would wedge this task's approval until a restart. This is the whole reason the predicate
+    is registry-first and absence means not-live."""
+    make_repo(tmp_path)
+    await set_main_branch("main")
+    loop = await make_loop(app, auth_headers, name="Crashed loop")
+    task = await loop_task(app, auth_headers, loop)
+    await bind_run_to(turn, task)
+    commit_on_task_branch(tmp_path, task, "feature.py", "print('hi')\n")
+    git(tmp_path, "checkout", "-q", "main")
+
+    async with async_session_factory() as session:
+        assert (await session.get(Run, turn)).status == "running"
+    assert turn not in run_liveness.active_ptys
+
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+    recorded = await integrations(app, auth_headers, task)
+    assert [row["outcome"] for row in recorded] == [task_integration.MERGED]
+
+
+@pytest.mark.asyncio
+async def test_a_task_with_no_run_is_unaffected(app, auth_headers, tmp_path):
+    """No run bound to it at all — approval proceeds exactly as it did before this requirement.
+    Deliberately without the `turn` fixture, so nothing in the process could answer for it."""
+    make_repo(tmp_path)
+    await set_main_branch("main")
+    loop = await make_loop(app, auth_headers, name="Quiet loop")
+    task = await loop_task(app, auth_headers, loop)
+    commit_on_task_branch(tmp_path, task, "feature.py", "print('hi')\n")
+    git(tmp_path, "checkout", "-q", "main")
+
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+
+
+@pytest.mark.asyncio
+async def test_rigor_does_not_exempt_the_refusal(app, auth_headers, turn, tmp_path):
+    """Refused identically at `sketch` and at `gate`.
+
+    The `sketch` half is the one that matters. `_enforced_requirements` filters `sketch` out
+    entirely and `evaluate` returns early for a task with nothing enforcing, so a check placed
+    below that return would be dead in every default project — which is where this defect was
+    measured. Asserted by `blocking` being empty while `unfinished` is not: it is the liveness
+    check refusing, not the requirement.
+    """
+    make_repo(tmp_path)
+    await set_main_branch("main")
+    run_headers = {"Authorization": "Bearer aw_run_window-secret"}
+    await make_document(app, auth_headers, run_headers)
+    task = await linked_task(app, auth_headers)
+    await bind_run_to(turn, task)
+    go_live(turn)
+
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    sketch = refused.json()["detail"]
+    assert sketch["blocking"] == [], "a sketch document enforces nothing — this is the live turn"
+    assert sketch["unfinished"] and sketch["unfinished"][0]["agent"] == "builder"
+
+    raised = await app.post(
+        f"{BASE}/documents/{PATH}/rigor", json={"rigor": "gate"}, headers=auth_headers
+    )
+    assert raised.status_code == 200, raised.text
+
+    refused_again = await app.patch(
+        f"{TASKS}/{task}", json={"status": "approved"}, headers=auth_headers
+    )
+    assert refused_again.status_code == 409, refused_again.text
+    gated = refused_again.json()["detail"]
+    assert gated["blocking"], "a gate document has its own reason to refuse as well"
+    assert gated["unfinished"] == sketch["unfinished"], "and the live-turn claim is unchanged"
+
+
+@pytest.mark.asyncio
+async def test_a_project_where_integration_cannot_be_attempted_is_refused_the_same(
+    app, auth_headers, turn, tmp_path
+):
+    """Task 3.9, and the interaction with `task-lifecycle-governance:720`.
+
+    `_merge_situation` returns `None` for a project with no configured main branch, so the two
+    repository-aware checks are silent there — each of their four preconditions is *a reason to not
+    know, never a reason to refuse*. This check is not one of them and fires anyway: `approved` is
+    a judgement that work is good, and judging work an agent has not finished producing is false
+    whether or not anything is merged afterwards. Pinned here rather than left to be re-derived,
+    because reading `:720` alone this looks like a breach of the corpus.
+
+    The second half is what keeps `:720` true: once the turn ends, the same task approves and the
+    integration is recorded as skipped exactly as it would have been before this requirement.
+    """
+    make_repo(tmp_path)
+    # No `set_main_branch` — this is the project the merge checks cannot ask about.
+    loop = await make_loop(app, auth_headers, name="Unresolvable loop")
+    task = await loop_task(app, auth_headers, loop)
+    await bind_run_to(turn, task)
+    go_live(turn)
+
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["unfinished"] and detail["unmergeable"] == [] and detail["unaccepted"] == []
+
+    end_the_turn(turn)
+    approved = await app.patch(f"{TASKS}/{task}", json={"status": "approved"}, headers=auth_headers)
+    assert approved.status_code == 200, approved.text
+    recorded = await integrations(app, auth_headers, task)
+    assert [row["outcome"] for row in recorded] == [task_integration.SKIPPED]
+
+
+@pytest.mark.asyncio
+async def test_a_reviewer_approves_from_inside_its_own_review_turn(
+    app, auth_headers, turn, tmp_path, request
+):
+    """Task 3.8 — the change's largest regression risk, in the populated shape.
+
+    Since migration `0092` a review run is bound to the very task it inspects, so a predicate that
+    counted the acting run would refuse every review the product staffs — including the only path
+    ever observed carrying a flow's work to a main branch. Driven through the agent surface rather
+    than the service, because that is the door a reviewer actually comes through.
+    """
+    make_repo(tmp_path)
+    await set_main_branch("main")
+    builder_headers = {"Authorization": "Bearer aw_run_window-secret"}
+    task = await plain_task(app, auth_headers, title="Reviewed work")
+
+    # The author's turn: claiming binds its run to the task, completing ends it.
+    for status in ("in_progress", "completed"):
+        moved = await app.patch(
+            f"/api/v1/agent-actions/tasks/{task}",
+            json={"status": status},
+            headers=builder_headers,
+        )
+        assert moved.status_code == 200, moved.text
+    end_the_turn(turn)
+
+    entered = await app.patch(
+        f"{TASKS}/{task}", json={"status": "under_review"}, headers=auth_headers
+    )
+    assert entered.status_code == 200, entered.text
+
+    # The reviewer's own turn, bound to the task it is reviewing and live at this moment.
+    async with async_session_factory() as session:
+        session.add(Agent(id="ag-reviewer", project_id="proj-test", name="reviewer"))
+        session.add(
+            Run(
+                id="run-reviewer",
+                project_id="proj-test",
+                agent="reviewer",
+                status="running",
+                turn_depth=0,
+                task_id=task,
+                capability_token_hash=hash_run_token("aw_run_reviewer-secret"),
+            )
+        )
+        await session.commit()
+    run_liveness.active_ptys["run-reviewer"] = LiveTurn()
+    request.addfinalizer(lambda: run_liveness.active_ptys.pop("run-reviewer", None))
+
+    approved = await app.patch(
+        f"/api/v1/agent-actions/tasks/{task}",
+        json={"status": "approved"},
+        headers={"Authorization": "Bearer aw_run_reviewer-secret"},
+    )
+    assert approved.status_code == 200, approved.text
+    async with async_session_factory() as session:
+        assert (await session.get(Task, task)).status == "approved"
