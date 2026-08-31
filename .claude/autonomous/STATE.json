@@ -1,266 +1,170 @@
 {
-  "purpose": "Fix the flow end to end until a flow's approved work actually reaches the main branch, and prove it by driving it. The complete analysis is openspec/explorations/2026-08-30-why-a-flow-cannot-land-its-work.md - READ IT FIRST, every iteration, before touching anything. It names seven breaks with file:line, the shipped requirements four of them breach, and the two operator decisions taken on 2026-08-30. You are not expected to re-derive any of it.",
+  "purpose": "Land `approval-waits-for-the-turn-to-end` — one change closing F162 (approving inside the window between `update_task(completed)` and the turn-end snapshot strands the work silently), F161/D21 (a loop staffs a review it structurally cannot fill), and F163 (landing a loop's work costs three hand transitions). Round 1 is DONE and committed at fc0c661 on master: proposal.md, design.md, specs/task-lifecycle-governance/spec.md, specs/agent-loops/spec.md and tasks.md all exist and `openspec validate --strict` passes. Your job is rounds 2 and 3, then implementation, then DRIVING it — the operator's words are \"fix everything and make the flow work\" and \"after fixing it another end to end run to test the flow\". A drive is not optional and must not be squeezed out by spec work.",
   "runner": "claude",
   "model": "opus",
   "permission_mode": "unattended-full-access",
-  "branch": "autonomous/2026-08-31-the-flow-lands-its-work",
+  "branch": "autonomous/2026-08-31-the-turn-must-end-first",
   "parent_branch": "master",
-  "parent_sha": "3a274a2",
-  "parent_sha_note": "master at arming, carrying the exploration document this run is built on. Cut the branch from here, never from a previous autonomous branch.",
-  "stop_at": "2026-08-31T08:00:00+01:00",
+  "parent_sha": "fc0c661",
+  "parent_sha_note": "master at arming — carries the merged overnight run (f4f8ac6, CI green all nine jobs) plus round 1 of this change (fc0c661). Cut the branch from here, never from a previous autonomous branch.",
+  "stop_at": "2026-08-31T17:00:00+01:00",
   "stop_when_queue_empties": false,
-  "iteration": 19,
-  "log_file": ".claude/autonomous/2026-08-31-the-flow-lands-its-work-log.md",
+  "iteration": 0,
+  "log_file": ".claude/autonomous/2026-08-31-the-turn-must-end-first-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
-  "green_at_arming": "CI green on c6cdf9e, all nine jobs (run 33310555286). The only commits since are two docs-only commits (345c149, 3a274a2), so no product code has moved. The full hub suite was last run green at 894d5b2: 3555 passed / 84 skipped / 1 xpassed. The suite was NOT re-run at arming - it takes ~14 minutes. Run it before offering the branch for merge, not before starting.",
+  "green_at_arming": "CI green on f4f8ac6 (master), ALL NINE JOBS verified job-by-job: hub-test, ui-test, test x6, build. That run included the full hub suite. The only commit since is fc0c661, which is openspec documents only — no product code has moved. So the tree you start from is green and you do NOT need to run the suite before starting. Run it before offering the branch, in file chunks (see limits).",
   "known_flakes": [
-    "F109: the hub suite shares one database connection per session and the retry chain can stall on it. Did not fire on either of the last two full runs. If a test fails once and passes alone, suspect this before suspecting your change.",
+    "F109: the hub suite shares one database connection per session and the retry chain can stall on it. If a test fails once and passes alone, suspect this before suspecting your change.",
     "test_relocate_repairs_and_redrains_queued_work was flaky and was fixed (d916861). A recurrence is a real finding."
   ],
   "environment": {
-    "trial_hub_port_8011": "The drive Hub. Was up and healthy at arming (22:50). It serves whatever code the process was started from - RESTART IT FROM THIS BRANCH before drawing any conclusion from it, and confirm by checking that no .py under hub/hub or src is newer than the uvicorn start time.",
-    "trial_hub_port_8010": "The other trial Hub, up and healthy. Leave it alone unless you need a second instance.",
+    "trial_hub_port_8011": "The drive Hub. Healthy at arming (11:25). It serves whatever code the process was started from and was last started from the PREVIOUS run's branch — RESTART IT FROM THIS BRANCH before drawing any conclusion from it, and confirm no .py under hub/hub or src is newer than the uvicorn start time.",
+    "trial_hub_port_8010": "The other trial Hub, up and healthy at arming. Leave it alone unless you need a second instance.",
     "port_8000": "THE OPERATOR'S REAL USAGE. Never touch it, never probe it, never start anything on it.",
     "start_command": "cd hub && DATABASE_URL=\"sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db\" py -3.11 -m uvicorn hub.main:app --port 8011 --host 127.0.0.1   -- from hub/, from source, NEVER `agentweave --port`, whose bundled migrations lag this checkout.",
-    "drive_harness": "scripts/drive/aw.py is what the drives use, not the e2e skill's e2e.py. Existing harnesses for this area: scripts/drive/t_row12_flows.py (F140's fixture), t_row12_review_leg.py (F142's three-way fixture). Reuse them.",
-    "forbidden_projects": "NEVER drive against proj-5e960453 (this repo) or proj-18e5d4e0. Make a fresh project for the drive.",
+    "drive_harness": "scripts/drive/aw.py is what the drives use. THREE harnesses already exist for exactly this area and must be reused rather than rewritten: t_f162_window.py (the F162 window, lanes 11/11 and 4/4), t_drive2_loop_lands.py (a loop's work reaching master), t_drive1_flow_lands.py (the flow end to end).",
+    "forbidden_projects": "NEVER drive against proj-5e960453 (this repo) or proj-18e5d4e0. Make a fresh project for every drive.",
     "cheap_models": "Every real agent turn in a drive binds Haiku (claude-haiku-4-5). There is no token-budget gate; this is a standing operator directive."
   },
   "queue": [
     {
-      "id": "A-R1",
-      "status": "done",
-      "title": "Round 1: propose `a-flow-briefing-names-its-contract` (breaks 2 and 3; F140, F143)",
-      "detail": "The exploration IS round 1's exploration - do not re-explore, write the proposal. Two defects, one change: (a) `_compose_loop_briefing` (scheduler.py:1732-1833) never names `update_task`, never names a target status, and never uses the word `completed`, so an agent is told 'finish and stop' and is never told what finishing is; (b) `is_review` is computed at scheduler.py:2356-2366 and :2713, passed to `_briefing_checkpoint`, and dropped on the next line, so a reviewer receives the implementation briefing verbatim while the context channel tells it the opposite. Create with `openspec new change a-flow-briefing-names-its-contract` (NO date prefix - archiving applies it; a name starting with a digit is refused). Spec deltas: agent-flows almost certainly needs a new requirement stating what a flow's briefing must tell an implementation turn about finishing, and that a review turn's briefing is review-shaped. Note the corpus silence recorded in the exploration section 5: NO requirement defines what causes in_progress -> completed, so you are adding one, not satisfying one. `openspec validate --strict` must pass."
-    },
-    {
       "id": "A-R2",
-      "status": "done",
-      "title": "Round 2: re-derive A against the code",
-      "detail": "A FRESH comparison of the proposal against what the code actually does - not a re-read of round 1's reasoning. Check at minimum: does the wording you propose survive `format_turn_prompt` and the inbound-queue wrapper (inbound_queue.py:98-122) intact? Does naming `update_task` in the briefing conflict with anything in agents.py's tool inventory, which deliberately excludes `submit_checkpoint_notes` (agents.py:835-838)? Does the review briefing you propose duplicate what agents.py:1121-1172 already says on the context channel, and if so is duplication right or wrong? Fix the proposal where it is wrong."
+      "status": "pending",
+      "title": "Round 2: independently re-derive the proposal against the code",
+      "detail": "Read openspec/changes/approval-waits-for-the-turn-to-end/{proposal,design,tasks}.md and both spec deltas, then RE-DERIVE the argument against the actual code — do not re-read round 1's reasoning and agree with it. The five claims that carry the change and must each be checked at the source: (1) `requirement_gate.evaluate` (:384) is the single pre-transition question and its repository-aware checks sit above the `if not enforced` early return; (2) `reconcile_interrupted_runs` runs ONLY in lifespan() startup (main.py:350) so `Run.status` alone is insufficient; (3) `pty_runner.pid_alive`'s docstring (:140-156) warns precisely the caller this change adds; (4) `agent_trigger._active_ptys` (:148) and `_active_app_server_runs` (:153) hold a handle per live run in THIS process, so registry-absence is a safe not-live; (5) nothing in openspec/specs/ says a LOOP staffs a review — agent-flows:134's scenarios all begin 'WHEN a flow fires'. Fix the proposal where the code disagrees. Answer design open question 1 (does the evidence route share the window — read `_targets` at task_integration.py:219 with `restamp_run_footprints` at requirement_evidence.py:846) and open question 2 (where the liveness predicate lives without requirement_gate importing api/v1/agent_trigger). `openspec validate approval-waits-for-the-turn-to-end --strict` must still pass. Commit as `spec(round 2)`."
     },
     {
       "id": "A-R3",
-      "status": "done",
-      "title": "Round 3: independent re-derivation of A",
-      "detail": "A second INDEPENDENT comparison against the code, not a review of round 2. The failure this round exists to catch is an argument that is wrong while everything it argues about is right. Specifically re-derive: is the briefing actually the right place for the fix, or does the real defect live in the tool surface (there is no `finish_turn` tool; ending a turn is ending the process)? Would a machine-readable completion contract be cleaner than better prose? Record the rejected alternative with its reason so it is not re-proposed."
+      "status": "pending",
+      "title": "Round 3: a second independent re-derivation",
+      "detail": "NOT a re-read of round 2. Round 3's job on the last five outings was to find what rounds 1 and 2 both missed, and it did so twice on 2026-08-28 — once catching both earlier rounds breaching a requirement that had shipped four days before. Specifically hunt: (a) does any SHIPPED requirement in openspec/specs/task-lifecycle-governance/spec.md forbid or contradict a new approval precondition? Read :688 'Approval is refused when the work cannot be merged cleanly' and :720 'An integration that cannot proceed does not block approval' — that second one is a closed enumeration of permitted excuses and is the most likely place this change breaches the corpus; (b) does removing the loop's review arm regress any loop population that TODAY gets a successful review with a recorded verdict? (c) does the composed landing action (design D6) violate `task-lifecycle-governance:117` 'Some transitions are the operator's alone' or :168 'Every accepted transition is recorded append-only'? Fix the proposal, or STOP and raise it in decisions_for_user if a breach is real. Commit as `spec(round 3)`."
     },
     {
-      "id": "A-IMPL",
-      "status": "done",
-      "title": "Implement A, reproduction test first",
-      "detail": "Write the failing test before the fix, as the discipline requires. A reproduction for (b) is cheap and deterministic: assert that a review selection's briefing differs from an implementation selection's. Then implement. Run the touched test files plus hub/tests/test_scheduler*.py and anything matching briefing/flow. ruff + black --target-version py311 before committing. Commit with the finding ids in the message."
+      "id": "A-IMPL-1",
+      "status": "pending",
+      "title": "Implement task groups 1-3: reproduce F162, the liveness predicate, the gate refusal",
+      "detail": "tasks.md groups 1, 2 and 3, in that order. THE REPRODUCTION COMES FIRST and must fail for the stated reason before anything is fixed — read its failure output, do not assume it. The reproduction must reproduce the WINDOW (a live run bound to the task at the moment of approval), not merely a state, or it will pass against code that still resolves the base commit. Then the predicate (design D3: registry first, absence means not-live, never pid_alive alone, and say why in a comment citing pty_runner.py:150-156). Then the fifth GateRefusal category, added ABOVE the `if not enforced` early return, composed in detail() and never as an early return. The refusal sentence must name the agent, say the turn is still running, and say it clears itself — F155 is the standing warning about a refusal naming a remedy that cannot clear it. Each group its own commit."
     },
     {
-      "id": "B-R1",
-      "status": "done",
-      "title": "Round 1: propose `a-review-a-flow-cannot-staff-is-named` (break 4; F142)",
-      "detail": "scheduler.py:1365-1369 drops an unattributable task with a bare `continue` that records nothing - not unstaffed, not deferred, not in_flight, not gated, no log, no event. This BREACHES agent-flows:134's scenario 'WHEN no agent can be resolved or found for a task THEN the operator is notified, naming the task'. So the minimum repair is enforcement, not new design: append to `unstaffed` with a reason naming the task. The deeper half is a judgement: `agent_that_completed` (task_transition_service.py:123-147) does not filter on actor_kind, so an operator's completion returns None, ambiguous with 'nobody completed this', and seven callers read None three different ways. Decide in the proposal whether to disambiguate it (a second function, or a richer return) and whether a flow may staff a review for work the OPERATOR completed - and if so, who counts as the author to exclude. task-lifecycle-governance:313 was written assuming a name is returned and has no clause for None; the exploration section 5 records that as a gap in the requirement, not only in the code."
+      "id": "A-DRIVE-1",
+      "status": "pending",
+      "title": "Prove F162 is closed, live",
+      "detail": "Restart the Hub on 8011 FROM THIS BRANCH first and confirm it (no .py under hub/hub newer than the start time). Fresh project, never proj-5e960453 or proj-18e5d4e0, Haiku on every agent turn. Re-run scripts/drive/t_f162_window.py. Lane 1 currently reaches outcome REPRODUCED — it must now reach the refusal instead, with the task's status UNCHANGED and no integration row written. Lane 2 measures the window's width and should still measure it; a closed window means approval is refused for its whole duration, not that the window vanished. Update the harness's pass condition and record the result in scripts/drive/FINDINGS.md. THE DRIVE IS RIGHT AND THE ROUNDS ARE WRONG when they disagree — F108 was found in one live request after three rounds read past it."
     },
     {
-      "id": "B-R2",
-      "status": "done",
-      "title": "Round 2: re-derive B against the code",
-      "detail": "Fresh comparison against the code. Enumerate ALL SEVEN callers of `agent_that_completed` and state, per caller, what your change does to it - the two guards permit on None, task_is_claimable_by refuses on None, the review arm drops, run_divergence.py:415 skips, agent_trigger.py:445 permits. A change to what None means reaches every one of them. Check the wedged-review recovery at scheduler.py:1280 too: F142 measured that moving the task to under_review by hand does not help because that path is ALSO gated on agent_that_completed returning the author."
+      "id": "A-IMPL-2",
+      "status": "pending",
+      "title": "Implement task groups 4-5: the evidence route's exposure, and the loop's review arm",
+      "detail": "Group 4 is a determination, not a change: state in design.md D9 whether approving mid-turn on the evidence route merges a stale commit, and add a test or record what prevents it. Group 5 removes the loop from the review arm at the SELECTION site (scheduler.py:1440-1500), never inside commit_for_task_review — making F161's sentence never said rather than true. A loop's completed task must also not reach `unstaffed`: it is not a step anything failed at. Before implementing, satisfy A-R3's question (b): establish exactly which loop populations lose the arm, and if any of them gets a successful review today, STOP and raise it."
     },
     {
-      "id": "B-R3",
-      "status": "done",
-      "title": "Round 3: independent re-derivation of B",
-      "detail": "Second independent pass. Re-derive whether the operator completing a task should be reviewable by a flow at all - there is a real argument that it should not, since the operator has already made a judgement, and a competing one that the operator marking a card done is exactly when a review is most wanted. Whichever you land on, the SILENT drop is indefensible either way and must go. Record both arguments."
+      "id": "A-IMPL-3",
+      "status": "pending",
+      "title": "Implement task group 6: one action lands a loop's work",
+      "detail": "A composition of the transitions that already exist — release the author's hold, -> under_review, -> approved — never a widened TRANSITIONS map (design D6, and round 3 must have cleared it against task-lifecycle-governance:117 and :168). The gate is evaluated BEFORE any transition is performed, so a refused landing leaves holder, status and integration record all untouched (design D7). If the UI affordance is added, rebuild and refresh the bundle with `py -3.11 scripts/refresh_ui_bundle.py` and commit hub/ui/src and hub/hub/static/ui together."
     },
     {
-      "id": "B-IMPL",
-      "status": "done",
-      "title": "Implement B, reproduction test first",
-      "detail": "Reproduce first: a flow whose only task was completed by the operator, asserting the stall reason names the task rather than the queue histogram. Then implement. Watch test_flow_chain_end_to_end.py - it pins attribution with a set equality at :342-355 and will fail loudly if you touch how the flow attributes anything."
+      "id": "A-DRIVE-2",
+      "status": "pending",
+      "title": "Drive the loop and the flow end to end",
+      "detail": "tasks.md group 7. Re-run scripts/drive/t_drive2_loop_lands.py — a loop's work must still reach the main branch, now in one operator action and with no review stall on the way. Then scripts/drive/t_drive1_flow_lands.py — the flow must still land its work and its review leg must be untouched, which is the regression this whole change most plausibly causes. Record both outcomes in FINDINGS.md including anything new they surface. This item is the operator's explicit ask and must not be skipped for lack of time; the 15:30 rule exists to protect it."
     },
     {
-      "id": "C-R1",
-      "status": "done",
-      "title": "Round 1: propose `approval-refuses-unaccepted-evidence` (breaks 5 and 6; F122) - OPERATOR DECISION D-A",
-      "detail": "The operator decided on 2026-08-30: approval is REFUSED while evidence sits unaccepted. Rejected alternatives, do not re-propose: seeding a granted agent per project; a flow granting its resolved reviewer per task; leaving the machinery alone and merely surfacing 'approved but unmerged' (rejected because it leaves task-lifecycle-governance:638 breached). THE SCOPING CONSTRAINT IS THE WHOLE DESIGN: refuse only when evidence EXISTS and is unaccepted. A task with no evidence at all must stay approvable or every research, docs and decision task wedges - this is `_check_mergeable`'s own written rule, 'approval must never be blocked by the absence of an integration, only by one that would fail'. Second half of the same change: accepting evidence must trigger integration for an already-approved task waiting on it (spec.py:864-891 and agent_actions.py:1164-1201 currently do not, so the natural repair sequence still merges nothing). Spec deltas: task-lifecycle-governance - a new refusal beside :688, and :720's CLOSED enumeration of when integration cannot be attempted almost certainly needs amending."
+      "id": "A-CLOSE",
+      "status": "pending",
+      "title": "Validate, suite, lint, then offer the branch",
+      "detail": "tasks.md group 8. `openspec validate approval-waits-for-the-turn-to-end --strict`. The hub suite IN FILE CHUNKS with py -3.11 (the whole of hub/tests/ exceeds the 600s command cap, and `pytest hub/tests/ tests/` together fails collection). `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`. Then push and write the closing log entry. DO NOT MERGE TO MASTER — push the branch and offer it, as the last three runs did."
     },
     {
-      "id": "C-R2",
-      "status": "done",
-      "title": "Round 2: re-derive C against the code",
-      "detail": "Fresh comparison. Verify the exact predicate: what is true of a task that has SOME accepted evidence naming a commit AND some awaiting evidence? Pre-authorised default is in decisions_for_user D3 - check it against the code rather than adopting it. Verify the refusal is reachable from every approval path (operator route, agent route, flow reviewer) - requirement_gate lives inside apply_transition precisely so one point suffices; confirm that still holds. Verify it is rigor-INDEPENDENT: DEFAULT_SPEC_RIGOR is 'sketch' (models.py:1796) and anything behind rigor is absent from a default project, which is how F122 survived."
-    },
-    {
-      "id": "C-R3",
-      "status": "done",
-      "title": "Round 3: independent re-derivation of C",
-      "detail": "Second independent pass. The specific thing to re-derive: does this refusal wedge the very flow it is meant to fix? A flow's reviewer approves; if approval is now refused pending acceptance, and no agent can accept, the flow stalls forever. That may be exactly the intended loud failure - but the refusal MUST name the remedy (accept it yourself, or grant an agent) per task-lifecycle-governance:865, and the stall must be visible on the board. Check what the flow does with a refused approval: does the reviewer's turn end cleanly, does the task stay under_review, is that a wedge or a wait? Drive it if reading is not conclusive."
-    },
-    {
-      "id": "C-IMPL",
-      "status": "done",
-      "title": "Implement C, reproduction test first",
-      "detail": "Reproduce first: a task with awaiting evidence is refused approval, and a task with no evidence at all is still approved. Then the acceptance-integrates edge, with its own test. Implement in requirement_gate as a sibling of `unmergeable` (see decisions_for_user D1). Run hub/tests/test_requirement_gate.py, test_task_integration.py, test_task_transition_service.py, test_requirement_evidence.py at minimum."
-    },
-    {
-      "id": "DRIVE-1",
-      "status": "done",
-      "title": "Drive the flow end to end on a fresh project and prove work lands",
-      "detail": "THE POINT OF THE WHOLE RUN. Restart 8011 from this branch first and confirm it serves this code. Fresh project, fresh document, two independent tasks, Haiku agents. The pass condition, driven not asserted: both tasks reach `approved` AND the commits are on the project's main branch, with a second firing finding nothing to re-do. Expect C's refusal to stall the flow until evidence is accepted - accept it as the operator, and record whether the product told you that was what to do. File everything found as F152+ in scripts/drive/FINDINGS.md, with reproductions. If the flow now lands work, say so plainly and record the transcript - that record is worth as much as any fix."
-    },
-    {
-      "id": "D-R1",
-      "status": "done",
-      "title": "Round 1: propose `a-loop-declares-whether-it-needs-evidence` (breaks 1 and 7; F124) - OPERATOR DECISION D-B",
-      "detail": "The operator decided on 2026-08-30: 'the operator defines if something in a loop needs evidence when setting up the loop'. Rejected: loops never merging; implicit invented requirements; retiring loops. Today a loop is documentless BY DEFINITION (create_loop refuses spec_document_id, mcp_server.py:653-661), so it has no requirements, so record_evidence 404s, so integration_targets is always empty - a loop can never land work, structurally. Propose: a declaration at loop creation, a Loop column plus a migration, and an integration path that honours it. See decisions_for_user D4 and D5 for the pre-authorised shapes. Second half: the 'Try again' button (TaskIntegrationNote.tsx:42-45) is offered on a reason it can never clear while integration-preview already computes will_merge:false - that breaches task-lifecycle-governance:865 and is fixed here."
-    },
-    {
-      "id": "D-R2",
-      "status": "done",
-      "title": "Round 2: re-derive D against the code",
-      "detail": "Fresh comparison. Verify the merge source you propose for an evidence-free loop task. The pre-authorised default is the task branch, on the grounds that `work-is-isolated-per-task` guarantees it carries that task's work and nothing else - VERIFY that guarantee holds for loop tasks specifically, since that change was written about flows. Check what F58 established about naming a commit rather than a branch (proposal.md:8-14): merge --no-ff brings the whole ancestry, so a branch tip is only safe if the branch is genuinely per-task. Check the migration guards for a missing table the way 0033/0034 do, and bump the head assertions in test_migrations.py AND test_project_persistence.py."
-    },
-    {
-      "id": "D-R3",
-      "status": "done",
-      "title": "Round 3: independent re-derivation of D",
-      "detail": "Second independent pass. Re-derive whether the declaration belongs on the Loop at all, versus on the task, versus on the project. A loop-level flag is what the operator asked for; check it does not produce an incoherent state when a loop's tasks are later adopted by a flow (jobs.py:204 _adopt_document_tasks back-fills loop_id) or when a task carries both a loop_id and a spec_document_id."
-    },
-    {
-      "id": "D-IMPL",
-      "status": "done",
-      "title": "Implement D, reproduction test first",
-      "detail": "Reproduce first: a loop declaring it needs no evidence lands its task's work on main; a loop declaring it does behaves exactly as today. Migration, column, create_loop parameter, integration path, UI retry guard. Run test_migrations.py and test_project_persistence.py for the head assertions."
-    },
-    {
-      "id": "DRIVE-2",
-      "status": "done",
-      "title": "Drive both loop modes and re-drive the flow",
-      "detail": "Fresh project. A loop declaring no evidence needed: does its work reach main? A loop declaring evidence needed: does it behave as before and say so honestly? Then re-run DRIVE-1's flow scenario to confirm D did not regress C. File findings."
-    },
-    {
-      "id": "SUITE",
-      "status": "done",
-      "title": "Full uncontended suite, then offer the branch",
-      "detail": "py -3.11 -m pytest hub/tests/ -q in the BACKGROUND with NO drive running beside it - it exceeds the 600s command cap and contends badly with live agent spawns. Then py -3.11 -m pytest tests/ -q. Then ruff check src/ hub/ tests/ and black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/. Push. Do NOT merge to master - the operator merges."
-    },
-    {
-      "id": "F162-DRIVE",
-      "status": "done",
-      "title": "Prove or kill F162: approve INSIDE the window and read what the integration records",
-      "detail": "F162 measured a real window - a task reads `completed` mid-turn while its branch tip is still the commit the branch was cut from - but its CONSEQUENCE is read from the code and not driven, which is the half this repository's own discipline says gets you. The claim to test: an approval inside the window resolves the BASE commit as the merge target, `integrate_task` finds it already reachable from the main branch, and records ALREADY_INTEGRATED, which `is_retryable` deliberately classifies as NOT retryable - stranding the work with the task at `approved` and no button on screen. Drive it against proj-60c8c49372ce on 8011: `create_loop` with the declaration omitted and one task, fire it, poll GET /tasks on a TIGHT loop (1s, not 6s) until the task reads `completed`, and immediately run the three transitions F163 documents (assignee -> null, -> under_review, -> approved) WHILE the agent is still busy. Then read GET /tasks/{id}/integrations and `git log master`. All three outcomes are worth having: it reproduces (F162 becomes a defect with a repro), the transition is refused while a run is live (F162 downgrades - say exactly where the product already guards it), or the tip is committed by then (the window is narrower than measured - say how narrow). Reuse t_drive2_loop_lands.py's helpers; write it as t_f162_window.py. Leave no job enabled."
+      "id": "F155-R1",
+      "status": "pending",
+      "title": "ONLY IF EVERYTHING ABOVE IS DONE AND IT IS BEFORE 15:30 — round 1 on F155",
+      "detail": "F155 (severity A, scripts/drive/FINDINGS.md): `_merge_detail` (requirement_gate.py:151-164) says 'Resolve the conflict on the branch, then approve', and doing that provably cannot clear the refusal — `_check_mergeable` judges the commit named by ACCEPTED EVIDENCE, never the branch. Driven, a Haiku reviewer obeyed it, was refused twice more, and reached for `git reset --hard` on a branch holding the only copy of an agent's work. What actually clears it is recording FRESH EVIDENCE naming the merged commit, a tool call the refusal, the drawer and the briefing all fail to mention. Write the PROPOSAL ONLY — rounds 2 and 3 and the implementation are the next run's. Stop after `openspec validate --strict` passes. Do not start this after 15:30."
     }
   ],
-  "current": "RUN COMPLETE. Iteration 19 fired at 07:49 with stop_at at 08:00 - eleven minutes, an empty queue, and nothing half-written - so it wrote the terminal log entry that closes the run instead of standing down a third time. Position reconciled (clean tree, HEAD == origin at 68de2bf, log tail iteration 18's). Iteration 18's bar on re-running the five offer checks was honoured; two cheap checks were run so the closing entry supports its own claim: 61 commits ahead of master, and master...HEAD touches exactly the four changes and no fifth. NO PRODUCT CODE WAS TOUCHED in iterations 17, 18 or 19 - the offer at the end of iteration 16's log stands as written, suite included (hub/tests/ 3751 passed / 84 skipped / 1 xpassed). The run produced: 4 changes proposed-reviewed-implemented across 12 uncollapsed rounds, 3 live end-to-end drives, 5 findings inherited unfixed (F154/F155/F161/F162/F163), and 12 decisions for the operator of which D20 and D21 gate the next unit of work.",
-  "next_action": "RUN COMPLETE - stop_at (2026-08-31T08:00+01:00) has been reached. Any firing that reads this must STAND DOWN unconditionally and change nothing: the queue is empty, the tree is clean and pushed, and the branch is offered to the operator at 68de2bf plus this closing commit. Do NOT start a spec round, do NOT begin fixing F162/F161/F154/F155/F163, and do NOT re-verify the offer - iterations 17 and 18 did that and iteration 19 confirmed nothing moved. The run resumes only if the OPERATOR re-arms it, and the first unit of work then is a spec loop for F162's repair scoped to whichever candidate D20 selects - not before, because the three candidates are three different changes. D21 likewise decides whether F161 is a commit_for_task_review change or a review-leg change.",
+  "current": "Nothing started. Iteration 0 is the arming. The first firing cuts `autonomous/2026-08-31-the-turn-must-end-first` from master at fc0c661 and begins A-R2.",
+  "next_action": "Cut the branch from master at fc0c661, then run A-R2: round 2 of `approval-waits-for-the-turn-to-end`. Read the change's five artifacts, then RE-DERIVE the argument against the code rather than agreeing with round 1. The five load-bearing claims to check at the source are listed in the queue item. Fix the proposal where the code disagrees; answer design open questions 1 and 2; keep `openspec validate --strict` passing; commit as `spec(round 2)`.",
   "limits": [
+    "THE 15:30 RULE. After 15:30 local, do not start a new spec round and do not start a new implementation group. Park at a clean boundary and hand the remaining time to A-DRIVE-2 and A-CLOSE. The operator asked for the fix AND a drive; a run that ends having half-written a proposal instead of having driven the product has failed its instruction.",
+    "AT 16:30 stop all work, run A-CLOSE if it has not run, write the closing log entry and offer the branch. Leave nothing half-committed.",
+    "Push, do not open PRs. Do not merge to master — offer the branch, as the last three runs did.",
     "Never point a Hub you are editing at this repo. The trial Hub on 8011 is a separate instance; port 8000 is the operator's REAL usage and must never be touched.",
     "Never drive against proj-5e960453 (this repo) or proj-18e5d4e0. Create a fresh project for every drive.",
-    "On testing with claude always use cheap models - every real agent turn in a drive binds Haiku.",
+    "On testing with claude always use cheap models — every real agent turn in a drive binds Haiku.",
     "Let codex undrivable for now. Drive Claude runners only.",
-    "Push, do not open PRs. This run does NOT merge to master - it pushes its branch and the operator merges.",
-    "Stage explicit paths. Never `git add -A` - it sweeps in scratch.",
+    "Explore/propose -> review -> review before implementing. NEVER collapse the rounds to save time; the discipline has found a real defect on five consecutive outings.",
+    "Never mark a task complete on the strength of a plan existing. Only real, verified implementation closes a task.",
+    "The reproduction test is written and seen to FAIL before the fix, every time, and its failure output is read rather than assumed.",
+    "Stage explicit paths. Never `git add -A` — it sweeps in scratch.",
     "Never commit kimichanges.md or kimiwork.md.",
-    "Run tests with py -3.11, never bare python - bare python is a venv that yields 3 phantom pty_runner failures on a green tree.",
-    "black needs --target-version py311 on this machine or it refuses with a safety-check warning.",
-    "hub/hub/mcp_server.py may import ONLY stdlib + fastmcp. approve_tool_call keeps NO return annotation - FastMCP would derive structuredContent from one and silently defeat an allow.",
-    "After any UI change: cd hub/ui && npm run build, then py -3.11 scripts/refresh_ui_bundle.py, and commit hub/ui/src and hub/hub/static/ui together.",
-    "Never leave a scheduled job enabled after a drive. Clean the fixture: no agent mid-turn, nothing queued, no run running, no permission card pending.",
-    "Always the cleanest solution. 'More work' is never the objection.",
-    "explore/propose -> review -> review before implementing. Never collapse the rounds to save time. Never mark a task complete on the strength of a plan existing.",
-    "Commit each completed checkpoint without asking. Backticks inside a double-quoted commit message execute - use git commit -F.",
-    "Use the Write tool for large file bodies; long heredocs through the Bash tool fail on ~120-line payloads.",
-    "openspec validate --strict reads only a requirement's FIRST PHYSICAL LINE for the modal - put SHALL there.",
-    "`openspec new change` refuses a name starting with a digit. Create as <name>; archiving applies the date prefix. Renaming the directory by hand breaks every subsequent openspec call.",
-    "AFTER 05:30 do not start a new spec round. Park at a clean boundary and go to whichever DRIVE item is next, so the run ends having proven something rather than half-written a proposal.",
-    "The hub suite takes ~14 minutes and the operator has called it 'already too long'. Do not add slow tests casually, and never run it beside a live drive."
+    "Run tests with `py -3.11`, never bare `python` — bare python is a venv that yields three phantom pty_runner failures on a green tree.",
+    "`black` needs `--target-version py311` on this machine or it refuses with a safety-check warning. CI lints `src/ hub/ tests/` with ruff and `src/ hub/hub/ hub/tests/ tests/` with black — use exactly those paths.",
+    "The hub suite exceeds the 600s command cap. Run it in file chunks. `pytest hub/tests/ tests/` together fails collection.",
+    "`hub/hub/mcp_server.py` may import ONLY stdlib + fastmcp, and `approve_tool_call` keeps NO return annotation — FastMCP would derive structuredContent from one and silently defeat an allow.",
+    "Commit source and bundle together: after `npm run build`, `py -3.11 scripts/refresh_ui_bundle.py`.",
+    "Backticks inside a double-quoted commit message execute — use `git commit -F <file>`. Long heredocs fail through the Bash tool on ~120-line bodies; use the Write tool.",
+    "`openspec new change` refuses a name starting with a digit, and `openspec validate --strict` reads only a requirement's FIRST PHYSICAL LINE for the modal — SHALL/MUST must be on it.",
+    "Commit every iteration. A firing that ends with uncommitted work has lost it — the next firing may be a fresh process."
   ],
   "decisions_for_user": [
     {
+      "id": "D-ANSWERED-20",
+      "question": "F162: which of the three candidate repairs? (Raised as D20 by the previous run.)",
+      "pre_authorised_default": "ANSWERED BY THE OPERATOR 2026-08-31, after an openspec explore: REFUSE approval while the task's turn is live. Rejected: deferring the merge to turn-end, because it changes what `approved` promises and the archived change `2026-08-13-approved-means-it-is-in-the-product` decided that word means the work IS in the product; and making ALREADY_INTEGRATED retryable, because it leaves the board's claim false and puts recovery behind a button nobody has a reason to press. The objection that stopped this being obvious — 'approval would depend on run state, which nothing else does' — is FALSE: project_lifecycle.py:207 refuses project deletion and _guard_relocation refuses relocation on exactly that condition. Do not re-litigate this."
+    },
+    {
+      "id": "D-ANSWERED-21",
+      "question": "F161: should a loop staff reviews of its own agent's work at all? (Raised as D21 by the previous run.)",
+      "pre_authorised_default": "ANSWERED BY THE OPERATOR 2026-08-31: NO — a loop should not staff reviews at all. So the repair is at the SELECTION site, not inside commit_for_task_review. Rejected: teaching commit_for_task_review the branch tip, which would make F161's sentence true rather than never said and entrench a review leg for a mode with one agent and no second party."
+    },
+    {
       "id": "D1",
-      "question": "C: where does the unaccepted-evidence refusal live?",
-      "pre_authorised_default": "In requirement_gate, as a sibling of GateRefusal.unmergeable and on the same rationale - `_check_mergeable`'s docstring already draws exactly this line ('rigor is a claim about how well the work must be proven; this is a claim about whether it can go where approval puts it') and GateRefusal already separates 'this cannot go in' from 'this is unproven'. It MUST be rigor-independent for the same reason _check_mergeable is. Cost if wrong: a refusal in the wrong module, cheap to move while nothing depends on its location.",
-      "raise_it_if": "placing it there forces requirement_gate to import something that creates a cycle, or the refusal needs to fire somewhere apply_transition does not reach."
+      "question": "Where does the liveness predicate live, given `requirement_gate` imports only requirement_coverage, spec_rigor and models, and the registry lives in `api/v1/agent_trigger`?",
+      "pre_authorised_default": "Prefer a small new module both can import, with `agent_trigger` registering into it. If moving the registry proves invasive, the fallback is a FUNCTION-LOCAL import inside the gate's check — which is the codebase's own existing answer to this exact problem: `task_transition_service.integrate_task` does `from . import project_workspace, task_integration` inside the function body for the same reason. Cost if wrong: a deferred import, cheap to relocate later.",
+      "raise_it_if": "both routes create a cycle, which would mean the layering is wrong in a way this change should not be fixing."
     },
     {
       "id": "D2",
-      "question": "C: what exactly counts as 'evidence sits unaccepted'?",
-      "pre_authorised_default": "Evidence rows for this task in review_state 'awaiting'. REJECTED evidence is NOT this case - it has been judged, and refusing on it would wedge a task whose author must now record better evidence. Name every awaiting row in the refusal, not just the count. Cost if wrong: an over- or under-broad refusal, found immediately by DRIVE-1.",
-      "raise_it_if": "the honest predicate needs to distinguish evidence recorded against a requirement this task is not linked to."
+      "question": "Does the refusal apply to the evidence route (flows) as well as the branch-tip route (loops)?",
+      "pre_authorised_default": "YES, unconditionally. The refusal is a statement about when a task's work is knowable, not about which mechanism resolves it, so scoping it to one route would leave the same defect reachable by the other. If round 2 finds the evidence route provably cannot strand, KEEP the refusal unconditional and record what prevents it — do not narrow the rule to match today's reachability. Cost if wrong: a flow's approval is refused for ten seconds it did not strictly need to be.",
+      "raise_it_if": "an unconditional refusal breaks an existing flow test in a way that reveals a population approving mid-turn as normal practice."
     },
     {
       "id": "D3",
-      "question": "C: a task with SOME accepted evidence naming a commit AND some still awaiting - refuse, or allow?",
-      "pre_authorised_default": "ALLOW. The goal is that approval always merges something when there is something to merge; if accepted evidence already names a commit, integration will merge it and approval keeps its meaning. Refusing here would block work that is genuinely ready because a second piece of evidence is still in review. Record the awaiting rows as an advisory on the transition rather than a refusal. Cost if wrong: a task merges the older of two commits, visible in the integration record and correctable by a retry after acceptance.",
-      "raise_it_if": "round 2 finds that the awaiting evidence routinely names a NEWER commit than the accepted one, which would make allowing it merge stale work."
+      "question": "What surface does the one-action landing take?",
+      "pre_authorised_default": "A dedicated POST under the task rather than a PATCH. It is one operator intent composed of three transitions; a PATCH that looked like a single field change would hide that, and the recorded history has to show all three. Cost if wrong: a route name, cheap to change while nothing depends on it.",
+      "raise_it_if": "an existing route already composes transitions and this would be a second way to do one thing."
     },
     {
       "id": "D4",
-      "question": "D: how does a loop declare whether its work needs evidence, and what is the default?",
-      "pre_authorised_default": "A column on Loop plus a create_loop parameter, defaulting to NOT requiring evidence. Rationale for that default: a loop today can never merge anything at all, so defaulting to evidence-free is what makes the feature work and regresses nothing - no existing loop is landing work that could break. Name it for what it means to the operator, not for the mechanism. Cost if wrong: a default that surprises someone whose loop starts merging; bounded because loop tasks are per-task-isolated branches.",
-      "raise_it_if": "round 2 or 3 finds an existing loop path that DOES merge today, which would make this a behaviour change rather than a new capability."
-    },
-    {
-      "id": "D5",
-      "question": "D: when a loop needs no evidence, what commit is merged?",
-      "pre_authorised_default": "The task's own branch, agentweave/task/<task_id>, because `work-is-isolated-per-task` guarantees it carries that task's work and nothing else - which is precisely the property F58 was about. VERIFY that guarantee holds for LOOP tasks specifically before relying on it; that change was written about flows. Do NOT merge an agent branch (agentweave/<agent>) - that is F58 exactly, and it ships every task the agent ever touched. Cost if wrong: the F58 class of defect, which is severity A, so verify rather than assume.",
-      "raise_it_if": "loop tasks turn out not to get per-task worktrees, in which case there is no safe branch to merge and this needs the operator."
-    },
-    {
-      "id": "D6",
       "question": "The drives will find new defects. Which get fixed unattended and which are merely filed?",
-      "pre_authorised_default": "FIX what is small, self-contained and unambiguous - a wrong status code, a missing field, a message naming the wrong thing - each with a reproduction first and its own commit. FILE anything that needs a design decision, changes a lifecycle, touches a shipped requirement, or has more than one defensible answer. When in doubt, file it: a filed finding costs the operator two minutes to read, a wrong fix costs a spec loop to undo.",
+      "pre_authorised_default": "FIX what is small, self-contained and unambiguous — a wrong status code, a missing field, a message naming the wrong thing — each with a reproduction first and its own commit. FILE anything that needs a design decision, changes a lifecycle, touches a shipped requirement, or has more than one defensible answer. When in doubt, file it: a filed finding costs the operator two minutes, a wrong fix costs a spec loop to undo.",
       "raise_it_if": "a drive finds something severity A that blocks the rest of the run."
     },
     {
-      "id": "D7",
-      "question": "F47/F120 attribution - the flow's own claim is recorded as the operator's. Fix it in this run?",
-      "pre_authorised_default": "NO. Out of scope, and deliberately. task-lifecycle-governance:359 FORBIDS a third actor kind categorically, with a scenario pinning the enumeration, so the obvious repair breaches a shipped requirement and needs the operator. The alternative it blesses - acting AS the responsible run via origin=runtime - needs the claim reordered after run creation, which touches every loop rather than only flows. If B's work makes a narrow attribution fix fall out for free, propose it and STOP; do not implement it.",
-      "raise_it_if": "B genuinely cannot be fixed without changing attribution, which would make this blocking rather than adjacent."
+      "id": "D5",
+      "question": "The suite is red at A-CLOSE. Fix it or report it?",
+      "pre_authorised_default": "If the failure is plausibly YOURS, fix it. If it is not — an unrelated module, a known flake from `known_flakes`, or a failure that reproduces on master at fc0c661 — do NOT fix it blind: record it, prove where it comes from by checking out the parent sha in a scratch worktree if that is cheap, and offer the branch with the fact stated. The tree was CI-green at f4f8ac6, so an unrelated red is new information worth more than a guessed patch.",
+      "raise_it_if": "the suite is red in a way that makes the change's own tests unrunnable."
     },
     {
-      "id": "D18",
-      "question": "B, found during IMPL: should `RequirementEvidence.actor` be a FOURTH term in the may-have-authored exclusion? `record_evidence` takes `task_id` freely and does not require the calling run to be bound, so an agent that worked a task on an unbound run and recorded evidence for it is in none of the three terms -- and the review arm requires that evidence row to exist before it resolves a reviewer at all.",
-      "pre_authorised_default": "NOT taken this iteration, deliberately, and that is the recommendation to confirm rather than a decision made. D14's own rule -- exclude every agent any record associates with the task -- says the term belongs; but the shipped delta enumerates three sources by name, and adding a fourth that no round re-derived is the exact move this change spent three rounds arguing against. The residual exposure is narrow: the ordinary path binds the run, so an agent in this position is usually already in one of the three terms. Cost of leaving it: one self-approval route, through a door that requires an unbound run to have done the work.",
-      "raise_it_if": "DRIVE-1's row four shows the agent that recorded the evidence being offered its own work to review -- which is what `AW_COMPLETE_BY=untouched` was added to find out. If it does, this stops being a question and becomes a fourth round on change B."
-    },
-    {
-      "id": "D19",
-      "question": "DRIVE-1 found F155 (severity A): the approval gate's own refusal tells the reader 'Resolve the conflict on the branch, then approve', and doing that provably cannot clear it -- _check_mergeable judges the commit named by accepted evidence, never the branch. Driven, a Haiku reviewer obeyed the instruction, was refused twice more, and reached for `git reset --hard` on a branch holding the only copy of an agent's work. Does F155 earn a spec loop AHEAD of change D, or does D keep the queue?",
-      "pre_authorised_default": "D KEEPS THE QUEUE. Not because F155 is less serious -- it is arguably the most serious thing this run has found -- but because reordering a queue on the strength of a finding made twenty minutes earlier is exactly the move the round discipline exists to prevent, and D is the last unproposed change with an operator decision (D-B) already attached to it. F155 is filed with a full reproduction and the remedy that actually works, so nothing is lost by it waiting. Note also that F155 and F154 are the same shape as D's own subject -- what a flow's machinery tells an agent to do -- so D's rounds may want to read them anyway.",
-      "raise_it_if": "the operator wants the branch merged sooner than the queue empties, in which case F155's repair is small and self-contained -- the refusal already carries commit_sha in its structured half and drops it from the prose -- and would be the highest-value single commit available."
-    },
-    {
-      "id": "D6b",
-      "question": "D: may an explicit `work_needs_evidence=False` merge the branch tip for a task that IS linked to requirements and has accepted evidence?",
-      "pre_authorised_default": "YES, and the design keeps it. Arm 3 of the resolver puts the operator's declaration above both defaults, in either direction. Rationale: a declaration a person made about their own loop should beat a default the product chose, and D-B read literally says the loop decides. Raised because round 3's D11 establishes that such a task merges TODAY, so this is the one remaining way this change can stop something merging that merges now -- but only where somebody explicitly asked for it. `create_loop`'s docstring (task 7.2) and the JobForm sentence (task 6.8) must both say it out loud. Cost if wrong: a loop whose operator opted out of evidence merges a branch tip where accepted evidence named a different commit; visible in the integration record and in the preview drawer before approval.",
-      "raise_it_if": "the operator wants the evidence chain to be un-overridable once a task is linked to a requirement, which would make the declaration a default rather than a decision and needs its own round."
-    },
-    {
-      "id": "D20",
-      "question": "F162: which of the three candidate repairs closes the approve-inside-the-window strand? DRIVEN AND CONFIRMED, NOT FIXED — an approval fired while the task's agent is still mid-turn resolves the BASE commit as the work, records ALREADY_INTEGRATED, and that skip is deliberately not retryable, so the task reads `approved` on the board while its work sits unmerged on its branch with no button anywhere. Measured window: 10.5s on an ordinary three-step turn, and it is the AGENT that sizes it — nothing bounds how long an agent works after calling update_task(completed). Evidence: scripts/drive/FINDINGS.md F162, harness scripts/drive/t_f162_window.py, lanes 11/11 and 4/4.",
-      "pre_authorised_default": "NONE — this one is genuinely yours, which is why the run stopped rather than picking. The three candidates, each with the objection that stops it being obvious: (1) REFUSE the -> approved transition while the task's agent has a live run — cheapest and it closes the window at the only place that matters, but it makes approval depend on run state, which nothing else in the product does; (2) RESOLVE THE MERGE TARGET AFTER the turn's snapshot rather than at transition time — fixes the cause rather than the symptom, but it makes approval asynchronous, and what the operator sees between transition and merge is undesigned; (3) MAKE ALREADY_INTEGRATED RETRYABLE when the source branch has moved since the row was written — narrowest and it touches one predicate, but it leaves the operator holding a button they have no reason to press, on a screen that already says the task is approved. My read, offered and not acted on: (1) and (3) together are a smaller change than (2) and cover both the window and the strand already sitting in a database, but (2) is the only one that makes the merge target mean what its name says.",
-      "raise_it_if": "already raised — this IS the raise. Nothing proceeds on F162 until it is answered; a spec loop for the repair cannot even be scoped without knowing which candidate it is proposing."
-    },
-    {
-      "id": "D21",
-      "question": "F161: should a LOOP staff reviews of its own single agent's work at all? A loop whose declaration says its work needs no evidence still stalls with `task ... has no recorded evidence, so there is no commit to review` — while approving that same task merges its branch tip into master seconds later, which the drive proves. The sentence is false for exactly the population the declaration was built for.",
-      "pre_authorised_default": "NONE — the mechanical fix is obvious and probably wrong, which is why it is here rather than in the queue. Mechanically: `requirement_evidence.commit_for_task_review` (scheduler.py:1472) resolves the review commit from evidence rows and nothing else, and its docstring's rejected alternative ('there is nothing to review anyway') stopped being true when `task_integration.merge_targets` learned a second answer to 'which commit is this task's work'. Teaching commit_for_task_review the branch tip would silence the stall in an afternoon. The reason not to just do it: a loop has ONE agent and no review leg, so it is not obvious it should be staffing a review at all — the honest repair may be that a loop never enters the review leg, which is a design question about the loop/flow split, not about this sentence. Answering 'teach the module' vs 'a loop skips review' picks two different changes. This is F58's drift arriving from the other side: two implementations of one question, and the newer one is the one that knows.",
-      "raise_it_if": "already raised — this IS the raise."
+      "id": "D6",
+      "question": "F154 (severity A) is not in this run's queue. Should it be pulled in?",
+      "pre_authorised_default": "NO. F154 — a review that ends without a verdict wedges the task while the flow answers 'nothing is wrong' — has a clear suggested shape already written in FINDINGS.md (the WITH_REVIEWER branch at scheduler.py:1289-1357 has `held` in scope and never consults it), but it is a different subject from this change and pulling it in is how a reviewable change stops being reviewable. It stays filed. F155-R1 is queued LAST and proposal-only for the same reason.",
+      "raise_it_if": "A-DRIVE-2 wedges on F154 and cannot complete without it, which would make it blocking rather than adjacent."
     }
   ],
   "carried_open_questions": [
-    "F162 IS DRIVEN AND CONFIRMED (iteration 16) but NOT FIXED. Approving inside the window is not refused by anything: three transitions at 200 with the agent mid-turn, the integration resolves the BASE commit, records already-integrated, and that skip is deliberately not retryable -- the work is stranded on its branch behind a screen that says `approved`. The window is AGENT-SIZED (measured 10.5s on an ordinary three-step turn), not a sub-second race. Three candidate repairs are recorded in FINDINGS.md, none driven: refuse the transition while the task's agent has a live run; resolve the merge target after the turn's snapshot; or make ALREADY_INTEGRATED retryable when the source branch has moved. Choosing between them is an operator decision.",
-    "FOUND IN ITERATION 15, filed as F161, NOT fixed: a loop whose declaration says evidence does not govern still stalls with 'has no recorded evidence, so there is no commit to review'. `requirement_evidence.commit_for_task_review` resolves the review commit from evidence and nothing else, and its docstring's rejected alternative ('there is nothing to review anyway') is now false, because `task_integration.merge_targets` knows a second answer for exactly this population. That is F58's drift arriving from the other side. Whether the repair belongs in `commit_for_task_review` at all is a design question about the loop/flow split: a loop has one agent and no review leg, so it is not obvious it should be staffing reviews at all.",
-    "FOUND IN ITERATION 15, filed as F163: landing a loop's work costs the operator THREE transitions (assignee -> null, -> under_review, -> approved), two of them discovered as refusals (403 then 409). A flow never meets the first, because it resolves a non-author reviewer. Both refusals name their remedy; the finding is that nothing says so before the operator is standing in front of the 403.",
-    "F109 FIRED for the first time in three full runs (iteration 15): the hub suite stalled dead at 95%, zero CPU movement over 40 seconds, nothing failed. The tail from that point passed standing alone in 84s and a full re-run was green. If it fires again, the stall region is `test_task_worktrees.py`/`test_tasks.py`, around test 3646 of 3836.",
-    "STILL OPEN, F154 - and it is no longer fair to call its cause intermittent: TWO consecutive drives ended with a reviewer looping on `ToolSearch`, writing its verdict in prose, and never calling `update_task`. The Hub's own half - every firing afterwards answering the false-healthy 409 'nothing is wrong' with both agents idle and the task wedged at `under_review` - reproduced verbatim in iteration 15.",
-    "STILL OPEN, F155, and MORE ORDINARY than DRIVE-1 suggested: two parallel tasks appending to one file is the SHAPE of a flow's work, not an accident of a stalled lane. Whichever lands first makes the other unmergeable, and the refusal's remedy ('Resolve the conflict on the branch, then approve') cannot be followed by anybody. Reproduced in iteration 15.",
-    "STILL OPEN, F157: `POST /jobs` drops `spec_document_id` silently while refusing `work_needs_evidence`. The asymmetry is deliberate and is stated in a comment at the refusal.",
-    "STILL OPEN, F158: a task branch is cut at DISPATCH and prerequisites are merged ONLY at branch creation, while `dependency_gate` fires one edge later; `agent_trigger` consults no dependency gate at all.",
-    "STILL OPEN, F156: `integration-preview`'s `will_merge` is `bool(main_branch and targets)` and answers true for a task the gate refuses outright.",
-    "STILL OPEN, F160: the tool-surface parity guards cannot see an OPTIONAL argument the hand-written inventory omits.",
-    "F159's guard is load-bearing for a reason it was not written for: if a later change widens design D12's `approved` filter back to both merge routes, `test_a_prerequisites_accepted_commits_are_in_the_task_checkout` is what fails.",
-    "D6 in `decisions_for_user` was EXERCISED in iteration 15 and behaves exactly as the design says: the omitted declaration merges the branch tip for a task that carries no requirement link. It is still the operator's to confirm as intent; it is not a defect.",
-    "The DRIVE-2 fixture is `drive2-2026-08-31` = `proj-60c8c49372ce` at C:\\Users\\huida\\Documents\\drive2-2026-08-31, on the 8011 Hub, `master` adopted automatically by `POST /projects/open`, agents `alpha` and `beta` on `claude-haiku-4-5-20251001`, and `allow_agent_jobs` turned ON - without which `create_loop` is not in an agent's inventory at all and task 8.5's named route is unreachable. Every job archived, both agents idle, checkout clean. Reuse it rather than building another.",
-    "The UI bundle is committed and stamped as of 5522597; nothing in iteration 15 touched `hub/ui/src`."
+    "F154 and F155 remain filed, severity A, unfixed. F155-R1 is queued last and proposal-only.",
+    "F156: integration-preview says will_merge:true for a task approval refuses outright — this change may fix it as a side effect, since the preview and the gate would then disagree in one fewer place. Check and record; do not chase.",
+    "F157, F158, F159, F160, F164: filed from the last run's drives, none queued.",
+    "F77: an agent has no way to address the operator. Filed, unfixed, unqueued.",
+    "F53's `_adopt_document_tasks` orphaning half, and F65's review-briefing retry — open, unqueued.",
+    "F130, F127, F111+F3, F113, F61 were queued for an earlier run and never carried forward. They need re-queueing.",
+    "The hub suite takes ~14 minutes and the operator called it 'already too long'. Still unscheduled.",
+    "`fastapi>=0.110` is unbounded and has produced two CI-only failures via Starlette major bumps. Worth pinning; still undecided.",
+    "The feature freeze's parameters, still unsettled.",
+    "The release roadmap's Phase 1 decision list still offers F122's 'change nothing, surface it loudly' option, which is NOT viable — it leaves task-lifecycle-governance:638 breached. The published artifact at https://claude.ai/code/artifact/5f126f3b-01a7-49a2-ac7c-180570aa8c81 has not been corrected."
   ],
-  "last_heartbeat": "2026-08-31T07:50:17+01:00"
+  "last_heartbeat": null
 }
