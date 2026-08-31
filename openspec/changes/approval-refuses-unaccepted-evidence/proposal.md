@@ -113,12 +113,17 @@ exactly when acceptance would produce a target that is not there now (D5).
 
 ### 2. Accepting evidence attempts the integration that wanted it
 
-A new `task_integration.tasks_skipped_for_want_of_accepted_evidence`, the sibling of
-`tasks_skipped_for_want_of_a_main_branch` (`task_integration.py:343-390`) — approved tasks linked to
-this evidence's requirement whose **most recent** integration attempt skipped with
-`NOTHING_TO_MERGE`. Called from both decision routes, after the commit, wrapped so a git failure
-never undoes the acceptance. Only that skip reason, on the same D8 reasoning the branch sibling
-records: accepting evidence says nothing about a dirty checkout.
+A new `task_integration.tasks_awaiting_this_commit` — approved tasks linked to this evidence's
+requirement whose newly accepted commit is **not already recorded as merged for that task**. Called
+from both decision routes, after the commit, wrapped so a git failure never undoes the acceptance.
+
+**Round 2 rewrote this half.** Round 1 wrote it as a copy of `tasks_skipped_for_want_of_a_main_branch`
+(`task_integration.py:343-390`), inheriting its filter on the *most recent* attempt's *reason*. That
+misses the mixed case entirely: there, approval already merged the accepted target, so the newest row
+is `MERGED` and no reason filter can match it — leaving the newer, unaccepted commit outside the
+product for ever. The trigger is a **commit that is not in the product**, not a previous attempt's
+reason. `retry_integration` self-guards with `ALREADY_INTEGRATED` by asking the repository rather
+than the attempt log, which is what makes the wider predicate safe (design D3 and D7).
 
 ### What is deliberately not in scope
 
@@ -134,7 +139,9 @@ records: accepting evidence says nothing about a dirty checkout.
 - Specs: `task-lifecycle-governance` — one ADDED refusal requirement, one ADDED
   acceptance-triggers-integration requirement, one MODIFIED enumeration.
 - Code: `hub/hub/requirement_gate.py`, `hub/hub/task_integration.py`,
-  `hub/hub/api/v1/spec.py`, `hub/hub/api/v1/agent_actions.py`.
+  `hub/hub/api/v1/spec.py`, `hub/hub/api/v1/agent_actions.py`, and — added by round 2 —
+  `hub/hub/mcp_server.py`, three lines, so the refusal's sentence reaches an agent as a sentence
+  rather than as a Python dict repr (**F152**, design D12).
 - No UI change, no migration, no new column.
 - **Behaviour change an operator will notice**: in a project with no granted agent, a flow that
   records evidence now stalls at approval instead of finishing with nothing merged. That is D-A,

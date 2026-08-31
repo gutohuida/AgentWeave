@@ -903,3 +903,149 @@ in the multi-branch shape too?), and D6 — the link-based scope means awaiting 
 *another* task against a *shared* requirement refuses this task's approval. Round 1's position is
 that consistency with the merge beats a narrower refusal; round 2 should find out how common a
 shared `TaskRequirementLink` actually is before that is taken as settled.
+
+## Iteration 7 — 2026-08-31 01:39 to 01:5x (+01:00)
+
+Branch `autonomous/2026-08-31-the-flow-lands-its-work` at `7c8c1ed`, tree clean, `git log` matching
+STATE.json (iteration 6 done and released). Nothing to reconcile. Heartbeat claimed at 01:39.
+
+### One item: `C-R2`
+
+Round 2 of `approval-refuses-unaccepted-evidence`, a fresh comparison against the code. Round 1's
+`file:line` claims were re-read rather than trusted; the ones that survive are not restated here.
+Four defects found, three in the proposal and one in the product.
+
+### The headline: D3's coupling was real, and half 2 as specified does not carry it
+
+Round 1 named the mixed case's ALLOW as *conditional* on half 2 and asked rounds 2 and 3 to check
+the coupling rather than agree with the sentence. Checked, it **fails** — and not in the
+multi-branch shape the queue asked about. In every shape, including the simplest.
+
+Half 2's predicate as round 1 wrote it (D7, `tasks.md` 4.1) was copied from
+`tasks_skipped_for_want_of_a_main_branch`: approved tasks whose **most recent** `TaskIntegration` is
+`SKIPPED` with `reason == NOTHING_TO_MERGE`. In the mixed case the most recent integration is not a
+skip — approval merged the accepted target, so the newest row is `MERGED`, no reason filter can
+match it, and the awaiting commit stays outside the product permanently while the task sits terminal
+at `approved`.
+
+| accepted | awaiting | approval merges | newest row | round 1's retry |
+|---|---|---|---|---|
+| A on `X` | — | nothing | `SKIPPED/NOTHING_TO_MERGE` | fires |
+| A on `X` | B on `X` (newer) | A | `MERGED` | **does not fire** |
+| A on `X` | B on `Y` | A | `MERGED` | **does not fire** |
+
+Row 2 is the ordinary one and the worst: `integration_targets` returns the newest *accepted*
+footprint per branch, so approval merges the older commit and strands the task's actual final work.
+
+**Measured, not inferred.** `hub/tests/test_task_integration.py:377-379` is a shipped, passing
+assertion that the newest row after such an approval reads `merged`. The suite already contains the
+row that proves round 1's predicate cannot match.
+
+**Why the borrowed proxy was wrong.** Naming a main branch changes the world in exactly one way, so
+"most recent skip was `NO_MAIN_BRANCH`" *is* the proposition "this action created something
+mergeable". Accepting evidence adds a **target**, and a task can acquire one whatever its last
+attempt did. Round 1 inherited a proxy from a case where it happened to be exact.
+
+**The repair, and its licence.** The trigger becomes *a commit that is not in the product* rather
+than *a previous attempt's reason*: approved tasks linked to the evidence's requirement, excluding
+any that already recorded a merge of that commit. Correctness does not depend on the predicate being
+exact — only noise does — because `retry_integration` self-guards with `ALREADY_INTEGRATED` by
+asking the repository rather than the attempt log, and says so in its own docstring
+(`task_transition_service.py:699-702`). Multi-branch converges by construction; same-branch
+converges because merging the newer commit carries the older one's ancestry.
+
+D3's ALLOW is **right**, after the repair. Round 1 reached a correct answer through an argument that
+did not hold — the failure mode round 3 exists for, arriving in round 2 for the second change
+running. The cost is named rather than hidden: a task whose last attempt skipped `CHECKOUT_DIRTY` is
+now attempted again on an acceptance and records a second dirty skip. Accepted, and the difference
+is causal — the branch sibling fires on a settings save that says nothing about the checkout; this
+fires on an acceptance that produced a commit nobody has merged.
+
+### D6 measured: sharing a requirement is ordinary, so the refusal's *wording* changes
+
+Round 1 asked how common a shared `TaskRequirementLink` is before its scope was taken as settled.
+Three places say many-tasks-per-requirement is first-class: `tasks_for_requirement` returns a
+**list** and `spec.py:767` serves it; `spec_tasks.materialise` scopes duplicate suppression to
+*hand-made* tasks and states in a comment that a later decomposition entry naming an
+already-declared requirement **is still created**; `absorb_free_text` from `tasks.py:795` lets any
+agent's `create_task` name any identifier.
+
+The link-based scope still stands — narrowing it to `RequirementEvidence.task_id` would make the
+refusal disagree with the merge — but an operator refused over a row their own task never recorded
+needs a route back to its cause. Each named row now carries **the task that recorded it**, and says
+so where that is not the task being approved. `RequirementEvidence.task_id` is populated even when
+an agent omits it (`requirement_evidence.py:125-129`), and is nullable, so absence is tolerated.
+
+### Scenarios re-derived, not just the argument (B-IMPL's lesson)
+
+- **Two WHENs were wider than their own requirement.** "Evidence naming no commit does not refuse"
+  and "Rejected evidence does not refuse" both omitted *only* — as written, a task carrying awaiting
+  evidence *and* a `paths` row would satisfy the scenario while the requirement demands a refusal.
+  The MODIFIED requirement's own rejected-evidence scenario already said "only"; the ADDED ones now
+  match it.
+- **The "already there" scenario contradicted the new predicate.** Excluding tasks that already
+  recorded a merge means no attempt and no row, while the scenario demanded an `ALREADY_INTEGRATED`
+  record. Split into the two genuinely different cases: this task already merged it (no attempt), or
+  it reached the branch some other way (attempt, and record the fact the reader does not otherwise
+  have).
+- One scenario added per new clause: the refusal saying whose evidence it is; the partial merge's
+  leftover merging on acceptance; an attempt that cannot proceed recording why.
+
+### The enumeration this change argues from was not actually closed
+
+The proposal's *Why* argues that `NOTHING_TO_MERGE` "is not in that list". Diffed against the live
+spec, the list also omits **an unresolvable working directory**, which `integrate_task` has always
+skipped on (`task_transition_service.py:746-753`). Added to the MODIFIED requirement, and requirement
+1's precondition enumeration corrected to match `_check_mergeable`'s four rather than three. An
+argument from a list that is not closed is worth nothing.
+
+### F152 — the product defect this round found
+
+`main.py:406-415` sends `refusal.to_dict()` as the response `detail`, so an agent's `update_task`
+receives a **dict**. `mcp_server._readable_detail` special-cases a `list` and falls through to
+`str(detail)` for everything else — so every gate refusal has reached every agent since the gate
+shipped as a Python dict repr, with the sentence buried in braces. That is exactly what that
+function's docstring says it exists to prevent, for the other shape. The two evidence-decision
+refusals D8 makes load-bearing (`acceptance_not_granted`, `self_acceptance`) arrive the same way.
+
+Pre-existing, and in scope anyway: this change's whole value is a sentence an agent must act on, and
+D8 makes that sentence the only thing between the agent and a deadlock it has to escalate. Three
+stdlib-only lines, carried as `tasks.md` 6.3.
+
+### Four facts checked so `C-IMPL` need not (design D13)
+
+1. Two unrelated `Actor` types. Both decision routes hold `spec_lifecycle.Actor`;
+   `retry_integration` takes `task_transitions.Actor`, which admits only `run`/`operator` and
+   requires both `run_id` and `agent` for `run`. Task 4.6 is reachable, but only through an explicit
+   conversion — passing the `spec_lifecycle` actor raises `ValueError`.
+2. `task_integration.record` constrains nothing: no `CheckConstraint` on `actor_kind` in the model
+   or any migration. The constraint that bites is (1).
+3. `expire_on_commit=False` (`db/engine.py:40`), so committing again after the route's own commit
+   cannot expire the objects it then serialises. The usual `MissingGreenlet` hazard is absent; do
+   not add a defensive refresh.
+4. Evidence the **operator** records is born `accepted` (`requirement_evidence.py:167`). So the
+   refusal can only ever fire on agent-produced evidence, which is why F122 is flow-shaped and why
+   D8's deadlock is exactly as narrow as D8 claims.
+
+Also: `resolve_project_workspace` is not a pure read — it writes `directory_state` and
+`last_seen_at` — which is a third reason for task 3.7's hoist beyond the two round 1 gave.
+
+### Verification
+
+- `openspec validate approval-refuses-unaccepted-evidence --strict` — valid, after each edit.
+- The MODIFIED requirement re-diffed line-by-line against `openspec/specs/`: the intended sentence,
+  the two new paragraphs, the one added scenario, nothing else.
+- Every claim above was read in the code this iteration; four cited line ranges were wrong on first
+  writing and were corrected against the files.
+- No code changed, so no test run. That is `C-IMPL`'s.
+
+### Next
+
+**`C-R3`.** A second *independent* re-derivation, not a review of round 2. Round 2 most wants
+attacked: (a) is "not already recorded as merged for that task" the right predicate, or does the
+honest question belong to the repository — is this commit reachable from main — with the DB row only
+a cheap pre-filter? (b) does the refusal belong at approval at all, given that `integration_targets`
+is link-based and a shared requirement now couples two tasks' approvals? (c) F152's fix returns
+`detail["message"]` — check nothing else depends on the dict repr reaching an agent, and that the
+`list` branch still wins for validation errors. And re-derive the scenarios again: round 2 found two
+whose WHEN was wider than the requirement and one that contradicted its own predicate.

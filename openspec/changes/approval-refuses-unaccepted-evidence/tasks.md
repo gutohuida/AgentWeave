@@ -9,7 +9,10 @@
   `review_state='awaiting'` carrying an `EvidenceFootprint` of `kind='git'` with a real
   `commit_sha` on a branch. Read the rows back and assert they are what they claim before asserting
   anything about behaviour — B-IMPL found two fixture defects this way, and each would have made an
-  assertion pass without the behaviour existing.
+  assertion pass without the behaviour existing. **Round 2: do not build this from scratch.**
+  `hub/tests/test_task_integration.py` already has `set_main_branch`, `linked_task`,
+  `commit_on_branch`, `accept_evidence`, `approve`, `integrations`, `commits_on` and `files_on`
+  working against a real repository; reuse them and the fixture risk mostly goes away.
 - [ ] 1.3 **F122's reproduction.** Approve that task through `apply_transition` and assert **today's**
   behaviour: the transition succeeds, `task.status == 'approved'`, and a `TaskIntegration` row
   records `outcome='skipped'` with `reason == task_integration.NOTHING_TO_MERGE`. Confirm it passes
@@ -32,11 +35,11 @@
   `requirement_evidence.AWAITING`. Its docstring states the property D5 buys: the refusal fires
   precisely when acceptance would produce a target that does not exist now, and two independently
   written queries would drift.
-- [ ] 2.3 Return the evidence id alongside the commit and branch — the refusal must **name each
-  piece of evidence**, not count them, and `Target` carries only `commit_sha` and `branch` today.
-  Decide between widening `Target` with an optional `evidence_id` and returning a second shape;
-  prefer widening, because the accepted path can carry it harmlessly and a second shape is a second
-  thing to keep in step.
+- [ ] 2.3 Return the evidence id, its requirement identifier **and its `task_id`** alongside the
+  commit and branch — the refusal must **name each piece of evidence** and say which task recorded
+  it (round 2's D6), and `Target` carries only `commit_sha` and `branch` today. Decide between
+  widening `Target` with optional fields and returning a second shape; prefer widening, because the
+  accepted path can carry them harmlessly and a second shape is a second thing to keep in step.
 - [ ] 2.4 Unit-test `awaiting_targets` directly: awaiting-with-commit returns it; accepted does not;
   rejected does not; `paths` footprint does not; evidence linked through a requirement this task is
   not linked to does not.
@@ -53,8 +56,12 @@
   immediately when `unmergeable` is set and nothing else is — a third category appended carelessly
   is dropped from the sentence in the case that matters most. Restructure so each category
   contributes its own sentence and the composition is explicit.
-- [ ] 3.4 The sentence names each awaiting evidence row (its requirement identifier and commit) and
-  **both remedies** — accept it, or grant an agent `can_accept_evidence`. The requirement is
+- [ ] 3.4 The sentence names each awaiting evidence row — its requirement identifier, its commit,
+  **and the task that recorded it**, saying so explicitly where that is not the task being approved
+  (round 2's D6: a shared `TaskRequirementLink` is ordinary, so this happens in normal use).
+  `RequirementEvidence.task_id` carries it and is populated even when an agent omits it
+  (`requirement_evidence.py:125-129`); it is nullable, so tolerate its absence. The sentence also
+  names **both remedies** — accept it, or grant an agent `can_accept_evidence`. The requirement is
   explicit that a refusal naming a remedy its reader cannot reach must say so.
 - [ ] 3.5 Add it to `to_dict()`. `main.py:415` serialises exactly that; a field missing there reaches
   no surface at all.
@@ -64,7 +71,10 @@
 - [ ] 3.7 **Share `_check_mergeable`'s preconditions (D4)**, and share them by construction rather
   than by copying: resolve project, main branch, workspace and `is_repository`/`branch_exists` once
   and pass the result to both checks. Two copies of four preconditions is two things to keep in
-  step, and the approval path would run the same two subprocess calls twice.
+  step, and the approval path would run the same two subprocess calls twice. A third reason round 2
+  found: `resolve_project_workspace` is not a pure read — it writes `project.directory_state` and
+  `project.last_seen_at` (`project_workspace.py:210-233`) — so calling it twice per approval writes
+  the same fields twice on the same session for no gain.
 - [ ] 3.8 `GateRefusal` gains `advisory: List[Dict[str, Any]]` (D3), populated with the awaiting rows
   in the mixed case — where accepted targets exist. It is **not** counted by `refuses` and **not**
   part of `detail()`.
@@ -75,27 +85,36 @@
 
 ## 4. Acceptance attempts the integration (D7)
 
-- [ ] 4.1 `tasks_skipped_for_want_of_accepted_evidence(session, evidence)` in `task_integration.py`,
-  written against `tasks_skipped_for_want_of_a_main_branch` as its template: the newest
-  `TaskIntegration` per task, `Task.status == 'approved'`, `outcome == SKIPPED`,
-  `reason == NOTHING_TO_MERGE`, and the task reached through `TaskRequirementLink` from the
-  evidence's `requirement_id`. Keep the `.unique()` handling the sibling needed — two integration
-  rows sharing the newest timestamp would otherwise retry twice.
-- [ ] 4.2 A shared `integrate_what_was_waiting_for_this_evidence(session, evidence)`, wrapped in
-  `try/except` with a `logger.warning` and `session.rollback()`, exactly as
+- [ ] 4.1 **Round 2 rewrote this task; do not implement the version it replaced.**
+  `tasks_awaiting_this_commit(session, evidence)` in `task_integration.py`: approved tasks reached
+  through `TaskRequirementLink` from the evidence's `requirement_id`, **excluding** any task that
+  already has a `TaskIntegration` row with `outcome == MERGED` and this evidence footprint's
+  `commit_sha`. It is **not** `tasks_skipped_for_want_of_a_main_branch` with a different reason
+  string: filtering on the most recent attempt's reason misses the mixed case entirely, because
+  there the most recent attempt is a `MERGED` row (design D3, round 2's table; D7 as rewritten).
+  Deduplicate the task list — one task can hold several integration rows.
+- [ ] 4.2 A shared `integrate_what_was_waiting_for_this_evidence(session, evidence, actor)`, wrapped
+  in `try/except` with a `logger.warning` and `session.rollback()`, exactly as
   `_integrate_what_was_waiting_for_a_branch` is. It returns early unless the evidence's
-  `review_state` is `ACCEPTED` **and** it carries a git footprint naming a commit.
+  `review_state` is `ACCEPTED` **and** it carries a git footprint naming a commit. It calls
+  `retry_integration` per task, which recomputes `integration_targets` and self-guards with
+  `ALREADY_INTEGRATED` — that self-guard (`task_transition_service.py:699-702`) is what licenses a
+  predicate wider than the sibling's, so do not add a second reachability check here.
 - [ ] 4.3 Call it from `hub/hub/api/v1/spec.py`'s `decide_evidence`, **after** `session.commit()`.
 - [ ] 4.4 Call it from `hub/hub/api/v1/agent_actions.py`'s `decide_evidence`, after its commit. Both
   routes, or the granted agent's acceptance — which is the whole point of the grant — merges
   nothing.
 - [ ] 4.5 Do **not** put this inside `requirement_evidence.decide`. It neither commits nor knows
   about tasks, and integration must run after the commit.
-- [ ] 4.6 Which actor is recorded on the integration? The sibling uses `operator()`. Here the
-  accepting actor is known and is sometimes an agent. Record the actor that *accepted*, and write
-  the reason down: the integration happened because of that decision, and an integration record
-  naming the operator for an agent's decision is a false account of who caused it. Check
-  `task_integration.record`'s `actor_kind` values accept it.
+- [ ] 4.6 Record the actor that *accepted*, not `operator()` as the sibling does: the integration
+  happened because of that decision, and a record naming the operator for an agent's decision is a
+  false account of who caused it. **Round 2 checked this and it needs an explicit conversion.**
+  Both routes hold a `spec_lifecycle.Actor(kind="agent"|"operator")`; `retry_integration` takes a
+  `task_transitions.Actor`, which admits only `run`/`operator` and *requires* both `run_id` and
+  `agent` for `run` (`task_transitions.py:59-67`). So build `run_actor(actor.run_id, actor.agent)`
+  on the agent route and `operator()` on the operator route. Passing the `spec_lifecycle` actor
+  through raises `ValueError`. `task_integration.record` itself constrains nothing — no
+  `CheckConstraint` on `actor_kind` in the model or any migration (design D13).
 
 ## 5. The behaviour tests
 
@@ -111,13 +130,20 @@
 - [ ] 5.6 The mixed case: accepted evidence naming commit A and awaiting evidence naming commit B —
   approval succeeds, A is merged, and the awaiting row appears in `approval_report`. Then accept B
   and assert B is merged too. **This pair is D3's whole argument**; without the second half the
-  first half is the defect in miniature.
+  first half is the defect in miniature. **Round 2: this test was already right and the requirement
+  behind it was wrong** — round 1's `NOTHING_TO_MERGE` predicate could not have passed it, because
+  the newest integration row here is `MERGED`. Write it in both shapes: B on A's branch, and B on a
+  second branch.
 - [ ] 5.7 Refusal at `sketch` rigor, which is where a default project lives.
 - [ ] 5.8 No main branch: approval succeeds with awaiting evidence present, and the skip is recorded.
   Same for a non-repository project.
 - [ ] 5.9 The granted-agent route: an agent with `can_accept_evidence` accepting through
   `agent_actions` merges the work.
-- [ ] 5.10 A dirty-checkout skip is **not** retried by an acceptance (D7's "only that cause").
+- [ ] 5.10 **Round 2 inverted this.** An acceptance on a task whose last attempt skipped
+  `CHECKOUT_DIRTY` **is** attempted again and records the dirty reason a second time — the trigger
+  is a commit that is not in the product, not the previous attempt's reason (D7 as rewritten). Also
+  assert the noise guard the new predicate does keep: accepting evidence whose commit already has a
+  `MERGED` row for that task attempts nothing.
 - [ ] 5.11 Rejecting attempts nothing.
 - [ ] 5.12 Acceptance stands when the attempt raises — patch the integration call to raise and assert
   `review_state == 'accepted'` afterwards.
@@ -132,6 +158,12 @@
   app-level `TransitionRefusedError` handler is not route-scoped. Assert it in a test rather than
   reasoning about it — this change's entire premise is that a refusal must reach the agent that has
   to act on it.
+- [ ] 6.3 **F152, added by round 2.** `mcp_server._readable_detail` handles a `list` detail and
+  falls through to `str(detail)` for a `dict`, so a gate refusal reaches an agent as a Python dict
+  repr with the sentence buried in it. Return `detail["message"]` where a dict carries a non-empty
+  string one; otherwise keep today's behaviour. Stdlib only — `mcp_server.py` may import nothing
+  else. Test it in `hub/tests/` against `_readable_detail` directly with a real `to_dict()` payload,
+  and assert the dict-repr braces are absent from what an agent would read.
 
 ## 7. Verification
 

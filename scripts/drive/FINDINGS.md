@@ -11252,3 +11252,56 @@ The mechanism that suppressed it is gone; that it now prints is inference, not m
 sqlalchemy, alembic`; `hub/hub/main.py` `lifespan()` ordering (`init_db()` first,
 `logger.warning(warning)` after); `C:/Users/huida/AppData/Local/Temp/aw0830/hub_crash.log`, eleven
 process starts, four lines each.
+
+## F152 (B) — every gate refusal reaches an agent as a Python dict repr, and the fix is three lines
+
+**Found 2026-08-31 by C-R2, reading code rather than driving.** Not a drive finding; recorded here
+because this is where the loop's defects live and because change `approval-refuses-unaccepted-evidence`
+now depends on the channel this breaks.
+
+`main.py:406-415` handles every `TransitionRefusedError` by sending the structured refusal as the
+response `detail`:
+
+```python
+refusal = getattr(exc, "refusal", None)
+return UTF8JSONResponse(status_code=exc.http_status,
+                        content={"detail": refusal.to_dict() if refusal is not None else exc.detail})
+```
+
+So an agent calling `update_task` on a task the requirement gate refuses gets a **dict**.
+`mcp_server._readable_detail` (`mcp_server.py:111-135`) special-cases a `list` — the Pydantic
+validation-error shape — and then falls through to `str(detail)`. The agent is handed:
+
+```
+{'code': 'gate_unsatisfied', 'blocking': [{'identifier': 'FR-3', 'state': 'awaiting_review',
+ 'remedy': '...'}], 'diagnostics': [], 'unmergeable': [], 'reported': [], 'message': 'This task
+ serves requirements a gate is enforcing ...'}
+```
+
+Which is exactly what that function's own docstring says it exists to prevent, for the other shape:
+
+> A Pydantic validation failure arrives as a list of error dicts, and stringifying it verbatim
+> produced tool errors like `[{'type': 'value_error', 'loc': [...], 'msg': ...}]`. An agent trying
+> to correct itself had to parse that.
+
+The `list` case was fixed. The `dict` case was never noticed, because the only producer of a dict
+detail is the gate, and the gate's refusals had not been driven from the agent plane.
+
+**Severity B, not C.** The sentence is present, so an agent that parses the repr can recover — but
+`GateRefusal.detail()` is the product's stated answer to *"an unactionable gate gets switched off,
+which is worse than never having built one"*, and this is the surface where the reader can least
+afford to parse. The two other dict-detail producers reach agents the same way: the evidence
+decision routes both raise `HTTPException(detail={"message": ..., "code": ...})`
+(`spec.py:887-888`, `agent_actions.py:1195-1197`), so `acceptance_not_granted` and
+`self_acceptance` — the two refusals D8 makes load-bearing — arrive in braces too.
+
+**Fix:** in `_readable_detail`, where `detail` is a dict carrying a non-empty string `message`,
+return it; otherwise keep today's behaviour. Stdlib only, which the file requires. Carried as task
+6.3 of `approval-refuses-unaccepted-evidence` rather than queued separately, because that change's
+whole value is a sentence an agent has to act on and its D8 deadlock is escalated by an agent
+repeating that sentence to a person.
+
+**Evidence:** `hub/hub/main.py:406-415`; `hub/hub/mcp_server.py:111-135`;
+`hub/hub/task_transition_service.py:77-89` (`GateUnsatisfiedError` carries the refusal);
+`hub/hub/requirement_gate.py:120-129` (`to_dict`); grep for `GateUnsatisfiedError` shows no route
+catches it, so the app handler is the only path.

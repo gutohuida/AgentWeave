@@ -24,9 +24,11 @@ way, and the author's only legitimate next move is to record evidence that satis
 refusal there would wedge the task behind a decision its holder cannot reverse.
 
 **The refusal SHALL NOT fire where integration could not be attempted in any case** — where the
-project has no configured main branch, is not a repository, or has no branch by the configured name.
-Accepting the evidence would merge nothing in those projects, so the refusal would block every task
-in them behind a remedy that changes nothing.
+project has no configured main branch, where its working directory cannot be resolved, where it is
+not a repository, or where it has no branch by the configured name. Accepting the evidence would
+merge nothing in those projects, so the refusal would block every task in them behind a remedy that
+changes nothing. These are the same conditions under which work that will not merge is not refused
+either, and they SHALL be the same conditions rather than a second list that can drift from it.
 
 This refusal SHALL apply regardless of the rigor of any document the task's requirements belong to.
 It is not an assertion that the work is unproven; it is an assertion that approving now would place
@@ -37,6 +39,13 @@ nothing.
 The refusal SHALL be carried in the same typed refusal that reports unverified requirements and work
 that will not merge, and SHALL name each piece of evidence that is waiting rather than only how many
 there are.
+
+**Each named piece SHALL say which task recorded it.** Evidence is reached through the requirements a
+task serves, and a requirement may be served by more than one task, so a task can be refused over
+evidence recorded by another one — and would be, since that evidence's commit is part of what this
+task's approval merges. Naming only the requirement and the commit would show the reader a fact with
+no route back to its cause. Where the recording task is not the task being approved, the refusal
+SHALL say so.
 
 **The refusal SHALL name both remedies: accepting the evidence, and granting an agent the capability
 to accept it.** Accepting evidence is the operator's unless an agent has been granted it, and no
@@ -68,14 +77,21 @@ enforcement point.
 
 #### Scenario: Evidence naming no commit does not refuse
 
-- **WHEN** approval is requested for a task whose awaiting evidence records paths rather than a
+- **WHEN** approval is requested for a task whose only awaiting evidence records paths rather than a
   commit
 - **THEN** the approval succeeds
 
 #### Scenario: Rejected evidence does not refuse
 
-- **WHEN** approval is requested for a task whose evidence naming a commit was reviewed and rejected
+- **WHEN** approval is requested for a task whose only evidence naming a commit was reviewed and
+  rejected
 - **THEN** the approval succeeds
+
+#### Scenario: The refusal says whose evidence it is
+
+- **WHEN** approval is refused over evidence recorded by a different task that serves the same
+  requirement
+- **THEN** the refusal names that task
 
 #### Scenario: Unaccepted evidence refuses approval even at sketch rigor
 
@@ -100,7 +116,7 @@ enforcement point.
 
 ### Requirement: Accepting evidence attempts the integrations that wanted it
 
-The system SHALL attempt integration again, when evidence is accepted, for approved tasks linked to that evidence's requirement whose most recent integration was skipped for want of an accepted commit.
+The system SHALL attempt integration again, when evidence is accepted, for every approved task linked to that evidence's requirement whose commit is not already recorded as merged for that task.
 
 Refusing approval while evidence is unaccepted tells the reader to accept it. Discharging that
 instruction at the moment they follow it is what makes the sentence true; without it, an approved
@@ -108,13 +124,31 @@ task whose evidence is accepted afterwards stays unmerged, and approving again c
 because restating a status is deliberately a no-op. The system would have asked for something and
 then ignored it being done.
 
-Only that cause SHALL be answered this way. Accepting evidence says nothing about a checkout with
-uncommitted changes or one parked elsewhere, and a merge that failed outright wants a person rather
-than a repetition.
+**The condition SHALL be a commit that is not in the product, and SHALL NOT be the reason the
+previous attempt gave.** Approval merges what is accepted at the moment it runs, so a task that had
+some accepted evidence and some awaiting has already recorded a *merge*, not a skip — and its
+awaiting commit is exactly the one that still needs to land. A rule expressed in terms of the last
+attempt's reason cannot reach it, and the newer commit would stay outside the product permanently
+while the task sat terminal at `approved`. That is the defect this capability exists to remove,
+arriving one commit smaller.
 
 The attempt SHALL be made only where the accepted evidence names a commit. Evidence recording paths
 produces nothing to merge, and an attempt that could only record a second identical skip adds noise
 to a record whose purpose is to distinguish a no-op from work reaching the product.
+
+An attempt SHALL be permitted to record a skip. Where the repository cannot take the commit — a
+checkout with uncommitted changes, a checkout parked elsewhere — the attempt SHALL record that
+reason rather than being suppressed. The operator accepted something and it did not land; saying so
+is the account they need, and silence there is how work goes missing quietly.
+
+The two "already there" cases are deliberately answered differently, and the difference is what each
+one tells the reader. Where **this task has already recorded a merge of this commit**, no attempt is
+made at all: repeating it could only append a row saying nothing happened, to a record that exists to
+distinguish a no-op from work reaching the product. Where the commit is in the main branch by some
+other route — merged by hand, or carried in by another task's integration — the attempt SHALL run and
+SHALL record that it was already integrated, because that is a fact about the repository the reader
+does not otherwise have. Whether a commit is present SHALL be settled by asking the repository rather
+than by reading the record of previous attempts.
 
 Rejecting evidence SHALL attempt nothing.
 
@@ -137,11 +171,34 @@ about the evidence, and a repository failure SHALL NOT reverse it.
   integration was skipped for want of it
 - **THEN** the work is merged
 
-#### Scenario: Other skips are left alone
+#### Scenario: The work left over from a partial merge is merged when it is accepted
 
-- **WHEN** an approved task's integration was skipped because the checkout had uncommitted changes
-- **AND** evidence for it is accepted
-- **THEN** that task's integration is not attempted again
+- **WHEN** an approved task's approval merged its accepted evidence and left a second piece awaiting
+  review
+- **AND** that second piece is then accepted
+- **THEN** its commit is merged into the project's main branch
+- **AND** the task is not reopened to achieve it
+
+#### Scenario: A commit this task already merged is not attempted again
+
+- **WHEN** evidence is accepted for an approved task that already has a recorded merge of that same
+  commit
+- **THEN** no attempt is made
+- **AND** no further integration is recorded
+
+#### Scenario: A commit that reached the main branch some other way is recorded, not merged again
+
+- **WHEN** evidence is accepted for an approved task that has no recorded merge of that commit, and
+  the commit is nevertheless already reachable from the main branch
+- **THEN** nothing is merged
+- **AND** the attempt records that it was already integrated
+
+#### Scenario: An attempt that cannot proceed records why
+
+- **WHEN** evidence naming a commit is accepted for an approved task while the checkout has
+  uncommitted changes
+- **THEN** nothing is merged
+- **AND** the attempt is recorded with that reason
 
 #### Scenario: Rejecting attempts nothing
 
@@ -162,11 +219,16 @@ about the evidence, and a repository failure SHALL NOT reverse it.
 
 ### Requirement: An integration that cannot proceed does not block approval
 
-The transition into `approved` SHALL still succeed where integration cannot be attempted, and the integration SHALL be recorded as skipped together with the reason. Integration cannot be attempted when the project has no configured main branch, when the project is not a repository, when the primary checkout has uncommitted changes to tracked files, when the primary checkout is not on the main branch, or when nothing the task's accepted evidence names a commit to merge.
+The transition into `approved` SHALL still succeed where integration cannot be attempted, and the integration SHALL be recorded as skipped together with the reason. Integration cannot be attempted when the project has no configured main branch, when the project's working directory cannot be resolved, when the project is not a repository, when the primary checkout has uncommitted changes to tracked files, when the primary checkout is not on the main branch, or when no accepted evidence for the task names a commit to merge.
 
-The last of those is enumerated here for the first time, and it is narrower than it reads. Work
-recorded but not yet judged is refused at approval rather than skipped after it, so what remains in
-this list is the task that genuinely produced no commit anyone is waiting to accept: work whose
+Two of those are enumerated here for the first time. An unresolvable working directory has always
+been skipped this way and was simply missing from the list; it is added because this change argues
+from the list being closed, and an argument from a list that is not actually closed is worth
+nothing.
+
+The last of them is narrower than it reads. Work recorded but not yet judged is refused at approval
+rather than skipped after it, so what remains in this list is the task that genuinely produced no
+commit anyone is waiting to accept: work whose
 evidence records paths, work whose evidence was rejected, and work that produced no evidence at all.
 For those, nothing being merged is the true account rather than a gap, and blocking approval would
 block work the product supports.
