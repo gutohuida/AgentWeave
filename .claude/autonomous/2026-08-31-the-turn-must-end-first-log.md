@@ -395,3 +395,115 @@ rollback scenario and two new paragraphs). `openspec validate --strict`: **valid
 
 No code was touched. The three rounds are complete and **A-IMPL-1 is next** — the reproduction first,
 and it must be seen to fail for the stated reason before anything is fixed.
+
+---
+
+## Iteration 3 — 2026-08-31T12:28:51+01:00 — A-IMPL-1: groups 1, 2 and 3
+
+Branch and `git log` matched STATE.json's `current` exactly (`3ad2fea`, tree clean, rounds 2 and 3
+committed at `28d97c3` and `9b26344`). Nothing to reconcile.
+
+**F162 is closed in code.** Three commits, each its own group, each verified before the next began.
+
+### Group 1 — `9f9f18d`, the reproduction, written to fail first
+
+`hub/tests/test_approval_waits_for_the_turn.py`. It reproduces the **window** and not merely a
+state (design D8): the task's branch exists at the commit it was cut from, a `Run` row is recorded
+`running` and bound to the task, **and** a session handle sits in this process's registry. Both
+halves of "live" are read back before the transition, so a fixture that stopped producing either
+fails there rather than passing for the wrong reason.
+
+Task 1.3 was done by reading output, not by assuming. The flipped form was written and run first,
+and it failed for exactly the stated reason:
+
+```
+expected a refusal, got 200: ... "status":"approved",
+"latest_integration":{"outcome":"skipped",
+"reason":"8471664b7ccf is already in main; there was nothing to merge", ...}
+```
+
+The committed form then asserted that wrong behaviour — a `200`, `approved`, `ALREADY_INTEGRATED`
+against the **base** commit, the turn's real commit never reaching `main`, and
+`is_retryable(...) is False` — following this repository's own precedent in
+`test_loop_lands_its_work.py`, whose docstring names the commit its measurement lives at.
+
+### Group 2 — `01100ad`, `hub/hub/run_liveness.py`
+
+The module owns `active_ptys` and `active_app_server_runs`, taken out of `api/v1/agent_trigger`;
+`agent_trigger` is still the only writer and the five test files that reach the registries moved
+their references with them (design D3, open question 2). Import graph confirmed by running it, not
+by reading it: `requirement_gate` → `run_liveness` → (`db.models`, `pty_runner`) closes no cycle,
+so no function-local import was needed and D1's fallback went unused.
+
+The predicate is registry-first, scoped to `Run.task_id == task.id`, excludes the acting run, and
+does not call `pid_alive` — with a comment citing that function's own docstring warning about
+precisely this caller.
+
+**A FINDING, and a correction to design D3.** D3 named `PtySession.isalive()` as the test.
+Implementing it showed **membership is the stricter and the correct signal**, and the difference is
+exactly the window this predicate exists to close. `_execute_run` pops its registry entry in a
+`finally` (`agent_trigger.py:2257`) that runs *after* the finalize block has taken the turn's
+snapshot commit and restamped the evidence footprints (`:2036-2050`). `isalive()` goes false the
+moment the process exits — which is **inside** the window, before the commit that holds the work
+exists. An `isalive()`-based predicate would have permitted approval during the seconds the product
+spends producing the very commit approval is waiting for, and F162 would have survived its own fix
+in narrowed form. Membership covers the whole turn including that finalize block. Recorded in the
+module docstring so the next reader does not re-derive it, and it is why `end_the_turn()` in the
+tests pops the registry entry and deliberately leaves `Run.status` alone.
+
+Seven tests: the three liveness arms, the task scoping, D10's carve-out **with a second live run
+proving it is not too wide**, and task 2.6's residual — `Run` carries nothing distinguishing a
+working turn from a review turn, so an agent on an operator-completed task can approve from inside
+its own turn. Pinned so a later change that makes the `InboundQueueEntry.review_task_id` join cheap
+knows exactly what it would be closing.
+
+### Group 3 — `89429d5`, the gate refuses
+
+The fifth `GateRefusal` category, `unfinished`, added in **all four** places. The check sits above
+the `if not enforced` early return and beside the `if situation is not None` block, and
+`_check_live_turn`'s docstring argues that departure from `_MergeSituation`'s *"a reason to not
+know, never a reason to refuse"* in the three terms round 3 set out, plus why
+`task-lifecycle-governance:720` is not breached. `evaluate` widens by a keyword-only
+`acting_run_id`; `task_transition_service` passes `actor.run_id`.
+
+The refusal sentence, measured live rather than quoted from the design:
+
+> builder is still running the turn that produces this task's work, so what approving would merge
+> is not knowable yet — the task's branch still points at the commit the turn started from. Nothing
+> is wrong with the work. Approve once the turn has ended: this clears itself, with nothing for
+> anyone to do. Stopping the agent's run ends the turn too.
+
+The reproduction flipped, and the second half is what makes it a fix rather than a block: once the
+turn ends the same task approves and merges the commit that actually holds the work. Five more
+scenarios cover the crash case, no-run, `sketch` vs `gate` (with `blocking` empty in the sketch case,
+proving it is the liveness check refusing), task 3.9's project with no configured main branch, and
+task 3.8's **flow reviewer approving from inside its own review turn, driven through the agent
+HTTP surface** — the change's largest regression risk.
+
+Task 3.6 was verified at the source: `readableApiError` reads `detail.message`, which `to_dict`
+composes, so the sentence renders as prose rather than a dict repr. A sixth case in
+`taskIntegration.test.ts` pins the who, the still-running and the clears-itself. `hub/ui/src` is
+excluded from the bundle fingerprint under `__tests__` (`main.ui_source_fingerprint`'s `exclude`),
+so no rebuild was owed.
+
+### Verification
+
+| Run | Result |
+|---|---|
+| `test_approval_waits_for_the_turn.py` | 12 passed |
+| `test_requirement_gate` + `test_task_integration` + `test_loop_lands_its_work` + `test_task_integration_retry` | 83 passed |
+| `test_task_transitions` + `test_a_task_waits_while_its_run_waits` + `test_review_dispatch_staffs_the_task` + `test_actor_aware_claimability` | 150 passed |
+| `test_agent_trigger` + `test_conversation_contract` | 52 passed |
+| `test_agent_trigger_overrides` + `test_lifespan_shutdown` | 7 passed, 1 xpassed |
+| `test_approval_refuses_unaccepted_evidence` + `test_task_rejected_evidence_signal` | 34 passed |
+| `taskIntegration.test.ts` (vitest) | 6 passed |
+| `ruff check src/ hub/ tests/`, `black --check` | clean |
+| `openspec validate --strict` | valid |
+
+**No drive yet.** Groups 1–3 are unit-level; nothing here has been seen against a running Hub. The
+suite passing is not proof of behaviour and the operator asked for a drive. That is group 7, and it
+must not be squeezed out.
+
+Next: group 4 (one test — the evidence route through the same refusal, D9 having already answered
+that it shares the window) then group 5 (the loop stops entering the review arm — the largest
+remaining blast radius, five test files' fixtures).
