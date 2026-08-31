@@ -5,7 +5,7 @@
 .DESCRIPTION
     Five tasks make up the loop; only three of them are permanent.
 
-      AgentWeaveResearch   08:30 daily   persistent   reads the web in `auto` mode, outside the repo
+      AgentWeaveResearch   07:10 daily   persistent   reads the web in `auto` mode, outside the repo
       AgentWeaveArmDay     08:55 daily   persistent   arms the day window
       AgentWeaveDayLoop    09:00-17:00   TRANSIENT    registered by ArmDay, unregisters itself at 17:00
       AgentWeaveArmNight   22:55 daily   persistent   arms the night window
@@ -79,7 +79,13 @@ $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" 
 $plan = @(
   @{
     Name        = "AgentWeaveResearch"
-    At          = "08:30"
+    # 07:10, not 08:30. This task's guardrail DELETES new untracked files in the repo, and it cannot
+    # tell a window's work from its own mess. A ~30-minute run started at 08:30 can still be
+    # finishing at 09:10, by which time the day window is writing untracked files -- and the
+    # guardrail would eat them. 07:10 sits after the night window ends (07:00) and leaves an hour of
+    # margin before 09:00 even on a long run. run.sh also refuses to delete anything while the
+    # checkout is on an autonomous branch, which is the mechanism behind this belt.
+    At          = "07:10"
     Execute     = $gitBash
     Argument    = "-lc `"$($researchScript -replace '\\','/' -replace '^C:','/c')`""
     WorkingDir  = "$HOME\.claude\routines\agentweave-research"

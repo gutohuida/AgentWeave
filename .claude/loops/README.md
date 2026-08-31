@@ -12,7 +12,7 @@ Contract for the files the windows exchange: `spec-queue/README.md`.
 
 | Task | When | Lifetime | Mode | Playbook |
 |---|---|---|---|---|
-| `AgentWeaveResearch` | 08:30 daily | **persistent** | **`auto`** | `~/.claude/routines/agentweave-research/prompt.md` |
+| `AgentWeaveResearch` | 07:10 daily | **persistent** | **`auto`** | `~/.claude/routines/agentweave-research/prompt.md` |
 | `AgentWeaveArmDay` | 08:55 daily | **persistent** | — | registers the next row |
 | `AgentWeaveDayLoop` | 09:00-17:00 | *transient* | `bypassPermissions` | `day-window.md` |
 | `AgentWeaveArmNight` | 22:55 daily | **persistent** | — | registers the next row |
@@ -27,6 +27,24 @@ and a window armed onto a tree it does not understand costs the morning.
 All three persistent tasks run as an **interactive logon**, so `gh`'s keyring and the Claude
 credentials resolve. Consequence, inherited from the `ai-digest` routine: **they only fire while you
 are logged on.** A logout or a reboot to the lock screen skips a day.
+
+## The overlap that would eat a window's work
+
+`AgentWeaveResearch` carries the `ai-digest` guardrail: it snapshots `git status --porcelain` before
+the run, diffs after, and **deletes new untracked files** in the repo. That is right for a routine
+that must never dirty the tree, and it cannot tell a window's work from its own mess.
+
+Two things keep them apart, and both are needed:
+
+1. **07:10, not 08:30.** A ~30-minute run started at 08:30 can still be finishing at 09:10, with the
+   day window already writing untracked files. 07:10 begins after the night window ends at 07:00 and
+   leaves an hour of margin before 09:00 even on a long run.
+2. **`run.sh` refuses to delete while the checkout is on an `autonomous/*` branch**, because that
+   means a window owns the tree. It reports the strays instead. The schedule is the belt; this is
+   the braces.
+
+`ClaudeAIDigest` at 07:57 carries the same guardrail against this same repo. It does not overlap a
+window either, and nothing about it needed changing.
 
 ## Operating it
 

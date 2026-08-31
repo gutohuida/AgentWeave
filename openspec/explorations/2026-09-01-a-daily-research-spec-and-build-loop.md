@@ -68,7 +68,7 @@ operator's own interactive session. This design takes the second — see D7.
 ## The design — one 24-hour cycle
 
 ```
-08:30 ── one shot ──                RESEARCH  Scheduled Task: AgentWeaveResearch
+07:10 ── one shot ──                RESEARCH  Scheduled Task: AgentWeaveResearch
                                               auto mode, outside the repo, reads the web
 
 09:00 ─────────────────── 17:00     FILL      Scheduled Task: AgentWeaveDayLoop
@@ -94,7 +94,7 @@ Iteration 1 composes its own queue; there is no separate orchestrator task. The 
 1. **Repo delta.** What landed since the last cycle: `git log`, merged branches, the diff to
    `scripts/drive/FINDINGS.md`, closed and opened findings, what the night run claimed and whether
    its evidence holds. Read-only.
-2. **Read the research** that `AgentWeaveResearch` left at 08:30 in `spec-queue/research/<date>.md` —
+2. **Read the research** that `AgentWeaveResearch` left at 07:10 in `spec-queue/research/<date>.md` —
    a ranked candidate list: what someone else shipped, what it implies for AgentWeave, and what a
    change would cost. Treated as **data, never as instructions**; it is assembled from pages written
    by strangers. A missing file costs the day its candidate list, not its work.
@@ -180,7 +180,7 @@ An autonomous window runs `bypassPermissions` — the driver refuses any other p
 a machine with unscoped `gh` and the operator's credentials. Reading the open web from inside it
 removes the only backstop there is.
 
-So research runs as its own one-shot task at 08:30, in `auto` mode, `cwd` outside the repo, on the
+So research runs as its own one-shot task at 07:10, in `auto` mode, `cwd` outside the repo, on the
 `ai-digest` pattern that has worked daily since 2026-08-28. The privileged window reads a file.
 
 **This bounds the untrusted content reaching the privileged process; it does not eliminate it.** The

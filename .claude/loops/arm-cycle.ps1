@@ -37,6 +37,10 @@ param(
   [string] $Repo = "",
   [string] $Model = "opus",
   [int]    $EveryMinutes = 5,
+  # Override the window's standard hours. Only for a one-off catch-up run armed by hand -- the
+  # daily arming tasks pass neither, and a window that quietly moved would be worse than no window.
+  [string] $StartAt = "",
+  [string] $Until = "",
   [switch] $DryRun
 )
 
@@ -70,6 +74,8 @@ $windows = @{
   }
 }
 $w = $windows[$Window]
+if ($StartAt) { $w.StartAt = $StartAt }
+if ($Until)   { $w.Until   = $Until }
 
 function Say([string] $m) { Write-Output ("[arm-{0}] {1}" -f $Window, $m) }
 

@@ -35,7 +35,7 @@ Only the first firing of the window does this. It ends by writing a full `queue`
    three answers: what was built, what was **driven** versus merely tested, and what the night window
    recorded in `decisions_for_user`.
 
-3. **Take delivery of the research.** `AgentWeaveResearch` wrote it at 08:30 to
+3. **Take delivery of the research.** `AgentWeaveResearch` wrote it at 07:10 to
    `~/.claude/routines/agentweave-research/out/research-<today>.md` — **outside** the repository,
    because that task deliberately never writes here. Copy it to `spec-queue/research/<today>.md` and
    commit it on the cycle branch; you own the branch, that task does not.
