@@ -97,6 +97,10 @@ $statePermissionMode = if ($state.permission_mode) { ([string]$state.permission_
 # operator selected Sonnet 5, ~/.claude/settings.json says "opus[1m]", and every firing of an
 # eight-hour run would have been Opus. Absent from the state file, keep the CLI default.
 $stateModel = if ($state.model) { ([string]$state.model).Trim() } else { "" }
+# Which log this window writes. The prompt used to send the agent at the DIRECTORY, which held one
+# log when only one window existed and now holds two live ones plus every finished run's. Naming it
+# is the difference between reading your own last entry and reading the other window's.
+$stateLogFile = if ($state.log_file) { ([string]$state.log_file).Trim() } else { ".claude/autonomous/" }
 if ($stateRunner -ne $Runner -or $statePermissionMode -ne $PermissionMode) {
   Write-Log "Driver settings ($Runner/$PermissionMode) disagree with STATE.json ($stateRunner/$statePermissionMode). Stopping."
   exit 2
@@ -174,7 +178,15 @@ genuinely the user's, add it to decisions_for_user rather than guessing.
 # thing that legitimately varies per window is which state file to read, so name it explicitly --
 # an agent told to read STATE.json on a checkout holding two of them will pick the wrong one, and
 # then commit a queue position belonging to the other window.
-$prompt = $prompt.Replace('.claude/autonomous/STATE.json', $stateRelative).Replace('rewrite STATE.json', "rewrite $stateRelative")
+# Tokenise, then expand once. Substituting the paths directly is order-dependent and silently wrong
+# in the legacy single-window case: the full-path replace is a no-op there, so a following bare
+# `STATE.json` replace rewrites the path's own tail and yields
+# .claude/autonomous/.claude/autonomous/STATE.json. Measured 2026-09-01 while adding this.
+$prompt = $prompt.Replace('.claude/autonomous/STATE.json', '<<STATE>>').
+                  Replace('STATE.json', '<<STATE>>').
+                  Replace('.claude/autonomous/ for context.', '<<LOG>> for context.').
+                  Replace('<<STATE>>', $stateRelative).
+                  Replace('<<LOG>>', $stateLogFile)
 
 Set-Location $Repo
 Write-Log "--- iteration start ($Runner, $PermissionMode) ---"
