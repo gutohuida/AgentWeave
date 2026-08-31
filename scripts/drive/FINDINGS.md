@@ -11330,3 +11330,268 @@ repeating that sentence to a person.
 `hub/hub/task_transition_service.py:77-89` (`GateUnsatisfiedError` carries the refusal);
 `hub/hub/requirement_gate.py:120-129` (`to_dict`); grep for `GateUnsatisfiedError` shows no route
 catches it, so the app handler is the only path.
+
+---
+
+# DRIVE-1, 2026-08-31 — the flow lands its work
+
+Project under test: **`drive-2026-08-31` = `proj-3175994d03ce`** at
+`C:\Users\huida\Documents\drive-2026-08-31`, a fresh git repository created for this drive with one
+commit (`calc.py` with `add`) on `master`. Trial Hub `127.0.0.1:8011`, **restarted from
+`autonomous/2026-08-31-the-flow-lands-its-work` at 02:40** — it had been serving code from
+2026-08-30 11:01 and ran migration `0098 -> 0099` on the restart, which is how the staleness was
+caught. Agents `alpha` and `beta`, both on `Haiku (cheap)` = `claude-haiku-4-5-20251001`.
+`main_branch` adopted automatically as `master` by `POST /projects/open`.
+
+Harness: `scripts/drive/t_drive1_flow_lands.py`, two lanes on one two-task document — one where the
+operator accepts the evidence before the review firing, one where the evidence is deliberately left
+`awaiting` so change C's refusal has something to refuse. Full transcript in the iteration-10 entry
+of `.claude/autonomous/2026-08-31-the-flow-lands-its-work-log.md`.
+
+---
+
+## F153 — **the flow lands its work.** Driven end to end, and it does
+
+**Not a defect. The record this whole run exists to produce.**
+
+`openspec/explorations/2026-08-30-why-a-flow-cannot-land-its-work.md` named seven breaks between a
+flow's first firing and a commit on the main branch. Three changes shipped against them —
+`a-flow-briefing-names-its-contract` (A), `a-review-a-flow-cannot-staff-is-named` (B),
+`approval-refuses-unaccepted-evidence` (C) — and all three were **undriven** until now. The flow
+suite structurally cannot prove C: it configures no main branch, so the refusal's preconditions are
+never met there.
+
+Driven on 2026-08-31, on a fresh project, with real Haiku turns and no row inserts:
+
+```
+961f605 Integrate approved work 4e722fa04088     <- task-7f11b87f3d36 ("power")
+6b938d7 Integrate approved work db8fc6a7c47e     <- task-5ae53e9b339c ("modulo")
+
+$ git show master:drive1_024543.py
+def power(a, b):
+    return a ** b
+
+
+def modulo(a, b):
+    return a % b
+```
+
+Both tasks reached `approved`; both commits are ancestors of `master`, checked with
+`git merge-base --is-ancestor` against the repository rather than by reading the Hub's own
+`TaskIntegration` rows. **This is the first time a flow's work has been observed reaching a main
+branch in this project's history of drives.**
+
+What held, each of it a change under test driven rather than asserted:
+
+| | |
+|---|---|
+| **A driven** | Both tasks went `pending -> in_progress -> completed` inside firing 1 with **no operator transition at all**. F140 was exactly this not happening: the briefing never named `update_task`, so both tasks sat in `in_progress` forever and every later firing re-briefed the same agents for finished work. `_briefing_completion_lines` names the call and both Haiku agents made it, ~24 seconds in. |
+| **A's other half driven** | Both agents also recorded evidence naming a commit without being asked to by the drive — `_briefing_evidence_lines` is the only place they were told. |
+| **B driven** | Firing 2 staffed **both** reviews and neither reviewer was its task's author: `alpha -> beta` on power, `beta -> alpha` on modulo. |
+| **C driven** | The lane whose evidence was left `awaiting` was refused at `approved`, in a live agent turn, and the lane whose evidence was accepted was not. |
+| **F152 driven** | See below — the refusal reached the agent as prose. |
+
+What it cost to get there is F154 and F155, and neither is small. The headline stands anyway: the
+loop closes.
+
+---
+
+## F152 driven — the refusal reaches the agent as a sentence
+
+F152 was fixed on 2026-08-31 (`2a53a27`) and unit-tested against a synthetic `to_dict()` payload.
+This is it in a live turn. `beta`, reviewing `task-7f11b87f3d36` with its evidence still `awaiting`,
+called `update_task(status="approved")` and read back:
+
+```
+Error calling tool 'update_task': Hub rejected PATCH /tasks/task-7f11b87f3d36 (409): This task's
+work has been recorded and nobody has judged it: FR-1 at 4e722fa04088. Approving now would record
+that the work is good and merge none of it, because only accepted evidence is merged. To land it,
+accept the evidence, or grant an agent the capability to accept it — both are the operator's, so an
+agent reading this has to ask for one rather than take it.
+```
+
+No brace, no `'code':`, no `'blocking': []`. **And the agent did the right thing with it** — its
+next thought was *"I see. The task can't be approved yet because there's evidence"* and it stopped
+rather than retrying the transition, which is the behaviour the `ACCEPT_OR_GRANT` clause was written
+to produce. That clause's own comment says *"An agent reading this can take neither remedy itself,
+and saying so is what stops it retrying."* Measured: it does.
+
+**Contrast it with F155's refusal below, which the same model retried five times and then reached
+for `git reset --hard`.** The difference between the two sentences is that one names a remedy the
+reader cannot take and says so, and the other names a remedy the reader *can* take and that does not
+work. That contrast is the most useful thing this drive produced.
+
+---
+
+## F154 (A) — a review that ends without a verdict wedges the task forever, and the flow answers "nothing is wrong"
+
+**Reproduced live, twice, on `task-5ae53e9b339c`.** The clean lane's reviewer (`alpha`) inspected the
+work, concluded in its own transcript that it was correct — *"The implementation is working
+correctly"* — and its turn ended **without `update_task` ever being called**. The task stayed
+`under_review` with `alpha` as its assignee.
+
+From that moment the flow could not move it, and said so in the worst possible words. Both agents
+idle, no run live, `firing_active: false`:
+
+```
+POST /projects/proj-3175994d03ce/jobs/job-e315b882df08/run   ->   409
+"Every task on this loop's queue is already being worked. Nothing was started, and nothing is
+ wrong — the next firing picks up whatever finishes."
+```
+
+Fired twice more, minutes apart, with `agents: {'alpha': 'idle', 'beta': 'idle'}` both times. Nothing
+was being worked. Nothing would ever finish. `GET /loops/{id}` agreed with the 409 and not with
+reality:
+
+```json
+"queue": {"under_review": 2},
+"current_tasks": [{"id": "task-5ae53e9b339c", "status": "under_review",
+                   "agent": "alpha", "agent_capacity": "held"}],
+"stall_reason": null
+```
+
+`agent_capacity: "held"` for an idle agent, and `stall_reason: null` for a queue that will never
+move again.
+
+**Where it comes from.** `decide_firing`'s `WITH_REVIEWER` branch (`hub/hub/scheduler.py:1289-1357`)
+records the task as `in_flight` on the strength of `task.assignee` alone. Its own comment claims the
+opposite of what it delivers:
+
+> Recorded as in-flight rather than skipped, for finding F23's reason … It is also what makes a
+> review that ended without a verdict *visible* — the task stays here with its reviewer named, which
+> is a stall the operator can see and act on, where F45 was a spend loop they could not.
+
+The row *is* visible. What is said about it is false. `DECISION_IN_FLIGHT`'s own definition
+(`scheduler.py:942-946`) is **"every candidate is already being worked by an agent mid-turn"**, and
+`api/v1/jobs.py:1246-1252` renders that as "nothing is wrong". Neither is true here.
+
+**The distinction is already computed and simply not consulted.** `decide_firing` asks
+`held = await tasks_held_by_a_running_turn(session, loop.project_id)` before the walk
+(`scheduler.py:1284-1286`) and the *ordinary-work* arm uses it — `holder = held.get(task.id)` — to
+tell "a turn is running on this" from "a name is written on this". The `WITH_REVIEWER` branch never
+looks at it. A review whose reviewer is mid-turn and a review whose reviewer went home are the same
+row to it.
+
+**Why this is severity A rather than B.** It is F142 one door over, and it breaches the same
+requirement B was just fixed against — `agent-flows`' *"WHEN no agent can be resolved or found for a
+task THEN the operator is notified, naming the task"*. F142 was a fact about the queue standing in
+for a fact about one task; this is a fact about the queue **actively contradicting** the fact about
+one task. The operator is not merely uninformed, they are told the flow is healthy. `under_review`'s
+three exits are all theirs, so they can rescue it — if they ever learn they need to.
+
+**Suggested shape, not a design:** the `WITH_REVIEWER` branch already has `held` and `running` in
+scope. Where the named reviewer is holding no running turn, the task belongs in `unstaffed` with a
+sentence naming the task and the reviewer, not in `in_flight`. That is the same repair B made to the
+arm next door, and it would flow through `_stall_reason_from_walk` and the 409 without new
+machinery.
+
+**Why the reviewer failed here, recorded separately because it is not the Hub's defect.** `alpha`
+spent its whole turn in a `ToolSearch` loop: the spawned Claude harness presents the AgentWeave MCP
+tools as *deferred*, and the model called `ToolSearch` eleven times, each returning "tool completed",
+without ever emitting the `mcp__agentweave__read_spec_document` or `mcp__agentweave__update_task`
+call it kept announcing. It reached a verdict and could not deliver it. The other three turns in the
+same drive — both implementers and the other reviewer — called their tools on the first attempt, so
+this is intermittent, not structural. **The Hub cannot prevent it and should not try. What the Hub
+owns is what happens afterwards, and afterwards is F154.**
+
+---
+
+## F155 (A) — "Resolve the conflict on the branch, then approve" cannot be followed, by anybody
+
+**The refusal names a remedy that provably does not clear it.** `_merge_detail`
+(`hub/hub/requirement_gate.py:151-164`) says:
+
+> This task's work does not merge cleanly into master: drive1_024543.py. **Resolve the conflict on
+> the branch, then approve** — approving is what merges it.
+
+`_check_mergeable` (`requirement_gate.py:279-306`) does not look at the branch. It iterates
+`situation.accepted` — the targets from `integration_targets`, i.e. **the commits named by accepted
+evidence** — and asks `would_conflict(root, target.commit_sha, main_branch)`, which is
+`git merge-tree --write-tree main_branch <that exact commit>` (`task_integration.py:264-284`).
+
+So resolving the conflict on the branch produces a *new* commit that no evidence names, the gate goes
+on asking about the *old* one, and the answer cannot change. There is no operator action in that
+sentence either: approving again re-runs the same probe on the same commit.
+
+**Driven, and it is worse than the summary.** `alpha`, re-triggered on `task-5ae53e9b339c` after
+`power` had landed on `master` first (both tasks created the same file, so an add/add conflict was
+inevitable), called `update_task(status="approved")`, got the refusal, and then did **exactly what it
+says**:
+
+1. `git merge master --no-commit --no-ff` → conflict, resolved by hand, both functions kept;
+2. `git commit` → `17aac8e`, a correct merge; `git diff master...HEAD` shows precisely the intended
+   addition;
+3. `update_task(status="approved")` → **the identical refusal, byte for byte**;
+4. `git log`, `git status`, `git diff`, re-read the file, re-read the spec document — all confirming
+   its own work was right;
+5. `update_task(status="approved")` → **the identical refusal again**;
+6. `git reset --hard 5f07663`, then `git rebase master`, resolving the same conflict a second time.
+
+The turn ended with the branch rebased to `db8fc6a` and the task still `under_review`. The accepted
+evidence still named `5f07663` — now an **orphaned commit, not on the branch at all** — while the
+refusal it produced went on reporting `"source_branch": "agentweave/task/task-5ae53e9b339c"`, a
+branch from which that commit had just been detached.
+
+The operator has no better time of it. Approving by hand at that point:
+
+```
+409  {"code": "gate_unsatisfied",
+      "unmergeable": [{"commit_sha": "5f07663e4d9c…", "source_branch": "agentweave/task/task-5ae53e9b339c",
+                       "target_branch": "master", "paths": ["drive1_024543.py"]}],
+      "message": "This task's work does not merge cleanly into master: drive1_024543.py.
+                  Resolve the conflict on the branch, then approve — approving is what merges it."}
+```
+
+**What actually clears it, and it is nowhere in the product's words.** Record *fresh evidence naming
+the merged commit*. Driven: `alpha` recorded `ev-a2a689ef080d` with footprint `db8fc6a`,
+`integration_targets`' per-branch reduction picked the newer row, the operator accepted it, and the
+approval went through and merged at once (`tint-e097e09de620`, outcome `merged`). One tool call
+neither the refusal nor the drawer nor the briefing mentions.
+
+**Two separable defects, and the second is the sharp one.**
+
+- *The sentence is wrong about where to act.* It should name the commit it is judging and say that a
+  resolution has to be **recorded as evidence** to be seen — the refusal already carries
+  `commit_sha` in its structured half and drops it from the prose.
+- *A destructive git operation is invited by a product instruction.* Step 6 is `git reset --hard` on
+  a branch carrying the only copy of an agent's work, reached by a model doing what the Hub told it
+  to and finding that it did not work. It came out fine here. The next one may not.
+
+Note this fires **only** where a second task has already landed on the main branch and touched the
+same paths — which is to say, exactly in the multi-task flows the flow feature exists for, and never
+in a single-task fixture. That is why three rounds of spec review and 3,555 unit tests did not have
+it.
+
+---
+
+## F156 (B) — `integration-preview` says `will_merge: true` for a task approval refuses outright
+
+Same task, same moment, the drawer the operator is meant to consult *before* approving:
+
+```
+GET /projects/proj-3175994d03ce/tasks/task-5ae53e9b339c/integration-preview
+{"task_id": "…", "main_branch": "master",
+ "targets": [{"commit_sha": "5f07663e4d9c…", "source_branch": "agentweave/task/task-5ae53e9b339c"}],
+ "will_merge": true, "reason": ""}
+```
+
+`will_merge: true`, `reason: ""` — for the task the gate refused twice in the same minute over that
+exact commit.
+
+`will_merge` is `bool(main_branch and targets)` (`hub/hub/api/v1/tasks.py:1085-1090`): a target
+exists, so it is `true`. The handler's docstring is candid about why —
+
+> Deliberately read-only and deliberately cheap: no git subprocess, no conflict probe — that is
+> `requirement_gate`'s job at the moment of approval, where a refusal can still stop it. This is a
+> sentence, not a second gate.
+
+— and the reasoning is sound. The **word** is not. That docstring also says the drawer exists because
+"nothing on the successful path ever said [the merge] was about to happen", and that it "states the
+answer beside the approve control". An operator reading `will_merge: true` is told the answer, and
+the answer is false.
+
+The cheap repair is vocabulary, not a probe: `will_attempt_merge`, or a `reason` that says *"one
+commit will be attempted; whether it merges cleanly is checked at approval"*. C severity for the
+concept, B because this is the one surface whose entire purpose is to be right about what approval
+will do.
+

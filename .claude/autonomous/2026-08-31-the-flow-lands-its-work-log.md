@@ -1323,3 +1323,163 @@ the drive to answer, because no test can: whether the refusal's sentence actuall
 in a live turn rather than in a unit test of `_readable_detail`; whether the advisory in the mixed
 case reaches the operator's screen at all (`approval_report` has no UI consumer — tasks.md 8.3);
 and whether the stall is legible on the board or merely correct in the API.
+
+## Iteration 10 — 2026-08-31 02:39 to 03:1x (+01:00) — `DRIVE-1`: **the flow lands its work**
+
+**Item:** `DRIVE-1`. **Status: done, and it passed.** Both tasks reached `approved` and both commits
+are on the project's main branch. It cost two severity-A findings to get there and neither is small,
+but the headline is the one this whole run was armed to produce: **the loop closes.**
+
+### The Hub on 8011 was serving 2026-08-30 code, and the restart is how that was caught
+
+PID 25908, started **2026-08-30 11:01**, command line
+`python -m uvicorn hub.main:app --port 8011 --host 127.0.0.1` with no `DATABASE_URL`. Killed and
+restarted from `hub/` with the beta-profile URL at **02:40**; the new process ran
+`0098 -> 0099, a question records the deadline of the wait it started` on startup, which proves the
+old one predated this branch's migrations. Confirmed afterwards that no `.py` under `hub/hub` or
+`src` is newer than the process start time. The state file's warning was right and would have cost
+the whole drive: an 8011 on 0098 would have shown the pre-C behaviour and read as a regression.
+
+Also measured: the beta profile is the only database written since 2026-08-30, so
+`~/.agentweave/hub/profiles/beta/agentweave.db` is still the live one, as CLAUDE.md's corrected row
+says. The `setup/token` key that `aw.py` defaults to answered `401` against the *old* process and
+`200` against the new one — worth knowing, because a `401` from a drive harness reads as a bad key
+and was actually a stale server.
+
+### The fixture
+
+New project **`drive-2026-08-31` = `proj-3175994d03ce`** at `C:\Users\huida\Documents\drive-2026-08-31`
+— a fresh `git init -b master` with one commit (`calc.py` with `add`), plus a `.gitignore` for
+`.agentweave/` (the first preflight caught the untracked marker directory immediately, which is the
+check earning its keep). `POST /projects/open` **adopted `master` as the main branch by itself** —
+`_adopt_detected_main_branch` driven, no settings round trip. Runner `Haiku (cheap)` =
+`claude-haiku-4-5-20251001`, agents `alpha` and `beta` bound to it. Neither forbidden project touched.
+
+### The harness: `scripts/drive/t_drive1_flow_lands.py`, two lanes on one document
+
+Two independent tasks on one `change-spec`, and the two lanes are the point. `modulo` is the CLEAN
+lane — the operator accepts its evidence before the review firing. `power` is the STALL lane — its
+evidence is left `awaiting` so change C's refusal has something to refuse. Ancestry is checked with
+`git merge-base --is-ancestor` against the repository, never by reading the Hub's own
+`TaskIntegration` rows: the run's purpose is written as *did the work reach the main branch*, and
+taking the Hub's word for that would answer a different question. `agent_output_text` reads
+`payload` as well as `content`, because a tool **result** — where a refusal lands — is carried in
+`payload`, and reading only `content` would have answered "the agent never saw it" for a refusal
+sitting one field over.
+
+**14 of 20 checks held on the first pass**, and every one that did not traces to a single event: the
+clean lane's reviewer never recorded its verdict.
+
+### What held — three changes driven, not asserted
+
+- **A driven.** Both tasks went `pending -> in_progress -> completed` inside firing 1, ~24 seconds
+  in, with **no operator transition at all**. F140 was exactly this not happening.
+- **A's evidence half driven.** Both agents recorded evidence naming a commit without the drive
+  asking; `_briefing_evidence_lines` is the only place they were told.
+- **B driven.** Firing 2 staffed both reviews and neither reviewer was its author — `alpha -> beta`
+  on power, `beta -> alpha` on modulo.
+- **C driven.** The `awaiting` lane was refused at `approved` in a live agent turn; the accepted lane
+  was not.
+- **F152 driven.** `beta` read the refusal as a sentence — no brace, no `'code':` — and *stopped*,
+  thinking *"I see. The task can't be approved yet because there's evidence"*. The `ACCEPT_OR_GRANT`
+  clause's own comment claims naming an untakeable remedy is what stops an agent retrying. Measured:
+  it does. That contrast becomes the sharpest thing in the drive once F155 shows the same model
+  retrying a *takeable* remedy five times.
+
+### `master` afterwards
+
+```
+6b938d7 Integrate approved work db8fc6a7c47e     <- task-5ae53e9b339c ("modulo")
+961f605 Integrate approved work 4e722fa04088     <- task-7f11b87f3d36 ("power")
+```
+
+with both functions in `drive1_024543.py` and both shas ancestors of `master`.
+
+### F154 (A) — a review that ends without a verdict wedges the task forever, and the flow says "nothing is wrong"
+
+`alpha` reviewed `modulo`, concluded in its own transcript that the work was correct, and its turn
+ended without `update_task`. From then on every firing answered **409 "Every task on this loop's
+queue is already being worked. Nothing was started, and nothing is wrong — the next firing picks up
+whatever finishes."** — with both agents `idle`, no run live, `firing_active: false`,
+`stall_reason: null`, and `agent_capacity: "held"` on an idle agent. Fired three times over several
+minutes; identical every time.
+
+`decide_firing`'s `WITH_REVIEWER` branch records `in_flight` on the strength of `task.assignee`
+alone. Its own comment claims this is what makes a verdictless review *visible to an operator*; the
+row is visible and what is said about it is false. The distinction is already computed —
+`held = tasks_held_by_a_running_turn(...)` sits in scope and the ordinary-work arm next door uses it
+— and this branch never looks at it. That is F142 one door over, breaching the same requirement B
+was just fixed against, and worse in kind: the operator is not uninformed, they are told the flow is
+healthy.
+
+The *cause* here was the spawned Claude harness presenting the MCP tools as **deferred**: `alpha`
+called `ToolSearch` eleven times, each returning "tool completed", and never emitted the
+`update_task` call it kept announcing. The other three turns in the same drive called their tools
+first try, so it is intermittent, not structural, and it is not the Hub's to fix. **What the Hub owns
+is what happens afterwards**, and afterwards is F154.
+
+### F155 (A) — "Resolve the conflict on the branch, then approve" cannot be followed, by anybody
+
+Re-triggered on `modulo` after `power` had already landed on `master`, `alpha` called `update_task`
+at once — so the ToolSearch loop really was intermittent — and got a **different** refusal:
+*"This task's work does not merge cleanly into master: drive1_024543.py. Resolve the conflict on the
+branch, then approve."* Both tasks created the same file, so the add/add conflict was inevitable the
+moment the first one merged.
+
+The agent then did **exactly what it says**: merged `master` in, resolved by hand keeping both
+functions, committed `17aac8e`, verified with `git diff master...HEAD`, approved — **identical
+refusal**. Read the file, the log, the spec document, approved again — **identical refusal**. Then
+`git reset --hard 5f07663` and `git rebase master`, resolving the same conflict a second time.
+
+`_check_mergeable` never looks at the branch. It asks
+`would_conflict(root, target.commit_sha, main_branch)` for each **commit named by accepted evidence**
+— `git merge-tree --write-tree master <that exact commit>`. Resolving on the branch makes a new
+commit no evidence names, so the answer cannot change. The operator has no route either: approving
+by hand returned the same 409, naming `source_branch: agentweave/task/task-5ae53e9b339c` for a commit
+that the agent's rebase had just detached from that branch.
+
+**What actually clears it, and the product never says so:** record *fresh evidence naming the merged
+commit*. Driven — `alpha` recorded `ev-a2a689ef080d` with footprint `db8fc6a`,
+`integration_targets`' per-branch reduction picked the newer row, the operator accepted it, and the
+approval went through and merged immediately (`tint-e097e09de620`, outcome `merged`). One tool call
+that neither the refusal, nor the drawer, nor the briefing mentions.
+
+Two separable defects: the sentence points at the wrong place (it carries `commit_sha` in its
+structured half and drops it from the prose), and **a product instruction invited `git reset --hard`
+on a branch holding the only copy of an agent's work.** It came out fine. The next one may not.
+
+This fires only where a second task has already landed and touched the same paths — which is to say
+exactly in the multi-task flows the feature exists for, and never in a single-task fixture. That is
+why three spec rounds and 3,555 unit tests did not have it.
+
+### F156 (B) — `integration-preview` says `will_merge: true` for a task approval refuses
+
+Same task, same minute: the drawer meant to state what approving will do returned
+`{"will_merge": true, "reason": ""}` for the commit the gate was refusing. `will_merge` is
+`bool(main_branch and targets)`. The handler's docstring is candid that it runs no conflict probe on
+purpose, and that reasoning is sound — the **word** is not. Cheap repair is vocabulary
+(`will_attempt_merge`), not a probe.
+
+### tasks.md 8.3 confirmed live, and it is quieter than expected
+
+`approval_report` has no UI consumer, so the mixed case's advisory reaches the API and the agent and
+never a screen. Not separately reproduced here because this drive never produced a mixed case: the
+stall lane held exactly one piece of evidence, so the refusal fired rather than the advisory. The
+grep result stands and 8.3 stays open.
+
+### Fixture left clean
+
+Job disabled and archived (`jobs: []`), both agents `idle`, both tasks `approved`, no question
+pending, every queue entry `delivered`, no permission card, no rebase in progress, fixture repo tree
+clean. The two review worktrees remain detached under `.agentweave/reviews/`, which is their ordinary
+resting state. `spec/` added to the fixture's `.gitignore` so a re-drive's preflight passes.
+
+### Next
+
+**`D-R1`** — round 1 of `a-loop-declares-whether-it-needs-evidence` (breaks 1 and 7; F124), the last
+unproposed change and the one carrying operator decision D-B. Before it: F154 and F155 are both
+severity A, both found by driving, and both sit squarely in this run's stated purpose — *fix the flow
+end to end until a flow's approved work actually reaches the main branch*. F155 in particular is a
+product instruction that cannot be followed and that invited a destructive git command, and it is
+reachable only from a multi-task flow, which is the shape D is about. Whether D still comes first, or
+whether F155 earns its own spec loop ahead of it, is queued for the operator as **D19**.
