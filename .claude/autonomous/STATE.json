@@ -237,5 +237,5 @@
     "D6 in `decisions_for_user` is unanswered and DRIVE-2 should exercise it: an explicit `work_needs_evidence=False` merges the branch tip even for a task linked to requirements with accepted evidence. That is D-B read literally and the design keeps it, but it is the operator's to confirm.",
     "The UI bundle is committed and stamped as of 5522597. Any further `hub/ui/src` change needs `npm run build` + `py -3.11 scripts/refresh_ui_bundle.py` again, committed together."
   ],
-  "last_heartbeat": "2026-08-31T04:28:02+01:00"
+  "last_heartbeat": "2026-08-31T05:20:54+01:00"
 }
