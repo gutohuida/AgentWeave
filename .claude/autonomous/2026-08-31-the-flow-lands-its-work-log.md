@@ -2344,3 +2344,45 @@ would be to stand down again. The heartbeat is stamped at this iteration's real 
 **The branch remains offered.** Four changes, all valid `--strict`, two end-to-end drives behind
 them, five findings inherited unfixed and now — for the two that block the next unit of work —
 raised as answerable questions rather than paragraphs. This run does not merge.
+
+---
+
+## Iteration 19 — 2026-08-31T07:49+01:00 — the run reaches `stop_at`, and closes
+
+**This is the terminal entry.** `stop_at` is **08:00+01:00** and this firing began at **07:49**, so
+there is no unit of work that fits inside the remaining eleven minutes and none is queued. The
+entry exists to close the run rather than to leave the last word to a stand-down.
+
+**Position reconciled.** Branch `autonomous/2026-08-31-the-flow-lands-its-work`, `git status` clean,
+`HEAD == origin/…` at `68de2bf`, log tail is iteration 18's. Nothing moved between firings.
+Iteration 18's `next_action` barred re-running the offer verification a third time, and it was not
+re-run; the two cheap checks that make this entry's closing claim self-supporting were run instead:
+**61 commits ahead of `master`**, and `master...HEAD` touches exactly the four changes named below
+and no fifth.
+
+**What this run produced, in one place.**
+
+| | |
+|---|---|
+| Changes proposed, three-round-reviewed and implemented | 4 — `a-flow-briefing-names-its-contract`, `a-review-a-flow-cannot-staff-is-named`, `approval-refuses-unaccepted-evidence`, `a-loop-declares-whether-it-needs-evidence` |
+| Rounds run | 12 (R1/R2/R3 × 4), never collapsed |
+| Live end-to-end drives | 3 — `t_drive1_flow_lands.py`, `t_drive2_loop_lands.py`, `t_f162_window.py` |
+| Suite at the offer | `hub/tests/` 3751 passed / 84 skipped / 1 xpassed (iteration 16) |
+| Findings inherited unfixed | F154, F155, F161, F162, F163 — all in `scripts/drive/FINDINGS.md` |
+| Decisions awaiting the operator | 12 in `decisions_for_user`; **D20 and D21 are the two that gate the next unit of work** |
+
+**Why the run ends with work unfixed, and why that is the right ending.** The three defects the
+drives confirmed last (F162, F161, F163) are not blocked on effort. F162 has **three** candidate
+repairs and each carries an objection that stops it being obvious; F161's mechanical fix is easy and
+probably wrong, because a loop has one agent and no review leg and may not belong in the review leg
+at all. Picking either is choosing between different changes, not between implementations — so they
+were raised as **D20** and **D21** with `pre_authorised_default: NONE` rather than guessed at
+04:00 by a process with no one to ask. A half-written proposal on a branch that is otherwise
+complete would have been the worse ending.
+
+**What the operator does next.** Review the branch and merge it or not; the four changes stand
+independently. Then answer **D20** — the answer scopes a spec loop for F162's repair, which is the
+next honest unit of work — and **D21**, which decides whether F161 is a `commit_for_task_review`
+change or a review-leg change.
+
+**The branch is offered, unchanged, at the tree iteration 16 described.** This run does not merge.
