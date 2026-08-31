@@ -29,11 +29,23 @@ param(
   # already doing the work and stand down. The driver is often installed as a *backup* to an
   # interactive session rather than instead of one; without this, both write to the same branch and
   # the headless one commits the interactive one's half-finished tree. Set to 0 to disable.
-  [int] $HeartbeatGraceMinutes = 25
+  [int] $HeartbeatGraceMinutes = 25,
+  # Repo-relative state file and driver log. Defaults reproduce the single-window arrangement
+  # exactly. A checkout running more than one daily window gives each its own pair, or the second
+  # window reads the first's queue and repeats work already done and pushed.
+  [string] $StateFile = ".claude\autonomous\STATE.json",
+  [string] $LogFile = ".claude\autonomous\driver.log"
 )
 
 $ErrorActionPreference = "Stop"
-$logFile = Join-Path $Repo ".claude\autonomous\driver.log"
+
+# See the matching guard in install-driver.ps1. An absolute path here joins onto $Repo a second
+# time and yields a path that never exists, which this script reports as "nothing to resume" and
+# then unregisters the task over -- indistinguishable, in the log, from finishing the queue.
+if ([System.IO.Path]::IsPathRooted($StateFile)) { throw "-StateFile must be repo-relative, not absolute: $StateFile" }
+if ([System.IO.Path]::IsPathRooted($LogFile))   { throw "-LogFile must be repo-relative, not absolute: $LogFile" }
+
+$driverLogPath = Join-Path $Repo $LogFile
 
 if (-not $AgentExecutable) {
   $agentCommand = Get-Command $Runner -ErrorAction SilentlyContinue
@@ -52,7 +64,7 @@ $script:LogEncoding = New-Object System.Text.UTF8Encoding($false)
 
 function Write-Log([string] $Message) {
   $line = "{0}  {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
-  [System.IO.File]::AppendAllText($logFile, $line + [Environment]::NewLine, $script:LogEncoding)
+  [System.IO.File]::AppendAllText($driverLogPath, $line + [Environment]::NewLine, $script:LogEncoding)
   Write-Output $line
 }
 
@@ -64,14 +76,17 @@ if ((Get-Date) -ge $stopAtInstant) {
   exit 0
 }
 
-$stateFile = Join-Path $Repo ".claude\autonomous\STATE.json"
-if (-not (Test-Path $stateFile)) {
-  Write-Log "No STATE.json - nothing to resume. Stopping."
+$stateFilePath = Join-Path $Repo $StateFile
+# Forward slashes, because the prompt below is read by an agent that will type this path into
+# tools where a backslash is an escape.
+$stateRelative = $StateFile -replace '\\', '/'
+if (-not (Test-Path $stateFilePath)) {
+  Write-Log "No $stateRelative - nothing to resume. Stopping."
   try { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop } catch {}
   exit 0
 }
 
-try { $state = Get-Content $stateFile -Raw | ConvertFrom-Json } catch {
+try { $state = Get-Content $stateFilePath -Raw | ConvertFrom-Json } catch {
   Write-Log "STATE.json did not parse - refusing to launch an unattended agent."
   exit 2
 }
@@ -110,7 +125,7 @@ if (-not $state.next_action) {
 # next firing is what picks the work up. Standing down is a skip, not a stop.
 if ($HeartbeatGraceMinutes -gt 0) {
   $heartbeat = $null
-  try { $heartbeat = (Get-Content $stateFile -Raw | ConvertFrom-Json).last_heartbeat } catch {
+  try { $heartbeat = (Get-Content $stateFilePath -Raw | ConvertFrom-Json).last_heartbeat } catch {
     Write-Log "STATE.json did not parse - proceeding, since a backup that defers to a file it cannot read is no backup."
   }
   if ($heartbeat) {
@@ -154,6 +169,12 @@ heartbeat written from it lands an hour in the future and stalls the loop until 
 Honour the limits recorded in STATE.json. Stay on the autonomous branch. If a decision is
 genuinely the user's, add it to decisions_for_user rather than guessing.
 '@
+
+# The prompt is a literal here-string so nothing inside it can be interpolated by accident. The one
+# thing that legitimately varies per window is which state file to read, so name it explicitly --
+# an agent told to read STATE.json on a checkout holding two of them will pick the wrong one, and
+# then commit a queue position belonging to the other window.
+$prompt = $prompt.Replace('.claude/autonomous/STATE.json', $stateRelative).Replace('rewrite STATE.json', "rewrite $stateRelative")
 
 Set-Location $Repo
 Write-Log "--- iteration start ($Runner, $PermissionMode) ---"

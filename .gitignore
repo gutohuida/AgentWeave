@@ -143,7 +143,10 @@ prints/
 # from `hub/`. The real database is `hub/data/`, ignored above; this one is always an accident.
 hub/hub/data/*.db
 hub/agentweave.db
-.claude/autonomous/driver.log
+# The driver writes this while the agent it launched is committing, so a tracked one guarantees a
+# dirty tree at every iteration boundary. Globbed because a checkout running more than one daily
+# window gives each window its own log.
+.claude/autonomous/driver*.log
 
 # Working files for the autonomous loop's own API-driving (request/response bodies), not
 # durable output - the findings/log files next to it are.

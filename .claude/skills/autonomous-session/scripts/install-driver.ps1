@@ -50,6 +50,19 @@
     tomorrow, so arming at night for a morning start does the obvious thing. Omit to start a
     minute from now, which is the attended case.
 
+.PARAMETER StateFile
+    Repo-relative path to the state file this task drives from. Defaults to the single
+    .claude\autonomous\STATE.json every run used before daily windows existed.
+
+    Two tasks on the same checkout need two state files, or the second reads the first's queue
+    and does its work twice. They must still agree on the branch: STATE.json's `branch` is
+    checked against the checkout's current branch on every firing, and a single working tree
+    can only be on one. Non-overlapping windows are therefore a requirement, not a convenience.
+
+.PARAMETER LogFile
+    Repo-relative driver log. Defaults to .claude\autonomous\driver.log. Give each task its own,
+    or diagnosing a dropped firing means untangling two interleaved windows.
+
 .EXAMPLE
     powershell -File install-driver.ps1 -EveryMinutes 5 -UntilHHmm "10:00"
 
@@ -71,17 +84,27 @@ param(
   [ValidateSet("auto", "claude", "codex")]
   [string] $Runner = "auto",
   [ValidateSet("auto", "unattended-full-access", "workspace-contained")]
-  [string] $PermissionMode = "auto"
+  [string] $PermissionMode = "auto",
+  [string] $StateFile = ".claude\autonomous\STATE.json",
+  [string] $LogFile = ".claude\autonomous\driver.log"
 )
 
 $ErrorActionPreference = "Stop"
 
-$stateFile = Join-Path $Repo ".claude\autonomous\STATE.json"
-if (-not (Test-Path $stateFile)) {
-  throw "No $stateFile. Run the autonomous-session skill first -- the driver resumes a session, it does not start one."
+# Both paths are joined onto $Repo here AND again in run-iteration.ps1, so an absolute one produces
+# C:\repo\C:\repo\... -- a path that cannot exist. The first firing would then log "nothing to
+# resume" and unregister the task, which reads exactly like a completed queue. Refuse loudly
+# instead. (Caught 2026-09-01: PowerShell variable names are case-insensitive, so an earlier
+# `$stateFile = Join-Path $Repo $StateFile` silently overwrote the parameter with its own result.)
+if ([System.IO.Path]::IsPathRooted($StateFile)) { throw "-StateFile must be repo-relative, not absolute: $StateFile" }
+if ([System.IO.Path]::IsPathRooted($LogFile))   { throw "-LogFile must be repo-relative, not absolute: $LogFile" }
+
+$stateFilePath = Join-Path $Repo $StateFile
+if (-not (Test-Path $stateFilePath)) {
+  throw "No $stateFilePath. Run the autonomous-session skill first -- the driver resumes a session, it does not start one."
 }
 
-try { $state = Get-Content $stateFile -Raw | ConvertFrom-Json } catch {
+try { $state = Get-Content $stateFilePath -Raw | ConvertFrom-Json } catch {
   throw "STATE.json is not valid JSON: $($_.Exception.Message)"
 }
 
@@ -140,7 +163,7 @@ $stopArg = $stopInstant.ToString("yyyy-MM-ddTHH:mm:ss")
 # guarantees a dirty tree at every iteration boundary -- the one thing the skill tells iterations
 # never to leave behind.
 $gitignore = Join-Path $Repo ".gitignore"
-$ignoreLine = ".claude/autonomous/driver.log"
+$ignoreLine = ".claude/autonomous/driver*.log"
 if (-not (Test-Path $gitignore) -or -not (Select-String -Path $gitignore -SimpleMatch $ignoreLine -Quiet)) {
   Add-Content -Path $gitignore -Value $ignoreLine -Encoding ascii
   throw "Added '$ignoreLine' to .gitignore. Commit it, then run the installer again so the first firing starts clean."
@@ -155,7 +178,7 @@ if ($dirty.Count -gt 0) {
 # -NoProfile so a slow or interactive profile cannot wedge an unattended firing.
 $action = New-ScheduledTaskAction `
   -Execute "powershell.exe" `
-  -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$iterationScript`" -Repo `"$Repo`" -StopAt `"$stopArg`" -TaskName `"$TaskName`" -Runner `"$resolvedRunner`" -PermissionMode `"$resolvedPermissionMode`" -AgentExecutable `"$agentExecutable`"" `
+  -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$iterationScript`" -Repo `"$Repo`" -StopAt `"$stopArg`" -TaskName `"$TaskName`" -Runner `"$resolvedRunner`" -PermissionMode `"$resolvedPermissionMode`" -AgentExecutable `"$agentExecutable`" -StateFile `"$StateFile`" -LogFile `"$LogFile`"" `
   -WorkingDirectory $Repo
 
 # Same "already passed today means tomorrow" rule the stop time uses, for the same reason: an
@@ -199,7 +222,8 @@ Write-Output "Installed '$TaskName': first firing $($startInstant.ToString('yyyy
 Write-Output "  repo:   $Repo"
 Write-Output "  runner: $resolvedRunner ($agentExecutable)"
 Write-Output "  mode:   $resolvedPermissionMode"
-Write-Output "  log:    $Repo\.claude\autonomous\driver.log"
+Write-Output "  state:  $stateFilePath"
+Write-Output "  log:    $(Join-Path $Repo $LogFile)"
 Write-Output ""
 Write-Output "Remove with: Unregister-ScheduledTask -TaskName '$TaskName' -Confirm:`$false"
 Write-Output "NOTE: MultipleInstances=IgnoreNew, so an iteration running longer than the interval"
