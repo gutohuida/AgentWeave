@@ -79,6 +79,27 @@ describe('TaskIntegrationNote', () => {
     expect(screen.getByText(/no main branch set/)).toBeTruthy()
   })
 
+  /**
+   * Today's behaviour, written down before it changes (break 7, task 1.6).
+   *
+   * The nothing-to-merge skip is the one reason retrying can never clear: the resolution it failed
+   * is a fact about the database, not about the checkout, so pressing this appends an identical
+   * second skip. The button is offered anyway, because the only reason suppressed today is a
+   * missing main branch. This case flips to asserting no button once retryability is decided by
+   * the Hub rather than by matching one sentence in the UI.
+   */
+  it('offers a retry today even for a skip that retrying can never clear', () => {
+    rows = [
+      row({
+        outcome: 'skipped',
+        reason: 'no accepted evidence names a commit, so there is nothing to merge',
+      }),
+    ]
+    render(<TaskIntegrationNote taskId="task-9" status="approved" />)
+
+    expect(screen.getByTestId('task-integration-retry-task-9')).toBeTruthy()
+  })
+
   it('shows only the newest attempt per target, so a stale skip does not outlive its merge', () => {
     rows = [
       row({ id: 'tint-old', outcome: 'skipped', reason: 'no main branch set' }),

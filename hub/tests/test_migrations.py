@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0099"
+HEAD_REVISION = "0100"
 
 
 # ---------------------------------------------------------------------------
@@ -3072,6 +3072,99 @@ def test_migration_0098_is_guarded_when_the_queue_table_does_not_exist(tmp_path)
 
     with sqlite3.connect(db_file) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0098"
+
+
+# ---------------------------------------------------------------------------
+# 0100 — a loop declares whether its work needs evidence to reach the main branch
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0100_adds_work_needs_evidence_with_no_backfill(tmp_path) -> None:
+    """F124, design D2: one nullable column, no server default and no backfill guess."""
+    db_file = tmp_path / "loop_work_needs_evidence.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        loop_columns = {row[1]: row for row in conn.execute("PRAGMA table_info(loops)")}
+        assert "work_needs_evidence" in loop_columns
+        assert loop_columns["work_needs_evidence"][3] == 0  # notnull
+        assert loop_columns["work_needs_evidence"][4] is None  # dflt_value
+
+
+def test_migration_0100_leaves_an_existing_loop_null_rather_than_answering_for_it(
+    tmp_path,
+) -> None:
+    """The load-bearing half, and it is about **flows**.
+
+    `loops` holds flows as well as loops, and `merge_targets` treats any explicit value as the
+    operator's own word — it wins over the kind-aware default that keeps evidence governing a
+    flow. So a `server_default` of either value would answer this question for every flow that
+    already exists, silently. An upgraded row must read NULL, which is how "the product's current
+    default" is spelled.
+
+    Written as a downgrade-and-back-up rather than a plain forward upgrade because `loops` is
+    created by `create_all` from the models, not by the migration chain: a database built by
+    migrations alone has no `loops` table at all (which is what 0100's own guard is for, below).
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "loop_work_needs_evidence_backfill.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    stamp = "2026-01-01T00:00:00Z"
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0099")
+
+        with sqlite3.connect(db_file) as conn:
+            assert "work_needs_evidence" not in {
+                row[1] for row in conn.execute("PRAGMA table_info(loops)")
+            }
+            conn.execute(
+                "INSERT INTO projects (id, name, created_at) " f"VALUES ('proj-1', 'p', '{stamp}')"
+            )
+            conn.execute(
+                "INSERT INTO ai_jobs (id, project_id, name, agent, message, cron, created_at, "
+                "session_mode, enabled, source) "
+                f"VALUES ('job-1', 'proj-1', 'n', 'claude', 'go', '0 9 * * *', '{stamp}', "
+                "'new', 1, 'hub')"
+            )
+            # A **flow**: it names a document, which is the shape a wrong server default would
+            # have quietly answered for.
+            conn.execute(
+                "INSERT INTO loops (id, project_id, job_id, purpose, stop_when_queue_empties, "
+                "created_at, spec_document_id) "
+                f"VALUES ('loop-1', 'proj-1', 'job-1', 'p', 0, '{stamp}', 'doc-1')"
+            )
+            conn.commit()
+
+        command.upgrade(cfg, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute(
+            "SELECT work_needs_evidence FROM loops WHERE id = 'loop-1'"
+        ).fetchone() == (None,)
+
+
+def test_migration_0100_is_guarded_when_the_loops_table_does_not_exist(tmp_path) -> None:
+    """Upgrades that start from an early revision reach 0100 with only that revision's tables."""
+    db_file = tmp_path / "no_loops_table.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0099')")
+
+    _upgrade_to(db_url, "0100")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0100"
 
 
 def test_running_migrations_leaves_existing_loggers_enabled(tmp_path) -> None:
