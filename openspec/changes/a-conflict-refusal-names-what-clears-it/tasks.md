@@ -4,37 +4,37 @@ Round 1 wrote these. Rounds 2 and 3 may rewrite any of them; nothing here is imp
 
 ## 1. Reproduce F155 before changing a word
 
-- [ ] 1.1 Write a failing test in `hub/tests/` that builds the F155 shape end to end: a project with
+- [x] 1.1 Write a failing test in `hub/tests/` that builds the F155 shape end to end: a project with
   a main branch, two tasks touching the same path, the second landed on the main branch first, and
   the first carrying **accepted** evidence whose footprint names a conflicting commit. Approve it,
   read the `409`, and assert today's sentence — that it says *"Resolve the conflict on the branch"*
   and does **not** name the commit. Assert today's wrong behaviour so the test flips.
-- [ ] 1.2 Assert the consequence rather than the wording alone: resolve the conflict on the branch
+- [x] 1.2 Assert the consequence rather than the wording alone: resolve the conflict on the branch
   (a real merge commit on the task branch), approve again, and assert the refusal is **byte-for-byte
   identical** — that is the defect, and a test that only reads prose does not prove it.
-- [ ] 1.3 Assert what does clear it, so the remedy the new sentence states is proven before it is
+- [x] 1.3 Assert what does clear it, so the remedy the new sentence states is proven before it is
   stated: record fresh evidence **from a checkout of the branch the refusal names**, accept it,
   approve, and assert the transition succeeds and integration records `merged` against the resolved
   commit. Round 2 answered design open question 1 at the source -- the agent route is safe because
   `_take_footprint` gates the named-commit path on `actor.kind == "operator"` (`requirement_evidence.py:282`) -- so this test's job
   is to hold that answer, not to discover it.
-- [ ] 1.3a Assert the operator hazard round 2 found, as an **xfail or an explicit non-guarantee**:
+- [x] 1.3a Assert the operator hazard round 2 found, as an **xfail or an explicit non-guarantee**:
   an operator recording evidence whose `locator` is the resolved sha, once that commit is no longer
   exactly one branch's tip, gets `branch=""` from `_branch_at` and does **not** supersede. This
   change does not fix that -- it is prose-only -- but the wording must not promise it away, and a
   test naming it is what stops a later reader assuming it works. If the test shows the hazard is
   unreachable, delete it and say so; if it shows it is reachable, file it as a finding.
-- [ ] 1.3b Assert the two properties D6 rests on, because the sentence is only true if they hold:
+- [x] 1.3b Assert the two properties D6 rests on, because the sentence is only true if they hold:
   fresh evidence for a **different** requirement on the same branch also supersedes, and a restamp
   of the stale row does not move it in the `observed_at` ordering.
-- [ ] 1.3c Assert round 3's correction to D2a, because round 2 stated it as a construction and it is
+- [x] 1.3c Assert round 3's correction to D2a, because round 2 stated it as a construction and it is
   a precondition: with `Run.workspace_dir` absent or pointing at a released directory,
   `footprint_root` (`requirement_evidence.py:334-340`) falls back to the per-agent checkout and then
   to `workspace.root`, which is on the **main** branch. Record fresh evidence in that state and
   assert it does **not** supersede -- `newest` gains a second key rather than replacing the first.
   This is the same non-guarantee as 1.3a reached from the agent route, and the wording must not
   promise it away. If it proves unreachable, delete it and say so.
-- [ ] 1.4 Confirm 1.1 and 1.2 fail for the stated reason by reading the failure output, not by
+- [x] 1.4 Confirm 1.1 and 1.2 fail for the stated reason by reading the failure output, not by
   assuming.
 
 ## 2. The gate carries where the commit came from
