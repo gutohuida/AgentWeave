@@ -624,3 +624,93 @@ loop whatever it declares.
 **Still no drive.** Every scheduler-touching test file in the suite has been run and is green, and
 that remains a statement about the tests. Groups 6 and 7 are next, and 7 is the one the operator
 asked for.
+
+---
+
+## Iteration 5 — 2026-08-31T13:23+01:00 — A-IMPL-3: group 6, the landing action
+
+**Reconciliation.** Branch and `git log` matched STATE.json exactly: `e50f0b2` on
+`autonomous/2026-08-31-the-turn-must-end-first`, clean tree, five product commits behind the two
+bookkeeping ones. Nothing to reconcile.
+
+Group 6 landed at `80e5717`, one commit, source and bundle together. `POST /tasks/{id}/land`
+composes the three moves the operator was making by hand: release the author's hold,
+`-> under_review`, `-> approved`. Tasks 6.1–6.5 all ticked, 6.4 included — there was time for the
+UI, so it was not dropped.
+
+### The shape
+
+The route is 60 lines and the map is untouched. `_commit_and_render` was extracted from
+`update_task_for_actor`'s tail and both routes share it, which is load-bearing rather than tidy:
+`apply_transition` stages and does not commit, so that one call **is** the transaction boundary both
+callers depend on. A second copy would be a second place for "nothing half-applied" to stop being
+true.
+
+Refused on a task that is not `completed`, rather than adapted to it. A task already `under_review`
+has a one-call approval that works, so landing would add nothing but a cleared assignee — which, on
+a task a reviewer holds, is the review taken off them without saying so. Not restricted to a loop's
+tasks: the composition grants no authority the operator lacks on any task, so a restriction would be
+a rule about who may take a shortcut rather than about what is legal.
+
+### Two findings, both measured
+
+**1. The delta asked for a third transition row that cannot exist.** It said the history records
+*"the release of its author's hold, the move into review, and the approval"*, and task 6.5 said to
+record *all three* as actor-caused. `TaskTransition` records a move between **statuses**
+(`db/models.py:768-799`) and `assignee` has no history table at all — the release is a column write
+folded into the same handler, exactly as the ordinary PATCH route folds it into the same request
+(F70's ordering, `tasks.py:1262`). Two rows are recorded, both `operator`, both `origin='actor'`.
+The delta scenario and design D6 were corrected to say what the record can hold; the test asserts
+the two rows **and** the cleared holder, so the release is still checked, just not claimed as
+history.
+
+**2. The gate pre-check is invisible from outside, and the code now says so.** Design D7 and round 3
+both said the pre-check *"makes the message the one approval would have given"*. Measured by
+deletion: with those three lines gone the landing still answers `409` with the **identical** body —
+step three evaluates the same gate, raises the same `GateUnsatisfiedError`, and the transaction rolls
+the staged `under_review` back. Eight of the nine backend tests passed with the pre-check removed;
+only `test_the_gate_is_decided_before_anything_is_attempted`, added for exactly this and observing the
+call sequence rather than the response, failed:
+
+```
+E       AssertionError: the landing action moved a task it was about to refuse
+```
+
+It is kept — ordering matters the moment a fourth step or a non-gate refusal joins the sequence —
+but an unobserved line rots, so both the route comment and D7 now state what it buys and what it
+does not.
+
+**A third thing, smaller.** Task 6.3 asked for a test of a refusal raised by
+`_guard_reviewer_is_not_the_author` on step two. Through the real route there is none: releasing the
+hold first means that guard returns immediately, on its own first permitted case. The refusal is
+therefore **forced** rather than provoked, and the test says so — which is the stronger reading of
+what the delta claims anyway (*"refused for any reason"*, not for the reasons the composition can
+foresee).
+
+### Verified by removal, twice
+
+| Removal | Result |
+|---|---|
+| Gate pre-check deleted | 8 passed, 1 failed — only the ordering test |
+| `session.commit()` inserted after the assignee write | 8 passed, 1 failed — `assert None == 'builder'`, the author's hold gone on a task that never reached review |
+
+Both restored, both green afterwards. This is what says the two tests discriminate rather than
+merely pass.
+
+### Verification
+
+| Run | Result |
+|---|---|
+| `test_one_action_lands_the_work.py` (new) | 9 passed |
+| `test_task_transitions_api` + `test_task_integration` + `test_loop_lands_its_work` + `test_approval_waits_for_the_turn` + the new file | 85 passed |
+| `pytest hub/tests/ -k "task or tasks"` (rest) | 680 passed, 5 skipped |
+| `taskLandingAction.test.tsx` (new) | 8 passed |
+| `npm run lint`, `tsc --noEmit` | clean |
+| `ruff check src/ hub/ tests/`, `black --check` | clean |
+| `openspec validate --strict` | valid |
+
+### Still no drive
+
+Group 7 is untouched and is the operator's explicit ask. Every implementation group is now closed,
+so the next firing has nothing standing between it and the three drives — which is why the branch is
+released immediately below rather than at a heartbeat's distance.
