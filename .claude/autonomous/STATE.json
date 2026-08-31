@@ -235,5 +235,5 @@
     "FOUND IN ITERATION 5 (B-IMPL), FILED NOT FIXED, and queued as decisions_for_user D18: `record_evidence` takes `task_id` as a free parameter and does not require the calling run to be bound to it, so an agent can work a task on an UNBOUND run, record evidence naming its commit, and appear in NONE of the exclusion's three terms while `RequirementEvidence.actor` names it -- and the review arm requires that very row to exist before it resolves a reviewer at all.",
     "FOUND IN ITERATION 5 (B-IMPL), FIXED, and worth carrying as a lesson about the rounds themselves: `task-lifecycle-governance`'s scenario was keyed on nothing but the absence of a completion, which implemented literally reports a REAL hand-dispatched review in progress as one nobody is doing. Every round checked the wedge predicate against being given the WIDER set -- three times -- and none checked the narrower direction."
   ],
-  "last_heartbeat": "2026-08-31T04:02:11+01:00"
+  "last_heartbeat": "2026-08-31T03:22:34+01:00"
 }
