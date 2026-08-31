@@ -302,29 +302,37 @@ def wait_for_status(loop_row_id, wanted, seconds=420):
     return rows, at_status, {t["id"]: task_branch_tip(t["id"]) for t in rows}
 
 
-def approve(task_id, label="operator approves"):
-    """Landing a LOOP's work costs the operator THREE requests, and this is all of them.
+def approve(task_id, label="operator lands the work"):
+    """ONE request. This function used to be three, and the three are why the route exists.
 
-    Driven 2026-08-31, each refusal measured rather than assumed:
+    **What it cost before 2026-08-31** (F163, measured by this harness on its earlier runs, each
+    refusal driven rather than assumed):
 
     1. `assignee -> null`. A loop's task is still assigned to the one agent that did it, and
-       `completed -> under_review` answers **403** while it is: *"the move would claim its own
+       `completed -> under_review` answered **403** while it was: *"the move would claim its own
        author is reviewing it"*. A flow resolves a different reviewer and never meets this; a loop
-       has no review leg, so the operator always does.
-    2. `-> under_review`. `completed -> approved` answers **409** listing `rejected, under_review`
+       has no review leg, so the operator always did.
+    2. `-> under_review`. `completed -> approved` answered **409** listing `rejected, under_review`
        as the only ways out of `completed`.
-    3. `-> approved`, which is the transition that integrates.
+    3. `-> approved`, the transition that integrates.
 
-    Same three hops `t_row11_loop.py` found for the loop-ending drive, before approving a loop's
-    task merged anything at all. Now that it does, the price of the product's only merge-on-
-    approval route for a loop is three hand transitions the product documents nowhere.
+    Three hand transitions, two of which existed only to satisfy the next one, and the product
+    documented none of them. `POST /tasks/{id}/land` (group 6 of
+    `approval-waits-for-the-turn-to-end`) composes exactly those three inside one transaction. The
+    three still work and are still legal; this drive uses the one because the one is the claim.
+
+    Asserted here rather than at the call sites, so every lane gets it: the single request answers
+    200, and the task comes back `approved` with the author's hold released -- the two facts the
+    three hops used to produce between them.
     """
-    call(f"{label} (1/3 clear assignee)", "PATCH", f"/projects/{P}/tasks/{task_id}",
-         {"assignee": None}, expect=200)
-    call(f"{label} (2/3 under_review)", "PATCH", f"/projects/{P}/tasks/{task_id}",
-         {"status": "under_review"}, expect=200)
-    return call(f"{label} (3/3 approved)", "PATCH", f"/projects/{P}/tasks/{task_id}",
-                {"status": "approved"}, expect=200, show=True, limit=700)
+    c, out = call(f"{label} (ONE request: POST /land)", "POST",
+                  f"/projects/{P}/tasks/{task_id}/land", {}, expect=200, show=True, limit=700)
+    if c == 200 and isinstance(out, dict):
+        check(f"{label}: one action reached `approved`", out.get("status") == "approved",
+              repr(out.get("status")))
+        check(f"{label}: and released the author's hold in the same request",
+              out.get("assignee") in (None, ""), repr(out.get("assignee")))
+    return c, out
 
 
 def main():
@@ -414,6 +422,19 @@ def main():
         check("the Hub committed the agent's work onto the task's own branch",
               bool(late) and late != base_head, (late or "")[:12])
         check(f"{FILE_A} is NOT on {MAIN} yet", file_on_main(FILE_A) is None)
+
+        # Group 5 of `approval-waits-for-the-turn-to-end` (F161/D21): a loop must not enter the
+        # review arm at all. Before it, the loop's completed task was offered to the reviewer
+        # selection, which a one-agent mode cannot staff -- so the work sat waiting for a reviewer
+        # that could never be resolved. Checked here rather than in a lane of its own because this
+        # is the exact population: one agent, one task, nobody else to ask.
+        check("NO REVIEW STALL: the loop's task rests at `completed`, not `under_review`",
+              task_a.get("status") == "completed", repr(task_a.get("status")))
+        check("and the task is still held by its own author -- no reviewer was resolved onto it",
+              task_a.get("assignee") == AUTHOR, repr(task_a.get("assignee")))
+        check("and no second agent was pulled in to review it",
+              statuses().get(OTHER) in ("idle", "offline"),
+              f"{OTHER}={statuses().get(OTHER)!r}  all={statuses()}")
 
         # ---------------------------------------------------------------- D
         head("D. LANE A' -- dirty the operator's checkout, THEN approve (DRIVE-2 item 4)")

@@ -13,16 +13,21 @@ repository's own discipline says gets you. The claim under test:
     deliberately classifies that skip as NOT retryable -- so the work is stranded with the task at
     `approved`, the file on a branch nobody will merge, and no button on screen.
 
-Three outcomes are all worth having and this drive prints which one happened:
+Three outcomes are all worth having and this drive prints which one happened. **The pass condition
+was inverted on 2026-08-31** when `approval-waits-for-the-turn-to-end` shipped: what this harness
+was written to REPRODUCE is now what it must fail on.
 
-  REPRODUCED   -- the three transitions land while the agent is still mid-turn, the integration
-                  skips as already-integrated with no retry, and the file never reaches the main
-                  branch. F162 becomes a defect with a repro.
-  GUARDED      -- some transition is REFUSED while a run is live. F162 downgrades, and the drive
-                  says exactly which request refused and with what sentence.
+  GUARDED      -- the approval is REFUSED while the run is live, with a sentence naming the agent
+                  and saying the refusal clears itself. THIS IS NOW THE PASS. The drive goes on to
+                  check that the same refusal reaches the one-action `land` route, that it leaves
+                  nothing half-applied, and that once the turn ends the same hops do land the work.
+  REPRODUCED   -- the three transitions land while the agent is still mid-turn and the work is
+                  stranded. This was the finding; it is now a REGRESSION and fails the drive.
   NARROWER     -- the tip has already moved by the time the task reads `completed` at 1s
-                  granularity. F162's window is narrower than 6s sampling suggested, and the drive
-                  says how narrow.
+                  granularity. The drive never entered the window, so it decides nothing; re-run.
+
+A closed window means approval is refused for the whole of its duration -- NOT that the window
+vanished. LANE 2 (`AW_WIDE=1`) still measures its width, and that number should not have moved.
 
 Method: one loop, declaration OMITTED (so the branch tip governs the merge -- LANE A of DRIVE-2,
 already proven to land), fired by hand, then a TIGHT 1-second poll of `GET /tasks` and the git
@@ -324,6 +329,24 @@ def main():
         note("agent status at that instant", str(busy_at_completed))
 
         # -------------------------------------------------------------- C
+        head("C0. The landing action, inside the window -- it must inherit the same refusal")
+        # `POST /tasks/{id}/land` (group 6) composes the three hops below into one operator action.
+        # It is driven FIRST because it is the only moment the task still reads `completed`, which
+        # is its precondition -- after hop 2 it is `under_review` and the route would refuse for a
+        # different reason entirely. Two things are under test: that the composition evaluates the
+        # SAME gate rather than routing around it, and that its refusal leaves nothing half-applied
+        # (it stages `under_review` before step three raises, so the task reading `completed`
+        # afterwards is the transaction boundary observed live rather than in a unit test).
+        cl, ol = call("land (one action) inside the window", "POST",
+                      f"/projects/{P}/tasks/{t_a}/land", {}, show=True, limit=800)
+        stamp("land attempted", str(cl))
+        after_land = next((x for x in board() if x["id"] == t_a), {})
+        land_detail = ol.get("detail") if isinstance(ol, dict) else ol
+        if isinstance(land_detail, dict):
+            land_detail = land_detail.get("message") or land_detail
+        note("task status immediately after the land attempt", repr(after_land.get("status")))
+        note("assignee immediately after the land attempt", repr(after_land.get("assignee")))
+
         head("C. The three transitions, back to back, WITH NO SETTLE -- inside the window")
         hops = []
         c1, o1 = call("1/3 assignee -> null", "PATCH", f"/projects/{P}/tasks/{t_a}",
@@ -354,12 +377,55 @@ def main():
 
         # -------------------------------------------------------------- D
         head("D. Which of the three outcomes happened?")
+        # THE PASS CONDITION CHANGED THIS ITERATION. Before the fix, REPRODUCED was the finding and
+        # the drive passed by producing it. `approval-waits-for-the-turn-to-end` closed F162, so
+        # GUARDED is now the only outcome that passes and REPRODUCED is a REGRESSION: it means the
+        # gate did not fire on the very population it was written for. NARROWER remains neither --
+        # it says the drive never entered the window, so it decides nothing either way.
         if refused and not approved:
             outcome = "GUARDED"
             what, code, detail = refused[-1]
-            check("F162 DOWNGRADES: the product refused a transition inside the window",
+            check("F162 IS CLOSED: approval is REFUSED inside the window",
                   True, f"{what} -> {code}: {str(detail)[:200]}")
-            note("the guard is at", f"{what} answering {code}")
+            check("the refusal is the approval, not an earlier hop -- the two moves that do not "
+                  "assert the work is good are still permitted",
+                  what == "-> approved" and c1 == 200 and c2 == 200,
+                  f"hop1={c1} hop2={c2} refused_at={what!r}")
+            check("it refuses with 409 gate_unsatisfied, not 4xx-anything",
+                  code == 409 and "gate_unsatisfied" in str(o3), f"{code}")
+            check("the sentence names the agent and says the turn is still running",
+                  AUTHOR in str(detail) and "still running the turn" in str(detail),
+                  str(detail)[:160])
+            check("and it says the remedy is waiting, and that it clears itself",
+                  "clears itself" in str(detail) and "once the turn has ended" in str(detail),
+                  str(detail)[-200:])
+            check("the refusal carries an `unfinished` entry naming the live run",
+                  bool(((o3.get("detail") or {}) if isinstance(o3, dict) else {})
+                       .get("unfinished")),
+                  blob(((o3.get("detail") or {}) if isinstance(o3, dict) else {})
+                       .get("unfinished"), 200))
+            check("we really were inside the window -- the tip was still the base commit",
+                  tip_is_stale, f"tip={(tip_at_completed or 'none')[:12]} "
+                                f"base={base_head[:12]}")
+            check("nothing was integrated by the refused approval",
+                  not rows_i or all(x.get("outcome") != "merged" for x in rows_i),
+                  blob([x.get("outcome") for x in rows_i], 200))
+            # C0's landing action, judged here so its verdict sits beside the one it must match.
+            check("THE COMPOSITION INHERITS IT: `land` is refused inside the window too",
+                  cl == 409, f"{cl}")
+            # Both unwrapped to the sentence. `call()` already unwraps C0's; the hop list keeps the
+            # whole `detail` object, so the comparison has to reach `message` on this side too --
+            # comparing the two as-printed compares a string against a dict and always differs.
+            approve_sentence = (detail.get("message") if isinstance(detail, dict) else detail)
+            check("and `land` refuses with the SAME sentence the approval gave",
+                  str(land_detail) == str(approve_sentence),
+                  "identical" if str(land_detail) == str(approve_sentence)
+                  else f"land={str(land_detail)[:120]!r} vs "
+                       f"approve={str(approve_sentence)[:120]!r}")
+            check("the refused `land` left NOTHING half-applied -- still `completed`, still held",
+                  after_land.get("status") == "completed"
+                  and after_land.get("assignee") == AUTHOR,
+                  f"{after_land.get('status')!r} assignee={after_land.get('assignee')!r}")
         elif not tip_is_stale:
             outcome = "NARROWER"
             check("F162 NARROWS: the tip had already moved when the task read `completed`",
@@ -367,8 +433,8 @@ def main():
             note("at 1s granularity the window did not contain the read; "
                  "the 6s measurement straddled the snapshot", "")
         else:
-            check("the approval landed inside the window -- task is `approved`", approved,
-                  f"hop3={c3}")
+            check("REGRESSION: approval was permitted inside the window, which the fix forbids",
+                  False, f"hop3={c3}, tip still {(tip_at_completed or 'none')[:12]}")
             note("nothing was refused; the product let approval run against a stale tip", "")
             stale_target = (last.get("commit_sha") or "")
             check("the integration did NOT merge",
