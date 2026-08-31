@@ -1483,3 +1483,113 @@ end to end until a flow's approved work actually reaches the main branch*. F155 
 product instruction that cannot be followed and that invited a destructive git command, and it is
 reachable only from a multi-task flow, which is the shape D is about. Whether D still comes first, or
 whether F155 earns its own spec loop ahead of it, is queued for the operator as **D19**.
+
+---
+
+## Iteration 11 — 2026-08-31 03:04 to 03:2x (+01:00) — `D-R1`: propose `a-loop-declares-whether-it-needs-evidence`
+
+Branch and `git log` matched STATE.json at start (`c326743`, clean tree). Nothing to reconcile.
+
+**D19 was honoured, and this is the sentence it asked for.** F155 is a severity-A instruction that
+cannot be followed and that invited `git reset --hard` on a branch holding the only copy of an
+agent's work, it sits inside this run's stated purpose, and **it was passed over.** The queue kept
+its order, per D19's pre-authorised default: reordering on the strength of a finding made forty
+minutes earlier is the move the round discipline exists to prevent. F155 stays filed with a full
+reproduction and the remedy that actually works.
+
+### What round 1 produced
+
+`openspec/changes/a-loop-declares-whether-it-needs-evidence/` — proposal, design, tasks, and spec
+deltas against **two** capabilities. `openspec validate --all --strict`: 48 passed, 0 failed.
+
+The change covers breaks 1 and 7 and carries operator decision D-B with its two pre-authorised
+follow-ons (D4, the default; D5, what is merged).
+
+**Break 1, restated more strongly than F124 did.** F124 said loop tasks *happen to* lack requirement
+links. `create_loop` refuses `spec_document_id` outright, so a loop mints no requirements, so
+`record_evidence` 404s, so `integration_targets` is empty, so the only `git merge` into a main branch
+in the tree has no input — **for every loop task that has ever existed.** Not a gap; a definition.
+
+**Break 7, and it is worse than "a useless button".** `TaskIntegrationNote.tsx:87` renders "Try
+again" for every non-`merged` outcome whose reason does not contain `no main branch set`. The default
+is *offer it*, decided by string-matching prose in the browser, so the two genuinely terminal reasons
+— nothing to merge, already integrated — are exactly the ones that get a button. This change adds a
+*new* terminal reason, so shipping break 1's fix without break 7's would put a second unclearable
+button on screen.
+
+### The five decisions round 1 had to take, and the two it should be attacked on
+
+- **D1** — D5 made the per-task-branch guarantee a *condition* of relying on it, since
+  `work-is-isolated-per-task` was written about flows. **Verified, not assumed:**
+  `resolve_turn_workspace_inputs` and `takes_task_workspace` key on `Task.workspace_scheme` and a
+  writing agent, and neither mentions a loop, a flow or a document. Three shapes still reach approval
+  with no task branch (grandfathered by `0095`, read-only agent, non-repository) and each gets a
+  stated skip rather than a fallback — **falling back to the agent branch is F58 exactly.**
+- **D2** — one nullable Boolean, NULL meaning "the current default", on `Loop.control`'s own recorded
+  reasoning nine columns up. Rejected: an enum naming the merge source; deriving it from
+  `spec_document_id is None`, which is the implicit-requirements answer D-B already rejected.
+- **D3** — declared at creation, refused on edit. The pending-edit machinery cannot help: its whole
+  rationale is that *a firing keeps the definition it was briefed with*, and this field is never read
+  by a firing — it is read at approval, per task. A staged edit would land on whichever task was
+  approved next, which is the one property staging exists to prevent.
+- **D5** — a second resolver taking a repository root, `merge_targets(session, task, root)`;
+  `integration_targets` is left untouched and pure. Its four call sites were **grepped, not
+  recalled**: three move, `_prerequisite_commits` stays on accepted evidence.
+- **D7** — retryability is classified at the source and rides on the integration row; the UI reads a
+  field instead of matching a sentence. **The default inverts:** an unclassified reason is not
+  retryable. The retry *route* is deliberately not narrowed — the shipped requirement says retrying
+  is available to operators and agents, and this change constrains what is **offered**.
+
+Two things round 1 wrote down for later rounds to hit rather than smoothing over:
+
+1. **The default.** D4's rationale is that no loop merges anything today, so evidence-free regresses
+   nothing. That is true of history and silent about tomorrow: from this change on, approving any
+   loop task in a project with a configured main branch writes to that branch — including a loop that
+   only ever wrote notes, because `snapshot_worktree` commits whatever the turn left dirty. Recorded
+   as design.md's open question.
+2. **`integration-preview` overriding its own docstring.** It says *"no git subprocess, no conflict
+   probe"*. Round 1 keeps the second and breaks the first, because a drawer that reports no target
+   for the one task shape whose target is not in the database would say "nothing will merge" beside
+   an approve button that merges. Stated as an override rather than quietly done.
+
+An inconsistency round 1 caught in itself: D5's first draft said the preview *keeps* asking
+`integration_targets` and then, one bullet later, that it gains the branch-tip target. Both cannot be
+true. Rewritten.
+
+### F157 filed (C) — found by reading, not by driving
+
+`PATCH /jobs/{id}` refuses a loop field on a job that is not a loop, naming the remedy
+(`jobs.py:856-876`). `POST /jobs` does not: `create_job` reads `spec_document_id` only inside
+`if _loop_opts_in(...)`, so a create supplying it without a stop condition returns `201` and silently
+drops it. Two write paths, one field, opposite answers, and the silent one is what a caller reaches
+first. Filed rather than fixed — extending the refusal is a behaviour change on a shipped route. It
+matters here because this change deliberately does **not** inherit the precedent for its own field
+(design D4): a dropped `spec_document_id` shows up as a loop that never fills, while a dropped
+"does this loop's work need evidence" is invisible until an approval writes, or fails to write, to
+the operator's main branch.
+
+### Verification
+
+A spec round has no product to drive, so what was verifiable was verified:
+
+- `openspec validate --all --strict` → 48 passed, 0 failed.
+- **Every file and line the artefacts cite was opened or grepped, not recalled.** Iteration 9's
+  lesson (`tasks.md` 7.2 named a test file that does not exist, copied through three rounds because
+  no round ran a command) was applied literally: `test_task_integration.py`,
+  `test_task_integration_retry.py`, `test_jobs_crud.py`, `test_migrations.py`,
+  `test_project_persistence.py`, `test_task_release.py`, `test_tool_surface_matches_server.py`,
+  `test_mcp_tool_schemas.py` and `taskIntegrationRetry.test.tsx` all exist; the fixture helpers named
+  in task 1.2 were read out of the file.
+- Three cited line ranges were **wrong and were corrected** after checking: the `git merge` is at
+  `task_integration.py:300-372` (the exploration's `:289-300` predates change C's insertions),
+  `Loop.control` is `models.py:1405-1412`, and `test_release_happens_after_integration` lives in
+  `hub/tests/test_task_release.py:278`.
+- No product code was touched, so no suite was run. Migration head is still `0099`; this change plans
+  `0100`.
+
+### Next
+
+**`D-R2`** — round 2 of `a-loop-declares-whether-it-needs-evidence`. A fresh comparison against the
+code, not a re-read of this reasoning. The two places round 1 is most likely to be wrong are named
+above and in design.md's open question; the third is the prerequisite chain in D5's last bullet,
+which rests on three shipped mechanisms interacting rather than on one line of code.

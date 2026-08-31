@@ -11595,3 +11595,39 @@ commit will be attempted; whether it merges cleanly is checked at approval"*. C 
 concept, B because this is the one surface whose entire purpose is to be right about what approval
 will do.
 
+
+
+## F157 (C) — a loop field on `POST /jobs` is silently dropped; the same field on `PATCH` is refused
+
+Found by reading, during round 1 of `a-loop-declares-whether-it-needs-evidence`, not by driving.
+
+`PATCH /api/v1/jobs/{id}` collects `loop_fields_supplied` — `purpose`, `stop_at`,
+`stop_when_queue_empties`, `stop_reason`, `spec_document_id` — and when the job has no `Loop` row and
+the update does not opt it into being one, it refuses (`hub/hub/api/v1/jobs.py:856-876`):
+
+> `this job is not a loop; create it with a purpose or stop condition to make it one`
+
+`POST /api/v1/jobs` has no such check. `JobCreate` accepts `spec_document_id`, and `create_job` reads
+it **only inside** `if _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties)`
+(`jobs.py:650-663`). So:
+
+```
+POST /jobs {name, agent, message, cron, spec_document_id: "doc-…"}   →  201, no Loop row,
+                                                                        the document silently dropped
+PATCH /jobs/{id} {spec_document_id: "doc-…"}  on the same job        →  400, naming the remedy
+```
+
+Two write paths, the same field, opposite answers, and the one that says nothing is the one a caller
+reaches first. `agent-loops`' scenario for this is worded *"WHEN an **update** supplies a loop field
+for a job that has never been opted into being a loop"* — so the create path is not in breach of a
+shipped requirement, it is simply outside one.
+
+Cost today is bounded: a create that silently drops `spec_document_id` produces a job that never
+fills a queue, which the operator sees quickly. It is filed because `a-loop-declares-whether-it-needs-evidence`
+deliberately does **not** follow the precedent for its own new field (design D4) — a dropped
+"does this loop's work need evidence" is invisible until an approval writes, or fails to write, to
+the operator's main branch — and a change that refuses one loop field on create while silently
+dropping another leaves an asymmetry somebody should decide about on purpose rather than inherit.
+
+Not fixed here. Extending the refusal to `spec_document_id` on create is a behaviour change on a
+shipped route, which is the operator's call and not a round-1 side effect.
