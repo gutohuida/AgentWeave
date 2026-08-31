@@ -164,19 +164,118 @@ class GateRefusal:
         )
 
     def _merge_detail(self) -> str:
+        """The conflict, and a remedy that depends on where the judged commit came from (F155).
+
+        Found live 2026-08-30: this said *"Resolve the conflict on the branch, then approve"* on
+        every route. On the evidence route that instruction is false, not merely unhelpful — what
+        approval merges is the commit the accepted evidence names, so a resolution commit no
+        evidence names changes nothing and the answer cannot change however many times approval is
+        retried. The reviewer who followed it and got the identical sentence back reached for
+        `git reset --hard` on a branch holding the only copy of an agent's work.
+
+        So the two routes get two sentences, grouped on the per-target `named_by_evidence`
+        (design D1). A task cannot today carry both shapes at once — `merge_targets` returns one or
+        the other — but the grouping does not rely on that, because it would be an invariant stated
+        in another module and `evidence_governs` is exactly the kind of ladder that grows a sixth
+        answer (design D5).
+        """
         if not self.unmergeable:
             return ""
+        named = [entry for entry in self.unmergeable if entry.get("named_by_evidence")]
+        tips = [entry for entry in self.unmergeable if not entry.get("named_by_evidence")]
+        return " ".join(
+            sentence
+            for sentence in (self._evidence_merge_detail(named), self._tip_merge_detail(tips))
+            if sentence
+        )
+
+    @staticmethod
+    def _conflict_opening(entries: List[Dict[str, Any]]) -> str:
         paths: List[str] = []
         target = ""
-        for entry in self.unmergeable:
+        for entry in entries:
             target = target or str(entry.get("target_branch") or "")
             paths.extend(str(path) for path in entry.get("paths", []))
         listed = ", ".join(sorted(set(paths))[:10])
         return (
-            f"This task's work does not merge cleanly into {target or 'the main branch'}: "
-            f"{listed}. Resolve the conflict on the branch, then approve — approving is what "
-            "merges it."
+            f"This task's work does not merge cleanly into {target or 'the main branch'}: {listed}."
         )
+
+    def _tip_merge_detail(self, entries: List[Dict[str, Any]]) -> str:
+        """The branch-tip route, whose wording is deliberately the one F155 was reported against.
+
+        It is right *here*: where the target is the task's own branch tip, the commit judged is
+        whatever the branch then points at, so resolving on the branch and approving again is
+        exactly what clears it. Do not "fix" this into agreement with the sentence above — the two
+        say different things because the two routes behave differently, which is the whole finding.
+        """
+        if not entries:
+            return ""
+        return (
+            f"{self._conflict_opening(entries)} Resolve the conflict on the branch, then approve — "
+            "approving is what merges it."
+        )
+
+    def _evidence_merge_detail(self, entries: List[Dict[str, Any]]) -> str:
+        """The evidence route: name the commit, name its branch, and state a remedy that works.
+
+        Every optional piece is guarded on its own (design D4). The producer always writes a
+        `commit_sha` and a `source_branch`, but this body is also built by hand in fixtures, and a
+        composition that assumes its producer is how the important half gets silently dropped.
+        """
+        if not entries:
+            return ""
+        parts = [self._conflict_opening(entries)]
+
+        judged: List[str] = []
+        for entry in entries:
+            commit = str(entry.get("commit_sha") or "")[:12]
+            branch = str(entry.get("source_branch") or "")
+            if not commit and not branch:
+                # Nothing knowable about this one. Say nothing rather than print "a commit", which
+                # is a clause that costs the reader a sentence and tells them nothing (design D4).
+                continue
+            piece = commit or "an unnamed commit"
+            if branch:
+                piece += f", recorded on {branch}"
+            if entry.get("recorded_by_another_task"):
+                piece += f" by {entry.get('recorded_by_task')}"
+            if entry.get("commit_left_its_branch") and branch:
+                piece += ", and no longer present on that branch"
+            judged.append(piece)
+        if judged:
+            parts.append("The commit judged is " + "; ".join(judged) + ".")
+
+        branches = sorted({str(entry.get("source_branch") or "") for entry in entries} - {""})
+        # Named distinctly from the branch the work merges into (design D8). Both are branches and
+        # this sentence speaks about both; naming only one makes every clause after it ambiguous,
+        # and it resolves the wrong way — towards the main branch, which is the one the reader must
+        # *not* act on.
+        on_it = branches[0] if len(branches) == 1 else "the branch it was recorded on"
+
+        parts.append(
+            f"Resolving the conflict on {on_it} and approving again will not clear this: what "
+            f"approval merges is the commit the accepted evidence names, so this same answer comes "
+            f"back however many times approval is retried."
+        )
+        parts.append(
+            f"What does clear it is fresh accepted evidence naming the resolved commit — the "
+            f"resolved commit on {on_it}, and the evidence recorded from a checkout of {on_it}. "
+            f"The branch is read from the repository the recording is done in and is not a value "
+            f"anyone supplies, so recording from anywhere else adds a second branch to what "
+            f"approval merges instead of replacing this one; it does not take care of itself. The "
+            f"fresh evidence need not be about the same requirement."
+        )
+        if any(entry.get("recorded_by_another_task") for entry in entries):
+            # Named, not decided. Whether to ask the other task's holder or the operator is a
+            # judgement this refusal is not in a position to make, and inventing a rule for it here
+            # would be the guessing this whole change exists to remove (design D7).
+            parts.append(
+                "That branch is not this task's, so this may not be a remedy this task's holder "
+                "can carry out."
+            )
+        parts.append(f"Then {ACCEPT_OR_GRANT}.")
+        return " ".join(parts)
 
     def _unaccepted_detail(self) -> str:
         """Each waiting piece by name, and both ways out.
@@ -338,15 +437,57 @@ async def _check_mergeable(
         paths = task_integration.would_conflict(
             situation.root, target.commit_sha, situation.main_branch
         )
-        if paths:
-            refusal.unmergeable.append(
-                {
-                    "commit_sha": target.commit_sha,
-                    "source_branch": target.branch,
-                    "target_branch": situation.main_branch,
-                    "paths": paths,
-                }
-            )
+        if not paths:
+            continue
+        refusal.unmergeable.append(
+            {
+                "commit_sha": target.commit_sha,
+                "source_branch": target.branch,
+                "target_branch": situation.main_branch,
+                "paths": paths,
+                # Which of `merge_targets`' two routes produced this commit (design D1).
+                # `integration_targets` names a commit accepted evidence points at; the branch-tip
+                # route names whatever the task's branch currently points at, and carries no
+                # evidence row at all. The remedy differs between them — resolving on the branch
+                # works on one and does nothing on the other — so the provenance is carried per
+                # *target*, not per project. A project-level flag would say "approvals here are
+                # governed by evidence", which is one inference away from what the sentence
+                # asserts, and one inference is what produced F155.
+                "named_by_evidence": bool(target.evidence_id),
+                "evidence_id": target.evidence_id,
+                # A requirement may be served by more than one task, so `_targets`' join through
+                # `TaskRequirementLink` puts another task's footprint into this task's targets — and
+                # this task's approval is what would merge it. Under per-task isolation the reader
+                # has no checkout of that branch, so a remedy phrased as though it were theirs
+                # cannot be followed (design D7). The same two keys `_check_unaccepted` carries,
+                # from data already on the `Target`: no new query.
+                "recorded_by_task": target.task_id,
+                "recorded_by_another_task": bool(target.task_id and target.task_id != task.id),
+                # `False` only — `None` says the branch does not resolve, which is a reason to say
+                # nothing rather than to claim the commit has left it (design D3).
+                "commit_left_its_branch": _left_its_branch(
+                    situation.root, target.commit_sha, target.branch
+                ),
+            }
+        )
+
+
+def _left_its_branch(root: Path, commit_sha: str, branch: Optional[str]) -> bool:
+    """Whether *commit_sha* is knowably absent from *branch*.
+
+    Reached only on a path that has already run `merge-tree --write-tree` and is already refusing,
+    so one `merge-base --is-ancestor` is not a cost worth avoiding. It fires only on the evidence
+    route in practice: a branch-tip target's commit *is* that branch's tip by construction.
+
+    The state it reports is the one the drive reached by rewriting the branch — the reasonable
+    response to a remedy that appeared not to work — and it is the state in which a reader comparing
+    the refusal against `git log` finds the two disagree with no way to tell which is stale.
+    """
+    from . import requirement_evidence
+
+    if not commit_sha or not branch:
+        return False
+    return requirement_evidence.is_reachable_from(root, commit_sha, branch) is False
 
 
 async def _check_unaccepted(

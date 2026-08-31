@@ -27,14 +27,24 @@ from pathlib import Path
 
 import pytest
 
-from hub import requirement_evidence, task_integration, worktrees
+from hub import requirement_evidence, requirement_gate, task_integration, worktrees
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, EvidenceFootprint, Project, RequirementEvidence, Run, Task
+from hub.db.models import (
+    Agent,
+    EvidenceFootprint,
+    Loop,
+    Project,
+    RequirementEvidence,
+    Run,
+    Task,
+)
+from hub.requirement_gate import ACCEPT_OR_GRANT, GateRefusal
 from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
 TASKS = "/api/v1/projects/proj-test/tasks"
+JOBS = "/api/v1/projects/proj-test/jobs"
 SUBMIT = "/api/v1/agent-actions/spec/documents"
 AGENT_EVIDENCE = "/api/v1/agent-actions/spec/evidence"
 PATH = "spec/changes/f155/spec.html"
@@ -535,3 +545,262 @@ async def test_the_evidence_row_is_this_tasks_own(app, auth_headers, builder, tm
         rows = (await session.execute(RequirementEvidence.__table__.select())).all()
     assert rows
     assert all(row.task_id in (None, task) for row in rows), rows
+
+
+# ---------------------------------------------------------------------------
+# 2 — the gate carries where the commit came from
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_evidence_named_target_is_marked_as_one(app, auth_headers, builder, tmp_path):
+    """2.1, first half — the provenance is read off the target, not inferred from the project."""
+    task, judged = await conflicted(app, auth_headers, builder, tmp_path)
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+
+    entry = refused.json()["detail"]["unmergeable"][0]
+    assert entry["named_by_evidence"] is True
+    assert entry["evidence_id"]
+    assert entry["commit_sha"] == judged
+    assert entry["source_branch"] == AGENT_BRANCH
+    assert entry["target_branch"] == "main"
+
+
+@pytest.mark.asyncio
+async def test_a_branch_tip_target_is_not_marked_as_evidence_named(
+    app, auth_headers, builder, tmp_path
+):
+    """2.1, second half — the other route, built the way the product builds it.
+
+    `evidence_governs` answers `False` for exactly one population: a task on a documentless loop
+    that has declared its work needs no evidence (`task_integration.py:376-388`). A task with no
+    loop at all answers `True`, which is why this is built through `POST /jobs` rather than by
+    creating a bare task — the shape is what is under test, not the flag.
+    """
+    make_repo(tmp_path)
+    await set_main_branch("main")
+
+    job = await app.post(
+        JOBS,
+        json={
+            "name": "Loop",
+            "agent": "builder",
+            "message": "work the queue",
+            "cron": "0 2 * * *",
+            "stop_when_queue_empties": True,
+        },
+        headers=auth_headers,
+    )
+    assert job.status_code == 201, job.text
+    loop_id = job.json()["loop"]["id"]
+    async with async_session_factory() as session:
+        loop = await session.get(Loop, loop_id)
+        loop.work_needs_evidence = False
+        await session.commit()
+
+    created = await app.post(
+        TASKS, json={"title": "No evidence here", "loop_id": loop_id}, headers=auth_headers
+    )
+    assert created.status_code == 201, created.text
+    task = created.json()["id"]
+
+    async with async_session_factory() as session:
+        row = await session.get(Task, task)
+        assert await task_integration.evidence_governs(session, row) is False
+
+    branch = worktrees.task_branch_name(task)
+    commit_on_branch(tmp_path, branch, "shared.txt", "from the task\n")
+    git(tmp_path, "checkout", "-q", "main")
+    (tmp_path / "shared.txt").write_text("from the operator\n", encoding="utf-8")
+    git(tmp_path, "add", "shared.txt")
+    git(tmp_path, "commit", "-q", "-m", "the operator's own change")
+
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    entry = refused.json()["detail"]["unmergeable"][0]
+    assert entry["named_by_evidence"] is False
+    assert entry["evidence_id"] is None
+    assert entry["source_branch"] == branch
+
+    # And its remedy is the one F155 was reported against, kept deliberately because here it works.
+    assert BRANCH_REMEDY in refused.json()["detail"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_a_commit_another_task_recorded_is_attributed_to_it(
+    app, auth_headers, builder, tmp_path
+):
+    """2.2b / 3.3b — built for real rather than by patching the flag.
+
+    The population is what is in doubt, not the boolean. `_targets` reaches evidence through
+    `TaskRequirementLink` (`task_integration.py:244`), so a requirement served by two tasks puts one
+    task's footprint into the other's targets — and this task's approval is what would merge it.
+    """
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    other = await linked_task(app, auth_headers, title="The other task")
+    judged = commit_on_branch(tmp_path, AGENT_BRANCH, "shared.txt", "from the other task\n")
+
+    # Recorded against the shared requirement and bound to the *other* task. Recorded from a
+    # checkout of the branch, so the footprint carries a branch rather than `_branch_at`'s "".
+    recorded = await app.post(
+        f"{BASE}/spec/evidence",
+        json={"identifier": "FR-1", "summary": "the other task's work", "task_id": other},
+        headers=auth_headers,
+    )
+    assert recorded.status_code == 201, recorded.text
+    assert recorded.json()["footprint"]["commit_sha"] == judged
+
+    git(tmp_path, "checkout", "-q", "main")
+    (tmp_path / "shared.txt").write_text("from the operator\n", encoding="utf-8")
+    git(tmp_path, "add", "shared.txt")
+    git(tmp_path, "commit", "-q", "-m", "the operator's own change")
+
+    mine = await linked_task(app, auth_headers, title="My task")
+    refused = await approve(app, auth_headers, mine)
+    assert refused.status_code == 409, refused.text
+    body = refused.json()["detail"]
+    entry = body["unmergeable"][0]
+    assert entry["recorded_by_task"] == other
+    assert entry["recorded_by_another_task"] is True
+    assert other in body["message"], body["message"]
+    # Named, not decided: the refusal does not tell the reader whom to approach.
+    assert "not this task's" in body["message"], body["message"]
+
+
+@pytest.mark.asyncio
+async def test_this_tasks_own_commit_is_not_attributed_elsewhere(
+    app, auth_headers, builder, tmp_path
+):
+    """3.3b's other half — the same-task case names no other task."""
+    task, _ = await conflicted(app, auth_headers, builder, tmp_path)
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    body = refused.json()["detail"]
+    assert body["unmergeable"][0]["recorded_by_another_task"] is False
+    assert "not this task's" not in body["message"], body["message"]
+
+
+# ---------------------------------------------------------------------------
+# 3 / 4 — the sentence, as a pure composition
+# ---------------------------------------------------------------------------
+
+
+def refusal(*entries):
+    built = GateRefusal()
+    built.unmergeable = list(entries)
+    return built.detail()
+
+
+def evidence_entry(**overrides):
+    entry = {
+        "commit_sha": "a" * 40,
+        "source_branch": "agentweave/builder",
+        "target_branch": "main",
+        "paths": ["shared.txt"],
+        "named_by_evidence": True,
+        "evidence_id": "ev-1",
+        "recorded_by_task": "tsk-mine",
+        "recorded_by_another_task": False,
+        "commit_left_its_branch": False,
+    }
+    entry.update(overrides)
+    return entry
+
+
+def test_the_evidence_sentence_says_what_clears_it():
+    """3.1 — the composition, over the five inputs, without a database or a repository."""
+    said = refusal(evidence_entry())
+    assert BRANCH_REMEDY not in said
+    assert "a" * 12 in said
+    assert "record" in said.lower()
+    assert said.endswith(ACCEPT_OR_GRANT + ".")
+    # The remedy is a condition on a state, never an instruction to supply a field (design D2a).
+    assert "is not a value anyone supplies" in said
+    assert "does not take care of itself" in said
+    # And it must not overstate what is required: the reduction keys on branch, not on requirement.
+    assert "need not be about the same requirement" in said
+
+
+def test_the_branch_tip_sentence_is_unchanged():
+    """3.3 — deliberately the old wording, because on this route it is true."""
+    said = refusal(evidence_entry(named_by_evidence=False, evidence_id=None))
+    assert said == (
+        "This task's work does not merge cleanly into main: shared.txt. "
+        "Resolve the conflict on the branch, then approve — approving is what merges it."
+    )
+
+
+def test_a_mixed_list_produces_both_sentences():
+    """3.1 / D5 — grouped, so a sixth answer in `evidence_governs` cannot silently drop one."""
+    said = refusal(
+        evidence_entry(paths=["one.txt"]),
+        evidence_entry(
+            commit_sha="b" * 40,
+            source_branch="agentweave/task/tsk-9",
+            paths=["two.txt"],
+            named_by_evidence=False,
+            evidence_id=None,
+        ),
+    )
+    assert "one.txt" in said and "two.txt" in said
+    assert BRANCH_REMEDY in said  # the tip half
+    assert "a" * 12 in said  # the evidence half
+
+
+def test_both_branches_are_named_and_the_remedy_is_attached_to_the_source():
+    """3.3a / D8 — without this the remedy reads as "put the resolution on the main branch"."""
+    said = refusal(evidence_entry(source_branch="agentweave/builder", target_branch="master"))
+    assert "master" in said
+    assert "agentweave/builder" in said
+    assert "the resolved commit on agentweave/builder" in said
+    assert "recorded from a checkout of agentweave/builder" in said
+    assert "the resolved commit on master" not in said
+
+
+def test_a_missing_commit_degrades_rather_than_printing_an_empty_one():
+    """3.4 / D4 — the fixture shape, which carries only a target branch and paths."""
+    said = refusal({"target_branch": "main", "paths": ["a.txt"], "named_by_evidence": True})
+    assert "a.txt" in said
+    assert "The commit judged is" not in said
+    assert "  " not in said
+    assert said.endswith(ACCEPT_OR_GRANT + ".")
+
+
+def test_an_empty_list_says_nothing():
+    assert refusal() == ""
+
+
+def test_a_commit_that_left_its_branch_is_reported_as_such():
+    """4.1, the positive case."""
+    said = refusal(evidence_entry(commit_left_its_branch=True))
+    assert "no longer present on that branch" in said
+
+
+def test_a_commit_still_on_its_branch_gets_no_such_clause():
+    assert "no longer present" not in refusal(evidence_entry(commit_left_its_branch=False))
+
+
+def test_an_unknown_branch_is_not_asserted_about():
+    """4.1's third case — no branch to check, so the gate claims nothing either way."""
+    said = refusal(evidence_entry(source_branch="", commit_left_its_branch=False))
+    assert "no longer present" not in said
+
+
+def test_reachability_is_only_claimed_when_it_is_false(tmp_path):
+    """4.2 / 4.3 — `_left_its_branch` at the source: `None` and a missing branch both say nothing."""
+    make_repo(tmp_path)
+    head = git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+    orphan = commit_on_branch(tmp_path, "side", "side.txt", "x\n")
+    git(tmp_path, "checkout", "-q", "main")
+    git(tmp_path, "branch", "-q", "-D", "side")
+
+    assert requirement_gate._left_its_branch(Path(tmp_path), head, "main") is False
+    assert requirement_gate._left_its_branch(Path(tmp_path), orphan, "main") is True
+    # Unknown, not false: the branch does not resolve, so nothing is claimed.
+    assert requirement_gate._left_its_branch(Path(tmp_path), head, "no-such-branch") is False
+    assert requirement_gate._left_its_branch(Path(tmp_path), head, "") is False
+    assert requirement_gate._left_its_branch(Path(tmp_path), "", "main") is False

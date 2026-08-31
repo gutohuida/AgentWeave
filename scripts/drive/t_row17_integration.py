@@ -281,11 +281,32 @@ def main():
         any(u.get("paths") for u in unmergeable),
         str([u.get("paths") for u in unmergeable]),
     )
+    # F155: this used to assert the message contained both "resolve" and "approve", lowercased.
+    # That was an assertion about *one* remedy, and the product now has two — the evidence route's
+    # sentence deliberately does not say "approve", because approving again is precisely what does
+    # not clear it there. So ask what the requirement now asks: does the message name the commit it
+    # judged, and does it state a remedy the reader can actually take?
+    message_b = str(detail_b.get("message", ""))
+    judged_b = str((unmergeable[0] or {}).get("commit_sha") or "")[:12] if unmergeable else ""
     check(
-        "B: and tells the operator what to do next",
-        "approve" in str(detail_b.get("message", "")).lower()
-        and "resolve" in str(detail_b.get("message", "")).lower(),
-        repr(detail_b.get("message"))[:260],
+        "B: the sentence names the commit it judged, not only the structured half",
+        bool(judged_b) and judged_b in message_b,
+        f"{judged_b} vs {message_b[:200]!r}",
+    )
+    named_by_evidence = bool((unmergeable[0] or {}).get("named_by_evidence")) if unmergeable else 0
+    if named_by_evidence:
+        remedy_b = (
+            "accepted evidence" in message_b.lower()
+            and "recorded from a checkout of" in message_b.lower()
+        )
+    else:
+        remedy_b = (
+            "resolve" in message_b.lower() and "approve" in message_b.lower()  # the tip route
+        )
+    check(
+        "B: and states a remedy that clears it on the route it was refused on",
+        remedy_b,
+        f"named_by_evidence={named_by_evidence}: {message_b[:260]!r}",
     )
     after_b = git("rev-parse", main_branch)
     check(

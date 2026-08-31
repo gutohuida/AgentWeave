@@ -39,20 +39,20 @@ Round 1 wrote these. Rounds 2 and 3 may rewrite any of them; nothing here is imp
 
 ## 2. The gate carries where the commit came from
 
-- [ ] 2.1 Test `_check_mergeable`'s entries directly: an evidence-governed target produces an entry
+- [x] 2.1 Test `_check_mergeable`'s entries directly: an evidence-governed target produces an entry
   with `named_by_evidence` true and the evidence id; a branch-tip target produces one with it false
   and no evidence id.
-- [ ] 2.2 Add the two keys in `_check_mergeable` (`hub/hub/requirement_gate.py:342-350`) from
+- [x] 2.2 Add the two keys in `_check_mergeable` (`hub/hub/requirement_gate.py:342-350`) from
   `Target.evidence_id`, with a comment naming `merge_targets`' two routes and why the provenance is
   per-target rather than per-project (design D1).
-- [ ] 2.2a Add `recorded_by_task` and `recorded_by_another_task` to the same entry, from
+- [x] 2.2a Add `recorded_by_task` and `recorded_by_another_task` to the same entry, from
   `Target.task_id` (`task_integration.py:263`), on the same terms `_check_unaccepted` already does
   (`requirement_gate.py:383-386`) -- design D7. No new query: the value is already on the target.
-- [ ] 2.2b Test the attribution directly: evidence recorded by this task sets
+- [x] 2.2b Test the attribution directly: evidence recorded by this task sets
   `recorded_by_another_task` false; evidence recorded by a **different** task against a shared
   requirement sets it true and carries that task's id. Build the shared-requirement shape for real
   rather than by patching the flag -- the population is what is in doubt, not the boolean.
-- [ ] 2.3 Confirm no consumer breaks on the wider entry. Round 2 corrected round 1 here: no
+- [x] 2.3 Confirm no consumer breaks on the wider entry. Round 2 corrected round 1 here: no
   **product-code** consumer reads a key off `unmergeable`, but
   `scripts/drive/t_row17_integration.py:273-282` reads `commit_sha` and `paths` off the refusal
   body. Both keep their meaning under additive keys. Re-check the whole set rather than inheriting
@@ -60,34 +60,34 @@ Round 1 wrote these. Rounds 2 and 3 may rewrite any of them; nothing here is imp
 
 ## 3. The sentence
 
-- [ ] 3.1 Test `_merge_detail` directly, as a pure composition, over five inputs: evidence-named;
+- [x] 3.1 Test `_merge_detail` directly, as a pure composition, over five inputs: evidence-named;
   branch-tip; an entry with no `commit_sha`; a mixed list; and an empty list. Assert the
   evidence-named case does **not** contain "Resolve the conflict on the branch", contains the
   12-character commit, contains the word `record`, and ends in `ACCEPT_OR_GRANT`'s text.
-- [ ] 3.2 Implement the composition: group by provenance, name the commit on **both** routes (open
+- [x] 3.2 Implement the composition: group by provenance, name the commit on **both** routes (open
   question 2, answered yes), reuse `ACCEPT_OR_GRANT` verbatim rather than restating it (design D2),
   and state the branch the resolved commit must be **on** and be recorded **from** -- never
   instructing the reader to supply a branch, which is not a field they have (design D2a).
-- [ ] 3.3 Keep the branch-tip sentence's existing wording, and leave a comment saying it is
+- [x] 3.3 Keep the branch-tip sentence's existing wording, and leave a comment saying it is
   deliberately unchanged because it is true on that route — so a later reader does not "fix" it into
   agreement with the other one.
-- [ ] 3.3a Name the **source** branch in the prose as well as the main branch, and phrase the
+- [x] 3.3a Name the **source** branch in the prose as well as the main branch, and phrase the
   remedy's condition against the source branch rather than an ambiguous "the branch" (design D8).
   Today `_merge_detail` reads only `target_branch` (`requirement_gate.py:172`), which is
   `situation.main_branch`, so without this the remedy reads as an instruction to put the resolved
   commit on the main branch. Test that both branch names appear and that the remedy's clause is
   attached to the source one.
-- [ ] 3.3b Render the attribution where `recorded_by_another_task` is true, and word the remedy so it
+- [x] 3.3b Render the attribution where `recorded_by_another_task` is true, and word the remedy so it
   does not address the reader as though the branch were theirs (design D7). Assert the same-task case
   names no other task. Do **not** invent an instruction about whom to approach; the requirement
   forbids it.
-- [ ] 3.4 Guard each optional piece independently (design D4); a missing `commit_sha` degrades to a
+- [x] 3.4 Guard each optional piece independently (design D4); a missing `commit_sha` degrades to a
   sentence without one and never prints an empty sha.
-- [ ] 3.5 Update `hub/ui/src/__tests__/taskIntegration.test.ts:43-56`'s fixture message to the new
+- [x] 3.5 Update `hub/ui/src/__tests__/taskIntegration.test.ts:43-56`'s fixture message to the new
   wording. Its two assertions are about the **sentence** — that the conflicting path and the target
   branch reach the reader — so they must still hold unchanged. If either has to be weakened, the new
   sentence has dropped something the old one carried, and that is a finding rather than a fixture fix.
-- [ ] 3.6 Update `scripts/drive/t_row17_integration.py:284-288`, which asserts the refusal's message
+- [x] 3.6 Update `scripts/drive/t_row17_integration.py:284-288`, which asserts the refusal's message
   contains both `"resolve"` and `"approve"` lowercased. On the evidence route the new sentence may
   contain neither word in that form. Replace the assertion with one that reads the new requirement --
   that the message names the commit and states a remedy the reader can take -- rather than deleting
@@ -95,12 +95,12 @@ Round 1 wrote these. Rounds 2 and 3 may rewrite any of them; nothing here is imp
 
 ## 4. The commit that left its branch (design D3)
 
-- [ ] 4.1 Test it: an entry whose commit is reachable from its branch produces no such clause; one
+- [x] 4.1 Test it: an entry whose commit is reachable from its branch produces no such clause; one
   whose commit is not produces the clause; a branch that does not resolve produces no clause.
-- [ ] 4.2 Implement it with `requirement_evidence.is_reachable_from`, `False` only — `None` says
+- [x] 4.2 Implement it with `requirement_evidence.is_reachable_from`, `False` only — `None` says
   nothing. Comment the cost argument: this runs only on a path that has already run `merge-tree` and
   is already refusing.
-- [ ] 4.3 Guard an empty or absent branch name before calling it.
+- [x] 4.3 Guard an empty or absent branch name before calling it.
 
 ## 5. Prove it in the product, not only in the suite
 
@@ -115,8 +115,8 @@ Round 1 wrote these. Rounds 2 and 3 may rewrite any of them; nothing here is imp
 
 ## 6. Green
 
-- [ ] 6.1 `openspec validate a-conflict-refusal-names-what-clears-it --strict`.
-- [ ] 6.2 `ruff check src/ hub/ tests/`; `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`; `mypy src/`.
+- [x] 6.1 `openspec validate a-conflict-refusal-names-what-clears-it --strict`.
+- [x] 6.2 `ruff check src/ hub/ tests/`; `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`; `mypy src/`.
 - [ ] 6.3 The Hub suite in chunks, and `cd hub/ui && npm run lint && npx vitest run` for the changed
   UI test.
 - [ ] 6.4a Do **not** sync or archive this change into `openspec/specs/` before
