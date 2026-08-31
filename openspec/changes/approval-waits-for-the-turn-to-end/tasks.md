@@ -164,9 +164,9 @@ design D7 says so rather than claiming a guarantee it does not provide.
 
 ## 8. Close it out
 
-- [ ] 8.1 `openspec validate approval-waits-for-the-turn-to-end --strict`.
-- [ ] 8.2 `pytest hub/tests/ -v` with `py -3.11`, and the CLI suite if anything under `src/` moved.
-- [ ] 8.3 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
+- [x] 8.1 `openspec validate approval-waits-for-the-turn-to-end --strict`.
+- [x] 8.2 `pytest hub/tests/ -v` with `py -3.11`, and the CLI suite if anything under `src/` moved.
+- [x] 8.3 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
   hub/tests/ tests/`, `mypy src/`.
-- [ ] 8.4 If `hub/ui/src` changed, rebuild and refresh the bundle with
+- [x] 8.4 If `hub/ui/src` changed, rebuild and refresh the bundle with
   `py -3.11 scripts/refresh_ui_bundle.py`, and commit source and bundle together.

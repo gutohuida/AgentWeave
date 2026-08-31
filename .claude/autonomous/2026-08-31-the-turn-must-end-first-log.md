@@ -714,3 +714,165 @@ merely pass.
 Group 7 is untouched and is the operator's explicit ask. Every implementation group is now closed,
 so the next firing has nothing standing between it and the three drives — which is why the branch is
 released immediately below rather than at a heartbeat's distance.
+
+---
+
+## Iteration 6 — 2026-08-31T13:48+01:00 — A-DRIVE-1/2/3: the change is driven
+
+**Reconciliation.** Branch and `git log` matched STATE.json exactly: `17d23b1` on
+`autonomous/2026-08-31-the-turn-must-end-first`, clean tree, six product commits behind the
+bookkeeping ones. Nothing to reconcile.
+
+Group 7 is closed, and so is group 8 apart from the suite that was still running when this was
+written. **The change has now been driven** — which, until this firing, nothing about it had been.
+
+### The Hub was stale, again, and again the restart is how that was caught
+
+PID 28704 on 8011, started **05:10**, serving the previous run's branch. Killed, restarted from
+`hub/` with the beta-profile `DATABASE_URL`, and the new PID's start time checked against every
+`.py` under `hub/hub` and `src`: none newer. **Third consecutive firing** where the state file's
+warning about 8011 was load-bearing. It should stay in the state file for as long as this loop runs.
+
+### The fixture
+
+New project **`drive3-2026-08-31` = `proj-f44107415869`** at `C:\Users\huida\Documents\drive3-2026-08-31`
+— `git init -b master`, one seed commit, `master` adopted by `POST /projects/open` with no settings
+round trip. Runner `Haiku (cheap)`, agents `alpha` and `beta`, `allow_agent_jobs` on. Neither
+forbidden project touched, every agent turn on Haiku.
+
+### Four harnesses, six runs
+
+| Run | Result |
+|---|---|
+| `t_f162_window.py` lane 1 | **17/17**, `OUTCOME: GUARDED` |
+| `t_f162_window.py` lane 2 (`AW_WIDE=1`) | **6/6**, window 9.7s, 409 at every probe across it |
+| `t_drive2_loop_lands.py` | **36/36** |
+| `t_drive1_flow_lands.py` | **16/20** — the four are F155 and F154, both pre-filed |
+
+Lanes 1 and 2 ran twice each. Each first outing failed exactly one assertion, and **both failures
+belonged to the harness rather than to the product** — see below. A harness edit is not evidence
+until it has been run, so both were re-run rather than reasoned about.
+
+The full account with sentences, timings and commit shas is in `scripts/drive/FINDINGS.md` under
+`DRIVE-3`. The three things worth carrying:
+
+**1. F162 is closed, measured inside the window rather than around it.** At the instant the task
+first read `completed`, the tip of its branch was still the commit it was cut from and `alpha` was
+still busy — so the window was *entered*, not assumed. 130ms later the approval answered `409
+gate_unsatisfied` with `unfinished: [{agent: alpha, run_id: …}]` and every other category empty.
+**No integration row was written at all**, which is a stronger result than the design argued for:
+the approval never reaches the point of resolving a merge target, so there is no
+`ALREADY_INTEGRATED` skip left behind to be stranded by. Then the turn ended and the same three
+hops answered 200/200/200 and put `def cube` on `master`. The refusal cleared itself exactly as its
+sentence promises.
+
+**2. The window did not narrow, and lane 2 is what says so.** A single refusal at one instant
+cannot distinguish "refused throughout" from "refused at the moment we happened to ask", so lane 2
+now probes `POST /land` every five seconds from `completed` to the tip moving. Two probes, both
+`409`, both `unfinished`, across a **9.7-second** window. The width is unchanged and still
+agent-sized — it runs to the end of the turn, which the product still does not constrain.
+
+**3. The flow's review leg is untouched.** This is the regression the change most plausibly causes,
+and it is absent: both reviewers non-author, and `modulo`'s integration row reads `actor_kind:
+"run"`, `actor: "alpha"`, `outcome: "merged"`. That row **is** design D10 — *a turn is never blocked
+by itself* — proven live rather than argued. Since migration `0092` a review run is bound to the
+task it inspects, so a predicate without the acting-run exclusion would have refused this exact
+approval. No refusal anywhere in that drive carried an `unfinished` entry.
+
+### What the harnesses had to be told, and what that cost
+
+- **Lane 1's pass condition is inverted.** `GUARDED` — the outcome the harness could only
+  hypothesise when it was written — is now the pass, and `REPRODUCED` is a regression that fails
+  the drive. Nine new assertions go with it: the refusal is the *approval* and not an earlier hop,
+  it is 409 rather than 4xx-anything, the sentence names the agent and states the remedy, the
+  `unfinished` entry names the live run, and we really were inside the window.
+- **Lane 1 also drives `POST /land` inside the window**, first, because that is the only moment the
+  task still reads `completed`. It answers the *identical* sentence, and afterwards the task still
+  reads `completed` and is still held — the refused landing left nothing half-applied, which is
+  `_commit_and_render`'s transaction boundary observed live rather than in a unit test.
+- **`t_drive2_loop_lands`' `approve()` is one request instead of three.** What the three used to
+  cost is kept in its docstring rather than deleted, because the three are the reason the route
+  exists.
+- **Three checks were added to LANE A for group 5's population** — one agent, one task, nobody else
+  to ask. The loop's task rests at `completed`, still held by its author, with `beta` idle
+  throughout.
+
+### Two harness failures, both mine, both worth the paragraph
+
+**A stale threshold is an assertion about the model.** Lane 2's `width >= 10` was calibrated on a
+single sample (10.5s, this morning) and failed at **8.7s** on nothing but Haiku tidying up faster.
+Three samples now read **10.5s, 8.7s, 9.7s**. The width is agent-sized *by construction*, so the
+bound was an assertion about Haiku rather than about the product; loosened to `>= 5`, two orders
+above the round trip that would land inside it, with the measured number printed either way because
+the number is the finding.
+
+**And a `NameError` in a branch no run had reached.** The LANE A review-arm check called
+`busy_names()`, which that module does not define — it has `statuses()`. It survived a
+`py_compile`, cost a full agent turn to discover, and the `finally` block is the only reason it left
+no job enabled. An AST pass for unresolved globals was run over all three harnesses afterwards and
+found nothing else. Worth doing *before* a run that costs ten minutes of Haiku, not after.
+
+### One new observation, not a defect
+
+Inside the window, hops 1 and 2 are permitted and only the approval refuses — right, because
+clearing an assignee and moving to `under_review` assert nothing about whether the work is good. But
+the operator is then left at `under_review`, and `POST /land` requires `completed`, so the
+one-action route is no longer available *for that task*. Nothing is stranded (a single
+`PATCH {"status": "approved"}` finishes it once the turn ends) and nothing is worse than before the
+route existed. Recorded because the recommended route and the legacy one **degrade differently under
+a refusal**, and that asymmetry is worth knowing before anyone documents either.
+
+### F164's "intermittent is the wrong word" is corrected by this drive
+
+F164 recorded two consecutive drives where a reviewer wrote a verdict in prose and never called
+`update_task`, and concluded that *"two for two makes **intermittent** the wrong word"*. This drive
+is the third, and the reviewer **did** call it — the transcript carries change C's 409 as prose,
+followed by the agent reasoning about it. Two misses and one hit puts "intermittent" back in play,
+and makes the harness's F152 assertions non-vacuous for the first time. The underlying diagnosis
+(the spawned Claude CLI presents MCP tools as deferred and the model can loop on `ToolSearch`) is
+unchanged and still not the Hub's.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `openspec validate approval-waits-for-the-turn-to-end --strict` | valid |
+| `ruff check src/ hub/ tests/` | All checks passed |
+| `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` | 533 files unchanged |
+| `mypy src/` | no issues, 22 files |
+| `pytest tests/` (the CLI suite) | 440 passed, 3 skipped |
+
+**The whole Hub suite, all 239 files, in six interleaved chunks** — `awk 'NR%6==n'` rather than
+contiguous blocks, so no chunk is a single subsystem and the per-chunk result means something:
+
+| Chunk | Result |
+|---|---|
+| 0 (39 files) | 503 passed, 1 skipped |
+| 1 (40 files) | 668 passed, 4 skipped |
+| 2 (40 files) | 662 passed, 1 skipped |
+| 3 (40 files) | 538 passed, 2 skipped, 1 xpassed |
+| 4 (40 files) | 681 passed, 1 skipped |
+| 5 (40 files) | 731 passed, 3 skipped |
+| **total** | **3783 passed, 12 skipped, 1 xpassed, 0 failed** |
+
+No product code moved this iteration — the diff is `scripts/drive/`, `FINDINGS.md` and `tasks.md`.
+Nothing under `src/` has moved on this branch at all, so the CLI suite was never implicated; it was
+run anyway (twice, by accident — see below) and is green.
+
+**A chunking trap, for whoever splits the suite next.** The chunk lists were first written by a
+Python heredoc to `/tmp/chunk0.txt` and read by bash from `/tmp/chunk0.txt`. Those are **different
+directories** on this machine: Python resolves `/tmp` to `C:	mp`, Git Bash resolves it to
+`%LOCALAPPDATA%\Temp`. `cat` failed, the shell substituted an empty argument list, and
+`pytest` with no paths silently ran `tests/` — the CLI suite — three times over while reporting
+`440 passed` and looking entirely legitimate. It was caught only because 440 is the wrong number for
+a 40-file Hub chunk. Build the lists in the same shell that reads them.
+
+Task 8.4's bundle was satisfied by iteration 5's commit and re-checked here rather than assumed:
+`test_ui_build_stamp.py` passes, and so does the stricter bundle-matches-source assertion behind
+`AW_CHECK_UI_BUNDLE=1` (13 passed). Nothing under `hub/ui/src` moved this iteration.
+
+### Where the change stands
+
+**Every task in `approval-waits-for-the-turn-to-end` is ticked** — groups 1 through 8. Three rounds
+of spec discipline, six implementation groups, six drives, the whole Hub suite and all three gating
+linters. The branch is ready to offer.
