@@ -65,6 +65,11 @@ Both end at the same false sentence, and one predicate covers both.
   `schedule_agent` (`turn_scheduler.py:78-105`) can leave a staffed review durably queued rather
   than running (`waiting_reason="agent is already running"`, an exhausted hop budget or token
   budget), and a review waiting its turn in the queue is attended, not abandoned.
+- `review_unstaffed` is emitted when the fact is new or changed for a task rather than on every
+  tick. This change is what makes that population permanent — it cannot clear without the operator —
+  so at a five-minute tick the unchanged fact would otherwise bury the activity log, which is the
+  harm `agent-loops`' "records only what is new" already names. Affects the existing rung-3
+  population the same way, deliberately.
 - `agent-loops` gains the statement the code's own constant already makes in its docstring and does
   not keep: a task counted as in flight is one an agent is working, and a queue whose only
   non-terminal work is a review nobody is doing is stalled, with a reason naming it.

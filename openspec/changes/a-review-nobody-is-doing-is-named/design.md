@@ -110,6 +110,43 @@ The sentence must not say the work is being done, and must not promise that a la
 up. That promise is the specific falsehood F154 records, because for this row it can never come
 true.
 
+### D5b — This is the codebase's own shape, and the sentence it must not re-earn
+
+`_loop_candidates`' docstring records that before F45 this exact population answered `stalled` with
+*"no claimable task among 1 open (1 under_review)"*, and that this was the defect — F23 one band
+over — fixed by letting the walk see with-reviewer rows and record them as in flight
+(`scheduler.py:693-698`). This change must not hand that sentence back. It does not: the F64 rule
+replaces it with ours before the decision is built (D4).
+
+The structural precedent is `awaiting_landing` (`scheduler.py:1269-1275`), a bucket carried out of
+the walk for exactly this reason — so the stall sentence names the operator's action *"instead of
+falling to `_stall_reason_from_walk`'s 'no claimable task among 1 open (1 completed)' — the sentence
+this change removes for flows and would otherwise re-earn for loops on the same day"*. Same trap,
+same answer, one population over. A repair that produced the generic sentence would be a regression
+wearing a fix's clothes.
+
+### D7 — The event fires every tick, and this change is what makes that permanent
+
+`decision.unstaffed`'s only consumer is `_emit_review_unstaffed` at `scheduler.py:2585`, once per
+entry, **on every firing**. Today's unstaffed population is transient — add an agent, free one, fix
+a name in a document, and it clears. The population this change adds cannot clear on its own: it
+persists until the operator takes one of `under_review`'s exits. At a five-minute tick that is an
+event every five minutes, for the same unchanged fact, indefinitely.
+
+So the emission is made conditional on the fact being **new or changed** for that task, rather than
+on the tick. The reasoning and the precedent are the codebase's own: `agent-loops`' *"A firing that
+does not fire records only what is new"* exists because *"a loop that ticks without working MUST NOT
+bury the record of the firings that did work"*, and `_stall_run_to_increment`
+(`scheduler.py:882-919`) already applies it to the `JobRun` row by comparing the stored
+`error_summary` to the new reason. The event gets the same treatment against the last
+`review_unstaffed` persisted for that task.
+
+*Rejected:* leaving it per-tick and recording the consequence. It buries the activity log with the
+one fact the operator has already seen, which is the specific harm the shipped requirement names.
+*Rejected:* scoping the dedupe to only the new population. The rung-3 case has the same shape and a
+condition-changed rule is simpler than a two-population one — this is a strict improvement there
+too, and stating it as one is honest about the blast radius.
+
 ### D6 — What the operator's Run button actually returns, checked at the route
 
 The 409 the operator sees is **not** rendered from `FiringDecision`. `POST /jobs/{id}/run` reads the

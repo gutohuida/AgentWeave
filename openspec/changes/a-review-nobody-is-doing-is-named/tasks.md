@@ -35,6 +35,17 @@
 - [ ] 3.5 Comment at the branch records what `_cannot_staff` still feeds and why the row stays in it
   — `task_attribution` and F63's `held` — so the next reader does not "tidy" it out.
 
+## 3b. The event stops repeating an unchanged fact
+
+- [ ] 3b.1 `_emit_review_unstaffed` emits only where no `review_unstaffed` event already stands for
+  that task with the same reason, following `_stall_run_to_increment`'s comparison
+  (`scheduler.py:882-919`). A changed reason emits again (design D7).
+- [ ] 3b.2 Test: twenty firings against one unchanged wedge persist **one** `review_unstaffed`
+  event, and the twenty-first with a changed reason persists a second.
+- [ ] 3b.3 Test: the existing rung-3 population is unaffected in kind — the first firing still
+  emits, which is what `agent-flows`' "no eligible agent surfaces rather than stalling silently"
+  requires.
+
 ## 4. Guard what must not move
 
 - [ ] 4.1 Test: a genuinely busy flow, every candidate held by a running turn, still decides

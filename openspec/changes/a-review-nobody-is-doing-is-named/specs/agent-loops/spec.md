@@ -46,3 +46,24 @@ An assignee is a record of who holds a task, not evidence that a turn exists. Re
 
 - **WHEN** every candidate in a loop's queue is held by a running turn
 - **THEN** the firing reports in flight rather than stalled
+
+### Requirement: A surfaced step is recorded once, not once per tick
+
+The Hub SHALL surface a step a firing could not take when that fact is new or has changed for the task, and SHALL NOT persist a further record of it on each subsequent firing that finds the same fact unchanged.
+
+A condition an operator must resolve can outlive many firings, and one that only the operator can clear outlives all of them. Repeating it every tick buries the records of the firings that did work, which is the same harm the loop's own execution history is already required to avoid.
+
+#### Scenario: An unchanged surfaced step is recorded once
+
+- **WHEN** a loop fires repeatedly and each firing finds the same step unsurfaceable for the same reason
+- **THEN** exactly one record of that surfacing exists
+
+#### Scenario: A changed reason is recorded again
+
+- **WHEN** the reason a step cannot be taken changes between firings
+- **THEN** a further record is persisted, carrying the new reason
+
+#### Scenario: The first firing still surfaces it
+
+- **WHEN** a firing is the first to find a step it cannot take
+- **THEN** that surfacing is recorded and broadcast
