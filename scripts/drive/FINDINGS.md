@@ -12473,3 +12473,42 @@ walked_edge.py` uses the real surface and asserts against the roster.
 ```
 AW_HUB=http://127.0.0.1:8011 py -3.11 -u scripts/drive/t_f167_agent_walked_edge.py
 ```
+
+### F168's bound, measured 2026-08-31 — the operator half is one state wide, not the whole surface
+
+Iteration 14 asked F168's own stated question: *is the missing runs surface reachable as an operator
+problem, or only as a harness one?* Read at the source rather than driven, because the answer is an
+invariant, not a behaviour under load.
+
+**Mostly a harness problem.** A spawn is refused when the agent already holds a `running` Run
+(`agent_trigger.py:627-633`, *"{agent} already has a run in progress."*). That guard sits in
+`trigger_agent_directly`, which is the internal the HTTP route `trigger_agent` (:1213) and the
+scheduler (`scheduler.py:771`) both call — not in the route, so no spawn path skips it. So **at most one run per agent per project is live at
+a time**, and both missing capabilities collapse onto surfaces that do exist: *enumerate live runs*
+is the roster's per-agent `status`, and *cancel a run* is `POST /agents/{agent}/stop`, whose
+`limit(1)` over `Run.agent == agent, status == "running"` (`agent_trigger.py:1499-1504`) can only
+ever be selecting that one run. Per-**agent** is not a coarser lever than per-**run** while the
+invariant holds; it is the same lever. What genuinely needs a run id is a *test* that wants to name
+one — which is exactly how F168 was found.
+
+**The residue is real and is one state.** A `Run` row left at `running` with no live process — the
+state `run_reconciliation` exists for — has **no operator route out short of restarting the Hub**:
+
+- `reconcile_interrupted_runs()` is called from **one** place, `main.py:350`, inside `lifespan()`
+  startup. (Confirmed by grep; the same claim round 2 confirmed for the gate.) Nothing sweeps a
+  stale row while the Hub is up.
+- the roster keeps showing the agent busy, because the roster reads that same column;
+- `POST /agent/trigger` refuses the agent at :633 — *already has a run in progress*;
+- `POST /agents/{agent}/stop` finds the row, finds no handle in either `run_liveness` registry, and
+  answers **409 *"{agent}'s run is not in a stoppable state right now."*** (`:1522-1527`).
+
+So the agent is unusable and every route says so without offering a way through. That is the
+operator-facing F168, and it is narrower and sharper than *"there is no runs surface"*: the gap is
+not enumeration or cancellation, it is that **nothing but a restart can retire a run the process no
+longer owns**. Severity stays B — reaching it needs a crash or a kill mid-turn, which is precisely
+why `reconcile_interrupted_runs` was written — but a repair should be read as *"give the stale-run
+sweep a second trigger"*, not *"add `GET /runs` and a cancel route"*. Adding those two routes would
+not clear the state either: a cancel route hitting the same empty registries has the same 409 to
+give.
+
+Not queued. No product code was touched to establish this.

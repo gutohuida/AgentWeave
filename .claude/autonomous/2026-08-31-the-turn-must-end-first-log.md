@@ -1633,3 +1633,60 @@ F168 carries that repair if anyone wants it.
 
 **State on exit.** Tree clean, branch pushed, not merged. Everything in the queue remains `done`;
 the next firing chooses again. It arrives with real time on the clock — this one finished at 16:12, well inside the 16:30 limit, so the next firing can still take a spec round if it lands before 15:30 on a later day, or another drive today.
+
+---
+
+## Iteration 14 — 2026-08-31 16:14 → 16:29 — F168's bound: the operator half is one state wide
+
+**Position on arrival.** Branch `autonomous/2026-08-31-the-turn-must-end-first` at `82a7c19`, tree
+clean, every queue item `done`. Clock 16:14 — past the 15:30 rule (no new spec round, no new
+implementation group) and sixteen minutes short of the 16:30 stop. So the honest unit was the
+smallest thing on the drivable list that finishes inside sixteen minutes and leaves nothing
+half-written: **F168's own stated question** — *is the missing runs surface reachable as an operator
+problem, or only as a harness one?*
+
+**Read at the source, not driven, and that was the right call.** The question is about an invariant,
+not a behaviour under load; no number of live runs would answer it and a Hub restart alone would
+have eaten the window. Four greps and three reads settled it.
+
+**THE ANSWER, in two halves.**
+
+*Mostly harness.* `trigger_agent_directly` refuses a spawn when the agent already holds a `running`
+Run (`agent_trigger.py:627-633`). That guard is in the **internal**, which both the HTTP route
+`trigger_agent` (:1213) and the scheduler (`scheduler.py:771`) call — the mirrored guards at :1233
+and :1250 are the archived-agent and `work_dir` ones, not this. So at most one run per agent per
+project is live, and both "missing" capabilities collapse onto surfaces that exist: enumeration is
+the roster's per-agent `status`, and cancellation is `POST /agents/{agent}/stop`, whose `limit(1)`
+over `Run.agent == agent, status == "running"` (:1499-1504) can only be selecting that one run.
+Per-agent is not a coarser lever than per-run while the invariant holds — it is the same lever.
+What genuinely needs a run id is a *test* that wants to name one, which is exactly how F168 was
+found.
+
+*The residue is real, and it is one state.* A `Run` row left at `running` with no live process has
+**no operator route out short of restarting the Hub**. `reconcile_interrupted_runs()` is called from
+exactly one place — `main.py:350`, inside `lifespan()` startup (grepped; the same claim round 2
+confirmed for the gate) — so nothing sweeps a stale row while the Hub is up. Meanwhile the roster
+reads that column and keeps showing the agent busy; `/agent/trigger` refuses it at :633 with *already
+has a run in progress*; and `/agents/{agent}/stop` finds the row, finds no handle in either
+`run_liveness` registry, and answers **409 *"not in a stoppable state right now"*** (:1522-1527).
+Every route says the agent is unusable and none offers a way through.
+
+**Why this changes what a repair should be.** F168 was filed as *"there is no runs surface"*. The
+measured shape is narrower and sharper: the gap is not enumeration or cancellation, it is that
+**nothing but a restart can retire a run the process no longer owns**. Adding `GET /runs` and a
+per-run cancel would not clear that state either — a cancel route hitting the same empty registries
+has the same 409 to give. Read the repair as *give the stale-run sweep a second trigger*, not
+*add two routes*. Severity stays B: reaching it needs a crash or a kill mid-turn, which is precisely
+what `reconcile_interrupted_runs` was written for.
+
+**Cost.** Zero spawns, zero projects, no Hub started, no product code touched. Iteration 10's suite
+numbers therefore stand and nothing was re-run — the only changed files are `FINDINGS.md`, this log
+and `STATE.json`.
+
+**Not done, deliberately.** F168's harness half was again left unrepaired, for the reason iteration
+13 gave: `t_f154_wedged_review.py` is committed evidence of a past drive and rewriting it after the
+fact would make its checks appear to mean something they did not mean at the time. F165/F166 remain
+undriven — each needs a live Hub and a real turn, which does not fit sixteen minutes.
+
+**State on exit.** Tree clean, branch pushed, not merged. Queue still entirely `done`. This is the
+last firing before the 17:00 `stop_at`; the branch is offered as it stands.
