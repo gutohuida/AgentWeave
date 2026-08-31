@@ -285,11 +285,26 @@ def main():
     c1, d1 = fire(job1, "first")
     time.sleep(2)
     c2, d2 = fire(job1, "second")
-    text1 = json.dumps(d1, default=str).lower()
-    reproduced = c1 == 409 and "nothing is wrong" in text1
+    text1 = json.dumps(d1, default=str)
+    lower1 = text1.lower()
+    # **These assertions were inverted when F154 was fixed** (`a-review-nobody-is-doing-is-named`).
+    # Until then they asserted the defect: 409 carrying "nothing is wrong". The refusal is still a
+    # 409 -- the firing is still refused, which agent-loops requires of a stalled queue -- but the
+    # sentence must now name the task and the agent and must not promise that waiting helps.
+    named = c1 == 409 and t1 in text1 and REVIEWER in text1
     check(
-        "F154 REPRODUCED: the firing answers 409 'nothing is wrong'",
-        reproduced,
+        "F154 CLOSED: the firing answers 409 naming the task and the idle reviewer",
+        named,
+        f"{c1} {text1[:200]}",
+    )
+    check(
+        "and it no longer claims the work is being done or that waiting will clear it",
+        "nothing is wrong" not in lower1 and "next firing" not in lower1,
+        text1[:200],
+    )
+    check(
+        "and it is not a 500 -- the route reads the skipped JobRun, not the in-flight guess",
+        c1 == 409 and "failed to fire job" not in lower1,
         f"{c1}",
     )
     check("and it says the same thing on a second press", c2 == c1, f"{c2}")
@@ -308,9 +323,11 @@ def main():
     note("job summary stall_reason", json.dumps(stall, default=str))
     note("job summary queue", json.dumps(queue, default=str))
     note("job summary current_tasks", json.dumps(current, default=str)[:600])
+    # Also inverted by the fix. `stall_reason: null` for a queue that would never move again was
+    # the whole of F154's LANE 3; it now carries the same sentence the 409 does.
     check(
-        "stall_reason is null for a queue that will never move again",
-        stall in (None, "", "null"),
+        "stall_reason names the wedge instead of being null",
+        bool(stall) and t1 in str(stall) and REVIEWER in str(stall),
         json.dumps(stall, default=str),
     )
     mine = [c for c in current if c.get("id") == t1]
@@ -335,9 +352,12 @@ def main():
         surfaces_that_name_it.append("stall_reason")
     if isinstance(d1, str) and t1 in d1:
         surfaces_that_name_it.append("the 409")
+    # The inversion of F154's headline. `agent_capacity: "held"` was ALWAYS correct and is asserted
+    # unchanged above -- F63 split that word out for exactly this row, and round 1 of the fix
+    # corrected the finding on that point. What was missing is a surface that says it in words.
     check(
-        "NOT ONE operator surface names the task or says the review is unattended",
-        not surfaces_that_name_it,
+        "at least one operator surface names the task in words",
+        bool(surfaces_that_name_it),
         str(surfaces_that_name_it),
     )
 
@@ -378,10 +398,13 @@ def main():
     c4, d4 = fire(job2, "author wedged")
     note("the author-wedged firing", f"{c4} {json.dumps(d4, default=str)[:300]}")
     check(
-        "F167: the AUTHOR-wedged row answers 409 'nothing is wrong' too -- F70's recovery "
-        "cannot see an author whose history is the operator's",
-        c4 == 409 and "nothing is wrong" in json.dumps(d4, default=str).lower(),
-        f"{c4}",
+        "F167's row reaches the same named refusal -- the predicate never asks who the "
+        "assignee is, so it covers the row F70's recovery cannot recognise",
+        c4 == 409
+        and t2 in json.dumps(d4, default=str)
+        and AUTHOR in json.dumps(d4, default=str)
+        and "nothing is wrong" not in json.dumps(d4, default=str).lower(),
+        f"{c4} {json.dumps(d4, default=str)[:200]}",
     )
     s2 = summary(job2)
     lv2 = s2.get("loop") or {}

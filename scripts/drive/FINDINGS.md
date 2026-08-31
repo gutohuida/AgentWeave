@@ -12564,3 +12564,88 @@ the plain agent route**, on the strength of the codebase's own drift-skip commen
 from the check and comment at `:1064-1069` rather than re-derived by running git — the one unmeasured
 link. Still not measured: whether two branch-unknown *accepted* footprints arise on one task in
 practice, which needs a drive. Not queued.
+
+---
+
+## F154 — Status: **FIXED** (`001a07d`, driven 2026-08-31), and the finding was wrong in one place
+
+The change is `a-review-nobody-is-doing-is-named`, through the full three rounds. Driven with
+`scripts/drive/t_f154_wedged_review.py` against a Hub restarted from the implementing commit,
+**18/18**, both populations:
+
+```
+409  "beta is named on task-f88573b632d2 ('Add one line to README') as its reviewer and is not
+      reviewing it: no turn is running on that task and none is queued. Nothing will move it on
+      its own. Ask beta again, review it yourself, or send it back with revision_needed."
+```
+
+`stall_reason` carries the same sentence, on both the reviewer-wedged and the author-wedged row.
+The board still reads `agent_capacity: "held"`. No job left enabled.
+
+### The correction: `agent_capacity: "held"` was never part of the defect
+
+F154 listed `held` on an idle agent among the surfaces getting it wrong. It is the **correct**
+value and was split out of `working` for precisely this row — *"a review that ended without a
+verdict, or whose turn failed"* (`hub/hub/schemas/jobs.py:136-143`, finding F63). Round 1 caught
+this, and it changed the repair rather than merely tidying the ledger: `task_attribution` derives
+that word from `FiringDecision._cannot_staff`, so the obvious-looking fix — moving the wedged row
+out of the in-flight collection — would have reverted F63 two modules from anything the change
+touched. The row now joins **both** collections: `_cannot_staff` for the board's word, `unstaffed`
+for the sentence and the event.
+
+So the defect was narrower than filed and worse than filed at the same time: one surface was
+already right, and the two that act — the firing decision and the operator's Run button — were
+both wrong.
+
+### What each round found, because the ledger is the argument for the cost
+
+- **Round 1** — the corpus already required this. `agent-flows` has had *"the operator is told
+  which declared reviewer gave no verdict, naming the task"* since 2026-08-27, and
+  `agent-loops:815` defines a stalled queue as one holding non-terminal unclaimable work and
+  requires a reason naming it. `run_divergence._answer_failed_review` implements the first
+  correctly. This was enforcement, not new behaviour — except for the operator-walked population,
+  which has no run boundary and which no scenario covered.
+- **Round 2** — *nobody had asked what the HTTP route returns.* The 409 is not rendered from
+  `FiringDecision`: `jobs.py:1263-1267` reads the latest `JobRun`'s `error_summary`, and only
+  failing that consults `_loop_work_is_all_in_flight`, which re-runs `decide_firing` and otherwise
+  falls to **500 "Failed to fire job"**. The repair is safe only because the stalled path writes
+  that skipped row first. That is F108's lesson arriving again, and it is now a route-level test.
+- **Round 3** — the codebase had been here before. `_loop_candidates`' docstring records that this
+  exact population once answered *"no claimable task among 1 open (1 under_review)"* and that
+  **that** was the defect (F23 one band over). A repair producing the generic sentence would have
+  been a regression wearing a fix's clothes. Round 3 also found the fix makes an existing per-tick
+  emission permanent: `review_unstaffed` fired on every firing, which was tolerable while the
+  population cleared by itself and is not for one that cannot clear without the operator. It is now
+  emitted once per fact.
+
+### Two tripwires that fired during implementation, both invisible to reasoning
+
+1. **`DECISION_STALLED` never carried `_cannot_staff` at all.** Until a stall could coexist with a
+   cannot-staff row the collection was empty on that branch by construction, so omitting it cost
+   nothing. Moving the wedged row to the stall path made the board report the reviewer as
+   `assigned` instead of `held` — F63 undone by moving a row rather than by editing anything F63
+   owns. Caught by the test written for round 1's D1 tripwire, which existed only because round 1
+   had argued the tripwire was real.
+2. **Gating the decision on a per-task predicate reported three busy agents as a stall.** The
+   ordinary-work arm records in flight from `agent in running` as well as from `held`, so a run
+   bound to no task is still work being done. Caught by `test_flow_width.py`. The gate now reads
+   the walk's own answer instead of re-deriving one.
+
+### Two existing tests were asserting the defect on fixtures that could not occur
+
+`test_board_agent_role.py::test_running_a_loop_whose_work_is_all_in_flight_is_not_a_failure` and
+`test_a_flow_names_what_it_cannot_staff.py::test_a_hand_dispatched_review_on_an_unattributed_task_is_still_held`
+both staged a review with `enter_selected_task` (or a direct status write) and **no turn anywhere**,
+while their docstrings described a dispatch. A real dispatch starts a turn or queues one. The
+fixtures were updated to include the half they were standing in for; their assertions were kept.
+
+### What this does not fix
+
+**F167 stays open.** The predicate never asks who the assignee is, so the author-wedged row now
+gets the same named refusal — but `agents_that_worked` still cannot see an author whose history is
+entirely the operator's, so F70's *recovery* (re-staffing through the ladder) still does not fire
+for it. Naming the wedge and recovering from it are different repairs.
+
+**The reviewer harness failure is still not the Hub's.** Two of three live drives had a reviewer
+loop on `ToolSearch` and never deliver a verdict it had reached. What the Hub owns is what happens
+afterwards, and afterwards is now correct.
