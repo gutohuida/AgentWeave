@@ -219,5 +219,5 @@
     "The feature freeze's parameters, still unsettled.",
     "The release roadmap's Phase 1 decision list still offers F122's 'change nothing, surface it loudly' option, which is NOT viable -- it leaves task-lifecycle-governance:638 breached. The published artifact at https://claude.ai/code/artifact/5f126f3b-01a7-49a2-ac7c-180570aa8c81 has not been corrected."
   ],
-  "last_heartbeat": "2026-08-31T16:21:11+0100"
+  "last_heartbeat": "2026-08-31T15:41:30+0100"
 }
