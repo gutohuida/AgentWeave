@@ -91,12 +91,42 @@ meaning is what that docstring warns against.
 
 ### D4 — The sentence, and where it is promoted
 
-The reason names the task and the agent, and says what the operator can do, in the register the
-neighbouring refusals use. It reaches `stall_reason` by the F64 rule already in place
-(`scheduler.py:1590-1609`) and the operator by `_emit_review_unstaffed`, both unchanged.
+The wedged row is appended to **`unstaffed` as well as** `in_flight`. Dual membership is the
+mechanism, not an accident of it: `_cannot_staff` is what keeps the board saying `held` (D1), and
+`unstaffed` is what carries the sentence — the F64 rule at `scheduler.py:1590-1609` promotes
+`unstaffed[0][1]` to `stall_reason`, and `scheduler.py:2585` emits one `review_unstaffed` per entry.
+Round 1 said "a walk-local list" and "promoted by the existing F64 rule" in the same breath; those
+are only both true if the list *is* `unstaffed`.
 
-It must not say the work is being done, and must not promise that a later firing picks it up. That
-promise is the specific falsehood F154 records, because for this row it can never come true.
+**The fall-through cannot reach `PROCEED_EMPTY`, and that was worth checking rather than assuming.**
+`decide_firing` returns `DECISION_PROCEED_EMPTY` when `_stall_reason_from_walk` answers `None`
+(`:1585-1589`), which would fire an agent to fill the queue — on this population, every tick,
+forever. It answers `None` only when the loop has no task outside `TERMINAL_FOR_BINDING`
+(`:1706-1716`), and that tuple is `TERMINAL_STATUSES` = `{"approved", "rejected"}`
+(`task_transition_service.py:628`, `run_task_binding.py:465`). `under_review` is not in it, so the
+walk always produces a sentence for this row and the F64 rule then replaces it with ours.
+
+The sentence must not say the work is being done, and must not promise that a later firing picks it
+up. That promise is the specific falsehood F154 records, because for this row it can never come
+true.
+
+### D6 — What the operator's Run button actually returns, checked at the route
+
+The 409 the operator sees is **not** rendered from `FiringDecision`. `POST /jobs/{id}/run` reads the
+latest `JobRun`: if its status is `"skipped"` it answers `409` with that row's `error_summary`
+(`api/v1/jobs.py:1263-1267`); only if there is no such row does it consult
+`_loop_work_is_all_in_flight` (`:1186-1204`), which re-runs `decide_firing` and checks for
+`DECISION_IN_FLIGHT`, and failing that returns **500 "Failed to fire job"** (`:1277-1285`).
+
+So the repair's user-visible outcome depends on the stalled path writing that row, which it does:
+first stall sets `run.status = "skipped"` and `run.error_summary = stall_reason`
+(`scheduler.py:2648-2649`), and a *continuing* stall increments `tick_count` on the existing row and
+discards the new one (`:2628-2646`), leaving the same skipped row as the latest. Both presses
+therefore answer `409` with our sentence, and the 500 branch is not reachable for this population.
+
+This is the check the round discipline exists for: `_loop_work_is_all_in_flight` answering `False`
+after the fix is *correct*, and would have been a regression from a calm wrong answer to an alarming
+one if the skipped row were not written first. It is asserted at the route, not reasoned about.
 
 ### D5 — Ordering, and what must not move
 

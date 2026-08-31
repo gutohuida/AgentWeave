@@ -24,14 +24,14 @@
 
 - [ ] 3.1 Ask the predicate once before the walk in `decide_firing`, beside `held`, `free` and
   `running` (`scheduler.py:1283-1291`).
-- [ ] 3.2 In the `WITH_REVIEWER` branch, keep appending to `in_flight` unchanged (design D1), and
-  additionally record the task in a walk-local list of reviews nobody is doing when the predicate
-  does not name it.
+- [ ] 3.2 In the `WITH_REVIEWER` branch, keep appending to `in_flight` unchanged (design D1) **and**
+  append `(task.id, sentence)` to `unstaffed` when the predicate does not name the task. Dual
+  membership is deliberate and is what makes D1 and D4 both hold; the comment says so.
 - [ ] 3.3 Choose `DECISION_IN_FLIGHT` only where at least one `in_flight` member is named by the
   predicate. Otherwise fall through to the stall path.
-- [ ] 3.4 The fall-through carries a sentence naming the task and the agent, promoted to
-  `stall_reason` by the existing F64 rule and emitted through `_emit_review_unstaffed`
-  (design D4). It states neither that the work is being done nor that a later firing will pick it up.
+- [ ] 3.4 The sentence names the task and the agent, states neither that the work is being done nor
+  that a later firing will pick it up, and reaches `stall_reason` through the F64 rule at
+  `scheduler.py:1590-1609` and the operator through `_emit_review_unstaffed` — both unchanged.
 - [ ] 3.5 Comment at the branch records what `_cannot_staff` still feeds and why the row stays in it
   — `task_attribution` and F63's `held` — so the next reader does not "tidy" it out.
 
@@ -46,6 +46,16 @@
   tripwire would fire (F63).
 - [ ] 4.4 Test: nothing on this path reassigns the task or fires another agent (`agent-flows`'
   "no substitution" scenario).
+- [ ] 4.5 Test **at the HTTP route**, not at `decide_firing` (design D6): `POST /jobs/{id}/run`
+  answers `409` carrying the naming sentence, and never `500 "Failed to fire job"`. The 500 is what
+  this repair returns if the skipped `JobRun` is not written first, and no scheduler-level test can
+  see it.
+- [ ] 4.6 Test: press Run a **second** time. Still `409` with the same sentence, and the loop's
+  execution history holds one row with `tick_count == 2` rather than two rows — the continuing-stall
+  path at `scheduler.py:2628-2646`, which agent-loops' "A firing that does not fire records only
+  what is new" already requires.
+- [ ] 4.7 Test: `PROCEED_EMPTY` is not reachable for this population — a loop whose only task is the
+  wedged review decides `STALLED`, never a firing that spawns an agent to fill the queue.
 
 ## 5. Validate and drive
 
