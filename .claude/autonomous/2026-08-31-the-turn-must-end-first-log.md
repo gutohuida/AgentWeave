@@ -1210,3 +1210,146 @@ need no query (D7); the source branch must reach the **prose**, not only the str
 and nothing written may claim an agent's evidence lands on the task branch automatically (D2a). One
 constraint on landing: not into `openspec/specs/` before
 `a-loop-declares-whether-it-needs-evidence` is archived (D9, task 6.4a).
+
+## Iteration 10 — 2026-08-31T15:15+01:00 — F155-IMPL: the whole change, implemented and driven
+
+**Position on arrival.** Branch `autonomous/2026-08-31-the-turn-must-end-first` at `5587e10`, tree
+clean, `git log` matching STATE.json exactly — iteration 9's round 3 at `85fc082`, branch released.
+Clock read **14:44**. Well inside the 15:30 window, so `next_action`'s F155-IMPL was startable as
+written, and there was room for the drive as well rather than instead.
+
+**One unit of work, as scoped:** implement `a-conflict-refusal-names-what-clears-it` end to end —
+all six task groups — and then drive it. Four commits: `229a2c5` (group 1), `0373867` (groups 2–4),
+`6c13a00` (group 5, the drive), `31115e4` (a regression the full UI suite surfaced).
+
+### Group 1 — reproduce it, and read the failure
+
+Nine tests in `hub/tests/test_conflict_refusal_names_what_clears_it.py`, of two deliberately
+different kinds, because F155 is a defect in a *sentence* about a *world* and only one of those
+moves.
+
+**One failed today**, and its output was read rather than assumed:
+
+```
+This task's work does not merge cleanly into main: shared.txt. Resolve the conflict on the
+branch, then approve — approving is what merges it.
+```
+
+No commit, and the instruction that does not work. **Eight passed today and must keep passing**,
+because they assert the world: following the old instruction leaves the refusal byte-for-byte
+identical (`integration_targets` still yields the commit the accepted evidence names); recording
+fresh evidence *from a checkout of that branch* is what clears it; D6's two properties hold — the
+reduction keys on branch alone, and a restamp does not move `observed_at`; and **both
+non-guarantees are reachable**, reached the way the product reaches them rather than by patching a
+flag.
+
+Task 1.2 was specified as a test that should fail first. It cannot: it asserts a fact about the
+world that this change does not move, so it passes before and after. Written that way, and said so
+in its docstring, rather than contorted into a red-then-green shape it has no business having.
+
+### Groups 2–4 — two sentences, because there are two routes
+
+`_check_mergeable` gains four keys, every one from data already on the `Target` — no new query and
+no new join. `named_by_evidence`/`evidence_id` (D1), `recorded_by_task`/`recorded_by_another_task`
+(D7, the same two keys the sibling refusal twenty lines below already carries), and
+`commit_left_its_branch` (D3, `False` only — `None` means the branch does not resolve, which is a
+reason to say nothing).
+
+`_merge_detail` groups on the provenance and composes per group. The branch-tip sentence is
+**unchanged**, with a comment saying it is deliberately unchanged, because on that route the commit
+judged is whatever the branch then points at and "resolve it on the branch" is true. The evidence
+sentence names the commit; names the source branch distinctly from the main branch and attaches the
+remedy to the source one (D8); says resolving there and retrying will not clear it, and why; states
+the remedy as a **condition on where the recording is done from** rather than a field to supply,
+because there is no branch parameter anywhere on the recording path (D2a); says explicitly that it
+does not take care of itself; says the fresh evidence need not be about the same requirement (D6);
+attributes the commit where another task recorded it and stops short of prescribing whom to
+approach (D7); and ends in `ACCEPT_OR_GRANT` reused verbatim (D2).
+
+Fourteen more tests, including both provenance shapes built through the product. That second one
+cost a correction worth keeping: **`evidence_governs` answers `True` for a task with no loop at
+all** (`task_integration.py:376-388`), so the branch-tip population has to be built through
+`POST /jobs` with a documentless loop, not by creating a bare task. A test that built it the lazy
+way would have asserted the branch-tip sentence against the evidence route.
+
+Both consumers updated rather than deleted. `t_row17_integration.py` asserted the message contained
+both `"resolve"` and `"approve"` lowercased — an assertion about *one* remedy where there are now
+two, and the evidence sentence deliberately says neither in that form. Replaced with the new
+requirement: names the commit judged, and states a remedy that clears it *on the route it was
+refused on*. `taskIntegration.test.ts`'s fixture now carries the shape the product emits; its two
+assertions held unchanged, which is the check that the new sentence dropped nothing.
+
+Re-checked every consumer of `unmergeable` across `.py`, `.ts` and `.tsx` rather than inheriting
+either earlier round's list: no product-code consumer reads a key off it; `to_dict` copies the list
+wholesale; `readableApiError` and `mcp_server._readable_detail` read only `detail.message`.
+
+### Group 5 — the drive, which is what the rounds cannot substitute for
+
+`scripts/drive/t_f155_conflict_remedy.py`, against a Hub **restarted on 8011 from this branch**
+(old PID stopped, `/health` confirmed, started from `hub/` from source), against a **fresh** project
+in a fresh temporary repository. No agent turns, so no model bound — this refusal's whole population
+is operator-facing.
+
+**23/23.** The one that matters is lane 2, and it is the one no unit test can do: it **parses the
+branch to act on out of the refusal's own sentence** and uses nothing it knows about its own setup.
+It resolves the conflict there, records evidence from a checkout of that branch, approves, and
+reaches `merged` with the resolved commit on the main branch. Lane 3 drove the *old* remedy against
+a second task and got the byte-for-byte identical refusal back — the defect, unchanged, which is
+why the product must stop giving that instruction. Lane 4 confirmed the branch-tip route keeps the
+old sentence.
+
+Two product refusals the harness earned by writing itself the lazy way round, both **good**: a
+loop's `work_needs_evidence` and a task's `loop_id` are creation-time only, and each refusal says
+what to do instead. Recorded in FINDINGS.md as behaviour, not findings.
+
+### What the drive and the tests filed
+
+* **F155 — FIXED**, driven.
+* **F165 (B, new)** — an operator whose `locator` **is** the resolved sha gets `branch=""` from
+  `_branch_at` once that commit is no longer exactly one branch's tip, so the fresh row lands
+  *beside* the stale one and the refusal stands with no visible reason. F71 made naming a commit
+  authoritative, so this is the natural thing for an informed operator to do. This change is
+  prose-only; its wording steers around it and deliberately promises nothing.
+* **F166 (C, new)** — the same hole on the agent route, via `footprint_root`'s two fallbacks. Round
+  2 called the agent route safe as a *construction*; round 3 corrected it to a *precondition*, and
+  the test confirms the correction.
+
+### The one thing this iteration found that nobody was looking for
+
+Running the **whole** UI suite rather than the file this change touched: **1 failed, 1468 passed.**
+`TaskDetailDrawer` gained F163's landing action in an *earlier* iteration on this branch, and
+`useLandTask` calls `useQueryClient` unconditionally — so the one test in `taskDetailDrawer.test.tsx`
+that renders outside a `QueryClientProvider` threw `No QueryClient set`. That test is the
+click-outside one; giving it a provider would change what it is testing. The file already had the
+convention (four hooks stubbed in one `vi.mock` block, with a comment saying why); this adds the
+fifth. **CI would have failed on this branch.** Fixed at `31115e4`.
+
+That is the second time on this branch that the difference between "the tests I touched" and "the
+suite" has been the difference between green and red. It is the same lesson as the drive's, one
+layer down.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `openspec validate a-conflict-refusal-names-what-clears-it --strict` | valid |
+| `ruff check src/ hub/ tests/` | clean |
+| `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` | 534 files unchanged |
+| `hub/tests` — gate + integration chunk (6 files) | 119 passed |
+| Whole hub suite, in two file chunks | see below |
+| `cd hub/ui && npm run lint` | clean |
+| `cd hub/ui && npx vitest run` | 142 files, **1469 passed**, 0 failed |
+| `t_f155_conflict_remedy.py` against 8011 from this branch | **23/23** |
+
+### Where the branch stands
+
+`approval-waits-for-the-turn-to-end` and `a-conflict-refusal-names-what-clears-it` are both
+complete, driven and offered. **Every task in F155's `tasks.md` is checked except `6.4a`, which is a
+standing prohibition rather than a step:** do not sync or archive this change into
+`openspec/specs/` before `a-loop-declares-whether-it-needs-evidence` is archived (design D9). The
+modified requirement's discriminator names the branch-tip route, which that change ADDS and which no
+shipped requirement describes today.
+
+Nothing is half-written. The next firing has a free choice, and the obvious candidates are F156
+(`integration-preview` says `will_merge:true` where the gate refuses — explicitly a non-goal of this
+change, still filed), F154 (severity A, unfixed, unqueued), or re-queueing F130/F127/F111+F3/F113/F61.
