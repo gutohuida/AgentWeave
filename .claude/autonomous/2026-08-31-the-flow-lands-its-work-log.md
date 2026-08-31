@@ -2242,3 +2242,41 @@ branch introduced; all were found by driving it.
 - **F156**, **F157**, **F158**, **F164** — as filed.
 
 **This run does not merge.** The branch is pushed; the merge is the operator's.
+
+---
+
+## Iteration 17 — 2026-08-31T06:50+01:00 — the offer re-verified, and the run stands down
+
+**No work was queued, and none was invented.** Iteration 16 left the branch finished and offered,
+and `next_action` named exactly three permitted acts: confirm the tree is clean and pushed, re-check
+the offer summary for drift, stand down. That is all this iteration did.
+
+**Position reconciled.** Branch `autonomous/2026-08-31-the-flow-lands-its-work`, `git status` clean,
+`HEAD == origin/…` at `6ef2195`, and the last four commits are the ones STATE.json describes. Nothing
+moved between firings.
+
+**The offer summary re-checked against the repository, not against itself.**
+
+| Claim in the summary | Checked how | Result |
+|---|---|---|
+| Four changes, all valid `--strict` | `openspec validate <c> --strict` ×4 | all four valid |
+| Every task ticked bar three markers | `grep '^- \[ \]'` across the four | exactly `approval-refuses-unaccepted-evidence` 8.1/8.2/8.3, the *"Not in this change"* markers |
+| The branch carries four changes | `git diff --name-only master...HEAD -- openspec/changes/` | exactly those four |
+| The drives are on disk | `ls` | `t_drive1_flow_lands.py`, `t_drive2_loop_lands.py`, `t_f162_window.py` |
+| Ahead of master | `git rev-list --count master..HEAD` | 59 |
+
+One thing worth naming so a reader does not mistake it for drift: `openspec/changes/` also holds
+**`a-write-outside-the-workspace-is-recorded`**, wholly unticked. It is **not this branch's** — it is
+on `master` already and `master...HEAD` does not touch it. The summary's "four changes / three
+unticked tasks" is correct as written and scoped to this branch.
+
+**The heartbeat is deliberately NOT released this time, and that is the whole content of the
+decision.** Releasing it hands *pending work* to the next firing; there is none. A released heartbeat
+would only make every firing between now and `stop_at` (08:00) repeat the five checks above on a
+branch nothing is changing. The heartbeat is therefore left at **now**, which stands the loop down
+until ~07:30 and keeps an interactive session and this driver off each other exactly as before. If
+the operator wants the run to continue, the next honest unit of work is a spec loop for F162's
+repair — and it needs a D-style decision raised first (which of the three candidate repairs, and
+whether a loop should staff reviews at all, per F161).
+
+**The branch remains offered, unchanged, at `6ef2195`.** This run does not merge.
