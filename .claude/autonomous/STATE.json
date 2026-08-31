@@ -250,5 +250,5 @@
     "The DRIVE-2 fixture is `drive2-2026-08-31` = `proj-60c8c49372ce` at C:\\Users\\huida\\Documents\\drive2-2026-08-31, on the 8011 Hub, `master` adopted automatically by `POST /projects/open`, agents `alpha` and `beta` on `claude-haiku-4-5-20251001`, and `allow_agent_jobs` turned ON - without which `create_loop` is not in an agent's inventory at all and task 8.5's named route is unreachable. Every job archived, both agents idle, checkout clean. Reuse it rather than building another.",
     "The UI bundle is committed and stamped as of 5522597; nothing in iteration 15 touched `hub/ui/src`."
   ],
-  "last_heartbeat": "2026-08-31T05:55:05+01:00"
+  "last_heartbeat": "2026-08-31T06:39:28+01:00"
 }
