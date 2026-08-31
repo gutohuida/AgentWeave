@@ -22,7 +22,7 @@ from typing import List, NamedTuple, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import task_integration, worktrees
+from . import dependency_gate, task_integration, worktrees
 from .db.models import Project, Task, TaskDependency
 
 logger = logging.getLogger(__name__)
@@ -97,7 +97,7 @@ async def resolve_turn_workspace_inputs(
     return TurnWorkspace(
         task_id=task.id,
         base=await _integration_base(session, project_id, repo_root),
-        prerequisites=await _prerequisite_commits(session, task),
+        prerequisites=await _prerequisite_commits(session, task, repo_root),
     )
 
 
@@ -118,7 +118,9 @@ async def _integration_base(session: AsyncSession, project_id: str, repo_root: P
     return "HEAD"
 
 
-async def _prerequisite_commits(session: AsyncSession, task: Task) -> Tuple[str, ...]:
+async def _prerequisite_commits(
+    session: AsyncSession, task: Task, repo_root: Path
+) -> Tuple[str, ...]:
     """Every commit *task*'s direct prerequisites contributed, in a stable order.
 
     **Direct only, and that is sufficient rather than approximate.** If A → B → C and each link was
@@ -126,10 +128,36 @@ async def _prerequisite_commits(session: AsyncSession, task: Task) -> Tuple[str,
     C brings A's along (design D1, "transitivity is free"). A grandfathered link breaks that chain,
     which is why grandfathering is per-task and self-extinguishing.
 
-    The commits come from `task_integration.integration_targets`, which is already exactly this
-    query — newest **accepted** `git` footprint, one per distinct branch, a `paths` footprint
-    contributing nothing. Calling it rather than restating it is the point: "which commit is this
-    task's work" having two implementations is the drift that produced F58 in the first place.
+    The commits come from `task_integration.merge_targets`, which is already exactly this question —
+    *what would approving this task have merged*. Calling it rather than restating it is the point:
+    "which commit is this task's work" having two implementations is the drift that produced F58 in
+    the first place, and that argument is what moved this from `integration_targets` to
+    `merge_targets` (design D12) once a second answer to the same question existed.
+
+    **Why this is not merely nicer.** `task-dependencies` SHALLs that a task's isolated checkout
+    contains the work of every prerequisite it was permitted to start on, *"whether or not that work
+    reached the project's main branch"* — and it names the dirty and parked checkouts
+    (`task_integration.py:329-335`, both of which skip the merge while approval stands) as the
+    reasons the requirement exists. An evidence-free loop task's prerequisite work would otherwise
+    reach its successor only through the main branch, which is the exact dependence that sentence
+    forbids.
+
+    **The `approved` filter is load-bearing, and it applies to the branch-tip route only.** This
+    function's previous docstring defended `integration_targets` on the grounds that anything else
+    *"would carry work nobody accepted into a checkout an agent is about to write in"*. On the
+    evidence route that filter is automatic — nothing is a target until a reviewer accepts it, at
+    any status. On the branch-tip route there is no automatic filter at all: an in-progress
+    prerequisite's tip is a real commit, and on that route approval *is* the acceptance, which is
+    why the status check restores exactly the property the sentence above is defending.
+
+    **Applying it to both routes would have been a regression, and F159 is why** (design D12 said
+    to, unconditionally; found while implementing it). The dependency gate does not make a
+    prerequisite `approved` by the time this runs: a task branch is cut at **dispatch**
+    (`pending -> assigned`), one edge before the gate fires, and `agent_trigger` consults no
+    dependency gate at all (F158). So at the moment prerequisites are seeded, an unapproved
+    prerequisite carrying accepted evidence is the ordinary case, not an exotic one — and it seeds
+    that checkout today. A blanket status check would have stopped it, breaching the same
+    requirement D12 exists to satisfy, in the other direction.
 
     Resolved on every task-bound turn even though `ensure_task_worktree` merges only when it creates
     the branch. That costs one query for the overwhelmingly common case of a task with no
@@ -152,7 +180,10 @@ async def _prerequisite_commits(session: AsyncSession, task: Task) -> Tuple[str,
     )
     commits: List[str] = []
     for prerequisite in prerequisites:
-        for target in await task_integration.integration_targets(session, prerequisite):
+        governed = await task_integration.evidence_governs(session, prerequisite)
+        if not governed and prerequisite.status != dependency_gate.MET_STATUS:
+            continue
+        for target in await task_integration.merge_targets(session, prerequisite, repo_root):
             if target.commit_sha and target.commit_sha not in commits:
                 commits.append(target.commit_sha)
     return tuple(commits)

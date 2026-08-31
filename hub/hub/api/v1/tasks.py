@@ -1053,30 +1053,54 @@ async def task_integration_preview(
     already legible ("no accepted evidence names a commit"); the *write* was not.
 
     So this answers the same question the merge itself will ask, from the same source
-    (`task_integration.integration_targets` and `Project.main_branch`), and the drawer states the
-    answer beside the approve control. Deliberately read-only and deliberately cheap: no git
-    subprocess, no conflict probe — that is `requirement_gate`'s job at the moment of approval,
-    where a refusal can still stop it. This is a sentence, not a second gate.
+    (`task_integration.merge_targets` and `Project.main_branch`), and the drawer states the answer
+    beside the approve control. Deliberately read-only and deliberately **no conflict probe** —
+    that is `requirement_gate`'s job at the moment of approval, where a refusal can still stop it.
+    This is a sentence, not a second gate.
 
-    `will_merge` is false with a stated `reason` for the two ordinary cases — a project with no
-    main branch configured, and a task whose evidence names no commit — because both are supported
-    project shapes and neither is an error.
+    This docstring used to also promise "no git subprocess", and that half is retired deliberately
+    (design D5). A task on a loop that declares its work needs no evidence has its merge target on
+    its own branch, not in the database, so a purely-database preview would report "nothing will
+    merge" beside an approve button that merges — silent about the exact case this route exists to
+    make legible. One `rev-parse` is not a gate.
+
+    The extra cost is paid **only** where evidence does not govern the task, which is why the
+    governance question is asked before the workspace is resolved: an ordinary task's drawer stays
+    exactly as cheap as it was. And an unresolvable workspace is a *reason not to know* — no target
+    and a stated reason, never a 500 — the same posture `requirement_gate._merge_situation` takes
+    for the same preconditions.
+
+    `will_merge` is false with a stated `reason` for the ordinary cases — a project with no main
+    branch configured, a task whose evidence names no commit, and a task of its own that has no
+    branch — because all of them are supported project shapes and none is an error.
     """
     project_id, _ = project
     task = await session.get(Task, task_id)
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    from ... import task_integration
+    from ... import project_workspace, task_integration
 
     project_row = await session.get(Project, project_id)
     main_branch = project_row.main_branch if project_row else None
-    targets = await task_integration.integration_targets(session, task)
+
+    governed = await task_integration.evidence_governs(session, task)
+    if governed:
+        targets = await task_integration.integration_targets(session, task)
+        empty_reason = task_integration.NOTHING_TO_MERGE
+    else:
+        empty_reason = task_integration.NO_TASK_BRANCH
+        try:
+            workspace = await project_workspace.resolve_project_workspace(session, project_id)
+        except Exception:  # noqa: BLE001 - not knowing is an answer here, a 500 is not
+            targets = []
+        else:
+            targets = await task_integration.merge_targets(session, task, workspace.root)
 
     if not main_branch:
         reason = task_integration.NO_MAIN_BRANCH
     elif not targets:
-        reason = task_integration.NOTHING_TO_MERGE
+        reason = empty_reason
     else:
         reason = ""
 

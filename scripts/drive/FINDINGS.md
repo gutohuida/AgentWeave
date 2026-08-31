@@ -11676,3 +11676,58 @@ Not fixed. The candidate repair is to make `_prerequisite_commits` ask `merge_ta
 prerequisites that are already `approved` — which the gate guarantees before a successor starts — and
 that is a fourth call site the change deliberately left still. Put to round 3 as
 `a-loop-declares-whether-it-needs-evidence`'s one open decision.
+
+
+## F159 (B) — design D12's `approved` filter, applied to both merge routes, would have stopped prerequisite work that reaches successors today
+
+Found while **implementing** D12 (`a-loop-declares-whether-it-needs-evidence`, group 4, task 4.9), by
+a shipped test failing. Not found by any of the three rounds, and the reason it was not is worth
+recording: rounds 2 and 3 both reasoned about the *new* route and never asked what the change did to
+the old one.
+
+D12 (design.md, "What moves, and what it costs") specifies `_prerequisite_commits` as:
+
+```
+for prerequisite in prerequisites:
+    if prerequisite.status != dependency_gate.MET_STATUS:      # "approved"
+        continue
+    for target in await task_integration.merge_targets(session, prerequisite, repo_root):
+```
+
+The status check is unconditional. Its stated justification is entirely about the branch-tip route —
+*"on the branch-tip route there is no automatic filter at all: an in-progress prerequisite's tip is a
+real commit and would be merged"* — and it is correct about that. But applied to the **evidence**
+route it removes behaviour that exists today and is tested:
+`hub/tests/test_turn_workspace.py::test_a_prerequisites_accepted_commits_are_in_the_task_checkout`
+constructs a prerequisite at status `in_progress` carrying accepted evidence, and asserts its commit
+is in the successor's checkout. That test failed the moment the unconditional filter landed.
+
+**And it is the ordinary case, not the fixture's artifice — F158 is why.** A task branch is cut at
+**dispatch** (`pending -> assigned`), one edge before the dependency gate fires, and `agent_trigger`
+consults no dependency gate at all. Prerequisites are merged **only at branch creation**
+(`worktrees.py:447-449`; the `branch_exists` arm at `:481-486` returns without merging). So at the
+single moment `_prerequisite_commits` is consulted, a prerequisite that is not yet `approved` is
+common. A blanket status check would have made an unapproved-but-demonstrated prerequisite stop
+seeding its successor — breaching `task-dependencies:335` (*"whether or not that work reached the
+project's main branch"*) in the opposite direction to the one D12 exists to close.
+
+**Fixed in the same change, narrowly.** The status check applies only where
+`task_integration.evidence_governs` is False:
+
+```
+governed = await task_integration.evidence_governs(session, prerequisite)
+if not governed and prerequisite.status != dependency_gate.MET_STATUS:
+    continue
+```
+
+which is exactly the scope D12's own justification argues for. The evidence route keeps today's
+behaviour to the row; the branch-tip route gets the filter it has no automatic equivalent of.
+Guarded by `test_an_unapproved_evidence_free_prerequisite_contributes_nothing` (the new route) and by
+the shipped `test_a_prerequisites_accepted_commits_are_in_the_task_checkout` (the old one), which is
+now load-bearing for a reason it was not written for.
+
+**The transferable lesson.** The rounds' rule is "compare the proposal against what the code does".
+This defect is what that rule looks like when it is applied only to the code the change is *about*:
+every citation in D12 was accurate, the mechanism it described was real, and the scope it applied
+that mechanism at was wrong by one predicate. A round that had asked *"which existing test does this
+line change the answer for?"* would have found it in one grep.

@@ -72,6 +72,13 @@ CHECKOUT_ELSEWHERE = (
 # exits 0 and creates nothing, so without this guard a no-op was recorded as work reaching the
 # product — which is the one thing this record exists to distinguish.
 ALREADY_INTEGRATED = "{commit} is already in {target}; there was nothing to merge"
+# The evidence-free route's own empty answer. Distinct from `NOTHING_TO_MERGE`, which is a statement
+# about *evidence* and would be a lie for a task whose merge evidence does not govern: it covers a
+# grandfathered task (one migration `0095` stamped onto the per-agent scheme), a task whose turn
+# never provisioned a checkout,
+# and a branch deleted by hand. Deliberately does not fall back to the agent branch — that branch
+# carries every task the agent ever worked on, which is the one thing this module refuses to merge.
+NO_TASK_BRANCH = "this task has no branch of its own, so there is nothing to merge"
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
@@ -243,6 +250,110 @@ async def awaiting_targets(session: AsyncSession, task: Task) -> List[Target]:
     carrying any.
     """
     return await _targets(session, task, requirement_evidence.AWAITING)
+
+
+def task_branch_tip(root: Path, task_id: str) -> Optional[str]:
+    """The commit at the head of *task_id*'s own branch, or None if it has none (design D6).
+
+    `worktrees.task_branch_name` validates the id and raises for one the product did not mint. That
+    is caught rather than propagated, for the reason `task_workspace` already gives about foreign
+    ids: an id this module cannot name a branch for simply has no branch, and the caller's answer
+    is `NO_TASK_BRANCH` either way — not a 500 in the middle of an approval that has already
+    happened.
+    """
+    try:
+        branch = worktrees.task_branch_name(task_id)
+    except ValueError:
+        return None
+    result = _git(root, "rev-parse", "--verify", f"refs/heads/{branch}")
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
+async def task_has_requirement_links(session: AsyncSession, task: Task) -> bool:
+    """Is this task wired into the evidence chain at all (design D11, task 4.3c)?
+
+    An existence check on `TaskRequirementLink`, not a count of evidence. The question is whether
+    the task *can* be demonstrated, which is a fact about how it was created and does not change
+    when the first piece of evidence is recorded. Answering it from evidence instead would make the
+    merge source depend on when you asked — D10's rejected timing-dependent alternative — so a task
+    would merge its branch tip in the morning and its evidence in the afternoon.
+
+    Reached only from the last arm of `evidence_governs`, so an ordinary task, a flow task and a
+    loop that declared for itself never pay for the query.
+    """
+    return (
+        await session.execute(
+            select(TaskRequirementLink.task_id)
+            .where(TaskRequirementLink.task_id == task.id)
+            .limit(1)
+        )
+    ).first() is not None
+
+
+async def evidence_governs(session: AsyncSession, task: Task) -> bool:
+    """Does accepted evidence decide what *task*'s approval merges (design D5, D10, D11)?
+
+    Five answers, in this order, and the order is the design:
+
+    1. **No loop** → yes. An ordinary task is untouched by any of this.
+    2. **The loop id does not resolve** → yes. A dangling id decides nothing.
+    3. **The loop declared** → the operator said, in either direction, and the operator wins over
+       both defaults below.
+    4. **The loop has a document** → yes. It is a *flow*, and `Loop` is a flow's row too (D10). A
+       document's requirements are the evidence chain, so a flat "a loop merges its branch tip"
+       default here would switch every flow onto a commit no reviewer accepted and degrade
+       `approval-refuses-unaccepted-evidence` to an advisory product-wide.
+    5. **Otherwise** → whether the task carries a requirement link (D11). A documentless loop's task
+       created with `requirement_ids` gets real links, and `record_evidence` resolves against the
+       *project's* index rather than a document's, so that task merges its evidence **today**.
+       Stopping at step 4 would silently switch it to its branch tip — and since `_targets`
+       deliberately includes evidence another task recorded against a shared requirement, a per-task
+       branch tip could not carry that commit at all.
+
+    `session.get` rather than a `select`, deliberately: `_merge_situation` and `integrate_task` both
+    ask this within one approval and one session, so the PK get is answered from the identity map
+    the second time and a `select` would not be.
+    """
+    if task.loop_id is None:
+        return True
+    from .db.models import Loop
+
+    loop = await session.get(Loop, task.loop_id)
+    if loop is None:
+        return True
+    if loop.work_needs_evidence is not None:
+        return loop.work_needs_evidence
+    if loop.spec_document_id is not None:
+        return True
+    return await task_has_requirement_links(session, task)
+
+
+async def merge_targets(session: AsyncSession, task: Task, root: Path) -> List[Target]:
+    """What approving *task* would actually merge — the commits, whatever their source (design D5).
+
+    `integration_targets` where evidence governs, and at most one branch-tip `Target` where it does
+    not. `integration_targets` itself is **not** modified and stays a pure database query; the
+    branch-tip answer needs a `rev-parse`, which is why this one takes a repository root and that
+    one does not.
+
+    The branch tip is the answer for exactly one population: a task on a documentless loop with no
+    requirement link of any kind — the set for which `integration_targets` is structurally empty
+    forever, because there is no requirement any evidence could ever be recorded against.
+
+    An empty list means different things on the two routes, and the callers say so rather than
+    collapsing them: `NOTHING_TO_MERGE` where evidence governs, `NO_TASK_BRANCH` where it does not.
+    """
+    if await evidence_governs(session, task):
+        return await integration_targets(session, task)
+    tip = task_branch_tip(root, task.id)
+    if tip is None:
+        return []
+    # The three evidence fields stay None: there is no evidence row to point at, and `Target`'s
+    # docstring says they exist so a refusal can name what it is waiting on. A refusal about
+    # unaccepted evidence cannot arise for a target that came from a branch.
+    return [Target(commit_sha=tip, branch=worktrees.task_branch_name(task.id), task_id=task.id)]
 
 
 def commits_riding_along(root: Path, main_branch: str, commit_sha: str) -> List[str]:

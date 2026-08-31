@@ -23,7 +23,16 @@ from sqlalchemy import select
 from hub import worktrees
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, EventLog, Project, RequirementEvidence, Run, Task
+from hub.db.models import (
+    Agent,
+    AIJob,
+    EventLog,
+    Loop,
+    Project,
+    RequirementEvidence,
+    Run,
+    Task,
+)
 from hub.spec_payload import SCHEMA_VERSION
 
 # Captured at import, before `conftest._no_real_worktree_provision` stubs the git-touching
@@ -530,3 +539,65 @@ async def test_approving_one_task_ships_none_of_another_tasks_work(
     assert not (tmp_path / "unrelated.py").exists()
     # And the other task's own work is untouched by someone else's approval.
     assert unreviewed in commits_on(tmp_path, worktrees.task_branch_name(other))
+
+
+@pytest.mark.asyncio
+async def test_the_merged_sha_is_the_tip_the_gate_saw(app, auth_headers, builder, tmp_path):
+    """4.5. The ordering above, now observable through the merged sha itself.
+
+    `test_release_happens_after_integration` had to spy on `release_task_worktree` because the
+    merged sha could not discriminate the order: `integration_targets` reads a database row, so it
+    answers the same under either ordering. `merge_targets` resolving an **evidence-free loop
+    task** from its branch tip is exactly the change that comment predicted, and it makes the two
+    orderings produce different commits — release snapshots the uncommitted change onto the task
+    branch, advancing the tip past what the gate conflict-tested.
+
+    So this asserts the sha, and it is a real assertion for the first time: merged is the tip as it
+    stood at approval, and the snapshot release then made is on the branch and not in `main`.
+    """
+    make_repo(tmp_path)
+    await set_main_branch("main")
+
+    task = await make_task(app, auth_headers)
+    async with async_session_factory() as session:
+        session.add(
+            AIJob(
+                id="job-tip",
+                project_id="proj-test",
+                name="the loop",
+                agent="builder",
+                message="work the queue",
+                cron="0 2 * * *",
+            )
+        )
+        session.add(
+            Loop(
+                id="loop-tip",
+                project_id="proj-test",
+                job_id="job-tip",
+                purpose="keep going",
+                stop_when_queue_empties=True,
+            )
+        )
+        row = await session.get(Task, task)
+        row.loop_id = "loop-tip"
+        await session.commit()
+
+    checkout = worktrees.ensure_task_worktree(tmp_path, task, "main")
+    tip = work_in(checkout, "feature.py", "print('hi')\n", "the task's work")
+    # Uncommitted, so release has something to snapshot. Without this the two orderings still
+    # produce the same sha and the test proves nothing.
+    (checkout / "feature.py").write_text("print('hi')\nprint('and this')\n", encoding="utf-8")
+
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+
+    latest = approved.json()["latest_integration"]
+    assert latest["outcome"] == "merged", latest
+    assert latest["commit_sha"] == tip, "release ran before the merge and advanced the tip past it"
+
+    # Release did happen, and its snapshot is on the branch rather than in the product.
+    branch = worktrees.task_branch_name(task)
+    branch_tip_now = git(tmp_path, "rev-parse", branch).stdout.strip()
+    assert branch_tip_now != tip, "release recorded no snapshot, so this proves nothing about order"
+    assert branch_tip_now not in commits_on(tmp_path, "main")

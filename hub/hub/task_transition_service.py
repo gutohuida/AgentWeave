@@ -770,12 +770,20 @@ async def integrate_task(session: AsyncSession, task: Task, actor: Actor) -> lis
             )
         )
 
-    targets = await task_integration.integration_targets(session, task)
+    targets = await task_integration.merge_targets(session, task, root)
     if not targets:
+        # Two reasons, not one. `NOTHING_TO_MERGE` is a statement about evidence and is only true
+        # where evidence governs this task's merge; for a task whose merge comes from its own
+        # branch, the honest answer is that it has no branch. Collapsing them would tell the
+        # operator to accept evidence that could never exist.
         return _record(
             task_integration.IntegrationResult(
                 outcome=task_integration.SKIPPED,
-                reason=task_integration.NOTHING_TO_MERGE,
+                reason=(
+                    task_integration.NOTHING_TO_MERGE
+                    if await task_integration.evidence_governs(session, task)
+                    else task_integration.NO_TASK_BRANCH
+                ),
                 target_branch=project.main_branch,
             )
         )

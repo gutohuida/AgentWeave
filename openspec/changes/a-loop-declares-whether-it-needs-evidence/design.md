@@ -672,11 +672,26 @@ call being changed. So the signature churn is one argument, and no caller moves.
 
 ```
 for prerequisite in prerequisites:
-    if prerequisite.status != dependency_gate.MET_STATUS:      # "approved" — dependency_gate.py:39
+    governed = await task_integration.evidence_governs(session, prerequisite)
+    if not governed and prerequisite.status != dependency_gate.MET_STATUS:   # "approved"
         continue
     for target in await task_integration.merge_targets(session, prerequisite, repo_root):
         ...
 ```
+
+**Corrected during implementation, and filed as F159.** This block said
+`if prerequisite.status != dependency_gate.MET_STATUS: continue`, unconditionally, and that is
+wrong — as the paragraph immediately below it accidentally proves, since its whole justification is
+about the branch-tip route. Applied to the **evidence** route the filter removes behaviour that
+exists today and is tested: `test_a_prerequisites_accepted_commits_are_in_the_task_checkout`
+constructs an `in_progress` prerequisite carrying accepted evidence and asserts its commit reaches
+the successor's checkout. That test failed the moment the unconditional form landed.
+
+It is the ordinary case rather than a fixture's artifice, and F158 is why: the branch is cut at
+**dispatch**, one edge before the gate fires, so at the single moment this function is consulted an
+unapproved prerequisite is common. The blanket check would therefore have breached
+`task-dependencies:335` in the opposite direction to the one this decision exists to close. Scoping
+it to the branch-tip route is exactly what the justification below argues for.
 
 **The `approved` restriction is load-bearing, not belt-and-braces.** `_prerequisite_commits`' own
 docstring justifies `integration_targets` by saying the alternative *"would carry work nobody

@@ -240,14 +240,18 @@ class _MergeSituation:
     read — it writes `project.directory_state` and `project.last_seen_at` — so asking twice per
     approval writes the same fields twice and runs the same two subprocess calls twice.
 
-    `accepted` is carried here because both checks need it and it is one query: the merge check
-    tests each accepted commit for conflicts, and the unaccepted check asks only whether the list is
-    empty.
+    `will_merge` is carried here because both checks need it and it is one resolution: the merge
+    check tests each commit for conflicts, and the unaccepted check asks only whether the list is
+    empty. It was called `accepted` while accepted evidence was the only thing that could ever
+    merge; `task_integration.merge_targets` answers the same question for a task on a loop that
+    declares its work needs no evidence, whose target is its own branch tip. The name states what
+    the list is *for* rather than where it came from, because the two checks only ever cared that
+    something would merge.
     """
 
     root: Path
     main_branch: str
-    accepted: List[Any]
+    will_merge: List[Any]
 
 
 async def _merge_situation(session: AsyncSession, task: Task) -> Optional["_MergeSituation"]:
@@ -274,7 +278,7 @@ async def _merge_situation(session: AsyncSession, task: Task) -> Optional["_Merg
     return _MergeSituation(
         root=root,
         main_branch=project.main_branch,
-        accepted=await task_integration.integration_targets(session, task),
+        will_merge=await task_integration.merge_targets(session, task, root),
     )
 
 
@@ -288,12 +292,12 @@ async def _check_mergeable(
     approved at `sketch` would record an approval that silently integrates nothing.
 
     Approval must never be blocked by the *absence* of an integration, only by one that would fail —
-    so a task with no accepted commit produces nothing here, and `_merge_situation` has already
+    so a task with nothing to merge produces nothing here, and `_merge_situation` has already
     returned `None` for every project where the question could not be asked.
     """
     from . import task_integration
 
-    for target in situation.accepted:
+    for target in situation.will_merge:
         paths = task_integration.would_conflict(
             situation.root, target.commit_sha, situation.main_branch
         )
@@ -348,7 +352,12 @@ async def _check_unaccepted(
         for target in awaiting
     ]
 
-    if situation.accepted:
+    # "Something else would merge", which is exactly the right reading for a branch-tip target as
+    # well as an accepted-evidence one — the mixed case is about whether approval still means
+    # something, not about where the commit came from. That is why no second rule is needed for the
+    # evidence-free route (design D8): a task whose merge its branch tip governs and which happens
+    # to carry awaiting evidence gets the advisory, not the refusal, because its work does land.
+    if situation.will_merge:
         refusal.advisory.extend(entries)
         return
     refusal.unaccepted.extend(entries)
