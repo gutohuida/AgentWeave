@@ -22,14 +22,14 @@ stopped producing either fails here rather than passing for the wrong reason.
 
 import pytest
 
-from hub import task_integration, worktrees
+from hub import run_liveness, task_integration, worktrees
 from hub.agent_auth import hash_run_token
-from hub.api.v1 import agent_trigger
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Run, Task
 
 from .test_loop_lands_its_work import loop_task, make_loop
 from .test_task_integration import (
+    TASKS,
     approve,
     commits_on,
     git,
@@ -40,7 +40,7 @@ from .test_task_integration import (
 
 
 class LiveTurn:
-    """Stands in for the `PtySession` a live turn holds in `_active_ptys`.
+    """Stands in for the `PtySession` a live turn holds in `run_liveness.active_ptys`.
 
     Only the two members the liveness question needs: `isalive()`, which `PtySession` answers from
     its own process handle (`pty_runner.py:287`), and `pid`, which the registry's other consumers
@@ -79,7 +79,7 @@ async def turn(request):
         )
         await session.commit()
 
-    request.addfinalizer(lambda: agent_trigger._active_ptys.pop("run-window", None))
+    request.addfinalizer(lambda: run_liveness.active_ptys.pop("run-window", None))
     return "run-window"
 
 
@@ -98,7 +98,7 @@ async def bind_run_to(run_id: str, task_id: str) -> None:
 def go_live(run_id: str) -> LiveTurn:
     """Register the handle a turn holds while its process is running."""
     session = LiveTurn()
-    agent_trigger._active_ptys[run_id] = session
+    run_liveness.active_ptys[run_id] = session
     return session
 
 
@@ -143,7 +143,7 @@ async def test_approving_inside_the_turn_strands_the_work(app, auth_headers, tur
         run = await session.get(Run, turn)
         assert run.task_id == task and run.status == "running"
     go_live(turn)
-    assert turn in agent_trigger._active_ptys
+    assert turn in run_liveness.active_ptys
 
     approved = await approve(app, auth_headers, task)
     assert approved.status_code == 200, approved.text
@@ -167,9 +167,163 @@ async def test_approving_inside_the_turn_strands_the_work(app, auth_headers, tur
     git(tmp_path, "checkout", "-q", "main")
 
     assert work != base
-    assert work not in commits_on(tmp_path, "main"), (
-        "the task reads approved and its work is not in the product — this is F162"
-    )
-    assert not task_integration.is_retryable(recorded[0]["outcome"], recorded[0]["reason"]), (
-        "and no retry can alter it: ALREADY_INTEGRATED describes a fact about the base commit"
-    )
+    assert work not in commits_on(
+        tmp_path, "main"
+    ), "the task reads approved and its work is not in the product — this is F162"
+    assert not task_integration.is_retryable(
+        recorded[0]["outcome"], recorded[0]["reason"]
+    ), "and no retry can alter it: ALREADY_INTEGRATED describes a fact about the base commit"
+
+
+# ---------------------------------------------------------------------------
+# 2.1 / 2.5 / 2.6 — the predicate itself
+#
+# Directly, not through the gate. The gate's use of it is group 3's subject; these are about the
+# one question `run_liveness` answers, and each of them is a sentence in the requirement.
+# ---------------------------------------------------------------------------
+
+
+async def plain_task(app, auth_headers, title="Some work"):
+    created = await app.post(TASKS, json={"title": title}, headers=auth_headers)
+    assert created.status_code == 201, created.text
+    return created.json()["id"]
+
+
+async def add_run(run_id, *, task_id=None, status="running", agent="builder"):
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id=run_id,
+                project_id="proj-test",
+                agent=agent,
+                status=status,
+                turn_depth=0,
+                task_id=task_id,
+                capability_token_hash=hash_run_token(f"aw_{run_id}-secret"),
+            )
+        )
+        await session.commit()
+
+
+async def live_turn(task_id, **kwargs):
+    async with async_session_factory() as session:
+        task = await session.get(Task, task_id)
+        return await run_liveness.live_turn_for_task(session, task, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_a_run_this_process_holds_a_handle_for_reads_live(app, auth_headers, turn):
+    """Task 2.1, arm 1. The registry is the answer, and it names the agent for the sentence."""
+    task = await plain_task(app, auth_headers)
+    await bind_run_to(turn, task)
+    go_live(turn)
+
+    found = await live_turn(task)
+    assert found is not None
+    assert found.run_id == turn
+    assert found.agent == "builder"
+
+
+@pytest.mark.asyncio
+async def test_a_run_recorded_running_with_no_handle_reads_not_live(app, auth_headers, turn):
+    """Task 2.1, arm 2 — and the whole reason the column is not the predicate.
+
+    `reconcile_interrupted_runs` runs only in `lifespan()` startup, so a crashed agent leaves
+    `Run.status == "running"` until the Hub restarts. Reading the column alone would wedge approval
+    on this task indefinitely, on one crash, with no way out but a restart.
+    """
+    task = await plain_task(app, auth_headers)
+    await bind_run_to(turn, task)
+
+    async with async_session_factory() as session:
+        assert (await session.get(Run, turn)).status == "running"
+    assert turn not in run_liveness.active_ptys
+
+    assert await live_turn(task) is None
+
+
+@pytest.mark.asyncio
+async def test_an_app_server_run_reads_live(app, auth_headers, request):
+    """Task 2.1, arm 3. Codex's transport registers membership and no session handle at all
+    (`agent_trigger.py:2411`), so a predicate that only consulted `active_ptys` would answer "not
+    live" for a Codex agent that is still working."""
+    task = await plain_task(app, auth_headers)
+    await add_run("run-appserver", task_id=task, agent="codexer")
+    run_liveness.active_app_server_runs.add("run-appserver")
+    request.addfinalizer(lambda: run_liveness.active_app_server_runs.discard("run-appserver"))
+
+    found = await live_turn(task)
+    assert found is not None and found.run_id == "run-appserver"
+    assert found.agent == "codexer"
+
+
+@pytest.mark.asyncio
+async def test_a_live_run_bound_to_another_task_is_not_this_tasks_turn(app, auth_headers, turn):
+    """Task 2.4's scoping. The predicate asks about *this* task, not about the Hub being busy."""
+    mine = await plain_task(app, auth_headers, title="Mine")
+    theirs = await plain_task(app, auth_headers, title="Theirs")
+    await bind_run_to(turn, theirs)
+    go_live(turn)
+
+    assert await live_turn(mine) is None
+    assert await live_turn(theirs) is not None
+
+
+@pytest.mark.asyncio
+async def test_a_turn_is_never_blocked_by_itself(app, auth_headers, turn, request):
+    """Task 2.5, design D10 — the exclusion, and the case that proves it is not too wide.
+
+    A reviewer approves the work it has just read from inside its own turn, and since migration
+    `0092` that turn is bound to the very task it is approving (`run_task_binding.py:170-189`,
+    `:427`). Without the exclusion the gate refuses every review the product staffs, with a remedy
+    the refused party cannot take — its only way out is for the turn to end, and it *is* the turn.
+
+    The second half is what keeps it a carve-out rather than a hole: a *different* live run bound
+    to the same task still answers, so excluding the actor does not disarm the predicate.
+    """
+    task = await plain_task(app, auth_headers)
+    await bind_run_to(turn, task)
+    go_live(turn)
+
+    assert await live_turn(task, acting_run_id=turn) is None
+
+    await add_run("run-second", task_id=task, agent="reviewer")
+    run_liveness.active_ptys["run-second"] = LiveTurn()
+    request.addfinalizer(lambda: run_liveness.active_ptys.pop("run-second", None))
+
+    other = await live_turn(task, acting_run_id=turn)
+    assert other is not None and other.run_id == "run-second"
+
+
+@pytest.mark.asyncio
+async def test_the_acting_run_exclusion_cannot_tell_a_working_turn_from_a_review(
+    app, auth_headers, turn
+):
+    """Task 2.6 — D10's residual, pinned rather than left in prose (round 3).
+
+    `_bind` writes `run.task_id = task.id` for a **working** turn exactly as for a review turn
+    (`run_task_binding.py:427`), so the `Run` row carries nothing that distinguishes them. The
+    exclusion is therefore unconditional on what the acting run is *for*, and an agent mid-turn on
+    a task whose `completed` the **operator** recorded — which
+    `_guard_author_is_not_reviewer` permits, since no completing agent is recorded
+    (`task_transition_service.py:304-305`) — can approve its own in-flight work from inside its own
+    turn. That is F162 reached through the carve-out built to protect reviewers.
+
+    Narrow, and not a reason to drop D10, whose absence breaks every flow review. Closing it costs
+    a join through `InboundQueueEntry.review_task_id`, which `Run` does not carry; the trade was
+    considered and declined for scope. This asserts the shape so a later change that makes the join
+    cheap knows exactly what it would be closing.
+    """
+    task = await plain_task(app, auth_headers)
+    await bind_run_to(turn, task)
+    go_live(turn)
+
+    async with async_session_factory() as session:
+        run = await session.get(Run, turn)
+        # Nothing on the row says "this is a review". That is the residual.
+        assert run.task_id == task
+        assert not hasattr(run, "review_task_id")
+
+    assert (
+        await live_turn(task, acting_run_id=turn) is None
+    ), "a working turn is excluded on the same terms as a review turn — the known residual"
