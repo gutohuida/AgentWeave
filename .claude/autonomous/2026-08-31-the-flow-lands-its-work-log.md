@@ -2386,3 +2386,12 @@ next honest unit of work — and **D21**, which decides whether F161 is a `commi
 change or a review-leg change.
 
 **The branch is offered, unchanged, at the tree iteration 16 described.** This run does not merge.
+
+**The heartbeat is deliberately not released, and this is the third and last time.** The driver's
+closing step backdates `last_heartbeat` so the next firing picks up *pending work* instead of
+standing down against this process's own heartbeat. There is no pending work, and `stop_at`
+(08:00) is nine minutes out — so a release buys at most one firing whose only correct act is the
+unconditional stand-down `next_action` now names, and after 08:00 every firing stands down on
+`stop_at` regardless of the heartbeat. It is stamped at this iteration's real time, 07:50+01:00.
+Iterations 17 and 18 made the same call for the same reason; this entry records it once more so a
+reader does not read the un-backdated heartbeat as an oversight.
