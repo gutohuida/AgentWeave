@@ -786,3 +786,120 @@ four (`AW_COMPLETE_BY=untouched`) is added, running the agent on a turn triggere
 **`C-R1`.** Change B is implemented and committed; change A is implemented and undriven. The queue's
 order puts C's three rounds before `DRIVE-1`, and `DRIVE-1` is the item that settles the judgement
 half of both A and B — string assertions do not.
+
+## Iteration 6 — 2026-08-31 01:24 to 01:3x (+01:00)
+
+Branch `autonomous/2026-08-31-the-flow-lands-its-work` at `e4e7646`, tree clean, `git log` matching
+STATE.json (iteration 5 done and released). Nothing to reconcile. Heartbeat claimed at 01:24.
+
+### One item: `C-R1`
+
+`approval-refuses-unaccepted-evidence` proposed — `proposal.md`, `design.md` (D1–D11), `tasks.md`
+(49 items in 8 groups), and a `task-lifecycle-governance` delta of two ADDED requirements and one
+MODIFIED. `openspec validate --strict` passes. The MODIFIED block was diffed against the live spec
+to confirm only the intended sentences moved.
+
+### The three pre-authorised defaults, checked against the code rather than adopted
+
+**D1 — where the refusal lives — survives.** Both escape conditions were tested rather than
+asserted. No cycle: `_check_mergeable` already imports `task_integration` locally, and
+`task_integration` already imports `requirement_evidence` at module level, so the new query adds
+*nothing* to `requirement_gate`'s imports. And `apply_transition` reaches every approval — verified
+by enumerating all nine call sites (`tasks.py:1309`, `run_task_binding.py` ×4, `scheduler.py` ×2,
+`agent_trigger.py:728`) and observing that **exactly one can pass `approved`**, and it is the one
+route both planes share (`agent_actions.py:275-289` delegates to `update_task_for_actor`).
+
+**D2 — what counts as "unaccepted" — is NARROWED, and this is round 1's finding.** The default said
+"evidence rows for this task in review_state 'awaiting'". Taken literally that refuses approval on an
+awaiting row whose footprint is `paths` or absent — evidence that could never have merged anything,
+because `integration_targets` requires `kind == "git"` and a non-null `commit_sha`. The refusal
+would be **unclearable**: accept it, and approval is refused again for the same reason, forever. And
+it lands on exactly the research, docs and decision tasks the operator's own scoping constraint
+exists to protect. Adopted predicate: awaiting **and naming a git commit** — refuse only where
+accepting would change what integration merges.
+
+**D3 — the mixed case — keeps ALLOW, but not for the reason given, and only conditionally.** The
+default's reason ("integration will merge it and approval keeps its meaning") is incomplete:
+`integration_targets` merges the newest *accepted* footprint per branch, so the newer unaccepted
+commit is genuinely left outside the product. What makes ALLOW right is the **second half of this
+change** — acceptance triggering integration makes the sequence converge. Stated as a coupling: were
+half 2 dropped, the mixed case would have to become a refusal. Rounds 2 and 3 should check the
+coupling rather than agree with the sentence.
+
+The queue said D3 was "the one most likely to be wrong". It is not wrong; its *argument* was. That
+is the failure mode round 3 exists for, arriving in round 1.
+
+### New in round 1, absent from every default: D4
+
+**The refusal must be silent wherever integration could not have been attempted anyway** — no main
+branch, no repository, no branch by that name. `integrate_task` skips at `NO_MAIN_BRANCH`
+(`task_transition_service.py:740-745`) before it ever asks for targets, so accepting the evidence in
+such a project merges nothing; refusing would block **every task in an unconfigured project** behind
+a remedy that changes nothing, and `task-lifecycle-governance` says in terms that *"a project that is
+not a repository SHALL be no less approvable than before this capability existed."* `_check_mergeable`
+already has exactly these four preconditions and already calls them "a reason to not know, never a
+reason to refuse". The new check shares them by construction, not by copying.
+
+### The half the refusal alone does not fix, and why it is in the same change
+
+Both decision routes (`spec.py:864-891`, `agent_actions.py:1164-1201`) call
+`requirement_evidence.decide`, commit, and return; `hub/hub/api/v1/spec.py` has zero references to
+integration. So the sentence the refusal asks the reader to act on — *accept the evidence* — merges
+nothing today. The product already solved this shape once, for a different cause:
+`_integrate_what_was_waiting_for_a_branch` (`projects.py:533-566`) under the requirement *Naming the
+main branch attempts the integrations that wanted one*. The delta adds the sibling, and `tasks.md`
+group 4 is written against that function as its template, carrying its two restrictions (most recent
+attempt; only that one reason) and adding two the sibling does not need (only on `accepted`; only
+where the accepted evidence names a commit, or the retry records a second identical skip).
+
+### Facts checked in the code, not carried from the exploration
+
+- `GRANT_FIELDS` (`agents.py:1750`) and the PATCH loop at `:2007` are the single writer of
+  `can_accept_evidence`, and a UI toggle exists (`AgentSettingsControls.tsx:448`). So D8's second
+  remedy — "grant an agent" — is **reachable**, which is what the corpus's *"point at the remedy that
+  works"* demands. The grant is ungranted by default, not ungrantable.
+- `main.py:406-415` serialises `refusal.to_dict()` for every `TransitionRefusedError`, and the UI
+  reads `message` off the structured detail (`ui/src/__tests__/taskIntegration.test.ts`). **No
+  component change is needed**, so no `npm run build` and `hub/hub/static/ui` must not move.
+- `approval_report` (`TaskResponse`) has **no UI consumer at all** — grepping `hub/ui/src` returns
+  nothing. So D3's advisory reaches the API and the agent but not the operator's screen; named as a
+  gap in design D3 and as `tasks.md` 8.3 rather than fixed here.
+- `GateRefusal.detail()` has an early return for the `unmergeable`-only case. A third category
+  appended carelessly is dropped from the sentence in precisely the case that matters most. Written
+  as tripwire D11 and as task 3.3.
+
+### Decisions recorded so they are not re-proposed
+
+Refusing per branch rather than globally (D3); refusing on rejected evidence (D2); auto-accepting a
+flow's own evidence; putting the trigger inside `requirement_evidence.decide` (it neither commits nor
+knows about tasks, and integration must run after the commit); splitting `NOTHING_TO_MERGE` here
+rather than in change D.
+
+### Consequence stated plainly, because it is the decision and not a defect
+
+In a default project the flow's review leg now **deadlocks**: the reviewer agent's approval is
+refused, and its remedy — accept the evidence — is refused too, because no agent has the grant. That
+is D-A verbatim. It also resolves the exploration's one genuine requirement-vs-requirement conflict
+in favour of `requirement-traceability`'s *"acceptance SHALL fall to the operator… a supported way to
+work, not a degraded one"* and against `loop-becomes-a-flow` design D11. D11 is an archived change's
+design note; grepping `agent-flows` and `agent-loops` found no shipped requirement claiming an
+unattended drain, so **no delta is owed to either spec**.
+
+### Verification
+
+- `openspec validate approval-refuses-unaccepted-evidence --strict` — valid.
+- The MODIFIED requirement diffed line-by-line against the live spec: only the enumeration's new
+  clause, its explanatory paragraph, and one added scenario.
+- Every `file:line` in the proposal and design was read in the code this iteration. Two citations
+  were wrong on first writing and were corrected (`agent_actions.py:315-319`,
+  `task_transition_service.py:740-745`).
+- No code changed, so no test run. That is `C-IMPL`'s.
+
+### Next
+
+**`C-R2`.** Round 2 re-derives C against the code independently. The two things round 1 most wants
+checked: the D3 coupling above (is half 2 really what licenses the mixed case, and does it converge
+in the multi-branch shape too?), and D6 — the link-based scope means awaiting evidence recorded by
+*another* task against a *shared* requirement refuses this task's approval. Round 1's position is
+that consistency with the merge beats a narrower refusal; round 2 should find out how common a
+shared `TaskRequirementLink` actually is before that is taken as settled.
