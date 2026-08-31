@@ -755,7 +755,7 @@ async def integrate_task(session: AsyncSession, task: Task, actor: Actor) -> lis
         return _record(
             task_integration.IntegrationResult(
                 outcome=task_integration.SKIPPED,
-                reason=f"the project's workspace is unavailable: {exc}",
+                reason=task_integration.WORKSPACE_UNAVAILABLE.format(error=exc),
                 target_branch=project.main_branch,
             )
         )

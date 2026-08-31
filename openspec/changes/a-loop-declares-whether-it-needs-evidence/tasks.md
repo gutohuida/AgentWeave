@@ -207,32 +207,32 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
 
 ## 6. Retryability
 
-- [ ] 6.1 In `hub/hub/task_integration.py`, beside the reason constants: the classification from
+- [x] 6.1 In `hub/hub/task_integration.py`, beside the reason constants: the classification from
   design D7 and `def is_retryable(outcome: str, reason: str) -> bool`. `FAILED` is retryable whatever
   its reason and is answered **on the outcome, before the reason is consulted** (it carries git's own
   stderr and can never be matched). An unclassified skip reason is **not** retryable — the default
   inverts deliberately.
-- [ ] 6.2 `CHECKOUT_ELSEWHERE` **and `ALREADY_INTEGRATED`** are format strings
+- [x] 6.2 `CHECKOUT_ELSEWHERE` **and `ALREADY_INTEGRATED`** are format strings
   (`task_integration.py:67-74`, applied at `:326` and `:334`); match each on its invariant stem, not
   by equality. Three of D7's nine rows are not fixed strings, and a dict keyed on the constants would
   drop exactly the dirty-checkout and failed-merge cases into "unclassified" — which under the
   inverted default means no button on the two most retryable outcomes there are. That is the defect
   being removed, reproduced one layer down.
-- [ ] 6.2a Add `SKIP_REASONS` to `hub/hub/task_integration.py` — an explicit tuple naming every
+- [x] 6.2a Add `SKIP_REASONS` to `hub/hub/task_integration.py` — an explicit tuple naming every
   reason a skip can carry — and a **totality test** asserting `is_retryable` answers for each member,
   with the two templates formatted first. A tenth reason added later without a classification then
   fails the suite instead of quietly losing its button. This is the guard that makes the inverted
   default safe; without it the default is just a slower way to lose a button.
-- [ ] 6.3 `_integration_view` (`hub/hub/api/v1/tasks.py:1090-1119`) adds `"retryable":
+- [x] 6.3 `_integration_view` (`hub/hub/api/v1/tasks.py:1090-1119`) adds `"retryable":
   task_integration.is_retryable(row.outcome, row.reason)` to each row. One shape, both routes, as its
   docstring says.
-- [ ] 6.4 `TaskIntegration` in `hub/ui/src/api/tasks.ts` gains `retryable: boolean`.
-- [ ] 6.5 `hub/ui/src/components/tasks/TaskIntegrationNote.tsx`: the button renders from
+- [x] 6.4 `TaskIntegration` in `hub/ui/src/api/tasks.ts` gains `retryable: boolean`.
+- [x] 6.5 `hub/ui/src/components/tasks/TaskIntegrationNote.tsx`: the button renders from
   `rows.some((row) => row.retryable)`; delete the `NO_MAIN_BRANCH` constant and the `wantsABranch`
   derivation. Keep the missing-main-branch case pointing at the setting — check whether that text
   exists anywhere on screen today, and if it does not, say so in the log rather than adding a sentence
   this change did not argue for.
-- [ ] 6.8 **The operator can make the declaration.** `hub/ui/src/components/jobs/JobForm.tsx` is the
+- [x] 6.8 **The operator can make the declaration.** `hub/ui/src/components/jobs/JobForm.tsx` is the
   only operator-facing surface that creates a loop (the loop toggle at :90-99, its fields at
   :300-330) and it must carry `work_needs_evidence` inside the same `loopEnabled` block, with one
   sentence saying what it decides — that approving this loop's tasks writes their work to the
@@ -240,30 +240,30 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
   round 2 and not optional:** without it the declaration is an agent-only control over the operator's
   own main branch, and the default becomes one the operator can neither see nor opt out of. The
   answered open question at the foot of `design.md` is the argument.
-- [ ] 6.9 Test in `hub/ui/src/__tests__/`: submitting the form with the loop toggle off sends no
+- [x] 6.9 Test in `hub/ui/src/__tests__/`: submitting the form with the loop toggle off sends no
   `work_needs_evidence`, and with it on sends what the control says — the same shape the existing
   `stop_when_queue_empties` assertions take, and for the same reason its comment at `JobForm.tsx:42`
   gives about a controlled field opting a job in by existing.
-- [ ] 6.6 `hub/ui/src/__tests__/taskIntegrationRetry.test.tsx`: 1.6's case now asserts **no** button,
+- [x] 6.6 `hub/ui/src/__tests__/taskIntegrationRetry.test.tsx`: 1.6's case now asserts **no** button,
   a retryable reason still renders one, and a row with `retryable` absent renders none.
-- [ ] 6.7 Python tests in `hub/tests/test_task_integration_retry.py`: the field is present and correct
+- [x] 6.7 Python tests in `hub/tests/test_task_integration_retry.py`: the field is present and correct
   on both the read route and the retry route, and — the one that matters — `POST
   /integrations/retry` still succeeds for a task whose last skip is unretryable (the requirement
   constrains what is offered, not what is permitted).
 
 ## 7. The tool surface
 
-- [ ] 7.1 `create_loop` in `hub/hub/mcp_server.py` gains `work_needs_evidence: Optional[bool] = None`
+- [x] 7.1 `create_loop` in `hub/hub/mcp_server.py` gains `work_needs_evidence: Optional[bool] = None`
   and passes it in the body dict. **Stdlib + fastmcp only**; nothing new is imported.
-- [ ] 7.2 Its docstring says what the declaration decides, in the operator's terms, and says the
+- [x] 7.2 Its docstring says what the declaration decides, in the operator's terms, and says the
   default. An agent creating a loop is the caller who most needs to know that approving its tasks will
   write to the project's main branch.
-- [ ] 7.3 `hub/hub/api/v1/agents.py:960-975` restates `create_loop`'s signature as prose in the
+- [x] 7.3 `hub/hub/api/v1/agents.py:960-975` restates `create_loop`'s signature as prose in the
   agent's tool inventory. Update it, or the agent reads a signature the Hub no longer has.
-- [ ] 7.4 `hub/tests/test_tool_surface_matches_server.py` and `hub/tests/test_mcp_tool_schemas.py`
+- [x] 7.4 `hub/tests/test_tool_surface_matches_server.py` and `hub/tests/test_mcp_tool_schemas.py`
   both exist and both compare these; run them, and if neither catches a stale inventory line, note
   that in the log as a finding rather than fixing it here.
-- [ ] 7.5 `create_flow` is **not** given the parameter. A flow has a document, so evidence always
+- [x] 7.5 `create_flow` is **not** given the parameter. A flow has a document, so evidence always
   governs it — which is true only because 4.3's default is kind-aware. **These two tasks are one
   decision and must not be done separately:** 7.5 without 4.3's `spec_document_id is not None` arm is
   what makes every flow evidence-free forever, since a flow's column can then never be anything but
@@ -271,13 +271,13 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
 
 ## 8. Verify
 
-- [ ] 8.1 `py -3.11 -m pytest hub/tests/test_loop_lands_its_work.py hub/tests/test_task_integration.py
+- [x] 8.1 `py -3.11 -m pytest hub/tests/test_loop_lands_its_work.py hub/tests/test_task_integration.py
   hub/tests/test_task_integration_retry.py hub/tests/test_jobs_crud.py hub/tests/test_migrations.py
   hub/tests/test_requirement_gate.py -q`.
-- [ ] 8.2 `cd hub/ui && npm run test` for the two UI test files, then `npm run lint`.
-- [ ] 8.3 `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`. Commit
+- [x] 8.2 `cd hub/ui && npm run test` for the two UI test files, then `npm run lint`.
+- [x] 8.3 `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`. Commit
   `hub/ui/src` and `hub/hub/static/ui` together.
-- [ ] 8.4 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`,
+- [x] 8.4 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`,
   `mypy src/`.
 - [ ] 8.5 **Drive it.** A fresh project, a loop created through `create_loop` with the declaration
   omitted, one task, one Haiku turn that writes a file, approval, and then

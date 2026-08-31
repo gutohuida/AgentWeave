@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from hub import task_integration
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Agent, Run
@@ -241,3 +242,108 @@ async def test_apply_transition_still_integrates_through_the_public_function(
     with patch("hub.task_transition_service.integrate_task", spy):
         assert (await approve(app, auth_headers, task)).status_code == 200
     spy.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# 6.2a / 6.7 — retryability is decided by the Hub, and it answers for every reason
+# ---------------------------------------------------------------------------
+
+
+def test_is_retryable_answers_for_every_skip_reason():
+    """The totality guard (design D7), and the reason the inverted default is safe.
+
+    An unclassified reason is **not** retryable, deliberately: the defect being fixed is a button
+    appearing on a reason nobody thought about. That default is only safe if adding a tenth reason
+    without classifying it is loud, which is what this asserts — every member of `SKIP_REASONS`,
+    with the templates formatted first, gets a definite answer.
+
+    It also pins the split. Three of the reasons are `.format()` templates, so a classifier keyed on
+    the constants would drop the dirty checkout — the single most retryable outcome there is — into
+    "unclassified", which is the defect reproduced one layer down.
+    """
+    filled = {
+        task_integration.CHECKOUT_ELSEWHERE.format(current="feature", target="main"),
+        task_integration.ALREADY_INTEGRATED.format(commit="abc123def456", target="main"),
+        task_integration.WORKSPACE_UNAVAILABLE.format(error="the directory is gone"),
+    }
+    reasons = {reason for reason in task_integration.SKIP_REASONS if "{" not in reason} | filled
+    assert len(reasons) == len(task_integration.SKIP_REASONS), "a template was left unformatted"
+
+    answers = {
+        reason: task_integration.is_retryable(task_integration.SKIPPED, reason)
+        for reason in reasons
+    }
+    assert all(isinstance(answer, bool) for answer in answers.values())
+
+    retryable = {reason for reason, answer in answers.items() if answer}
+    assert retryable == {
+        task_integration.CHECKOUT_DIRTY,
+        task_integration.CHECKOUT_ELSEWHERE.format(current="feature", target="main"),
+        task_integration.WORKSPACE_UNAVAILABLE.format(error="the directory is gone"),
+    }, answers
+
+
+def test_a_failed_merge_is_retryable_whatever_it_says():
+    """Answered on the outcome, before the reason is consulted.
+
+    A `failed` row carries git's own stderr, truncated — it can never be matched, so classifying it
+    by reason would lose the button on the outcome that most deserves one. The merge was tested
+    clean at approval, so a failure means the world moved, and it can move back.
+    """
+    assert task_integration.is_retryable(task_integration.FAILED, "CONFLICT (add/add): x.py")
+    assert task_integration.is_retryable(task_integration.FAILED, "")
+    # And a merge is never retryable: there is nothing to repeat.
+    assert not task_integration.is_retryable(task_integration.MERGED, "")
+
+
+@pytest.mark.asyncio
+async def test_the_read_and_retry_routes_both_carry_retryable(app, auth_headers, builder, tmp_path):
+    """6.7: one shape, both routes — which is what `_integration_view`'s docstring promises."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    # Deliberately no main branch: an unretryable skip, and the one the UI used to special-case by
+    # matching its sentence.
+    commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
+    await accept_evidence(app, auth_headers, builder)
+    git(tmp_path, "checkout", "-q", "main")
+
+    task = await linked_task(app, auth_headers)
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+
+    read = await app.get(f"{TASKS}/{task}/integrations", headers=auth_headers)
+    assert read.status_code == 200, read.text
+    assert [row["retryable"] for row in read.json()["integrations"]] == [False]
+
+    # 6.7's other half, and the one that matters: the requirement constrains what is *offered*, not
+    # what is permitted. Narrowing the route would breach the shipped sentence saying retrying is
+    # available to the operator and to agents for any approved task.
+    retried = await app.post(f"{TASKS}/{task}/integrations/retry", headers=auth_headers)
+    assert retried.status_code == 200, retried.text
+    rows = retried.json()["integrations"]
+    assert len(rows) == 2
+    assert [row["retryable"] for row in rows] == [False, False]
+
+
+@pytest.mark.asyncio
+async def test_a_dirty_checkout_skip_is_offered_a_retry(app, auth_headers, builder, tmp_path):
+    """The positive case, through the route rather than the predicate — a skip whose sentence names
+    a remediation must carry the flag that puts the button on screen."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "x\n")
+    await accept_evidence(app, auth_headers, builder)
+    git(tmp_path, "checkout", "-q", "main")
+    (tmp_path / "README.md").write_text("the operator is mid-edit\n", encoding="utf-8")
+
+    task = await linked_task(app, auth_headers)
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+
+    read = await app.get(f"{TASKS}/{task}/integrations", headers=auth_headers)
+    rows = read.json()["integrations"]
+    assert [row["outcome"] for row in rows] == ["skipped"]
+    assert rows[0]["reason"] == task_integration.CHECKOUT_DIRTY
+    assert rows[0]["retryable"] is True

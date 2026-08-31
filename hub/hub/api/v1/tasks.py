@@ -1132,6 +1132,10 @@ async def _integration_view(session: AsyncSession, task_id: str) -> dict:
                 "target_branch": row.target_branch,
                 "outcome": row.outcome,
                 "reason": row.reason,
+                # Classified here rather than by matching the sentence in the browser (design D7).
+                # One shape, both routes, as this docstring says — and the UI's own copy of one
+                # reason constant is what this replaces.
+                "retryable": task_integration.is_retryable(row.outcome, row.reason),
                 "rode_along_commits": (
                     row.rode_along_commits.split(",") if row.rode_along_commits else []
                 ),

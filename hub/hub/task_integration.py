@@ -79,6 +79,58 @@ ALREADY_INTEGRATED = "{commit} is already in {target}; there was nothing to merg
 # and a branch deleted by hand. Deliberately does not fall back to the agent branch — that branch
 # carries every task the agent ever worked on, which is the one thing this module refuses to merge.
 NO_TASK_BRANCH = "this task has no branch of its own, so there is nothing to merge"
+# Built where the failure happens (`task_transition_service.integrate_task`), stated here so it is
+# one of the reasons `SKIP_REASONS` enumerates rather than a sentence only the classifier's absence
+# would notice.
+WORKSPACE_UNAVAILABLE = "the project's workspace is unavailable: {error}"
+
+#: Every reason a `SKIPPED` row can carry, as templates. The point is totality, not lookup: a test
+#: asserts `is_retryable` answers for each member, so a tenth reason added later without a
+#: classification fails the suite instead of quietly losing — or gaining — a button.
+SKIP_REASONS = (
+    NO_MAIN_BRANCH,
+    NOT_A_REPOSITORY,
+    NOTHING_TO_MERGE,
+    NO_TASK_BRANCH,
+    CHECKOUT_DIRTY,
+    CHECKOUT_ELSEWHERE,
+    ALREADY_INTEGRATED,
+    WORKSPACE_UNAVAILABLE,
+)
+
+#: The stems of the skip reasons a retry can clear, matched rather than compared (design D7). Three
+#: of the reasons above are `.format()` templates, so a dict keyed on the constants would classify
+#: six and drop the rest into "unclassified" — which under the inverted default below means no
+#: button on a dirty checkout, the single most retryable outcome there is.
+_RETRYABLE_STEMS = (
+    "the project's checkout has uncommitted changes",
+    "the project's checkout is on ",
+    "the project's workspace is unavailable",
+)
+
+
+def is_retryable(outcome: str, reason: str) -> bool:
+    """Would pressing "Try again" have any chance of a different answer (design D7)?
+
+    **The default inverts.** Today an unrecognised reason gets a button; here it gets none. The
+    failure being fixed is precisely a button appearing on a reason nobody thought about, so a skip
+    whose reason is not classified is not retryable until somebody decides it is. `SKIP_REASONS`'
+    totality test is what makes that safe rather than merely stricter.
+
+    `FAILED` is answered **on the outcome, before the reason is consulted at all**: a failed row
+    carries git's own stderr and can never be matched. It is retryable whatever it says — the merge
+    was tested clean at approval, so reaching a failure means the world moved, and it can move back.
+
+    The four unretryable skips are not oversights. `NO_MAIN_BRANCH` is re-attempted by saving the
+    setting, and a button here would race it; `NOT_A_REPOSITORY` is nothing this screen can change;
+    `NOTHING_TO_MERGE` means no commit was ever recorded, and accepting evidence re-attempts by
+    itself; `NO_TASK_BRANCH` and `ALREADY_INTEGRATED` describe facts a repeat cannot alter.
+    """
+    if outcome == FAILED:
+        return True
+    if outcome != SKIPPED:
+        return False
+    return any(stem in reason for stem in _RETRYABLE_STEMS)
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:

@@ -183,6 +183,7 @@ class AgentJobCreate(RequestModel):
     purpose: Optional[str] = Field(default=None, max_length=4000)
     stop_at: Optional[datetime] = None
     stop_when_queue_empties: bool = False
+    work_needs_evidence: Optional[bool] = None
     spec_document_id: Optional[str] = Field(default=None, max_length=64)
     initial_tasks: Optional[List[Dict[str, Any]]] = None
 

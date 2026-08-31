@@ -131,6 +131,11 @@ export interface TaskIntegration {
   actor_kind: string
   actor: string
   created_at: string
+  /** Whether pressing "Try again" could produce a different answer. Decided by the Hub, which owns
+   *  the reasons — the UI used to infer it by matching one reason's sentence, which offered a
+   *  button on every reason nobody had thought about. Optional so a response from an older Hub
+   *  renders no button rather than a button that cannot help. */
+  retryable?: boolean
 }
 
 export function useTaskIntegrations(taskId: string, enabled: boolean) {

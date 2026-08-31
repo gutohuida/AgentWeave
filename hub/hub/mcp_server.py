@@ -626,6 +626,7 @@ def create_loop(
     purpose: str = "",
     stop_at: Optional[str] = None,
     stop_when_queue_empties: bool = False,
+    work_needs_evidence: Optional[bool] = None,
     spec_document_id: Optional[str] = None,
     initial_tasks: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
@@ -648,6 +649,12 @@ def create_loop(
         stop_at: ISO-8601 timestamp after which the loop stops firing. At least one of
             stop_at or stop_when_queue_empties is required.
         stop_when_queue_empties: Stop once this loop's queue has no open task left.
+        work_needs_evidence: Whether this loop's work must be demonstrated by evidence a reviewer
+            accepted before approving a task writes it to the project's main branch. Leave it unset
+            for the product's current default, which for a loop with no document is False: approving
+            one of its tasks merges that task's own branch into the main branch. Set it True where
+            the work should reach the main branch only once somebody has accepted evidence for it.
+            Declared here and fixed for the loop's life — it cannot be changed afterwards.
         spec_document_id: Not accepted here — declaring a document makes this a flow. Kept in
             the signature so the refusal can name create_flow rather than the call failing as an
             unexpected argument, which tells the caller nothing about what to do instead.
@@ -683,6 +690,7 @@ def create_loop(
             "purpose": purpose,
             "stop_at": stop_at,
             "stop_when_queue_empties": stop_when_queue_empties,
+            "work_needs_evidence": work_needs_evidence,
             "spec_document_id": spec_document_id,
             "initial_tasks": initial_tasks,
         },
@@ -699,6 +707,7 @@ def create_flow(
     purpose: str = "",
     stop_at: Optional[str] = None,
     stop_when_queue_empties: bool = False,
+    work_needs_evidence: Optional[bool] = None,
     initial_tasks: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Create a flow: a loop that decomposes an approved specification document.
@@ -729,6 +738,11 @@ def create_flow(
         stop_at: ISO-8601 timestamp after which the flow stops firing. At least one of
             stop_at or stop_when_queue_empties is required.
         stop_when_queue_empties: Stop once this flow's queue has no open task left.
+        work_needs_evidence: Not accepted here — a flow decomposes a document, so its requirements
+            are the evidence chain and accepted evidence always decides what approval merges. Kept
+            in the signature so the refusal can say that, rather than the call failing as an
+            unexpected argument, which tells the caller nothing about what to do instead. Same
+            reasoning as spec_document_id on create_loop.
         initial_tasks: Tasks to seed the queue with, created in this same call. Each entry is
             a dict with "title" required and the same optional fields create_task accepts:
             description, assignee, priority, requirements, requirement_ids, spec_document,
@@ -753,6 +767,15 @@ def create_flow(
             "POST",
             "/jobs",
         )
+    if work_needs_evidence is not None:
+        raise HubAPIError(
+            400,
+            "a flow's work is always governed by evidence: its document's requirements are the "
+            "chain, and approving one of its tasks merges the commit a reviewer accepted. Only a "
+            "loop with no document declares this; call create_loop if that is what you want",
+            "POST",
+            "/jobs",
+        )
     # Byte-identical to `create_loop`'s body but for the document, and deliberately so: design D1
     # says a flow is a configuration rather than a record, so there is one route and one row. If
     # these two payloads ever diverge, a `Flow` table has grown in all but name.
@@ -767,6 +790,7 @@ def create_flow(
             "purpose": purpose,
             "stop_at": stop_at,
             "stop_when_queue_empties": stop_when_queue_empties,
+            "work_needs_evidence": work_needs_evidence,
             "spec_document_id": spec_document_id,
             "initial_tasks": initial_tasks,
         },

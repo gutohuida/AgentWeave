@@ -11731,3 +11731,39 @@ This defect is what that rule looks like when it is applied only to the code the
 every citation in D12 was accurate, the mechanism it described was real, and the scope it applied
 that mechanism at was wrong by one predicate. A round that had asked *"which existing test does this
 line change the answer for?"* would have found it in one grep.
+
+
+## F160 (C) — the tool-surface parity tests cannot see an *optional* argument the inventory omits
+
+Found by running the two guards task 7.4 names, having deliberately added an optional argument to a
+tool: `hub/tests/test_tool_surface_matches_server.py` and `hub/tests/test_mcp_tool_schemas.py`.
+Neither would have caught a stale inventory line, and the gap is exactly one word wide.
+
+The file asserts three things about `_tool_surface_lines()`' hand-written `name(args)` prose:
+
+- every served tool is described or deliberately excluded, and nothing described is unserved;
+- `test_no_described_argument_is_one_the_tool_does_not_take` — every argument the prose names is in
+  the tool's schema;
+- `test_every_required_argument_is_described` — every **required** argument is named by the prose.
+
+So the two directions are asymmetric. A described argument the tool does not accept fails; a
+*required* argument the prose omits fails; an **optional** argument the tool accepts and the prose
+omits passes silently. `work_needs_evidence` is optional on `create_loop`, so the inventory could
+have gone on describing the old signature indefinitely with the suite green.
+
+The file's own docstring is the argument for closing it: *"An enumeration an agent believes is worse
+than no enumeration when it is wrong"*, written after a Codex agent stopped a completed interview
+because a tool it was told to call was absent from the described surface. An omitted optional
+argument does not cost the call; it costs the agent a capability it never learns it has. Here that
+capability is *declaring what approving this loop's tasks does to the operator's main branch* — the
+one an agent creating a loop most needs.
+
+**Not fixed here**, per task 7.4's instruction to note it rather than repair it inside another
+change. The repair is small and obvious — a fourth test asserting
+`set(schema["properties"]) - set(described_args)` is empty, with an explicit allow-list for
+arguments deliberately left undescribed — but it will make several existing inventory lines fail at
+once, and triaging those is its own piece of work with its own rounds.
+
+The inventory lines for `create_loop` and `create_flow` were updated by hand in this change (task
+7.3), so nothing is stale today. That is the point: it was correct by attention, and attention is
+what this repository's guards exist to stop relying on.

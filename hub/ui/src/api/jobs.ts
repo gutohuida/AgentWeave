@@ -50,6 +50,10 @@ export interface LoopSummary {
   purpose: string
   stop_at?: string
   stop_when_queue_empties: boolean
+  /** What approving this loop's tasks does to the project's main branch. `null`/absent means the
+   *  product's current default, returned as-is rather than resolved — the same convention
+   *  `control` uses. */
+  work_needs_evidence?: boolean | null
   stop_reason?: string
   stopped_at?: string
   /** What happened ("completed"/"stopped"), null while still running (design D17). */
@@ -131,6 +135,12 @@ export interface JobCreate {
   purpose?: string
   stop_at?: string
   stop_when_queue_empties?: boolean
+  /** Whether this loop's approved work must be demonstrated by accepted evidence before approval
+   *  writes it to the project's main branch. Declared at creation and refused on edit, so it is on
+   *  `JobCreate` and deliberately not on `JobUpdate`. Omitted means "the product's current
+   *  default" — it does **not** opt a job into being a loop, and the Hub refuses it on a job that
+   *  is not becoming one. */
+  work_needs_evidence?: boolean
 }
 
 export interface JobUpdate {
