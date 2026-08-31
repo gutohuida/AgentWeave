@@ -12404,3 +12404,72 @@ AW_HUB=http://127.0.0.1:8011 py -3.11 -u t_f156_preview_promises_the_merge.py
 
 Fresh project every run, never an existing one. The harness leaves the project and the temporary
 repository in place for inspection and prints both paths.
+
+## F167's bound is now measured — the recovery DOES fire when one edge names an agent
+
+Driven 2026-08-31 (iteration 13), against the trial Hub on 8011 running this branch. New harness:
+`scripts/drive/t_f167_agent_walked_edge.py`. **13/13 checks**, reproduced twice, two Haiku spawns
+and no Haiku thinking.
+
+F167 was filed with a bound stated in the finding itself: *"every edge in LANE 5 was walked by the
+operator … a history containing an agent-walked edge is not measured here, and F70's recovery may
+well fire for it."* This harness measures exactly that and nothing else.
+
+**How an agent-named edge is obtained without spending a turn.** `bind_run_to_task`
+(`run_task_binding.py:427-440`) sets `run.task_id` and then takes `-> in_progress` through
+`apply_transition` with `run_actor(run.id, run.agent)` and `origin='runtime'` — at **bind time, at
+spawn**, before the model has said a word. So LANE 1 presses Run once, watches the task reach
+`in_progress` with `alpha` on it having sent no PATCH, and stops the turn. That one edge is the only
+difference between the two lanes.
+
+### The contrast, both firings minutes apart in one project against one build
+
+| history | firing | what it says |
+|---|---|---|
+| **agent-walked** (`-> in_progress` by the runtime, `completed`/`under_review` by the operator) | 409 | *"task task-e8c0dbf50eb2 has no recorded evidence, so there is no commit to review. Evidence naming a commit is what a review turn is given. Until the work that finished this task is recorded as evidence naming a commit, no reviewer can be given anything to look at."* |
+| **all-operator** (every edge PATCHed by hand) | 409 | *"Every task on this loop's queue is already being worked. Nothing was started, and nothing is wrong — the next firing picks up whatever finishes."* |
+
+**So F167 is precisely scoped, and stays severity B.** `wedged_review` fires when the history names
+the author: the task is carried past the `in_flight` arm to the ladder, the review is attempted, and
+the refusal that comes back **names the task and states what would clear it**. That is the F155
+vocabulary doing its job one route over. The all-operator row is the one that gets *"nothing is
+wrong"* about a task nobody is working.
+
+The consequence for a F154 repair is now a measured fact rather than a worry: leaning on
+`wedged_review` is sound for a history with any agent-walked edge and **unsound for the
+all-operator history**, which is the one an operator reaches through the only route the lifecycle
+offers them. A repair must not treat the predicate as covering both.
+
+LANE 5 adds one thing the all-operator case does not have: the agent-walked task is absent from
+`current_tasks` (`[]`) but the job summary's `stall_reason` carries the evidence sentence verbatim.
+So for this history an operator surface *does* name the problem — the opposite of F154's LANE 3,
+where not one surface did.
+
+### F168 (B, new) — there is no way to list a project's runs, and no way to cancel one
+
+Found by a red check that was written to pass. LANE 1 asserted *"a run is bound to the task"* and
+came back with an empty list; the cause was not the product's binding but the route:
+`GET /projects/{p}/runs` **does not exist**, and neither does `POST /projects/{p}/runs/{id}/cancel`.
+Confirmed against `openapi.json` — the only run-shaped paths the Hub publishes are
+`/projects/{p}/jobs/{job_id}/run` and the runners CRUD. The whole operator surface for a live run is
+the roster's `status` field and `POST /projects/{p}/agent/{agent}/stop`, which is per-**agent**: an
+operator cannot enumerate what is running, and cannot stop one run without stopping whatever that
+agent is doing.
+
+`t_review_by_hand.py:14` already recorded that `GET /projects/{id}/runs/{run_id}` does not exist.
+This is the same absence one level up, and it has a second cost that is worth stating on its own:
+
+**three drive harnesses have been asserting liveness against a 404.** `t_f154_wedged_review.py`'s
+`live_runs()` parses `(body or {}).get("runs") or []` out of the 404's `{"detail": "Not Found"}`, so
+its *"no run is live on this project"* checks (`:276`, `:298`) passed **vacuously**, and its two
+cancel loops (`:356`, `:400`) stopped nothing. F154's finding does not depend on those checks — its
+wedge is built by hand and no turn is ever started for the lanes that matter — but the checks
+themselves proved nothing and should not be read as if they did. This is the same shape as F156's
+`/integration` vs `/integrations`: a missing route read as an honest empty answer. `t_f167_agent_
+walked_edge.py` uses the real surface and asserts against the roster.
+
+### Reproducing it
+
+```
+AW_HUB=http://127.0.0.1:8011 py -3.11 -u scripts/drive/t_f167_agent_walked_edge.py
+```

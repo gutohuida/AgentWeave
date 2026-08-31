@@ -1558,3 +1558,78 @@ severity A. A firing that arrives after 15:30 has a third drivable target left, 
 LANE 5 of the F154 harness measured only histories walked **entirely** by the operator, so whether
 F70's recovery sees an author with an **agent-walked** edge is unmeasured, and that needs one real
 Haiku turn to find out.
+
+## Iteration 13 — 2026-08-31 16:04 → 16:12 — past 15:30, so a third drive: F167's stated bound, measured
+
+**Position on arrival.** Branch `autonomous/2026-08-31-the-turn-must-end-first` at `4e5b535`, tree
+clean, `git log` matching STATE.json exactly. Every queue item `done`. 16:04 on arrival, so the
+15:30 rule decided the shape before anything else did: no spec round, no implementation group, a
+drive. `next_action` named the one drivable target left — F167's stated bound.
+
+**The Hub was checked before it was trusted.** 8011 has been up since 15:01:38 and iteration 10's
+product changes landed at 15:15, so the obvious worry was a stale server. Measured rather than
+assumed: no `.py` under `hub/hub` or `src` has an mtime later than the uvicorn start, so 8011 serves
+this branch. (Iteration 10's edits were committed before 15:01 and only the log/state moved after.)
+
+**What was measured.** F167 was filed with its own bound written into it: every edge in
+`t_f154_wedged_review.py`'s LANE 5 was walked by the operator, so a history containing an
+*agent-walked* edge was unmeasured, and F70's recovery might well fire for it. New harness
+`scripts/drive/t_f167_agent_walked_edge.py`, **13/13, reproduced twice.**
+
+The cheap trick that made it a drive rather than a model-time sink: `bind_run_to_task`
+(`run_task_binding.py:427-440`) takes `-> in_progress` with `run_actor(run.id, run.agent)` at
+**bind** time, so the agent-named transition exists at spawn, before the model has said a word.
+Press Run, watch the task reach `in_progress` with `alpha` on it having sent no PATCH, stop the
+turn. One edge differs between the two lanes; everything else is identical and both firings happen
+in one project against one build, minutes apart.
+
+**The answer, and it is the good one.** The recovery DOES fire when the history names the author:
+
+```
+agent-walked  409  "task ... has no recorded evidence, so there is no commit to review. ...
+                    Until the work that finished this task is recorded as evidence naming a
+                    commit, no reviewer can be given anything to look at."
+all-operator  409  "Every task on this loop's queue is already being worked. Nothing was
+                    started, and nothing is wrong — the next firing picks up whatever finishes."
+```
+
+So `wedged_review` carries the agent-walked row past the `in_flight` arm to the ladder, the review
+is attempted, and the refusal **names the task and states what would clear it** — the F155
+vocabulary working one route over. F167 stays severity B and is now precisely scoped: a F154 repair
+may lean on `wedged_review` for any history with an agent-walked edge and **must not** for the
+all-operator history, which is the one an operator reaches through the only route the lifecycle
+offers them. That was the open worry in F167's own text and it is now settled by measurement.
+
+LANE 5 found the one asymmetry worth recording: the agent-walked task is absent from `current_tasks`
+(`[]`) but the job summary's `stall_reason` carries the evidence sentence verbatim — so for this
+history an operator surface *does* name the problem, the opposite of F154's LANE 3 where not one did.
+
+**F168 (B, new), and it came from a check written to pass.** LANE 1 asserted *"a run is bound to the
+task"*, came back red with `[]`, and the failure was read rather than patched out — for the third
+iteration running that has been worth more than the pass. `GET /projects/{p}/runs` **does not
+exist**, and neither does `POST /projects/{p}/runs/{id}/cancel`; confirmed against `openapi.json`,
+whose only run-shaped paths are `/jobs/{job_id}/run` and the runners CRUD. The whole operator
+surface for a live run is the roster's `status` and `POST /projects/{p}/agent/{agent}/stop`, which
+is per-**agent**: nothing enumerates what is running and nothing stops one run.
+
+The second cost is the one worth stating loudly: **`t_f154_wedged_review.py` has been asserting
+liveness against a 404.** Its `live_runs()` parses `(body or {}).get("runs") or []` out of
+`{"detail": "Not Found"}`, so *"no run is live on this project"* (`:276`, `:298`) passed **vacuously**
+and both cancel loops (`:356`, `:400`) stopped nothing. F154's finding does not depend on them — its
+wedge is built by hand and starts no turn — but those particular checks proved nothing and this log
+says so rather than leaving them to be read as evidence. Same shape as F156's `/integration` vs
+`/integrations`. This harness uses the real surface.
+
+**Cost.** Two Haiku spawns, each stopped as soon as the edge it existed for was recorded; the
+prompt was "Reply with the single word: ok" and both turns had ended on their own by teardown (no
+stray `claude` processes). Two fresh temporary projects (`proj-2e76faa131aa`, `proj-7ddc22215adf`),
+neither forbidden, every job disabled.
+
+**Not done, deliberately.** No product code was touched, so iteration 10's suite numbers stand and
+nothing was re-run. `t_f154_wedged_review.py` was **not** repaired: it is committed evidence of a
+past drive, its finding is unaffected, and rewriting a harness after the fact to make its checks
+mean something they did not mean at the time is worse than recording what they actually proved.
+F168 carries that repair if anyone wants it.
+
+**State on exit.** Tree clean, branch pushed, not merged. Everything in the queue remains `done`;
+the next firing chooses again. It arrives with real time on the clock — this one finished at 16:12, well inside the 16:30 limit, so the next firing can still take a spec round if it lands before 15:30 on a later day, or another drive today.
