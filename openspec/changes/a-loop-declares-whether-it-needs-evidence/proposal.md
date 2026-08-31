@@ -78,11 +78,19 @@ it without fixing the button would put a second unclearable "Try again" on scree
 
 ### 1. A loop declares whether its work needs evidence
 
-`Loop` gains one nullable Boolean column, `work_needs_evidence`, and `create_loop` gains the
-matching optional parameter. Nullable, with **NULL meaning "the product's current default"** rather
+`Loop` gains one nullable Boolean column, `work_needs_evidence`; `create_loop`, `POST /jobs` and the
+operator's own job form all gain the matching optional control. Nullable, with **NULL meaning "the product's current default"** rather
 than a stored copy of today's answer — the identical reasoning `Loop.control` already states
 (`models.py:1405-1412`): *"a row storing today's default would keep saying it after the default
 moved."*
+
+**Evidence always governs a flow**, and the default says so. `Loop` is the row for a flow as well
+as a loop — `spec_document_id` is the only thing that separates them — so "the product's current
+default" has to be *evidence governs a flow, and does not govern a documentless loop*. A flat default
+of "no evidence needed" would resolve that way for every flow too, and every flow task would merge
+its branch tip instead of the commit its accepted evidence names, retiring both F58's protection and
+`approval-refuses-unaccepted-evidence` in the process. Round 2 found that; design D10 has the
+derivation. The operator's declaration, where one was made, still wins over the default.
 
 The declaration is made **at creation and never edited**. That is D-B's own word — *declares at
 creation* — and it is also the honest engineering answer: the loop's answer decides what approval
@@ -167,7 +175,10 @@ merge, no branch for the task, and already integrated.
   `hub/hub/api/v1/jobs.py`, `hub/hub/task_integration.py`, `hub/hub/task_transition_service.py`,
   `hub/hub/requirement_gate.py`, `hub/hub/api/v1/tasks.py`, `hub/hub/mcp_server.py`,
   `hub/hub/api/v1/agents.py` (the tool-inventory sentence for `create_loop`),
-  `hub/ui/src/api/tasks.ts`, `hub/ui/src/components/tasks/TaskIntegrationNote.tsx`.
+  `hub/ui/src/api/tasks.ts`, `hub/ui/src/components/tasks/TaskIntegrationNote.tsx`,
+  `hub/ui/src/api/jobs.ts` and `hub/ui/src/components/jobs/JobForm.tsx` — the operator's own
+  loop-creation form, added in round 2 because without it the declaration is an agent-only control
+  over what the operator's main branch receives.
 - A UI change, so the bundle is rebuilt and `hub/hub/static/ui` is committed with `hub/ui/src`.
 - **Behaviour change an operator will notice, and it is the whole point:** in a project with a
   configured main branch, approving a loop task now merges that task's branch into it. Before this
@@ -175,3 +186,8 @@ merge, no branch for the task, and already integrated.
   commits on its branch — `snapshot_worktree` commits whatever the turn left dirty — so "this loop
   produces no code" is not a reason it will not merge. An operator who does not want that says so at
   creation, and D4 chose which way round the default points.
+- **A task can be attached to an evidence-free loop after it exists.** `TaskCreate.loop_id` is
+  caller-supplied and agent-reachable, and `TaskUpdate.loop_id` is write-once rather than immutable,
+  so what approval writes for a given task is not fixed when the task is created. Approval remains
+  gated and conflict-tested, so this widens what can be *offered*, not what lands unasked. Named
+  rather than closed (design D10); narrowing `loop_id` is a change of its own.

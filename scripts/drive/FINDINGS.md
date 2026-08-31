@@ -11631,3 +11631,48 @@ dropping another leaves an asymmetry somebody should decide about on purpose rat
 
 Not fixed here. Extending the refusal to `spec_document_id` on create is a behaviour change on a
 shipped route, which is the operator's call and not a round-1 side effect.
+
+---
+
+## F158 (B) — a task branch cut before its prerequisite was approved never gets that prerequisite's work
+
+Found in `D-R2` by reading the chain design D5 leans on, rather than by driving. It is **not** about
+`a-loop-declares-whether-it-needs-evidence`; it is about the shipped per-task isolation, and the
+evidence route has it today.
+
+`ensure_task_worktree` merges a task's prerequisite commits **only when it creates the branch**, and
+says so (`worktrees.py:447-449`); the `branch_exists` arm at `:481-487` re-attaches a worktree to an
+existing branch and merges nothing, deliberately, because the unwind that makes the merge safe is
+only safe while the branch is seconds old.
+
+The branch is created at **dispatch**. `agent_trigger` calls `resolve_turn_workspace_inputs` and then
+`resolve_turn_workspace` (`agent_trigger.py:837-880`), and dispatch enters a task at
+`pending -> assigned` (`scheduler.enter_selected_task`). The dependency gate fires one edge later, on
+`-> in_progress` (`dependency_gate`'s own docstring, enforced at `task_transition_service.py:540`).
+So the checkout exists before the gate has been asked anything.
+
+The scheduler closes that on its own path — `candidate_is_startable` (`scheduler.py:671-677`) refuses
+to *select* a task whose prerequisites are unmet — but **`agent_trigger` consults no dependency gate
+at all** (grepped: the module has no `dependency_gate` call site). Two reachable shapes, therefore:
+
+1. an operator triggers an agent on a task whose prerequisite is not yet approved. The turn is
+   refused at `-> in_progress`, correctly — but the branch has already been cut from the main branch
+   without the prerequisite's commits, and no later turn will add them;
+2. `POST /tasks/{id}/dependencies` (`tasks.py:1487-1524`) adds a prerequisite to a task that has
+   already been worked. Its branch exists; nothing back-fills.
+
+In both, the agent then works a checkout that is missing work the product told it it could build on,
+and every surface says the dependency is satisfied. Nothing reports the omission.
+
+**Why it matters more after `a-loop-declares-whether-it-needs-evidence`.** On the evidence route the
+main-branch merge is a second route home: a successor cut *after* its prerequisite merged carries it
+anyway. An evidence-free loop task has only that route — `_prerequisite_commits` stays on accepted
+evidence by design (D5) and an evidence-free task has none — and the merge itself is best-effort:
+`integrate` skips on a dirty checkout or a checkout parked off the main branch
+(`task_integration.py:329-335`), which are ordinary states of a working repository. So a skip that is
+merely untidy on the evidence route becomes a silently missing prerequisite on the new one.
+
+Not fixed. The candidate repair is to make `_prerequisite_commits` ask `merge_targets`' question for
+prerequisites that are already `approved` — which the gate guarantees before a successor starts — and
+that is a fourth call site the change deliberately left still. Put to round 3 as
+`a-loop-declares-whether-it-needs-evidence`'s one open decision.

@@ -21,6 +21,13 @@ A loop that declares its work does **not** need evidence SHALL have its tasks' w
 approval without any requirement link or accepted evidence, from the source stated in
 `task-lifecycle-governance`.
 
+**The default SHALL be that evidence governs the work of a loop that declares a specification
+document, and does not govern the work of a loop that declares none.** A loop and a flow are the same
+kind of thing wearing different queues — declaring a document is the only thing that separates them —
+so a single default that ignored the distinction would answer for both, and answering "no evidence
+needed" for a flow would end the requirement-and-evidence chain that a flow exists to run. A
+declaration that was actually made SHALL take precedence over the default in either direction.
+
 The declaration SHALL be recorded as made or not made, and SHALL NOT be stored as a copy of whatever
 the default is at the moment of creation. A loop created before this capability existed, and a loop
 created without stating a preference, are the same case and SHALL be answered by resolving the
@@ -54,6 +61,13 @@ happen long afterwards.
   configured main branch
 - **THEN** the task's work is integrated
 - **AND** no requirement link and no accepted evidence were needed for it
+
+#### Scenario: A flow that declares nothing has its work governed by evidence
+
+- **WHEN** a loop that declares a specification document is created without saying whether its work
+  needs evidence, and one of its tasks is approved
+- **THEN** what is integrated is what that task's accepted evidence names
+- **AND** the default did not make its work evidence-free by virtue of no declaration having been made
 
 #### Scenario: A loop that declares its work needs evidence is unchanged
 

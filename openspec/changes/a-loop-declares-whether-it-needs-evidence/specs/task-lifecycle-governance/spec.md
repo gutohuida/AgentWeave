@@ -31,8 +31,20 @@ main branch on the same terms it tests a commit named by evidence, and SHALL ref
 would not merge cleanly. Work reaching the main branch by this route SHALL NOT be the one route that
 was never checked first.
 
-Where a loop declares that its work needs evidence, this requirement SHALL NOT apply to its tasks,
-and evidence remains the only thing that names what is merged.
+Where evidence governs a task, this requirement SHALL NOT apply to it, and evidence remains the only
+thing that names what is merged. Evidence governs a task whose loop declares that its work needs
+evidence, a task belonging to no loop at all, and — by the default stated in `agent-loops` — a task
+whose loop declares a specification document and has made no declaration either way. **A task
+belonging to a flow SHALL NOT have its branch merged in place of the commit its accepted evidence
+names**, because a flow that made no declaration has not thereby asked to stop being governed by the
+requirements it decomposed.
+
+#### Scenario: A flow's task is unaffected by this requirement
+
+- **WHEN** a task belonging to a loop that declares a specification document, and that has made no
+  declaration about evidence, is approved with accepted evidence naming a commit
+- **THEN** the commit that evidence names is what is merged
+- **AND** the tip of that task's own branch is not merged in its place
 
 #### Scenario: An approved task on an evidence-free loop merges its own branch
 
@@ -163,8 +175,8 @@ silently is worse than none, because it spends the operator's confidence as well
 Where a skip names a cause the operator can put right, it SHALL point at the remedy that works —
 retrying the integration, or the setting whose absence caused the skip.
 
-**Whether retrying can change the outcome SHALL be decided where the reason is produced, and SHALL be
-carried with the record of the attempt.** A surface that offers the retry SHALL read that answer
+**Whether retrying can change the outcome SHALL be decided by the same component that produces the
+reason, and SHALL be carried on the record of the attempt wherever that record is read.** A surface that offers the retry SHALL read that answer
 rather than deriving one from the wording of the reason. A reason is a sentence written for a person;
 deriving behaviour from its text means every new reason is offered a retry by default, including the
 ones that are terminal, and the surface making the offer is the one place that cannot know which is
@@ -179,7 +191,7 @@ something the operator can put right somewhere else, the skip SHALL point there 
 Retrying SHALL be available to the operator and to agents, and SHALL be refused for a task that is
 not approved. This requirement constrains what is **offered**, not what is permitted: a retry
 requested directly SHALL still be attempted and recorded, whatever the previous reason was, because
-the world may have moved in a way no stored classification knows about.
+the world may have moved in a way no classification made at the time of the skip could know about.
 
 #### Scenario: A retryable skip offers the retry
 

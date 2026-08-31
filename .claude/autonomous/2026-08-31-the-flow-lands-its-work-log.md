@@ -1593,3 +1593,127 @@ A spec round has no product to drive, so what was verifiable was verified:
 code, not a re-read of this reasoning. The two places round 1 is most likely to be wrong are named
 above and in design.md's open question; the third is the prerequisite chain in D5's last bullet,
 which rests on three shipped mechanisms interacting rather than on one line of code.
+
+---
+
+## Iteration 12 — 2026-08-31 03:49 to 04:0x (+01:00) — `D-R2`: round 2 of `a-loop-declares-whether-it-needs-evidence`
+
+Branch and `git log` matched STATE.json at start (`773a8d6`, tree dirty only in `STATE.json`:
+iteration 11's heartbeat plus mojibake it had reintroduced into `carried_open_questions` — the em
+dashes were repaired in place, not left). Nothing to reconcile.
+
+### The severity-A defect round 2 found, and it is the shape this round exists for
+
+**`Loop` is the row for a flow as well as a loop.** `create_flow`'s own docstring says it — *"a flow
+differs from a loop in what it does with its queue, not in what it is"* — and `spec_document_id` is
+the only thing separating them (`models.py:1377-1388`; `scheduler.py:2043` already computes
+`is_flow=bool(loop.spec_document_id)`). Round 1 put `work_needs_evidence` on `Loop`, resolved NULL
+with `False if ... is None else ...` (design D2), and then — correctly, in task 7.5 — decided
+`create_flow` does **not** take the parameter. Those three decisions are individually right and
+together they say:
+
+```
+every flow's row is NULL, forever
+  -> the default resolves to "needs no evidence"
+  -> merge_targets returns the branch tip for every flow task
+  -> requirement_gate._check_unaccepted's refusal arm is `if situation.accepted: advisory`
+     (requirement_gate.py:351-354), and now always has a target
+  -> approval-refuses-unaccepted-evidence, implemented in iteration 9 of THIS run, degrades to an
+     advisory for every flow task in the product, and F58's "merge the commit evidence names" with it
+```
+
+Round 1 was not careless anywhere; it never asked what its own field means on the other kind of row
+that carries it. **An argument can be wrong while everything it argues about is right** — the exact
+failure the third round was added for, caught by the second.
+
+**The repair** is design D10: the question is *does evidence govern this task's merge*, and it has
+three answers — no loop → evidence governs; a declaration was made → the operator wins; NULL →
+`loop.spec_document_id is not None`. That is **not** D2's rejected "derive it from
+`spec_document_id`": the field still exists and still wins where it was set, and what is derived is
+only the *default*, which D2 already insisted must be resolved at the point of use. Both spec deltas
+now state the default in words, because "the product's current default" is not something a reader can
+check, and both gained a flow scenario. `openspec validate --all --strict`: 48 passed, 0 failed.
+
+Task 1.7 gained the guard that would have caught it — a flow task with accepted evidence and a
+*different* commit at its branch tip, written against today's code where it passes, failing the
+moment 4.3 is implemented with a flat default.
+
+### The open question, answered — the default stands, and round 1's scope made it a defect
+
+Five mechanisms already stand between the default and a surprise, each read rather than assumed:
+`_check_mergeable` conflict-tests first; `merge --no-ff` cannot rewrite history and `rode_along`
+reports the ancestry; `integrate` refuses unless the primary checkout is **on the main branch and
+clean** (`task_integration.py:329-335`), so the write lands in a checkout the operator is looking at;
+the preview states it before; `TaskIntegrationNote` states it after.
+
+Against that, one measured fact settles it: **`JobForm.tsx` is the operator's loop-creation surface**
+— loop toggle at `:90-99`, fields at `:300-330` — and round 1 gave the declaration to `create_loop`
+(an agent tool) and `POST /jobs` (an API) and to no screen at all. An agent could declare; the
+operator whose main branch is written could not, and was never told the default. So the answer is not
+a different default: it is task **6.8**, the declaration on the form that creates loops, with one
+sentence saying what it decides. Not optional.
+
+### Three more corrections, all from reading the code
+
+- **D5's preview bullet.** Round 1 accounted for the `rev-parse` and not for the root:
+  `resolve_project_workspace` writes `project.directory_state` and `project.last_seen_at` and
+  validates the on-disk marker (`project_workspace.py:198-234`), so the `GET` acquires a write.
+  **Checked before calling it a defect — and it is not one:** `GET /projects` already does exactly
+  this per project through `_refresh_project_observation` (`projects.py:268-276`). Kept, with the
+  cost stated and two conditions: an unresolvable workspace answers "no target, here is why" rather
+  than 500, and no workspace is resolved at all where evidence governs the task.
+- **D5's prerequisite chain.** Every link read. The chain holds on the loop-dispatched path
+  (`candidate_is_startable` gates selection; `_integration_base` returns `Project.main_branch`;
+  `ensure_task_worktree` cuts from it) and round 1 stated as unconditional something that has three
+  conditions. Two are pre-existing and are now **F158**; the third — that the main-branch merge
+  actually happened — is *created by this change*, because an evidence-free loop task has no second
+  route home. Round 2 recommends extending `_prerequisite_commits` and **deliberately does not take
+  it**; it is left as the one open decision for round 3.
+- **D7's classification.** "A single mapping" cannot be keyed on the reason: `CHECKOUT_ELSEWHERE`
+  and `ALREADY_INTEGRATED` are `.format()` templates (`:67-74`, applied at `:326`/`:334`) and a
+  `FAILED` row carries git's stderr (`:365`). Three of nine rows would fall into "unclassified",
+  which under this design's *inverted* default means **no button on a dirty checkout and none on a
+  failed merge** — the two most retryable outcomes there are, i.e. the fixed defect reproduced one
+  layer down. So `FAILED` is answered on the outcome, the templates on their stems, and task 6.2a
+  adds a `SKIP_REASONS` tuple with a **totality test** so a tenth reason cannot be added without a
+  classification. A `reason_code` column was considered and rejected in writing. The spec's
+  "carried with the record of the attempt" was reworded so it does not promise a column nothing
+  builds.
+
+Also recorded in Impact rather than closed: `TaskCreate.loop_id` is caller-supplied and
+agent-reachable (`tasks.py:771`, `schemas/tasks.py:63`) and `TaskUpdate.loop_id` is write-once rather
+than immutable, so a task can be attached to an evidence-free loop after it exists, changing what
+approval writes. Approval stays gated and conflict-tested, so it widens what can be *offered*.
+
+### F158 filed (B) — and it is a product defect, not a proposal one
+
+A task branch is cut at **dispatch** (`pending -> assigned`) and prerequisites are merged **only at
+creation** (`worktrees.py:447-449`, `:481-487`), while the dependency gate fires one edge later, on
+`-> in_progress`. `candidate_is_startable` closes this on the scheduler's path;
+**`agent_trigger` consults no dependency gate at all** (grepped: no call site). So an operator
+triggering an agent on a task whose prerequisite is unapproved cuts its branch permanently without
+that work, and `POST /tasks/{id}/dependencies` can add an edge after a branch exists. The evidence
+route has this today; the evidence-free route makes it worse because the main branch is its only
+route home and that merge is best-effort.
+
+### Verification
+
+- `openspec validate --all --strict` → **48 passed, 0 failed**, after every edit.
+- **Every citation added this round was opened or grepped.** Confirmed live: migration head is
+  `0099` (`test_migrations.py:40`, `test_project_persistence.py:227`);
+  `test_migration_0098_is_guarded_when_the_queue_table_does_not_exist` at `test_migrations.py:3062`;
+  all nine fixtures in `test_task_integration.py` (`make_repo`:47 … `integrations`:178);
+  `test_a_conflicting_branch_refuses_approval` at `:389`; `test_release_happens_after_integration` at
+  `test_task_release.py:278`; `_loop_opts_in` at `jobs.py:103-105`; `integration_targets` at
+  `task_transition_service.py:773` with the ordering comment at `:606-615`.
+- **One citation corrected:** the `create_loop` tool-inventory prose is `agents.py:965-971`, not
+  `:960-975`.
+- No product code touched. No suite run, and none was warranted.
+
+### Next
+
+**`D-R3`** — the second *independent* re-derivation. It has one decision waiting rather than a blank
+page: whether `_prerequisite_commits` moves to `merge_targets`' question for `approved`
+prerequisites (F158's repair, and the third condition D5 now admits to). Its own brief still stands —
+re-derive whether the declaration belongs on the `Loop` at all, given D10 has now proved that row is
+two things wearing one name.

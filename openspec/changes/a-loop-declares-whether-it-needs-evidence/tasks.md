@@ -31,7 +31,11 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
   the "Try again" button. It must **fail** after group 6, which is the point of writing it now.
 - [ ] 1.7 The guards that must still pass afterwards, written now as assertions about today: a task on
   a loop that declares evidence **is** needed merges nothing without accepted evidence; a task with no
-  loop at all is untouched by everything in this change.
+  loop at all is untouched by everything in this change; and — **the guard round 2 added, and the one
+  that would have caught D10** — a task on a **flow** (a `Loop` row with a `spec_document_id`, field
+  NULL) merges the commit its accepted evidence names, with a different commit at its branch tip so
+  the two answers cannot be confused. Write it against today's code, where it passes, and it fails the
+  moment 4.3 is implemented with a flat default.
 
 ## 2. The column and the migration
 
@@ -79,10 +83,27 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
   validates the id and raises `ValueError` for one it did not mint; catch that and return `None`
   rather than letting it out, for the reason `task_workspace` already gives about ids the product did
   not mint.
-- [ ] 4.3 `async def merge_targets(session, task, root) -> List[Target]` — design D5. Reads the task's
-  loop (`Task.loop_id` → `Loop`), resolves the declaration with `False if ... is None else ...`,
-  and returns either `integration_targets(session, task)` or at most one branch-tip `Target`.
+- [ ] 4.3 `async def merge_targets(session, task, root) -> List[Target]` — design D5 and **D10**.
+  It asks *does evidence govern this task's merge*, which has three answers and not two:
+  `task.loop_id is None` → yes, evidence governs, unchanged; the loop's `work_needs_evidence` is not
+  NULL → the operator said, and the operator wins; NULL → **`loop.spec_document_id is not None`**,
+  because the current default is that evidence governs a flow and does not govern a documentless
+  loop. **A flat `False if ... is None else ...` is the severity-A defect round 2 found**: `Loop` is
+  a flow's row too, `create_flow` never sets the field (7.5), so every flow would merge branch tips
+  and `approval-refuses-unaccepted-evidence` would degrade to an advisory product-wide. Then returns
+  `integration_targets(session, task)` or at most one branch-tip `Target`.
   **`integration_targets` is not modified.**
+- [ ] 4.3a Use `session.get(Loop, task.loop_id)`, not `select(Loop).where(...)`. `_merge_situation`
+  and `integrate_task` both call `merge_targets` within one approval and one session, so the PK get
+  is answered from the identity map the second time and a `select` would not be. One line, and it is
+  the difference between one query per approval and two.
+- [ ] 4.3b Tests for the resolver itself, and the first is the one that matters: **a flow task with
+  accepted evidence merges the commit that evidence names, not its branch tip** — assert the merged
+  sha equals the evidence footprint's, with a *different* commit sitting at the branch tip so the two
+  answers are distinguishable. Then: a flow task with awaiting-only evidence is still **refused**
+  approval by `approval-refuses-unaccepted-evidence` (the regression D10 describes, caught at the
+  gate); a documentless loop with the field NULL uses its branch tip; either kind with the field set
+  explicitly obeys the field against its own default.
 - [ ] 4.4 `hub/hub/task_transition_service.py` `integrate_task`: `merge_targets(session, task, root)`
   in place of `integration_targets(session, task)` (line ~773), and the empty case records
   `NO_TASK_BRANCH` rather than `NOTHING_TO_MERGE` **only** where evidence does not govern the task.
@@ -123,11 +144,20 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
 
 - [ ] 6.1 In `hub/hub/task_integration.py`, beside the reason constants: the classification from
   design D7 and `def is_retryable(outcome: str, reason: str) -> bool`. `FAILED` is retryable whatever
-  its reason (it carries git's own text). An unclassified skip reason is **not** retryable — the
-  default inverts deliberately.
-- [ ] 6.2 `CHECKOUT_ELSEWHERE` is a format string; match it as a prefix or by structure, not by
-  equality. A classifier that silently fails to match is exactly the string-matching defect being
-  removed, one layer down.
+  its reason and is answered **on the outcome, before the reason is consulted** (it carries git's own
+  stderr and can never be matched). An unclassified skip reason is **not** retryable — the default
+  inverts deliberately.
+- [ ] 6.2 `CHECKOUT_ELSEWHERE` **and `ALREADY_INTEGRATED`** are format strings
+  (`task_integration.py:67-74`, applied at `:326` and `:334`); match each on its invariant stem, not
+  by equality. Three of D7's nine rows are not fixed strings, and a dict keyed on the constants would
+  drop exactly the dirty-checkout and failed-merge cases into "unclassified" — which under the
+  inverted default means no button on the two most retryable outcomes there are. That is the defect
+  being removed, reproduced one layer down.
+- [ ] 6.2a Add `SKIP_REASONS` to `hub/hub/task_integration.py` — an explicit tuple naming every
+  reason a skip can carry — and a **totality test** asserting `is_retryable` answers for each member,
+  with the two templates formatted first. A tenth reason added later without a classification then
+  fails the suite instead of quietly losing its button. This is the guard that makes the inverted
+  default safe; without it the default is just a slower way to lose a button.
 - [ ] 6.3 `_integration_view` (`hub/hub/api/v1/tasks.py:1090-1119`) adds `"retryable":
   task_integration.is_retryable(row.outcome, row.reason)` to each row. One shape, both routes, as its
   docstring says.
@@ -137,6 +167,18 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
   derivation. Keep the missing-main-branch case pointing at the setting — check whether that text
   exists anywhere on screen today, and if it does not, say so in the log rather than adding a sentence
   this change did not argue for.
+- [ ] 6.8 **The operator can make the declaration.** `hub/ui/src/components/jobs/JobForm.tsx` is the
+  only operator-facing surface that creates a loop (the loop toggle at :90-99, its fields at
+  :300-330) and it must carry `work_needs_evidence` inside the same `loopEnabled` block, with one
+  sentence saying what it decides — that approving this loop's tasks writes their work to the
+  project's main branch. `hub/ui/src/api/jobs.ts` gains the field on the create body. **Added in
+  round 2 and not optional:** without it the declaration is an agent-only control over the operator's
+  own main branch, and the default becomes one the operator can neither see nor opt out of. The
+  answered open question at the foot of `design.md` is the argument.
+- [ ] 6.9 Test in `hub/ui/src/__tests__/`: submitting the form with the loop toggle off sends no
+  `work_needs_evidence`, and with it on sends what the control says — the same shape the existing
+  `stop_when_queue_empties` assertions take, and for the same reason its comment at `JobForm.tsx:42`
+  gives about a controlled field opting a job in by existing.
 - [ ] 6.6 `hub/ui/src/__tests__/taskIntegrationRetry.test.tsx`: 1.6's case now asserts **no** button,
   a retryable reason still renders one, and a row with `retryable` absent renders none.
 - [ ] 6.7 Python tests in `hub/tests/test_task_integration_retry.py`: the field is present and correct
@@ -157,7 +199,10 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
   both exist and both compare these; run them, and if neither catches a stale inventory line, note
   that in the log as a finding rather than fixing it here.
 - [ ] 7.5 `create_flow` is **not** given the parameter. A flow has a document, so evidence always
-  governs it. If a later round wants to argue otherwise, that is a change of its own.
+  governs it — which is true only because 4.3's default is kind-aware. **These two tasks are one
+  decision and must not be done separately:** 7.5 without 4.3's `spec_document_id is not None` arm is
+  what makes every flow evidence-free forever, since a flow's column can then never be anything but
+  NULL. If a later round wants to give a flow the parameter, that is a change of its own.
 
 ## 8. Verify
 
