@@ -12582,6 +12582,11 @@ The change is `a-review-nobody-is-doing-is-named`, through the full three rounds
 `stall_reason` carries the same sentence, on both the reviewer-wedged and the author-wedged row.
 The board still reads `agent_capacity: "held"`. No job left enabled.
 
+**Suite at the close**, run whole rather than chunked: `hub/tests/` **3,825 passed, 84 skipped,
+1 xpassed, 0 failed** (25m39s). That is the 3,806 of the pre-change tree plus this change's 19
+tests, and the run before the change had 1 failure — F40's documented residual race, which did not
+recur. `ruff`, `black --target-version py311` and `mypy src/` clean.
+
 ### The correction: `agent_capacity: "held"` was never part of the defect
 
 F154 listed `held` on an idle agent among the surfaces getting it wrong. It is the **correct**
