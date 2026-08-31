@@ -237,5 +237,5 @@
     "FOUND IN ITERATION 11 (D-R1), filed as F157 and NOT fixed: `POST /jobs` accepts a loop field on a job that is not becoming a loop and silently drops it, while `PATCH /jobs/{id}` refuses the same field naming the remedy (`jobs.py:856-876`). Change D deliberately does not inherit the precedent for its own field (design D4).",
     "FOUND IN ITERATION 10 (DRIVE-1), filed as F154 and NOT fixed: a review turn that ends without a verdict leaves the task `under_review` with its reviewer named, and every later firing reports it as DECISION_IN_FLIGHT -- 409 'Every task on this loop's queue is already being worked' -- with both agents idle and no run live."
   ],
-  "last_heartbeat": "2026-08-31T04:17:50+01:00"
+  "last_heartbeat": "2026-08-31T03:38:12+01:00"
 }
