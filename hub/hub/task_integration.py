@@ -133,10 +133,76 @@ def has_uncommitted_changes(root: Path) -> bool:
 
 @dataclass
 class Target:
-    """One commit to integrate, and the branch it was produced on."""
+    """One commit to integrate, and the branch it was produced on.
+
+    The three optional fields are for saying *whose* commit this is, and are populated on both
+    paths because the accepted path carries them harmlessly. They exist because a refusal has to
+    name each piece of evidence it is waiting on, with a route back to its cause: the evidence row,
+    the requirement it demonstrates, and the task that recorded it — which is not always the task
+    being approved, since a requirement may be served by more than one task.
+
+    `requirement_id` is the `spec_requirements.id` foreign key, not the human identifier. The
+    identifier lives on `SpecRequirement`, which this module deliberately does not import: reaching
+    it would add a join to the *merge* query for a field only a sentence uses. `requirement_gate`
+    already imports `SpecRequirement` and resolves it where the sentence is composed.
+    """
 
     commit_sha: str
     branch: Optional[str] = None
+    evidence_id: Optional[str] = None
+    requirement_id: Optional[str] = None
+    task_id: Optional[str] = None
+
+
+async def _targets(session: AsyncSession, task: Task, review_state: str) -> List[Target]:
+    """Every footprint for *task* in *review_state* that names a commit, oldest first, undeduplicated.
+
+    The **filter**, shared by the two callers below so that the refusal and the merge cannot come to
+    disagree about what counts. That shared property is exact: the refusal fires precisely when
+    acceptance would produce a target that does not exist now. Two independently-written queries
+    would drift, and a filter added to one and not the other produces either a refusal nothing can
+    clear or a silent non-merge — which is the defect this whole capability exists to end.
+
+    Evidence is reached through `TaskRequirementLink`, so evidence recorded by *another* task against
+    a *shared* requirement is in scope here. That is not an accident of the join: if that evidence
+    were accepted, it is this task's integration that would merge its commit.
+
+    The empty-`commit_sha` guard belongs to the filter and lives here, although it sat inside
+    `integration_targets`' reduction loop until this function existed. Left there, a `git` footprint
+    whose `commit_sha` is `""` would refuse an approval that the merge would then silently ignore.
+    """
+    rows = (
+        await session.execute(
+            select(EvidenceFootprint, RequirementEvidence)
+            .join(
+                RequirementEvidence,
+                RequirementEvidence.id == EvidenceFootprint.evidence_id,
+            )
+            .join(
+                TaskRequirementLink,
+                TaskRequirementLink.requirement_id == RequirementEvidence.requirement_id,
+            )
+            .where(
+                TaskRequirementLink.task_id == task.id,
+                RequirementEvidence.project_id == task.project_id,
+                RequirementEvidence.review_state == review_state,
+                EvidenceFootprint.kind == "git",
+                EvidenceFootprint.commit_sha.is_not(None),
+            )
+            .order_by(EvidenceFootprint.observed_at.asc())
+        )
+    ).all()
+    return [
+        Target(
+            commit_sha=footprint.commit_sha,
+            branch=footprint.branch,
+            evidence_id=evidence.id,
+            requirement_id=evidence.requirement_id,
+            task_id=evidence.task_id,
+        )
+        for footprint, evidence in rows
+        if footprint.commit_sha
+    ]
 
 
 async def integration_targets(session: AsyncSession, task: Task) -> List[Target]:
@@ -149,41 +215,31 @@ async def integration_targets(session: AsyncSession, task: Task) -> List[Target]
     A `paths` footprint contributes nothing: there is no commit, so there is nothing that could be
     merged. That is a supported project shape, not a degraded one.
     """
-    rows = (
-        (
-            await session.execute(
-                select(EvidenceFootprint)
-                .join(
-                    RequirementEvidence,
-                    RequirementEvidence.id == EvidenceFootprint.evidence_id,
-                )
-                .join(
-                    TaskRequirementLink,
-                    TaskRequirementLink.requirement_id == RequirementEvidence.requirement_id,
-                )
-                .where(
-                    TaskRequirementLink.task_id == task.id,
-                    RequirementEvidence.project_id == task.project_id,
-                    RequirementEvidence.review_state == requirement_evidence.ACCEPTED,
-                    EvidenceFootprint.kind == "git",
-                    EvidenceFootprint.commit_sha.is_not(None),
-                )
-                .order_by(EvidenceFootprint.observed_at.asc())
-            )
-        )
-        .scalars()
-        .all()
-    )
-
     # Ordered oldest-first, so the last write per branch leaves the newest commit standing. One
     # target per branch: work produced on two branches has to be merged twice, and silently
     # dropping one of them would integrate half of what was approved.
     newest: Dict[Optional[str], Target] = {}
-    for row in rows:
-        if not row.commit_sha:
-            continue
-        newest[row.branch] = Target(commit_sha=row.commit_sha, branch=row.branch)
+    for target in await _targets(session, task, requirement_evidence.ACCEPTED):
+        newest[target.branch] = target
     return list(newest.values())
+
+
+async def awaiting_targets(session: AsyncSession, task: Task) -> List[Target]:
+    """Every piece of *task*'s evidence that names a commit and is still waiting to be judged.
+
+    Shares `integration_targets`' filter and deliberately **not** its per-branch reduction. Keying by
+    branch answers *what do I merge* — one merge per branch, because merging two commits from the
+    same branch twice is pointless. This function is not deciding anything about merging; it is
+    enumerating what has not been judged, and a refusal built on it must name each waiting piece
+    rather than only how many there are. Two awaiting rows on one branch — one agent, one task, two
+    sittings — would collapse to one under the reduction, and the refusal would name one of the two.
+
+    The property the shared filter buys survives the split whole, because that property is about
+    **non-emptiness**: a per-branch dedup of a non-empty list is non-empty, so both reductions are
+    empty on exactly the same row sets. Sharing the filter buys all of it; the reduction was never
+    carrying any.
+    """
+    return await _targets(session, task, requirement_evidence.AWAITING)
 
 
 def commits_riding_along(root: Path, main_branch: str, commit_sha: str) -> List[str]:
