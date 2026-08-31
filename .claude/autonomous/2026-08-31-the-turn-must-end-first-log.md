@@ -876,3 +876,109 @@ Task 8.4's bundle was satisfied by iteration 5's commit and re-checked here rath
 **Every task in `approval-waits-for-the-turn-to-end` is ticked** — groups 1 through 8. Three rounds
 of spec discipline, six implementation groups, six drives, the whole Hub suite and all three gating
 linters. The branch is ready to offer.
+
+---
+
+## Iteration 7 — 2026-08-31T14:18+01:00 — F155-R1: round 1 on the unfollowable refusal
+
+**Position on arrival.** Branch `autonomous/2026-08-31-the-turn-must-end-first` at `6911702`, tree
+clean, `git log` matching STATE.json exactly — iteration 6 recorded and the branch released.
+`approval-waits-for-the-turn-to-end` is complete and driven; nothing about it is outstanding. Clock
+read **14:09**, inside the 15:30 window, so `next_action` was startable as written.
+
+**One unit of work, and only one.** `F155-R1` — explore the code and write the proposal for F155.
+Proposal only. No implementation, and rounds 2 and 3 deliberately left for later firings.
+
+### The change: `a-conflict-refusal-names-what-clears-it`
+
+`openspec/changes/a-conflict-refusal-names-what-clears-it/` — `proposal.md`, `design.md`,
+`tasks.md` (22 tasks in 6 groups), and one delta modifying `task-lifecycle-governance`'s
+*Approval is refused when the work cannot be merged cleanly*. `openspec validate --strict`: valid.
+
+**The defect, re-derived at the source rather than taken from the finding.** `_merge_detail`
+(`hub/hub/requirement_gate.py:165-179`) says *"Resolve the conflict on the branch, then approve"*.
+`_check_mergeable` (`:322-350`) iterates `situation.will_merge` and probes
+`would_conflict(root, target.commit_sha, main_branch)` — `git merge-tree --write-tree` against **that
+exact commit** (`task_integration.py:427-449`). Where evidence governs, those commits are the newest
+**accepted** footprint per branch (`integration_targets`, `:270-287`). Resolving on the branch makes a
+commit no evidence names; the gate re-reads the old one; the answer cannot change. Confirmed, and it
+is the whole of F155.
+
+### What round 1 found that the finding did not say
+
+**The sentence is not wrong everywhere — it is wrong on one of two routes, and that is why it
+survived review.** `merge_targets` (`task_integration.py:385-409`) has answered two ways since
+`a-loop-declares-whether-it-needs-evidence` shipped:
+
+| Route | Target commit | `Target.evidence_id` | Is "resolve on the branch" true? |
+|---|---|---|---|
+| evidence governs | newest accepted footprint per branch | the evidence row's id | **No** |
+| documentless loop, no requirement link | `task_branch_tip` | `None`, by construction (`:405-409`) | **Yes** |
+
+One sentence is emitted for both. It is true of the route the fixtures exercise and false of the
+route the flow feature exists for. So the repair is **route-aware**, not a rewording — and the
+discriminator is already carried, per target, on `Target.evidence_id`. That reframing is round 1's
+main contribution; F155 filed the defect as "the sentence is wrong" and it is more precisely "one
+sentence is emitted where the product has two answers".
+
+**Nothing reads a key off `unmergeable`.** Checked rather than assumed, because D1 adds keys to it:
+`to_dict` copies the list wholesale, `readableApiError` (`hub/ui/src/api/client.ts:74-108`) returns
+`detail.message` and nothing else, and `mcp_server._readable_detail` (`:112-131`) does the same on the
+agent's side. The `paths`/`target_branch` assertions in `taskIntegration.test.ts` are assertions about
+the **sentence**, not about the structured half. So the sentence is the entire interface, on both
+planes — which is exactly why a prose-only change is worth three rounds.
+
+**And that is a correction round 1 made to itself.** The first draft of D1 wrote *"the UI reads
+`paths` and `target_branch` from it and nothing else"*, which is false in the direction that would
+have made the change look riskier than it is. Corrected in `design.md` before commit, and task 2.3
+now says re-check rather than inherit.
+
+### The proposed repair, in three pieces
+
+- **D1** — `_check_mergeable` carries `named_by_evidence` and `evidence_id` per entry, from
+  `Target.evidence_id`. Rejected the alternative of a route flag on `_MergeSituation` on
+  *truthfulness*, not cost: the sentence is a claim about the commit being judged, and a
+  project-level flag is one inference away from what it asserts — and one inference is what produced
+  F155.
+- **D2** — the evidence-route remedy is resolve → **record evidence naming the resolved commit** →
+  have it accepted, ending in `ACCEPT_OR_GRANT` reused verbatim (`requirement_gate.py:73-80`), whose
+  own docstring says naming what an agent cannot take *"is what stops it retrying"* — precisely
+  F155's failure mode. The wording must name **which branch** the fresh footprint has to carry,
+  because the supersession is per-branch (`newest[target.branch]`).
+- **D3** — where the judged commit is no longer reachable from the branch the refusal names, say so.
+  That is the state step 6 of the drive created, one `is_reachable_from` call on a path already
+  running `merge-tree` and already refusing. Carries a pre-authorised default to **drop it** if a
+  round objects; D1 and D2 are the repair proper.
+
+### The open question that could invalidate D2
+
+Recorded in `design.md` as open question 1, and it is the one round 2 must answer at the source: does
+a footprint recorded on the resolved commit reliably carry the **same `branch` value** as the stale
+row? `restamp_run_footprints` writes `rev-parse --abbrev-ref HEAD` (`requirement_evidence.py:908`);
+`read_footprint` with an explicit `at` writes `_branch_at`, which is `""` when the commit is not
+exactly one branch's tip (`:516-531`). If a resolution can land `branch=""` while the stale row names
+the task branch, the per-branch reduction keeps **both** and the stated remedy fails — in a change
+whose entire subject is remedies that fail. Task 1.3 exists to prove the remedy before it is written
+into prose.
+
+### Verification
+
+No product code moved. The diff against `6911702` is `STATE.json` plus the four new openspec
+documents — 444 insertions, nothing under `src/`, `hub/hub/` or `hub/ui/`.
+
+| Check | Result |
+|---|---|
+| `openspec validate a-conflict-refusal-names-what-clears-it --strict` | valid |
+| Every file/line citation in the proposal and design, checked programmatically | 15 ranges; **1 miss found and fixed** — `_MergeSituation` is at `:265-291`, not `:228-250` |
+| `git status` | clean |
+
+Ruff, black and mypy were not run: no Python moved, and CI lints no markdown. The suite was not run
+for the same reason — iteration 6 ran all 239 Hub files (3,783 passed, 0 failed) on the tree this
+iteration adds documents to.
+
+### Where the branch stands
+
+`approval-waits-for-the-turn-to-end` remains complete, driven and offered. `F155` now has round 1
+and nothing more. Round 2 is the next unit of work, and it must be an **independent re-derivation** —
+above all of the supersession claim D2 rests on, and of the two-route table, which is round 1's own
+reasoning and therefore exactly what round 2 exists to distrust.
