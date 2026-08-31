@@ -1879,3 +1879,116 @@ D11 respectively. Note the round's one open item for the operator, now in `decis
 D6: an explicit `work_needs_evidence=False` merges the branch tip even for a task linked to
 requirements with accepted evidence. That is D-B read literally and the design keeps it, but it is
 the operator's to confirm.
+
+
+## Iteration 14 — 2026-08-31 04:19 to 05:1x (+01:00) — `D-IMPL`: implement `a-loop-declares-whether-it-needs-evidence`
+
+**Every group is done but the drive.** Groups 1, 2, 3, 4, 5, 6 and 7 landed in four commits, each
+at a group boundary with the tree clean and the touched tests green. Task 8.5 — driving it against
+a live Hub — is the only unticked item and belongs to `DRIVE-2`.
+
+`4ce13c9` groups 1-2 · `eeab0d3` groups 4-5 · `c1bb982` group 3 · `5522597` groups 6-7
+
+### The reproduction was committed before the fix, and it mattered twice
+
+Group 1's five cases were written against unmodified code and **passed there**, which is the whole
+point: `4ce13c9` is where the defect is measured, not asserted. Two of them then flipped in
+`eeab0d3` — an evidence-free loop task's commit now reaches the main branch, and its retry says
+`already integrated` instead of repeating a skip nothing could clear.
+
+The other three are guards and still pass unchanged. Two are the ones rounds 2 and 3 added:
+
+- **1.7** — a task on a **flow** merges the commit its accepted evidence names, with a *different*
+  commit at its branch tip. This is what would have caught D10.
+- **1.7a** — the same for a **documentless-loop** task carrying a requirement link. This is what
+  would have caught D11, and it is the population D-B's `raise_it_if` fired on.
+
+Both write a different commit to the tip than the evidence names, so "merged the evidence" and
+"merged the tip" cannot be confused. A guard where the two answers coincide proves nothing.
+
+### F159 — the round-3 decision was wrong by one predicate, and implementing it is what found that
+
+Design D12 specified `_prerequisite_commits` as an **unconditional** `approved` filter. Its whole
+justification is about the branch-tip route — *"on the branch-tip route there is no automatic filter
+at all"* — and applied to the **evidence** route it stops prerequisite work that reaches successors
+today. A shipped test caught it within a minute of the change landing:
+`test_a_prerequisites_accepted_commits_are_in_the_task_checkout` constructs an `in_progress`
+prerequisite with accepted evidence and asserts its commit is in the successor's checkout.
+
+And F158 is why it is the ordinary case rather than the fixture's artifice: a task branch is cut at
+**dispatch**, one edge before the dependency gate fires, and prerequisites are merged only at branch
+creation. At the one moment `_prerequisite_commits` is consulted, an unapproved prerequisite is
+common. The blanket check would have breached `task-dependencies:335` in the opposite direction to
+the one D12 exists to close.
+
+Scoped to the branch-tip route, which is exactly what D12's own justification argues for. Design
+D12 corrected in place; F159 filed with the transferable lesson, which is that "compare the proposal
+against the code" was applied only to the code the change is *about*. **A round that had asked
+"which existing test does this line change the answer for?" would have found it in one grep.**
+
+Three rounds did not find this. A shipped test did, in 105 seconds.
+
+### What each group actually did
+
+**2 — the column.** `Loop.work_needs_evidence`, nullable, no `default=` and no `server_default=`.
+Migration `0100`, guarded for a missing `loops` table. Its no-backfill test inserts a **flow** row
+and asserts NULL after upgrade: `loops` holds flows too, and an explicit value wins over the
+kind-aware default, so a server default would have answered for every existing flow silently. Both
+head assertions bumped.
+
+**4 — the merge target.** `merge_targets(session, task, root)` beside `integration_targets`, which
+is not modified and stays a pure DB query. `evidence_governs` is the five-arm resolver, extracted as
+its own function so the preview can ask the governance question *before* deciding whether to resolve
+a workspace — which is the condition design D5 put on moving that route. `NO_TASK_BRANCH` is a
+second empty-case reason, because `NOTHING_TO_MERGE` is a statement about evidence and would be a
+lie for a task whose merge evidence does not govern.
+
+**5 — the gate.** `_MergeSituation.accepted` became `will_merge`: what the list is *for*, not where
+it came from. `_check_unaccepted`'s `if situation.will_merge:` arm needed no second rule, which is
+D8, and now says so in a comment.
+
+**6 — retryability.** `is_retryable` answers `FAILED` on the **outcome** before the reason is
+consulted, matches the two templates on their invariant stems, and inverts the default. `SKIP_REASONS`
+plus a totality test is what makes the inversion safe rather than merely stricter. The UI's
+`NO_MAIN_BRANCH` constant is deleted; `retryable` is optional in the TS type so an older Hub's
+response offers nothing to press.
+
+**7 — the tool surface.** `create_flow` does not get the *capability*, per 7.5, but it does keep the
+parameter and **refuse** it — the pattern `create_loop` already uses for `spec_document_id`, and
+required anyway by the schema parity test. The field went onto `AgentJobCreate` too, without which
+the MCP path would have dropped it silently.
+
+### Three things checked that the tasks asked about
+
+- **6.5's question.** "Keep the missing-main-branch case pointing at the setting — check whether
+  that text exists on screen today." It does not exist in the component: the sentence *"choose one
+  in the project's settings"* is part of the **reason the Hub records**, rendered as the row's own
+  text. So nothing was added, as the task instructed.
+- **7.4's question.** Neither guard catches a stale inventory line for an *optional* argument.
+  Filed as **F160**, not fixed — the repair will make several existing lines fail at once and is its
+  own piece of work.
+- **F157 stays open and is now referenced in code.** `create_job` still drops `spec_document_id`
+  silently while refusing `work_needs_evidence`; the comment at the refusal states the asymmetry and
+  why this change does not sweep it in.
+
+### Verification
+
+- Task 8.1's list plus the three tool-surface files: **310 passed, 3 skipped**.
+- Broader sweep, `integration|workspace|release|gate|loop|dependenc|worktree|approval`: **685
+  passed, 15 skipped**. Everything matching `job|loop`: **297 passed, 14 skipped**.
+- Full UI suite: **1460 passed across 141 files**. `npm run lint` clean. `npm run build` +
+  `scripts/refresh_ui_bundle.py`; `hub/ui/src` and `hub/hub/static/ui` committed together.
+- `ruff check src/ hub/ tests/`, `black --check --target-version py311`, `mypy src/` — all clean.
+- `openspec validate a-loop-declares-whether-it-needs-evidence --strict` — valid.
+- One incidental catch worth knowing: `test_task_workspace_scheme.py` scans **source comments** for
+  writes to the column, so a comment containing the literal `workspace_scheme='agent'` fails it. The
+  comment was reworded.
+
+### Next
+
+**`DRIVE-2`** — and task 8.5 is its first item, because until the drive nothing has proved this
+outside a fixture. A fresh project, a loop created through `create_loop` with the declaration
+omitted, one Haiku turn that writes a file, approval, and then `git merge-base --is-ancestor`
+against the repository itself — not the `TaskIntegration` row, which is what the product *claims*.
+Then the same loop declaring `work_needs_evidence=True` and confirming nothing merges. Then re-drive
+the flow, because groups 4 and 5 moved the code every flow's approval runs through.
