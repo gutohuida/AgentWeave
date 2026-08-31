@@ -264,6 +264,51 @@ async def binding_for_delivery(
     return binding_from_entries(result.scalars().all())
 
 
+async def tasks_with_a_turn_pending_or_running(
+    session: AsyncSession, project_id: str
+) -> Dict[str, str]:
+    """`task_id -> the agent who is on it`, counting a turn that has not started yet.
+
+    The question is *is anybody on this task*, and it is asked by `decide_firing` about a task
+    already in `under_review`: nobody can be staffed onto one, so the only thing left to establish
+    is whether the agent named on it is actually doing it (finding F154). A firing that answered
+    from `Task.assignee` alone reported the queue as busy while every agent in the project was idle.
+
+    **A second function rather than a widening of `tasks_held_by_a_running_turn`.** That one's
+    docstring records that its two callers ask two different questions of one query, and the
+    trigger path's question is *may this turn start* — an undelivered queue entry must not stop a
+    turn starting, so it must not enter that answer. A third caller with a third meaning is exactly
+    what that note warns against.
+
+    **Why a queued entry counts.** `turn_scheduler.schedule_agent` leaves correctly staffed work
+    durably queued rather than running whenever the chosen agent is already running, the hop budget
+    or token budget is spent, or the conversation is unavailable; `run_divergence` queues a
+    substituted reviewer's turn the same way. Between the assignee being written and the run
+    reaching `running` there is a moment where only the entry exists, and a predicate blind to it
+    would call a review abandoned on the tick immediately after staffing it correctly.
+
+    `state == "queued"` is the right test and `delivered_in_run_id is None` is not: `"withdrawn"`
+    already means *"this will never be delivered"* (`models.py`'s own comment), so an abandoned
+    entry stops counting as attendance, which is what makes the answer decay correctly rather than
+    hiding the wedge forever.
+    """
+    held = await tasks_held_by_a_running_turn(session, project_id)
+    rows = await session.execute(
+        select(InboundQueueEntry.task_id, InboundQueueEntry.review_task_id, InboundQueueEntry.agent)
+        .where(InboundQueueEntry.project_id == project_id)
+        .where(InboundQueueEntry.state == "queued")
+    )
+    pending: Dict[str, str] = {}
+    for task_id, review_task_id, agent in rows.all():
+        if not agent:
+            continue
+        for candidate in (task_id, review_task_id):
+            if candidate:
+                pending.setdefault(candidate, agent)
+    # A running turn is the stronger statement, so it wins where both exist.
+    return {**pending, **held}
+
+
 async def tasks_held_by_a_running_turn(session: AsyncSession, project_id: str) -> Dict[str, str]:
     """`task_id -> the agent whose running turn is bound to it`, for one project (design D8).
 

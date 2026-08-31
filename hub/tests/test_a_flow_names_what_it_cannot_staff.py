@@ -972,6 +972,13 @@ async def test_a_hand_dispatched_review_on_an_unattributed_task_is_still_held(
     which is this requirement's own false statement made in the opposite direction. The delta's
     scenario as written through round 3 required exactly that; it was corrected during
     implementation.
+
+    **The dispatched turn is what makes this a dispatch** (finding F154). The fixture wrote the
+    status and the assignee and stopped, which is the row an operator produces with a bare
+    `PATCH /tasks` -- not the one `trigger_agent_directly` produces, which staffs the task *and*
+    starts a turn on it. Those two are now distinguished, by whether anybody is on the task, so
+    the fixture has to include the half it was standing in for. Without it this test asserted a
+    hand dispatch's outcome against an operator's hand-walked row.
     """
     await _roster(app, auth_headers, bind_runner, WORKER, REVIEWER)
     async with async_session_factory() as db:
@@ -980,6 +987,16 @@ async def test_a_hand_dispatched_review_on_an_unattributed_task_is_still_held(
         fresh = await db.get(Task, c.id)
         await apply_transition(db, fresh, "under_review", operator())
         fresh.assignee = REVIEWER
+        db.add(
+            Run(
+                id="run-handdisp",
+                project_id="proj-test",
+                agent=REVIEWER,
+                status="running",
+                task_id=c.id,
+                turn_depth=0,
+            )
+        )
         await db.commit()
 
     async with async_session_factory() as db:

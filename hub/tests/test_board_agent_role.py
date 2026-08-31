@@ -295,12 +295,20 @@ async def test_running_a_loop_whose_work_is_all_in_flight_is_not_a_failure(
 
     Reachable before F45 and ordinary after it: every dispatched review parks a task in flight, so
     an operator pressing Run while a review is out hit this on the common path.
+
+    **The running turn is not decoration** (finding F154). This fixture used to stage the review
+    with `enter_selected_task` alone and no turn anywhere, which is not what dispatching a review
+    produces -- a real dispatch starts a turn or queues one -- and it is precisely the row F154
+    names: a reviewer with nothing behind it. That row now stalls with a sentence naming it, so
+    staging it here would have this test asserting the false sentence rather than F48's true one.
+    The turn makes the fixture the case the docstring describes.
     """
     await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
     async with async_session_factory() as db:
         job, _loop, task = await _flow(db, suffix="inflight")
         await _completed_by(db, task, AUTHOR)
         await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
+        await _running_turn(db, task, REVIEWER)
         await db.commit()
 
     res = await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)

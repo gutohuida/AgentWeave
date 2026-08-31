@@ -30,11 +30,17 @@ from hub.db.engine import async_session_factory
 from hub.db.models import (
     AIJob,
     Conversation,
+    EventLog,
     InboundQueueEntry,
+    JobRun,
     Loop,
     Run,
     SpecDocument,
     Task,
+)
+from hub.run_task_binding import (
+    tasks_held_by_a_running_turn,
+    tasks_with_a_turn_pending_or_running,
 )
 from hub.scheduler import (
     DECISION_IN_FLIGHT,
@@ -50,13 +56,30 @@ from hub.task_attribution import (
     live_runs,
     staffing_from_decision,
 )
-from hub.task_transitions import operator, run_actor
 from hub.task_transition_service import apply_transition
+from hub.task_transitions import operator, run_actor
 
 pytestmark = pytest.mark.asyncio
 
 AUTHOR = "alpha"
 REVIEWER = "beta"
+
+
+@pytest.fixture
+def live_scheduler(monkeypatch):
+    """A `JobScheduler` the manual-run route can find.
+
+    `run_job` refuses with 503 when `get_scheduler()` is None, so a test of the route that omitted
+    this would never reach the firing at all — which is how F48 survived, and would have hidden
+    this change's route behaviour just as thoroughly. Copied from `test_board_agent_role.py`, which
+    is where that lesson is recorded.
+    """
+    import hub.scheduler as scheduler_module
+    from hub.scheduler import JobScheduler
+
+    instance = JobScheduler()
+    monkeypatch.setattr(scheduler_module, "get_scheduler", lambda: instance)
+    return instance
 
 
 # ---------------------------------------------------------------------------
@@ -260,10 +283,14 @@ async def test_the_fixture_names_nobody_when_the_operator_walked_it(app):
         _job, loop = await _flow(db, suffix="fixture")
         task = await _wedged(db, loop, suffix="fixture", assignee=AUTHOR, by_agent=False)
         actors = (
-            await db.execute(
-                select(TaskTransition.actor_agent).where(TaskTransition.task_id == task.id)
+            (
+                await db.execute(
+                    select(TaskTransition.actor_agent).where(TaskTransition.task_id == task.id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     assert actors, "the fixture recorded no transitions at all"
     assert set(actors) == {None}
@@ -389,9 +416,7 @@ async def test_nothing_on_this_path_reassigns_or_fires_anybody(app, auth_headers
     assert after.status == "under_review"
 
 
-async def test_proceed_empty_is_not_reachable_for_this_population(
-    app, auth_headers, bind_runner
-):
+async def test_proceed_empty_is_not_reachable_for_this_population(app, auth_headers, bind_runner):
     """4.7 — round 2's check, kept as a test rather than as a paragraph.
 
     `PROCEED_EMPTY` fires an agent to fill the queue. It is chosen when `_stall_reason_from_walk`
@@ -409,3 +434,193 @@ async def test_proceed_empty_is_not_reachable_for_this_population(
 
     assert decision.kind != DECISION_PROCEED_EMPTY
     assert decision.kind == DECISION_STALLED
+
+
+# ---------------------------------------------------------------------------
+# 2.3 — the predicate on its own
+# ---------------------------------------------------------------------------
+
+
+async def test_the_predicate_counts_a_running_turn(app):
+    async with async_session_factory() as db:
+        _job, loop = await _flow(db, suffix="predrun")
+        task = await _wedged(db, loop, suffix="predrun", assignee=REVIEWER)
+        await _running_turn(db, task, agent=REVIEWER)
+        answer = await tasks_with_a_turn_pending_or_running(db, "proj-test")
+
+    assert answer.get(task.id) == REVIEWER
+
+
+async def test_the_predicate_counts_a_queued_entry_by_either_column(app):
+    """`task_id` and `review_task_id` both name what a turn is about, and a review entry carries
+    both — but a work entry carries only the first, so neither column alone is enough."""
+    async with async_session_factory() as db:
+        _job, loop = await _flow(db, suffix="predq")
+        task = await _wedged(db, loop, suffix="predq", assignee=REVIEWER)
+        entry = await _queued_review(db, task, agent=REVIEWER)
+        entry.review_task_id = None
+        await db.commit()
+        by_task = await tasks_with_a_turn_pending_or_running(db, "proj-test")
+
+        entry.task_id = None
+        entry.review_task_id = task.id
+        await db.commit()
+        by_review = await tasks_with_a_turn_pending_or_running(db, "proj-test")
+
+    assert by_task.get(task.id) == REVIEWER
+    assert by_review.get(task.id) == REVIEWER
+
+
+async def test_the_predicate_ignores_a_withdrawn_or_delivered_entry(app):
+    """`withdrawn` means it will never be delivered. A delivered entry is not attendance either —
+    the run it was delivered into answers that, and it has ended."""
+    async with async_session_factory() as db:
+        _job, loop = await _flow(db, suffix="predw")
+        task = await _wedged(db, loop, suffix="predw", assignee=REVIEWER)
+        entry = await _queued_review(db, task, agent=REVIEWER, state="withdrawn")
+        withdrawn = await tasks_with_a_turn_pending_or_running(db, "proj-test")
+
+        entry.state = "delivered"
+        entry.delivered_in_run_id = "run-gone"
+        await db.commit()
+        delivered = await tasks_with_a_turn_pending_or_running(db, "proj-test")
+
+    assert task.id not in withdrawn
+    assert task.id not in delivered
+
+
+async def test_the_predicate_is_empty_for_a_task_with_neither(app):
+    async with async_session_factory() as db:
+        _job, loop = await _flow(db, suffix="predn")
+        task = await _wedged(db, loop, suffix="predn", assignee=REVIEWER)
+        answer = await tasks_with_a_turn_pending_or_running(db, "proj-test")
+
+    assert task.id not in answer
+
+
+async def test_held_is_unchanged_by_this_change(app):
+    """The predicate is a second function precisely so this one keeps answering its own question —
+    *may a turn start on this checkout* — which a queued entry must not veto."""
+    async with async_session_factory() as db:
+        _job, loop = await _flow(db, suffix="predheld")
+        task = await _wedged(db, loop, suffix="predheld", assignee=REVIEWER)
+        await _queued_review(db, task, agent=REVIEWER)
+        held = await tasks_held_by_a_running_turn(db, "proj-test")
+
+    assert task.id not in held
+
+
+# ---------------------------------------------------------------------------
+# 3b — the event says it once
+# ---------------------------------------------------------------------------
+
+
+async def _review_unstaffed_events(db, task_id):
+    rows = (
+        (await db.execute(select(EventLog).where(EventLog.event_type == "review_unstaffed")))
+        .scalars()
+        .all()
+    )
+    return [row for row in rows if (row.data or {}).get("task_id") == task_id]
+
+
+async def test_an_unchanged_wedge_is_recorded_once_not_once_per_tick(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """3b.2 — the same fact, five firings, one record.
+
+    This population cannot clear without the operator, so a per-tick event is the same sentence
+    twelve times an hour forever, burying the events that carry news.
+    """
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="onceonly")
+        task = await _wedged(db, loop, suffix="onceonly", assignee=REVIEWER)
+
+    for _ in range(5):
+        await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
+
+    async with async_session_factory() as db:
+        events = await _review_unstaffed_events(db, task.id)
+
+    assert len(events) == 1
+    assert REVIEWER in events[0].data["reason"]
+
+
+async def test_a_changed_reason_is_recorded_again(app, auth_headers, bind_runner, live_scheduler):
+    """3b.2's other half. A condition that changed shape is news; silence there would hide it."""
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="changed")
+        task = await _wedged(db, loop, suffix="changed", assignee=REVIEWER)
+
+    await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
+
+    async with async_session_factory() as db:
+        fresh = await db.get(Task, task.id)
+        fresh.assignee = AUTHOR
+        await db.commit()
+
+    await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
+
+    async with async_session_factory() as db:
+        events = await _review_unstaffed_events(db, task.id)
+
+    assert len(events) == 2
+    assert {REVIEWER in event.data["reason"] for event in events} == {True, False}
+
+
+# ---------------------------------------------------------------------------
+# 4.5 / 4.6 — what the operator's Run button actually returns
+# ---------------------------------------------------------------------------
+
+
+async def test_the_route_answers_409_with_the_sentence_not_500(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """4.5 — no scheduler-level test can see this.
+
+    The 409 is not rendered from `FiringDecision`: the route reads the latest `JobRun`, and only
+    failing that asks `_loop_work_is_all_in_flight`, which now answers `False` here — falling to
+    `500 "Failed to fire job"` if the stalled path had not written a skipped row first. That is
+    the difference between a calm wrong answer and an alarming one.
+    """
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="route")
+        task = await _wedged(db, loop, suffix="route", assignee=REVIEWER)
+
+    res = await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
+
+    assert res.status_code == 409, res.text
+    detail = res.json()["detail"]
+    assert task.id in detail
+    assert REVIEWER in detail
+    assert "already being worked" not in detail
+    assert "nothing is wrong" not in detail
+    assert "Failed to fire job" not in detail
+
+
+async def test_a_second_press_says_the_same_thing_and_writes_one_row(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """4.6 — `agent-loops`' "records only what is new", which this wedge is now a permanent client
+    of: one row counting up, not one row per press."""
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="twice")
+        await _wedged(db, loop, suffix="twice", assignee=REVIEWER)
+
+    first = await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
+    second = await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
+
+    assert first.status_code == 409
+    assert second.status_code == 409
+    assert first.json()["detail"] == second.json()["detail"]
+
+    async with async_session_factory() as db:
+        rows = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
+
+    assert len(rows) == 1
+    assert rows[0].status == "skipped"
+    assert rows[0].tick_count == 2

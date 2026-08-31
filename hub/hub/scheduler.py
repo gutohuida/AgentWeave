@@ -25,7 +25,11 @@ from .conversations import (
 from .db.engine import async_session_factory
 from .db.models import Agent, AIJob, Checkpoint, JobRun, Loop, Message, Question, Run, Task
 from .loop_ending import QUEUE_DRAINED_REASON, end_loop
-from .run_task_binding import TERMINAL_FOR_BINDING, tasks_held_by_a_running_turn
+from .run_task_binding import (
+    TERMINAL_FOR_BINDING,
+    tasks_held_by_a_running_turn,
+    tasks_with_a_turn_pending_or_running,
+)
 from .runner_events import redact_secrets
 from .sse import sse_manager
 from .task_transition_service import apply_transition
@@ -1278,6 +1282,13 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     # would be started twice concurrently; `schedule_agent` refuses the second and drops it without
     # a word, so the collision is decided here where it can be recorded instead.
     taken: "Set[str]" = set()
+    # The in-flight rows that are not actually being worked (finding F154). Recorded by the review
+    # arm, which is the only place the question is asked, and read once when the decision is
+    # chosen -- never re-derived there. The ordinary-work arm's rows are never members: it records
+    # in flight only where `held` names a turn on the task or the assignee is mid-turn, and its
+    # second form is agent-level, so a run carrying no `task_id` still counts there and must keep
+    # counting. Re-asking a per-task predicate at the decision would silently drop exactly those.
+    wedged_reviews: "Set[str]" = set()
 
     # Both asked once, before the walk. `_agents_that_are_free` excludes agents that are running a
     # turn *or* holding active work, which is right for staffing something new and wrong for
@@ -1290,6 +1301,13 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     # for the same two reasons the line above is: a wide firing asks it about several candidates,
     # and asking it per candidate would make this a third place the question is asked.
     held = await tasks_held_by_a_running_turn(session, loop.project_id)
+    # The same question one band wider, and asked for the opposite purpose (finding F154). `held`
+    # answers *may a turn start on this checkout*, so it counts only running turns; this answers
+    # *is anybody on this task at all*, so it also counts a turn that is staffed and still queued.
+    # A review already in `under_review` cannot be staffed onto anybody, so its assignee is the
+    # only thing left to check -- and an assignee is a record of who holds a task, never evidence
+    # that a turn exists.
+    on_it = await tasks_with_a_turn_pending_or_running(session, loop.project_id)
     default_taken = False
 
     for task in await _loop_candidates(session, loop):
@@ -1357,6 +1375,22 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                     wedged_review = task.assignee in await agents_that_worked(session, task.id)
                 if not wedged_review:
                     in_flight.append((task.id, task.assignee))
+                    if task.id not in on_it:
+                        # **Both collections, deliberately** (finding F154). The row stays in
+                        # `in_flight` because `_cannot_staff` is where `task_attribution` reads the
+                        # board's `held` capacity from, and F63 split that word out of `working` to
+                        # mean precisely this task -- removing the row here would revert that two
+                        # modules away, in a field this function never reads. It joins `unstaffed`
+                        # as well because that is what carries a sentence: the F64 rule below
+                        # promotes `unstaffed[0][1]` to `stall_reason`, and `_do_fire_job` emits
+                        # one `review_unstaffed` per entry.
+                        #
+                        # What must not come back is the sentence `_loop_candidates`' own docstring
+                        # records as the pre-F45 defect -- "no claimable task among 1 open
+                        # (1 under_review)", a fact about the queue standing in for a fact about
+                        # one task. The F64 promotion replaces it before the decision is built.
+                        wedged_reviews.add(task.id)
+                        unstaffed.append((task.id, _wedged_review_reason(task, task.assignee)))
             if not wedged_review:
                 continue
 
@@ -1571,10 +1605,22 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             deferred=tuple(deferred),
         )
 
-    if in_flight:
+    if in_flight and any(task_id not in wedged_reviews for task_id, _ in in_flight):
         # **Checked before the stall, and that order is the fix** (finding F23). A queue whose work
         # is being done is not waiting on anything; asking `_stall_reason_from_walk` here would
         # count those very tasks as "open" and report the flow stalled at its busiest.
+        #
+        # **And `in_flight` alone is not that queue** (finding F154). This branch's own constant
+        # says "every candidate is already being worked by an agent mid-turn", which was being
+        # claimed on the strength of an assignee. At least one row must be work somebody is
+        # actually doing for that sentence to be true. Where every row is a wedged review, the
+        # firing falls through to the stall path, where the `unstaffed` entries recorded on the
+        # walk name the task and the agent.
+        #
+        # Asked of `wedged_reviews` rather than of the predicate again, and that distinction has
+        # teeth: the ordinary-work arm records in flight from `agent in running` as well as from
+        # `held`, so a run bound to no task at all is still work being done. A decision that
+        # re-asked a per-task question here would report three agents mid-turn as a stall.
         return FiringDecision(
             kind=DECISION_IN_FLIGHT,
             _cannot_staff=tuple(in_flight),
@@ -1622,6 +1668,13 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     return FiringDecision(
         kind=DECISION_STALLED,
         stall_reason=stall_reason,
+        # **Carried on this branch too, and it was not before** (finding F154). Until a stall could
+        # coexist with a cannot-staff row this was empty here by construction, so omitting it cost
+        # nothing. It costs the board now: `task_attribution` reads this collection to choose
+        # between `held` and `assigned`, and a wedged review that reached the stall path without it
+        # would report its reviewer as merely assigned -- undoing F63 by moving the row rather than
+        # by editing anything F63 touched.
+        _cannot_staff=tuple(in_flight),
         unstaffed=tuple(unstaffed),
         deferred=tuple(deferred),
     )
@@ -1674,6 +1727,25 @@ async def _loop_stall_reason(session: AsyncSession, loop: Loop, *, agent: str) -
     """
     _, gated = await _first_startable_candidate(session, loop, agent=agent)
     return await _stall_reason_from_walk(session, loop, gated)
+
+
+def _wedged_review_reason(task: Task, reviewer: str) -> str:
+    """What a firing says about a review with a name on it and nobody doing it (finding F154).
+
+    Names the task, names the agent, and names the operator's own remedy -- `under_review`'s three
+    exits are theirs alone, so a sentence that ended without one would leave them knowing something
+    is wrong and not what to do about it.
+
+    **Says nothing about a later firing.** The sentence this replaces promised that "the next firing
+    picks up whatever finishes", which for this row can never come true: nothing is running, so
+    nothing finishes, and every subsequent firing repeats the promise. A refusal that cannot be
+    cleared by waiting must not suggest waiting.
+    """
+    return (
+        f"{reviewer} is named on {task.id} ({task.title!r}) as its reviewer and is not reviewing "
+        f"it: no turn is running on that task and none is queued. Nothing will move it on its own. "
+        f"Ask {reviewer} again, review it yourself, or send it back with revision_needed."
+    )
 
 
 def _landing_stall_reason(count: int) -> str:
@@ -1838,6 +1910,37 @@ async def _emit_loop_edit_applied(session: AsyncSession, payload: dict) -> None:
     await sse_manager.broadcast(payload["project_id"], "loop_edit_applied", payload)
 
 
+async def _review_unstaffed_already_stands(
+    session: AsyncSession, loop: Loop, task_id: str, reason: str
+) -> bool:
+    """Whether the newest `review_unstaffed` for this task already says exactly this.
+
+    Narrow in the same two directions as `_stall_run_to_increment`: the **most recent** record for
+    this task, so a condition that cleared and returned is news again, and the **same reason**, so
+    a condition that changed shape stays visible rather than hiding inside a silence.
+    """
+    from .db.models import EventLog
+
+    latest = (
+        (
+            await session.execute(
+                select(EventLog)
+                .where(EventLog.project_id == loop.project_id)
+                .where(EventLog.event_type == "review_unstaffed")
+                .where(EventLog.loop_id == loop.id)
+                .order_by(EventLog.timestamp.desc(), EventLog.id.desc())
+                .limit(1)
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if latest is None:
+        return False
+    data = latest.data or {}
+    return data.get("task_id") == task_id and data.get("reason") == reason
+
+
 async def _emit_review_unstaffed(
     session: AsyncSession,
     job: AIJob,
@@ -1862,7 +1965,18 @@ async def _emit_review_unstaffed(
     nobody can take is a fact about the queue rather than about this tick, and a firing that quietly
     did something else instead would leave the operator with a queue that never finishes and no
     indication why.
+
+    **Once per fact, not once per tick** (finding F154). This used to emit on every firing, which
+    was tolerable while the population was transient -- an unstaffable review clears the moment an
+    agent frees up. F154's population cannot clear without the operator, so at a five-minute
+    cadence the same unchanged sentence would arrive twelve times an hour forever, burying the
+    events that carry news. That is the harm `agent-loops`' *"A firing that does not fire records
+    only what is new"* already names, and `_stall_run_to_increment` above is the same rule applied
+    to the `JobRun` row: compare the standing record's reason and stay silent when it has not
+    moved. A changed reason emits again, because a condition that changed shape is news.
     """
+    if await _review_unstaffed_already_stands(session, loop, task_id, reason):
+        return
     payload = {
         "job_id": job.id,
         "job_name": job.name,
