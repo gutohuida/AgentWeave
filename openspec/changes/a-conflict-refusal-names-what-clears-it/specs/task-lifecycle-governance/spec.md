@@ -32,9 +32,18 @@ of them does not clear it under the other:
   approving again SHALL be stated as the remedy, because there the commit judged is whatever the
   branch then points at.
 
-The remedy for the evidence route SHALL state which branch the fresh evidence must name, where the
-system's choice of what to merge depends on it. A remedy that is followable only by accident is a
-remedy that has not been stated.
+The remedy for the evidence route SHALL state the condition under which the fresh evidence replaces
+the one being judged, in terms of something the party it refuses can arrange. The system decides
+what to merge per branch, keeping the most recently recorded accepted evidence for each; the branch
+a piece of evidence belongs to is derived from the repository at the moment it is recorded and is
+not a value anybody supplies. So the refusal SHALL say that the resolved commit must be on the
+branch it names and that the evidence must be recorded from that branch, and SHALL NOT instruct the
+reader to state a branch. A remedy expressed as a field the reader cannot set is a remedy that has
+not been stated.
+
+The remedy SHALL NOT claim that the fresh evidence must demonstrate the same requirement as the
+evidence it replaces, because it need not: the system's choice is made per branch across all of the
+task's evidence. A remedy that overstates what is required blocks a reader who is not blocked.
 
 Where the judged commit is **no longer present on the branch the refusal names it on**, the refusal
 SHALL say so. That state is reached by rewriting the branch — the reasonable response to a remedy
@@ -76,9 +85,16 @@ enforcement point.
 
 #### Scenario: Following the stated remedy clears the refusal
 
-- **WHEN** the conflict is resolved, evidence naming the resolved commit is recorded and accepted, and approval is requested again
+- **WHEN** the conflict is resolved on the branch the refusal names, evidence is recorded from that branch and accepted, and approval is requested again
 - **THEN** the transition is permitted
 - **AND** the resolved commit is what integration merges
+- **AND** the evidence that was being judged before is no longer what integration merges
+
+#### Scenario: The remedy does not ask for a branch to be named
+
+- **WHEN** approval is refused for a task whose merge target came from accepted evidence
+- **THEN** the refusal names the branch the resolved commit must be on
+- **AND** it does not instruct the reader to supply or record a branch, which is not something the reader can set
 
 #### Scenario: A branch-tip commit is answered with the branch
 

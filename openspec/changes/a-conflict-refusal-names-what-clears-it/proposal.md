@@ -4,7 +4,7 @@ The product tells a refused party to do something that provably cannot clear the
 2026-08-31 an agent did exactly what it said, twice, and then ran `git reset --hard` on the branch
 holding the only copy of its work.
 
-`_merge_detail` (`hub/hub/requirement_gate.py:165-179`) composes:
+`_merge_detail` (`hub/hub/requirement_gate.py:166-179`) composes:
 
 > This task's work does not merge cleanly into master: drive1_024543.py. **Resolve the conflict on
 > the branch, then approve** — approving is what merges it.
@@ -35,7 +35,7 @@ The turn ended with the task still `under_review`, the accepted evidence still n
 then an **orphaned commit, not on the branch at all** — and the refusal still reporting
 `"source_branch": "agentweave/task/task-5ae53e9b339c"`, a branch from which that commit had just been
 detached. The refusal reaches the agent as bare prose: `mcp_server._readable_detail`
-(`hub/hub/mcp_server.py:112-131`) returns `detail["message"]` and nothing else, so the sentence *is*
+(`hub/hub/mcp_server.py:111-131`) returns `detail["message"]` and nothing else, so the sentence *is*
 the agent's whole instruction. It reaches the operator the same way, through
 `readableApiError` in the UI.
 
@@ -68,6 +68,12 @@ single-task fixture. That is why three rounds of spec review and 3,783 unit test
   accepted — which ends in the same two-way-out clause `ACCEPT_OR_GRANT` already states for the
   `unaccepted` refusal, because acceptance is the operator's and an agent reading it must ask rather
   than take. For a branch-tip commit, today's sentence is kept unchanged, because there it is true.
+  **Round 2 changed what the remedy may say about the branch.** Round 1 wrote that it must state
+  which branch the fresh evidence should *name*; the recording path has no branch parameter, so that
+  is a second instruction nobody can follow. The remedy states the condition instead — the resolved
+  commit on the branch the refusal names, the evidence recorded from that branch — which is what an
+  agent does by construction and what an operator naming a sha in the locator has to arrange. See
+  design D2a.
 - **The discriminator is a fact about the target, not about the project.** `Target.evidence_id` is
   populated on the evidence route by `_targets` (`task_integration.py:219-267`) and left `None` on
   the branch-tip route by construction (`merge_targets`, `:405-409`, whose comment says so). The

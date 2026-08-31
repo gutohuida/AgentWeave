@@ -982,3 +982,113 @@ iteration adds documents to.
 and nothing more. Round 2 is the next unit of work, and it must be an **independent re-derivation** —
 above all of the supersession claim D2 rests on, and of the two-route table, which is round 1's own
 reasoning and therefore exactly what round 2 exists to distrust.
+
+---
+
+## Iteration 8 — 2026-08-31T14:33+01:00 — F155-R2: the second remedy was unfollowable too
+
+**Position on arrival.** Branch `autonomous/2026-08-31-the-turn-must-end-first` at `2523326`, tree
+clean, `git log` matching STATE.json exactly — iteration 7 recorded, branch released, `30db7b8`
+carrying F155 round 1. Clock read **14:24**, inside the 15:30 window, so `next_action` was startable
+as written.
+
+**One unit of work.** `F155-R2` — round 2 on `a-conflict-refusal-names-what-clears-it`. A spec round
+only. Nothing implemented, no product code touched; the diff is four markdown files.
+
+### The four load-bearing claims, checked at the source
+
+| # | Claim | Verdict |
+|---|---|---|
+| 1 | `_merge_detail` is the only producer of conflict prose; `_check_mergeable` the only producer of `unmergeable` entries | **Confirmed.** `refusal.unmergeable.append` occurs once in the product, `requirement_gate.py:342`. Every other construction is a test or fixture literal. |
+| 2 | `merge_targets` answers two ways, and `Target.evidence_id` is set on every evidence row and `None` on the branch-tip row | **Confirmed.** `_targets` sets `evidence_id=evidence.id` unconditionally (`task_integration.py:259`); `merge_targets:405-409` leaves all three evidence fields `None` and comments why. Note the branch-tip `Target` does carry a `branch` — `worktrees.task_branch_name(task.id)` — which matters for D3. |
+| 3 | Nothing reads a key off `unmergeable` | **FALSE as stated.** True of product code; false of the drives. `scripts/drive/t_row17_integration.py:273-282` reads `commit_sha` and `paths` off the refusal body. |
+| 4 | The supersession D2's remedy rests on | **The finding.** See below. |
+
+### The finding: round 1's remedy is a second unfollowable sentence
+
+This change exists because the product tells a refused party to do something that cannot clear the
+refusal. Round 1's replacement instruction had the same defect, one layer down.
+
+Round 1 wrote that the new wording *"must say **which branch** the fresh footprint has to name"*.
+Three facts from the code say it cannot:
+
+1. **`branch` is not a field anybody supplies.** `record` (`requirement_evidence.py:97-190`) takes
+   `kind`, `actor`, `locator`, `summary`, `task_id`, `workspace`. The `branch` on
+   `EvidenceFootprint` is written only by `_apply_footprint` (`:362-388`) from a `Footprint` the
+   repository was measured for. A reader told to name a branch has nowhere to name it.
+2. **On the agent route the right value happens automatically**, so open question 1 is answered
+   **yes** — but for a reason round 1 did not have. `_take_footprint`'s named-commit path is gated
+   on the actor: `named = locator_commit(locator) if actor.kind == "operator" else None`
+   (`:282`). An agent therefore *never* reaches `_branch_at`, and the `""` round 1 feared is
+   unreachable for it: its branch is `rev-parse --abbrev-ref HEAD` at record time and the same at
+   turn end via `restamp_run_footprints` (`:908`). Both agree with the stale row, `newest[branch]`
+   collapses them, the refusal clears.
+3. **On the operator route it does not.** An operator whose `locator` is the resolved sha — which is
+   exactly what "record evidence naming the resolved commit" invites, and what F71 made
+   authoritative — gets `read_footprint(root, at=…)` and so `_branch_at`, which returns `""` unless
+   the commit is the tip of exactly one local branch. The resolved commit stops being a tip the
+   moment anything is committed on top of it, which the turn-end snapshot does. `""` and
+   `"agentweave/task/…"` are distinct keys in `newest: Dict[Optional[str], Target]`, both targets
+   survive, and the refusal stands.
+
+So the remedy is rewritten as a **condition on the repository and on where the recording is done
+from** — the resolved commit on the branch the refusal names, the evidence recorded from that
+branch — which an agent satisfies by construction and an operator must arrange. New design section
+**D2a** carries the derivation; the delta now forbids instructing the reader to state a branch, and
+a new scenario asserts that.
+
+### Two further properties the sentence rests on (new design D6)
+
+Both read rather than assumed, because D2 is only true if they hold.
+
+- **"Newest" means most recently *recorded*, not newest commit.** `_targets` orders by
+  `EvidenceFootprint.observed_at.asc()`; `observed_at` is `default=_now` at row creation
+  (`db/models.py:2462`) and `_apply_footprint` never touches it, so a restamp corrects a commit
+  without moving the row in the ordering.
+- **Any accepted evidence on that branch supersedes, not only evidence for the same requirement.**
+  The reduction keys on `target.branch` alone across everything the task reaches through
+  `TaskRequirementLink`. The delta now says the remedy must *not* claim the requirement has to
+  match, because a reader who believed that would think themselves blocked where they are not.
+
+### The consumer round 1 did not have
+
+`t_row17_integration.py:284-288` asserts the refusal's message contains both `"resolve"` and
+`"approve"`, lowercased. The evidence-route sentence may contain neither in that form, so this drive
+goes red when the change lands — correctly. New task **3.6** replaces the assertion with one that
+reads the new requirement instead of deleting it.
+
+### The other open questions, answered
+
+- **2 — should the branch-tip sentence name its commit?** Yes, and on a stronger ground than round
+  1's symmetry: `task_branch_tip` is read at the moment the gate asked, so the tip is precisely the
+  time-varying thing a reader who has pushed since cannot reconstruct. Naming it is what makes the
+  sentence checkable.
+- **3 — any other producer of `unmergeable`?** No. One `append`, at `requirement_gate.py:342`.
+- **D3, weighed as instructed and kept**, with something round 1 did not say: it can only ever fire
+  on the evidence route, because a branch-tip target's commit is that branch's tip by construction
+  and is therefore always reachable. The cost is not paid where it buys nothing.
+
+### Verification
+
+No product code moved. `hub/`, `src/` and `hub/ui/` are untouched; the diff is the four openspec
+documents, 163 insertions.
+
+| Check | Result |
+|---|---|
+| `openspec validate a-conflict-refusal-names-what-clears-it --strict` | valid |
+| Every `file:line` citation across all four documents, resolved programmatically | 26 ranges checked; **3 corrected** — `_merge_detail` is at `:166`, `_take_footprint`'s actor gate at `:282` not `:285`, and D4's fixture entry at `taskIntegration.test.ts:48` not `:49` |
+| `git status` | clean |
+
+Linters and the suite were not run: no Python or TypeScript moved and CI lints no markdown.
+Iteration 6's whole-suite run (3,783 passed, 0 failed) still describes this tree.
+
+### Where the branch stands
+
+`approval-waits-for-the-turn-to-end` remains complete, driven and offered. `F155` now has rounds 1
+and 2. Round 3 is next and owns different ground: whether the modified requirement contradicts
+anything already shipped in `task-lifecycle-governance` (`:638`, `:720`, and
+`approval-refuses-unaccepted-evidence`'s ACCEPT_OR_GRANT rule), whether prose alone is enough, and
+whether the scenarios are drivable. One thing round 2 checked in passing and round 3 should not have
+to re-derive: `evaluate` excludes the acting run from the liveness check (`requirement_gate.py:468`),
+so an agent approving inside its own turn is not refused as `unfinished` — the new scenarios are
+drivable in a single turn.
