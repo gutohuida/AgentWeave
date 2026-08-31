@@ -2085,3 +2085,22 @@ a stalled lane.
   it now ticked.
 - The fixture is clean: no job enabled (all archived), both agents idle, checkout clean, nothing
   queued, no permission card pending.
+
+### `SUITE` — green, on the second attempt, and the first attempt is worth recording
+
+**`py -3.11 -m pytest hub/tests/ -q` → 3751 passed, 84 skipped, 1 xpassed in 20:43.**
+`py -3.11 -m pytest tests/ -q` → 440 passed, 3 skipped. `ruff check src/ hub/ tests/`,
+`black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` and `mypy src/` all clean.
+
+The **first** attempt stalled. It reached 95% (~3646 of 3836) and then stopped — not slowly, but
+completely: measured 912.6 seconds of CPU on the pytest process, and 912.6 seconds again forty
+seconds later. Nothing had failed; it simply stopped advancing, and sat there twelve minutes before
+it was killed. That is **F109**, the known flake the state file describes as "the hub suite shares
+one database connection per session and the retry chain can stall on it", and it is the first firing
+of it in three full runs.
+
+Two things were done rather than assumed. The stall point was located by index — 95% of 3836 puts it
+in `test_task_worktrees.py`/`test_tasks.py` — and then **every file from there to the end was run
+standing alone: 235 passed, 2 skipped, in 84 seconds.** So the tail is not broken; it stalls only
+behind the other 3600. Then the whole suite was run again from scratch, and that run is the green
+one above. A single green full run is the claim, not two partial ones stitched together.
