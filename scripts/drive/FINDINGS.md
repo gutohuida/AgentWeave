@@ -8145,10 +8145,27 @@ for FR-1 has already been recorded" and moves on rather than retrying.
 
 ---
 
-## F122 (B) — a flow drives a task to `approved` by itself, and the work never reaches the branch
+## F122 (B) — a flow drives a task to `approved` by itself, and the work never reaches the branch — FIXED, NOT YET DRIVEN
 
-**Status:** open, filed not fixed. **Needs an operator decision**, so it is deliberately not
-repaired here.
+**Status: fixed 2026-08-31 (`d4c1467`, `2a53a27`), on the operator's decision of 2026-08-30 that
+approval is refused while evidence sits unaccepted.** The change is
+`openspec/changes/approval-refuses-unaccepted-evidence`, three spec rounds then implementation.
+
+Both halves shipped. Approval is now **refused** where a task has evidence awaiting review that names
+a commit and nothing accepted names one — rigor-independently, so it fires in a default project,
+which is where this defect lived. And **accepting evidence attempts the integrations that wanted
+it**, on the operator's route and the granted agent's alike, so the remedy the refusal names actually
+lands the work rather than being asked for and then ignored.
+
+The scoping constraint is the whole design and is held by test: a task with no evidence, evidence
+naming no commit, rejected evidence, and any project where integration could not have been attempted
+anyway are all exactly as approvable as before.
+
+**What the fix does NOT yet show is a live flow landing its work.** The flow suite configures no main
+branch, so it cannot prove this; only `DRIVE-1` can. The consequence the operator chose is that a
+default project's first flow now **stalls loudly** — the refusal names both remedies and neither is
+an agent's to take — and whether that stall is legible on the board is a drive question, not a test
+one. The original report follows.
 
 The end of row 12's drive. A flow started `task-524904110504`, `alpha` implemented it and recorded
 evidence, a later firing resolved `gamma` as an independent reviewer, and `gamma` approved it. The
@@ -11253,7 +11270,15 @@ sqlalchemy, alembic`; `hub/hub/main.py` `lifespan()` ordering (`init_db()` first
 `logger.warning(warning)` after); `C:/Users/huida/AppData/Local/Temp/aw0830/hub_crash.log`, eleven
 process starts, four lines each.
 
-## F152 (B) — every gate refusal reaches an agent as a Python dict repr, and the fix is three lines
+## F152 (B) — every gate refusal reaches an agent as a Python dict repr, and the fix is three lines — FIXED
+
+**Fixed 2026-08-31 (`2a53a27`), as task 6.3 of `approval-refuses-unaccepted-evidence`.**
+`_readable_detail` returns `detail["message"]` where a dict carries a non-empty string one, and keeps
+today's behaviour otherwise. Asserted in `hub/tests/test_approval_refuses_unaccepted_evidence.py`
+against a real `to_dict()` payload — the reduction equals `refusal.detail()` exactly, with no brace
+and no `'code'` in what an agent reads — and the string and messageless-dict cases are pinned
+verbatim. It repairs the sentence for all six agent-plane dict-detail producers, not only the gate's.
+**Not yet driven**; `DRIVE-1` is what shows an agent reading it in a live turn.
 
 **Found 2026-08-31 by C-R2, reading code rather than driving.** Not a drive finding; recorded here
 because this is where the loop's defects live and because change `approval-refuses-unaccepted-evidence`

@@ -1199,3 +1199,127 @@ Round 3's rewrites are in tasks 2.1–2.3, 2.5, 3.4, 3.6 and 5.2a — read those
 because the naive "extract the body" is the version that breaches requirement 1. Expect the five
 named test files to move, and nothing outside them; if a sixth starts refusing, that is a finding
 about the predicate, not a test to edit.
+
+---
+
+## Iteration 9 — 2026-08-31 02:09 to 02:38 (+01:00) — `C-IMPL`: implement `approval-refuses-unaccepted-evidence`
+
+**Item:** `C-IMPL`. **Status: done.** Groups 1 through 7 of `tasks.md` are implemented, verified and
+pushed; group 8 is the "not in this change" list and stays open by design.
+
+Five commits: `8028636` (group 1, reproductions), `d4c1467` (group 2, the query split), `2a53a27`
+(groups 3–5 and 6.2/6.3, the refusal and the acceptance), `9ca6ab9` (6.1, the UI case), `8e21cbd`
+(tasks.md).
+
+### Group 1 — the reproductions passed against unmodified code first
+
+Four tests in the new `hub/tests/test_approval_refuses_unaccepted_evidence.py`, green on untouched
+code before a line was changed: awaiting evidence naming a commit **approves** and records
+`NOTHING_TO_MERGE`; accepting it afterwards **merges nothing at all**; a `paths` footprint approves;
+a task with no evidence approves. The fixture reads the rows back — awaiting, `git` footprint, the
+named commit, the requirement link, the recording task — before asserting behaviour, which caught a
+real fixture defect immediately: evidence recorded *before* the task exists on a run bound to nothing
+lands with `task_id = NULL`. That is the product's real behaviour and the refusal has to tolerate it,
+but it is not the ordinary shape, so the fixture now creates the task first and names it, and one
+test deliberately keeps the null case.
+
+### Group 2 — the split round 3 called for, and the test that proves it
+
+`_targets(session, task, review_state)` holds the **filter**; `integration_targets` keeps the
+per-branch reduction and `awaiting_targets` returns every waiting row. The empty-`commit_sha` guard
+moved out of the reduction loop into the filter, where it belongs — left where it was,
+`awaiting_targets` would have refused on a footprint the merge silently ignores.
+
+`test_two_awaiting_commits_on_one_branch_are_both_returned` is the regression round 3 asked for and
+it discriminates: two awaiting rows on one branch return **two**, the same two accepted return
+**one**. `Target` widened with `evidence_id`, `requirement_id` and `task_id`; the human identifier is
+resolved in `requirement_gate`, which already imports `SpecRequirement`.
+
+### Group 3 — three tripwires closed by construction rather than by care
+
+- `unaccepted` is in `refuses` **and** in `to_dict()`.
+- `detail()` is now a composition of one sentence per category. The early return it replaced
+  (`if self.unmergeable and not (blocking or diagnostics)`) would have dropped the new sentence in
+  precisely the case that matters most — an otherwise-clean task. The text for both pre-existing
+  shapes is byte-identical; `_unverified_detail()` and `_merge_detail()` return `""` when they have
+  nothing to say and the join does the rest.
+- `_check_unaccepted` sits **above** `evaluate`'s `if not enforced: return`, beside
+  `_check_mergeable`. Proven by `test_the_refusal_fires_at_sketch_rigor`, which asserts the
+  document's rigor is a sketch before asserting the refusal.
+
+D4's preconditions are now shared **by construction**: one `_merge_situation` resolves project, main
+branch, workspace, `is_repository`, `branch_exists` and the accepted targets, and both checks take
+it. So the refusal cannot fire where the merge would have been skipped anyway, and
+`resolve_project_workspace` — which writes `directory_state` and `last_seen_at` — runs once per
+approval instead of twice.
+
+The mixed case populates `advisory`, carried out beside `reported` on `reported_advisories`. Each
+entry now carries a `kind`, stamped on the reported copy only so `blocking`'s shape is untouched.
+
+### Group 4 — the second half, on the predicate round 2 rewrote
+
+`tasks_awaiting_this_commit` excludes only *this task's own recorded merge of this commit*, asked of
+the database as a pre-filter with the repository as the authority.
+`integrate_what_was_waiting_for_this_evidence` is wrapped and called after each route's commit, on
+both planes, with the actor that actually decided — `run_actor(...)` on the agent route,
+`operator()` on the operator's. `test_a_granted_agent_accepting_merges_the_work_too` asserts the
+integration row reads `actor_kind: run, actor: reviewer`, not the operator.
+
+The pair that is D3's whole argument passes in both shapes: accepted A merged at approval with
+awaiting B reported, then B merged when accepted — B on A's branch, and B on a second branch.
+
+### Group 6 — F152 fixed and asserted, and the UI needed no component
+
+`_readable_detail` returns `message` where a dict carries a non-empty one. Two tests: a real
+`to_dict()` payload reduces to exactly `refusal.detail()` with no brace or `'code'` in it, and a
+plain-string detail plus a messageless dict keep today's behaviour verbatim.
+`test_the_agent_plane_sees_the_refusal` drives the agent PATCH and reads `gate_unsatisfied` off it.
+The UI test gained a case; no component moved, so `hub/hub/static/ui` did not.
+
+### One existing test moved, and it was inside the predicted five
+
+Round 3 named five candidate files. Measured: **exactly one test** newly refused,
+`test_task_integration.py::test_evidence_awaiting_review_merges_nothing` — which was F122's own shape
+asserted as intended behaviour ("approval succeeds, records `NOTHING_TO_MERGE`"). Its real property,
+nothing reaching `main` on unreviewed evidence, is kept verbatim and now stated more strongly as a
+refusal. The reason is written into its docstring, as 7.4 requires.
+
+### Two small inaccuracies in the change, recorded rather than smoothed over
+
+- **`tasks.md` 7.2 names `hub/tests/test_spec_evidence.py`, which does not exist.** Written from
+  memory across three rounds and never checked, because no round ran a command. Substituted
+  `test_requirement_evidence.py`, `test_agent_evidence_grant.py` and `test_agent_evidence_plane.py`.
+  Small, and exactly the class of thing only implementation finds.
+- **Task 6.2 could not be written as stated without first walking the task to `under_review`.** The
+  agent plane returned a *string* detail — `"Cannot move a task from 'pending' to 'approved'"` — and
+  the assertion `detail["code"]` raised `TypeError`. The test now drives the task to `under_review`
+  as the operator and then approves as the agent. Worth noting because a test that had asserted only
+  "409" would have passed on the wrong refusal.
+
+### Verification
+
+- `test_approval_refuses_unaccepted_evidence.py` — 31 passed.
+- The blast-radius candidates plus the evidence plane —
+  `test_evidence_footprint_root`, `test_evidence_restamp`, `test_task_release`,
+  `test_task_transitions`, `test_task_transition_service`, `test_requirement_evidence`,
+  `test_agent_evidence_grant`, `test_agent_evidence_plane` — 200 passed.
+- 7.3's selection, `-k "integration or evidence or approve or approval or gate"` — **418 passed, 3
+  skipped**.
+- The flow, scheduler, handover and divergence suites — **245 passed**, unchanged. Round 3 predicted
+  this exactly, and it is the same fact as *only a drive can prove this change*: `test_flow_chain_
+  end_to_end.py` configures no main branch, so the refusal's preconditions are never met there.
+- `hub/ui`: `npm run lint` clean, `vitest src/__tests__/taskIntegration.test.ts` 5 passed.
+- `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/
+  tests/` — clean over the paths CI covers.
+- `openspec validate approval-refuses-unaccepted-evidence --strict` — valid.
+
+### Next
+
+**`DRIVE-1`** — the point of the whole run. Restart 8011 from this branch and confirm it serves this
+code before drawing any conclusion. Fresh project, fresh document, two independent tasks, Haiku
+agents. Expect C's refusal to stall the flow until evidence is accepted; accept it as the operator
+and record whether the product told you that was what to do. Three things this iteration leaves for
+the drive to answer, because no test can: whether the refusal's sentence actually reaches the agent
+in a live turn rather than in a unit test of `_readable_detail`; whether the advisory in the mixed
+case reaches the operator's screen at all (`approval_report` has no UI consumer — tasks.md 8.3);
+and whether the stall is legible on the board or merely correct in the API.
