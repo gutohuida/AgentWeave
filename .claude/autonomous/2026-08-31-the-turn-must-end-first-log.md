@@ -1745,3 +1745,67 @@ numbers stand and nothing was re-run. Changed files: `FINDINGS.md`, this log, `S
 
 **State on exit.** Tree clean, branch pushed, not merged. Queue still entirely `done`. Past the
 16:30 boundary the branch is offered as it stands.
+
+---
+
+## Iteration 16 — 2026-08-31 16:24 → 16:30 — the unknown branch has two spellings, and only one consumer knows it
+
+**Position on arrival.** Branch `autonomous/2026-08-31-the-turn-must-end-first` at `1f97662`, tree
+clean, `git log` matching STATE.json exactly — nothing to reconcile. Every queue item `done`,
+including `A-CLOSE`. Arrived 16:24, **six minutes** before the 16:30 hard stop. That forbids a drive
+(F165 and F166 each need a live Hub and a real turn, and the standing rule is not to start one with
+under ~40 minutes on the clock) and the 15:30 rule forbids a spec round. So this took the
+iteration-13/14/15 shape: one bounded, read-only source measurement, chosen to remove the specific
+unknown iteration 15 left named in `next_action`.
+
+**The question asked.** Iteration 15 measured that `_branch_at`'s `""` means *skip* in `detect_drift`
+and *one shared merge bucket* in `integration_targets`, and left one thing explicitly unmeasured:
+whether a branch-unknown footprint is reachable through the product's own routes rather than merely
+constructible in a test. That is a source question, so it fit the six minutes.
+
+**MEASURED — the sentinel is two values, not one.** `read_footprint` (`requirement_evidence.py:480-486`)
+sets `branch` down two different arms:
+
+- **with `at`** — the operator named a sha (the F71 route) — `branch = _branch_at(root, commit)`,
+  which returns `""` when the commit is not exactly one branch's tip. This is F165's route.
+- **without `at`** — the ordinary route, no sha named — `branch = _git(root, "rev-parse",
+  "--abbrev-ref", "HEAD") or ""`. On a detached HEAD that call answers the literal string
+  **`"HEAD"`**, not `""`.
+
+`detect_drift` knows this and unifies the two: `:1064-1069` reads `if not ref or ref == "HEAD":
+continue`, with a comment naming the detached-HEAD case by name. So the module has **two spellings of
+"names no line of work"** and its drift consumer honours both.
+
+`integration_targets` (`task_integration.py:283-286`) honours neither. It writes
+`newest[target.branch] = target` with no guard at all, and `_targets` (`:257-267`) filters only on
+`commit_sha`. So the two spellings do not merely both leak into the reduction — **they leak as two
+different keys.** A detached-HEAD footprint and an operator-named-mid-history footprint on the same
+task mean the same thing and land in two separate merge buckets; two footprints sharing a spelling
+supersede each other last-write-wins.
+
+**What this settles.** Iteration 15's open unknown is answered in the direction that makes F165
+worse, not better: the branch-unknown class is reachable through the **plain agent route**, not only
+through F71's named-sha route. A workspace sitting on a detached HEAD — a checkout at a tag or a sha,
+which needs no operator sophistication and no evidence `locator` at all — produces `branch="HEAD"` on
+every footprint it records. The evidence for that reading is the codebase's own: the drift skip at
+`:1067` exists precisely because this happens.
+
+**What it does to the repair.** F165's repair now has to pick a single spelling for "unknown" before
+it can do anything else. Teaching `_branch_at` to answer a descendant branch does not touch the
+detached-HEAD arm, which does not go through `_branch_at` at all — so a repair scoped to that function
+leaves the second spelling, the more reachable one, entirely in place. Iteration 15 said the repair is
+bigger than `_branch_at`; this says *which* part is outside it.
+
+**Bound on the claim.** Read at the source, not run. The `"HEAD"` behaviour of
+`git rev-parse --abbrev-ref HEAD` on a detached head is asserted here on the strength of the
+codebase's own comment and check at `:1064-1069` rather than re-derived by running git — that is the
+one link in the chain not independently measured this iteration. Not measured either: whether two
+branch-unknown *accepted* footprints on one task arise in practice, which still needs a drive. F165
+stays severity B, stays unfixed, stays unqueued; F166 untouched.
+
+**Cost.** Zero spawns, zero projects, no Hub started, no product code touched. Iteration 10's suite
+numbers stand and nothing was re-run — this iteration changed no code, so there was nothing for a
+suite to say.
+
+**State on exit.** Tree clean, branch pushed, not merged. Queue entirely `done`. At the 16:30 boundary
+the branch is offered as it stands.

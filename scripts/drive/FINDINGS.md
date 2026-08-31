@@ -12528,3 +12528,39 @@ not clear the state either: a cancel route hitting the same empty registries has
 give.
 
 Not queued. No product code was touched to establish this.
+
+---
+
+## F165 addendum, measured 2026-08-31 (iteration 16) — the unknown branch has **two** spellings, and the merge path knows neither
+
+Read at the source, no code touched. This narrows F165's repair a second time; the finding, its
+severity (**B**) and its unqueued status are unchanged.
+
+`read_footprint` (`requirement_evidence.py:480-486`) sets `Footprint.branch` down two arms:
+
+| route | expression | value when the line of work is unknown |
+|---|---|---|
+| operator named a sha (`at`, the F71 route) | `_branch_at(root, commit)` | `""` |
+| ordinary route, no sha named | `_git(root, "rev-parse", "--abbrev-ref", "HEAD") or ""` | `"HEAD"` — a detached HEAD answers the literal string |
+
+`detect_drift` treats the two as one: `:1064-1069` is `if not ref or ref == "HEAD": continue`, with a
+comment naming the detached-HEAD case explicitly. `integration_targets`
+(`task_integration.py:283-286`) guards neither — it writes `newest[target.branch] = target`, and
+`_targets` (`:257-267`) filters only on `commit_sha`. So the two spellings do not merely both survive
+into the merge reduction: **they survive as two distinct keys.** Two footprints that mean the same
+thing — "this names no line of work" — occupy two different merge buckets, while two sharing a
+spelling supersede each other last-write-wins.
+
+**What this changes.** Iteration 15 established that a repair scoped to `_branch_at` leaves an
+undesigned equivalence class behind it. This says which part of the problem is outside that function
+altogether: the detached-HEAD arm never calls `_branch_at`, so nothing done to `_branch_at` reaches
+it. And that arm is the *more* reachable of the two — a workspace checked out at a tag or a sha
+produces `branch="HEAD"` on every footprint it records, with no operator sophistication and no
+evidence `locator` involved. Iteration 15's open question ("is the branch-unknown class reachable
+through the product's own routes, or only constructible in a test?") is therefore answered **yes, via
+the plain agent route**, on the strength of the codebase's own drift-skip comment.
+
+**Bound.** The `"HEAD"` behaviour of `git rev-parse --abbrev-ref HEAD` under a detached head is taken
+from the check and comment at `:1064-1069` rather than re-derived by running git — the one unmeasured
+link. Still not measured: whether two branch-unknown *accepted* footprints arise on one task in
+practice, which needs a drive. Not queued.
