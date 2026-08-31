@@ -152,14 +152,14 @@ design D7 says so rather than claiming a guarantee it does not provide.
 
 ## 7. Prove it end to end
 
-- [ ] 7.1 Re-run `scripts/drive/t_f162_window.py` against a Hub restarted from this branch. Lane 1
+- [x] 7.1 Re-run `scripts/drive/t_f162_window.py` against a Hub restarted from this branch. Lane 1
   must now reach a refusal instead of `REPRODUCED`; update the harness's pass condition and say in
   `FINDINGS.md` what changed.
-- [ ] 7.2 Re-run `scripts/drive/t_drive2_loop_lands.py`: a loop's work still reaches the main branch,
+- [x] 7.2 Re-run `scripts/drive/t_drive2_loop_lands.py`: a loop's work still reaches the main branch,
   now in one operator action, with no review stall on the way.
-- [ ] 7.3 Re-run `scripts/drive/t_drive1_flow_lands.py`: the flow still lands its work and its review
+- [x] 7.3 Re-run `scripts/drive/t_drive1_flow_lands.py`: the flow still lands its work and its review
   leg is untouched.
-- [ ] 7.4 Record the outcome of each drive in `scripts/drive/FINDINGS.md`, including anything new the
+- [x] 7.4 Record the outcome of each drive in `scripts/drive/FINDINGS.md`, including anything new the
   drives surface.
 
 ## 8. Close it out

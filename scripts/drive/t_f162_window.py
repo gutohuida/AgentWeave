@@ -598,8 +598,26 @@ def lane_wide():
               tip0 == base_head, f"{(tip0 or 'none')[:12]} vs base {base_head[:12]}")
 
         head("Poll the tip every second until it moves -- this IS the window")
+        # And PROBE it every five, because closing the window does not narrow it. The width is
+        # whatever the agent chooses to do after `update_task`, and the fix does not touch that --
+        # it makes the whole width refuse. A single refusal at one instant would not distinguish
+        # "refused throughout" from "refused at the moment we happened to ask", so the probe is
+        # repeated from one end of the window to the other. `land` is the probe rather than a PATCH
+        # because lane 1 measured it leaving the task exactly as it found it (still `completed`,
+        # still held), so probing costs the window nothing.
         width = None
+        probes = []
+        next_probe = 0.0
         while time.monotonic() - completed_at < 480:
+            elapsed = time.monotonic() - completed_at
+            if elapsed >= next_probe:
+                next_probe = elapsed + 5.0
+                pc, po = api("POST", f"/projects/{P}/tasks/{t_a}/land", {})
+                pd = po.get("detail") if isinstance(po, dict) else po
+                pu = (pd or {}).get("unfinished") if isinstance(pd, dict) else None
+                probes.append((elapsed, pc, bool(pu)))
+                print(f"      [probe t+{elapsed:5.1f}s] land -> {pc}"
+                      f"{'  (unfinished)' if pu else ''}")
             tip = task_branch_tip(t_a)
             if tip and tip != tip0:
                 width = time.monotonic() - completed_at
@@ -614,9 +632,24 @@ def lane_wide():
             check("the window closed inside the deadline", False)
             return
         note("THE WIDTH OF THE WINDOW", f"{width:.1f} seconds, with the task readable as "
-             f"`completed` and approvable for every one of them")
-        check("the window is wide enough for an operator to sit in it (>= 10s)", width >= 10,
-              f"{width:.1f}s")
+             f"`completed` for every one of them")
+        # `>= 10` was the threshold until 2026-08-31, calibrated on ONE sample -- the 10.5s this
+        # lane measured on its first outing. The second measured 8.7s on the same prompt, and the
+        # assertion failed on nothing but Haiku having tidied up slightly faster. The width is
+        # AGENT-SIZED by construction (it runs to the end of the turn, which the product does not
+        # constrain), so a threshold tuned to one sample is an assertion about the model rather than
+        # about the product. What the drive is entitled to claim is that the window is far wider
+        # than the request that would land inside it, so 5s -- two orders above a round trip -- is
+        # the floor, and the measured number is printed either way because the number is the finding.
+        check("the window is STILL operator-sized (>= 5s) -- the fix refuses the window, it does "
+              "not narrow it", width >= 5,
+              f"{width:.1f}s  (previously measured: 10.5s, 2026-08-31 06:41)")
+        check("REFUSED FOR ITS WHOLE DURATION: every probe across the window answered 409",
+              len(probes) >= 2 and all(c == 409 for _, c, _ in probes),
+              f"{len(probes)} probes: " + ", ".join(f"t+{e:.0f}s->{c}" for e, c, _ in probes))
+        check("and every one of them refused for the liveness reason, not some other",
+              bool(probes) and all(u for _, _, u in probes),
+              ", ".join(f"t+{e:.0f}s unfinished={u}" for e, _, u in probes))
 
         head("Approve normally, outside the window, so the fixture is left landing its work")
         settle(rounds=40, label="(waiting for the turn to end)")

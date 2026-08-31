@@ -11974,3 +11974,184 @@ c7f64f2 Integrate approved work 8534ede91e4f   <- the loop's power, F124 dead
 8534ede Auto-snapshot: alpha's turn on task-494c563cd6ef
 3a0c5a2 calc
 ```
+
+## DRIVE-3 (2026-08-31) — `approval-waits-for-the-turn-to-end`, driven
+
+Group 7 of the change. Fresh project **`drive3-2026-08-31` = `proj-f44107415869`** at
+`C:\Users\huida\Documents\drive3-2026-08-31` — `git init -b master`, one seed commit (`calc.py`,
+`.gitignore`), `master` adopted by `POST /projects/open` with no settings round trip. Runner
+`Haiku (cheap)`, agents `alpha` and `beta`, `allow_agent_jobs` on. Neither forbidden project
+touched. The Hub on 8011 was restarted from this branch first (PID 28704, started **05:10**, was
+serving the previous run's code) and confirmed: no `.py` under `hub/hub` or `src` newer than the new
+process's start time.
+
+Six runs, every agent turn on Haiku: `t_f162_window.py` lane 1, `t_drive2_loop_lands.py`,
+`t_drive1_flow_lands.py`, and `t_f162_window.py` lane 2 (`AW_WIDE=1`) — lanes 1 and 2 twice each,
+because the first outing of each failed one assertion belonging to the harness rather than to the
+product, and a harness edit is not evidence until it has been run.
+
+### F162 is closed, measured inside the window at 1-second granularity
+
+`t_f162_window.py` lane 1, **17/17**, `OUTCOME: GUARDED`, on two independent runs. The harness's
+pass condition was inverted for this run: what it was written to REPRODUCE is now what it fails on,
+and `GUARDED` — the outcome it could only hypothesise before — is the pass. The first run scored
+16/17 on a harness bug of my own (comparing a `detail` dict against an unwrapped sentence); fixed,
+re-run, and the check it was hiding now reads `identical`.
+
+The window was entered, not assumed: at the instant the task first read `completed`, the tip of
+`agentweave/task/task-24d6d5aa1175` was still `1ee11f5`, the commit the branch was cut from, and
+`alpha` was still busy.
+
+```
+t+  47.59s  task reads 'completed'   tip=1ee11f5088b4 (== base)   busy=['alpha']
+t+  47.72s  land attempted           409
+t+  47.75s  hop 1 (assignee -> null) 200
+t+  47.77s  hop 2 (-> under_review)  200
+t+  47.89s  hop 3 (-> approved)      409
+```
+
+The approval's refusal, verbatim, and the thing an operator actually reads:
+
+> alpha is still running the turn that produces this task's work, so what approving would merge is
+> not knowable yet — the task's branch still points at the commit the turn started from. Nothing is
+> wrong with the work. Approve once the turn has ended: this clears itself, with nothing for anyone
+> to do. Stopping the agent's run ends the turn too.
+
+`409 gate_unsatisfied`, with `unfinished: [{"agent": "alpha", "run_id": "run-…"}]` and
+every other category empty. **No integration row was written at all** — the approval did not reach
+the point of resolving a merge target, so there is no `ALREADY_INTEGRATED` skip to be stranded by.
+Then the turn ended, the tip moved to `6c9cc34`, the same three hops answered 200/200/200, and
+`git show master:f162_134506.py` returns `def cube(a): return a ** 3`. The refusal cleared itself,
+exactly as its sentence promises.
+
+**The composition inherits it.** `POST /tasks/{id}/land` was driven inside the window too — first,
+because it is the only moment the task still reads `completed` — and answered the **same 409**, and the
+two sentences compare `identical`. Afterwards the task still read `completed` and was still held by
+`alpha`: the refused landing left nothing half-applied, which is `_commit_and_render`'s transaction
+boundary observed live rather than in a unit test.
+
+### The window did not narrow — it is refused for the whole of its width
+
+Lane 2 (`AW_WIDE=1`), **6/6**, asks the other half of the question. Closing a window is not the same
+as shrinking one, and a single refusal at one instant would not tell them apart. So this lane drives
+an ordinary multi-step turn — build the file, mark the task done, *then* keep working — and probes
+`POST /land` every five seconds from the moment the task reads `completed` until the tip moves.
+`land` is the probe because lane 1 measured it leaving the task exactly as it found it, so probing
+costs the window nothing.
+
+```
+t+   0.56s  job fired
+t+  18.36s  task reads 'completed'   tip=d05400ffdb7f (== base)   busy=['alpha']
+   [probe t+ 0.1s] land -> 409  (unfinished)
+   [probe t+ 5.4s] land -> 409  (unfinished)
+t+  28.05s  the snapshot arrived     tip 052a4b9db0dd
+```
+
+**9.7 seconds wide, 409 at both ends, `unfinished` both times.** The window is exactly where it was
+— it runs from `update_task(completed)` to the end of the turn, which the product still does not
+constrain — and the fix makes all of it refuse rather than making any of it go away. Approving after
+the turn ended merged `052a4b9` normally.
+
+One harness assertion had to be loosened to get there, and it is worth saying why rather than just
+doing it. The check was `width >= 10`, calibrated on a single sample — the 10.5s this lane measured
+on 2026-08-31 06:41 — and the first run here failed it at **8.7s**, on nothing but Haiku having
+tidied up faster. Three samples now exist for the same prompt: **10.5s, 8.7s, 9.7s**. The width is
+**agent-sized by construction**, so a bound tuned to one turn is an assertion about the model rather
+than about the product. Loosened to `>= 5` — two orders above the round trip that would land inside
+it — with the measured number printed either way, because the number is the finding.
+
+### F163 is closed: landing a loop's work is one request
+
+`t_drive2_loop_lands.py`, **36/36**. `approve()` in that harness used to be three PATCHes and is now
+one `POST /tasks/{id}/land`; what the three used to cost is kept in its docstring rather than
+deleted, because the three are the reason the route exists. Both lanes:
+
+- **LANE A** (declaration omitted): one request answered `200` with `status: approved` and
+  `assignee: null` — the two facts the three hops used to produce between them. Under LANE A′'s
+  deliberately dirty checkout it skipped with `CHECKOUT_DIRTY` and `retryable: true`; cleaning and
+  pressing retry merged `5413b41` and put `def power(a, b): return a ** b` on `master`.
+- **LANE B** (`work_needs_evidence=True`): the same one request reached `approved`, nothing merged,
+  and the reason was the evidence one — *"no accepted evidence names a commit, so there is nothing
+  to merge"* — never `NO_TASK_BRANCH`, with no retry offered.
+
+### F161/D21 is closed: a loop does not enter the review arm
+
+Same run, three checks added to LANE A for exactly this population — one agent, one task, nobody
+else to ask. When the turn ended, the loop's task rested at **`completed`**, still held by `alpha`,
+and `beta` was `idle` throughout. No reviewer was resolved onto it and no second agent was pulled
+in. Before group 5 this is the shape that stalled: a completed task offered to a selection a
+one-agent mode cannot fill.
+
+### The flow's review leg is untouched — the regression this change most plausibly caused, absent
+
+`t_drive1_flow_lands.py`, **16/20**, re-run because group 5 changed the review arm at the selection
+site and the new gate sits on every approval. Both are clean:
+
+- both tasks staffed, worked, and reached `completed` with no operator transition;
+- both recorded evidence naming a commit unasked;
+- **both reviewers were non-authors** — `power`: alpha → beta, `modulo`: beta → alpha;
+- `modulo` reached `approved` **with nobody's hand on it**, and its integration row reads
+  `actor_kind: "run"`, `actor: "alpha"`, `outcome: "merged"`, `9773ee1` onto `master`.
+
+That last row is design **D10 proven live**. Since migration `0092` a review run is bound to the
+very task it inspects, so a predicate that merely asked "is a live run bound to this task?" would
+have refused every review the product staffs — including this one, whose author is a different
+agent entirely. The acting run is excluded, a turn is never blocked by itself, and the reviewer's
+approval merged. **No refusal anywhere in this drive carried an `unfinished` entry**; the two that
+fired were change C's evidence one and F155's conflict one.
+
+The four that did not hold are all the `power` lane and all previously filed:
+
+1. **F155, third consecutive drive.** *"This task's work does not merge cleanly into master:
+   drive1_133738.py. Resolve the conflict on the branch, then approve."* Both tasks append to one
+   file and `modulo` landed first. F164 already called this the ordinary shape of a flow's parallel
+   work rather than a stall artefact; a third occurrence settles it.
+2. **F154 verbatim.** With both agents idle and `power` wedged at `under_review`, every firing
+   answers `409` *"Every task on this loop's queue is already being worked."*
+3. and 4. are the pass condition and the following-firing check, both downstream of (1).
+
+### F164's "intermittent is the wrong word" is itself corrected by this drive
+
+F164 recorded that two consecutive drives had a reviewer write a verdict in prose and never call
+`update_task`, and concluded *"two for two makes **intermittent** the wrong word"*. On this drive
+the reviewer **did** call it: the transcript carries
+
+> `Error calling tool 'update_task': Hub rejected PATCH /tasks/task-c5d6452745a1 (409): This task's
+> work has been recorded and nobody has judged it: FR-1 at 5150e66dcd43. …`
+
+followed by the agent reasoning about it — *"Ah! The task requires evidence to be recorded and
+accepted…"*. So the F152 checks fired for the first time on real output: change C's refusal reached
+the agent's turn **as prose, not as a dict repr**. Three drives, two misses and one hit, which puts
+"intermittent" back in play and makes the harness's F152 assertions no longer vacuous. The
+underlying diagnosis (the spawned Claude CLI presents the MCP tools as deferred and the model can
+loop on `ToolSearch`) is unchanged and still not the Hub's.
+
+### One new observation, not a defect — the two landing routes stop being interchangeable
+
+Inside the window, hops 1 and 2 are **permitted** and only the approval refuses, which is right:
+clearing an assignee and moving to `under_review` assert nothing about whether the work is good.
+But the operator is then left at `under_review`, and `POST /land` requires `completed`, so the
+one-action route is no longer available to them for that task. The remaining cost is a single
+`PATCH {"status": "approved"}` once the turn ends, so nothing is stranded and nothing is worse than
+before the route existed. Recorded because it means the recommended route (`land`, which leaves the
+task exactly as it found it) and the legacy three-hop route degrade differently under a refusal, and
+that asymmetry is worth knowing before anyone documents either.
+
+`master` in the fixture at the end, every merge on it produced by driving the product:
+
+```
+d24414e Integrate approved work 052a4b9db0dd   <- lane 2's cube, approved after the turn ended
+052a4b9 Auto-snapshot: alpha's turn on task-789cc620f212
+d05400f Integrate approved work 6c9cc34b43de   <- lane 1's cube, refused inside the window first
+6c9cc34 Auto-snapshot: alpha's turn on task-24d6d5aa1175
+1ee11f5 Integrate approved work dffd3ef68871
+dffd3ef Auto-snapshot: alpha's turn on task-a7e9b3493c7e
+eaa92ce The flow drive's spec document, committed so the next drive's preflight starts clean
+773f942 Integrate approved work 9773ee122100   <- the flow's modulo, merged by its REVIEWER's turn
+9773ee1 Auto-snapshot: beta's turn on task-b45ec2c16caa
+d3ba8f3 Integrate approved work 5413b419c459   <- the loop's power, landed in ONE action
+5413b41 Auto-snapshot: alpha's turn on task-436b1128ca4d
+5d7e9cc Integrate approved work fcf083ef1274
+fcf083e Auto-snapshot: alpha's turn on task-d8bf6c0b7180
+922c427 seed
+```
