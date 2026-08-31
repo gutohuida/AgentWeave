@@ -1690,3 +1690,58 @@ undriven — each needs a live Hub and a real turn, which does not fit sixteen m
 
 **State on exit.** Tree clean, branch pushed, not merged. Queue still entirely `done`. This is the
 last firing before the 17:00 `stop_at`; the branch is offered as it stands.
+
+---
+
+## Iteration 15 — 2026-08-31 16:19 → 16:28 — F165's bound, measured: `""` is not one meaning, it is two
+
+**Position on arrival.** Branch `autonomous/2026-08-31-the-turn-must-end-first` at `3ad882b`, tree
+clean, matching STATE.json exactly. Every queue item `done`. Arrival 16:19 — nine minutes before the
+16:30 hard stop, past the 15:30 rule. No spec round, no implementation group, and no drive: F165 and
+F166 are the only undriven targets and each needs a live Hub plus a real turn. So this iteration took
+the shape iterations 13 and 14 took — one bounded measurement at the source, sized to finish.
+
+**What was measured.** F165's open question as filed: *what should `_branch_at` answer for a commit
+that is an ancestor of exactly one branch?* The answer to that is a design decision, not a
+measurement. What **is** measurable, and what changes the decision, is what the consumers do with the
+`""` that `_branch_at` returns today.
+
+**The finding: `""` carries two contradicting meanings, in two consumers, in the same module's
+neighbourhood.**
+
+- `_branch_at` (`requirement_evidence.py:516-529`) documents `""` as *"names no line of work"*, and
+  cites `evidence_drift` skipping such a footprint as the established precedent that makes the
+  sentinel honest.
+- `detect_drift` (`requirement_evidence.py:1064-1069`) does exactly that — `if not ref or ref ==
+  "HEAD": continue`. Unknown is not drift. The docstring's cited precedent holds.
+- `integration_targets` (`task_integration.py:283-286`) does **not**. It writes
+  `newest[target.branch]` with no guard on empty, so `""` is a live dictionary key like any other.
+
+So in the merge reduction `""` does not mean *"names no line of work"*. It means *"one particular
+shared line of work"* — an equivalence class that every branch-unknown footprint on the task falls
+into together, resolved last-write-wins by the oldest-first ordering. Two genuinely unrelated
+detached-HEAD or non-tip commits on one task supersede each other; neither ever merges with a
+known-branch row.
+
+**Why this sharpens F165 rather than restating it.** F165 was filed as *the fresh row lands beside
+the stale one, so the refusal stands with no visible reason*. That is the symptom under one row. The
+measurement says the sentinel itself is the defect surface: `_branch_at` was written against a
+precedent that one of its two consumers does not honour, and the docstring's justification is
+therefore true of `detect_drift` and false of `integration_targets`. That moves the repair. Teaching
+`_branch_at` to answer a descendant branch would move rows *out* of the shared bucket and is the
+right direction — but it does not, on its own, decide what the bucket should do with whatever stays
+in it, and today nothing has decided that at all. A repair that only touches `_branch_at` leaves an
+undesigned equivalence class behind it.
+
+**Bound on the claim.** Read at the source, not run. `integration_targets`' body is quoted above and
+has no empty-branch guard anywhere in the function; `_targets` (`:257-267`) filters only on
+`footprint.commit_sha`, so an empty branch survives into the reduction. Not measured: whether two
+branch-unknown accepted footprints on one task is reachable through the product's own routes as
+opposed to constructible in a test — that needs a drive, which did not fit. F165 stays severity B and
+stays unqueued; F166 untouched.
+
+**Cost.** Zero spawns, zero projects, no Hub started, no product code touched. Iteration 10's suite
+numbers stand and nothing was re-run. Changed files: `FINDINGS.md`, this log, `STATE.json`.
+
+**State on exit.** Tree clean, branch pushed, not merged. Queue still entirely `done`. Past the
+16:30 boundary the branch is offered as it stands.

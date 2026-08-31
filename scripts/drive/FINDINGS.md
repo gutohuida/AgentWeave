@@ -12207,6 +12207,22 @@ promise the branch takes care of itself. The fix, if it is wanted, is a decision
 `_branch_at` should answer for a commit that is an *ancestor* of exactly one branch, and that is a
 change to what a footprint's `branch` means. Not queued.
 
+**Bound measured 2026-08-31 (iteration 15), at the source — the sentinel carries two meanings.**
+`_branch_at`'s docstring (`requirement_evidence.py:516-529`) justifies returning `""` by calling it
+"names no line of work" and citing `evidence_drift` skipping such a footprint. That precedent is real
+in one consumer and absent in the other. `detect_drift` (`:1064-1069`) does skip it — `if not ref or
+ref == "HEAD": continue`. But `integration_targets` (`task_integration.py:283-286`) writes
+`newest[target.branch]` with **no empty-branch guard**, and `_targets` (`:257-267`) filters only on
+`footprint.commit_sha`, so `""` reaches the reduction as an ordinary key. In the merge path `""`
+therefore means *one shared line of work* — an equivalence class every branch-unknown footprint on
+the task falls into together, resolved last-write-wins by the oldest-first ordering — not *unknown*.
+Consequence for the repair: teaching `_branch_at` to answer a descendant branch moves rows out of
+that bucket and is the right direction, but it does not decide what the bucket should do with what
+stays in it, and nothing has decided that today. A repair touching only `_branch_at` leaves an
+undesigned equivalence class behind. Not measured: whether two branch-unknown accepted footprints on
+one task are reachable through the product's own routes rather than constructible in a test — that
+needs a drive. Severity stays B, still unqueued.
+
 ### F166 (new, severity **C**) — the same hole on the agent route, via `footprint_root`'s fallbacks
 
 Also reachable, also held by a test
