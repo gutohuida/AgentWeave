@@ -12321,3 +12321,86 @@ ladder with an assignee change on the last edge, both did exactly what an operat
 the first attempt. The entire wedge is four PATCHes. That is worth recording alongside the defect:
 the surface that *builds* the broken state is in good order, which is why the state is so easy to
 reach.
+
+
+## F156 reproduced deterministically — and the contrast lane is what turns it from a rough edge into a defect
+
+Driven 2026-08-31 (iteration 12), against the trial Hub on 8011 running this branch. New harness:
+`scripts/drive/t_f156_preview_promises_the_merge.py`. **21/21 checks, 2.4 s, zero agent turns and
+no model bound** — the whole population this defect addresses is operator-facing, so nothing in it
+needs a runner.
+
+F156 was originally recorded as an observation: `will_merge: true` beside an approval the gate
+refused. Recorded that way it reads like something a particular repository shape gets you to. It is
+not. The reproduction is **one conflicting commit and four HTTP calls**, on a fresh temporary
+repository the harness creates for itself.
+
+### What the two surfaces say about the same commit at the same moment
+
+| Called | Answer |
+|---|---|
+| `GET .../tasks/{id}/integration-preview` | `{"targets": [{"commit_sha": "d491caac1742…", "source_branch": "work/ledger"}], "will_merge": true, "reason": ""}` |
+| `PATCH .../tasks/{id} {"status": "approved"}` | **409** *"This task's work does not merge cleanly into main: ledger.py. The commit judged is d491caac1742…"* |
+| `GET …/integration-preview`, **again, after the refusal** | byte-for-byte identical. `will_merge: true`, `reason: ""` |
+
+The third row is its own small finding, and it is the same shape F141 recorded about the gate: the
+refusal happens, and nothing that the operator can read afterwards remembers it. LANE 3 asserts
+equality of the whole response object, not just the flag — `after == before`, and it holds.
+
+### LANE 4 is the reason this is filed as a defect and not as imprecise wording
+
+The contrast lane runs a **second task with no conflict at all** through the same route:
+
+```
+conflicting task   will_merge=True   reason=''    → approval REFUSED 409
+clean task         will_merge=True   reason=''    → approval 200, integration `merged`, main moved
+```
+
+Identical in every field the drawer's sentence is built from. So `will_merge: true` is not merely
+imprecise — **it takes the same value across the two outcomes an operator consults it to tell
+apart**, which means the field carries no information about the question it is named after. That is
+the finding stated exactly, and it is the thing a fix has to change.
+
+LANE 5 was written to check the other half and confirms the `false` side is honest: a task with no
+accepted evidence gets `will_merge: false` with `reason: "no accepted evidence names a commit, so
+there is nothing to merge"`. Only the `true` side over-promises. A repair that reaches for a second
+conflict probe would therefore be fixing the wrong half; the asymmetry is in the vocabulary.
+
+### The prose the operator actually reads is worse than the JSON
+
+`TaskDetailDrawer.tsx:66-79` renders the `true` case as an amber note:
+
+> ⚠ Approving writes to your repository: it cherry-picks `d491caac1742` from work/ledger into
+> **main**.
+
+Indicative mood, no hedge, and **no clause anywhere saying the clean-merge question is asked later**
+— which the handler's own docstring is explicit about ("deliberately no conflict probe … a
+sentence, not a second gate"). The docstring's reasoning is sound and the sentence built on top of
+it is not. A headless drive cannot read the browser, so LANE 1 asserts against the three fields that
+sentence is composed from (`main_branch`, `targets[0].commit_sha`, `targets[0].source_branch`) and
+confirms all three are populated, i.e. that the amber branch is the one that renders.
+
+### The harness bug that had to be read rather than patched out
+
+First run came back **19/20**. The failing check was *"its work really did reach main"* — an empty
+integration history for a task whose merge had demonstrably happened, since the neighbouring check
+saw `main` move and carry the commit's content. The cause was the harness's, not the product's:
+it called `/tasks/{id}/integration`, and the route is **`/integrations`**, plural
+(`hub/hub/api/v1/tasks.py:1024`). The 404 body has no `integrations` key, so `(body or {}).get(...)
+or []` turned *route does not exist* into *history is empty* without a murmur.
+
+Two things came out of fixing it, and both are now in the file: the call asserts `code == 200`
+separately from what it found, so a harness can no longer mistake a 404 for an honest empty answer;
+and this is the third iteration running where **a check written to pass came back failing and the
+failure was worth more than the pass** — here it was worth a harness that cannot lie to itself in
+that particular way again.
+
+### Reproducing it
+
+```
+cd scripts/drive
+AW_HUB=http://127.0.0.1:8011 py -3.11 -u t_f156_preview_promises_the_merge.py
+```
+
+Fresh project every run, never an existing one. The harness leaves the project and the temporary
+repository in place for inspection and prints both paths.

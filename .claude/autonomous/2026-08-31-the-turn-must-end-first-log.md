@@ -1469,3 +1469,92 @@ the assertion; in both cases reading *why* it failed produced the finding.
 
 No product code was touched this iteration, so the suites are unchanged from iteration 10's
 measured numbers and were deliberately not re-run.
+
+## Iteration 12 — 2026-08-31 15:54 → 16:01 — past 15:30 again, so a second drive: F156, and its contrast lane is the whole finding
+
+**Position on arrival.** Branch `autonomous/2026-08-31-the-turn-must-end-first` at `4496f96`, tree
+clean, `git log` matching STATE exactly — nothing to reconcile. Every queue item `done`;
+`next_action` was a free choice naming F154 first, **but explicitly conditioned on the clock**: F154
+is unproposed, so taking it means starting round 1, and at 15:54 the 15:30 rule bars that. Same
+reasoning as iteration 11, reached independently from the rule rather than by copying it. So: a
+drive, on the one A/B finding that has neither a proposal nor a reproduction — **F156**.
+
+**The Hub on 8011 was already serving this branch.** Started 15:01:38;
+`find hub/hub src -name '*.py' -newermt "2026-08-31 15:01:38"` returns nothing. Run, not assumed.
+
+### What was driven
+
+`scripts/drive/t_f156_preview_promises_the_merge.py` is new. **21/21, 2.4 s, zero agent turns, no
+model bound** — the drawer beside the approve control is an operator surface end to end, so no
+runner is involved at any point.
+
+F156 was recorded as an observation on 2026-08-30: `will_merge: true, reason: ""` for a task the
+gate refused over that exact commit. The reproduction is **one conflicting commit and four HTTP
+calls**, on a temporary repository the harness creates for itself.
+
+| Called, one task, one moment | Answer |
+|---|---|
+| `GET .../integration-preview` | `will_merge: true`, `reason: ""`, target `d491caac1742` on `work/ledger` |
+| `PATCH .../tasks/{id} {"status":"approved"}` | **409** *"…does not merge cleanly into main: ledger.py. The commit judged is d491caac1742…"* |
+| `GET .../integration-preview` **again, after the refusal** | byte-for-byte identical (LANE 3 asserts `after == before` on the whole object) |
+
+### The lane that carries the argument
+
+The observation alone supports "the word is imprecise". **LANE 4** is what makes it a defect: a
+second task with **no conflict**, through the same route, answers `will_merge: true, reason: ""` —
+and then approves 200, writes a `merged` integration row and moves `main`. So the field takes the
+**same value across the two outcomes an operator consults it to tell apart**. It is not imprecise;
+it carries no information about the question it is named after.
+
+**LANE 5** checks the other half and clears it: no accepted evidence → `will_merge: false` with
+`reason: "no accepted evidence names a commit, so there is nothing to merge"`. Only the `true` side
+over-promises. That asymmetry is the argument against the expensive repair: a second conflict probe
+would be fixing the half that is already right.
+
+The prose the operator actually reads is worse than the JSON. `TaskDetailDrawer.tsx:66-79` renders
+the `true` case in the indicative — *"Approving writes to your repository: it cherry-picks `<sha>`
+from `<branch>` into **main**"* — with no clause saying the clean-merge question is asked later,
+which the handler's own docstring is explicit about. A headless drive cannot read a browser, so
+LANE 1 asserts the three fields that sentence is composed from are all populated, i.e. that the
+amber branch is the one that renders.
+
+### The check written to pass that came back failing — third iteration running
+
+First run: **19/20**. The red one was *"its work really did reach main"* — an empty integration
+history for a merge that had demonstrably happened, since the neighbouring check watched `main` move
+and carry the commit's content. Reading it rather than adjusting it: the harness called
+`/tasks/{id}/integration`; **the route is `/integrations`, plural** (`api/v1/tasks.py:1024`). The
+404 body has no `integrations` key, so `(body or {}).get("integrations") or []` silently turned
+*this route does not exist* into *this history is empty*.
+
+The fix is in the file and is not just the path: the call now asserts `code == 200` **separately**
+from what it found, so this harness cannot mistake a 404 for an honest empty answer again. Iterations
+10, 11 and 12 have each now turned on the same move, and it is worth stating as a rule rather than
+as three anecdotes — **a drive harness must check the status code of every call whose body it then
+interrogates**, because every "not found" body in this product is a valid-looking empty one.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `t_f156_preview_promises_the_merge.py`, run 1 | 19/20 — harness's own route bug, read at the source |
+| same, run 2 after the fix, **fresh project** | **21/21** |
+| `py -3.11 -m ruff check` on the new file | All checks passed |
+| `py -3.11 -m black --check --target-version py311` | 1 file would be left unchanged |
+| Agent turns spent | **zero**; no model bound |
+| Jobs created | none |
+
+No product code was touched, so iteration 10's measured suite numbers stand unchanged and were
+deliberately not re-run — same posture as iteration 11, and stated so it is a decision rather than
+an omission.
+
+### What the next firing inherits
+
+F154 and F156 now both have deterministic, token-free reproductions to press before and after a fix
+(`t_f154_wedged_review.py`, `t_f156_preview_promises_the_merge.py`). Both are unproposed. A firing
+that arrives **before 15:30** should open round 1 on one of them; F156 is the cheaper change by a
+wide margin — LANE 5 shows the repair is vocabulary, not a probe — and F154 is the more valuable,
+severity A. A firing that arrives after 15:30 has a third drivable target left, F167's stated bound:
+LANE 5 of the F154 harness measured only histories walked **entirely** by the operator, so whether
+F70's recovery sees an author with an **agent-walked** edge is unmeasured, and that needs one real
+Haiku turn to find out.
