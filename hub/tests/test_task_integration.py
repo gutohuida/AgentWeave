@@ -774,7 +774,19 @@ async def test_a_project_without_a_repository_approves_unchanged(
 @pytest.mark.asyncio
 async def test_evidence_awaiting_review_merges_nothing(app, auth_headers, builder, tmp_path):
     """Only accepted evidence names a commit to merge. Merging on unreviewed evidence would make
-    the review that gates the merge decorative."""
+    the review that gates the merge decorative.
+
+    **The approval is now refused rather than allowed to record a skip** — changed by
+    `approval-refuses-unaccepted-evidence` (F122), and the property this test names is unchanged and
+    now stated more strongly. It used to assert that approval succeeded and recorded
+    `NOTHING_TO_MERGE`, which was true of the merge and false about the world: the commit existed and
+    was waiting for a person, and the task went terminal at `approved` with its work on a branch
+    nothing merges. The refusal is what stops that, and the assertion that nothing reaches `main` is
+    kept verbatim, because it is the half that was always the point.
+
+    The full behaviour, including the acceptance that follows, lives in
+    `test_approval_refuses_unaccepted_evidence.py`.
+    """
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
@@ -787,12 +799,11 @@ async def test_evidence_awaiting_review_merges_nothing(app, auth_headers, builde
     git(tmp_path, "checkout", "-q", "main")
 
     task = await linked_task(app, auth_headers)
-    assert (await approve(app, auth_headers, task)).status_code == 200
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
     assert work not in commits_on(tmp_path, "main")
 
-    rows = await integrations(app, auth_headers, task)
-    assert rows[0]["outcome"] == "skipped"
-    assert "nothing to merge" in rows[0]["reason"]
+    assert await integrations(app, auth_headers, task) == []
 
 
 # ---------------------------------------------------------------------------

@@ -561,7 +561,12 @@ async def apply_transition(
         # unless this call carries them out. Not persisted — a transient attribute on the returned
         # row rather than a column, because this is a report at the moment of approval, not an
         # audit trail; the audit trail is `requirement_coverage` and evidence review, unchanged.
-        reported = list(refusal.reported)
+        #
+        # Two kinds travel on this one list: `contract`-rigor requirements that are unverified, and
+        # evidence still awaiting review on a task that had accepted evidence to merge as well. Each
+        # entry carries a `kind`, so a consumer cannot mistake one for the other — they call for
+        # different things, and the second is not a statement about rigor at all.
+        reported = list(refusal.reported) + list(refusal.advisory)
 
     task.status = to_status
     transition = TaskTransition(

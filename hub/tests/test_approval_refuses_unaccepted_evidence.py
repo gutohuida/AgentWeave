@@ -21,6 +21,7 @@ one that would fail.
 import pytest
 from sqlalchemy import select
 
+from hub import task_integration
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import (
@@ -43,6 +44,8 @@ from .test_task_integration import (
     approve,
     commit_on_branch,
     commits_on,
+    drive_to,
+    files_on,
     git,
     integrations,
     linked_task,
@@ -75,6 +78,29 @@ async def builder():
         )
         await session.commit()
     return {"Authorization": "Bearer aw_run_unacc-secret"}
+
+
+@pytest.fixture
+async def reviewer():
+    """A second agent, for the one remedy the refusal names that an agent can take.
+
+    Necessarily a second one: `requirement_evidence.decide` refuses an agent deciding about its own
+    work, so the builder cannot discharge its own refusal even if it were granted.
+    """
+    async with async_session_factory() as session:
+        session.add(Agent(id="ag-unacc-rev", project_id="proj-test", name="reviewer"))
+        session.add(
+            Run(
+                id="run-unacc-rev",
+                project_id="proj-test",
+                agent="reviewer",
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token("aw_run_unaccrev-secret"),
+            )
+        )
+        await session.commit()
+    return {"Authorization": "Bearer aw_run_unaccrev-secret"}
 
 
 # ---------------------------------------------------------------------------
@@ -202,54 +228,10 @@ async def a_task_with_awaiting_evidence(app, auth_headers, builder, tmp_path, ti
 
 
 # ---------------------------------------------------------------------------
-# Group 1 — F122 as it behaves today. These pass against unmodified code; group 5 inverts them.
+# The scoping constraint. Both of these passed before this change and must still pass after it —
+# if either fails, the change is wrong rather than the test. (The two reproductions that used to
+# stand here, F122's approval-succeeds and its accept-merges-nothing, are inverted in group 5.)
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_awaiting_evidence_approves_and_merges_nothing(app, auth_headers, builder, tmp_path):
-    """F122's reproduction. Approval succeeds and records the skip that reads like an absence."""
-    make_repo(tmp_path)
-    await make_document(app, auth_headers, builder)
-    await set_main_branch("main")
-
-    task, _evidence, work = await a_task_with_awaiting_evidence(
-        app, auth_headers, builder, tmp_path
-    )
-
-    approved = await approve(app, auth_headers, task)
-    assert approved.status_code == 200, approved.text
-    assert approved.json()["status"] == "approved"
-
-    recorded = await integrations(app, auth_headers, task)
-    assert [row["outcome"] for row in recorded] == ["skipped"]
-    from hub import task_integration
-
-    assert recorded[0]["reason"] == task_integration.NOTHING_TO_MERGE
-    assert work not in commits_on(tmp_path, "main")
-
-
-@pytest.mark.asyncio
-async def test_accepting_afterwards_merges_nothing(app, auth_headers, builder, tmp_path):
-    """The second half's reproduction — the sentence "accept the evidence", measured being ignored.
-
-    The task is already `approved` and unmerged. The operator does the one thing that could make the
-    evidence count, and the commit stays exactly where it was.
-    """
-    make_repo(tmp_path)
-    await make_document(app, auth_headers, builder)
-    await set_main_branch("main")
-
-    task, evidence, work = await a_task_with_awaiting_evidence(app, auth_headers, builder, tmp_path)
-    approved = await approve(app, auth_headers, task)
-    assert approved.status_code == 200, approved.text
-
-    before = await integrations(app, auth_headers, task)
-    await accept(app, auth_headers, evidence)
-
-    after = await integrations(app, auth_headers, task)
-    assert len(after) == len(before)
-    assert work not in commits_on(tmp_path, "main")
 
 
 @pytest.mark.asyncio
@@ -486,3 +468,529 @@ async def test_two_awaiting_commits_on_one_branch_are_both_returned(
     await accept(app, auth_headers, evidence_two)
     _awaiting, accepted = await targets_of(task)
     assert [target.commit_sha for target in accepted] == [second]
+
+
+# ---------------------------------------------------------------------------
+# Group 5 — the behaviour. 1.3 and 1.4 above are inverted here; 1.5's two wedges are unchanged and
+# stay where they are, because "still approves" is the same assertion before and after.
+# ---------------------------------------------------------------------------
+
+
+async def approve_without_a_main_branch(app, auth_headers, builder, tmp_path):
+    """An approved, unmerged task carrying awaiting evidence — the state the second half repairs.
+
+    Reached the only honest way now that the refusal exists: a project with no configured main
+    branch, where the refusal is deliberately silent because accepting the evidence there would
+    merge nothing either. The branch is then set directly rather than through the settings route,
+    which would fire the *other* retry path (`_integrate_what_was_waiting_for_a_branch`) and prove
+    the wrong thing.
+    """
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+
+    task, evidence, work = await a_task_with_awaiting_evidence(app, auth_headers, builder, tmp_path)
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+
+    recorded = await integrations(app, auth_headers, task)
+    assert [row["reason"] for row in recorded] == [task_integration.NO_MAIN_BRANCH]
+
+    await set_main_branch("main")
+    return task, evidence, work
+
+
+@pytest.mark.asyncio
+async def test_awaiting_evidence_refuses_approval(app, auth_headers, builder, tmp_path):
+    """1.3 inverted. The task stays where it was and no attempt is recorded at all — an attempt row
+    would be a claim that integration was tried, and it was not."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    task, _evidence, work = await a_task_with_awaiting_evidence(
+        app, auth_headers, builder, tmp_path
+    )
+
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["detail"]["code"] == "gate_unsatisfied"
+
+    fetched = await app.get(f"{TASKS}/{task}", headers=auth_headers)
+    assert fetched.json()["status"] == "under_review"
+    assert await integrations(app, auth_headers, task) == []
+    assert work not in commits_on(tmp_path, "main")
+
+
+@pytest.mark.asyncio
+async def test_the_refusal_names_the_requirement_and_both_remedies(
+    app, auth_headers, builder, tmp_path
+):
+    """The sentence is the feature. An agent that reads it can take neither remedy itself, and
+    saying so is what stops it retrying the transition instead of asking."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    task, _evidence, work = await a_task_with_awaiting_evidence(
+        app, auth_headers, builder, tmp_path
+    )
+
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    message = detail["message"]
+
+    assert "FR-1" in message, message
+    assert work[:12] in message, message
+    assert "accept" in message.lower(), message
+    assert "grant" in message.lower(), message
+
+    assert [entry["identifier"] for entry in detail["unaccepted"]] == ["FR-1"]
+    assert detail["unaccepted"][0]["commit_sha"] == work
+    assert detail["unaccepted"][0]["recorded_by_task"] == task
+    assert detail["unaccepted"][0]["recorded_by_another_task"] is False
+
+
+@pytest.mark.asyncio
+async def test_the_refusal_names_the_task_that_recorded_the_evidence(
+    app, auth_headers, builder, tmp_path
+):
+    """A requirement may be served by more than one task, and this task's integration is what would
+    merge the other one's commit — so the reader needs a route back to the cause."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    other = await linked_task(app, auth_headers, title="The other one")
+    commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('hi')\n")
+    await record_evidence(app, builder, task_id=other)
+    git(tmp_path, "checkout", "-q", "main")
+
+    task = await linked_task(app, auth_headers, title="This one")
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+
+    assert detail["unaccepted"][0]["recorded_by_task"] == other
+    assert detail["unaccepted"][0]["recorded_by_another_task"] is True
+    assert other in detail["message"], detail["message"]
+
+
+@pytest.mark.asyncio
+async def test_the_refusal_names_both_waiting_commits_on_one_branch(
+    app, auth_headers, builder, tmp_path
+):
+    """The behavioural half of the query split. Requirement: each waiting piece is named, not
+    counted — and a shared per-branch reduction would have passed the previous test while naming
+    one of these two."""
+    make_repo(tmp_path)
+    await make_two_requirement_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    task = await linked_task_for(app, auth_headers, ["FR-1", "FR-2"])
+    first = commit_on_branch(tmp_path, AGENT_BRANCH, "one.py", "1\n")
+    await record_evidence_for(app, builder, "FR-1", task_id=task)
+    second = commit_on_branch(tmp_path, AGENT_BRANCH, "two.py", "2\n", create=False)
+    await record_evidence_for(app, builder, "FR-2", task_id=task)
+    git(tmp_path, "checkout", "-q", "main")
+
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    message = refused.json()["detail"]["message"]
+    assert first[:12] in message, message
+    assert second[:12] in message, message
+
+
+@pytest.mark.asyncio
+async def test_the_refusal_fires_at_sketch_rigor(app, auth_headers, builder, tmp_path):
+    """Where a default project lives. Anything conditional on rigor is absent from one, which is how
+    this defect survived — so the fixture asserts the rigor rather than assuming it."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    documents = await app.get(f"{BASE}/documents", headers=auth_headers)
+    assert documents.status_code == 200, documents.text
+    rigors = {row["path"]: row.get("rigor") for row in documents.json()["documents"]}
+    assert rigors[PATH] in (None, "sketch"), rigors
+
+    task, _evidence, _work = await a_task_with_awaiting_evidence(
+        app, auth_headers, builder, tmp_path
+    )
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+
+
+@pytest.mark.asyncio
+async def test_rejected_evidence_approves_and_records_a_skip(app, auth_headers, builder, tmp_path):
+    """It has been judged, the other way. Refusing here would wedge the task behind a decision its
+    holder cannot reverse."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    task, evidence, work = await a_task_with_awaiting_evidence(app, auth_headers, builder, tmp_path)
+    await reject(app, auth_headers, evidence)
+
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+
+    recorded = await integrations(app, auth_headers, task)
+    assert [row["outcome"] for row in recorded] == ["skipped"]
+    assert recorded[0]["reason"] == task_integration.NOTHING_TO_MERGE
+    assert work not in commits_on(tmp_path, "main")
+
+
+@pytest.mark.asyncio
+async def test_no_main_branch_does_not_refuse(app, auth_headers, builder, tmp_path):
+    """Accepting the evidence would merge nothing in this project, so refusing would block every
+    task in it behind a remedy that changes nothing."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+
+    task, _evidence, _work = await a_task_with_awaiting_evidence(
+        app, auth_headers, builder, tmp_path
+    )
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+
+    recorded = await integrations(app, auth_headers, task)
+    assert [row["reason"] for row in recorded] == [task_integration.NO_MAIN_BRANCH]
+
+
+@pytest.mark.asyncio
+async def test_a_project_that_is_not_a_repository_does_not_refuse(
+    app, auth_headers, builder, tmp_path
+):
+    """ "A project that is not a repository SHALL be no less approvable than before this capability
+    existed." The main branch is named, and there is no repository for it to name anything in."""
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    task = await linked_task(app, auth_headers)
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+
+
+@pytest.mark.asyncio
+async def test_accepting_merges_the_work_that_was_waiting(app, auth_headers, builder, tmp_path):
+    """1.4 inverted, and the sentence "accept the evidence" made true.
+
+    The task is already `approved` and unmerged. Approving again could not merge it — restating a
+    status is deliberately a no-op — so the acceptance itself has to carry the integration.
+    """
+    task, evidence, work = await approve_without_a_main_branch(app, auth_headers, builder, tmp_path)
+
+    await accept(app, auth_headers, evidence)
+
+    assert work in commits_on(tmp_path, "main")
+    assert "feature.py" in files_on(tmp_path, "main")
+
+    recorded = await integrations(app, auth_headers, task)
+    assert [row["outcome"] for row in recorded] == ["skipped", "merged"]
+
+    # Not reopened to achieve it. The judgement that the work was good was already made.
+    fetched = await app.get(f"{TASKS}/{task}", headers=auth_headers)
+    assert fetched.json()["status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_a_granted_agent_accepting_merges_the_work_too(
+    app, auth_headers, builder, reviewer, tmp_path
+):
+    """The remedy the refusal names is available to both, so the discharge of it must be too — an
+    agent granted the capability is the whole point of naming it as a way out."""
+    task, evidence, work = await approve_without_a_main_branch(app, auth_headers, builder, tmp_path)
+
+    granted = await app.patch(
+        "/api/v1/projects/proj-test/agents/reviewer",
+        json={"can_accept_evidence": True},
+        headers=auth_headers,
+    )
+    assert granted.status_code == 200, granted.text
+
+    decided = await app.post(
+        f"/api/v1/agent-actions/spec/evidence/{evidence}/decision",
+        json={"decision": "accepted"},
+        headers=reviewer,
+    )
+    assert decided.status_code == 200, decided.text
+
+    assert work in commits_on(tmp_path, "main")
+    recorded = await integrations(app, auth_headers, task)
+    assert recorded[-1]["outcome"] == "merged"
+    # Whose decision caused it, not the operator's. A record naming the operator for an agent's
+    # decision is a false account of who caused the merge.
+    assert recorded[-1]["actor"] == "reviewer"
+    assert recorded[-1]["actor_kind"] == "run"
+
+
+@pytest.mark.asyncio
+async def test_rejecting_attempts_nothing(app, auth_headers, builder, tmp_path):
+    task, evidence, work = await approve_without_a_main_branch(app, auth_headers, builder, tmp_path)
+
+    await reject(app, auth_headers, evidence)
+
+    assert work not in commits_on(tmp_path, "main")
+    assert [row["outcome"] for row in await integrations(app, auth_headers, task)] == ["skipped"]
+
+
+@pytest.mark.asyncio
+async def test_an_attempt_that_cannot_proceed_records_why(app, auth_headers, builder, tmp_path):
+    """Round 2 inverted this. The trigger is a commit that is not in the product, not the previous
+    attempt's reason — so a dirty checkout is attempted again and says so a second time. "You
+    accepted this, and here is why it still did not land" is the account the operator needs;
+    suppressing it is how work goes missing quietly."""
+    task, evidence, work = await approve_without_a_main_branch(app, auth_headers, builder, tmp_path)
+    (tmp_path / "README.md").write_text("edited, uncommitted\n", encoding="utf-8")
+
+    await accept(app, auth_headers, evidence)
+
+    assert work not in commits_on(tmp_path, "main")
+    recorded = await integrations(app, auth_headers, task)
+    assert [row["outcome"] for row in recorded] == ["skipped", "skipped"]
+    assert recorded[-1]["reason"] == task_integration.CHECKOUT_DIRTY
+
+
+@pytest.mark.asyncio
+async def test_a_commit_already_in_main_is_recorded_not_merged_again(
+    app, auth_headers, builder, tmp_path
+):
+    """The other "already there" case, answered differently on purpose: the repository is asked, and
+    what it says is a fact the reader does not otherwise have."""
+    task, evidence, work = await approve_without_a_main_branch(app, auth_headers, builder, tmp_path)
+    git(tmp_path, "merge", "--no-ff", "-m", "by hand", work)
+    assert work in commits_on(tmp_path, "main")
+
+    await accept(app, auth_headers, evidence)
+
+    recorded = await integrations(app, auth_headers, task)
+    assert recorded[-1]["outcome"] == "skipped"
+    assert "already in main" in recorded[-1]["reason"], recorded[-1]["reason"]
+
+
+@pytest.mark.asyncio
+async def test_the_decision_stands_when_the_attempt_raises(
+    app, auth_headers, builder, tmp_path, monkeypatch
+):
+    """The decision is a judgement about the evidence, and a repository failure must not reverse
+    it."""
+    _task, evidence, work = await approve_without_a_main_branch(
+        app, auth_headers, builder, tmp_path
+    )
+
+    def _explode(*args, **kwargs):
+        raise RuntimeError("the repository fell over")
+
+    monkeypatch.setattr(task_integration, "tasks_awaiting_this_commit", _explode)
+    await accept(app, auth_headers, evidence)
+
+    async with async_session_factory() as session:
+        row = await session.get(RequirementEvidence, evidence)
+        assert row.review_state == "accepted"
+    assert work not in commits_on(tmp_path, "main")
+
+
+@pytest.mark.asyncio
+async def test_a_task_that_is_not_approved_is_left_alone(app, auth_headers, builder, tmp_path):
+    """Accepting evidence for work still in review merges nothing: approval is what places work in
+    the product, and it has not happened."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    task, evidence, work = await a_task_with_awaiting_evidence(app, auth_headers, builder, tmp_path)
+    await accept(app, auth_headers, evidence)
+
+    assert work not in commits_on(tmp_path, "main")
+    assert await integrations(app, auth_headers, task) == []
+
+
+# ---------------------------------------------------------------------------
+# The mixed case (D3). Both halves, because the first half alone is the defect in miniature.
+# ---------------------------------------------------------------------------
+
+
+async def a_mixed_task(app, auth_headers, builder, tmp_path, *, second_branch=None):
+    """Accepted evidence naming commit A, awaiting evidence naming commit B.
+
+    `second_branch` puts B on a branch of its own; without it B sits on A's branch, which is the
+    ordinary shape of a task worked in two sittings. Both are driven because the per-branch
+    reduction in `integration_targets` treats them differently.
+    """
+    make_repo(tmp_path)
+    await make_two_requirement_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    task = await linked_task_for(app, auth_headers, ["FR-1", "FR-2"])
+    first = commit_on_branch(tmp_path, AGENT_BRANCH, "one.py", "1\n")
+    accepted = await record_evidence_for(app, builder, "FR-1", task_id=task)
+    git(tmp_path, "checkout", "-q", "main")
+    await accept(app, auth_headers, accepted)
+
+    if second_branch:
+        git(tmp_path, "checkout", "-q", AGENT_BRANCH)
+        git(tmp_path, "checkout", "-q", "main")
+        second = commit_on_branch(tmp_path, second_branch, "two.py", "2\n")
+    else:
+        second = commit_on_branch(tmp_path, AGENT_BRANCH, "two.py", "2\n", create=False)
+    awaiting = await record_evidence_for(app, builder, "FR-2", task_id=task)
+    git(tmp_path, "checkout", "-q", "main")
+
+    return task, first, second, awaiting
+
+
+@pytest.mark.asyncio
+async def test_the_mixed_case_approves_merges_and_reports_the_rest(
+    app, auth_headers, builder, tmp_path
+):
+    """Refusing here would block work that is genuinely ready because a second piece is still in
+    review. The waiting piece is reported on the approval instead."""
+    task, first, second, _awaiting = await a_mixed_task(app, auth_headers, builder, tmp_path)
+
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+    assert first in commits_on(tmp_path, "main")
+    assert second not in commits_on(tmp_path, "main")
+
+    report = approved.json()["approval_report"]
+    awaiting_entries = [row for row in report if row.get("kind") == "awaiting_evidence"]
+    assert [row["identifier"] for row in awaiting_entries] == ["FR-2"]
+    assert awaiting_entries[0]["commit_sha"] == second
+
+
+@pytest.mark.asyncio
+async def test_the_mixed_case_merges_the_rest_when_it_is_accepted(
+    app, auth_headers, builder, tmp_path
+):
+    """The second half, and without it the first half is the defect one commit smaller: the most
+    recent attempt here is a *merge*, so no rule expressed in terms of the last attempt's reason
+    could ever reach this commit."""
+    task, _first, second, awaiting = await a_mixed_task(app, auth_headers, builder, tmp_path)
+    assert (await approve(app, auth_headers, task)).status_code == 200
+
+    await accept(app, auth_headers, awaiting)
+
+    assert second in commits_on(tmp_path, "main")
+    assert "two.py" in files_on(tmp_path, "main")
+    fetched = await app.get(f"{TASKS}/{task}", headers=auth_headers)
+    assert fetched.json()["status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_the_mixed_case_merges_a_second_branch_when_it_is_accepted(
+    app, auth_headers, builder, tmp_path
+):
+    """The same pair with the awaiting commit on a branch of its own, where the per-branch reduction
+    keeps two targets rather than collapsing to one."""
+    task, first, second, awaiting = await a_mixed_task(
+        app, auth_headers, builder, tmp_path, second_branch="agentweave/second"
+    )
+    assert (await approve(app, auth_headers, task)).status_code == 200
+    assert first in commits_on(tmp_path, "main")
+    assert second not in commits_on(tmp_path, "main")
+
+    await accept(app, auth_headers, awaiting)
+    assert second in commits_on(tmp_path, "main")
+
+
+@pytest.mark.asyncio
+async def test_a_commit_this_task_already_merged_is_not_attempted_again(
+    app, auth_headers, builder, tmp_path
+):
+    """The one "already there" case answered by suppression rather than by a record: repeating it
+    could only append a row saying nothing happened, to a record that exists to distinguish a no-op
+    from work reaching the product."""
+    make_repo(tmp_path)
+    await make_two_requirement_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    task = await linked_task_for(app, auth_headers, ["FR-1", "FR-2"])
+    work = commit_on_branch(tmp_path, AGENT_BRANCH, "one.py", "1\n")
+    accepted = await record_evidence_for(app, builder, "FR-1", task_id=task)
+    awaiting = await record_evidence_for(app, builder, "FR-2", task_id=task)
+    git(tmp_path, "checkout", "-q", "main")
+    await accept(app, auth_headers, accepted)
+
+    assert (await approve(app, auth_headers, task)).status_code == 200
+    assert work in commits_on(tmp_path, "main")
+    before = await integrations(app, auth_headers, task)
+
+    await accept(app, auth_headers, awaiting)
+
+    assert await integrations(app, auth_headers, task) == before
+
+
+# ---------------------------------------------------------------------------
+# Group 6 — the surfaces the sentence has to reach.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_agent_plane_sees_the_refusal(app, auth_headers, builder, tmp_path):
+    """This change's entire premise is that a refusal reaches the agent that has to act on it, so
+    it is asserted rather than reasoned about from `update_task_for_actor` being shared."""
+    make_repo(tmp_path)
+    await make_document(app, auth_headers, builder)
+    await set_main_branch("main")
+
+    task, _evidence, _work = await a_task_with_awaiting_evidence(
+        app, auth_headers, builder, tmp_path
+    )
+    walked = await drive_to(
+        app, auth_headers, task, "assigned", "in_progress", "completed", "under_review"
+    )
+    assert walked.status_code == 200, walked.text
+
+    refused = await app.patch(
+        f"/api/v1/agent-actions/tasks/{task}", json={"status": "approved"}, headers=builder
+    )
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["code"] == "gate_unsatisfied", detail
+    assert "FR-1" in detail["message"]
+    assert "grant" in detail["message"].lower()
+
+
+def test_a_dict_detail_reaches_an_agent_as_its_sentence():
+    """F152. `_readable_detail` special-cased the Pydantic list shape and stringified everything
+    else, so every gate refusal arrived at an agent as a Python dict repr with the sentence buried
+    inside it — precisely the failure its own docstring says it exists to prevent.
+
+    Asserted against a real `to_dict()` payload rather than a hand-built dict, because the shape is
+    what the app-level handler actually sends.
+    """
+    from hub import mcp_server
+    from hub.requirement_gate import ACCEPT_OR_GRANT, REPORT_AWAITING_EVIDENCE, GateRefusal
+
+    refusal = GateRefusal(
+        unaccepted=[
+            {
+                "kind": REPORT_AWAITING_EVIDENCE,
+                "evidence_id": "ev-1",
+                "identifier": "FR-1",
+                "commit_sha": "0123456789abcdef",
+                "remedy": ACCEPT_OR_GRANT,
+            }
+        ]
+    )
+    readable = mcp_server._readable_detail(refusal.to_dict())
+
+    assert readable == refusal.detail()
+    assert "FR-1" in readable
+    assert "{" not in readable and "}" not in readable, readable
+    assert "'code'" not in readable, readable
+
+
+def test_a_dict_without_a_message_keeps_the_old_behaviour():
+    """The guard is the shape of the fix, not a precaution: a detail that is a plain string, or a
+    dict carrying no sentence, must keep arriving exactly as it did."""
+    from hub import mcp_server
+
+    assert mcp_server._readable_detail("this run is not bound to that task") == (
+        "this run is not bound to that task"
+    )
+    assert mcp_server._readable_detail({"code": "x"}) == str({"code": "x"})
+    assert mcp_server._readable_detail({"code": "x", "message": ""}) == str(
+        {"code": "x", "message": ""}
+    )

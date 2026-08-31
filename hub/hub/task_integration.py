@@ -23,6 +23,7 @@ feature unable to damage anything shared, and it is asserted by test as well as 
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,6 +42,8 @@ from .db.models import (
 )
 from .subprocess_windows import no_console_kwargs
 from .utils import short_id
+
+logger = logging.getLogger(__name__)
 
 MERGED = "merged"
 SKIPPED = "skipped"
@@ -447,6 +450,98 @@ async def tasks_skipped_for_want_of_a_main_branch(
         if task not in seen:
             seen.append(task)
     return seen
+
+
+async def tasks_awaiting_this_commit(session: AsyncSession, evidence) -> List[Task]:
+    """Approved tasks that would merge *evidence*'s commit and have no record of having done so.
+
+    **The condition is a commit that is not in the product, not the reason the previous attempt
+    gave.** The sibling above filters on the most recent skip because naming a main branch changes
+    the world in exactly one way, so its proxy is exact. Accepting evidence is not like that: it adds
+    a *target*, and a task can acquire one whatever its last attempt did. In the mixed case — some
+    evidence accepted at approval, some still awaiting — the most recent row is a `merged`, so no
+    reason filter can reach it, and the awaiting commit would stay outside the product permanently
+    while the task sat terminal at `approved`.
+
+    Only the commit *this task has already merged* is excluded, and only because repeating it could
+    append nothing but a row saying nothing happened. A commit that reached the main branch some
+    other way is deliberately *not* excluded: `integrate` asks the repository and records
+    `ALREADY_INTEGRATED`, which is a fact about the repository the reader does not otherwise have.
+
+    Correctness does not rest on this predicate being exact; only noise does. `integrate` self-guards
+    by asking git whether the commit is reachable, before it asks anything about the working tree.
+    """
+    footprint = (
+        await session.execute(
+            select(EvidenceFootprint).where(EvidenceFootprint.evidence_id == evidence.id)
+        )
+    ).scalar_one_or_none()
+    if footprint is None or footprint.kind != "git" or not footprint.commit_sha:
+        return []
+
+    already = select(TaskIntegration.task_id).where(
+        TaskIntegration.project_id == evidence.project_id,
+        TaskIntegration.outcome == MERGED,
+        TaskIntegration.commit_sha == footprint.commit_sha,
+    )
+    rows = (
+        await session.execute(
+            select(Task)
+            .join(TaskRequirementLink, TaskRequirementLink.task_id == Task.id)
+            .where(
+                TaskRequirementLink.requirement_id == evidence.requirement_id,
+                Task.project_id == evidence.project_id,
+                Task.status == "approved",
+                Task.id.not_in(already),
+            )
+            .order_by(Task.id.asc())
+        )
+    ).scalars()
+    # One task can hold several integration rows and several links, so the join can repeat it; a
+    # duplicate here would attempt the same merge twice and record two rows for one acceptance.
+    waiting: List[Task] = []
+    for task in rows:
+        if task not in waiting:
+            waiting.append(task)
+    return waiting
+
+
+async def integrate_what_was_waiting_for_this_evidence(
+    session: AsyncSession, evidence, actor
+) -> None:
+    """Merge the approved work that was waiting for *evidence* to be judged.
+
+    Approval is refused while evidence that would merge sits unaccepted, and that refusal tells the
+    reader to accept it. Discharging the instruction at the moment they follow it is what makes the
+    sentence true — without this, an approved task whose evidence is accepted afterwards stays
+    unmerged, and approving again cannot merge it, because restating a status is a no-op.
+
+    Wrapped, and called *after* the route's commit, exactly as the main-branch sibling is: the
+    decision is the operator's or the granted agent's, and it must stand or fall on its own terms. A
+    repository failure is recorded as a skip like any other, never as a failure to accept.
+
+    `actor` is whoever *accepted*, not `operator()` — the integration happened because of that
+    decision, and a record naming the operator for an agent's decision is a false account of who
+    caused it.
+    """
+    from .task_transition_service import retry_integration
+
+    try:
+        if evidence.review_state != requirement_evidence.ACCEPTED:
+            # A rejection changes nothing that could merge.
+            return
+        waiting = await tasks_awaiting_this_commit(session, evidence)
+        for task in waiting:
+            await retry_integration(session, task, actor)
+        if waiting:
+            await session.commit()
+    except Exception:  # noqa: BLE001 - never let a merge undo the decision that asked for it
+        logger.warning(
+            "Could not integrate the work waiting on evidence %s",
+            getattr(evidence, "id", "?"),
+            exc_info=True,
+        )
+        await session.rollback()
 
 
 async def history_for(session: AsyncSession, task_id: str) -> List[TaskIntegration]:

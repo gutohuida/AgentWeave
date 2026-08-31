@@ -37,6 +37,8 @@ from ... import (
     spec_rigor,
     spec_service,
     spec_tasks,
+    task_integration,
+    task_transitions,
 )
 from ... import (
     spec_payload as spec_payload_module,
@@ -888,6 +890,13 @@ async def decide_evidence(
             status_code=exc.http_status or 403, detail={"message": str(exc), "code": exc.code}
         ) from exc
     await session.commit()
+    # After the commit, and wrapped inside: accepting is a judgement about the evidence, and a
+    # repository failure must not reverse it. This is what makes the approval refusal's instruction
+    # — "accept the evidence" — actually land the work, rather than asking for something and then
+    # ignoring it being done.
+    await task_integration.integrate_what_was_waiting_for_this_evidence(
+        session, evidence, task_transitions.operator()
+    )
     return _evidence_view(evidence, latest_review=review)
 
 

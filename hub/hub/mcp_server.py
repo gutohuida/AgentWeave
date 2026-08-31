@@ -115,7 +115,20 @@ def _readable_detail(detail: Any) -> str:
     produced tool errors like `[{'type': 'value_error', 'loc': ['body', 'type'], 'msg': "Value
     error, type must be one of [...]", 'ctx': {...}}]`. An agent trying to correct itself had to
     parse that. Keep the messages, and name the offending field when the body says which it was.
+
+    **The same failure had a second shape (F152).** A refusal carrying structure arrives as a
+    *dict* — the transition gate's is the one that matters most, since its whole value is a sentence
+    the agent has to act on — and fell through to `str(detail)`, so the agent read
+    `{'code': 'gate_unsatisfied', 'blocking': [], ..., 'message': 'This task ...'}` with the sentence
+    buried in it. Every reachable producer on this plane composes the whole sentence into `message`,
+    including the field path where there is one (`PayloadError` puts it there), so nothing is lost by
+    returning it. Guarded on a non-empty string so a plain-string detail and any future messageless
+    dict keep today's behaviour.
     """
+    if isinstance(detail, dict):
+        message = detail.get("message")
+        if isinstance(message, str) and message.strip():
+            return message
     if isinstance(detail, list):
         parts = []
         for item in detail:

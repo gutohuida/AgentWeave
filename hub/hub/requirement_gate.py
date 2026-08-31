@@ -24,7 +24,8 @@ one.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,6 +64,22 @@ REMEDY = {
 }
 
 
+# What an entry in `reported`/`advisory` is about. Both lists are carried out of the transition on
+# the same attribute, so each entry has to say which it is or a consumer cannot tell a `contract`
+# rigor report from evidence nobody has judged.
+REPORT_REQUIREMENT = "requirement"
+REPORT_AWAITING_EVIDENCE = "awaiting_evidence"
+
+# Named once because the refusal and the advisory say the same thing, and because the requirement is
+# explicit that both ways out are named: accepting evidence is the operator's unless an agent has
+# been granted it, and no agent is granted it by default. An agent reading this can take neither
+# remedy itself, and saying so is what stops it retrying.
+ACCEPT_OR_GRANT = (
+    "accept the evidence, or grant an agent the capability to accept it — both are the "
+    "operator's, so an agent reading this has to ask for one rather than take it"
+)
+
+
 @dataclass
 class GateRefusal:
     """Why the gate refused, in a shape a surface can render without parsing prose."""
@@ -73,20 +90,48 @@ class GateRefusal:
     # different kind of claim: not "this is unproven" but "this cannot go in". An operator told the
     # requirement is unverified would go and record evidence, which would not help at all here.
     unmergeable: List[Dict[str, Any]] = field(default_factory=list)
+    # Evidence that names a commit and is still waiting to be judged, where nothing accepted names
+    # one. A third kind of claim again: not "this is unproven" and not "this cannot go in", but
+    # "nothing would go in while something is waiting to be judged". Approving here would record
+    # that the work is good and merge none of it, and the skip would read like an absence of work
+    # rather than a queue of it.
+    unaccepted: List[Dict[str, Any]] = field(default_factory=list)
     # `contract`-rigor requirements that are not verified, named the same way a `blocking` entry
     # is — identifier, state, remedy — but never inspected by `refuses`. This is `contract`'s whole
     # behaviour: report unmet and rejected requirements at the moment of approval, without ever
     # standing in the way of it. `sketch` never reaches here at all (task 5.5 of
     # `2026-08-13-a-gate-that-only-evidence-opens`).
     reported: List[Dict[str, str]] = field(default_factory=list)
+    # Evidence still awaiting review on a task that *does* have accepted evidence naming a commit.
+    # Approval succeeds there and merges what was accepted, so this is a report rather than a
+    # refusal — deliberately absent from `refuses` and from `detail()`. Refusing would block work
+    # that is genuinely ready because a second piece is still in review.
+    advisory: List[Dict[str, Any]] = field(default_factory=list)
 
     @property
     def refuses(self) -> bool:
-        return bool(self.blocking or self.diagnostics or self.unmergeable)
+        return bool(self.blocking or self.diagnostics or self.unmergeable or self.unaccepted)
 
     def detail(self) -> str:
-        if self.unmergeable and not (self.blocking or self.diagnostics):
-            return self._merge_detail()
+        """One sentence per category that has anything to say, composed explicitly.
+
+        This used to return `_merge_detail()` from an early return when `unmergeable` was the only
+        category set. A third category appended to the tail of the other branch would have been
+        silently dropped in exactly the case that matters most — an otherwise-clean task whose only
+        problem is the new one. Composition rather than a special case is what makes that
+        impossible; the text for the two pre-existing shapes is unchanged.
+        """
+        return " ".join(
+            sentence
+            for sentence in (
+                self._unverified_detail(),
+                self._merge_detail(),
+                self._unaccepted_detail(),
+            )
+            if sentence
+        )
+
+    def _unverified_detail(self) -> str:
         parts: List[str] = []
         for entry in self.blocking:
             parts.append(f"{entry['identifier']} is {entry['state']}: {entry['remedy']}")
@@ -95,16 +140,17 @@ class GateRefusal:
                 f"{entry['identifier'] or 'a requirement'} cannot be checked at all: "
                 f"{entry['problem']}"
             )
-        sentence = (
+        if not parts:
+            return ""
+        return (
             "This task serves requirements a gate is enforcing, and they are not verified: "
             + "; ".join(parts)
             + ". Satisfy them, or lower the document's rigor — which is recorded."
         )
-        if self.unmergeable:
-            sentence += " " + self._merge_detail()
-        return sentence
 
     def _merge_detail(self) -> str:
+        if not self.unmergeable:
+            return ""
         paths: List[str] = []
         target = ""
         for entry in self.unmergeable:
@@ -117,12 +163,40 @@ class GateRefusal:
             "merges it."
         )
 
+    def _unaccepted_detail(self) -> str:
+        """Each waiting piece by name, and both ways out.
+
+        Every piece is listed rather than counted, because a count tells the reader there is
+        something to do and not what. Where the piece was recorded by a *different* task serving the
+        same requirement, that task is named too: this task's integration is what would merge that
+        commit, so without the attribution the reader is shown a fact with no route back to its
+        cause.
+        """
+        if not self.unaccepted:
+            return ""
+        pieces: List[str] = []
+        for entry in self.unaccepted:
+            commit = str(entry.get("commit_sha") or "")[:12]
+            piece = (
+                f"{entry.get('identifier') or 'a requirement'} at {commit or 'an unnamed commit'}"
+            )
+            if entry.get("recorded_by_another_task"):
+                piece += f", recorded by {entry.get('recorded_by_task')}"
+            pieces.append(piece)
+        return (
+            "This task's work has been recorded and nobody has judged it: "
+            + "; ".join(pieces)
+            + f". Approving now would record that the work is good and merge none of it, because "
+            f"only accepted evidence is merged. To land it, {ACCEPT_OR_GRANT}."
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "code": "gate_unsatisfied",
             "blocking": list(self.blocking),
             "diagnostics": list(self.diagnostics),
             "unmergeable": list(self.unmergeable),
+            "unaccepted": list(self.unaccepted),
             "reported": list(self.reported),
             "message": self.detail(),
         }
@@ -151,47 +225,151 @@ async def _enforced_requirements(
     return enforced, rigors
 
 
-async def _check_mergeable(session: AsyncSession, task: Task, refusal: GateRefusal) -> None:
+@dataclass
+class _MergeSituation:
+    """What a repository-aware check needs, resolved once for all of them.
+
+    The two checks below ask different questions about the same four preconditions, and both are
+    silent — never refusing — when any of them fails: no configured main branch, an unresolvable
+    workspace, a directory that is not a repository, no branch by the configured name. Each is *a
+    reason to not know, never a reason to refuse*, and they have to be the same four rather than two
+    lists that can drift, because a refusal that fired where the merge would have been skipped
+    anyway would block every task in such a project behind a remedy that changes nothing.
+
+    Resolved once for a second reason found in round 2: `resolve_project_workspace` is not a pure
+    read — it writes `project.directory_state` and `project.last_seen_at` — so asking twice per
+    approval writes the same fields twice and runs the same two subprocess calls twice.
+
+    `accepted` is carried here because both checks need it and it is one query: the merge check
+    tests each accepted commit for conflicts, and the unaccepted check asks only whether the list is
+    empty.
+    """
+
+    root: Path
+    main_branch: str
+    accepted: List[Any]
+
+
+async def _merge_situation(session: AsyncSession, task: Task) -> Optional["_MergeSituation"]:
+    """The four preconditions, or `None` where integration could not be attempted at all."""
+    from . import project_workspace, task_integration
+    from .db.models import Project
+
+    project = await session.get(Project, task.project_id)
+    if project is None or not project.main_branch:
+        return None
+
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, task.project_id)
+    except Exception:
+        # An unreachable workspace is a reason to not know, never a reason to refuse.
+        return None
+
+    root = workspace.root
+    if not task_integration.is_repository(root):
+        return None
+    if not task_integration.branch_exists(root, project.main_branch):
+        return None
+
+    return _MergeSituation(
+        root=root,
+        main_branch=project.main_branch,
+        accepted=await task_integration.integration_targets(session, task),
+    )
+
+
+async def _check_mergeable(
+    session: AsyncSession, task: Task, refusal: GateRefusal, situation: _MergeSituation
+) -> None:
     """Add a refusal where the task's work would not merge into the project's main branch.
 
     Deliberately **not** conditional on rigor. Rigor is a claim about how well the work must be
     proven; this is a claim about whether it can go where approval puts it. A conflicting branch
     approved at `sketch` would record an approval that silently integrates nothing.
 
-    Every "cannot check" path here is silent, not a refusal: no configured main branch, no
-    repository, no accepted commit, an unavailable workspace. Approval must never be blocked by the
-    *absence* of an integration, only by one that would fail.
+    Approval must never be blocked by the *absence* of an integration, only by one that would fail —
+    so a task with no accepted commit produces nothing here, and `_merge_situation` has already
+    returned `None` for every project where the question could not be asked.
     """
-    from . import project_workspace, task_integration
-    from .db.models import Project
+    from . import task_integration
 
-    project = await session.get(Project, task.project_id)
-    if project is None or not project.main_branch:
-        return
-
-    try:
-        workspace = await project_workspace.resolve_project_workspace(session, task.project_id)
-    except Exception:
-        # An unreachable workspace is a reason to not know, never a reason to refuse.
-        return
-
-    root = workspace.root
-    if not task_integration.is_repository(root):
-        return
-    if not task_integration.branch_exists(root, project.main_branch):
-        return
-
-    for target in await task_integration.integration_targets(session, task):
-        paths = task_integration.would_conflict(root, target.commit_sha, project.main_branch)
+    for target in situation.accepted:
+        paths = task_integration.would_conflict(
+            situation.root, target.commit_sha, situation.main_branch
+        )
         if paths:
             refusal.unmergeable.append(
                 {
                     "commit_sha": target.commit_sha,
                     "source_branch": target.branch,
-                    "target_branch": project.main_branch,
+                    "target_branch": situation.main_branch,
                     "paths": paths,
                 }
             )
+
+
+async def _check_unaccepted(
+    session: AsyncSession, task: Task, refusal: GateRefusal, situation: _MergeSituation
+) -> None:
+    """Refuse where a commit has been recorded, nobody has judged it, and nothing else would merge.
+
+    Rigor-independent for the same reason `_check_mergeable` is, and the reason is sharper here: the
+    default rigor is `sketch`, `_enforced_requirements` filters `sketch` out entirely, and anything
+    behind that filter is absent from a default project — which is exactly how this defect survived.
+
+    **The mixed case is allowed, not refused.** Where accepted evidence already names a commit,
+    integration will merge it and approval keeps its meaning; blocking there would hold up work that
+    is genuinely ready because a second piece is still in review. The waiting rows are reported on
+    the transition instead, and accepting them afterwards merges them
+    (`task_integration.integrate_what_was_waiting_for_this_evidence`).
+    """
+    from . import task_integration
+
+    awaiting = await task_integration.awaiting_targets(session, task)
+    if not awaiting:
+        return
+
+    identifiers = await _identifiers_for(session, [row.requirement_id for row in awaiting])
+    entries = [
+        {
+            "kind": REPORT_AWAITING_EVIDENCE,
+            "evidence_id": target.evidence_id,
+            "requirement_id": target.requirement_id,
+            "identifier": identifiers.get(target.requirement_id or "", ""),
+            "commit_sha": target.commit_sha,
+            "source_branch": target.branch,
+            "target_branch": situation.main_branch,
+            "recorded_by_task": target.task_id,
+            # A requirement may be served by more than one task, and this task's integration is what
+            # would merge that other task's commit — so the refusal has to say whose it is.
+            "recorded_by_another_task": bool(target.task_id and target.task_id != task.id),
+            "remedy": ACCEPT_OR_GRANT,
+        }
+        for target in awaiting
+    ]
+
+    if situation.accepted:
+        refusal.advisory.extend(entries)
+        return
+    refusal.unaccepted.extend(entries)
+
+
+async def _identifiers_for(session: AsyncSession, requirement_ids: List[Any]) -> Dict[str, str]:
+    """`{spec_requirements.id: identifier}` for the rows a sentence has to name.
+
+    Resolved here rather than in `task_integration` (design D5, round 3): the identifier is a field
+    only the sentence uses, and reaching it from the target query would add a join to the *merge*
+    path for prose. This module already imports `SpecRequirement`.
+    """
+    wanted = [requirement_id for requirement_id in requirement_ids if requirement_id]
+    if not wanted:
+        return {}
+    rows = (
+        (await session.execute(select(SpecRequirement).where(SpecRequirement.id.in_(wanted))))
+        .scalars()
+        .all()
+    )
+    return {row.id: row.identifier for row in rows}
 
 
 async def evaluate(session: AsyncSession, task: Task) -> tuple[GateRefusal, str]:
@@ -202,7 +380,13 @@ async def evaluate(session: AsyncSession, task: Task) -> tuple[GateRefusal, str]
     arrive as a barrier nobody asked for.
     """
     refusal = GateRefusal()
-    await _check_mergeable(session, task, refusal)
+    # Both repository-aware checks, and both **above** the early return two statements down. That
+    # return fires whenever no linked document is above `sketch`, which is every default project —
+    # a check placed after it would be dead exactly where the defect it fixes lives.
+    situation = await _merge_situation(session, task)
+    if situation is not None:
+        await _check_mergeable(session, task, refusal, situation)
+        await _check_unaccepted(session, task, refusal, situation)
 
     enforced, rigors = await _enforced_requirements(session, task)
     if not enforced:
@@ -241,7 +425,12 @@ async def evaluate(session: AsyncSession, task: Task) -> tuple[GateRefusal, str]
                 }
                 # `gate` refuses on it; `contract` reports it and lets the transition through — the
                 # entire distinction between the two rigors lives in which list an entry lands in.
-                (refusal.blocking if gates else refusal.reported).append(unmet)
+                if gates:
+                    refusal.blocking.append(unmet)
+                else:
+                    # Stamped only on the reported copy: `reported` and `advisory` are carried out
+                    # of the transition on one attribute, so an entry has to say which kind it is.
+                    refusal.reported.append({**unmet, "kind": REPORT_REQUIREMENT})
         for entry in report.diagnostics:
             if entry.requirement_id not in wanted:
                 continue
@@ -258,6 +447,7 @@ async def evaluate(session: AsyncSession, task: Task) -> tuple[GateRefusal, str]
             else:
                 refusal.reported.append(
                     {
+                        "kind": REPORT_REQUIREMENT,
                         "identifier": entry.identifier or "",
                         "requirement_id": entry.requirement_id,
                         "state": "invalid",
