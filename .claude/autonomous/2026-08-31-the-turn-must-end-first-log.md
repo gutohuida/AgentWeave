@@ -239,3 +239,159 @@ scenarios). `openspec validate --strict`: **valid**.
 
 No code was touched. A-R3 is next and must not re-read this — it is to re-derive independently, with
 task 5.4's population question as its named starting point.
+
+---
+
+## Iteration 2 — 2026-08-31T12:05+01:00 — A-R3, round 3
+
+**Branch reconciled first.** `autonomous/2026-08-31-the-turn-must-end-first` at `f29277e`, tree
+clean, `git log` matching STATE.json's `current`. Nothing to reconcile.
+
+Round 3 was run against the **code and the shipped corpus**, not against round 2's log entry. Where
+this entry names something round 2 also found, that is convergence, not a re-read.
+
+### (a) Does a shipped requirement forbid a new approval precondition? — **No, and here is the proof**
+
+`task-lifecycle-governance:720` *"An integration that cannot proceed does not block approval"* is the
+place the queue item predicted a breach, and read alone it forbids this change: its scenarios say
+flatly that approval succeeds with no configured main branch, and it closes with *"A project that is
+not a repository SHALL be no less approvable than before this capability existed."*
+
+It does not forbid it, and the evidence is inside the function this change edits. `evaluate`'s
+enforced-requirements walk (`requirement_gate.py:399-410`) is **unconditional on `situation`** — so
+`blocking` and `diagnostics` already refuse approval in projects `_merge_situation` cannot resolve,
+and have since the gate shipped. The corpus therefore already tolerates non-integration refusals
+there, which settles `:720`'s scope: it governs *integration* as a blocker of approval, and its
+scenarios speak about their own cause. No delta against it.
+
+**But there is a finding, and it is a principle stated in the code rather than in the corpus.**
+`_MergeSituation`'s docstring (`requirement_gate.py:230-238`) says of its four preconditions: *"Each
+is **a reason to not know, never a reason to refuse**, and they have to be the same four rather than
+two lists that can drift, because a refusal that fired where the merge would have been skipped anyway
+would block every task in such a project behind a remedy that changes nothing."* Round 2's D1
+deliberately places the liveness check outside that block, so it fires in exactly those projects.
+Round 2 was right to; it never noticed it was departing from a written rule. Design D1 now argues the
+departure in three terms — liveness is not one of the four (it is answerable in a directory that is
+not a repository at all), its remedy is not "a remedy that changes nothing" because it clears itself,
+and `approved` is a judgement about work even where nothing merges. A scenario now pins it, and task
+3.9 tests it.
+
+### (b) Does removing the loop's review arm regress anything? — **four findings, one of them inverts the argument**
+
+**1. The corpus does not merely permit this removal. It requires it.** Rounds 1 and 2 both argued from
+silence: *"nothing in the corpus says a loop staffs a review."* `agent-flows:13` says the opposite of
+silence — *"A loop that declares no document SHALL be unaffected by [this capability's requirements]
+and SHALL behave exactly as it does today"* — and that capability's Purpose enumerates what it owns:
+*"firing-time agent resolution, **reviewer resolution, review dispatch and its handover briefings**,
+flow width, and the checkpoint lineage"* (`openspec/specs/agent-flows/spec.md:5-9`). Its scenario is
+flatter still: *"A loop without a document is unchanged — every firing fires the job's own agent, as
+before."* `decide_firing` resolves a **second** agent to review a documentless loop's task. So the arm
+is a **breach of a shipped requirement**, and D5 restores the corpus. The proposal's weakest load-
+bearing sentence is replaced by its strongest.
+
+This is the round-3 shape CLAUDE.md describes: rounds 1 and 2 reached the right conclusion by an
+argument that would not have survived a reader who knew `agent-flows:13`.
+
+**2. Round 2's population estimate was right in its clauses and wrong in its scale.** Round 2 called
+it *"narrow and specific: a documentless loop, in a project with a second eligible agent, whose agent
+recorded evidence naming a commit"* and left it as an observation. That description is **the suite's
+default fixture.** Measured, not assumed — `grep -c spec_document_id` is `0` in all five:
+
+| File | Tests | Asserts |
+|---|---|---|
+| `test_actor_aware_claimability.py` | 14 | `:428` *"the ladder staffs a review, not the job's own agent"*, `is_review is True` |
+| `test_a_flow_names_what_it_cannot_staff.py` | 24 | F142's three arms and the `unstaffed` sentences |
+| `test_review_dispatch_staffs_the_task.py` | 12 | `:1481` staffing |
+| `test_review_leaves_the_pool.py` | 9 | F45, review leaves the recruitment pool |
+| `test_a_review_needs_something_to_review.py` | 5 | `commit_for_task_review` gating the arm |
+
+Every loop in them is `Loop(id=..., project_id=..., job_id=..., purpose=...)` with no
+`spec_document_id`. They are **flow requirements tested through loop fixtures**, which is precisely
+why nobody noticed the arm running outside its capability. Task 5.5 moves the flow-subject fixtures
+onto documents; the exclusion is not weakened to keep a fixture green.
+
+**3. The arm serves two populations and only one may be excluded.** `scheduler.py:1440-1500` is
+reached by a `completed` candidate (a fresh review) **and** by an `under_review` row whose assignee is
+its own author, carried down by `wedged_review` from `:1299-1356` — the F70 recovery. An exclusion at
+the top of the arm removes both, and the second failure is **silent**: that path deliberately skips
+the `in_flight` record (`if not wedged_review: in_flight.append(...)`, `:1349`), so a loop's wedged row
+would leave the walk having recorded nothing at all. F23's and F142's silence through a third door, in
+a change whose purpose is to end a stall nobody can see. The exclusion goes on the fresh-review branch
+only.
+
+**4. `unstaffed` staying empty is right and not sufficient.** With the arm gone, a loop whose only open
+task is `completed` falls to `_stall_reason_from_walk` and gets *"loop queue is stalled: no claimable
+task among 1 open (1 completed)"* (`scheduler.py:1668`) — word for word the sentence the review arm's
+own comment records as measured live on 2026-08-30 and wrong. This change would re-earn it for loops
+on the day it removes it for flows. Here the cause is fully known and the remedy is D6, so the firing
+must say so. New requirement text, a scenario, and task 5.4.
+
+Also cleared, and now stated so it is not removed by accident (task 5.6): the operator's **by-hand**
+review of a loop's completed task survives — `task-lifecycle-governance:1481` requires every dispatch
+path to staff, and names the operator's first.
+
+### (c) Does the composed landing action breach `:117` or `:168`? — **No, and one thing was missing**
+
+`:117` is satisfied at the map: `TRANSITIONS["completed"]["under_review"]` and
+`TRANSITIONS["under_review"]["approved"]` are both `_BOTH` (`task_transitions.py:134-141`), so the
+composition travels declared operator edges and widens nothing. `:168` is satisfied because each step
+goes through `apply_transition`, which writes its own row. `:264` — which *"binds every actor,
+including the operator"* — is satisfied by ordering, since the hold is released first and
+`_guard_reviewer_is_not_the_author` returns immediately for a task with no assignee (`:357`).
+
+**What `:168` demanded and the delta did not say:** the recorded cause must *"distinguish a transition
+an actor asked for from one the system made on that actor's behalf"*. The landing action is one intent
+producing three records, so it has to choose. They are **actor-caused, all three** — nothing here is
+observed by the runtime; the operator asked for every step, in one word instead of three. Delta text
+and task 6.5.
+
+**And a real gap in D7.** The delta already promises *"refused **for any reason** leaves nothing
+half-applied"*; D7 delivered only a gate pre-check. The gate is one of several ways this composition
+can refuse — `apply_transition`'s legality check, `_guard_reviewer_is_not_the_author` on
+`-> under_review`, `_guard_run_holds_the_task`, `_guard_author_is_not_reviewer`. A landing that
+pre-checked the gate and met one of those on step two would have released the author's hold already.
+What guarantees the promise is the **transaction**: `apply_transition` and `transition_task` do not
+commit — the routes in `api/v1/tasks.py` do (`:1173`, `:1397`, `:1564`) — so all three steps go in one
+handler under one commit. The pre-check is kept and its purpose restated: it makes the *message* the
+one approval would have given. Atomicity is the transaction's job. Delta paragraph, new scenario, task
+6.3.
+
+### D10, re-derived independently — right, necessary, and carrying a second residual
+
+D10 is confirmed at the source: `_bind` writes `run.task_id = task.id` (`run_task_binding.py:427`) and
+`task_named_by` resolves `entry.task_id or entry.review_task_id` (`:170-189`), so a reviewer's own turn
+is bound to the task it approves and a naive predicate refuses every flow review. Also checked rather
+than assumed: `requirement_gate.evaluate` has **exactly one caller**
+(`task_transition_service.py:555`), so widening its signature keeps no second surface in step.
+
+**The residual round 2 did not name.** The exclusion is unconditional on what the acting run is *for*,
+and two facts make that reach further than intended:
+
+- `_bind` sets `run.task_id` for a **working** turn exactly as for a review turn, so the `Run` row
+  cannot tell them apart — the same fact that made the structural alternative expensive.
+- `_guard_author_is_not_reviewer` refuses only where a completing agent is *recorded*
+  (`task_transition_service.py:304-305`). An **unattributable** completion is permitted to act on, by
+  the corpus's own *"refuse to offer, permit to act"* asymmetry — and an operator marking a card done
+  is exactly that case, measured live in F142.
+
+So: an agent mid-turn on task T, bound to T, whose `completed` the **operator** recorded and whose
+assignee the operator cleared, may approve its own in-flight work from inside its own turn. The author
+guard permits, D10 excludes its run, the gate says nothing, `task_branch_tip` resolves the pre-turn
+commit. **That is F162 reached through the carve-out built to protect reviewers.**
+
+Narrow — it needs the operator to complete *and* unassign a task an agent is still working — and not a
+reason to drop D10, whose absence kills every flow review. Named in D10 with its price (the
+`InboundQueueEntry.review_task_id` join round 2 rejected for scope; round 3 confirms the trade), and
+task 2.6 pins the shape in a test so a later change knows what it would be closing.
+
+### Artifacts
+
+`proposal.md` (the `agent-flows:13` argument replaces the argument from silence; two bullets on what
+D5 does *not* remove and on the stall sentence; an Impact paragraph costing the five test files),
+`design.md` (D1, D5, D6, D7, D10 all extended; six new risks), `tasks.md` (2.6, 3.9, 5.4 rewritten,
+5.5, 5.6, 6.3 rewritten, 6.5), and both deltas (a `:720`-interaction scenario; three new `agent-loops`
+scenarios on the stall sentence, the by-hand review and the wedged recovery; a landing-action
+rollback scenario and two new paragraphs). `openspec validate --strict`: **valid**.
+
+No code was touched. The three rounds are complete and **A-IMPL-1 is next** — the reproduction first,
+and it must be seen to fail for the stated reason before anything is fixed.

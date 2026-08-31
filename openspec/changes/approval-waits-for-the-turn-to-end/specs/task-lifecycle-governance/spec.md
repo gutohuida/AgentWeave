@@ -18,6 +18,14 @@ The refusal SHALL apply wherever the work is resolved from, not only where it wa
 
 This refusal SHALL be independent of the rigor of any document the task's requirements belong to, for the same reason the unmergeable refusal is: rigor is a claim about how well work must be proven, and this is a claim about whether the work yet exists to be put anywhere.
 
+It SHALL likewise be independent of whether the project's work could be integrated at all. The refusals that ask *what would merge* are silent wherever the system cannot answer that question — no configured main branch, an unresolvable workspace, a directory that is not a repository — because there each is a reason to not know rather than a reason to refuse. This one asks a different question. `approved` is a judgement that work is good, and judging work an agent has not finished producing is false whether or not anything is merged afterwards, so a project where integration cannot be attempted SHALL be refused on the same terms as one where it can.
+
+#### Scenario: A project where integration cannot be attempted is refused on the same terms
+
+- **WHEN** a task in a project with no configured main branch is moved to `approved` while its turn is live
+- **THEN** the transition is refused
+- **AND** once the turn has ended the same task approves, with the integration recorded as skipped exactly as it would have been before this requirement
+
 #### Scenario: An approval inside the turn is refused
 
 - **WHEN** a task is moved to `approved` while the agent that completed it still has a running turn bound to that task

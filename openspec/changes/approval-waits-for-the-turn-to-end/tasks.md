@@ -27,6 +27,15 @@
   run bound to the task approving *itself* is permitted; a *second* live run bound to the same task
   still refuses. Comment it with why — `run_task_binding.task_named_by` binds a review run to the
   task it inspects (`:170-189`, migration `0092`), so without this every flow review is refused.
+  `evaluate` has exactly one caller (`task_transition_service.py:555`), checked rather than assumed,
+  so no second surface has to be kept in step with the widened signature.
+- [ ] 2.6 **Pin D10's residual in a test rather than leaving it in prose** (design D10, round 3). A
+  *working* run bound to a task whose `completed` was recorded by the **operator** and whose assignee
+  was cleared can approve from inside its own live turn: `_bind` sets `run.task_id` for a working
+  turn too (`run_task_binding.py:427`), and `_guard_author_is_not_reviewer` permits where no
+  completing agent is recorded (`task_transition_service.py:304-305`). Assert that shape explicitly,
+  named as a known residual, so the behaviour is a decision on the record and a later change that
+  makes the `InboundQueueEntry.review_task_id` join cheap knows exactly what it is closing.
 
 ## 3. The gate refuses a live turn
 
@@ -41,7 +50,14 @@
 - [ ] 3.3 Implement the check in `evaluate`, **above** the `if not enforced` early return, and
   **beside** the `if situation is not None` block rather than inside it (design D1, round 2):
   `_merge_situation` returns `None` for any project with no main branch or unresolvable workspace,
-  and liveness is not a question about the repository.
+  and liveness is not a question about the repository. The comment SHALL state why this departs from
+  `_MergeSituation`'s *"a reason to not know, never a reason to refuse"* (`requirement_gate.py:230-238`,
+  round 3) — it is not one of that docstring's four preconditions, its remedy clears itself, and
+  `approved` is a judgement about work even where nothing merges.
+- [ ] 3.9 Test the departure directly (round 3): a task in a project `_merge_situation` cannot
+  resolve — no configured main branch — is still refused while its turn is live, and still approves
+  normally once the turn ends. This is the interaction with
+  `task-lifecycle-governance:720` and it must be pinned rather than left to be re-derived.
 - [ ] 3.4 Compose its sentence in `detail()` alongside the others — never as an early return
   (`requirement_gate.py:115-124` records why that mattered once already).
 - [ ] 3.5 Write the refusal sentence so it names the agent, states that the turn is still running,
@@ -73,11 +89,30 @@ Round 2 answered this at the source (design D9): **it does.** `_targets` does no
   firing reports a missing commit to review; the unstaffed report stays empty for it; a flow's
   review leg is unchanged.
 - [ ] 5.2 Implement the exclusion at the selection site in `scheduler.py` (design D5), not inside
-  `commit_for_task_review`.
+  `commit_for_task_review`. **On the fresh-review branch only** (round 3): the same block is reached
+  by `wedged_review` rows carried down from `scheduler.py:1299-1356`, which is the F70 recovery of a
+  task already in `under_review` under its own author's name. That path deliberately records no
+  `in_flight` entry (`:1349`), so a wholesale exclusion would drop such a row out of the walk in
+  total silence.
 - [ ] 5.3 Make sure the loop's completed task does not reach `unstaffed` — it is not a step anything
   failed at.
-- [ ] 5.4 Check the other loop populations before assuming nothing is lost: a loop with a document is
-  a flow (`agent-flows:13`), so establish exactly which loops lose the arm.
+- [ ] 5.4 **And does not fall to the generic stall sentence either** (round 3). Without the arm,
+  `_stall_reason_from_walk` emits *"no claimable task among 1 open (1 completed)"*
+  (`scheduler.py:1668`) — F142's measured-live sentence, re-earned for loops on the day it is removed
+  for flows. Give the firing a stall reason that names the completed work as waiting for the
+  operator's landing action. Test it.
+- [ ] 5.5 **Move the flow fixtures onto documents** (round 3, and this is the item task 5.4 used to
+  understate). Five test files construct `Loop(...)` with no `spec_document_id` and assert the review
+  arm through `decide_firing`: `test_actor_aware_claimability.py` (`:428`),
+  `test_a_flow_names_what_it_cannot_staff.py`, `test_review_dispatch_staffs_the_task.py`,
+  `test_review_leaves_the_pool.py`, `test_a_review_needs_something_to_review.py`. Where the test's
+  subject is a **flow** requirement, the fixture declares a document — the exclusion is not weakened
+  to keep a fixture passing. Where the subject is genuinely a loop, the expectation changes with this
+  requirement. Say in each which of the two it was.
+- [ ] 5.6 Assert the two things D5 does **not** remove (round 3): the operator can still start a
+  review of a loop's completed task by hand (`task-lifecycle-governance:1481`), and a loop's
+  `under_review` row wedged under its own author still recovers through the ladder without moving
+  status (`:317`).
 
 ## 6. One action lands a loop's work
 
@@ -86,7 +121,16 @@ Round 2 answered this at the source (design D9): **it does.** `_targets` does no
   live; a refused landing leaves holder, status and integration record untouched.
 - [ ] 6.2 Implement it as a composition of the existing transitions (design D6). Do not add
   `completed -> approved` to `TRANSITIONS`.
-- [ ] 6.3 Evaluate the gate before performing any transition (design D7).
+- [ ] 6.3 Evaluate the gate before performing any transition (design D7) — **and perform all three
+  in one handler under one commit** (round 3). `apply_transition` does not commit; the routes in
+  `api/v1/tasks.py` do (`:1173`, `:1397`, `:1564`). The transaction is what makes "refused for any
+  reason leaves nothing half-applied" true; the pre-check only makes the *message* the one approval
+  would have given. Test a refusal raised on step two — `_guard_reviewer_is_not_the_author` on
+  `-> under_review` — and assert the author's hold is still in place afterwards.
+- [ ] 6.5 Record all three transitions as **actor-caused**, not `ORIGIN_RUNTIME`
+  (`task-lifecycle-governance:168`, round 3). Nothing here is a move the runtime made from something
+  it observed; the operator asked for every step, in one word instead of three. Assert the recorded
+  cause, not only the actor kind.
 - [ ] 6.4 Add the UI affordance that issues it, and render the live-turn refusal where the operator
   takes the action.
 

@@ -86,7 +86,14 @@ three.
   review, so `commit_for_task_review` is never asked for a commit and F161's sentence is never
   emitted — rather than being made true by teaching that function about branch tips. A loop has one
   agent and no second party; a review it staffs is the author reviewing itself, which
-  `_guard_reviewer_is_not_the_author` refuses anyway.
+  `_guard_reviewer_is_not_the_author` refuses anyway. **The operator's by-hand review is untouched**
+  (`task-lifecycle-governance:1481`), and so is the recovery of a loop's task already wedged in
+  `under_review` under its own author's name — only the *fresh* selection goes.
+- **The loop says what it is waiting for instead of falling silent.** With the review arm gone, a
+  loop whose only open task is `completed` would otherwise reach the generic
+  *"no claimable task among 1 open (1 completed)"* stall — the exact sentence F142 measured live and
+  removed for flows on 2026-08-30. The firing names the completed work as waiting for the operator's
+  landing action instead.
 - **Landing a loop's work becomes one operator action**, composed of the transitions that already
   exist — clear the assignee, `-> under_review`, `-> approved` — rather than three hand-made calls.
   The operator *is* the reviewer in that sequence, which is exactly the remedy the existing 403 names
@@ -128,12 +135,21 @@ None.
   itself.
 - `agent-loops`: a loop does not staff a review of its own agent's work, and landing a loop's
   approved work is one operator action rather than three.
-**`agent-flows` is deliberately not modified.** Its review requirements are already written about a
-flow — *"A flow resolves a reviewer by declaration, then by availability"* (`agent-flows:134`), whose
-scenarios all begin *"WHEN a flow fires"*. No requirement anywhere in the corpus *mandates* that a
-**loop** staffs a review. The code applies the flow's review arm to loops anyway, which is what emits
-F161's sentence, so the breach is code exceeding its spec rather than a requirement needing
-amendment. The `agent-loops` delta states the negative that was never written down.
+**`agent-flows` is deliberately not modified — and round 3 replaced the reason.** Rounds 1 and 2 both
+argued from silence: *"no requirement anywhere in the corpus mandates that a loop staffs a review"*.
+That is true and it is the weakest ground a removal can stand on. The corpus is not silent. It
+**forbids** it. `agent-flows:13` says *"A loop that declares no document SHALL be unaffected by [this
+capability's requirements] and SHALL behave exactly as it does today"*, and that capability's Purpose
+names what it owns: *"firing-time agent resolution, **reviewer resolution, review dispatch and its
+handover briefings**, flow width, and the checkpoint lineage"* (`openspec/specs/agent-flows/spec.md:5-9`).
+Its scenario is flatter still: *"A loop without a document is unchanged — every firing fires the job's
+own agent, as before."* `decide_firing` resolves a *second* agent to review a documentless loop's
+task, which is neither unaffected nor the job's own agent.
+
+So the arm is a **breach of a shipped requirement**, not code running ahead of an unwritten one, and
+removing it restores the corpus rather than narrowing it. `agent-flows` still needs no delta, for a
+better reason than before: it already says this. The `agent-loops` delta states the consequence on the
+loop's side.
 
 **Round 2 narrowed that claim, because one requirement comes close to presupposing the opposite.**
 `agent-loops`' *"An agent attributed to a task SHALL be attributed in a stated capacity"*
@@ -159,6 +175,15 @@ the selection.
 
 **Tests:** `hub/tests/` — a reproduction of F162 before the fix, in the shape the drive proved
 (mark completed mid-turn, approve, assert the refusal rather than a stranded `approved`).
+
+**And a cost round 3 measured rather than estimated.** Five existing test files build `Loop(...)` with
+no `spec_document_id` and then exercise the review arm through `decide_firing` —
+`test_actor_aware_claimability.py` (14 tests), `test_a_flow_names_what_it_cannot_staff.py` (24),
+`test_review_dispatch_staffs_the_task.py` (12), `test_review_leaves_the_pool.py` (9),
+`test_a_review_needs_something_to_review.py` (5). They are **flow** requirements tested through
+**loop** fixtures, which is why the arm was never noticed running outside its capability. Those whose
+subject is a flow gain a declared document; those whose subject is genuinely a loop change with the
+requirement. This is real work, not a footnote, and it is why `tasks.md` carries it as its own item.
 
 **Drives:** `scripts/drive/t_f162_window.py` is the existing harness and should re-run to a different
 outcome; `t_drive2_loop_lands.py` covers the loop's landing route.
