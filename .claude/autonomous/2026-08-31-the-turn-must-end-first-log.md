@@ -507,3 +507,120 @@ must not be squeezed out.
 Next: group 4 (one test — the evidence route through the same refusal, D9 having already answered
 that it shares the window) then group 5 (the loop stops entering the review arm — the largest
 remaining blast radius, five test files' fixtures).
+
+---
+
+## Iteration 4 — 2026-08-31T13:00 — A-IMPL-2: groups 4 and 5
+
+Branch and `git log` matched STATE.json's `current` exactly (`cdd9c5a`, tree clean, groups 1–3 at
+`9f9f18d`, `01100ad`, `89429d5`). Nothing to reconcile.
+
+### Group 4 — `c3c23a4`, the evidence route through the same refusal
+
+One test, as expected, and one correction that was not.
+
+**Task 4.2.** A task whose work is named by accepted evidence, approved while a live run is bound to
+it, is refused on exactly the same terms as one resolved from its own branch tip. Round 2 answered
+*whether* the evidence route shares the window by reading the source (design D9); this measures it.
+
+**The premise was verified by removal rather than assumed.** With `_check_live_turn`'s call
+temporarily commented out of the gate, the new test's first approval returns `200` and records:
+
+```
+"latest_integration":{"outcome":"skipped",
+"reason":"b04eea26d4f5 is already in main; there was nothing to merge", ...}
+```
+
+— F162 exactly, through the other door, against the pre-turn commit. Restored, it is a `409` whose
+`unaccepted` and `unmergeable` are both empty, which is what proves the liveness check is the thing
+refusing rather than the evidence being in some bad state.
+
+The second half is the same as the branch-tip case: the work is committed, `restamp_run_footprints`
+re-points the run's footprints at it the way the finalize block does, and the same task then approves
+and merges the commit that holds the work.
+
+**Task 4.3 asked whether the delta still reads true after implementation, and it did not quite.**
+The evidence-route scenario said *"while the run that recorded that evidence is still live"*, which
+is narrower than what the predicate does — it tests whether a live run is **bound to the task**, not
+who authored each piece of evidence. The two coincide in the shape the product produces (the agent
+working the task claims it, which binds its run, and records its evidence from that same turn) and
+diverge where evidence recorded by another task's run against a **shared requirement** is a merge
+target here — which `_targets` reaches through `TaskRequirementLink` by design. The scenario now
+states the binding, and the routes paragraph carries that residual alongside the unbound-run one.
+
+### Group 5 — `f468bf5`, a loop stops entering the review arm
+
+Two lines of scheduler, and nine test files.
+
+The exclusion sits at the selection site, above the finished-work arm, guarded by `not
+wedged_review` — the fresh-review branch only, exactly as round 3 required. `awaiting_landing`
+carries the excluded task ids out of the walk so the stall sentence can name them; `unstaffed` stays
+empty because nothing was attempted.
+
+**Verified by removal.** With the two-line exclusion commented out, five of the nine new tests fail,
+and the sentence they fail with is F161 verbatim:
+
+```
+task task-f161-nocommit has no recorded evidence, so there is no commit to review.
+Evidence naming a commit is what a review turn is given. Until the work that finished
+this task is recorded as evidence naming a commit, no reviewer can be given anything
+to look at.
+```
+
+**One of the nine passed against the defect, and that is a finding about the test rather than the
+code.** `test_the_unstaffed_report_stays_empty_for_a_loops_completed_work` was written with evidence
+recorded, so the old arm resolved a reviewer and *selected* — leaving `unstaffed` empty before the
+change too. It was rewritten to the no-evidence shape, which is the shape that actually filled
+`unstaffed`, and now fails without the fix. This is the reason the discipline says to read the
+failure output rather than assume it: a green run of the reproduction is not the same as a
+reproduction.
+
+**Task 5.5 was larger than round 3 measured.** Round 3 named five files. Nine needed work:
+
+| File | Which of the two |
+|---|---|
+| `test_a_flow_names_what_it_cannot_staff` | declares a document — `_flow` |
+| `test_a_review_needs_something_to_review` | declares — `_loop_with_completed_task` → `_flow_with_completed_task` |
+| `test_review_leaves_the_pool` | declares — `_loop_with_task` → `_flow_with_task` |
+| `test_actor_aware_claimability` | declares, **one test only** — the file is about claimability, which is every queue's property |
+| `test_flow_fires_a_review_turn` | declares — `_flow` (also fixes one in `test_scheduler`) |
+| `test_flow_width` | declares, with a `declares_document=False` arm for the one test whose subject *is* a documentless loop |
+| `test_reviewer_is_not_the_author` | declares — `_flow` |
+| `test_board_agent_role` | declares — `_flow` |
+| `test_scheduler` (all-completed spin) | **expectation changes** — genuinely a loop |
+| `test_firing_decision_is_shared` (×2) | **expectation changes** — genuinely a loop |
+| `test_loop_stall_ticks_in_place` (changed reason) | **expectation changes** — genuinely a loop |
+
+Round 3's table also listed `test_review_dispatch_staffs_the_task`. It builds no `Loop` at all — it
+drives the operator's by-hand dispatch — so it needed nothing, and its passing unchanged is itself
+evidence for task 5.6.
+
+`test_loop_stall_ticks_in_place`'s changed-reason mechanism has now moved twice: a second unclaimable
+task originally, then recording an agent completion after F142, and now back to a second finished
+task — because the landing sentence counts what it names, which is the property that makes the
+original mechanism work again.
+
+**A comment this change makes false, corrected rather than left.** `_compose_loop_briefing` asserted
+that *"nothing in `decide_firing` or `resolve_reviewer` consults `spec_document_id` — width and
+review by a non-author apply to every loop"*. Half of that is now wrong. The briefing wording it
+justified is unchanged and is now true *of the scheduler* rather than merely safe for it, and the
+documentless `is_review` arm stays reachable because the F70 recovery still staffs a reviewer for a
+loop whatever it declares.
+
+### Verification
+
+| Run | Result |
+|---|---|
+| `test_approval_waits_for_the_turn` + `test_task_integration` | 39 passed |
+| `test_scheduler` + `test_turn_scheduler` + `test_flow_fires_a_review_turn` + `test_flow_width` + `test_reviewer_ladder` + `test_reviewer_is_not_the_author` + `test_firing_decision_is_shared` + the new file | 144 passed |
+| `test_flow_chain_end_to_end` + `test_flow_checkpoint_lineage` + `test_flow_holds_the_loop_requirements` + `test_handover_briefs_the_reviewer` + `test_briefing_names_its_contract` + 7 loop files | 86 passed |
+| `test_a_decided_task_takes_no_new_work` … `test_dependency_gate` (12 files) | 215 passed |
+| `test_failed_run_returns_input` … `test_review_divergence` (10 files) | 238 passed, 2 skipped |
+| `test_run_reconciliation` … `test_agent_trigger` (12 files) | 223 passed |
+| `test_actor_aware_claimability` + the other four of round 3's five | 66 passed |
+| `ruff check src/ hub/ tests/`, `black --check` | clean |
+| `openspec validate --strict` | valid |
+
+**Still no drive.** Every scheduler-touching test file in the suite has been run and is green, and
+that remains a statement about the tests. Groups 6 and 7 are next, and 7 is the one the operator
+asked for.
