@@ -109,7 +109,12 @@ async def test_a_stalled_queue_claims_nothing_and_the_board_offers_no_claimable_
 
     assert decision.kind == DECISION_STALLED
     assert decision.selections == ()
-    assert decision.stall_reason and "stalled" in decision.stall_reason
+    # The reason names the task, not the queue (F142). This asserted the word "stalled" -- the
+    # histogram's own prefix -- while the fixture builds its task directly at `completed`, so no
+    # completion is recorded and the walk now surfaces it by name with the remedy instead of
+    # dropping it in silence and falling back to a count.
+    assert decision.stall_reason and "no recorded completion" in decision.stall_reason
+    assert [task_id for task_id, _ in decision.unstaffed] == ["task-dec-done"]
     assert current == []
 
 
@@ -219,8 +224,10 @@ async def test_a_stalled_loop_reports_why_on_its_summary(app):
         summary = (await _batch_loop_summaries(db, [job.id]))[job.id]
 
     assert summary.stall_reason is not None
-    assert "no claimable task" in summary.stall_reason
-    assert "1 completed" in summary.stall_reason
+    # Same substitution as above, and the property under test is unchanged: the board's label is
+    # the *same string* the firing would refuse with, whichever of the two reasons that is.
+    assert "no recorded completion" in summary.stall_reason
+    assert "Reviewing it directly" in summary.stall_reason
 
 
 async def test_a_loop_that_would_fire_reports_no_stall_reason(app):

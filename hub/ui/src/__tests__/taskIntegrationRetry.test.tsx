@@ -6,8 +6,10 @@
  * press. Approving again cannot re-run a merge, so the reason text was asking for something the
  * operator could not do from here.
  *
- * The one exception is a missing main branch. Retrying there would skip again for the same reason,
- * so that case deliberately shows no button — saving the setting is what re-attempts the merge.
+ * Which skips are worth pressing is the **Hub's** answer, carried per row as `retryable`. It used
+ * to be this component's, derived by matching the missing-main-branch sentence — so every reason
+ * nobody had thought of got a button, including "there is nothing to merge", where pressing it
+ * appends an identical second skip forever.
  */
 import { render, screen, fireEvent } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -32,6 +34,7 @@ function row(over: Partial<TaskIntegration>): TaskIntegration {
     target_branch: 'main',
     outcome: 'skipped',
     reason: 'something',
+    retryable: true,
     rode_along_commits: [],
     mechanism: 'local',
     actor_kind: 'operator',
@@ -49,7 +52,9 @@ describe('TaskIntegrationNote', () => {
   })
 
   it('offers a retry when the newest attempt did not merge', () => {
-    rows = [row({ outcome: 'skipped', reason: 'the checkout has uncommitted changes' })]
+    rows = [
+      row({ outcome: 'skipped', reason: 'the checkout has uncommitted changes', retryable: true }),
+    ]
     render(<TaskIntegrationNote taskId="task-1" status="approved" />)
 
     fireEvent.click(screen.getByTestId('task-integration-retry-task-1'))
@@ -57,7 +62,7 @@ describe('TaskIntegrationNote', () => {
   })
 
   it('offers nothing to press once the work is merged', () => {
-    rows = [row({ outcome: 'merged', reason: '' })]
+    rows = [row({ outcome: 'merged', reason: '', retryable: false })]
     render(<TaskIntegrationNote taskId="task-2" status="approved" />)
 
     expect(screen.queryByTestId('task-integration-retry-task-2')).toBeNull()
@@ -70,6 +75,7 @@ describe('TaskIntegrationNote', () => {
         outcome: 'skipped',
         commit_sha: null,
         target_branch: null,
+        retryable: false,
         reason: "this project has no main branch set — choose one in the project's settings",
       }),
     ]
@@ -79,21 +85,57 @@ describe('TaskIntegrationNote', () => {
     expect(screen.getByText(/no main branch set/)).toBeTruthy()
   })
 
+  /**
+   * Break 7, closed. This case is the reproduction, flipped.
+   *
+   * It was committed asserting the defect: the nothing-to-merge skip rendered "Try again", and
+   * pressing it appended an identical second skip, because the resolution that failed is a fact
+   * about the database rather than about the checkout. The only reason suppressed was a missing
+   * main branch, so every other unclearable reason got a button by default.
+   */
+  it('offers nothing to press for a skip that retrying can never clear', () => {
+    rows = [
+      row({
+        outcome: 'skipped',
+        reason: 'no accepted evidence names a commit, so there is nothing to merge',
+        retryable: false,
+      }),
+    ]
+    render(<TaskIntegrationNote taskId="task-9" status="approved" />)
+
+    expect(screen.queryByTestId('task-integration-retry-task-9')).toBeNull()
+    expect(screen.getByText(/nothing to merge/)).toBeTruthy()
+  })
+
+  /**
+   * The inverted default, at the one layer it can still be got wrong.
+   *
+   * A response from a Hub older than this change carries no `retryable` at all. Absent must read
+   * as "no", not as "unknown, so offer it" — which is the same failure the string match was.
+   */
+  it('offers nothing to press when the Hub said nothing about retryability', () => {
+    rows = [row({ outcome: 'skipped', reason: 'something nobody has classified' })]
+    delete (rows[0] as { retryable?: boolean }).retryable
+    render(<TaskIntegrationNote taskId="task-10" status="approved" />)
+
+    expect(screen.queryByTestId('task-integration-retry-task-10')).toBeNull()
+  })
+
   it('shows only the newest attempt per target, so a stale skip does not outlive its merge', () => {
     rows = [
-      row({ id: 'tint-old', outcome: 'skipped', reason: 'no main branch set' }),
-      row({ id: 'tint-new', outcome: 'merged', reason: '' }),
+      row({ id: 'tint-old', outcome: 'skipped', reason: 'no main branch set', retryable: false }),
+      row({ id: 'tint-new', outcome: 'merged', reason: '', retryable: false }),
     ]
     render(<TaskIntegrationNote taskId="task-4" status="approved" />)
 
     expect(screen.queryByText(/Not merged/)).toBeNull()
     expect(screen.getByText(/Merged/)).toBeTruthy()
-    // The stale skip is gone, so its "no main branch" wording must not suppress the button either.
+    // The stale skip is gone, so nothing it carried can put a button on screen either.
     expect(screen.queryByTestId('task-integration-retry-task-4')).toBeNull()
   })
 
   it('disables the button while a retry is in flight', () => {
-    rows = [row({ outcome: 'failed', reason: 'the merge conflicted' })]
+    rows = [row({ outcome: 'failed', reason: 'the merge conflicted', retryable: true })]
     pending = true
     render(<TaskIntegrationNote taskId="task-5" status="approved" />)
 
@@ -110,7 +152,13 @@ describe('TaskIntegrationNote', () => {
 
   it('warns when other commits rode along with a merge (F58)', () => {
     rows = [
-      row({ id: 'tint-rode-along', outcome: 'merged', reason: '', rode_along_commits: ['a1', 'b2', 'c3'] }),
+      row({
+        id: 'tint-rode-along',
+        outcome: 'merged',
+        reason: '',
+        retryable: false,
+        rode_along_commits: ['a1', 'b2', 'c3'],
+      }),
     ]
     render(<TaskIntegrationNote taskId="task-7" status="approved" />)
 
@@ -119,7 +167,7 @@ describe('TaskIntegrationNote', () => {
   })
 
   it('shows no warning when a merge brought in nothing extra', () => {
-    rows = [row({ outcome: 'merged', reason: '', rode_along_commits: [] })]
+    rows = [row({ outcome: 'merged', reason: '', retryable: false, rode_along_commits: [] })]
     render(<TaskIntegrationNote taskId="task-8" status="approved" />)
 
     expect(screen.queryByText(/also landed with this merge/)).toBeNull()

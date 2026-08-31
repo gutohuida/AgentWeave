@@ -23,6 +23,7 @@ feature unable to damage anything shared, and it is asserted by test as well as 
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,6 +42,8 @@ from .db.models import (
 )
 from .subprocess_windows import no_console_kwargs
 from .utils import short_id
+
+logger = logging.getLogger(__name__)
 
 MERGED = "merged"
 SKIPPED = "skipped"
@@ -69,6 +72,65 @@ CHECKOUT_ELSEWHERE = (
 # exits 0 and creates nothing, so without this guard a no-op was recorded as work reaching the
 # product — which is the one thing this record exists to distinguish.
 ALREADY_INTEGRATED = "{commit} is already in {target}; there was nothing to merge"
+# The evidence-free route's own empty answer. Distinct from `NOTHING_TO_MERGE`, which is a statement
+# about *evidence* and would be a lie for a task whose merge evidence does not govern: it covers a
+# grandfathered task (one migration `0095` stamped onto the per-agent scheme), a task whose turn
+# never provisioned a checkout,
+# and a branch deleted by hand. Deliberately does not fall back to the agent branch — that branch
+# carries every task the agent ever worked on, which is the one thing this module refuses to merge.
+NO_TASK_BRANCH = "this task has no branch of its own, so there is nothing to merge"
+# Built where the failure happens (`task_transition_service.integrate_task`), stated here so it is
+# one of the reasons `SKIP_REASONS` enumerates rather than a sentence only the classifier's absence
+# would notice.
+WORKSPACE_UNAVAILABLE = "the project's workspace is unavailable: {error}"
+
+#: Every reason a `SKIPPED` row can carry, as templates. The point is totality, not lookup: a test
+#: asserts `is_retryable` answers for each member, so a tenth reason added later without a
+#: classification fails the suite instead of quietly losing — or gaining — a button.
+SKIP_REASONS = (
+    NO_MAIN_BRANCH,
+    NOT_A_REPOSITORY,
+    NOTHING_TO_MERGE,
+    NO_TASK_BRANCH,
+    CHECKOUT_DIRTY,
+    CHECKOUT_ELSEWHERE,
+    ALREADY_INTEGRATED,
+    WORKSPACE_UNAVAILABLE,
+)
+
+#: The stems of the skip reasons a retry can clear, matched rather than compared (design D7). Three
+#: of the reasons above are `.format()` templates, so a dict keyed on the constants would classify
+#: six and drop the rest into "unclassified" — which under the inverted default below means no
+#: button on a dirty checkout, the single most retryable outcome there is.
+_RETRYABLE_STEMS = (
+    "the project's checkout has uncommitted changes",
+    "the project's checkout is on ",
+    "the project's workspace is unavailable",
+)
+
+
+def is_retryable(outcome: str, reason: str) -> bool:
+    """Would pressing "Try again" have any chance of a different answer (design D7)?
+
+    **The default inverts.** Today an unrecognised reason gets a button; here it gets none. The
+    failure being fixed is precisely a button appearing on a reason nobody thought about, so a skip
+    whose reason is not classified is not retryable until somebody decides it is. `SKIP_REASONS`'
+    totality test is what makes that safe rather than merely stricter.
+
+    `FAILED` is answered **on the outcome, before the reason is consulted at all**: a failed row
+    carries git's own stderr and can never be matched. It is retryable whatever it says — the merge
+    was tested clean at approval, so reaching a failure means the world moved, and it can move back.
+
+    The four unretryable skips are not oversights. `NO_MAIN_BRANCH` is re-attempted by saving the
+    setting, and a button here would race it; `NOT_A_REPOSITORY` is nothing this screen can change;
+    `NOTHING_TO_MERGE` means no commit was ever recorded, and accepting evidence re-attempts by
+    itself; `NO_TASK_BRANCH` and `ALREADY_INTEGRATED` describe facts a repeat cannot alter.
+    """
+    if outcome == FAILED:
+        return True
+    if outcome != SKIPPED:
+        return False
+    return any(stem in reason for stem in _RETRYABLE_STEMS)
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
@@ -133,10 +195,76 @@ def has_uncommitted_changes(root: Path) -> bool:
 
 @dataclass
 class Target:
-    """One commit to integrate, and the branch it was produced on."""
+    """One commit to integrate, and the branch it was produced on.
+
+    The three optional fields are for saying *whose* commit this is, and are populated on both
+    paths because the accepted path carries them harmlessly. They exist because a refusal has to
+    name each piece of evidence it is waiting on, with a route back to its cause: the evidence row,
+    the requirement it demonstrates, and the task that recorded it — which is not always the task
+    being approved, since a requirement may be served by more than one task.
+
+    `requirement_id` is the `spec_requirements.id` foreign key, not the human identifier. The
+    identifier lives on `SpecRequirement`, which this module deliberately does not import: reaching
+    it would add a join to the *merge* query for a field only a sentence uses. `requirement_gate`
+    already imports `SpecRequirement` and resolves it where the sentence is composed.
+    """
 
     commit_sha: str
     branch: Optional[str] = None
+    evidence_id: Optional[str] = None
+    requirement_id: Optional[str] = None
+    task_id: Optional[str] = None
+
+
+async def _targets(session: AsyncSession, task: Task, review_state: str) -> List[Target]:
+    """Every footprint for *task* in *review_state* that names a commit, oldest first, undeduplicated.
+
+    The **filter**, shared by the two callers below so that the refusal and the merge cannot come to
+    disagree about what counts. That shared property is exact: the refusal fires precisely when
+    acceptance would produce a target that does not exist now. Two independently-written queries
+    would drift, and a filter added to one and not the other produces either a refusal nothing can
+    clear or a silent non-merge — which is the defect this whole capability exists to end.
+
+    Evidence is reached through `TaskRequirementLink`, so evidence recorded by *another* task against
+    a *shared* requirement is in scope here. That is not an accident of the join: if that evidence
+    were accepted, it is this task's integration that would merge its commit.
+
+    The empty-`commit_sha` guard belongs to the filter and lives here, although it sat inside
+    `integration_targets`' reduction loop until this function existed. Left there, a `git` footprint
+    whose `commit_sha` is `""` would refuse an approval that the merge would then silently ignore.
+    """
+    rows = (
+        await session.execute(
+            select(EvidenceFootprint, RequirementEvidence)
+            .join(
+                RequirementEvidence,
+                RequirementEvidence.id == EvidenceFootprint.evidence_id,
+            )
+            .join(
+                TaskRequirementLink,
+                TaskRequirementLink.requirement_id == RequirementEvidence.requirement_id,
+            )
+            .where(
+                TaskRequirementLink.task_id == task.id,
+                RequirementEvidence.project_id == task.project_id,
+                RequirementEvidence.review_state == review_state,
+                EvidenceFootprint.kind == "git",
+                EvidenceFootprint.commit_sha.is_not(None),
+            )
+            .order_by(EvidenceFootprint.observed_at.asc())
+        )
+    ).all()
+    return [
+        Target(
+            commit_sha=footprint.commit_sha,
+            branch=footprint.branch,
+            evidence_id=evidence.id,
+            requirement_id=evidence.requirement_id,
+            task_id=evidence.task_id,
+        )
+        for footprint, evidence in rows
+        if footprint.commit_sha
+    ]
 
 
 async def integration_targets(session: AsyncSession, task: Task) -> List[Target]:
@@ -149,41 +277,135 @@ async def integration_targets(session: AsyncSession, task: Task) -> List[Target]
     A `paths` footprint contributes nothing: there is no commit, so there is nothing that could be
     merged. That is a supported project shape, not a degraded one.
     """
-    rows = (
-        (
-            await session.execute(
-                select(EvidenceFootprint)
-                .join(
-                    RequirementEvidence,
-                    RequirementEvidence.id == EvidenceFootprint.evidence_id,
-                )
-                .join(
-                    TaskRequirementLink,
-                    TaskRequirementLink.requirement_id == RequirementEvidence.requirement_id,
-                )
-                .where(
-                    TaskRequirementLink.task_id == task.id,
-                    RequirementEvidence.project_id == task.project_id,
-                    RequirementEvidence.review_state == requirement_evidence.ACCEPTED,
-                    EvidenceFootprint.kind == "git",
-                    EvidenceFootprint.commit_sha.is_not(None),
-                )
-                .order_by(EvidenceFootprint.observed_at.asc())
-            )
-        )
-        .scalars()
-        .all()
-    )
-
     # Ordered oldest-first, so the last write per branch leaves the newest commit standing. One
     # target per branch: work produced on two branches has to be merged twice, and silently
     # dropping one of them would integrate half of what was approved.
     newest: Dict[Optional[str], Target] = {}
-    for row in rows:
-        if not row.commit_sha:
-            continue
-        newest[row.branch] = Target(commit_sha=row.commit_sha, branch=row.branch)
+    for target in await _targets(session, task, requirement_evidence.ACCEPTED):
+        newest[target.branch] = target
     return list(newest.values())
+
+
+async def awaiting_targets(session: AsyncSession, task: Task) -> List[Target]:
+    """Every piece of *task*'s evidence that names a commit and is still waiting to be judged.
+
+    Shares `integration_targets`' filter and deliberately **not** its per-branch reduction. Keying by
+    branch answers *what do I merge* — one merge per branch, because merging two commits from the
+    same branch twice is pointless. This function is not deciding anything about merging; it is
+    enumerating what has not been judged, and a refusal built on it must name each waiting piece
+    rather than only how many there are. Two awaiting rows on one branch — one agent, one task, two
+    sittings — would collapse to one under the reduction, and the refusal would name one of the two.
+
+    The property the shared filter buys survives the split whole, because that property is about
+    **non-emptiness**: a per-branch dedup of a non-empty list is non-empty, so both reductions are
+    empty on exactly the same row sets. Sharing the filter buys all of it; the reduction was never
+    carrying any.
+    """
+    return await _targets(session, task, requirement_evidence.AWAITING)
+
+
+def task_branch_tip(root: Path, task_id: str) -> Optional[str]:
+    """The commit at the head of *task_id*'s own branch, or None if it has none (design D6).
+
+    `worktrees.task_branch_name` validates the id and raises for one the product did not mint. That
+    is caught rather than propagated, for the reason `task_workspace` already gives about foreign
+    ids: an id this module cannot name a branch for simply has no branch, and the caller's answer
+    is `NO_TASK_BRANCH` either way — not a 500 in the middle of an approval that has already
+    happened.
+    """
+    try:
+        branch = worktrees.task_branch_name(task_id)
+    except ValueError:
+        return None
+    result = _git(root, "rev-parse", "--verify", f"refs/heads/{branch}")
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
+async def task_has_requirement_links(session: AsyncSession, task: Task) -> bool:
+    """Is this task wired into the evidence chain at all (design D11, task 4.3c)?
+
+    An existence check on `TaskRequirementLink`, not a count of evidence. The question is whether
+    the task *can* be demonstrated, which is a fact about how it was created and does not change
+    when the first piece of evidence is recorded. Answering it from evidence instead would make the
+    merge source depend on when you asked — D10's rejected timing-dependent alternative — so a task
+    would merge its branch tip in the morning and its evidence in the afternoon.
+
+    Reached only from the last arm of `evidence_governs`, so an ordinary task, a flow task and a
+    loop that declared for itself never pay for the query.
+    """
+    return (
+        await session.execute(
+            select(TaskRequirementLink.task_id)
+            .where(TaskRequirementLink.task_id == task.id)
+            .limit(1)
+        )
+    ).first() is not None
+
+
+async def evidence_governs(session: AsyncSession, task: Task) -> bool:
+    """Does accepted evidence decide what *task*'s approval merges (design D5, D10, D11)?
+
+    Five answers, in this order, and the order is the design:
+
+    1. **No loop** → yes. An ordinary task is untouched by any of this.
+    2. **The loop id does not resolve** → yes. A dangling id decides nothing.
+    3. **The loop declared** → the operator said, in either direction, and the operator wins over
+       both defaults below.
+    4. **The loop has a document** → yes. It is a *flow*, and `Loop` is a flow's row too (D10). A
+       document's requirements are the evidence chain, so a flat "a loop merges its branch tip"
+       default here would switch every flow onto a commit no reviewer accepted and degrade
+       `approval-refuses-unaccepted-evidence` to an advisory product-wide.
+    5. **Otherwise** → whether the task carries a requirement link (D11). A documentless loop's task
+       created with `requirement_ids` gets real links, and `record_evidence` resolves against the
+       *project's* index rather than a document's, so that task merges its evidence **today**.
+       Stopping at step 4 would silently switch it to its branch tip — and since `_targets`
+       deliberately includes evidence another task recorded against a shared requirement, a per-task
+       branch tip could not carry that commit at all.
+
+    `session.get` rather than a `select`, deliberately: `_merge_situation` and `integrate_task` both
+    ask this within one approval and one session, so the PK get is answered from the identity map
+    the second time and a `select` would not be.
+    """
+    if task.loop_id is None:
+        return True
+    from .db.models import Loop
+
+    loop = await session.get(Loop, task.loop_id)
+    if loop is None:
+        return True
+    if loop.work_needs_evidence is not None:
+        return loop.work_needs_evidence
+    if loop.spec_document_id is not None:
+        return True
+    return await task_has_requirement_links(session, task)
+
+
+async def merge_targets(session: AsyncSession, task: Task, root: Path) -> List[Target]:
+    """What approving *task* would actually merge — the commits, whatever their source (design D5).
+
+    `integration_targets` where evidence governs, and at most one branch-tip `Target` where it does
+    not. `integration_targets` itself is **not** modified and stays a pure database query; the
+    branch-tip answer needs a `rev-parse`, which is why this one takes a repository root and that
+    one does not.
+
+    The branch tip is the answer for exactly one population: a task on a documentless loop with no
+    requirement link of any kind — the set for which `integration_targets` is structurally empty
+    forever, because there is no requirement any evidence could ever be recorded against.
+
+    An empty list means different things on the two routes, and the callers say so rather than
+    collapsing them: `NOTHING_TO_MERGE` where evidence governs, `NO_TASK_BRANCH` where it does not.
+    """
+    if await evidence_governs(session, task):
+        return await integration_targets(session, task)
+    tip = task_branch_tip(root, task.id)
+    if tip is None:
+        return []
+    # The three evidence fields stay None: there is no evidence row to point at, and `Target`'s
+    # docstring says they exist so a refusal can name what it is waiting on. A refusal about
+    # unaccepted evidence cannot arise for a target that came from a branch.
+    return [Target(commit_sha=tip, branch=worktrees.task_branch_name(task.id), task_id=task.id)]
 
 
 def commits_riding_along(root: Path, main_branch: str, commit_sha: str) -> List[str]:
@@ -391,6 +613,98 @@ async def tasks_skipped_for_want_of_a_main_branch(
         if task not in seen:
             seen.append(task)
     return seen
+
+
+async def tasks_awaiting_this_commit(session: AsyncSession, evidence) -> List[Task]:
+    """Approved tasks that would merge *evidence*'s commit and have no record of having done so.
+
+    **The condition is a commit that is not in the product, not the reason the previous attempt
+    gave.** The sibling above filters on the most recent skip because naming a main branch changes
+    the world in exactly one way, so its proxy is exact. Accepting evidence is not like that: it adds
+    a *target*, and a task can acquire one whatever its last attempt did. In the mixed case — some
+    evidence accepted at approval, some still awaiting — the most recent row is a `merged`, so no
+    reason filter can reach it, and the awaiting commit would stay outside the product permanently
+    while the task sat terminal at `approved`.
+
+    Only the commit *this task has already merged* is excluded, and only because repeating it could
+    append nothing but a row saying nothing happened. A commit that reached the main branch some
+    other way is deliberately *not* excluded: `integrate` asks the repository and records
+    `ALREADY_INTEGRATED`, which is a fact about the repository the reader does not otherwise have.
+
+    Correctness does not rest on this predicate being exact; only noise does. `integrate` self-guards
+    by asking git whether the commit is reachable, before it asks anything about the working tree.
+    """
+    footprint = (
+        await session.execute(
+            select(EvidenceFootprint).where(EvidenceFootprint.evidence_id == evidence.id)
+        )
+    ).scalar_one_or_none()
+    if footprint is None or footprint.kind != "git" or not footprint.commit_sha:
+        return []
+
+    already = select(TaskIntegration.task_id).where(
+        TaskIntegration.project_id == evidence.project_id,
+        TaskIntegration.outcome == MERGED,
+        TaskIntegration.commit_sha == footprint.commit_sha,
+    )
+    rows = (
+        await session.execute(
+            select(Task)
+            .join(TaskRequirementLink, TaskRequirementLink.task_id == Task.id)
+            .where(
+                TaskRequirementLink.requirement_id == evidence.requirement_id,
+                Task.project_id == evidence.project_id,
+                Task.status == "approved",
+                Task.id.not_in(already),
+            )
+            .order_by(Task.id.asc())
+        )
+    ).scalars()
+    # One task can hold several integration rows and several links, so the join can repeat it; a
+    # duplicate here would attempt the same merge twice and record two rows for one acceptance.
+    waiting: List[Task] = []
+    for task in rows:
+        if task not in waiting:
+            waiting.append(task)
+    return waiting
+
+
+async def integrate_what_was_waiting_for_this_evidence(
+    session: AsyncSession, evidence, actor
+) -> None:
+    """Merge the approved work that was waiting for *evidence* to be judged.
+
+    Approval is refused while evidence that would merge sits unaccepted, and that refusal tells the
+    reader to accept it. Discharging the instruction at the moment they follow it is what makes the
+    sentence true — without this, an approved task whose evidence is accepted afterwards stays
+    unmerged, and approving again cannot merge it, because restating a status is a no-op.
+
+    Wrapped, and called *after* the route's commit, exactly as the main-branch sibling is: the
+    decision is the operator's or the granted agent's, and it must stand or fall on its own terms. A
+    repository failure is recorded as a skip like any other, never as a failure to accept.
+
+    `actor` is whoever *accepted*, not `operator()` — the integration happened because of that
+    decision, and a record naming the operator for an agent's decision is a false account of who
+    caused it.
+    """
+    from .task_transition_service import retry_integration
+
+    try:
+        if evidence.review_state != requirement_evidence.ACCEPTED:
+            # A rejection changes nothing that could merge.
+            return
+        waiting = await tasks_awaiting_this_commit(session, evidence)
+        for task in waiting:
+            await retry_integration(session, task, actor)
+        if waiting:
+            await session.commit()
+    except Exception:  # noqa: BLE001 - never let a merge undo the decision that asked for it
+        logger.warning(
+            "Could not integrate the work waiting on evidence %s",
+            getattr(evidence, "id", "?"),
+            exc_info=True,
+        )
+        await session.rollback()
 
 
 async def history_for(session: AsyncSession, task_id: str) -> List[TaskIntegration]:

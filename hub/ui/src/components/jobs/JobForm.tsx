@@ -45,6 +45,13 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
   const [purpose, setPurpose] = useState('')
   const [stopAt, setStopAt] = useState('')
   const [stopWhenQueueEmpties, setStopWhenQueueEmpties] = useState(false)
+  // What approving this loop's tasks does to the operator's own main branch. It lives here and
+  // nowhere else because this is the only operator-facing surface that creates a loop: without it
+  // the declaration would be an agent-only control over the operator's repository, and its default
+  // one they could neither see nor opt out of. Inside `loopEnabled` for the same reason the three
+  // fields above are — a controlled field that always renders must not opt a job into a loop by
+  // existing.
+  const [workNeedsEvidence, setWorkNeedsEvidence] = useState(false)
 
   // What the operator is about to commit, said twice over: once as a sentence, once as the actual
   // instants. Both are `null`/empty for an expression that cannot be read exactly, so a schedule
@@ -96,6 +103,7 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
              * timestamp. Reading it as UTC would move the stop condition by the machine's offset. */
             ...(stopAt ? { stop_at: new Date(stopAt).toISOString() } : {}),
             stop_when_queue_empties: stopWhenQueueEmpties,
+            work_needs_evidence: workNeedsEvidence,
           }
         : {}),
     })
@@ -331,6 +339,24 @@ export function JobForm({ onSubmit, onCancel, isPending }: JobFormProps) {
                   />
                   <span className="text-xs" style={{ color: 'var(--text)' }}>
                     Stop when the queue is empty
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    data-testid="job-form-work-needs-evidence"
+                    checked={workNeedsEvidence}
+                    onChange={(e) => setWorkNeedsEvidence(e.target.checked)}
+                    disabled={isPending}
+                    className="control-choice mt-0.5"
+                  />
+                  <span className="text-xs" style={{ color: 'var(--text)' }}>
+                    Require accepted evidence before merging
+                    <span className="block text-[11px]" style={{ color: 'var(--text-3)' }}>
+                      Off, approving this loop&rsquo;s tasks writes their work to this project&rsquo;s
+                      main branch. On, only work a reviewer has accepted is merged.
+                    </span>
                   </span>
                 </label>
               </div>

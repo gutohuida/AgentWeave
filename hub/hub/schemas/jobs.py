@@ -33,6 +33,16 @@ class JobCreate(RequestModel):
     # object type would silently drop a field a later schema version adds. Ignored (never an
     # implicit loop opt-in) unless the job is already opting into a loop via the fields above.
     initial_tasks: Optional[List[Dict[str, Any]]] = None
+    # Whether this loop's approved work has to be demonstrated by accepted evidence before approval
+    # writes it to the project's main branch (design D2/D3). NULL is "the product's current
+    # default", resolved at the point of use — never a stored copy of today's answer.
+    #
+    # A loop field that does **not** opt a job in (design D4): `_loop_opts_in` stays purpose /
+    # stop time / queue-emptiness, because a job created by this field alone would be a loop with
+    # no stop condition. Supplying it on a job that is not becoming a loop is a 400, not a silent
+    # drop — the drop is invisible until an approval writes, or fails to write, to the operator's
+    # main branch weeks later.
+    work_needs_evidence: Optional[bool] = None
 
     @field_validator("session_mode")
     @classmethod
@@ -55,6 +65,10 @@ class JobUpdate(RequestModel):
     stop_when_queue_empties: Optional[bool] = None
     stop_reason: Optional[str] = Field(default=None, max_length=4000)
     spec_document_id: Optional[str] = Field(default=None, max_length=64)
+    # Accepted by the schema only so the route can **refuse** it with a sentence saying what to do
+    # instead (design D3). Declaring it here rather than letting the request 422 on an unexpected
+    # field is deliberate: a 422 says the field is unknown, which is false and offers no remedy.
+    work_needs_evidence: Optional[bool] = None
 
     @field_validator("session_mode")
     @classmethod
@@ -97,6 +111,11 @@ class LoopSummary(BaseModel):
     purpose: str
     stop_at: Optional[datetime] = None
     stop_when_queue_empties: bool
+    # What approving this loop's tasks does to the project's main branch (design D2). On the shape
+    # every loop route already returns, because the operator cannot see a fact that decides what
+    # their main branch receives unless it is there. NULL is returned as-is, never resolved to the
+    # current default — the same serialization `control` below already states.
+    work_needs_evidence: Optional[bool] = None
     stop_reason: Optional[str] = None
     stopped_at: Optional[datetime] = None
     # D17: the two axes B1 added — what happened ("completed"/"stopped", or None while running)

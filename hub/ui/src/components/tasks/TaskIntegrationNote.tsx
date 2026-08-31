@@ -1,9 +1,6 @@
 import { useRetryTaskIntegration, useTaskIntegrations, type TaskIntegration } from '@/api/tasks'
 import { Icon } from '@/components/common/Icon'
 
-/** The exact wording the Hub records when no merge target has been chosen. */
-const NO_MAIN_BRANCH = 'no main branch set'
-
 /**
  * The newest attempt per target, newest last.
  *
@@ -28,9 +25,11 @@ function newestPerTarget(rows: TaskIntegration[]): TaskIntegration[] {
  * for on their main line and not find. Silence there is the failure this closes.
  *
  * A skip used to be terminal — approving again cannot re-run the merge — so the note stated a
- * remediation and then offered no way to act on it. It now does, except where the reason is a
- * missing main branch: retrying there would only skip again, so that one points at the setting
- * instead, which re-attempts the merge on save.
+ * remediation and then offered no way to act on it. It now does, for the reasons a retry can
+ * actually clear. Which those are is the Hub's answer (`retryable` on each row), not this
+ * component's: it used to be derived by matching the missing-main-branch sentence, which meant
+ * every reason nobody had thought of — including "there is nothing to merge" — got a button that
+ * appended an identical second failure.
  */
 export function TaskIntegrationNote({ taskId, status }: { taskId: string; status: string }) {
   // Only an approved task has reached the integration step, so nothing else is worth a request.
@@ -39,10 +38,11 @@ export function TaskIntegrationNote({ taskId, status }: { taskId: string; status
   const rows = newestPerTarget(data?.integrations ?? [])
   if (rows.length === 0) return null
 
-  const stuck = rows.some((row) => row.outcome !== 'merged')
-  const wantsABranch = rows.some(
-    (row) => row.outcome !== 'merged' && row.reason.includes(NO_MAIN_BRANCH),
-  )
+  // The Hub decides this now. It owns the reasons, so it is the only place that can classify them
+  // without matching prose — and the classification is deliberately absent-means-no, so a row from
+  // an older Hub, or a reason nobody has classified, offers nothing to press rather than a button
+  // that appends an identical failure.
+  const canRetry = rows.some((row) => row.retryable)
 
   return (
     <div className="task-integration-note mt-2 space-y-1" data-testid={`task-integrations-${taskId}`}>
@@ -84,7 +84,7 @@ export function TaskIntegrationNote({ taskId, status }: { taskId: string; status
           </div>
         )
       })}
-      {stuck && !wantsABranch && (
+      {canRetry && (
         <button
           data-testid={`task-integration-retry-${taskId}`}
           className="text-[11px] underline"

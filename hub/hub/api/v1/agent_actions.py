@@ -183,6 +183,7 @@ class AgentJobCreate(RequestModel):
     purpose: Optional[str] = Field(default=None, max_length=4000)
     stop_at: Optional[datetime] = None
     stop_when_queue_empties: bool = False
+    work_needs_evidence: Optional[bool] = None
     spec_document_id: Optional[str] = Field(default=None, max_length=64)
     initial_tasks: Optional[List[Dict[str, Any]]] = None
 
@@ -1198,6 +1199,17 @@ async def decide_evidence(
         ) from exc
 
     await session.commit()
+    # Both routes, or the granted agent's acceptance — which is the whole point of the grant —
+    # merges nothing. The actor is the agent that decided, not `operator()`: the integration
+    # happened because of *that* decision, and a record naming the operator for it would be a false
+    # account of who caused it. `retry_integration` takes a `task_transitions.Actor`, which is a
+    # different type from the `spec_lifecycle.Actor` the decision was made with.
+    from ... import task_integration
+    from ...task_transitions import run_actor
+
+    await task_integration.integrate_what_was_waiting_for_this_evidence(
+        session, evidence, run_actor(actor.run_id, actor.agent)
+    )
     return {"id": evidence.id, "review_state": evidence.review_state}
 
 

@@ -135,8 +135,14 @@ async def test_a_completed_task_with_no_recorded_completer_is_offered_to_nobody(
     permissive defaults agreeing is author/reviewer separation bypassed entirely, for exactly the
     tasks whose provenance is unknown.
 
-    Refuse to offer, permit to act. The cost is that such a task stalls the queue for the operator
-    to review, which is what happens today.
+    Refuse to offer, permit to act. The cost is that such a task is not offered for review; since
+    F142 it is at least *surfaced by name* to the operator rather than dropped in silence.
+
+    **This fixture is case (c) and not case (b)**, and the distinction is F142's whole subject. It
+    is constructed at `completed` with no history at all — not walked there by the operator, which
+    records a real transition naming no agent and is a different fact. The three cases below are
+    that one, and reading this test as "operator-completed work is refused" is how the defect
+    survived being read.
 
     The first implementation had this the other way round, on the argument that the guard permits.
     `test_scheduler.py`'s spin test found it as a hang — the firing claimed a directly-constructed
@@ -150,6 +156,111 @@ async def test_a_completed_task_with_no_recorded_completer_is_offered_to_nobody(
         assert await task_is_claimable_by(db, fresh_task, AUTHOR) is False
         assert await task_is_claimable_by(db, fresh_task, REVIEWER) is False
         assert await _claim_loop_task(db, await _fresh(db, loop.id), agent=REVIEWER) == []
+
+
+# ---------------------------------------------------------------------------
+# F142 — a completion the *operator* recorded is provenance, not an absence
+#
+# The flow walk and this per-agent walk must answer the same thing about one task, or the board
+# (which reads `_first_startable_candidate`) and the firing disagree about the same card. So the
+# three cases the review arm distinguishes are asserted here too, and against the **same** helper
+# the arm excludes with rather than a second composition of the same terms.
+# ---------------------------------------------------------------------------
+
+
+async def _operator_completed(db, task, agent):
+    """(b) The agent worked it through the machine; the operator recorded the completion.
+
+    Reaches `completed` through `apply_transition` and records `actor_agent = NULL`, which is what
+    every operator completion looks like — the supported route, not a legacy remnant.
+    """
+    from hub.task_transitions import operator
+
+    actor = run_actor(run_id=f"run-{agent}-{task.id}", agent=agent)
+    for status in ("assigned", "in_progress"):
+        if task.status != status:
+            await apply_transition(db, task, status, actor)
+    task.assignee = agent
+    await apply_transition(db, task, "completed", operator())
+    await db.commit()
+    return task
+
+
+async def test_operator_completed_work_is_offered_to_an_agent_that_did_not_work_it(app):
+    """(b) — F142. No agent completed it, so no agent's own sign-off is at stake."""
+    async with async_session_factory() as db:
+        _job, loop, task = await _loop_with_one_task(db, suffix="opdone")
+        await _operator_completed(db, task, AUTHOR)
+
+    async with async_session_factory() as db:
+        fresh_task = await db.get(Task, task.id)
+        assert await task_is_claimable_by(db, fresh_task, REVIEWER) is True
+        # ...and never to the agent that produced it. The transition guards *permit* here, because
+        # they cannot attribute the completion, so this exclusion is the only thing standing
+        # between the two permissive defaults and a self-approval.
+        assert await task_is_claimable_by(db, fresh_task, AUTHOR) is False
+
+
+async def test_an_agent_that_worked_it_without_moving_it_is_still_refused(app):
+    """(d) — the transitions name nobody while an agent wrote every line.
+
+    The operator starts the card by hand, an agent's run binds to it and travels no edge (there is
+    no `in_progress -> in_progress`), and the operator marks it done. `assignee` is the only record
+    naming the agent, and an exclusion built from the history alone would hand it its own work.
+    """
+    from hub.db.models import Run
+    from hub.run_task_binding import bind_run_to_task
+    from hub.task_transitions import operator
+
+    async with async_session_factory() as db:
+        _job, _loop, task = await _loop_with_one_task(db, suffix="boundonly")
+        await apply_transition(db, task, "in_progress", operator())
+        await db.commit()
+        run = Run(id="run-boundonly", project_id="proj-test", agent=AUTHOR, status="completed")
+        db.add(run)
+        assert await bind_run_to_task(db, run, task) is None
+        await apply_transition(db, task, "completed", operator())
+        await db.commit()
+
+    async with async_session_factory() as db:
+        fresh_task = await db.get(Task, task.id)
+        assert fresh_task.assignee == AUTHOR
+        assert await task_is_claimable_by(db, fresh_task, AUTHOR) is False
+        assert await task_is_claimable_by(db, fresh_task, REVIEWER) is True
+
+
+async def test_the_second_agent_to_work_a_started_task_is_refused_too(app):
+    """(e) — named by neither the transitions nor the assignee, and only by its run's binding.
+
+    A flow staffs the first agent; it stalls without calling `update_task`; the operator starts a
+    second on the same card. The second takes no edge (already `in_progress`) and no assignee
+    (already set), so `worked | {assignee}` misses it entirely — which is a self-approval one agent
+    over from the one the assignee term closes.
+    """
+    from hub.db.models import Run
+    from hub.run_task_binding import bind_run_to_task
+    from hub.task_transitions import operator
+
+    second = "flow-author-2"
+    async with async_session_factory() as db:
+        _job, _loop, task = await _loop_with_one_task(db, suffix="secondagent")
+        await apply_transition(db, task, "assigned", operator())
+        task.assignee = AUTHOR
+        first = Run(id="run-second-1", project_id="proj-test", agent=AUTHOR, status="completed")
+        db.add(first)
+        assert await bind_run_to_task(db, first, task) is not None
+        await db.commit()
+        later = Run(id="run-second-2", project_id="proj-test", agent=second, status="completed")
+        db.add(later)
+        assert await bind_run_to_task(db, later, task) is None
+        await apply_transition(db, task, "completed", operator())
+        await db.commit()
+
+    async with async_session_factory() as db:
+        fresh_task = await db.get(Task, task.id)
+        assert await task_is_claimable_by(db, fresh_task, second) is False
+        assert await task_is_claimable_by(db, fresh_task, AUTHOR) is False
+        assert await task_is_claimable_by(db, fresh_task, REVIEWER) is True
 
 
 async def test_the_guard_still_permits_what_the_queue_will_not_offer(app):

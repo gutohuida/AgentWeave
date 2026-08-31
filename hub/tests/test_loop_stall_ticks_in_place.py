@@ -20,6 +20,8 @@ from sqlalchemy import func, select
 from hub.db.engine import async_session_factory
 from hub.db.models import AIJob, JobRun, Loop, Task
 from hub.scheduler import JobScheduler
+from hub.task_transition_service import apply_transition
+from hub.task_transitions import run_actor
 
 pytestmark = pytest.mark.asyncio
 
@@ -120,8 +122,16 @@ async def test_the_first_refusal_writes_a_row_reading_one(app):
 
 
 async def test_a_stall_whose_reason_changes_starts_a_new_row(app):
-    """Incrementing on a *changed* reason would hide the change inside a growing number. The
-    second task makes the reason text differ by naming a different count of open tasks."""
+    """Incrementing on a *changed* reason would hide the change inside a growing number.
+
+    **How the reason is made to change moved with F142.** It used to be a second unclaimable task,
+    which changed the count in the queue's status histogram. The histogram is now the reason of last
+    resort: where the walk attributes the stall to a specific task, that is what the operator is
+    told, and adding a second unstaffable task leaves the first one's sentence exactly as it was.
+    So the reason is changed the way it now actually changes — by changing what is true of the task
+    the reason is about. Recording an agent as completing it moves the walk past the *no recorded
+    completion* arm and into the evidence gate, whose sentence is a different one.
+    """
     async with async_session_factory() as db:
         job, loop, _task = await _stalled_loop(db, suffix="reason")
 
@@ -132,17 +142,14 @@ async def test_a_stall_whose_reason_changes_starts_a_new_row(app):
         first_rows = await _runs(db, job.id)
         assert len(first_rows) == 1
         first_reason = first_rows[0].error_summary
+        assert "no recorded completion" in first_reason
         assert first_rows[0].tick_count == 2
 
-        # A second unclaimable task changes what the stall reason says.
-        db.add(
-            Task(
-                id="task-stall-reason-2",
-                project_id="proj-test",
-                title="also awaiting review",
-                status="under_review",
-                loop_id=loop.id,
-            )
+        task = await db.get(Task, "task-stall-reason")
+        task.status = "in_progress"
+        await db.commit()
+        await apply_transition(
+            db, task, "completed", run_actor(run_id="run-stall-reason", agent="worker")
         )
         await db.commit()
 

@@ -481,3 +481,131 @@ async def test_job_run_history_tracks_run_count(app, auth_headers):
     entry = data["history"][0]
     assert entry["job_id"] == job_id
     assert "fired_at" in entry
+
+
+# ---------------------------------------------------------------------------
+# The declaration a loop makes about its own work (`a-loop-declares-whether-it-needs-evidence`)
+# ---------------------------------------------------------------------------
+
+JOBS = "/api/v1/projects/proj-test/jobs"
+
+
+def _loop_body(name, **extra):
+    return {
+        "name": name,
+        "agent": "kimi",
+        "message": "work the queue",
+        "cron": "0 2 * * *",
+        "stop_when_queue_empties": True,
+        **extra,
+    }
+
+
+async def _loop_row(loop_id):
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Loop
+
+    async with async_session_factory() as session:
+        return await session.get(Loop, loop_id)
+
+
+@pytest.mark.asyncio
+async def test_a_loop_records_the_declaration_it_was_created_with(app, auth_headers):
+    """3.6: `True`, `False` and omitted are three answers, and the third is not the second.
+
+    The stored value is read from the row rather than from the response, because it is the row the
+    merge-target resolver reads. NULL means "the product's current default", resolved at the point
+    of use — a `False` stored where nothing was said would keep asserting today's default after the
+    default moved, which is the whole reason the column is nullable.
+    """
+    for label, sent, stored in (("yes", True, True), ("no", False, False), ("silent", None, None)):
+        extra = {} if sent is None else {"work_needs_evidence": sent}
+        created = await app.post(
+            JOBS, json=_loop_body(f"Loop {label}", **extra), headers=auth_headers
+        )
+        assert created.status_code == 201, created.text
+        summary = created.json()["loop"]
+        assert summary["work_needs_evidence"] is stored, label
+        row = await _loop_row(summary["id"])
+        assert row.work_needs_evidence is stored, label
+
+
+@pytest.mark.asyncio
+async def test_the_declaration_is_refused_on_a_job_that_is_not_a_loop(app, auth_headers):
+    """Design D4: refused, not dropped.
+
+    `spec_document_id` on the same route is still dropped silently, deliberately left alone (F157):
+    a dropped document costs a loop its queue source, visible at once in a loop that never fills.
+    A dropped declaration is invisible until an approval writes — or does not write — to the
+    operator's main branch. The refusal names what to supply instead, so it is a step rather than a
+    wall.
+    """
+    refused = await app.post(
+        JOBS,
+        json={
+            "name": "Not a loop",
+            "agent": "kimi",
+            "message": "ping",
+            "cron": "0 9 * * *",
+            "work_needs_evidence": False,
+        },
+        headers=auth_headers,
+    )
+    assert refused.status_code == 400, refused.text
+    assert "purpose or a stop condition" in refused.json()["detail"]
+
+    # And nothing was left behind: a 400 must not leave a job row sitting enabled (F54).
+    listed = await app.get(JOBS, headers=auth_headers)
+    assert "Not a loop" not in [job["name"] for job in listed.json()]
+
+
+@pytest.mark.asyncio
+async def test_the_declaration_cannot_be_changed_after_creation(app, auth_headers):
+    """Design D3. The refusal says the remedy, because there is one."""
+    created = await app.post(JOBS, json=_loop_body("Fixed at birth"), headers=auth_headers)
+    assert created.status_code == 201, created.text
+    job_id = created.json()["id"]
+
+    refused = await app.patch(
+        f"{JOBS}/{job_id}", json={"work_needs_evidence": True}, headers=auth_headers
+    )
+    assert refused.status_code == 400, refused.text
+    assert "cannot be changed afterwards" in refused.json()["detail"]
+
+    # Refused, not partially applied.
+    row = await _loop_row(created.json()["loop"]["id"])
+    assert row.work_needs_evidence is None
+
+    # And the refusal is unconditional: it fires for a job that is not a loop at all too, rather
+    # than falling through to the "this job is not a loop" message, which names the wrong remedy.
+    plain = await app.post(
+        JOBS,
+        json={"name": "Plain", "agent": "kimi", "message": "ping", "cron": "0 9 * * *"},
+        headers=auth_headers,
+    )
+    assert plain.status_code == 201, plain.text
+    also_refused = await app.patch(
+        f"{JOBS}/{plain.json()['id']}",
+        json={"work_needs_evidence": False},
+        headers=auth_headers,
+    )
+    assert also_refused.status_code == 400, also_refused.text
+    assert "cannot be changed afterwards" in also_refused.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_every_loop_route_reports_the_declaration(app, auth_headers):
+    """3.5: the operator cannot see a fact that decides what their main branch receives unless it
+    is on the shape every loop route already returns."""
+    created = await app.post(
+        JOBS, json=_loop_body("Visible", work_needs_evidence=False), headers=auth_headers
+    )
+    assert created.status_code == 201, created.text
+    job_id = created.json()["id"]
+
+    fetched = await app.get(f"{JOBS}/{job_id}", headers=auth_headers)
+    assert fetched.json()["loop"]["work_needs_evidence"] is False
+
+    listed = await app.get(JOBS, headers=auth_headers)
+    mine = [job for job in listed.json() if job["id"] == job_id]
+    assert mine and mine[0]["loop"]["work_needs_evidence"] is False

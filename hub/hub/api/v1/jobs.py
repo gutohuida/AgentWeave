@@ -422,6 +422,7 @@ async def _batch_loop_summaries(
             purpose=loop.purpose,
             stop_at=loop.stop_at,
             stop_when_queue_empties=loop.stop_when_queue_empties,
+            work_needs_evidence=loop.work_needs_evidence,
             stop_reason=loop.stop_reason,
             stopped_at=loop.stopped_at,
             ending_state=loop.ending_state,
@@ -559,6 +560,25 @@ async def create_job(
             detail="this job is a loop; continuity is by checkpoint, not by resumed session",
         )
 
+    # Design D4: `work_needs_evidence` is a loop field that does not opt a job in, and a loop field
+    # on a job that is not becoming a loop is refused rather than dropped. Deliberately unlike
+    # `spec_document_id`, which this route still drops silently a few lines further down: a dropped
+    # document costs a loop its queue source, which the operator sees immediately in a loop that
+    # never fills, while a dropped declaration is invisible until an approval writes — or fails to
+    # write — to their main branch. That asymmetry is filed as F157 and is not fixed here.
+    #
+    # Before the job row, like every other check in this block, so a 400 leaves nothing behind.
+    if body.work_needs_evidence is not None and not _loop_opts_in(
+        body.purpose, body.stop_at, body.stop_when_queue_empties
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "work_needs_evidence describes a loop; give this job a purpose or a stop "
+                "condition to make it one"
+            ),
+        )
+
     # Same moment as the cron check below, for the same reason: both are facts about this request
     # that are knowable now, and a job that can only ever fail should not be scheduled (F33).
     await _check_agent_exists(session, project_id, body.agent)
@@ -657,6 +677,7 @@ async def create_job(
             stop_at=body.stop_at,
             stop_when_queue_empties=body.stop_when_queue_empties,
             spec_document_id=body.spec_document_id,
+            work_needs_evidence=body.work_needs_evidence,
             created_by_run_id=run_identity,
         )
         session.add(loop)
@@ -853,6 +874,24 @@ async def update_job(
     # "at least one field" rule). `spec_document_id` alone does NOT opt a job in (design D2 keeps
     # that stricter contract on the agent-facing `create_loop` tool only) — it is still gated on an
     # existing loop or one of the other three fields alongside it, same as `stop_reason`.
+
+    # `work_needs_evidence` is not one of those five: it is refused outright, always, whether or not
+    # this job is a loop already (design D3 — declared at creation, refused on edit). It is also not
+    # staged like the three definition fields below, and the difference is what the pending-edit
+    # machinery is *for*: it defers an edit to a **firing** boundary, and this field is never read
+    # by a firing — it is read at approval, per task. Staging it would apply a decision about the
+    # operator's main branch at a moment the scheduler's clock chose; accepting it on the spot is
+    # worse still, changing what approval writes half way through a queue.
+    if body.work_needs_evidence is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "a loop declares at creation whether its work needs evidence, and it cannot be "
+                "changed afterwards — create a loop with the declaration you want, and offer this "
+                "loop's tasks to it"
+            ),
+        )
+
     loop_fields_supplied = (
         body.purpose is not None
         or body.stop_at is not None

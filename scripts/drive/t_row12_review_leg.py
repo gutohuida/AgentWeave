@@ -20,9 +20,22 @@ So this file steps over F140, and `AW_COMPLETE_BY` decides who steps:
      briefing's own first paragraph promises? Does the task enter `under_review`? Is the reviewer
      told it is reviewing, and given the commit?
 
-The two modes do not give the same answer, and that is the finding. `agent_that_completed` reads
-`TaskTransition.actor_agent`, which an operator's transition leaves NULL, and the review arm drops
-an unattributable task from the walk with no diagnostic at all.
+The two modes did not give the same answer, and that was F142. `agent_that_completed` reads
+`TaskTransition.actor_agent`, which an operator's transition leaves NULL, and the review arm dropped
+an unattributable task from the walk with no diagnostic at all -- so row one reported
+*"no claimable task among 1 open (1 completed)"* forever, a fact about the queue standing in for a
+fact about one task.
+
+**`a-review-a-flow-cannot-staff-is-named` inverts row one**, and this file's checks now assert the
+fixed behaviour: an operator-completed task reaches a staffed review, with the agents that worked it
+excluded. Where no eligible reviewer exists, the refusal must name the task and must NOT be the
+status histogram.
+
+`AW_COMPLETE_BY=untouched` is **row four**, added with that change: the operator completes a task no
+agent ever touched, so the exclusion is empty and a review is staffed with nobody excluded -- the arm
+with the widest exclusion behaviour, which had no drive coverage at all. The agent works and records
+evidence on a turn triggered **without** `task_id`, so no run binds to the task, no transition names
+an agent, and `assignee` is never written.
 
 Real surface only. No row inserts. Haiku turns. LEAVES NO JOB ENABLED.
 """
@@ -42,10 +55,13 @@ P = os.environ.get("AW_PROJECT") or ""
 AGENT = os.environ.get("AW_AGENT") or ""
 RUN = os.environ.get("AW_RUN") or time.strftime("%H%M%S")
 # WHO makes the missing `-> completed` transition, and it turns out to be the whole question.
-#   "operator" -- the operator does it by hand, which is what F140 leaves them to do.
-#   "agent"    -- the author agent is told to call `update_task`, which is F140's repair 1.
-# `agent_that_completed` reads `TaskTransition.actor_agent` (`task_transition_service.py:123-147`)
-# and an operator's transition writes NULL there, so the two are not interchangeable.
+#   "operator"  -- the operator does it by hand, which is what F140 leaves them to do.
+#   "agent"     -- the author agent is told to call `update_task`, which is F140's repair 1.
+#   "untouched" -- row four: the operator walks the task the whole way and no run ever binds to it,
+#                  so no record associates any agent with it and the exclusion is empty.
+# `agent_that_completed` reads `TaskTransition.actor_agent` and an operator's transition writes NULL
+# there, so the first two are not interchangeable; `completion_attribution` is what tells the two
+# NULL worlds apart, and "untouched" is the third.
 COMPLETE_BY = (os.environ.get("AW_COMPLETE_BY") or "operator").lower()
 TARGET = f"reviewleg_{RUN}.py"
 BASE = f"/projects/{P}/project"
@@ -226,17 +242,49 @@ def main():
         check("...into this loop's queue", rows[0].get("loop_id") == loop_id,
               repr(rows[0].get("loop_id")))
 
-        head("B. Firing 1 -- the flow staffs the task and the work gets done")
-        call("run job", "POST", f"/projects/{P}/jobs/{job_id}/run", {}, expect=(200, 201))
-        settle()
-        t = next((x for x in mine() if x["id"] == task_id), {})
-        author = t.get("assignee")
-        check("the task was staffed", bool(author), repr(author))
-        check("...and is in_progress after the turn, not completed (F140)",
-              t.get("status") == "in_progress", repr(t.get("status")))
+        if COMPLETE_BY == "untouched":
+            # Row four. No firing, so nothing staffs the task and no run ever binds to it. The
+            # agent is triggered WITHOUT `task_id`, which is what keeps `run.task_id` NULL and
+            # `assignee` unwritten -- the three records the exclusion reads all stay empty.
+            head("B. Row four -- an agent does the work on a turn bound to NO task")
+            c, b = api("POST", f"/projects/{P}/agent/trigger", {
+                "agent": AGENT,
+                "message": (
+                    f"Create {TARGET} in your working directory containing exactly one function, "
+                    "`triple(a)`, returning a * 3. Change nothing else. Then call "
+                    "mcp__agentweave__record_evidence with identifier='FR-1', "
+                    f"task_id='{task_id}', kind='implementation', locator='{TARGET}', and a "
+                    "one-sentence summary. Do not call update_task. That is the whole turn."
+                ),
+                "overrides": {"permission_mode": "workspace"},
+            }, timeout=30)
+            print(f"  trigger {AGENT} (unbound): {c}")
+            settle()
+            t = next((x for x in mine() if x["id"] == task_id), {})
+            author = None
+            check("no agent holds the task -- `assignee` was never written",
+                  not t.get("assignee"), repr(t.get("assignee")))
+            check("...and it never left `pending`", t.get("status") == "pending",
+                  repr(t.get("status")))
+        else:
+            head("B. Firing 1 -- the flow staffs the task and the work gets done")
+            call("run job", "POST", f"/projects/{P}/jobs/{job_id}/run", {}, expect=(200, 201))
+            settle()
+            t = next((x for x in mine() if x["id"] == task_id), {})
+            author = t.get("assignee")
+            check("the task was staffed", bool(author), repr(author))
+            check("...and is in_progress after the turn, not completed (F140)",
+                  t.get("status") == "in_progress", repr(t.get("status")))
 
         head(f"C. F140's missing transition, made by the {COMPLETE_BY.upper()}")
-        if COMPLETE_BY == "agent":
+        if COMPLETE_BY == "untouched":
+            for to in ("in_progress", "completed"):
+                c, b = call(f"-> {to}", "PATCH", f"/projects/{P}/tasks/{task_id}",
+                            {"status": to}, expect=200)
+                if c != 200:
+                    return
+            check("the operator walked it the whole way, and no agent is on the record", True)
+        elif COMPLETE_BY == "agent":
             c, b = api("POST", f"/projects/{P}/agent/trigger", {
                 "agent": author,
                 "task_id": task_id,
@@ -284,6 +332,28 @@ def main():
         before = {t["id"]: t.get("assignee") for t in mine()}
         c, b = call("run job", "POST", f"/projects/{P}/jobs/{job_id}/run", {},
                     expect=(200, 201))
+        # **Row one's expectation inverts here** (F142). Before
+        # `a-review-a-flow-cannot-staff-is-named` an operator-completed task was dropped from the
+        # walk in silence and this came back `409` with the status histogram. Two outcomes are now
+        # acceptable and a third is not: a staffed review, or -- where no eligible reviewer exists
+        # -- a refusal that names THE TASK. The histogram is what must never come back, and it is
+        # asserted by string because this file's own history is a check passing on content that
+        # said the opposite.
+        detail = b.get("detail") if isinstance(b, dict) else None
+        if isinstance(detail, dict):
+            detail = detail.get("message")
+        refusal = detail if isinstance(detail, str) else ""
+        check(
+            "the refusal, if there is one, does NOT fall back to the queue's status histogram",
+            "no claimable task among" not in refusal,
+            refusal[:220],
+        )
+        if c not in (200, 201):
+            check(
+                "...and it names this task instead",
+                task_id in refusal or "has worked on this task" in refusal,
+                refusal[:220],
+            )
         check(
             "the firing was accepted rather than skipped as a stalled queue",
             c in (200, 201),
@@ -298,9 +368,16 @@ def main():
               t.get("status") in ("under_review", "approved", "revision_needed", "rejected"),
               repr(t.get("status")))
         check("a reviewer was staffed", bool(reviewer), repr(reviewer))
-        check("...and it is NOT the author", reviewer != author, f"{author} -> {reviewer}")
-        check("...and it is one of the agents that could have taken it",
-              reviewer in pool or reviewer == author, f"{reviewer} vs {pool}")
+        if COMPLETE_BY == "untouched":
+            # Row four's whole point: nothing associates any agent with this task, so the exclusion
+            # is empty and even the flow's own default agent is eligible. A refusal here would mean
+            # the exclusion is drawing on a record nobody re-derived.
+            check("...with NOBODY excluded -- any bound agent may take it",
+                  reviewer in pool or reviewer == AGENT, f"{reviewer} vs {pool + [AGENT]}")
+        else:
+            check("...and it is NOT the author", reviewer != author, f"{author} -> {reviewer}")
+            check("...and it is one of the agents that could have taken it",
+                  reviewer in pool or reviewer == author, f"{reviewer} vs {pool}")
         print(f"      assignee before firing 2: {before}")
 
         head("E. What was the reviewer actually told?")
@@ -311,27 +388,58 @@ def main():
             content = (latest or {}).get("content", "")
             print("      " + content[:1500].replace(chr(10), chr(10) + "      "))
             check("the reviewer got a briefing at all", bool(content), str(len(content)))
-            # These two were written as `"review" in content` and `TARGET in content`, and both
+            # These were written as `"review" in content` and `TARGET in content`, and both
             # passed -- for the wrong reason. "review" matches the flow paragraph's generic
             # sentence about somebody else reviewing, and TARGET matches the implementation task's
-            # own title. Neither says anything about THIS turn being a review, which is the claim
-            # being tested. Asserted properly below, and it fails: see F143.
+            # own title. Neither said anything about THIS turn being a review, which is the claim
+            # being tested. They were then rewritten to assert F143's actual state, deliberately,
+            # "so the day it is fixed the lines swap and say so".
+            #
+            # `a-flow-briefing-names-its-contract` is that day. The three below are the swapped
+            # form: the implementation wording must be GONE, the review wording must be PRESENT,
+            # and the queue entry the flow composed must not contradict the turn context.
             check(
-                "F143: the briefing tells the reviewer to BUILD the thing it is meant to check",
-                "Finish the task below and stop" in content
-                and "Work the task you have been given" in content,
-                content[-140:].replace(chr(10), " | "),
+                "F143 fixed: the reviewer is no longer told to BUILD the thing it checks",
+                "Finish the task below and stop" not in content,
+                content[:200].replace(chr(10), " | "),
             )
             check(
                 "the briefing says this turn is a review",
-                "this is a review" in content.lower()
-                or "you are reviewing" in content.lower(),
-                content[:160].replace(chr(10), " | "),
+                "this turn is a review" in content.lower()
+                or "you are reviewing" in content.lower()
+                or "checking their work" in content.lower(),
+                content[:200].replace(chr(10), " | "),
             )
             check(
-                "the briefing names the commit under review",
-                "commit" in content.lower(),
-                content[:160].replace(chr(10), " | "),
+                "the briefing names both verdicts, with the tool that records them",
+                "update_task" in content
+                and "approved" in content
+                and "revision_needed" in content,
+                content[:260].replace(chr(10), " | "),
+            )
+            # Round 2 of the change (design D9) settled that the briefing must NOT name the
+            # commit, and this check was the reason it had to be settled rather than assumed. The
+            # briefing is composed at firing time; the commit is resolved one step later, at
+            # spawn, by `commit_for_task_review`. Naming it here would be a second copy of a fact
+            # that can disagree with the checkout the reviewer is actually standing in -- which is
+            # exactly the case `ReviewContext.work_moved` exists to handle, on the channel that
+            # resolved it. The commit belongs to the turn CONTEXT, not to this queue entry.
+            check(
+                "the briefing does NOT name a commit -- that is the context channel's to state",
+                "commit" not in content.lower(),
+                content[:200].replace(chr(10), " | "),
+            )
+            # The loop's own message is delivered immediately after the briefing, unchanged, and
+            # was authored for the loop's ordinary firings -- in the run that found F143 a reviewer
+            # was handed "Work the task you have been given" right here. The briefing says what
+            # that text IS. It must not tell the agent to ignore it: a loop's message may itself
+            # address a review, and that instruction would be wrong exactly there.
+            check(
+                "the briefing identifies the loop's standing message without disowning it",
+                "standing message" in content.lower()
+                and "ignore" not in content.lower()
+                and "disregard" not in content.lower(),
+                content[-260:].replace(chr(10), " | "),
             )
 
         head("F. Where the loop thinks it is")

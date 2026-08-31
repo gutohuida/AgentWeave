@@ -773,3 +773,247 @@ async def test_an_unbound_run_records_its_own_checkout_too(
         )
     assert run.workspace_dir == str(cwd)
     assert Path(run.workspace_dir) == worktrees.worktree_path(repo, "writer")
+
+
+# ---------------------------------------------------------------------------
+# 4.9 — a prerequisite on the evidence-free route seeds its successor's checkout
+# ---------------------------------------------------------------------------
+
+#: A third valid task id, for the prerequisite in the tests below.
+PREREQUISITE_TASK = "task-b1b1b1b1b1b1"
+
+
+async def _evidence_free_loop(loop_id: str = "loop-ef") -> str:
+    """A documentless `Loop` and the job it wears, created directly.
+
+    Documentless and with no requirement links on its tasks is the whole point: that is the one
+    shape for which `task_integration.evidence_governs` answers False, so its tasks merge — and
+    seed their successors from — their own branch tips.
+    """
+    from hub.db.models import AIJob, Loop
+
+    async with async_session_factory() as session:
+        session.add(
+            AIJob(
+                id=f"job-{loop_id}",
+                project_id="proj-test",
+                name="the loop",
+                agent="writer",
+                message="work the queue",
+                cron="0 2 * * *",
+            )
+        )
+        session.add(
+            Loop(
+                id=loop_id,
+                project_id="proj-test",
+                job_id=f"job-{loop_id}",
+                purpose="keep going",
+                stop_when_queue_empties=True,
+            )
+        )
+        await session.commit()
+    return loop_id
+
+
+async def _attach(task_id: str, loop_id: str, *, status: Optional[str] = None) -> None:
+    async with async_session_factory() as session:
+        task = await session.get(Task, task_id)
+        task.loop_id = loop_id
+        if status is not None:
+            task.status = status
+        await session.commit()
+
+
+def _commit_on_task_branch(repo: Path, task_id: str, filename: str, content: str) -> str:
+    """Real work on the branch the product would have given *task_id*, cut from `main`."""
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "checkout", "-q", "-b", worktrees.task_branch_name(task_id))
+    (repo / filename).write_text(content)
+    _git(repo, "add", filename)
+    _git(repo, "commit", "-q", "-m", f"work on {filename}")
+    head = _rev(repo, "HEAD")
+    _git(repo, "checkout", "-q", "main")
+    return head
+
+
+@pytest.mark.asyncio
+async def test_an_evidence_free_prerequisites_work_reaches_its_successors_checkout(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """4.9a — the whole argument for moving `_prerequisite_commits` onto `merge_targets`.
+
+    `task-dependencies` SHALLs that a task's checkout carries its prerequisites' work *"whether or
+    not that work reached the project's main branch"*, and names the dirty checkout as a reason the
+    requirement exists. So the prerequisite here is approved with its integration **skipped** — the
+    ordinary state of a working repository, not an exotic one — and its work must still be in the
+    successor's checkout. On `integration_targets` it could not be: an evidence-free loop task has
+    no accepted evidence and never will, so the successor would be cut from a main branch the work
+    never reached.
+    """
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    await _set_main_branch("main")
+    _real_worktrees(monkeypatch)
+    await _agent(app, auth_headers, bind_runner, "writer")
+    conversation_id = await _conversation("writer")
+
+    loop = await _evidence_free_loop()
+    await _task(PREREQUISITE_TASK)
+    await _task(BOUND_TASK)
+    await _attach(PREREQUISITE_TASK, loop, status="under_review")
+    await _attach(BOUND_TASK, loop)
+    async with async_session_factory() as session:
+        session.add(
+            TaskDependency(
+                id="dep-ef",
+                project_id="proj-test",
+                task_id=BOUND_TASK,
+                depends_on_task_id=PREREQUISITE_TASK,
+            )
+        )
+        await session.commit()
+
+    prerequisite_commit = _commit_on_task_branch(
+        repo, PREREQUISITE_TASK, "prerequisite.txt", "groundwork\n"
+    )
+
+    # The checkout is mid-edit, so the merge skips and approval stands — which is the situation the
+    # requirement was written about.
+    (repo / "README.md").write_text("the operator is editing this\n")
+    approved = await app.patch(
+        f"/api/v1/projects/proj-test/tasks/{PREREQUISITE_TASK}",
+        json={"status": "approved"},
+        headers=auth_headers,
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["latest_integration"]["outcome"] == "skipped"
+    assert prerequisite_commit not in _git(repo, "log", "--format=%H", "main").stdout.split()
+
+    cwd = await _turn(
+        async_session_factory,
+        project_id="proj-test",
+        agent="writer",
+        message="build on it",
+        conversation_id=conversation_id,
+        task_id=BOUND_TASK,
+    )
+
+    assert Path(cwd) == worktrees.task_worktree_path(repo, BOUND_TASK)
+    assert (Path(cwd) / "prerequisite.txt").read_text() == "groundwork\n"
+
+
+@pytest.mark.asyncio
+async def test_an_unapproved_evidence_free_prerequisite_contributes_nothing(
+    app, auth_headers, bind_project_workspace, tmp_path
+):
+    """4.9c — the guard on the branch-tip route, and the reason it is needed.
+
+    On the evidence route the filter is automatic: nothing is a target until a reviewer accepts it.
+    On the branch-tip route an in-progress prerequisite's tip is a real commit and there is no
+    filter at all, so without the status check that work would be merged into a checkout an agent
+    is about to write in.
+    """
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    await _set_main_branch("main")
+
+    loop = await _evidence_free_loop("loop-ef-unapproved")
+    await _task(PREREQUISITE_TASK)
+    await _task(BOUND_TASK)
+    await _attach(PREREQUISITE_TASK, loop, status="in_progress")
+    await _attach(BOUND_TASK, loop)
+    async with async_session_factory() as session:
+        session.add(
+            TaskDependency(
+                id="dep-unapproved",
+                project_id="proj-test",
+                task_id=BOUND_TASK,
+                depends_on_task_id=PREREQUISITE_TASK,
+            )
+        )
+        await session.commit()
+
+    _commit_on_task_branch(repo, PREREQUISITE_TASK, "unreviewed.txt", "half done\n")
+
+    async with async_session_factory() as session:
+        bound = await session.get(Task, BOUND_TASK)
+        resolved = await task_workspace.resolve_turn_workspace_inputs(
+            session, project_id="proj-test", repo_root=repo, task=bound
+        )
+    assert resolved.prerequisites == ()
+
+    # And once it *is* approved, the same tip is contributed — so the assertion above is about the
+    # status and not about the resolver failing to find the branch at all.
+    await _attach(PREREQUISITE_TASK, loop, status="approved")
+    async with async_session_factory() as session:
+        bound = await session.get(Task, BOUND_TASK)
+        resolved = await task_workspace.resolve_turn_workspace_inputs(
+            session, project_id="proj-test", repo_root=repo, task=bound
+        )
+    assert resolved.prerequisites == (_rev(repo, worktrees.task_branch_name(PREREQUISITE_TASK)),)
+
+
+@pytest.mark.asyncio
+async def test_a_conflicting_evidence_free_prerequisite_refuses_the_turn_and_leaves_no_branch(
+    app, auth_headers, bind_project_workspace, tmp_path, monkeypatch
+):
+    """4.9b — the cost of 4.9a, made a known behaviour rather than a surprise.
+
+    `ensure_task_worktree` unwinds all-or-nothing: a prerequisite that cannot be brought in leaves
+    no checkout and no branch behind, and refuses the turn. That is `task-dependencies`' own rule
+    (*"where a prerequisite's work cannot be brought in without conflict, the turn SHALL NOT
+    start"*), not a failure mode this change invents — but until now no evidence-free loop task
+    could reach it, and on that route the situation was silent instead. Asserted at
+    `ensure_task_worktree` rather than through a turn because the refusal is what a turn would
+    surface, and this is the layer that decides it.
+    """
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    await _set_main_branch("main")
+    # The suite stubs `ensure_task_worktree` to return the project root; this test is about what
+    # the real one does, so it has to be restored or the refusal can never fire.
+    _real_worktrees(monkeypatch)
+
+    loop = await _evidence_free_loop("loop-ef-conflict")
+    await _task(PREREQUISITE_TASK)
+    await _task(BOUND_TASK)
+    await _attach(PREREQUISITE_TASK, loop, status="approved")
+    await _attach(BOUND_TASK, loop)
+    async with async_session_factory() as session:
+        session.add(
+            TaskDependency(
+                id="dep-conflict",
+                project_id="proj-test",
+                task_id=BOUND_TASK,
+                depends_on_task_id=PREREQUISITE_TASK,
+            )
+        )
+        await session.commit()
+
+    _commit_on_task_branch(repo, PREREQUISITE_TASK, "shared.txt", "from the prerequisite\n")
+    # The base moves underneath it, which is the only way the merge can fail: the tip was
+    # conflict-tested against `main` at the prerequisite's own approval.
+    (repo / "shared.txt").write_text("from the operator\n")
+    _git(repo, "add", "shared.txt")
+    _git(repo, "commit", "-q", "-m", "the operator's own change")
+
+    async with async_session_factory() as session:
+        bound = await session.get(Task, BOUND_TASK)
+        resolved = await task_workspace.resolve_turn_workspace_inputs(
+            session, project_id="proj-test", repo_root=repo, task=bound
+        )
+    assert len(resolved.prerequisites) == 1
+
+    with pytest.raises(worktrees.IsolationUnavailableError) as refusal:
+        worktrees.ensure_task_worktree(
+            repo,
+            BOUND_TASK,
+            base=resolved.base,
+            prerequisites=resolved.prerequisites,
+        )
+    assert resolved.prerequisites[0][:8] in str(refusal.value)
+
+    branches = _git(repo, "branch", "--format=%(refname:short)").stdout.split()
+    assert worktrees.task_branch_name(BOUND_TASK) not in branches
+    assert not worktrees.task_worktree_path(repo, BOUND_TASK).exists()

@@ -1410,6 +1410,20 @@ class Loop(Base):
     # operator's decision to make, not the creator agent's to take). Resolve at the point of use
     # (`_authorize_loop_task_creation`, `tasks.py`), never write "operator" into this column.
     control: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Design D2 (`a-loop-declares-whether-it-needs-evidence`): whether this loop's approved work has
+    # to be demonstrated by accepted evidence before approval writes it to the project's main
+    # branch. NULL means "the product's current default", which is the reasoning `control` above
+    # already states: a row that stores today's default keeps asserting it after the default moves,
+    # so the resolution belongs at the point of use — `task_integration.merge_targets`, which reads
+    # the loop for the declaration and the task for the default. Deliberately no `default=` and no
+    # `server_default=`: "the operator said no" and "the operator did not say" must stay
+    # distinguishable rows, or a later change to the default becomes a data migration.
+    #
+    # This is a **loop and flow** column, because `Loop` is the row for both (design D10). A flow
+    # never sets it and its NULL never resolves to "no evidence": a document's requirements are the
+    # evidence chain, so `merge_targets` answers a flow from `spec_document_id` before it reaches
+    # any default. Only an explicit value from the operator overrides that.
+    work_needs_evidence: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
 
     # Design D11 (addendum, task A2.1): an edit to a loop's definition is always accepted and
     # staged here, never applied on the spot — a firing already under way keeps the definition it

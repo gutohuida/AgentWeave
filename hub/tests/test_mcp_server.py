@@ -397,6 +397,9 @@ def test_create_loop_sends_the_widened_governed_jobs_payload(hub):
         "purpose": "keep the backlog tidy",
         "stop_at": None,
         "stop_when_queue_empties": True,
+        # None, not False: "the operator did not say" and "the operator said no" are different
+        # rows, and only the first resolves to the product's current default.
+        "work_needs_evidence": None,
         "spec_document_id": None,
         "initial_tasks": [{"title": "First task"}],
     }
@@ -436,6 +439,9 @@ def test_create_flow_sends_the_same_payload_a_loop_does_plus_the_document(hub):
         "purpose": "decompose the backlog",
         "stop_at": None,
         "stop_when_queue_empties": True,
+        # Always None on this tool: a flow refuses the field client-side, and it stays in the body
+        # so the two payloads remain identical but for the document, which is what D1 asserts.
+        "work_needs_evidence": None,
         "spec_document_id": "doc-1",
         "initial_tasks": [{"title": "First task"}],
     }
@@ -602,3 +608,52 @@ def test_unreachable_hub_is_distinguishable_from_a_rejected_request(hub):
     assert "HUB_URL" in str(raised.value)
     # Distinguishable phrasing from the rejected case, not just a distinguishable type.
     assert "rejected" not in str(raised.value)
+
+
+def test_create_loop_carries_the_declaration_it_was_given(hub):
+    """`a-loop-declares-whether-it-needs-evidence` task 7.1.
+
+    An agent creating a loop is the caller who most needs to know that approving its tasks writes
+    to the project's main branch, so the tool takes the declaration rather than leaving it to a
+    surface the agent cannot reach.
+    """
+    from hub.mcp_server import create_loop
+
+    calls, responses = hub
+    responses.append(b'{"ok":true}')
+    create_loop(
+        "Nightly sweep",
+        "worker",
+        "Work the queue",
+        "0 2 * * *",
+        stop_when_queue_empties=True,
+        work_needs_evidence=True,
+    )
+    assert _body(calls[0])["work_needs_evidence"] is True
+
+
+def test_create_flow_refuses_the_declaration_and_says_why(hub):
+    """Task 7.5, and it is one decision with the resolver's flow arm rather than two.
+
+    A flow decomposes a document, so its requirements *are* the evidence chain and accepted
+    evidence always decides what approval merges. The parameter stays in the signature for the
+    reason `create_loop` keeps `spec_document_id`: an unexpected-argument `TypeError` tells the
+    caller nothing about what to do instead, and the schema parity test requires the two tools to
+    offer the same fields.
+    """
+    from hub.mcp_server import HubAPIError, create_flow
+
+    calls, _responses = hub
+    for value in (True, False):
+        with pytest.raises(HubAPIError) as excinfo:
+            create_flow(
+                "N",
+                "worker",
+                "M",
+                "doc-1",
+                stop_when_queue_empties=True,
+                work_needs_evidence=value,
+            )
+        assert "create_loop" in str(excinfo.value)
+        assert "evidence" in str(excinfo.value)
+    assert calls == []
