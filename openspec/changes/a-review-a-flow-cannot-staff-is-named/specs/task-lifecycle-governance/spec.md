@@ -27,10 +27,13 @@ reviewer legitimately staffed onto a task is absent from its **transitions**, an
 what carries the distinction — so the wider determination the exclusion uses cannot be reused here,
 however tempting one determination for two questions looks.
 
-Where nothing is recorded as completing the task at all, the ladder SHALL surface it rather than
-staff it, naming the task. Recovery is not possible for such a task — no agent can be ruled out as its
-author — and saying so is what this requirement asks for in place of reporting a reviewer that is not
-there.
+Where nothing is recorded as completing the task at all **and its assignee is one of the agents its
+transitions name**, the ladder SHALL surface it rather than staff it, naming the task. Recovery is
+not possible for such a task — no agent can be ruled out as its author — and saying so is what this
+requirement asks for in place of reporting a reviewer that is not there. Where instead its assignee
+appears on none of its transitions, the task SHALL still be reported as held: an agent may be
+dispatched as reviewer by hand for a task no agent is recorded as completing, and that review is
+genuinely in progress.
 
 Recovery SHALL be a reassignment and SHALL NOT move the task to another status: the task is already
 in review, and only who holds it was wrong.
@@ -61,8 +64,21 @@ in review, and only who holds it was wrong.
 - **THEN** it is reported as held by that reviewer
 - **AND** no reviewer is resolved for it
 
-#### Scenario: A task with no recorded completion is surfaced, not restaffed
+#### Scenario: A task with no recorded completion held by an agent that moved it is surfaced, not restaffed
 
-- **WHEN** a task in `under_review` has an assignee and no recorded completion at all
+- **WHEN** a task in `under_review` has no recorded completion at all and its assignee is recorded
+  on one of its transitions
 - **THEN** it is not reported as held by a reviewer
 - **AND** the operator is notified, naming the task
+
+#### Scenario: A review dispatched by hand on a task with no recorded completion is still held
+
+- **WHEN** a task in `under_review` has no recorded completion at all and its assignee is an agent
+  that no transition on it names
+- **THEN** it is reported as held by that assignee
+
+The route is supported and produces a review that is genuinely in progress: dispatching a review by
+hand refuses only an agent *recorded* as completing the task, so on a task with no recorded
+completion any agent may be dispatched, and dispatching staffs the task. Treating every such task as
+unstaffable would report a real reviewer's work as nobody's — which is the same false statement this
+requirement exists to prevent, made in the opposite direction.

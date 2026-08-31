@@ -18,6 +18,7 @@ reaches the row a different way.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Optional
 
 from sqlalchemy import select
@@ -120,20 +121,50 @@ class RunNotBoundError(TransitionRefusedError):
     http_status = 403
 
 
-async def agent_that_completed(session: AsyncSession, task_id: str) -> Optional[str]:
-    """The **agent** responsible for the most recent move of this task into `completed`.
+@dataclass(frozen=True)
+class CompletionAttribution:
+    """What the record says about the most recent move of a task into `completed`.
 
-    Agent, not run. The first version of this compared `run_id`, and live use on 2026-08-10 walked
-    straight through it: an agent completed a task on one run and approved it on its next, which
-    are different runs by construction. Every turn is a new run, so a run-based check is satisfied
-    by an agent merely continuing its own work — it forbade nothing.
+    Three fields because `agent_that_completed`'s `None` is **two worlds**, and until this existed
+    no caller could tell them apart:
+
+    1. the **operator** completed it — provenance exists and is a person;
+    2. **nothing** completed it — the row was written straight into the status, or predates the
+       transition table.
+
+    They are separable at zero cost. `Actor.__post_init__` makes an actor of kind `run` *without* an
+    agent unconstructible and an actor of kind `operator` *with* one equally so, so on a
+    `-> completed` transition `actor_agent IS NULL` is exactly *the operator made the move*. One
+    extra column on a query the callers already run tells the two apart: no migration, no new
+    column, no second round trip.
+
+    Measured live (F142, 2026-08-30): a flow whose only task the operator had marked finished was
+    dropped by `decide_firing` in silence, on every firing, forever — because the walk read `None`
+    and had no way to ask which world it was in.
+    """
+
+    #: Whether a `-> completed` transition is recorded for the task at all.
+    recorded: bool
+    #: `'run'` or `'operator'`, or `None` where nothing is recorded.
+    actor_kind: Optional[str]
+    #: The agent, where a run recorded it. `None` for an operator completion and for no completion.
+    agent: Optional[str]
+
+
+async def completion_attribution(session: AsyncSession, task_id: str) -> CompletionAttribution:
+    """Who is recorded as making the most recent move of this task into `completed`.
+
+    Agent, not run. The first version of `agent_that_completed` compared `run_id`, and live use on
+    2026-08-10 walked straight through it: an agent completed a task on one run and approved it on
+    its next, which are different runs by construction. Every turn is a new run, so a run-based
+    check is satisfied by an agent merely continuing its own work — it forbade nothing.
 
     Read from the history and never from `Task.updated_by_run_id`: that column is a single mutable
     field which the approving write overwrites, and it being unable to answer this question is the
     whole reason this table exists.
     """
     result = await session.execute(
-        select(TaskTransition.actor_agent)
+        select(TaskTransition.actor_kind, TaskTransition.actor_agent)
         .where(TaskTransition.task_id == task_id)
         .where(TaskTransition.to_status == "completed")
         # By `sequence`, not `created_at`: transitions staged in one flush share a timestamp, and
@@ -144,7 +175,112 @@ async def agent_that_completed(session: AsyncSession, task_id: str) -> Optional[
         .limit(1)
     )
     row = result.first()
-    return row[0] if row else None
+    if row is None:
+        return CompletionAttribution(recorded=False, actor_kind=None, agent=None)
+    return CompletionAttribution(recorded=True, actor_kind=row[0], agent=row[1])
+
+
+async def agent_that_completed(session: AsyncSession, task_id: str) -> Optional[str]:
+    """The **agent** responsible for the most recent move of this task into `completed`.
+
+    A wrapper over `completion_attribution`, with its signature and semantics unchanged. `None`
+    still means *no agent is recorded as completing this* — which is true of an operator completion
+    and of no completion at all, the two worlds that function exists to separate. Seven callers read
+    this `None` in three different ways and four of them are correct as written; a caller that needs
+    to know *which* world reaches for `completion_attribution` rather than reinterpreting this
+    return value.
+
+    The argument for reading the history, and for ordering by `sequence`, lives on
+    `completion_attribution`.
+    """
+    return (await completion_attribution(session, task_id)).agent
+
+
+async def agents_that_worked(session: AsyncSession, task_id: str) -> "set[str]":
+    """The agents recorded on this task's **transitions**. *"Which agents moved this task?"*
+
+    Not `{task.assignee}`, and the reason is that `assignee` is one mutable column overwritten by
+    every restaff: a task returned for revision and picked up by a second agent has two authors and
+    only the history names both.
+
+    **And it is not every agent that worked the task either** — the converse matters just as much,
+    because round 1 of this change asserted the opposite. An agent takes a transition only when it
+    *changes* a task's status, so an agent whose run binds to a task already `in_progress` travels
+    no edge and leaves no row here (`TRANSITIONS` has no `in_progress -> in_progress`). A task the
+    operator started by hand, let an agent work, and then marked finished carries a full history
+    that names no agent at all.
+
+    So this is a **term** in the exclusion `agents_that_may_have_authored` builds, and it is used
+    alone in exactly one place: the wedged-review predicate in `scheduler.py`, which asks whether
+    the *assignee* is one of the agents that moved the task and for which the wider set is wrong by
+    construction (`task-lifecycle-governance`).
+    """
+    rows = await session.execute(
+        select(TaskTransition.actor_agent)
+        .where(TaskTransition.task_id == task_id)
+        .where(TaskTransition.actor_agent.isnot(None))
+        .distinct()
+    )
+    return {agent for agent in rows.scalars().all() if agent}
+
+
+async def agents_of_runs_bound_to(session: AsyncSession, task_id: str) -> "set[str]":
+    """The agents whose runs were recorded as **about** this task.
+
+    `bind_run_to_task`'s first statement is `run.task_id = task.id`, above the `blocked` guard and
+    above the legality check, so a run that binds and takes no transition still records that it was
+    about the task. That is the one record in the product naming the *second* agent to work a task
+    already in progress: it is absent from the transitions (no edge was legal) and absent from
+    `assignee` (the column was already filled by the first).
+
+    **Why this reaches for a column `checkpoint_handover.py:87-92` forbids in the strongest terms.**
+    That module rules out `run.task_id` on measurement — *"of the ten runs that had recorded a
+    `completed` transition, six carried `run.task_id = NULL`"* — and a function reaching for it
+    right afterwards has to say why it is not the same mistake. The failure directions are
+    opposite. `_task_this_run_completed` asks *which task did this run finish?*, and a NULL there
+    produces a **wrong answer**: a handover that should have happened does not. This asks *might
+    this agent be the author?*, and a NULL produces a **missing candidate** in a set whose only job
+    is to grow. A source that under-reports cannot make an exclusion unsafe; it can only fail to
+    make it safer.
+
+    Which is exactly why this is a **term and never the set**. Dropping the transition set in favour
+    of this one would reproduce `checkpoint_handover`'s bug with this docstring's blessing.
+    """
+    rows = await session.execute(select(Run.agent).where(Run.task_id == task_id).distinct())
+    return {agent for agent in rows.scalars().all() if agent}
+
+
+async def agents_that_may_have_authored(session: AsyncSession, task: Task) -> "set[str]":
+    """*"Might this agent be the author of this task's work?"* — the exclusion a reviewer ladder gets.
+
+    Every agent **any** record associates with the task: the transitions that moved it, the agent it
+    is assigned to, and the runs recorded as bound to it. Three sources for one question is not
+    elegant, and the reason it is nonetheless right is that each names a different fact and each is
+    individually incomplete:
+
+    | source | names | misses |
+    |---|---|---|
+    | transitions | every agent that **moved** it | one that worked it without moving it |
+    | `assignee` | the agent that **holds** it now | every previous holder, and everyone after the first |
+    | bound runs | every agent whose run was **about** it | runs predating the column, and runs never bound |
+
+    Used where no completion names an agent, which is the case where *the author is not provable
+    from anything* — so the narrowest set that provably contains the author does not exist, and this
+    is its honest replacement. The determination is therefore **over-inclusive by construction**: a
+    record associating an agent with a task is sufficient to exclude it, and a source's silence is
+    not evidence that the agent did not work it. The cost of excluding an agent that did nothing is
+    a review the flow reports it could not staff, which the operator sees and resolves; the cost of
+    including an agent that wrote the work is a self-approval nobody sees.
+
+    **Not `agents_that_worked`, and the distinction is load-bearing.** That function answers *which
+    agents moved this task?* and is what the wedged-review predicate needs; this one answers *might
+    this agent be the author?* and is what an exclusion needs. Using this one there makes
+    `assignee in <the set>` true of every assigned task, so every review genuinely in progress
+    reports as one nobody is doing.
+    """
+    worked = await agents_that_worked(session, task.id)
+    bound = await agents_of_runs_bound_to(session, task.id)
+    return worked | bound | ({task.assignee} if task.assignee else set())
 
 
 async def _guard_author_is_not_reviewer(

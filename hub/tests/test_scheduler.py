@@ -1020,8 +1020,16 @@ async def test_loop_whose_tasks_are_all_completed_but_unapproved_skips_instead_o
         assert len(job_runs) == 1
         assert job_runs[0].tick_count == 3
         assert {r.status for r in job_runs} == {"skipped"}
-        assert all("stalled" in r.error_summary for r in job_runs)
-        assert all("2 completed" in r.error_summary for r in job_runs)
+        # **The reason names the task, not the queue** (F142, `agent-loops`' "An attributed stall
+        # names its task rather than the queue"). This asserted `"stalled"` and `"2 completed"` --
+        # the status histogram -- until the walk stopped dropping an unattributable completed task
+        # in silence. These two are constructed directly at `completed`, so no completion is
+        # recorded for either, and the walk now surfaces the first of them by name with the remedy.
+        # The histogram is the reason of last resort and this queue no longer needs it: the
+        # operator's remedy here is the named task, and a firing that established a specific cause
+        # and then reported a count has discarded the only part of what it knows they can act on.
+        assert all("no recorded completion" in r.error_summary for r in job_runs)
+        assert all("Reviewing it directly" in r.error_summary for r in job_runs)
 
         conversations = (
             (await db.execute(select(Conversation).where(Conversation.agent == job.agent)))

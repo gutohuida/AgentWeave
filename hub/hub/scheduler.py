@@ -559,21 +559,45 @@ async def task_is_claimable_by(session: AsyncSession, task: Task, agent: str) ->
     at work it is structurally unable to sign off -- forever, since the refusal changes nothing
     about the queue.
 
-    A `completed` task with **no recorded completer** is claimable by nobody, and this is the one
-    place the two functions deliberately diverge. `_guard_author_is_not_reviewer` treats an unknown
-    completer as *permitting*, which is right for a refusal: a guard that blocked every move it
-    could not attribute would stop legitimate work over a missing history row. It is exactly wrong
-    for an **offer**. Handing finished work to an agent the Hub cannot rule out as its author, when
-    the guard will then also fail to rule it out, is self-approval reached by two permissive
+    A `completed` task with **no recorded completion at all** is claimable by nobody, and this is
+    the one place the two functions deliberately diverge. `_guard_author_is_not_reviewer` treats an
+    unknown completer as *permitting*, which is right for a refusal: a guard that blocked every move
+    it could not attribute would stop legitimate work over a missing history row. It is exactly
+    wrong for an **offer**. Handing finished work to an agent the Hub cannot rule out as its author,
+    when the guard will then also fail to rule it out, is self-approval reached by two permissive
     defaults agreeing -- the guard bypassed entirely, for precisely the tasks whose provenance is
     unknown.
 
-    So the asymmetry is the safe direction of each: refuse to offer, permit to act. The cost is a
-    task completed before the transition table existed, or written straight into the status, which
-    the flow will not staff for review; it stalls the queue and the operator reviews it, which is
-    what happens today and is a state the operator can see and resolve. Every task that reaches
-    `completed` through `apply_transition` records its completer, so this is the legacy and
-    hand-written case only.
+    So the asymmetry is the safe direction of each: refuse to offer, permit to act.
+
+    **Where the operator recorded the completion, the exclusion is what rules the author out, and
+    the same argument therefore permits the offer** (F142). That case is not an absence: a person
+    completed the task, and `agents_that_may_have_authored` names every agent any record associates
+    with it -- the transitions, the assignee, and the runs bound to it. Read the new arm as the rule
+    above being *applied*, not as an exception carved out of it: the reason a `None` completer was
+    unclaimable is that nothing ruled the author out, and here something does. The residue is
+    genuine: it is over-inclusive by construction, because with no completion row the author is not
+    provable from anything and a source's silence is not evidence that an agent did not work the
+    task. The cost of excluding an agent that did nothing is a review the flow reports it could not
+    staff, which the operator sees; the cost of including one that wrote the work is a self-approval
+    nobody sees.
+
+    **Two sentences that used to stand here were false, and correcting them is part of F142's fix
+    rather than tidy-up** (design D17) -- they are the reason the branch below looked safe to
+    everyone who read it:
+
+    - *"Every task that reaches `completed` through `apply_transition` records its completer, so
+      this is the legacy and hand-written case only."* An operator completion reaches `completed`
+      through `apply_transition` and records `actor_agent = NULL`, so the `None` population included
+      **every task an operator finishes through the supported route** -- not a legacy remnant.
+    - *"it stalls the queue and the operator reviews it, which is ... a state the operator can see
+      and resolve."* Both halves were measured false on 2026-08-30. The stall reason was the queue's
+      status histogram, which names no task; and `completed` reaches only `rejected` and
+      `under_review`, so there is no exit that returns the work to an agent.
+
+    What remains true is the narrow case the first sentence was reaching for: a task written
+    straight into the status, or completed before the transition table existed, is still claimable
+    by nobody -- and it is now *surfaced by name* rather than dropped in silence.
 
     **Found by a hang, not by reasoning.** The first version of this returned `completed_by !=
     agent`, which for `None` is `True`; `test_scheduler.py`'s spin test constructs its completed
@@ -584,12 +608,17 @@ async def task_is_claimable_by(session: AsyncSession, task: Task, agent: str) ->
         return True
     if task.status not in REVIEWABLE_LOOP_TASK_STATUSES:
         return False
-    from .task_transition_service import agent_that_completed
+    from .task_transition_service import agents_that_may_have_authored, completion_attribution
 
-    completed_by = await agent_that_completed(session, task.id)
-    if completed_by is None:
+    attribution = await completion_attribution(session, task.id)
+    if attribution.agent is not None:
+        return attribution.agent != agent
+    if not attribution.recorded:
         return False
-    return completed_by != agent
+    # The operator completed it. **The same set the review arm excludes, called rather than
+    # recomposed** -- two compositions of the same three terms are free to drift, and the two walks
+    # disagreeing about one task is the failure this function's whole docstring is about.
+    return agent not in await agents_that_may_have_authored(session, task)
 
 
 async def candidate_is_startable(
@@ -1014,6 +1043,7 @@ async def resolve_reviewer(
     project_id: str,
     exclude: "set[str]",
     unavailable: "Optional[set[str]]" = None,
+    excluded_because: str = "is the one that completed this task",
 ) -> ReviewerChoice:
     """Who should take *task*, walking design D4's ladder. `exclude` is who may not (the author).
 
@@ -1051,6 +1081,22 @@ async def resolve_reviewer(
     minutes, which is a false statement about the work that outlives the tick that produced it.
     So a declaration resolving into `unavailable` is `rung="deferred"` instead, and rung 2 simply
     walks past those candidates.
+
+    **`excluded_because` is why an excluded agent is excluded, and it is a parameter because it is
+    not always the same reason** (design D13). The ladder used to hard-code *"is the one that
+    completed this task"* into both refusal sentences, which is true only where an agent is recorded
+    as completing the work. Where the **operator** completed it, the exclusion is every agent that
+    may have authored the work and no agent completed anything -- so the hard-coded clause would
+    state a completion that did not happen. That is not cosmetic: rung 3's sentence is the one
+    `decide_firing` promotes to `stall_reason` and `_emit_review_unstaffed` broadcasts, so it is the
+    whole of what the operator is shown in place of the queue's status histogram. A change whose
+    entire subject is telling the operator a fact about the task cannot ship that fact in a sentence
+    that is untrue.
+
+    The clause and not the whole sentence: the ladder owns its own vocabulary -- rung 1b's *"the
+    flow will not substitute somebody else for a named reviewer"* is the ladder's argument, not the
+    caller's -- and letting callers compose the reasons would let two of them drift into two
+    accounts of the same rung.
     """
     from . import review_turn
 
@@ -1075,8 +1121,8 @@ async def resolve_reviewer(
             return ReviewerChoice(
                 rung="unresolved",
                 reason=(
-                    f"this task names {resolution.declared!r} as its reviewer, and that agent is "
-                    f"the one that completed the work. Naming a different reviewer, or reviewing "
+                    f"this task names {resolution.declared!r} as its reviewer, and that agent "
+                    f"{excluded_because}. Naming a different reviewer, or reviewing "
                     f"it yourself, is the way forward -- the flow will not substitute somebody "
                     f"else for a named reviewer."
                 ),
@@ -1111,9 +1157,9 @@ async def resolve_reviewer(
     return ReviewerChoice(
         rung="unstaffed",
         reason=(
-            "could not staff this step: no agent is free to take it. Every agent on the roster is "
-            "either running a turn, already holding active work, or is the one that completed this "
-            "task and so may not review it."
+            f"could not staff this step: no agent is free to take it. Every agent on the roster is "
+            f"either running a turn, already holding active work, or {excluded_because} and so may "
+            f"not review it."
         ),
     )
 
@@ -1211,7 +1257,11 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     agent's job is to fill it, and whether a *drained* queue should stop firing at all is
     `_loop_stop_reason`'s question, asked earlier and separately.
     """
-    from .task_transition_service import agent_that_completed
+    from .task_transition_service import (
+        agents_that_may_have_authored,
+        agents_that_worked,
+        completion_attribution,
+    )
 
     gated: "list[tuple[Task, dependency_gate.DependencyRefusal]]" = []
     unstaffed: "list[tuple[str, str]]" = []
@@ -1276,11 +1326,30 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             # `assignee` and re-staff the review as implementation, which is F10 arriving by the
             # new route this branch's own comment warns about. `wedged_review` carries the decision
             # past that arm to the ladder, which excludes the author by construction.
+            #
+            # **And who produced the work is read from the completion only where one names an
+            # agent** (F142). A completion the operator recorded names nobody, so a predicate keyed
+            # on it alone reports such a task as held by a reviewer -- the exact false statement
+            # this branch exists to prevent, one case over. Measured live: an operator who moved a
+            # stuck task to `under_review` by hand, following the only route the lifecycle offers
+            # them, produced precisely that, and the task sat there with its author named as its
+            # reviewer forever.
+            #
+            # **`agents_that_worked` and never `agents_that_may_have_authored`.** The wider set is
+            # what the *exclusion* needs; here the question is whether the assignee is one of the
+            # agents that produced the work, and an assignee counted as a producer by definition
+            # answers yes for every task that has one -- so every review genuinely in progress
+            # would be reported as one nobody is doing. The bound runs answer yes very nearly as
+            # often, since a staffed reviewer's own run is bound to the task it is inspecting. A
+            # legitimately staffed reviewer is absent from the **transitions**, and that absence is
+            # the whole of what carries the distinction.
             if task.assignee:
-                wedged_author = await agent_that_completed(session, task.id)
-                if wedged_author is not None and wedged_author == task.assignee:
-                    wedged_review = True
+                wedged_author = (await completion_attribution(session, task.id)).agent
+                if wedged_author is not None:
+                    wedged_review = wedged_author == task.assignee
                 else:
+                    wedged_review = task.assignee in await agents_that_worked(session, task.id)
+                if not wedged_review:
                     in_flight.append((task.id, task.assignee))
             if not wedged_review:
                 continue
@@ -1361,11 +1430,30 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         # Finished work. **The ladder decides, always** — not "the job's agent if it happens to be
         # eligible". A declared reviewer that resolves outranks the job's own agent, or the
         # declaration would be advisory; and D4 is the one statement of who reviews.
-        author = await agent_that_completed(session, task.id)
-        if author is None:
-            # Unattributable, and therefore offered to nobody — see `task_is_claimable_by` for why
-            # this is the safe direction. Not `unstaffed` either: nothing is waiting on staffing, the
-            # task simply has no provenance, and the stall reason already counts it as open work.
+        # **Three arms, and none of them is silent** (F142). `agent_that_completed` returning
+        # `None` is two different facts about a task and the walk used to drop both with a bare
+        # `continue` that recorded nothing -- not `unstaffed`, not `deferred`, not `in_flight`, not
+        # `gated`, no log, no event. Measured live on 2026-08-30: a flow whose only task the
+        # operator had marked finished reported *"no claimable task among 1 open (1 completed)"* on
+        # every firing, forever, while the actual cause was a property of that one task and had a
+        # remedy. `completed` has no exit that returns the work to an agent, so the operator could
+        # not resolve it either.
+        attribution = await completion_attribution(session, task.id)
+        if not attribution.recorded:
+            # **Nothing completed it.** The row was written straight into the status or predates
+            # the transition table. No record rules any agent out, so nothing rules out the author
+            # either, and the task stays claimable by nobody -- `task_is_claimable_by`'s asymmetry,
+            # unchanged. What changes is that the operator is *told*, by name, because nothing a
+            # flow can do will give this task provenance it never had and a later firing will not
+            # pick it up.
+            unstaffed.append(
+                (
+                    task.id,
+                    "this task is finished but has no recorded completion, so the flow cannot rule "
+                    "any agent out as its author and will not offer it to one. Reviewing it "
+                    "directly is the way forward.",
+                )
+            )
             continue
         # **Can a review turn be provisioned for this at all?** Asked before a reviewer is
         # resolved, because a task with no commit to check out cannot be reviewed by anybody, and
@@ -1393,8 +1481,40 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             )
             continue
 
+        if attribution.agent is not None:
+            # **An agent completed it.** Byte-identical to what shipped, and deliberately so
+            # (design D6): where the product has a *decided* answer to who the author is, the whole
+            # corpus is keyed on it and this change does not widen it.
+            exclude = {attribution.agent}
+            excluded_because = "is the one that completed this task"
+        else:
+            # **The operator completed it**, which is provenance -- a person did it -- and not an
+            # absence. Withholding review here removes the flow's own second half at exactly the
+            # moment the operator involved themselves, and leaves them no way out: `completed`
+            # reaches only `rejected` and `under_review`, and moving it to `under_review` by hand
+            # offers it to nobody. The product has already decided this case on its other path:
+            # `agent_trigger.py` bars a manually dispatched reviewer only where an agent is
+            # *recorded* as completing the task, so an operator-completed task is reviewable by
+            # hand today. This removes a disagreement between two paths about one task.
+            #
+            # **But the exclusion cannot be `{author}`, because there is no author to name**, and
+            # `exclude=set()` is a self-approval route: the agent that wrote the work is still
+            # eligible, and both transition guards *permit* when the completer is unknown --
+            # `task_is_claimable_by`'s own "self-approval reached by two permissive defaults
+            # agreeing", arriving through this new door. So the ladder gets every agent any record
+            # associates with the task. Over-inclusive by construction, because with no completion
+            # row the author is not provable from anything and a source's silence is not evidence
+            # that an agent did not work the task.
+            exclude = await agents_that_may_have_authored(session, task)
+            excluded_because = "has worked on this task"
+
         choice = await resolve_reviewer(
-            session, task, project_id=loop.project_id, exclude={author}, unavailable=taken
+            session,
+            task,
+            project_id=loop.project_id,
+            exclude=exclude,
+            unavailable=taken,
+            excluded_because=excluded_because,
         )
         if choice.agent is not None:
             selections.append(LoopSelection(task=task, agent=choice.agent, is_review=True))

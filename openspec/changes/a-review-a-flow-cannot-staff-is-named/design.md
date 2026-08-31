@@ -614,3 +614,52 @@ correction is short: name the operator-completed world as the third case, and sa
 produced was invisible until F142 measured it and is what the new arm exists to end. A docstring that
 still claims the operator can see and resolve this state, in the function the change edits to make
 that true, is a claim the product will be judged against.
+
+## D18 — found during implementation: the delta's own scenario was wider than its requirement
+
+Round 3 left `task-lifecycle-governance`'s scenario *"A task with no recorded completion is
+surfaced, not restaffed"* keyed on nothing but the absence of a completion:
+
+> **WHEN** a task in `under_review` has an assignee and no recorded completion at all
+> **THEN** it is not reported as held by a reviewer
+
+Implemented literally, that reports a **real, in-progress review** as one nobody is doing. Reaching
+`under_review` with an assignee and no recorded completion is a supported route: `agent_trigger` bars
+a manually dispatched reviewer only where an agent is *recorded* as completing the task, so on a task
+with no recorded completion any agent may be dispatched by hand -- and `enter_selected_task` staffs
+it, which is `task-lifecycle-governance`'s own *"Dispatching a review staffs the task, whichever path
+dispatched it"*. That is 5.4's risk arriving through the requirement rather than through the code.
+
+The requirement's **prose** was already right and the scenario disagreed with it. Its opening
+sentence is *"when that task's assignee is an agent that produced the work"*, and for a task with no
+recorded transitions naming an agent, no record says the assignee produced anything. `tasks.md` 5.1
+was right too: `wedged_review` where `task.assignee in agents_that_worked(task)`, transitions only.
+
+So the scenario was corrected to name the assignee condition, and a second scenario added for the
+hand-dispatched case that must stay `in_flight`. `test_a_hand_dispatched_review_on_an_unattributed_task_is_still_held`
+is its permanent form.
+
+Worth recording *how* it survived three rounds: every round checked that the wedge predicate would
+not be reused with the wider exclusion set (D8, D14), which is a real hazard and was caught. Nobody
+checked the predicate against the **narrower** direction -- what the requirement says about the case
+where the set is empty. The rounds re-derived the exclusion three times and the scenario once.
+
+## D19 — filed, not fixed: `RequirementEvidence.actor` is a fourth record and is not a term
+
+`record_evidence` takes `task_id` as a free parameter and does not require the calling run to be
+bound to that task (`mcp_server.py`). So an agent can work a task on an **unbound** run, record
+evidence naming its commit, and appear in no record the exclusion reads: no transition (it moved
+nothing), no `assignee` (`bind_run_to_task` never ran), no `run.task_id` (the run was never bound).
+`RequirementEvidence.actor` names it, and the review arm requires that very row to exist before it
+resolves a reviewer at all.
+
+That is the same shape as D14's second agent, one source further out, and D14's own rule --
+*exclude every agent any record associates with the task* -- says the term belongs in the union.
+It is **not** added here: the spec delta enumerates three sources by name, adding a fourth without a
+round re-deriving it is exactly the move this change exists to argue against, and the residual
+exposure is narrow (an agent that recorded evidence for a task it never bound to is usually in one of
+the three terms already, because the ordinary path binds).
+
+Queued as a question for the operator rather than taken. `AW_COMPLETE_BY=untouched`, added to
+`t_row12_review_leg.py` as row four, drives exactly this shape live -- so `DRIVE-1` will show whether
+the agent that recorded the evidence is offered its own work to review.
