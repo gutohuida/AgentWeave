@@ -104,20 +104,20 @@ Round 1 wrote these. Rounds 2 and 3 may rewrite any of them; nothing here is imp
 
 ## 5. Prove it in the product, not only in the suite
 
-- [ ] 5.1 Extend the drive harness that produced F155 (`scripts/drive/t_drive1_flow_lands.py`) — or
+- [x] 5.1 Extend the drive harness that produced F155 (`scripts/drive/t_drive1_flow_lands.py`) — or
   add a lane to it — that manufactures the conflict deliberately: two tasks, same path, one landed
   first. Assert the `409`'s `message` against the new requirements, and assert the drive can follow
   the sentence it is given to a `merged` outcome without any instruction the product did not supply.
-- [ ] 5.2 Run it against a Hub restarted from this branch, against a **fresh** project — never
+- [x] 5.2 Run it against a Hub restarted from this branch, against a **fresh** project — never
   `proj-5e960453` or `proj-18e5d4e0`. Every real agent turn binds Haiku.
-- [ ] 5.3 Record what the drive found in `scripts/drive/FINDINGS.md`, including anything the new
+- [x] 5.3 Record what the drive found in `scripts/drive/FINDINGS.md`, including anything the new
   sentence still leaves a reader unable to do.
 
 ## 6. Green
 
 - [x] 6.1 `openspec validate a-conflict-refusal-names-what-clears-it --strict`.
 - [x] 6.2 `ruff check src/ hub/ tests/`; `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`; `mypy src/`.
-- [ ] 6.3 The Hub suite in chunks, and `cd hub/ui && npm run lint && npx vitest run` for the changed
+- [x] 6.3 The Hub suite in chunks, and `cd hub/ui && npm run lint && npx vitest run` for the changed
   UI test.
 - [ ] 6.4a Do **not** sync or archive this change into `openspec/specs/` before
   `a-loop-declares-whether-it-needs-evidence` is archived (design D9). This requirement's
@@ -126,5 +126,5 @@ Round 1 wrote these. Rounds 2 and 3 may rewrite any of them; nothing here is imp
   `openspec/specs/task-lifecycle-governance/spec.md:638` -- *"SHALL NOT be the agent's branch"* --
   with the reconciliation only in an unarchived change. Round 3 checked and found no breach, only
   this ordering.
-- [ ] 6.4 No UI source changed beyond a test fixture, so no bundle rebuild — confirm that rather than
+- [x] 6.4 No UI source changed beyond a test fixture, so no bundle rebuild — confirm that rather than
   assume it.

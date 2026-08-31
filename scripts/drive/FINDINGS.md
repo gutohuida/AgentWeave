@@ -12155,3 +12155,86 @@ d3ba8f3 Integrate approved work 5413b419c459   <- the loop's power, landed in ON
 fcf083e Auto-snapshot: alpha's turn on task-d8bf6c0b7180
 922c427 seed
 ```
+
+---
+
+## Drive 2026-08-31 — F155's remedy, followed end to end (`t_f155_conflict_remedy.py`)
+
+Hub restarted on `127.0.0.1:8011` from `autonomous/2026-08-31-the-turn-must-end-first` at `0373867`.
+A **fresh** project (`/projects/open` on a fresh temporary git repository) for every run, as the
+autonomous run's limits require. No agent turns: the whole population this refusal addresses is
+operator-facing, so no model was bound.
+
+**23/23 checks passed.** The one that matters is lane 2, and it is the one the unit tests
+structurally cannot make: **the harness parses the branch to act on out of the refusal's own
+sentence** — `recorded from a checkout of ([^\s.,;]+)` — and uses nothing it knows about its own
+setup. It resolves the conflict there, records evidence from a checkout of that branch, approves,
+and reaches `merged` with the resolved commit on the main branch. A remedy is followable or it is
+not, and this is the only way to find out.
+
+Lane 3 drove the **old** remedy against a second task and confirmed the defect is still exactly
+what it was: resolve on the branch, approve again, and the refusal comes back **byte-for-byte
+identical**. That is the world, not the wording, and it does not change — which is precisely why
+the product must stop giving that instruction on this route. Lane 4 confirmed the branch-tip route
+keeps the old sentence, because there the commit judged is whatever the branch then points at.
+
+### F155 — Status: **FIXED** (`0373867`, driven 2026-08-31)
+
+The refusal on the evidence route now names the commit it judged, names the branch it was recorded
+on distinctly from the branch it would merge into, says that resolving there and retrying will not
+clear it and why, states the remedy as a condition on *where the recording is done from* rather
+than as a field to supply, says it does not take care of itself, says the fresh evidence need not
+be about the same requirement, attributes the commit where another task recorded it, and ends in
+the same `ACCEPT_OR_GRANT` clause the sibling refusal uses.
+
+### F165 (new, severity **B**) — an operator's locator-named commit silently fails to supersede
+
+Reachable, and proven reachable in `hub/tests/test_conflict_refusal_names_what_clears_it.py`
+(`test_an_operator_naming_the_resolved_sha_does_not_supersede`), which is what task 1.3a asked for.
+
+An operator who reads the new remedy and records evidence whose `locator` **is the resolved sha**
+goes through `read_footprint(root, at=resolved)` and therefore `_branch_at`, which answers `""`
+unless that commit is the tip of exactly one local branch (`requirement_evidence.py:516-529`). The
+resolved commit stops being a tip the moment anything is committed on top of it. `""` and
+`agentweave/task/…` are distinct keys in `integration_targets`' per-branch reduction, so the fresh
+row lands **beside** the stale one instead of replacing it, and the refusal stands with no visible
+reason. Recording naming a commit is exactly what F71 made authoritative, so this is the natural
+thing for an informed operator to do.
+
+The `a-conflict-refusal-names-what-clears-it` change is prose-only and does **not** fix this. Its
+wording steers around it — *recorded from a checkout of that branch* — and deliberately refuses to
+promise the branch takes care of itself. The fix, if it is wanted, is a decision about what
+`_branch_at` should answer for a commit that is an *ancestor* of exactly one branch, and that is a
+change to what a footprint's `branch` means. Not queued.
+
+### F166 (new, severity **C**) — the same hole on the agent route, via `footprint_root`'s fallbacks
+
+Also reachable, also held by a test
+(`test_an_agent_whose_workspace_is_gone_does_not_supersede`). Round 2 recorded that an agent's
+footprint is *always* taken in a worktree on the task branch; round 3 corrected it and the test
+confirms the correction. `footprint_root` has three answers
+(`requirement_evidence.py:299-340`): the recorded run directory **only while it still exists**, then
+the per-agent checkout, then `workspace.root` — which is on the main branch. Its own docstring names
+both fallbacks as live, including *"a task checkout that has since been released, whose directory is
+gone by design"*. On either, the fresh footprint carries a branch the stale row does not, `newest`
+gains a second key, and the refusal stands. The third answer is the worst: the project checkout is
+on the main branch, so the fresh target merges trivially and displaces nothing while the stale one
+goes on refusing.
+
+Severity C rather than B because the population F155 was measured on does not hit it — the agent is
+mid-turn on the task it is approving, so its task worktree exists. That is a fact about that drive,
+not a guarantee, which is the whole reason it is written down.
+
+### Two product refusals the harness earned by getting it wrong first — both good
+
+Not findings. Recorded because they are the kind of thing a harness author assumes is a bug.
+
+* `PATCH /jobs/{id} {"work_needs_evidence": false}` → **400**, *"a loop declares at creation whether
+  its work needs evidence, and it cannot be changed afterwards — create a loop with the declaration
+  you want, and offer this loop's tasks to it"*. It says what to do instead, which is the standard
+  this whole change is about.
+* `PATCH /tasks/{id} {"loop_id": …}` → **403**, *"A task's loop assignment is set at creation and
+  cannot be changed afterwards."*
+
+Both were reached by writing the harness the lazy way round; both refusals were legible enough to
+fix it in one pass.
