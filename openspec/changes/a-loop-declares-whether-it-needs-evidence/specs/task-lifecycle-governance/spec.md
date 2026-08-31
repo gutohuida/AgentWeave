@@ -34,10 +34,24 @@ was never checked first.
 Where evidence governs a task, this requirement SHALL NOT apply to it, and evidence remains the only
 thing that names what is merged. Evidence governs a task whose loop declares that its work needs
 evidence, a task belonging to no loop at all, and — by the default stated in `agent-loops` — a task
-whose loop declares a specification document and has made no declaration either way. **A task
-belonging to a flow SHALL NOT have its branch merged in place of the commit its accepted evidence
-names**, because a flow that made no declaration has not thereby asked to stop being governed by the
-requirements it decomposed.
+whose loop declares a specification document, and a task that is linked to a requirement, where
+neither has had a declaration made about it either way. **A task belonging to a flow SHALL NOT have
+its branch merged in place of the commit its accepted evidence names**, because a flow that made no
+declaration has not thereby asked to stop being governed by the requirements it decomposed. **Nor
+SHALL a task that is linked to a requirement**, for the same reason and one that is sharper: such a
+task's integration already merges what its accepted evidence names, including evidence another task
+recorded against a requirement they share, and no branch of this task's own can carry that commit.
+
+So this requirement applies to a task on a loop that declares no specification document, that is
+linked to no requirement, and about which no declaration was made — the task for which no evidence
+can ever name a commit — and to any task whose loop declared that its work needs no evidence.
+
+#### Scenario: A task linked to a requirement is unaffected by this requirement
+
+- **WHEN** a task on a loop that declares no specification document, and about which no declaration
+  was made, is linked to a requirement and is approved with accepted evidence naming a commit
+- **THEN** the commit that evidence names is what is merged
+- **AND** the tip of that task's own branch is not merged in its place
 
 #### Scenario: A flow's task is unaffected by this requirement
 

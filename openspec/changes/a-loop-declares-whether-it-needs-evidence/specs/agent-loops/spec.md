@@ -22,11 +22,24 @@ approval without any requirement link or accepted evidence, from the source stat
 `task-lifecycle-governance`.
 
 **The default SHALL be that evidence governs the work of a loop that declares a specification
-document, and does not govern the work of a loop that declares none.** A loop and a flow are the same
-kind of thing wearing different queues — declaring a document is the only thing that separates them —
-so a single default that ignored the distinction would answer for both, and answering "no evidence
-needed" for a flow would end the requirement-and-evidence chain that a flow exists to run. A
-declaration that was actually made SHALL take precedence over the default in either direction.
+document, and governs the work of any task that is linked to a requirement, and does not govern the
+work of a task on a loop that declares neither.** A loop and a flow are the same kind of thing
+wearing different queues — declaring a document is the only thing that separates them — so a single
+default that ignored the distinction would answer for both, and answering "no evidence needed" for a
+flow would end the requirement-and-evidence chain that a flow exists to run.
+
+The second half of the default is the same correction one step further in. A loop's tasks may be
+linked to requirements individually even though the loop declares no document, and such a task can
+record evidence and have its work integrated **today**, before this capability exists. The default
+SHALL NOT take that away from it: evidence recorded against a shared requirement by a different task
+is integrated by this task, and no branch belonging to this task can carry that work, so a default
+that ignored the link would stop merging work that merges today and record nothing about the loss.
+A default may create a capability where none existed; it SHALL NOT remove one.
+
+A declaration that was actually made SHALL take precedence over the default in either direction, for
+both halves of it. A loop whose operator declares that its work needs no evidence SHALL have its
+tasks' work integrated from their branches even where those tasks are linked to requirements — that
+is what declaring it means, and the surfaces that accept the declaration SHALL say so.
 
 The declaration SHALL be recorded as made or not made, and SHALL NOT be stored as a copy of whatever
 the default is at the moment of creation. A loop created before this capability existed, and a loop
@@ -61,6 +74,19 @@ happen long afterwards.
   configured main branch
 - **THEN** the task's work is integrated
 - **AND** no requirement link and no accepted evidence were needed for it
+
+#### Scenario: A loop task linked to a requirement has its work governed by evidence
+
+- **WHEN** a task on a loop that declares no specification document and no preference about evidence
+  is linked to a requirement, and is approved with accepted evidence naming a commit
+- **THEN** the commit that evidence names is what is integrated
+- **AND** the tip of that task's own branch is not integrated in its place
+
+#### Scenario: A declaration overrides the requirement link
+
+- **WHEN** a task linked to a requirement belongs to a loop that declared its work needs no evidence,
+  and it is approved
+- **THEN** the commit at the tip of that task's own branch is what is integrated
 
 #### Scenario: A flow that declares nothing has its work governed by evidence
 

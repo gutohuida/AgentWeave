@@ -1717,3 +1717,165 @@ page: whether `_prerequisite_commits` moves to `merge_targets`' question for `ap
 prerequisites (F158's repair, and the third condition D5 now admits to). Its own brief still stands —
 re-derive whether the declaration belongs on the `Loop` at all, given D10 has now proved that row is
 two things wearing one name.
+
+## Iteration 13 — 2026-08-31 04:04 to 04:2x (+01:00) — `D-R3`: round 3 of `a-loop-declares-whether-it-needs-evidence`
+
+Round 3 re-derived the proposal against the code independently of round 2 — not a review of it.
+**It found a second severity-A defect, and it is decision D4's own `raise_it_if` condition firing.**
+It also took the decision round 2 left open, found that decision is not a decision at all (a shipped
+requirement already mandates it), and corrected one claim round 2 carried from a comment rather than
+from the route.
+
+### D11 — a loop task that carries requirement links merges TODAY, so the kind-aware default is still a regression
+
+`decisions_for_user` D4 says in as many words: *raise it if "round 2 or 3 finds an existing loop path
+that DOES merge today, which would make this a behaviour change rather than a new capability."*
+There is one. Every step opened, not reasoned about:
+
+```
+create_task(loop_id=<documentless loop>, requirement_ids=["FR-8"], spec_document="x.md")
+  tasks.py:748-753   spec_document_id resolved from the requirements' agreed document
+  tasks.py:771       loop_id stored — _authorize_loop_task_creation gates WHO, never WHAT
+  tasks.py:790       link(...)  ->  TaskRequirementLink rows exist
+record_evidence("FR-8", commit=…)
+  agent_actions.py:1031-1044   resolves against the PROJECT's requirement index. Nothing
+                               consults the task's loop. It does NOT 404.
+decide_evidence(accepted)
+  _targets joins TaskRequirementLink -> integration_targets NON-EMPTY -> integrate_task MERGES.
+```
+
+The proposal's Why says *"A loop has no requirements to link"* — true of the tasks a loop's
+**document** would mint, of which there are none, and false of the tasks a caller creates with
+`requirement_ids`, which `TaskCreate` supports on purpose and which D10 itself acknowledges exist.
+D4's rationale — *"a loop today can never merge anything at all, so defaulting to evidence-free …
+regresses nothing"* — has a counterexample, and rounds 1 and 2 turn that counterexample into silent
+behaviour change.
+
+**And it is worse than substituting one commit for another.** `_targets`' docstring states the
+property and the join at `task_integration.py:182-186` makes it true: *"evidence recorded by another
+task against a shared requirement is in scope here… it is this task's integration that would merge
+its commit."* A per-task branch tip **cannot** carry another task's branch's work — D1's isolation
+guarantee, working against us — so that commit is not merged elsewhere, it is not merged at all,
+while the integration record says `merged`. Silent, and in the direction that loses work. Plus
+`approval-refuses-unaccepted-evidence` degrades for the same task by the same mechanism D10
+described for flows.
+
+**The repair is one more arm**, and the resolver now has five, in order: no loop → evidence;
+the loop row does not resolve → evidence; the field is set → **the operator wins**;
+`spec_document_id is not None` → evidence (a flow, round 2's D10); otherwise
+`task_has_requirement_links(session, task)`. The branch tip is the default for exactly one
+population — a task on a documentless loop with **no requirement link of any kind** — which is the
+set for which `integration_targets` is structurally empty forever, and the set the proposal's Why
+actually describes.
+
+**Why neither arm alone will do**, and this is the part only a fresh read finds:
+
+- **Not the link test alone.** `spec_tasks.materialise` links requirements only under
+  `if requirements:` (`spec_tasks.py:221-222`) — a flow task whose declared identifiers did not
+  resolve has **no** links, so a link-only default would start merging its branch tip. D10's defect,
+  re-entered through the door D10 closed.
+- **Not `spec_document_id` alone (D10 as written).** `Task.spec_document_id` is set only where the
+  named requirements agree on **one** document (`tasks.py:752-753`, a singleton set), and
+  `PATCH /tasks/{id}` adds links without ever assigning it (`tasks.py:1347-1362`).
+
+**And it is not D10's rejected timing-dependent alternative.** Links can be added after creation, but
+the flip is one-way and conservative (toward evidence-governed, i.e. toward "nothing merged" rather
+than "the wrong thing merged"), and it fires on a deliberate act naming a requirement rather than on
+a review verdict landing. One consequence named rather than left to be discovered: `absorb_free_text`
+(`tasks.py:793`) can make a loop task evidence-governed from an agent's prose — but only where the
+identifier **resolves** (`requirement_links.py:225-230`), so in a project with no documents, the
+ordinary shape for a loop, nothing is linked.
+
+### D12 — the decision round 2 left open, taken; and it was never a decision
+
+Round 2 framed `_prerequisite_commits` as *"the honest options are (a) leave it and say so, (b)
+make it ask the same question"*, recommended (b), and put it to round 3. **There is no option (a).**
+`openspec/specs/task-dependencies/spec.md:335`, shipped:
+
+> **A task's isolated checkout SHALL contain the work of every prerequisite the task was permitted
+> to start on, *whether or not that work reached the project's main branch*.**
+
+Its rationale at `:337` enumerates the conditions round 2 discovered independently — *"the operator's
+own checkout may be mid-edit or parked elsewhere, or the merge may have failed outright"* — as
+reasons the requirement exists. So leaving `_prerequisite_commits` on `integration_targets` would
+make this change **breach a shipped requirement** for every evidence-free loop task.
+
+Two consequences round 2 could not have drawn without that sentence:
+
+1. **A third spec delta.** `:339`'s mechanism sentence names *"each direct prerequisite's accepted
+   evidence commit"*, because evidence was the only source when it was written. It is MODIFIED to
+   name whatever the system would integrate for that prerequisite, or the capability's normative
+   sentence and its mechanism sentence disagree about the one task shape this change introduces.
+   `specs/task-dependencies/spec.md` is new in this round and is not optional.
+2. **Round 3's own first draft of D12 was wrong** and is corrected in place. It called the
+   all-or-nothing unwind refusing a turn (`worktrees.py:451-452`, `:492-493`) *"a new failure mode
+   … accepted on the grounds that loud beats silent"*. It is not new: it is `task-dependencies:341`
+   verbatim, with its own scenario. This change puts one more task shape under a rule that already
+   exists.
+
+The `approved` restriction is kept and is load-bearing rather than belt-and-braces:
+`_prerequisite_commits`' docstring defends `integration_targets` by saying the alternative *"would
+carry work nobody accepted into a checkout an agent is about to write in"*. On the evidence route
+that filter is automatic; on the branch-tip route an in-progress prerequisite's tip is a real commit
+and there is no filter at all. `dependency_gate.MET_STATUS` is `"approved"` (`dependency_gate.py:39`).
+Mechanically cheap: `resolve_turn_workspace_inputs` already holds `repo_root` (`task_workspace.py:62`)
+and already passes it to `_integration_base` on the line above the call being changed.
+
+**Rejected and recorded:** gating the successor on the prerequisite's integration having actually
+*merged* — it converts an ordinary dirty checkout into a stalled queue and contradicts both "approval
+is never blocked by what integration could not do" and `task-dependencies`' own "whether or not".
+
+### D13 — one round-2 claim was wrong, and it made the proposal overstate a risk
+
+Round 2 carried *"`TaskUpdate.loop_id` is write-once rather than immutable"* into the proposal's
+Impact and into `carried_open_questions`. It read the schema's comment (`schemas/tasks.py:146-151`,
+which does say "write-once") and not the route. `tasks.py:1215-1223` refuses the field
+**unconditionally** whenever supplied, without consulting the current value. Grepped for every write
+to the column rather than recalled: `tasks.py:771`, `jobs.py:685` (both creation), `jobs.py:233`
+(`_adopt_document_tasks`), `spec_tasks.py:216` (`materialise`). There is no fifth. **An existing task
+cannot be attached to a loop at all.** The one remaining route is a single `create_task` supplying
+both — which D11 closes on its own terms rather than by narrowing `loop_id`. Impact corrected.
+
+Also confirmed rather than assumed: `_adopt_document_tasks` returns `0` unless
+`loop.spec_document_id is not None` (`jobs.py:225-226`) and its `UPDATE` is restricted to
+`Task.loop_id.is_(None)` (`jobs.py:231`), so it back-fills only for flows and only onto unowned
+tasks — the incoherent state the round's brief worried about cannot arise. And `agents.py:965` is
+the `create_loop` inventory line; round 2's correction of round 1 stands.
+
+### D14 and D15 — the two questions the brief asked, answered
+
+**(a) The declaration stays on `Loop`.** Moving it to `Task` contradicts D-B's words, is per-card
+where the operator asked for per-loop, and needs a control on every task-creation path to be
+discoverable. Moving it to `Project` reintroduces D10's defect at a larger radius, since a project
+runs flows and loops side by side. What D10 and D11 *do* change is the shape of the answer, and it is
+worth naming rather than treating as a smell: the resolver reads the **loop** for the declaration and
+the **task** for the default. The loop is where a person states an intent; the task is where the
+product observes whether this work is wired into the chain.
+
+**(c) D3 stands.** `pending_edit_at`'s invariant is *"non-NULL iff at least one of the three
+pending_\* fields above is set"* (`models.py:1428-1431`) — read carefully, that "three" excludes
+`pending_edit_actor`, which is attribution. Not editing leaves it untouched. And the pending
+machinery would be the wrong home anyway: it defers an edit to a **firing** boundary, and this field
+is never read by a firing — it is read at approval, per task. Staging it would apply a decision about
+the operator's main branch at a boundary chosen by the scheduler's clock.
+
+### Verification
+
+- `openspec validate a-loop-declares-whether-it-needs-evidence --strict` → **valid**;
+  `openspec validate --all --strict` → **48 passed, 0 failed**.
+- **Every citation added this round was opened or grepped**, including re-checking three of round 2's.
+  Line numbers corrected against the files: `worktrees.py:451-452` (not `:450-452`), `:481-486`
+  (not `:479-486`), `_merge_prerequisites` at `:491` with the unwind at `:492-493`.
+- Checked by listing every `openspec/changes/*/specs/`: **no other in-flight change touches
+  `task-dependencies`**, so the new delta carries no archive-order constraint. C-before-D still
+  applies to `task-lifecycle-governance`.
+- No product code touched. No suite run, and none was warranted.
+
+### Next
+
+**`D-IMPL`** — implement the change, reproduction tests first, and 1.7/1.7a are the two guards that
+must be written **against today's code where they pass**: they are what would have caught D10 and
+D11 respectively. Note the round's one open item for the operator, now in `decisions_for_user` as
+D6: an explicit `work_needs_evidence=False` merges the branch tip even for a task linked to
+requirements with accepted evidence. That is D-B read literally and the design keeps it, but it is
+the operator's to confirm.

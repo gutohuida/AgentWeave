@@ -92,6 +92,19 @@ its branch tip instead of the commit its accepted evidence names, retiring both 
 `approval-refuses-unaccepted-evidence` in the process. Round 2 found that; design D10 has the
 derivation. The operator's declaration, where one was made, still wins over the default.
 
+**And evidence governs any task that is actually wired into the evidence chain, flow or not.** A
+documentless loop's task created with `requirement_ids` gets real requirement links, can record
+evidence — `record_evidence` resolves an identifier against the *project's* index and never consults
+the task's loop — and **merges today**, through the ordinary route, with no change at all. So the
+premise D4's default rests on, *"a loop today can never merge anything at all"*, has a counterexample,
+and a default that stopped at "is this a flow" would silently switch that task to its branch tip.
+Worse than substituting one commit for another: evidence recorded by another task against a shared
+requirement is in scope for this task's integration by design, and a per-task branch tip cannot carry
+it, so a commit that merges today would stop merging with nothing recording the loss. Round 3 found
+that; design D11 has the derivation. **The branch tip is therefore the default for exactly one
+population — a task on a documentless loop with no requirement link of any kind**, which is the
+population this proposal's Why describes and the only one for which nothing is being displaced.
+
 The declaration is made **at creation and never edited**. That is D-B's own word — *declares at
 creation* — and it is also the honest engineering answer: the loop's answer decides what approval
 writes into the operator's main branch, and a mid-flight edit would change what a queue that is
@@ -171,8 +184,15 @@ merge, no branch for the task, and already integrated.
 
 - Specs: `agent-loops` — one ADDED requirement. `task-lifecycle-governance` — one ADDED requirement
   for the branch-tip target, one MODIFIED skip enumeration, one MODIFIED retry requirement.
+  `task-dependencies` — one MODIFIED requirement, *A task's checkout carries the work it depends
+  on*, added in round 3. Its opening sentence already requires a successor's checkout to carry its
+  prerequisites' work *"whether or not that work reached the project's main branch"*; its mechanism
+  sentence names accepted evidence as the source, because evidence was the only source when it was
+  written. Without that amendment this change would breach the requirement for every evidence-free
+  loop task.
 - Code: `hub/hub/db/models.py` (one column), a new migration `0100`, `hub/hub/schemas/jobs.py`,
-  `hub/hub/api/v1/jobs.py`, `hub/hub/task_integration.py`, `hub/hub/task_transition_service.py`,
+  `hub/hub/api/v1/jobs.py`, `hub/hub/task_integration.py`, `hub/hub/task_workspace.py`,
+  `hub/hub/task_transition_service.py`,
   `hub/hub/requirement_gate.py`, `hub/hub/api/v1/tasks.py`, `hub/hub/mcp_server.py`,
   `hub/hub/api/v1/agents.py` (the tool-inventory sentence for `create_loop`),
   `hub/ui/src/api/tasks.ts`, `hub/ui/src/components/tasks/TaskIntegrationNote.tsx`,
@@ -186,8 +206,17 @@ merge, no branch for the task, and already integrated.
   commits on its branch — `snapshot_worktree` commits whatever the turn left dirty — so "this loop
   produces no code" is not a reason it will not merge. An operator who does not want that says so at
   creation, and D4 chose which way round the default points.
-- **A task can be attached to an evidence-free loop after it exists.** `TaskCreate.loop_id` is
-  caller-supplied and agent-reachable, and `TaskUpdate.loop_id` is write-once rather than immutable,
-  so what approval writes for a given task is not fixed when the task is created. Approval remains
-  gated and conflict-tested, so this widens what can be *offered*, not what lands unasked. Named
-  rather than closed (design D10); narrowing `loop_id` is a change of its own.
+- **A task cannot be attached to a loop after it exists** — round 2 said it could, reading the
+  schema's "write-once" comment rather than the route, and round 3 corrected it (design D13).
+  `PATCH /tasks/{id}` refuses `loop_id` unconditionally whenever it is supplied, without consulting
+  the current value, and the only four writes to the column are all at creation or restricted to
+  flows. So the one route by which a task carrying requirement links reaches an evidence-free loop
+  is a single `create_task` call supplying both — and that is closed on its own terms by the default
+  above (design D11), not by narrowing `loop_id`.
+- **A prerequisite's work reaches its successor without depending on the main-branch merge having
+  succeeded.** `_prerequisite_commits` asks the same question, restricted to prerequisites that are
+  already `approved`. Without it, this change would create the first task shape whose prerequisite
+  work has only one route to a successor — the main branch — while `integrate` skips on an ordinary
+  dirty checkout and approval stands regardless. The cost, stated rather than discovered: a
+  prerequisite branch tip that will not merge cleanly refuses the successor's turn instead of being
+  silently absent. Design D12, the decision round 2 left open.

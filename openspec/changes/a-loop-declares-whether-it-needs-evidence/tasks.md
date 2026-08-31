@@ -36,6 +36,14 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
   NULL) merges the commit its accepted evidence names, with a different commit at its branch tip so
   the two answers cannot be confused. Write it against today's code, where it passes, and it fails the
   moment 4.3 is implemented with a flat default.
+- [ ] 1.7a **The guard round 3 added, and the one that would have caught D11** — the same shape one
+  step further in. A task on a **documentless loop** (`spec_document_id` NULL, `work_needs_evidence`
+  NULL) created with `requirement_ids`, carrying a real `TaskRequirementLink` and accepted evidence,
+  merges **the commit that evidence names** — again with a different commit at its branch tip.
+  It passes against today's code, because that task merges today through the ordinary evidence
+  route, and it fails the moment 4.3 stops at `loop.spec_document_id is not None`. Assert the linked
+  row exists before asserting the merge (1.3's rule): a fixture that silently failed to link would
+  make this pass for the wrong reason.
 
 ## 2. The column and the migration
 
@@ -83,16 +91,38 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
   validates the id and raises `ValueError` for one it did not mint; catch that and return `None`
   rather than letting it out, for the reason `task_workspace` already gives about ids the product did
   not mint.
-- [ ] 4.3 `async def merge_targets(session, task, root) -> List[Target]` — design D5 and **D10**.
-  It asks *does evidence govern this task's merge*, which has three answers and not two:
-  `task.loop_id is None` → yes, evidence governs, unchanged; the loop's `work_needs_evidence` is not
-  NULL → the operator said, and the operator wins; NULL → **`loop.spec_document_id is not None`**,
-  because the current default is that evidence governs a flow and does not govern a documentless
-  loop. **A flat `False if ... is None else ...` is the severity-A defect round 2 found**: `Loop` is
-  a flow's row too, `create_flow` never sets the field (7.5), so every flow would merge branch tips
-  and `approval-refuses-unaccepted-evidence` would degrade to an advisory product-wide. Then returns
-  `integration_targets(session, task)` or at most one branch-tip `Target`.
-  **`integration_targets` is not modified.**
+- [ ] 4.3 `async def merge_targets(session, task, root) -> List[Target]` — design D5, **D10 and
+  D11**. It asks *does evidence govern this task's merge*, which has **five** answers and not two.
+  In order, and the order is the design:
+
+  1. `task.loop_id is None` → evidence governs. An ordinary task is untouched by this change.
+  2. the loop row does not resolve → evidence governs. A dangling id decides nothing.
+  3. `loop.work_needs_evidence is not None` → **the operator said, and the operator wins**, in
+     either direction and against both defaults below.
+  4. `loop.spec_document_id is not None` → evidence governs. **A flow.** (Round 2's D10: `Loop` is
+     a flow's row too and `create_flow` never sets the field (7.5), so a flat
+     `False if ... is None else ...` would make every flow merge branch tips and degrade
+     `approval-refuses-unaccepted-evidence` to an advisory product-wide.)
+  5. otherwise → **`await task_has_requirement_links(session, task)`** (4.3c). (Round 3's D11: a
+     documentless loop's task created with `requirement_ids` gets real links at `tasks.py:790`,
+     `record_evidence` resolves against the *project's* index and does not 404, and that task
+     **merges today**. Stopping at step 4 would silently switch it to its branch tip — and because
+     `_targets` deliberately includes evidence another task recorded against a shared requirement,
+     a per-task branch tip cannot carry that commit at all, so work that merges today would stop
+     merging with no record of the loss.)
+
+  Then returns `integration_targets(session, task)` or at most one branch-tip `Target`.
+  **`integration_targets` is not modified.** The branch tip is the answer for exactly one
+  population: a task on a documentless loop with no requirement link of any kind — the set for
+  which `integration_targets` is structurally empty forever, and the set the proposal's Why
+  describes.
+- [ ] 4.3c `async def task_has_requirement_links(session, task) -> bool` in
+  `hub/hub/task_integration.py`, beside `_targets` — a `SELECT 1` existence check on
+  `TaskRequirementLink.task_id == task.id`, which is already imported there. Reached only from
+  step 5, so an ordinary task, a flow task and a declared loop never pay for it. Do **not** answer
+  it by calling `_targets` or counting evidence: the question is whether the task is wired into the
+  chain, not whether anything has been recorded yet, and answering it from evidence is D10's
+  rejected timing-dependent alternative.
 - [ ] 4.3a Use `session.get(Loop, task.loop_id)`, not `select(Loop).where(...)`. `_merge_situation`
   and `integrate_task` both call `merge_targets` within one approval and one session, so the PK get
   is answered from the identity map the second time and a `select` would not be. One line, and it is
@@ -104,6 +134,13 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
   approval by `approval-refuses-unaccepted-evidence` (the regression D10 describes, caught at the
   gate); a documentless loop with the field NULL uses its branch tip; either kind with the field set
   explicitly obeys the field against its own default.
+- [ ] 4.3d **The test that would have caught D11**, and it is the one that matters most here: a task
+  on a **documentless loop with the field NULL** that carries a requirement link and accepted
+  evidence merges **the commit that evidence names**, not its branch tip — again with a different
+  commit at the tip so the two answers cannot be confused. Then the same task with the loop
+  declaring `work_needs_evidence=False` merges the tip, because the operator's declaration wins
+  (step 3). Write the first half against today's code, where it **passes**, so it is a regression
+  guard rather than a new assertion: this is the population D4's `raise_it_if` is about.
 - [ ] 4.4 `hub/hub/task_transition_service.py` `integrate_task`: `merge_targets(session, task, root)`
   in place of `integration_targets(session, task)` (line ~773), and the empty case records
   `NO_TASK_BRANCH` rather than `NOTHING_TO_MERGE` **only** where evidence does not govern the task.
@@ -123,6 +160,34 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
   task (`workspace_scheme='agent'`) skips with `NO_TASK_BRANCH` and **no agent branch is merged** —
   assert the agent branch's commits are absent from the main branch, not merely that the outcome was
   a skip; a tip already on the main branch records `ALREADY_INTEGRATED`.
+- [ ] 4.9 **`_prerequisite_commits` asks the same question — design D12, the decision round 2 left
+  open and round 3 took.** `hub/hub/task_workspace.py:121` takes `repo_root` (which
+  `resolve_turn_workspace_inputs` already holds at `:62` and already passes to `_integration_base`
+  at `:99`), skips any prerequisite whose `status != dependency_gate.MET_STATUS`
+  (`dependency_gate.py:39`, `"approved"`), and calls `merge_targets` instead of
+  `integration_targets`. Update the docstring: its stated reason for using `integration_targets` —
+  *"would carry work nobody accepted"* — is answered by the status check, and on the evidence-free
+  route approval **is** the acceptance.
+  **Why this is in scope and not late widening: without it the change breaches a shipped
+  requirement.** `task-dependencies:335` — *"A task's isolated checkout SHALL contain the work of
+  every prerequisite the task was permitted to start on, whether or not that work reached the
+  project's main branch"* — and its rationale at `:337` names the dirty and parked checkouts
+  (`task_integration.py:329-335`) as reasons the requirement exists. An evidence-free loop task's
+  prerequisite work would reach its successor only through the main branch, which is the exact
+  dependence that sentence forbids. This change creates that shape; it does not inherit it.
+  The MODIFIED delta for `task-dependencies` in this change's `specs/` is the other half of 4.9 and
+  must land with it.
+- [ ] 4.9a Test: two evidence-free loop tasks, A → B, A approved while the primary checkout is
+  **dirty** so its integration skips. Assert A's commit is *not* on the main branch, and that B's
+  branch — cut after A's approval — nevertheless carries A's commit. That test fails without 4.9
+  and is the whole argument for it.
+- [ ] 4.9b Test the cost, so it is a known behaviour rather than a surprise: a prerequisite whose
+  branch tip conflicts with the successor's base makes `ensure_task_worktree` refuse the turn and
+  leave no branch behind (`worktrees.py:451-452`, the unwind at `:492-493`). Assert the refusal and
+  the absence of the branch. Today, on this route, the situation is silent.
+- [ ] 4.9c Test the guard: an **unapproved** prerequisite on an evidence-free loop contributes
+  nothing to the successor's branch. Without the status check its in-progress tip would be merged
+  into a checkout an agent is about to write in.
 
 ## 5. The gate
 
