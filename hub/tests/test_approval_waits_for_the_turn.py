@@ -22,17 +22,20 @@ stopped producing either fails here rather than passing for the wrong reason.
 
 import pytest
 
-from hub import run_liveness, task_integration, worktrees
+from hub import requirement_evidence, run_liveness, task_integration, worktrees
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, Run, Task
+from hub.db.models import Agent, EvidenceFootprint, Run, Task
 
 from .test_loop_lands_its_work import commit_on_task_branch, loop_task, make_loop
 from .test_task_integration import (
+    AGENT_BRANCH,
     BASE,
     PATH,
     TASKS,
+    accept_evidence,
     approve,
+    commit_on_branch,
     commits_on,
     git,
     integrations,
@@ -520,3 +523,108 @@ async def test_a_reviewer_approves_from_inside_its_own_review_turn(
     assert approved.status_code == 200, approved.text
     async with async_session_factory() as session:
         assert (await session.get(Task, task)).status == "approved"
+
+
+# ---------------------------------------------------------------------------
+# 4.2 — the evidence route, through the same refusal
+#
+# Round 2 answered *whether* it shares the window at the source (design D9): it does, by the same
+# mechanism through the other door. This proves it, and proves the one refusal covers both — the
+# requirement is a statement about when a task's work is knowable, not about which mechanism
+# resolves it.
+# ---------------------------------------------------------------------------
+
+
+async def footprint_sha(evidence_id):
+    async with async_session_factory() as session:
+        row = (
+            await session.execute(
+                EvidenceFootprint.__table__.select().where(
+                    EvidenceFootprint.evidence_id == evidence_id
+                )
+            )
+        ).first()
+        return row.commit_sha if row is not None else None
+
+
+@pytest.mark.asyncio
+async def test_the_evidence_route_is_refused_inside_the_turn_too(app, auth_headers, turn, tmp_path):
+    """Task 4.2. A task resolved by **accepted evidence** rather than by its own branch tip is
+    refused inside the turn on exactly the same terms.
+
+    The window is identical and structural. `read_footprint` observes the checkout's `HEAD` at the
+    moment evidence is recorded, and mid-turn that is the commit the turn was cut from — so the
+    footprint names a commit holding none of the work *by construction*, asserted below rather than
+    assumed. Nothing downstream repairs that in time: `_targets` (`task_integration.py:219`) does
+    not filter on `reachable_from_main`, so an already-shipped pre-turn commit is a live merge
+    target, and `restamp_run_footprints` — the thing that *does* repair it — runs at turn **end**
+    and re-merges nothing (`requirement_evidence.py:845`). Approving in between merges the stale
+    commit and records `ALREADY_INTEGRATED`, which is F162 with a different resolver.
+
+    The second half is the same as the branch-tip case and is what makes this a fix rather than a
+    block: once the turn ends and its footprints are restamped, the same task approves and merges
+    the commit that actually holds the work.
+    """
+    base = make_repo(tmp_path)
+    await set_main_branch("main")
+    run_headers = {"Authorization": "Bearer aw_run_window-secret"}
+    await make_document(app, auth_headers, run_headers)
+
+    # The agent's branch, cut from main and holding none of the turn's work yet. Evidence is
+    # recorded from here, which is where a real agent records it: mid-turn, before any commit.
+    git(tmp_path, "checkout", "-q", "-b", AGENT_BRANCH)
+    evidence = await accept_evidence(app, auth_headers, run_headers)
+    git(tmp_path, "checkout", "-q", "main")
+
+    assert await footprint_sha(evidence) == base, (
+        "the window requires the accepted footprint to name the pre-turn commit — "
+        "if it names the work, this test is reproducing something else"
+    )
+
+    task = await linked_task(app, auth_headers)
+    # The binding, not the authorship, is what the predicate reads — on this route as on the other.
+    # In the shape the product produces they coincide: the agent working the task claims it, which
+    # binds its run, and records its evidence from that same turn. Evidence recorded by *another*
+    # task's run against a shared requirement is a merge target here (`_targets` reaches it through
+    # `TaskRequirementLink`) and is outside the test; that residual is on the record in the
+    # requirement rather than left to be discovered.
+    await bind_run_to(turn, task)
+    go_live(turn)
+
+    refused = await approve(app, auth_headers, task)
+    assert refused.status_code == 409, refused.text
+    detail = refused.json()["detail"]
+    assert detail["code"] == "gate_unsatisfied"
+    assert detail["unfinished"] == [{"agent": "builder", "run_id": turn}]
+    # Nothing is wrong with the evidence: it is accepted, and its commit exists. The live turn is
+    # the only claim being made, which is what makes the refusal's "this clears itself" true.
+    assert detail["unaccepted"] == [] and detail["unmergeable"] == []
+
+    async with async_session_factory() as session:
+        assert (await session.get(Task, task)).status == "under_review"
+    assert await integrations(app, auth_headers, task) == []
+
+    # The turn ends: the work is committed and the run's footprints are re-pointed at it, which is
+    # what `_execute_run`'s finalize block does before the registry entry goes.
+    work = commit_on_branch(tmp_path, AGENT_BRANCH, "feature.py", "print('hi')\n", create=False)
+    git(tmp_path, "checkout", "-q", "main")
+    async with async_session_factory() as session:
+        moved = await requirement_evidence.restamp_run_footprints(
+            session,
+            project_id="proj-test",
+            run_id=turn,
+            root=tmp_path,
+            commit_sha=work,
+            main_branch="main",
+        )
+        await session.commit()
+    assert moved == 1
+    end_the_turn(turn)
+
+    approved = await app.patch(f"{TASKS}/{task}", json={"status": "approved"}, headers=auth_headers)
+    assert approved.status_code == 200, approved.text
+
+    recorded = await integrations(app, auth_headers, task)
+    assert [row["outcome"] for row in recorded] == [task_integration.MERGED]
+    assert recorded[0]["commit_sha"] == work
+    assert work in commits_on(tmp_path, "main"), "the commit that holds the work is what merged"

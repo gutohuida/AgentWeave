@@ -78,9 +78,9 @@ Round 2 answered this at the source (design D9): **it does.** `_targets` does no
 
 - [x] 4.1 Determine whether approving mid-turn on the evidence route merges a stale commit. Answered
   in design D9: yes, by the same mechanism, through the other door.
-- [ ] 4.2 Add a test covering the evidence route through the same refusal: a task whose accepted
+- [x] 4.2 Add a test covering the evidence route through the same refusal: a task whose accepted
   evidence names a commit, approved while the run that recorded it is still live, refused.
-- [ ] 4.3 The requirement's rationale names both routes rather than the branch-tip one alone (already
+- [x] 4.3 The requirement's rationale names both routes rather than the branch-tip one alone (already
   written into the delta by round 2 — confirm it still reads true after implementation).
 
 ## 5. A loop stops entering the review arm

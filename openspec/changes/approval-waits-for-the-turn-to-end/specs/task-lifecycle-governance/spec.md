@@ -14,7 +14,7 @@ Liveness SHALL be determined by testing the run's process, not by reading its re
 
 **A turn SHALL NOT be blocked by itself.** The run performing the transition SHALL be excluded from the test. A reviewer approves the work it has read from inside its own turn, and that turn is bound to the task it is approving — so counting it would refuse every review the product staffs, and would do so with a refusal the refused party cannot clear: its only remedy is for the turn to end, and it *is* the turn. A refusal whose stated remedy is unavailable to the one being refused is not a governance rule but a dead end.
 
-The refusal SHALL apply wherever the work is resolved from, not only where it was first observed. Both routes by which a task's work is resolved — a commit named by accepted evidence, and the task's own branch tip — read a commit that predates the turn while the turn is live, so a refusal scoped to one of them would leave the same defect reachable through the other.
+The refusal SHALL apply wherever the work is resolved from, not only where it was first observed. Both routes by which a task's work is resolved — a commit named by accepted evidence, and the task's own branch tip — read a commit that predates the turn while the turn is live, so a refusal scoped to one of them would leave the same defect reachable through the other. Liveness remains a question about **the task**, on both routes alike: what is tested is whether a live run is bound to the task being approved, not who authored each piece of evidence. Evidence recorded by another task's run against a shared requirement is a merge target for this task and is therefore outside the test — a narrower residual of the same scoping that leaves an unbound run outside it, recorded here so it is a known limit rather than an oversight.
 
 This refusal SHALL be independent of the rigor of any document the task's requirements belong to, for the same reason the unmergeable refusal is: rigor is a claim about how well work must be proven, and this is a claim about whether the work yet exists to be put anywhere.
 
@@ -58,7 +58,7 @@ It SHALL likewise be independent of whether the project's work could be integrat
 
 #### Scenario: An approval on the evidence route is refused inside the turn
 
-- **WHEN** a task whose work is named by accepted evidence is moved to `approved` while the run that recorded that evidence is still live
+- **WHEN** a task whose work is named by accepted evidence is moved to `approved` while a live run is bound to that task
 - **THEN** the transition is refused
 - **AND** no commit is merged
 
