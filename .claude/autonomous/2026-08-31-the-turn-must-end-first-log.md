@@ -1809,3 +1809,47 @@ suite to say.
 
 **State on exit.** Tree clean, branch pushed, not merged. Queue entirely `done`. At the 16:30 boundary
 the branch is offered as it stands.
+
+---
+
+## Iteration 17 — 2026-08-31T16:29+01:00 — the 16:30 stop, taken as written
+
+**Position on arrival, verified not assumed.** Branch `autonomous/2026-08-31-the-turn-must-end-first`
+at `373221f`, tree clean. `git log` matches STATE.json: iteration 16's measurement (`ccae08b`) sits
+under its release commit exactly as the last entry describes. Nothing to reconcile. Queue entirely
+`done`, `A-CLOSE` already run at iteration 12, nothing in flight.
+
+**Why this iteration does no work.** It arrived at **16:29:13** — forty-seven seconds before the
+limit that reads *"AT 16:30 stop all work"*. There is no unit of work that fits inside forty-seven
+seconds. The three shapes still open to this run all breach the limit the moment they begin: a drive
+of F165 or F166 needs a live Hub and a real turn (the standing rule is not to start one under ~40
+minutes), a spec round is forbidden by the 15:30 rule, and even the bounded read-only source
+measurement that iterations 13–16 fell back on takes minutes, not seconds. Starting one and stopping
+it half-done would leave exactly what the limits exist to prevent.
+
+So the limit is honoured as written rather than rounded past. `stop_at` is 17:00, but 16:30 is the
+line the prep drew for *work*, and the thirty minutes after it were reserved for closing — which
+already happened.
+
+**One deliberate deviation from the standing release protocol, and why.** Every prior iteration
+ended by backdating `last_heartbeat` ~40 minutes to release the branch for the next firing. This one
+does **not**. That mechanism exists to stop a firing standing down against its own heartbeat while
+work remains; past the 16:30 stop there is no work to hand on, and releasing the branch would invite
+a firing between now and `stop_at` to start something the limits forbid. `last_heartbeat` is
+therefore stamped **fresh**, which is the correct signal for a run that is over: any firing before
+17:00 stands down, and 17:00 retires the run.
+
+**What is left for whoever picks this branch up.** Unchanged from iteration 16 and stated there in
+full. The only targets never driven live are **F165** and **F166**; both have unit reproductions and
+both need a live Hub and a real turn. F165's rounds now open with two fewer unknowns — the sentinel
+means *skip* in `detect_drift` and *a shared merge bucket* in `integration_targets` (iteration 15),
+and it has **two spellings**, `""` and `"HEAD"`, reaching the reduction as two distinct keys via two
+different arms of `read_footprint` (iteration 16). A repair must cover both consumers and both arms.
+The cheapest unproposed work remains **F156** (vocabulary; `TaskDetailDrawer.tsx:66-79` moves with
+it), expanded into R1/R2/R3/IMPL; the most valuable remains **F154** (severity A).
+
+**Cost.** Zero spawns, zero projects, no Hub started, no product code touched, no suite re-run —
+nothing changed that a suite could speak to. Iteration 10's numbers stand.
+
+**State on exit.** Tree clean, branch pushed, **not merged**. Both changes this run was armed for are
+complete and driven. The branch is offered as it stands.
