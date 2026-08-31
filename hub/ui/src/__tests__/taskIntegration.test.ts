@@ -45,10 +45,28 @@ describe('readableApiError', () => {
       code: 'gate_unsatisfied',
       blocking: [],
       diagnostics: [],
-      unmergeable: [{ target_branch: 'main', paths: ['src/ledger.py'] }],
+      unmergeable: [
+        {
+          commit_sha: '0123456789abcdef0123456789abcdef01234567',
+          source_branch: 'agentweave/builder',
+          target_branch: 'main',
+          paths: ['src/ledger.py'],
+          named_by_evidence: true,
+          evidence_id: 'ev-4c1f',
+        },
+      ],
+      // F155: on the evidence route the remedy is no longer "resolve it on the branch, then
+      // approve" — that instruction does not clear the refusal, because what approval merges is
+      // the commit the accepted evidence names. Both assertions below are about the *sentence*
+      // reaching the reader, so they hold unchanged; if either had to be weakened, the new wording
+      // would have dropped something the old one carried.
       message:
-        "This task's work does not merge cleanly into main: src/ledger.py. Resolve the conflict " +
-        'on the branch, then approve — approving is what merges it.',
+        "This task's work does not merge cleanly into main: src/ledger.py. The commit judged is " +
+        '0123456789ab, recorded on agentweave/builder. Resolving the conflict on ' +
+        'agentweave/builder and approving again will not clear this: what approval merges is the ' +
+        'commit the accepted evidence names, so this same answer comes back however many times ' +
+        'approval is retried. What does clear it is fresh accepted evidence naming the resolved ' +
+        'commit.',
     }
     const readable = readableApiError(refusal(detail), 'The Hub refused this change.')
     expect(readable).toContain('src/ledger.py')
@@ -85,6 +103,29 @@ describe('readableApiError', () => {
     expect(readable).toContain('0123456789ab')
     expect(readable).toContain('accept the evidence')
     expect(readable).toContain('grant an agent')
+    expect(readable).not.toBe('The Hub refused this change.')
+  })
+
+  it('surfaces the live turn when approval is refused because the work is still being produced', () => {
+    const detail = {
+      code: 'gate_unsatisfied',
+      blocking: [],
+      diagnostics: [],
+      unmergeable: [],
+      unaccepted: [],
+      unfinished: [{ agent: 'builder', run_id: 'run-4c1f' }],
+      message:
+        "builder is still running the turn that produces this task's work, so what approving " +
+        "would merge is not knowable yet — the task's branch still points at the commit the " +
+        'turn started from. Nothing is wrong with the work. Approve once the turn has ended: this ' +
+        "clears itself, with nothing for anyone to do. Stopping the agent's run ends the turn too.",
+    }
+    const readable = readableApiError(refusal(detail), 'The Hub refused this change.')
+    // The three things the requirement says the sentence must carry: who, that the turn is still
+    // running, and that waiting is the whole remedy.
+    expect(readable).toContain('builder')
+    expect(readable).toContain('still running the turn')
+    expect(readable).toContain('clears itself')
     expect(readable).not.toBe('The Hub refused this change.')
   })
 

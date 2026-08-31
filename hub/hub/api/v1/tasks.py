@@ -41,6 +41,7 @@ from ...db.models import (
     TaskRequirementReference,
 )
 from ...requirement_evidence import REJECTED as EVIDENCE_REJECTED
+from ...requirement_gate import evaluate as evaluate_approval_gate
 from ...requirement_links import LinkRefusedError, absorb_free_text, link, resolve_identifiers
 from ...run_task_binding import (
     TERMINAL_FOR_BINDING,
@@ -60,6 +61,7 @@ from ...schemas.tasks import (
 from ...spec_lifecycle import Actor as SpecActor
 from ...sse import sse_manager
 from ...task_transition_service import (
+    GateUnsatisfiedError,
     TransitionRefusedError,
     apply_transition,
     guard_entry_status,
@@ -1394,14 +1396,33 @@ async def update_task_for_actor(
     # Kept as the materialised latest writer (D4 of the proposal's impact notes). The rules read the
     # append-only history instead; this stays for existing consumers and is not what governs.
     task.updated_by_run_id = actor.run_id
+    return await _commit_and_render(
+        session, task, project_id=project_id, approval_report=approval_report
+    )
+
+
+async def _commit_and_render(
+    session: AsyncSession,
+    task: Task,
+    *,
+    project_id: str,
+    approval_report: List[Any],
+) -> TaskResponse:
+    """Commit what the caller staged, announce it, and render the task.
+
+    Extracted so the landing action below shares it rather than growing a second copy — and the
+    sharing is load-bearing rather than tidy: `apply_transition` does not commit, so this call
+    **is** the transaction boundary that makes "a refused write leaves nothing half-applied" true
+    for both callers. A second copy would be a second place for that to stop being true.
+    """
     await session.commit()
     await session.refresh(task)
-    await sse_manager.broadcast(project_id, "task_updated", {"id": task_id, "status": task.status})
+    await sse_manager.broadcast(project_id, "task_updated", {"id": task.id, "status": task.status})
     await persist_event(
         session,
         project_id,
         "task_updated",
-        {"id": task_id, "status": task.status},
+        {"id": task.id, "status": task.status},
         agent=task.assignee,
     )
     await session.refresh(task)
@@ -1446,6 +1467,97 @@ async def update_task(
         project_id=project_id,
         actor=operator(),
         session=session,
+    )
+
+
+@router.post("/{task_id}/land", response_model=TaskResponse)
+async def land_task(
+    task_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """One operator action carries completed work to `approved` (F163, design D6).
+
+    Landing a loop's work is the only route by which it reaches the operator's main branch, and it
+    cost three calls, two of which begin as refusals: the task is still held by the agent that
+    completed it, and `completed` does not reach `approved` directly. Both refusals are correct.
+    Neither is the operator's mistake.
+
+    **`TRANSITIONS` is not widened.** Adding `completed -> approved` to the map would let every
+    task in the product skip review with only a guard in the way. This composes the moves the map
+    already grants the operator — `completed -> under_review` and `under_review -> approved`, both
+    `_BOTH` in `task_transitions.py:134-141` — so each recorded history still describes a sequence
+    that was legal one step at a time (`task-lifecycle-governance:117`). Each step goes through
+    `apply_transition`, so each writes its own row (`:168`), and each is recorded **actor-caused**:
+    `ORIGIN_RUNTIME` is for moves the runtime makes from something it observed, and the operator
+    asked for all three of these, in one word instead of three.
+
+    **Not restricted to a loop's tasks**, though a loop is what made the cost visible. The action
+    grants no authority the operator does not already have on any task, so a restriction would be a
+    rule about who may take a shortcut rather than about what is legal.
+
+    **The gate is evaluated before anything is performed, and that is not what makes this safe**
+    (design D7). It makes the *message* the one approval itself would have given, rather than a
+    failure discovered two steps in — including the live-turn refusal, which is the whole of F162
+    reached through this door. What makes a refusal leave nothing behind is the transaction:
+    `apply_transition` stages, `_commit_and_render` commits, and any refusal raised by any step
+    exits this handler with the session uncommitted, which `get_session` rolls back.
+
+    Releasing the hold **first** is also what stops `_guard_reviewer_is_not_the_author` from ever
+    refusing step two here: it returns immediately for a task nobody holds, which is that guard's
+    own first permitted case — *"the operator taking a task off the agents' board to look at
+    themselves"*, which is exactly what this action is.
+    """
+    project_id, _ = project
+    # The operator's action, so `operator()` rather than an actor derived from the request. This
+    # route is registered only on the operator API; an agent reaches `tasks` through
+    # `update_task_for_actor`, which this deliberately does not extend.
+    actor = operator()
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.status != "completed":
+        # Refused rather than adapted. A task already `under_review` has a one-call approval that
+        # works, so the composition would add nothing but a cleared assignee — which, on a task a
+        # reviewer holds, is the review being taken off them without saying so.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Task {task_id} is {task.status!r}, and landing carries *completed* work to "
+                f"'approved'. Move it to 'completed' first, or take the transition it needs "
+                f"directly."
+            ),
+        )
+    # Approval's own preconditions, asked here so the refusal is decided before the composition
+    # starts moving. `acting_run_id` is None: the operator is not a run, so nothing is excluded from
+    # the liveness check.
+    #
+    # **Measured: this is invisible from outside**, and the comment says so rather than claiming a
+    # guarantee it does not provide. Delete these three lines and a gate-refused landing still
+    # answers with the identical body — step three evaluates the same gate, raises the same error,
+    # and the transaction rolls the staged `under_review` back. Every black-box assertion in
+    # `test_one_action_lands_the_work.py` passes either way; only
+    # `test_the_gate_is_decided_before_anything_is_attempted`, which observes the call sequence,
+    # fails. What is bought is ordering, which matters the moment a fourth step or a non-gate
+    # refusal joins the sequence — not the response, which the transaction already covers.
+    refusal, _policy = await evaluate_approval_gate(session, task, acting_run_id=None)
+    if refusal.refuses:
+        raise GateUnsatisfiedError(refusal)
+    # Step one: the author's hold. `None` rather than the operator's name — the operator is not an
+    # agent and `assignee` names agents.
+    task.assignee = None
+    await apply_transition(session, task, "under_review", actor)
+    transition = await apply_transition(session, task, "approved", actor)
+    approval_report = list(getattr(transition, "reported_advisories", None) or [])
+    # The same two the PATCH route does after a terminal transition, for the same reasons: a reason
+    # that outlived its block describes something that already arrived, and anything still bound
+    # would keep attributing turns to a task the operator has decided about (F79).
+    release_reason(task)
+    await release_bindings_to(session, task)
+    task.updated = datetime.now(timezone.utc)
+    task.updated_by_run_id = actor.run_id
+    return await _commit_and_render(
+        session, task, project_id=project_id, approval_report=approval_report
     )
 
 

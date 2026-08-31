@@ -26,7 +26,7 @@ import pytest
 from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, Loop, Run, Task
+from hub.db.models import AIJob, Loop, Run, SpecDocument, Task
 from hub.scheduler import JobScheduler, enter_selected_task
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import run_actor
@@ -41,6 +41,14 @@ REVIEWER = "board-reviewer"
 
 
 async def _flow(db, *, suffix):
+    """A flow — it declares a document — its job, and one task.
+
+    **The declaration is load-bearing** (`agent-flows:13`, and
+    `approval-waits-for-the-turn-to-end` design D5). Several tests here are about how the board
+    renders a task the next firing would hand to a *reviewer*, and only a flow's firing resolves
+    one. Built documentless, they were standing in for a flow with a row the product does not treat
+    as one.
+    """
     job = AIJob(
         id=f"job-board-{suffix}",
         project_id="proj-test",
@@ -53,11 +61,23 @@ async def _flow(db, *, suffix):
     )
     db.add(job)
     await db.commit()
+    db.add(
+        SpecDocument(
+            id=f"doc-board-{suffix}",
+            project_id="proj-test",
+            path=f"spec/board-{suffix}.html",
+            title=f"Board {suffix}",
+            phase="current",
+            kind="capability",
+        )
+    )
+    await db.commit()
     loop = Loop(
         id=f"loop-board-{suffix}",
         project_id="proj-test",
         job_id=job.id,
         purpose=f"board {suffix}",
+        spec_document_id=f"doc-board-{suffix}",
     )
     db.add(loop)
     await db.commit()

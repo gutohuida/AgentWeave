@@ -17,7 +17,7 @@ import pytest
 from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, Loop, Task
+from hub.db.models import AIJob, Loop, SpecDocument, Task
 from hub.scheduler import (
     CLAIMABLE_LOOP_TASK_STATUSES,
     REVIEWABLE_LOOP_TASK_STATUSES,
@@ -33,7 +33,16 @@ AUTHOR = "flow-author"
 REVIEWER = "flow-reviewer"
 
 
-async def _loop_with_one_task(db, *, suffix, status="pending"):
+async def _loop_with_one_task(db, *, suffix, status="pending", declares_document=False):
+    """A loop, its job, and one task.
+
+    **A loop by default, and that is the accurate fixture for this file** — claimability is a
+    property of every queue, flow or not, and these tests are about who may claim what. Only the
+    review case is a flow's: `decide_firing`'s review arm belongs to `agent-flows`, which a loop
+    declaring no document is required to be unaffected by (`approval-waits-for-the-turn-to-end`,
+    design D5), so the one test here that asserts a review pass `declares_document=True` rather
+    than the exclusion being weakened to keep it green.
+    """
     job = AIJob(
         id=f"job-actor-{suffix}",
         project_id="proj-test",
@@ -46,8 +55,24 @@ async def _loop_with_one_task(db, *, suffix, status="pending"):
     )
     db.add(job)
     await db.commit()
+    if declares_document:
+        db.add(
+            SpecDocument(
+                id=f"doc-actor-{suffix}",
+                project_id="proj-test",
+                path=f"spec/actor-{suffix}.html",
+                title=f"Actor {suffix}",
+                phase="current",
+                kind="capability",
+            )
+        )
+        await db.commit()
     loop = Loop(
-        id=f"loop-actor-{suffix}", project_id="proj-test", job_id=job.id, purpose=f"actor {suffix}"
+        id=f"loop-actor-{suffix}",
+        project_id="proj-test",
+        job_id=job.id,
+        purpose=f"actor {suffix}",
+        spec_document_id=f"doc-actor-{suffix}" if declares_document else None,
     )
     db.add(loop)
     await db.commit()
@@ -396,7 +421,10 @@ async def test_the_board_and_the_firing_agree_about_a_completed_task(
     await _roster(app, auth_headers, bind_runner, AUTHOR)
 
     async with async_session_factory() as db:
-        job, loop, task = await _loop_with_one_task(db, suffix="board")
+        # A flow, because the case under test is the *review* one: a loop that declares no
+        # document does not enter the review arm at all (design D5), and the question here is
+        # whether the board keeps up with a firing that does.
+        job, loop, task = await _loop_with_one_task(db, suffix="board", declares_document=True)
         await _completed_by(db, task, AUTHOR)
         # A reviewer needs a commit to be shown. Without one the firing declines the step for a
         # different reason entirely and this test would pass on the wrong evidence — the subject

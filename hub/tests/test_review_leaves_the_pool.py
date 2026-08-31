@@ -29,7 +29,7 @@ import pytest
 from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, Loop, Task
+from hub.db.models import AIJob, Loop, SpecDocument, Task
 from hub.scheduler import (
     DECISION_CLAIM,
     REVIEWABLE_LOOP_TASK_STATUSES,
@@ -49,7 +49,15 @@ AUTHOR = "f45-author"
 REVIEWER = "f45-reviewer"
 
 
-async def _loop_with_task(db, *, suffix):
+async def _flow_with_task(db, *, suffix):
+    """A **flow** — it declares a document — and one task.
+
+    Documentless until `approval-waits-for-the-turn-to-end` (design D5). F45 is a defect in how a
+    *flow* dispatches a review, and the review arm belongs to `agent-flows`, which a loop declaring
+    no document is required to be unaffected by. The fixture had been standing in for a flow with a
+    row the product does not treat as one; declaring the document is what makes the file test what
+    its docstring says it tests. The exclusion is not weakened to keep it green.
+    """
     job = AIJob(
         id=f"job-f45-{suffix}",
         project_id="proj-test",
@@ -62,8 +70,23 @@ async def _loop_with_task(db, *, suffix):
     )
     db.add(job)
     await db.commit()
+    db.add(
+        SpecDocument(
+            id=f"doc-f45-{suffix}",
+            project_id="proj-test",
+            path=f"spec/f45-{suffix}.html",
+            title=f"F45 {suffix}",
+            phase="current",
+            kind="capability",
+        )
+    )
+    await db.commit()
     loop = Loop(
-        id=f"loop-f45-{suffix}", project_id="proj-test", job_id=job.id, purpose=f"f45 {suffix}"
+        id=f"loop-f45-{suffix}",
+        project_id="proj-test",
+        job_id=job.id,
+        purpose=f"f45 {suffix}",
+        spec_document_id=f"doc-f45-{suffix}",
     )
     db.add(loop)
     await db.commit()
@@ -133,7 +156,7 @@ async def test_a_review_verdict_is_reachable_only_from_under_review():
 
 async def test_entering_a_review_moves_the_task_out_of_the_pool(app):
     async with async_session_factory() as db:
-        _job, _loop, task = await _loop_with_task(db, suffix="enter")
+        _job, _loop, task = await _flow_with_task(db, suffix="enter")
         await _completed_by(db, task, AUTHOR)
         await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await db.commit()
@@ -148,7 +171,7 @@ async def test_entering_ordinary_work_is_unchanged(app):
     """The other half of `enter_selected_task` must keep behaving exactly as it did — this is the
     path every non-flow loop in the product takes."""
     async with async_session_factory() as db:
-        _job, _loop, task = await _loop_with_task(db, suffix="ordinary")
+        _job, _loop, task = await _flow_with_task(db, suffix="ordinary")
         await enter_selected_task(db, task, agent=AUTHOR, is_review=False)
         await db.commit()
 
@@ -163,7 +186,7 @@ async def test_entering_a_review_twice_is_not_an_illegal_transition(app):
     selection. `under_review -> under_review` is not an edge, so this must be a no-op rather than
     a refusal that takes the firing down with it."""
     async with async_session_factory() as db:
-        _job, _loop, task = await _loop_with_task(db, suffix="twice")
+        _job, _loop, task = await _flow_with_task(db, suffix="twice")
         await _completed_by(db, task, AUTHOR)
         await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
@@ -183,7 +206,7 @@ async def test_a_review_in_flight_is_not_staffed_again(app, auth_headers, bind_r
     """The regression itself. Before the fix this returned a fresh review selection on every call,
     which is what made it a spend loop with no stop condition."""
     async with async_session_factory() as db:
-        job, loop, task = await _loop_with_task(db, suffix="restaff")
+        job, loop, task = await _flow_with_task(db, suffix="restaff")
         await _completed_by(db, task, AUTHOR)
         # The firing only staffs a review it could provision, so the task needs a commit before
         # "staffed once, not twice" is a question that can be asked of it at all.
@@ -209,7 +232,7 @@ async def test_a_review_in_flight_still_appears_on_the_board(app, auth_headers, 
     would make a flow whose reviews are all running read as having nothing to do — and would hide
     a review that ended without a verdict, which is the state F45 leaves behind."""
     async with async_session_factory() as db:
-        job, loop, task = await _loop_with_task(db, suffix="board")
+        job, loop, task = await _flow_with_task(db, suffix="board")
         await _completed_by(db, task, AUTHOR)
         await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await db.commit()
@@ -230,7 +253,7 @@ async def test_a_review_in_flight_is_never_restaffed_as_ordinary_work(
     arriving by a new route, and it is a worse outcome than the loop this change set out to fix.
     """
     async with async_session_factory() as db:
-        job, loop, task = await _loop_with_task(db, suffix="notordinary")
+        job, loop, task = await _flow_with_task(db, suffix="notordinary")
         await _completed_by(db, task, AUTHOR)
         await enter_selected_task(db, task, agent=REVIEWER, is_review=True)
         await db.commit()
@@ -249,7 +272,7 @@ async def test_the_author_still_cannot_be_staffed_for_its_own_review(
     """Unchanged by this fix, and asserted here because `enter_selected_task` now writes an
     assignee onto finished work — which must not become a route back to the author."""
     async with async_session_factory() as db:
-        job, loop, task = await _loop_with_task(db, suffix="author")
+        job, loop, task = await _flow_with_task(db, suffix="author")
         await _completed_by(db, task, AUTHOR)
 
     async with async_session_factory() as db:

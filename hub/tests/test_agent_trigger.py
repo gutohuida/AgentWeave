@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import hub.api.v1.agent_trigger as agent_trigger
-from hub import worktrees
+from hub import run_liveness, worktrees
 from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT
 from hub.sse import sse_manager
 
@@ -50,7 +50,7 @@ async def _await_background_run():
 async def _wait_for_active_pty(run_id, timeout=2.0):
     """Poll until `_execute_run` has registered *run_id*'s PtySession.
 
-    The stop endpoint can only reach a run's process via `agent_trigger._active_ptys`,
+    The stop endpoint can only reach a run's process via `run_liveness.active_ptys`,
     which the background task populates asynchronously after `trigger_agent`'s HTTP
     response has already returned (unlike the Run row's "running" status, which is
     committed synchronously in the request handler itself) — so a test calling stop
@@ -58,7 +58,7 @@ async def _wait_for_active_pty(run_id, timeout=2.0):
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if run_id in agent_trigger._active_ptys:
+        if run_id in run_liveness.active_ptys:
             return
         await asyncio.sleep(0.01)
     raise AssertionError(f"run {run_id} never registered an active pty")
@@ -68,11 +68,11 @@ async def _wait_for_active_app_server_run(run_id, timeout=2.0):
     """Poll until `_execute_codex_appserver_run` has registered *run_id* as in-flight.
 
     App-server equivalent of `_wait_for_active_pty` above: this path has no PtySession to
-    register in `_active_ptys`, only membership in `_active_app_server_runs`.
+    register in `run_liveness.active_ptys`, only membership in `_active_app_server_runs`.
     """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if run_id in agent_trigger._active_app_server_runs:
+        if run_id in run_liveness.active_app_server_runs:
             return
         await asyncio.sleep(0.01)
     raise AssertionError(f"run {run_id} never registered as an active app-server run")
@@ -1428,7 +1428,7 @@ async def test_shutdown_terminates_all_active_runs(app, auth_headers, bind_runne
 
                 await _await_background_run()
 
-    assert trigger.json()["run_id"] not in agent_trigger._active_ptys
+    assert trigger.json()["run_id"] not in run_liveness.active_ptys
 
 
 @pytest.mark.asyncio

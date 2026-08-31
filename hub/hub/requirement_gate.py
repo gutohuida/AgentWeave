@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import requirement_coverage, spec_rigor
+from . import requirement_coverage, run_liveness, spec_rigor
 from .db.models import SpecDocument, SpecRequirement, Task, TaskRequirementLink
 
 # The state a `gate` requirement must be in. Deliberately one value: `verified` means the same at
@@ -102,6 +102,14 @@ class GateRefusal:
     # standing in the way of it. `sketch` never reaches here at all (task 5.5 of
     # `2026-08-13-a-gate-that-only-evidence-opens`).
     reported: List[Dict[str, str]] = field(default_factory=list)
+    # A turn that is still producing the work. A fifth kind of claim: not "this is unproven", not
+    # "this cannot go in", not "something is waiting to be judged", but **"what would go in is not
+    # knowable yet"**. The agent recorded `completed` during its turn; the commit that holds its
+    # edits is made when the turn ends, so until then the task's branch points at the commit it was
+    # cut from and every answer to "which commit is this task's work?" names one containing none of
+    # it. An operator told the requirement is unverified, or that the branch conflicts, would go
+    # looking for something to fix; there is nothing to fix, only a moment to wait through.
+    unfinished: List[Dict[str, str]] = field(default_factory=list)
     # Evidence still awaiting review on a task that *does* have accepted evidence naming a commit.
     # Approval succeeds there and merges what was accepted, so this is a report rather than a
     # refusal — deliberately absent from `refuses` and from `detail()`. Refusing would block work
@@ -110,7 +118,13 @@ class GateRefusal:
 
     @property
     def refuses(self) -> bool:
-        return bool(self.blocking or self.diagnostics or self.unmergeable or self.unaccepted)
+        return bool(
+            self.blocking
+            or self.diagnostics
+            or self.unmergeable
+            or self.unaccepted
+            or self.unfinished
+        )
 
     def detail(self) -> str:
         """One sentence per category that has anything to say, composed explicitly.
@@ -127,6 +141,7 @@ class GateRefusal:
                 self._unverified_detail(),
                 self._merge_detail(),
                 self._unaccepted_detail(),
+                self._unfinished_detail(),
             )
             if sentence
         )
@@ -149,19 +164,118 @@ class GateRefusal:
         )
 
     def _merge_detail(self) -> str:
+        """The conflict, and a remedy that depends on where the judged commit came from (F155).
+
+        Found live 2026-08-30: this said *"Resolve the conflict on the branch, then approve"* on
+        every route. On the evidence route that instruction is false, not merely unhelpful — what
+        approval merges is the commit the accepted evidence names, so a resolution commit no
+        evidence names changes nothing and the answer cannot change however many times approval is
+        retried. The reviewer who followed it and got the identical sentence back reached for
+        `git reset --hard` on a branch holding the only copy of an agent's work.
+
+        So the two routes get two sentences, grouped on the per-target `named_by_evidence`
+        (design D1). A task cannot today carry both shapes at once — `merge_targets` returns one or
+        the other — but the grouping does not rely on that, because it would be an invariant stated
+        in another module and `evidence_governs` is exactly the kind of ladder that grows a sixth
+        answer (design D5).
+        """
         if not self.unmergeable:
             return ""
+        named = [entry for entry in self.unmergeable if entry.get("named_by_evidence")]
+        tips = [entry for entry in self.unmergeable if not entry.get("named_by_evidence")]
+        return " ".join(
+            sentence
+            for sentence in (self._evidence_merge_detail(named), self._tip_merge_detail(tips))
+            if sentence
+        )
+
+    @staticmethod
+    def _conflict_opening(entries: List[Dict[str, Any]]) -> str:
         paths: List[str] = []
         target = ""
-        for entry in self.unmergeable:
+        for entry in entries:
             target = target or str(entry.get("target_branch") or "")
             paths.extend(str(path) for path in entry.get("paths", []))
         listed = ", ".join(sorted(set(paths))[:10])
         return (
-            f"This task's work does not merge cleanly into {target or 'the main branch'}: "
-            f"{listed}. Resolve the conflict on the branch, then approve — approving is what "
-            "merges it."
+            f"This task's work does not merge cleanly into {target or 'the main branch'}: {listed}."
         )
+
+    def _tip_merge_detail(self, entries: List[Dict[str, Any]]) -> str:
+        """The branch-tip route, whose wording is deliberately the one F155 was reported against.
+
+        It is right *here*: where the target is the task's own branch tip, the commit judged is
+        whatever the branch then points at, so resolving on the branch and approving again is
+        exactly what clears it. Do not "fix" this into agreement with the sentence above — the two
+        say different things because the two routes behave differently, which is the whole finding.
+        """
+        if not entries:
+            return ""
+        return (
+            f"{self._conflict_opening(entries)} Resolve the conflict on the branch, then approve — "
+            "approving is what merges it."
+        )
+
+    def _evidence_merge_detail(self, entries: List[Dict[str, Any]]) -> str:
+        """The evidence route: name the commit, name its branch, and state a remedy that works.
+
+        Every optional piece is guarded on its own (design D4). The producer always writes a
+        `commit_sha` and a `source_branch`, but this body is also built by hand in fixtures, and a
+        composition that assumes its producer is how the important half gets silently dropped.
+        """
+        if not entries:
+            return ""
+        parts = [self._conflict_opening(entries)]
+
+        judged: List[str] = []
+        for entry in entries:
+            commit = str(entry.get("commit_sha") or "")[:12]
+            branch = str(entry.get("source_branch") or "")
+            if not commit and not branch:
+                # Nothing knowable about this one. Say nothing rather than print "a commit", which
+                # is a clause that costs the reader a sentence and tells them nothing (design D4).
+                continue
+            piece = commit or "an unnamed commit"
+            if branch:
+                piece += f", recorded on {branch}"
+            if entry.get("recorded_by_another_task"):
+                piece += f" by {entry.get('recorded_by_task')}"
+            if entry.get("commit_left_its_branch") and branch:
+                piece += ", and no longer present on that branch"
+            judged.append(piece)
+        if judged:
+            parts.append("The commit judged is " + "; ".join(judged) + ".")
+
+        branches = sorted({str(entry.get("source_branch") or "") for entry in entries} - {""})
+        # Named distinctly from the branch the work merges into (design D8). Both are branches and
+        # this sentence speaks about both; naming only one makes every clause after it ambiguous,
+        # and it resolves the wrong way — towards the main branch, which is the one the reader must
+        # *not* act on.
+        on_it = branches[0] if len(branches) == 1 else "the branch it was recorded on"
+
+        parts.append(
+            f"Resolving the conflict on {on_it} and approving again will not clear this: what "
+            f"approval merges is the commit the accepted evidence names, so this same answer comes "
+            f"back however many times approval is retried."
+        )
+        parts.append(
+            f"What does clear it is fresh accepted evidence naming the resolved commit — the "
+            f"resolved commit on {on_it}, and the evidence recorded from a checkout of {on_it}. "
+            f"The branch is read from the repository the recording is done in and is not a value "
+            f"anyone supplies, so recording from anywhere else adds a second branch to what "
+            f"approval merges instead of replacing this one; it does not take care of itself. The "
+            f"fresh evidence need not be about the same requirement."
+        )
+        if any(entry.get("recorded_by_another_task") for entry in entries):
+            # Named, not decided. Whether to ask the other task's holder or the operator is a
+            # judgement this refusal is not in a position to make, and inventing a rule for it here
+            # would be the guessing this whole change exists to remove (design D7).
+            parts.append(
+                "That branch is not this task's, so this may not be a remedy this task's holder "
+                "can carry out."
+            )
+        parts.append(f"Then {ACCEPT_OR_GRANT}.")
+        return " ".join(parts)
 
     def _unaccepted_detail(self) -> str:
         """Each waiting piece by name, and both ways out.
@@ -190,6 +304,27 @@ class GateRefusal:
             f"only accepted evidence is merged. To land it, {ACCEPT_OR_GRANT}."
         )
 
+    def _unfinished_detail(self) -> str:
+        """Name the agent, say the turn is still running, and say the refusal clears itself.
+
+        The remedy is **waiting**, and it has to be said, or an operator told only "refused" goes
+        looking for a defect in work that has none (design D4). F155 is the standing warning: a
+        refusal naming a remedy the refused party could not take drove a reviewer to
+        `git reset --hard` on a branch holding the only copy of an agent's work. So this says what
+        clears it, that it clears itself, and that the operator has a second lever if the turn is
+        one they no longer want — `POST /agent/{agent}/stop` (`agent_trigger.stop_agent_run`).
+        """
+        if not self.unfinished:
+            return ""
+        agent = str(self.unfinished[0].get("agent") or "an agent")
+        return (
+            f"{agent} is still running the turn that produces this task's work, so what approving "
+            f"would merge is not knowable yet — the task's branch still points at the commit the "
+            f"turn started from. Nothing is wrong with the work. Approve once the turn has ended: "
+            f"this clears itself, with nothing for anyone to do. Stopping the agent's run ends the "
+            f"turn too."
+        )
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "code": "gate_unsatisfied",
@@ -197,6 +332,7 @@ class GateRefusal:
             "diagnostics": list(self.diagnostics),
             "unmergeable": list(self.unmergeable),
             "unaccepted": list(self.unaccepted),
+            "unfinished": list(self.unfinished),
             "reported": list(self.reported),
             "message": self.detail(),
         }
@@ -301,15 +437,57 @@ async def _check_mergeable(
         paths = task_integration.would_conflict(
             situation.root, target.commit_sha, situation.main_branch
         )
-        if paths:
-            refusal.unmergeable.append(
-                {
-                    "commit_sha": target.commit_sha,
-                    "source_branch": target.branch,
-                    "target_branch": situation.main_branch,
-                    "paths": paths,
-                }
-            )
+        if not paths:
+            continue
+        refusal.unmergeable.append(
+            {
+                "commit_sha": target.commit_sha,
+                "source_branch": target.branch,
+                "target_branch": situation.main_branch,
+                "paths": paths,
+                # Which of `merge_targets`' two routes produced this commit (design D1).
+                # `integration_targets` names a commit accepted evidence points at; the branch-tip
+                # route names whatever the task's branch currently points at, and carries no
+                # evidence row at all. The remedy differs between them — resolving on the branch
+                # works on one and does nothing on the other — so the provenance is carried per
+                # *target*, not per project. A project-level flag would say "approvals here are
+                # governed by evidence", which is one inference away from what the sentence
+                # asserts, and one inference is what produced F155.
+                "named_by_evidence": bool(target.evidence_id),
+                "evidence_id": target.evidence_id,
+                # A requirement may be served by more than one task, so `_targets`' join through
+                # `TaskRequirementLink` puts another task's footprint into this task's targets — and
+                # this task's approval is what would merge it. Under per-task isolation the reader
+                # has no checkout of that branch, so a remedy phrased as though it were theirs
+                # cannot be followed (design D7). The same two keys `_check_unaccepted` carries,
+                # from data already on the `Target`: no new query.
+                "recorded_by_task": target.task_id,
+                "recorded_by_another_task": bool(target.task_id and target.task_id != task.id),
+                # `False` only — `None` says the branch does not resolve, which is a reason to say
+                # nothing rather than to claim the commit has left it (design D3).
+                "commit_left_its_branch": _left_its_branch(
+                    situation.root, target.commit_sha, target.branch
+                ),
+            }
+        )
+
+
+def _left_its_branch(root: Path, commit_sha: str, branch: Optional[str]) -> bool:
+    """Whether *commit_sha* is knowably absent from *branch*.
+
+    Reached only on a path that has already run `merge-tree --write-tree` and is already refusing,
+    so one `merge-base --is-ancestor` is not a cost worth avoiding. It fires only on the evidence
+    route in practice: a branch-tip target's commit *is* that branch's tip by construction.
+
+    The state it reports is the one the drive reached by rewriting the branch — the reasonable
+    response to a remedy that appeared not to work — and it is the state in which a reader comparing
+    the refusal against `git log` finds the two disagree with no way to tell which is stale.
+    """
+    from . import requirement_evidence
+
+    if not commit_sha or not branch:
+        return False
+    return requirement_evidence.is_reachable_from(root, commit_sha, branch) is False
 
 
 async def _check_unaccepted(
@@ -363,6 +541,44 @@ async def _check_unaccepted(
     refusal.unaccepted.extend(entries)
 
 
+async def _check_live_turn(
+    session: AsyncSession, task: Task, refusal: GateRefusal, *, acting_run_id: Optional[str]
+) -> None:
+    """Refuse while a turn bound to this task is still running (F162).
+
+    **Deliberately not nested under `_merge_situation`**, unlike the two checks above it, and that
+    is a departure from a principle this module states in words. `_MergeSituation`'s docstring says
+    of its four preconditions that each is *"a reason to not know, never a reason to refuse ...
+    because a refusal that fired where the merge would have been skipped anyway would block every
+    task in such a project behind a remedy that changes nothing"* (`:230-238`). Placing this check
+    outside that block makes it fire in exactly those projects. Three reasons it is right anyway:
+
+    1. **It is not one of the four.** That rule binds checks asking *what would merge*. This asks
+       whether the work exists yet, which is answerable in a directory that is not a repository.
+    2. **The remedy is not "a remedy that changes nothing".** The clause exists to prevent a
+       refusal whose stated fix is unavailable; this one clears itself when the turn ends, without
+       anybody doing anything.
+    3. **`approved` is a judgement about work, not only an instruction to merge.** Where nothing
+       can merge, approving mid-turn still records that unfinished work is good — a statement as
+       false in a non-repository project as in a repository one.
+
+    Rigor-independent for the reason `_check_mergeable` is, and the reason is sharper here: the
+    default rigor is `sketch`, `_enforced_requirements` filters `sketch` out entirely, and the
+    population this defect was measured on is a documentless loop, which has no requirements at all.
+
+    `task-lifecycle-governance:720` — *"An integration that cannot proceed does not block
+    approval"* — reads at first like a prohibition on this. It is not: `evaluate`'s
+    enforced-requirements walk below is already unconditional on `situation`, so `blocking` and
+    `diagnostics` have refused approval in unresolvable projects since the gate shipped. That
+    requirement governs *integration* as a blocker of approval, and its scenarios speak about their
+    own cause.
+    """
+    live = await run_liveness.live_turn_for_task(session, task, acting_run_id=acting_run_id)
+    if live is None:
+        return
+    refusal.unfinished.append({"agent": live.agent, "run_id": live.run_id})
+
+
 async def _identifiers_for(session: AsyncSession, requirement_ids: List[Any]) -> Dict[str, str]:
     """`{spec_requirements.id: identifier}` for the rows a sentence has to name.
 
@@ -381,12 +597,19 @@ async def _identifiers_for(session: AsyncSession, requirement_ids: List[Any]) ->
     return {row.id: row.identifier for row in rows}
 
 
-async def evaluate(session: AsyncSession, task: Task) -> tuple[GateRefusal, str]:
+async def evaluate(
+    session: AsyncSession, task: Task, *, acting_run_id: Optional[str] = None
+) -> tuple[GateRefusal, str]:
     """`(refusal, policy_digest)` for moving this task to `approved`.
 
     A task linked to nothing is unaffected, and so is one whose documents are all
     sketches — the default blocks nothing, and it has to, or the change would
     arrive as a barrier nobody asked for.
+
+    *acting_run_id* is the run performing the transition, `None` for the operator. It is excluded
+    from the liveness check below: **a turn is never blocked by itself** (design D10). Widening the
+    signature keeps no second surface in step — `task_transition_service.py:555` is the only caller,
+    checked rather than assumed.
     """
     refusal = GateRefusal()
     # Both repository-aware checks, and both **above** the early return two statements down. That
@@ -396,6 +619,11 @@ async def evaluate(session: AsyncSession, task: Task) -> tuple[GateRefusal, str]
     if situation is not None:
         await _check_mergeable(session, task, refusal, situation)
         await _check_unaccepted(session, task, refusal, situation)
+
+    # Beside that block rather than inside it, and above the early return for the same reason both
+    # of the above are. Liveness is not a question about the repository — see `_check_live_turn`,
+    # which argues the departure rather than leaving it to be re-derived.
+    await _check_live_turn(session, task, refusal, acting_run_id=acting_run_id)
 
     enforced, rigors = await _enforced_requirements(session, task)
     if not enforced:

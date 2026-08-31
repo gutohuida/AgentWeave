@@ -70,7 +70,16 @@ REVIEWER = "critic"
 
 
 async def _flow(db, *, suffix, agent=WORKER):
-    """A loop and its job. The job's agent is the flow's default, not necessarily the reviewer."""
+    """A flow and its job. The job's agent is the flow's default, not necessarily the reviewer.
+
+    **It declares a document, and that is load-bearing rather than decorative**
+    (`approval-waits-for-the-turn-to-end`, design D5). Every test in this file is about the review
+    arm of `decide_firing` — F142's three arms, the `unstaffed` sentences, the exclusion — and that
+    arm belongs to `agent-flows`, which a loop declaring no document is required to be unaffected
+    by. Until this change the fixture was a documentless `Loop`, so the file was standing in for a
+    flow with a row the product does not treat as one. The document is the one `_evidence` hangs
+    its requirement on, so the flow declares the specification its own evidence demonstrates.
+    """
     job = AIJob(
         id=f"job-f142-{suffix}",
         project_id="proj-test",
@@ -83,8 +92,23 @@ async def _flow(db, *, suffix, agent=WORKER):
     )
     db.add(job)
     await db.commit()
+    db.add(
+        SpecDocument(
+            id=f"doc-{suffix}",
+            project_id="proj-test",
+            path=f"spec/{suffix}.html",
+            title=f"Doc {suffix}",
+            phase="current",
+            kind="capability",
+        )
+    )
+    await db.commit()
     loop = Loop(
-        id=f"loop-f142-{suffix}", project_id="proj-test", job_id=job.id, purpose=f"f142 {suffix}"
+        id=f"loop-f142-{suffix}",
+        project_id="proj-test",
+        job_id=job.id,
+        purpose=f"f142 {suffix}",
+        spec_document_id=f"doc-{suffix}",
     )
     db.add(loop)
     await db.commit()
@@ -111,17 +135,10 @@ async def _evidence(db, task_id, *, suffix, commit="c" * 40, agent=WORKER):
     The gate is checked **before** a reviewer is resolved and stays there (design D9), so a fixture
     that omits this reaches a different, more specific refusal and never exercises the ladder at
     all — which would make every exclusion assertion below pass for the wrong reason.
+
+    The document is `_flow`'s, not this function's: the flow declares it, and the requirement this
+    evidence demonstrates belongs to it. Callers pass the same `suffix` to both.
     """
-    db.add(
-        SpecDocument(
-            id=f"doc-{suffix}",
-            project_id="proj-test",
-            path=f"spec/{suffix}.html",
-            title=f"Doc {suffix}",
-            phase="current",
-            kind="capability",
-        )
-    )
     db.add(
         SpecRequirement(
             id=f"req-{suffix}",

@@ -27,7 +27,7 @@ import pytest
 from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, InboundQueueEntry, Loop, Task
+from hub.db.models import AIJob, InboundQueueEntry, Loop, SpecDocument, Task
 from hub.scheduler import JobScheduler
 from hub.task_transition_service import (
     ActorNotPermittedError,
@@ -142,6 +142,13 @@ async def test_an_unattributable_completed_task_may_still_enter_review(app):
 
 
 async def _flow(db, *, task_id, agent=AUTHOR):
+    """The flow whose own review F70 refused.
+
+    **It declares a document, and that is what makes it a flow** (`agent-flows:13`). Until
+    `approval-waits-for-the-turn-to-end` (design D5) this built a documentless `Loop`, so the
+    review arm was being exercised through a row the product does not treat as a flow. The arm
+    now reads the declaration; the fixture states what these tests always meant.
+    """
     job = AIJob(
         id="job-f70",
         project_id="proj-test",
@@ -154,7 +161,24 @@ async def _flow(db, *, task_id, agent=AUTHOR):
     )
     db.add(job)
     await db.commit()
-    loop = Loop(id="loop-f70", project_id="proj-test", job_id=job.id, purpose="flow f70")
+    db.add(
+        SpecDocument(
+            id="doc-f70",
+            project_id="proj-test",
+            path="spec/f70.html",
+            title="Flow f70",
+            phase="current",
+            kind="capability",
+        )
+    )
+    await db.commit()
+    loop = Loop(
+        id="loop-f70",
+        project_id="proj-test",
+        job_id=job.id,
+        purpose="flow f70",
+        spec_document_id="doc-f70",
+    )
     db.add(loop)
     await db.commit()
     task = await db.get(Task, task_id)

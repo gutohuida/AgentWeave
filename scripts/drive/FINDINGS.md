@@ -11974,3 +11974,593 @@ c7f64f2 Integrate approved work 8534ede91e4f   <- the loop's power, F124 dead
 8534ede Auto-snapshot: alpha's turn on task-494c563cd6ef
 3a0c5a2 calc
 ```
+
+## DRIVE-3 (2026-08-31) — `approval-waits-for-the-turn-to-end`, driven
+
+Group 7 of the change. Fresh project **`drive3-2026-08-31` = `proj-f44107415869`** at
+`C:\Users\huida\Documents\drive3-2026-08-31` — `git init -b master`, one seed commit (`calc.py`,
+`.gitignore`), `master` adopted by `POST /projects/open` with no settings round trip. Runner
+`Haiku (cheap)`, agents `alpha` and `beta`, `allow_agent_jobs` on. Neither forbidden project
+touched. The Hub on 8011 was restarted from this branch first (PID 28704, started **05:10**, was
+serving the previous run's code) and confirmed: no `.py` under `hub/hub` or `src` newer than the new
+process's start time.
+
+Six runs, every agent turn on Haiku: `t_f162_window.py` lane 1, `t_drive2_loop_lands.py`,
+`t_drive1_flow_lands.py`, and `t_f162_window.py` lane 2 (`AW_WIDE=1`) — lanes 1 and 2 twice each,
+because the first outing of each failed one assertion belonging to the harness rather than to the
+product, and a harness edit is not evidence until it has been run.
+
+### F162 is closed, measured inside the window at 1-second granularity
+
+`t_f162_window.py` lane 1, **17/17**, `OUTCOME: GUARDED`, on two independent runs. The harness's
+pass condition was inverted for this run: what it was written to REPRODUCE is now what it fails on,
+and `GUARDED` — the outcome it could only hypothesise before — is the pass. The first run scored
+16/17 on a harness bug of my own (comparing a `detail` dict against an unwrapped sentence); fixed,
+re-run, and the check it was hiding now reads `identical`.
+
+The window was entered, not assumed: at the instant the task first read `completed`, the tip of
+`agentweave/task/task-24d6d5aa1175` was still `1ee11f5`, the commit the branch was cut from, and
+`alpha` was still busy.
+
+```
+t+  47.59s  task reads 'completed'   tip=1ee11f5088b4 (== base)   busy=['alpha']
+t+  47.72s  land attempted           409
+t+  47.75s  hop 1 (assignee -> null) 200
+t+  47.77s  hop 2 (-> under_review)  200
+t+  47.89s  hop 3 (-> approved)      409
+```
+
+The approval's refusal, verbatim, and the thing an operator actually reads:
+
+> alpha is still running the turn that produces this task's work, so what approving would merge is
+> not knowable yet — the task's branch still points at the commit the turn started from. Nothing is
+> wrong with the work. Approve once the turn has ended: this clears itself, with nothing for anyone
+> to do. Stopping the agent's run ends the turn too.
+
+`409 gate_unsatisfied`, with `unfinished: [{"agent": "alpha", "run_id": "run-…"}]` and
+every other category empty. **No integration row was written at all** — the approval did not reach
+the point of resolving a merge target, so there is no `ALREADY_INTEGRATED` skip to be stranded by.
+Then the turn ended, the tip moved to `6c9cc34`, the same three hops answered 200/200/200, and
+`git show master:f162_134506.py` returns `def cube(a): return a ** 3`. The refusal cleared itself,
+exactly as its sentence promises.
+
+**The composition inherits it.** `POST /tasks/{id}/land` was driven inside the window too — first,
+because it is the only moment the task still reads `completed` — and answered the **same 409**, and the
+two sentences compare `identical`. Afterwards the task still read `completed` and was still held by
+`alpha`: the refused landing left nothing half-applied, which is `_commit_and_render`'s transaction
+boundary observed live rather than in a unit test.
+
+### The window did not narrow — it is refused for the whole of its width
+
+Lane 2 (`AW_WIDE=1`), **6/6**, asks the other half of the question. Closing a window is not the same
+as shrinking one, and a single refusal at one instant would not tell them apart. So this lane drives
+an ordinary multi-step turn — build the file, mark the task done, *then* keep working — and probes
+`POST /land` every five seconds from the moment the task reads `completed` until the tip moves.
+`land` is the probe because lane 1 measured it leaving the task exactly as it found it, so probing
+costs the window nothing.
+
+```
+t+   0.56s  job fired
+t+  18.36s  task reads 'completed'   tip=d05400ffdb7f (== base)   busy=['alpha']
+   [probe t+ 0.1s] land -> 409  (unfinished)
+   [probe t+ 5.4s] land -> 409  (unfinished)
+t+  28.05s  the snapshot arrived     tip 052a4b9db0dd
+```
+
+**9.7 seconds wide, 409 at both ends, `unfinished` both times.** The window is exactly where it was
+— it runs from `update_task(completed)` to the end of the turn, which the product still does not
+constrain — and the fix makes all of it refuse rather than making any of it go away. Approving after
+the turn ended merged `052a4b9` normally.
+
+One harness assertion had to be loosened to get there, and it is worth saying why rather than just
+doing it. The check was `width >= 10`, calibrated on a single sample — the 10.5s this lane measured
+on 2026-08-31 06:41 — and the first run here failed it at **8.7s**, on nothing but Haiku having
+tidied up faster. Three samples now exist for the same prompt: **10.5s, 8.7s, 9.7s**. The width is
+**agent-sized by construction**, so a bound tuned to one turn is an assertion about the model rather
+than about the product. Loosened to `>= 5` — two orders above the round trip that would land inside
+it — with the measured number printed either way, because the number is the finding.
+
+### F163 is closed: landing a loop's work is one request
+
+`t_drive2_loop_lands.py`, **36/36**. `approve()` in that harness used to be three PATCHes and is now
+one `POST /tasks/{id}/land`; what the three used to cost is kept in its docstring rather than
+deleted, because the three are the reason the route exists. Both lanes:
+
+- **LANE A** (declaration omitted): one request answered `200` with `status: approved` and
+  `assignee: null` — the two facts the three hops used to produce between them. Under LANE A′'s
+  deliberately dirty checkout it skipped with `CHECKOUT_DIRTY` and `retryable: true`; cleaning and
+  pressing retry merged `5413b41` and put `def power(a, b): return a ** b` on `master`.
+- **LANE B** (`work_needs_evidence=True`): the same one request reached `approved`, nothing merged,
+  and the reason was the evidence one — *"no accepted evidence names a commit, so there is nothing
+  to merge"* — never `NO_TASK_BRANCH`, with no retry offered.
+
+### F161/D21 is closed: a loop does not enter the review arm
+
+Same run, three checks added to LANE A for exactly this population — one agent, one task, nobody
+else to ask. When the turn ended, the loop's task rested at **`completed`**, still held by `alpha`,
+and `beta` was `idle` throughout. No reviewer was resolved onto it and no second agent was pulled
+in. Before group 5 this is the shape that stalled: a completed task offered to a selection a
+one-agent mode cannot fill.
+
+### The flow's review leg is untouched — the regression this change most plausibly caused, absent
+
+`t_drive1_flow_lands.py`, **16/20**, re-run because group 5 changed the review arm at the selection
+site and the new gate sits on every approval. Both are clean:
+
+- both tasks staffed, worked, and reached `completed` with no operator transition;
+- both recorded evidence naming a commit unasked;
+- **both reviewers were non-authors** — `power`: alpha → beta, `modulo`: beta → alpha;
+- `modulo` reached `approved` **with nobody's hand on it**, and its integration row reads
+  `actor_kind: "run"`, `actor: "alpha"`, `outcome: "merged"`, `9773ee1` onto `master`.
+
+That last row is design **D10 proven live**. Since migration `0092` a review run is bound to the
+very task it inspects, so a predicate that merely asked "is a live run bound to this task?" would
+have refused every review the product staffs — including this one, whose author is a different
+agent entirely. The acting run is excluded, a turn is never blocked by itself, and the reviewer's
+approval merged. **No refusal anywhere in this drive carried an `unfinished` entry**; the two that
+fired were change C's evidence one and F155's conflict one.
+
+The four that did not hold are all the `power` lane and all previously filed:
+
+1. **F155, third consecutive drive.** *"This task's work does not merge cleanly into master:
+   drive1_133738.py. Resolve the conflict on the branch, then approve."* Both tasks append to one
+   file and `modulo` landed first. F164 already called this the ordinary shape of a flow's parallel
+   work rather than a stall artefact; a third occurrence settles it.
+2. **F154 verbatim.** With both agents idle and `power` wedged at `under_review`, every firing
+   answers `409` *"Every task on this loop's queue is already being worked."*
+3. and 4. are the pass condition and the following-firing check, both downstream of (1).
+
+### F164's "intermittent is the wrong word" is itself corrected by this drive
+
+F164 recorded that two consecutive drives had a reviewer write a verdict in prose and never call
+`update_task`, and concluded *"two for two makes **intermittent** the wrong word"*. On this drive
+the reviewer **did** call it: the transcript carries
+
+> `Error calling tool 'update_task': Hub rejected PATCH /tasks/task-c5d6452745a1 (409): This task's
+> work has been recorded and nobody has judged it: FR-1 at 5150e66dcd43. …`
+
+followed by the agent reasoning about it — *"Ah! The task requires evidence to be recorded and
+accepted…"*. So the F152 checks fired for the first time on real output: change C's refusal reached
+the agent's turn **as prose, not as a dict repr**. Three drives, two misses and one hit, which puts
+"intermittent" back in play and makes the harness's F152 assertions no longer vacuous. The
+underlying diagnosis (the spawned Claude CLI presents the MCP tools as deferred and the model can
+loop on `ToolSearch`) is unchanged and still not the Hub's.
+
+### One new observation, not a defect — the two landing routes stop being interchangeable
+
+Inside the window, hops 1 and 2 are **permitted** and only the approval refuses, which is right:
+clearing an assignee and moving to `under_review` assert nothing about whether the work is good.
+But the operator is then left at `under_review`, and `POST /land` requires `completed`, so the
+one-action route is no longer available to them for that task. The remaining cost is a single
+`PATCH {"status": "approved"}` once the turn ends, so nothing is stranded and nothing is worse than
+before the route existed. Recorded because it means the recommended route (`land`, which leaves the
+task exactly as it found it) and the legacy three-hop route degrade differently under a refusal, and
+that asymmetry is worth knowing before anyone documents either.
+
+`master` in the fixture at the end, every merge on it produced by driving the product:
+
+```
+d24414e Integrate approved work 052a4b9db0dd   <- lane 2's cube, approved after the turn ended
+052a4b9 Auto-snapshot: alpha's turn on task-789cc620f212
+d05400f Integrate approved work 6c9cc34b43de   <- lane 1's cube, refused inside the window first
+6c9cc34 Auto-snapshot: alpha's turn on task-24d6d5aa1175
+1ee11f5 Integrate approved work dffd3ef68871
+dffd3ef Auto-snapshot: alpha's turn on task-a7e9b3493c7e
+eaa92ce The flow drive's spec document, committed so the next drive's preflight starts clean
+773f942 Integrate approved work 9773ee122100   <- the flow's modulo, merged by its REVIEWER's turn
+9773ee1 Auto-snapshot: beta's turn on task-b45ec2c16caa
+d3ba8f3 Integrate approved work 5413b419c459   <- the loop's power, landed in ONE action
+5413b41 Auto-snapshot: alpha's turn on task-436b1128ca4d
+5d7e9cc Integrate approved work fcf083ef1274
+fcf083e Auto-snapshot: alpha's turn on task-d8bf6c0b7180
+922c427 seed
+```
+
+---
+
+## Drive 2026-08-31 — F155's remedy, followed end to end (`t_f155_conflict_remedy.py`)
+
+Hub restarted on `127.0.0.1:8011` from `autonomous/2026-08-31-the-turn-must-end-first` at `0373867`.
+A **fresh** project (`/projects/open` on a fresh temporary git repository) for every run, as the
+autonomous run's limits require. No agent turns: the whole population this refusal addresses is
+operator-facing, so no model was bound.
+
+**23/23 checks passed.** The one that matters is lane 2, and it is the one the unit tests
+structurally cannot make: **the harness parses the branch to act on out of the refusal's own
+sentence** — `recorded from a checkout of ([^\s.,;]+)` — and uses nothing it knows about its own
+setup. It resolves the conflict there, records evidence from a checkout of that branch, approves,
+and reaches `merged` with the resolved commit on the main branch. A remedy is followable or it is
+not, and this is the only way to find out.
+
+Lane 3 drove the **old** remedy against a second task and confirmed the defect is still exactly
+what it was: resolve on the branch, approve again, and the refusal comes back **byte-for-byte
+identical**. That is the world, not the wording, and it does not change — which is precisely why
+the product must stop giving that instruction on this route. Lane 4 confirmed the branch-tip route
+keeps the old sentence, because there the commit judged is whatever the branch then points at.
+
+### F155 — Status: **FIXED** (`0373867`, driven 2026-08-31)
+
+The refusal on the evidence route now names the commit it judged, names the branch it was recorded
+on distinctly from the branch it would merge into, says that resolving there and retrying will not
+clear it and why, states the remedy as a condition on *where the recording is done from* rather
+than as a field to supply, says it does not take care of itself, says the fresh evidence need not
+be about the same requirement, attributes the commit where another task recorded it, and ends in
+the same `ACCEPT_OR_GRANT` clause the sibling refusal uses.
+
+### F165 (new, severity **B**) — an operator's locator-named commit silently fails to supersede
+
+Reachable, and proven reachable in `hub/tests/test_conflict_refusal_names_what_clears_it.py`
+(`test_an_operator_naming_the_resolved_sha_does_not_supersede`), which is what task 1.3a asked for.
+
+An operator who reads the new remedy and records evidence whose `locator` **is the resolved sha**
+goes through `read_footprint(root, at=resolved)` and therefore `_branch_at`, which answers `""`
+unless that commit is the tip of exactly one local branch (`requirement_evidence.py:516-529`). The
+resolved commit stops being a tip the moment anything is committed on top of it. `""` and
+`agentweave/task/…` are distinct keys in `integration_targets`' per-branch reduction, so the fresh
+row lands **beside** the stale one instead of replacing it, and the refusal stands with no visible
+reason. Recording naming a commit is exactly what F71 made authoritative, so this is the natural
+thing for an informed operator to do.
+
+The `a-conflict-refusal-names-what-clears-it` change is prose-only and does **not** fix this. Its
+wording steers around it — *recorded from a checkout of that branch* — and deliberately refuses to
+promise the branch takes care of itself. The fix, if it is wanted, is a decision about what
+`_branch_at` should answer for a commit that is an *ancestor* of exactly one branch, and that is a
+change to what a footprint's `branch` means. Not queued.
+
+**Bound measured 2026-08-31 (iteration 15), at the source — the sentinel carries two meanings.**
+`_branch_at`'s docstring (`requirement_evidence.py:516-529`) justifies returning `""` by calling it
+"names no line of work" and citing `evidence_drift` skipping such a footprint. That precedent is real
+in one consumer and absent in the other. `detect_drift` (`:1064-1069`) does skip it — `if not ref or
+ref == "HEAD": continue`. But `integration_targets` (`task_integration.py:283-286`) writes
+`newest[target.branch]` with **no empty-branch guard**, and `_targets` (`:257-267`) filters only on
+`footprint.commit_sha`, so `""` reaches the reduction as an ordinary key. In the merge path `""`
+therefore means *one shared line of work* — an equivalence class every branch-unknown footprint on
+the task falls into together, resolved last-write-wins by the oldest-first ordering — not *unknown*.
+Consequence for the repair: teaching `_branch_at` to answer a descendant branch moves rows out of
+that bucket and is the right direction, but it does not decide what the bucket should do with what
+stays in it, and nothing has decided that today. A repair touching only `_branch_at` leaves an
+undesigned equivalence class behind. Not measured: whether two branch-unknown accepted footprints on
+one task are reachable through the product's own routes rather than constructible in a test — that
+needs a drive. Severity stays B, still unqueued.
+
+### F166 (new, severity **C**) — the same hole on the agent route, via `footprint_root`'s fallbacks
+
+Also reachable, also held by a test
+(`test_an_agent_whose_workspace_is_gone_does_not_supersede`). Round 2 recorded that an agent's
+footprint is *always* taken in a worktree on the task branch; round 3 corrected it and the test
+confirms the correction. `footprint_root` has three answers
+(`requirement_evidence.py:299-340`): the recorded run directory **only while it still exists**, then
+the per-agent checkout, then `workspace.root` — which is on the main branch. Its own docstring names
+both fallbacks as live, including *"a task checkout that has since been released, whose directory is
+gone by design"*. On either, the fresh footprint carries a branch the stale row does not, `newest`
+gains a second key, and the refusal stands. The third answer is the worst: the project checkout is
+on the main branch, so the fresh target merges trivially and displaces nothing while the stale one
+goes on refusing.
+
+Severity C rather than B because the population F155 was measured on does not hit it — the agent is
+mid-turn on the task it is approving, so its task worktree exists. That is a fact about that drive,
+not a guarantee, which is the whole reason it is written down.
+
+### Two product refusals the harness earned by getting it wrong first — both good
+
+Not findings. Recorded because they are the kind of thing a harness author assumes is a bug.
+
+* `PATCH /jobs/{id} {"work_needs_evidence": false}` → **400**, *"a loop declares at creation whether
+  its work needs evidence, and it cannot be changed afterwards — create a loop with the declaration
+  you want, and offer this loop's tasks to it"*. It says what to do instead, which is the standard
+  this whole change is about.
+* `PATCH /tasks/{id} {"loop_id": …}` → **403**, *"A task's loop assignment is set at creation and
+  cannot be changed afterwards."*
+
+Both were reached by writing the harness the lazy way round; both refusals were legible enough to
+fix it in one pass.
+
+---
+
+## F154 reproduced deterministically, with no agent turn at all — and the reproduction is `scripts/drive/t_f154_wedged_review.py`
+
+F154 was found by accident on 2026-08-30: a reviewer spent its whole turn in a `ToolSearch` loop,
+reached a verdict in its own prose, and never called `update_task`. That accident made the finding
+look like it needed a flaky model to reach. **It does not.** The flaky reviewer was the occasion,
+not the cause.
+
+`t_f154_wedged_review.py` builds the same row **by hand, through the operator's own routes, on a
+fresh project in a fresh repository, with no model ever bound** — and reproduces every symptom
+F154 recorded. **16/16**, twice, on two independently created projects.
+
+The population is one sentence: *an `under_review` task whose assignee holds no running turn.* An
+operator reaches it through the only route the lifecycle offers them; a reviewer reaches it by
+ending a turn without a verdict. Neither needs a model, and the second is merely the expensive way
+to arrive.
+
+**What the drive measured, surface by surface, with both agents `idle` and `GET /runs` empty:**
+
+| Surface | What it says |
+|---|---|
+| `POST /jobs/{id}/run` | **409** — *"Every task on this loop's queue is already being worked. Nothing was started, and nothing is wrong — the next firing picks up whatever finishes."* Identical on a second press. |
+| `GET /jobs/{id}` → `loop.stall_reason` | `null` |
+| `GET /jobs/{id}` → `loop.queue` | `{"under_review": 1}` |
+| `GET /jobs/{id}` → `loop.current_tasks` | `[{"status": "under_review", "agent": "beta", "agent_capacity": "held"}]` |
+| `GET /agents` | `{"alpha": "idle", "beta": "idle"}` |
+| `GET /tasks/{id}` | `under_review`, assignee `beta` |
+
+`agent_capacity: "held"` for an agent the roster on the next line calls `idle`. **Not one surface
+names the task, and the only one that speaks at all says nothing is wrong.** The sentence's own
+promise — *"the next firing picks up whatever finishes"* — cannot come true: nothing is running, so
+nothing will finish.
+
+**The cure is one transition and costs nothing.** LANE 4 moves the task to `revision_needed` and the
+very next press of Run fires a turn (200). The whole defect is that the operator is never told they
+need to do it.
+
+**Why this reproduction is worth more than the original.** It is deterministic, costs no tokens,
+runs in about thirty seconds, and — because it never spawns an agent — it proves the defect is
+structural rather than a consequence of the reviewer's tool loop. Any fix now has a live check that
+can be pressed before and after.
+
+### F167 (B, new) — the F70/F142 recovery cannot see an author whose history is entirely the operator's
+
+LANE 5 was written expecting a **contrast**: put the AUTHOR in `assignee` instead of a reviewer,
+one variable changed, and watch F70's recovery fire and answer differently. It did not. The
+author-wedged row answers the **byte-for-byte identical 409**, and the board names `alpha` — the
+author — as the agent holding the review.
+
+The mechanism is not a surprise once read, and the code says it out loud. `wedged_review` asks
+`task.assignee in await agents_that_worked(session, task.id)` when `completion_attribution` names
+nobody (`scheduler.py:1348-1352`), and `agents_that_worked` reads `TaskTransition.actor_agent`,
+which is **NULL for every edge an operator walked by hand**. Its own docstring
+(`task_transition_service.py:206-211`) states the case exactly:
+
+> A task the operator started by hand, let an agent work, and then marked finished carries a full
+> history that names no agent at all.
+
+So a task whose history is the operator's names no agent, the author is not recognised as the
+author, `wedged_review` stays `False`, and the branch takes the `in_flight` arm — which is F142's
+own measured case, *"an operator who moved a stuck task to `under_review` by hand … and the task sat
+there with its author named as its reviewer forever"*, arriving through the very fallback that was
+added to close it.
+
+**Severity B, and deliberately not A**: the outcome is the same wedge F154 already describes, so it
+adds no new consequence — but it does mean the F70 recovery's guarantee ("rows … written straight
+into the status" are *"recovered rather than merely reported"*) is false for one reachable history,
+and a fix for F154 that leans on `wedged_review` to carry the author case would inherit the hole.
+
+**The bound on the measurement, stated because the drive cannot exceed it.** Every edge in LANE 5
+was walked by the operator. A history containing an *agent-walked* edge is not measured here, and
+F70's recovery may well fire for it. What is measured is that the all-operator history defeats it.
+
+### One thing this drive did not have to work around
+
+`POST /jobs` seeding a loop's queue with `initial_tasks` in the same call that creates the loop, and
+`PATCH /tasks/{id}` walking the whole `pending → assigned → in_progress → completed → under_review`
+ladder with an assignee change on the last edge, both did exactly what an operator would expect on
+the first attempt. The entire wedge is four PATCHes. That is worth recording alongside the defect:
+the surface that *builds* the broken state is in good order, which is why the state is so easy to
+reach.
+
+
+## F156 reproduced deterministically — and the contrast lane is what turns it from a rough edge into a defect
+
+Driven 2026-08-31 (iteration 12), against the trial Hub on 8011 running this branch. New harness:
+`scripts/drive/t_f156_preview_promises_the_merge.py`. **21/21 checks, 2.4 s, zero agent turns and
+no model bound** — the whole population this defect addresses is operator-facing, so nothing in it
+needs a runner.
+
+F156 was originally recorded as an observation: `will_merge: true` beside an approval the gate
+refused. Recorded that way it reads like something a particular repository shape gets you to. It is
+not. The reproduction is **one conflicting commit and four HTTP calls**, on a fresh temporary
+repository the harness creates for itself.
+
+### What the two surfaces say about the same commit at the same moment
+
+| Called | Answer |
+|---|---|
+| `GET .../tasks/{id}/integration-preview` | `{"targets": [{"commit_sha": "d491caac1742…", "source_branch": "work/ledger"}], "will_merge": true, "reason": ""}` |
+| `PATCH .../tasks/{id} {"status": "approved"}` | **409** *"This task's work does not merge cleanly into main: ledger.py. The commit judged is d491caac1742…"* |
+| `GET …/integration-preview`, **again, after the refusal** | byte-for-byte identical. `will_merge: true`, `reason: ""` |
+
+The third row is its own small finding, and it is the same shape F141 recorded about the gate: the
+refusal happens, and nothing that the operator can read afterwards remembers it. LANE 3 asserts
+equality of the whole response object, not just the flag — `after == before`, and it holds.
+
+### LANE 4 is the reason this is filed as a defect and not as imprecise wording
+
+The contrast lane runs a **second task with no conflict at all** through the same route:
+
+```
+conflicting task   will_merge=True   reason=''    → approval REFUSED 409
+clean task         will_merge=True   reason=''    → approval 200, integration `merged`, main moved
+```
+
+Identical in every field the drawer's sentence is built from. So `will_merge: true` is not merely
+imprecise — **it takes the same value across the two outcomes an operator consults it to tell
+apart**, which means the field carries no information about the question it is named after. That is
+the finding stated exactly, and it is the thing a fix has to change.
+
+LANE 5 was written to check the other half and confirms the `false` side is honest: a task with no
+accepted evidence gets `will_merge: false` with `reason: "no accepted evidence names a commit, so
+there is nothing to merge"`. Only the `true` side over-promises. A repair that reaches for a second
+conflict probe would therefore be fixing the wrong half; the asymmetry is in the vocabulary.
+
+### The prose the operator actually reads is worse than the JSON
+
+`TaskDetailDrawer.tsx:66-79` renders the `true` case as an amber note:
+
+> ⚠ Approving writes to your repository: it cherry-picks `d491caac1742` from work/ledger into
+> **main**.
+
+Indicative mood, no hedge, and **no clause anywhere saying the clean-merge question is asked later**
+— which the handler's own docstring is explicit about ("deliberately no conflict probe … a
+sentence, not a second gate"). The docstring's reasoning is sound and the sentence built on top of
+it is not. A headless drive cannot read the browser, so LANE 1 asserts against the three fields that
+sentence is composed from (`main_branch`, `targets[0].commit_sha`, `targets[0].source_branch`) and
+confirms all three are populated, i.e. that the amber branch is the one that renders.
+
+### The harness bug that had to be read rather than patched out
+
+First run came back **19/20**. The failing check was *"its work really did reach main"* — an empty
+integration history for a task whose merge had demonstrably happened, since the neighbouring check
+saw `main` move and carry the commit's content. The cause was the harness's, not the product's:
+it called `/tasks/{id}/integration`, and the route is **`/integrations`**, plural
+(`hub/hub/api/v1/tasks.py:1024`). The 404 body has no `integrations` key, so `(body or {}).get(...)
+or []` turned *route does not exist* into *history is empty* without a murmur.
+
+Two things came out of fixing it, and both are now in the file: the call asserts `code == 200`
+separately from what it found, so a harness can no longer mistake a 404 for an honest empty answer;
+and this is the third iteration running where **a check written to pass came back failing and the
+failure was worth more than the pass** — here it was worth a harness that cannot lie to itself in
+that particular way again.
+
+### Reproducing it
+
+```
+cd scripts/drive
+AW_HUB=http://127.0.0.1:8011 py -3.11 -u t_f156_preview_promises_the_merge.py
+```
+
+Fresh project every run, never an existing one. The harness leaves the project and the temporary
+repository in place for inspection and prints both paths.
+
+## F167's bound is now measured — the recovery DOES fire when one edge names an agent
+
+Driven 2026-08-31 (iteration 13), against the trial Hub on 8011 running this branch. New harness:
+`scripts/drive/t_f167_agent_walked_edge.py`. **13/13 checks**, reproduced twice, two Haiku spawns
+and no Haiku thinking.
+
+F167 was filed with a bound stated in the finding itself: *"every edge in LANE 5 was walked by the
+operator … a history containing an agent-walked edge is not measured here, and F70's recovery may
+well fire for it."* This harness measures exactly that and nothing else.
+
+**How an agent-named edge is obtained without spending a turn.** `bind_run_to_task`
+(`run_task_binding.py:427-440`) sets `run.task_id` and then takes `-> in_progress` through
+`apply_transition` with `run_actor(run.id, run.agent)` and `origin='runtime'` — at **bind time, at
+spawn**, before the model has said a word. So LANE 1 presses Run once, watches the task reach
+`in_progress` with `alpha` on it having sent no PATCH, and stops the turn. That one edge is the only
+difference between the two lanes.
+
+### The contrast, both firings minutes apart in one project against one build
+
+| history | firing | what it says |
+|---|---|---|
+| **agent-walked** (`-> in_progress` by the runtime, `completed`/`under_review` by the operator) | 409 | *"task task-e8c0dbf50eb2 has no recorded evidence, so there is no commit to review. Evidence naming a commit is what a review turn is given. Until the work that finished this task is recorded as evidence naming a commit, no reviewer can be given anything to look at."* |
+| **all-operator** (every edge PATCHed by hand) | 409 | *"Every task on this loop's queue is already being worked. Nothing was started, and nothing is wrong — the next firing picks up whatever finishes."* |
+
+**So F167 is precisely scoped, and stays severity B.** `wedged_review` fires when the history names
+the author: the task is carried past the `in_flight` arm to the ladder, the review is attempted, and
+the refusal that comes back **names the task and states what would clear it**. That is the F155
+vocabulary doing its job one route over. The all-operator row is the one that gets *"nothing is
+wrong"* about a task nobody is working.
+
+The consequence for a F154 repair is now a measured fact rather than a worry: leaning on
+`wedged_review` is sound for a history with any agent-walked edge and **unsound for the
+all-operator history**, which is the one an operator reaches through the only route the lifecycle
+offers them. A repair must not treat the predicate as covering both.
+
+LANE 5 adds one thing the all-operator case does not have: the agent-walked task is absent from
+`current_tasks` (`[]`) but the job summary's `stall_reason` carries the evidence sentence verbatim.
+So for this history an operator surface *does* name the problem — the opposite of F154's LANE 3,
+where not one surface did.
+
+### F168 (B, new) — there is no way to list a project's runs, and no way to cancel one
+
+Found by a red check that was written to pass. LANE 1 asserted *"a run is bound to the task"* and
+came back with an empty list; the cause was not the product's binding but the route:
+`GET /projects/{p}/runs` **does not exist**, and neither does `POST /projects/{p}/runs/{id}/cancel`.
+Confirmed against `openapi.json` — the only run-shaped paths the Hub publishes are
+`/projects/{p}/jobs/{job_id}/run` and the runners CRUD. The whole operator surface for a live run is
+the roster's `status` field and `POST /projects/{p}/agent/{agent}/stop`, which is per-**agent**: an
+operator cannot enumerate what is running, and cannot stop one run without stopping whatever that
+agent is doing.
+
+`t_review_by_hand.py:14` already recorded that `GET /projects/{id}/runs/{run_id}` does not exist.
+This is the same absence one level up, and it has a second cost that is worth stating on its own:
+
+**three drive harnesses have been asserting liveness against a 404.** `t_f154_wedged_review.py`'s
+`live_runs()` parses `(body or {}).get("runs") or []` out of the 404's `{"detail": "Not Found"}`, so
+its *"no run is live on this project"* checks (`:276`, `:298`) passed **vacuously**, and its two
+cancel loops (`:356`, `:400`) stopped nothing. F154's finding does not depend on those checks — its
+wedge is built by hand and no turn is ever started for the lanes that matter — but the checks
+themselves proved nothing and should not be read as if they did. This is the same shape as F156's
+`/integration` vs `/integrations`: a missing route read as an honest empty answer. `t_f167_agent_
+walked_edge.py` uses the real surface and asserts against the roster.
+
+### Reproducing it
+
+```
+AW_HUB=http://127.0.0.1:8011 py -3.11 -u scripts/drive/t_f167_agent_walked_edge.py
+```
+
+### F168's bound, measured 2026-08-31 — the operator half is one state wide, not the whole surface
+
+Iteration 14 asked F168's own stated question: *is the missing runs surface reachable as an operator
+problem, or only as a harness one?* Read at the source rather than driven, because the answer is an
+invariant, not a behaviour under load.
+
+**Mostly a harness problem.** A spawn is refused when the agent already holds a `running` Run
+(`agent_trigger.py:627-633`, *"{agent} already has a run in progress."*). That guard sits in
+`trigger_agent_directly`, which is the internal the HTTP route `trigger_agent` (:1213) and the
+scheduler (`scheduler.py:771`) both call — not in the route, so no spawn path skips it. So **at most one run per agent per project is live at
+a time**, and both missing capabilities collapse onto surfaces that do exist: *enumerate live runs*
+is the roster's per-agent `status`, and *cancel a run* is `POST /agents/{agent}/stop`, whose
+`limit(1)` over `Run.agent == agent, status == "running"` (`agent_trigger.py:1499-1504`) can only
+ever be selecting that one run. Per-**agent** is not a coarser lever than per-**run** while the
+invariant holds; it is the same lever. What genuinely needs a run id is a *test* that wants to name
+one — which is exactly how F168 was found.
+
+**The residue is real and is one state.** A `Run` row left at `running` with no live process — the
+state `run_reconciliation` exists for — has **no operator route out short of restarting the Hub**:
+
+- `reconcile_interrupted_runs()` is called from **one** place, `main.py:350`, inside `lifespan()`
+  startup. (Confirmed by grep; the same claim round 2 confirmed for the gate.) Nothing sweeps a
+  stale row while the Hub is up.
+- the roster keeps showing the agent busy, because the roster reads that same column;
+- `POST /agent/trigger` refuses the agent at :633 — *already has a run in progress*;
+- `POST /agents/{agent}/stop` finds the row, finds no handle in either `run_liveness` registry, and
+  answers **409 *"{agent}'s run is not in a stoppable state right now."*** (`:1522-1527`).
+
+So the agent is unusable and every route says so without offering a way through. That is the
+operator-facing F168, and it is narrower and sharper than *"there is no runs surface"*: the gap is
+not enumeration or cancellation, it is that **nothing but a restart can retire a run the process no
+longer owns**. Severity stays B — reaching it needs a crash or a kill mid-turn, which is precisely
+why `reconcile_interrupted_runs` was written — but a repair should be read as *"give the stale-run
+sweep a second trigger"*, not *"add `GET /runs` and a cancel route"*. Adding those two routes would
+not clear the state either: a cancel route hitting the same empty registries has the same 409 to
+give.
+
+Not queued. No product code was touched to establish this.
+
+---
+
+## F165 addendum, measured 2026-08-31 (iteration 16) — the unknown branch has **two** spellings, and the merge path knows neither
+
+Read at the source, no code touched. This narrows F165's repair a second time; the finding, its
+severity (**B**) and its unqueued status are unchanged.
+
+`read_footprint` (`requirement_evidence.py:480-486`) sets `Footprint.branch` down two arms:
+
+| route | expression | value when the line of work is unknown |
+|---|---|---|
+| operator named a sha (`at`, the F71 route) | `_branch_at(root, commit)` | `""` |
+| ordinary route, no sha named | `_git(root, "rev-parse", "--abbrev-ref", "HEAD") or ""` | `"HEAD"` — a detached HEAD answers the literal string |
+
+`detect_drift` treats the two as one: `:1064-1069` is `if not ref or ref == "HEAD": continue`, with a
+comment naming the detached-HEAD case explicitly. `integration_targets`
+(`task_integration.py:283-286`) guards neither — it writes `newest[target.branch] = target`, and
+`_targets` (`:257-267`) filters only on `commit_sha`. So the two spellings do not merely both survive
+into the merge reduction: **they survive as two distinct keys.** Two footprints that mean the same
+thing — "this names no line of work" — occupy two different merge buckets, while two sharing a
+spelling supersede each other last-write-wins.
+
+**What this changes.** Iteration 15 established that a repair scoped to `_branch_at` leaves an
+undesigned equivalence class behind it. This says which part of the problem is outside that function
+altogether: the detached-HEAD arm never calls `_branch_at`, so nothing done to `_branch_at` reaches
+it. And that arm is the *more* reachable of the two — a workspace checked out at a tag or a sha
+produces `branch="HEAD"` on every footprint it records, with no operator sophistication and no
+evidence `locator` involved. Iteration 15's open question ("is the branch-unknown class reachable
+through the product's own routes, or only constructible in a test?") is therefore answered **yes, via
+the plain agent route**, on the strength of the codebase's own drift-skip comment.
+
+**Bound.** The `"HEAD"` behaviour of `git rev-parse --abbrev-ref HEAD` under a detached head is taken
+from the check and comment at `:1064-1069` rather than re-derived by running git — the one unmeasured
+link. Still not measured: whether two branch-unknown *accepted* footprints arise on one task in
+practice, which needs a drive. Not queued.

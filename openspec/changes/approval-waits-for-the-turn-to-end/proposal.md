@@ -19,13 +19,26 @@ marking its task done. All three transitions in the drive answered `200` with th
 The product has met this window before and said so. `requirement_evidence.restamp_run_footprints`
 (`hub/hub/requirement_evidence.py:846`) exists because *"an agent records evidence during its turn,
 while its work is still uncommitted… The window is structural — there is no moment at which recording
-could observe the right sha — so the record is corrected once the commit exists."* The evidence route
-survives the window because it has three defences: that restamp, a human acceptance step before
-approval is permitted, and coverage vocabulary (`verified, not integrated`) for the gap. The
-branch-tip route added by `a-loop-declares-whether-it-needs-evidence` inherited **none** of them —
-and coverage structurally cannot describe it, because `requirement_coverage` selects from
+could observe the right sha — so the record is corrected once the commit exists."*
+
+**Round 2 corrects round 1 here.** Round 1 wrote that the evidence route *survives* the window
+because it carries three defences — that restamp, a human acceptance step, and coverage vocabulary.
+Re-derived against the code, that is wrong, and wrong in the direction that matters. The restamp runs
+at turn **end** (`agent_trigger.py:2041-2050`); it repairs the *label* after the fact and re-merges
+nothing, so an approval that landed mid-turn has already merged the stale commit and recorded the
+skip by the time it fires. Nothing sequences acceptance after the turn either — `decide_evidence` may
+be called at any moment, and `_targets` (`task_integration.py:219`) filters on `review_state` and a
+non-empty `commit_sha` and **not** on `reachable_from_main`, so a footprint accepted mid-turn hands
+its pre-turn sha straight to `integrate`. `restamp_run_footprints`' own docstring states the
+consequence — *"the pre-turn commit is usually already on the main line… evidence for code that does
+not exist reads as already shipped"* — which is `ALREADY_INTEGRATED` by another name.
+
+So **both routes share the window** (this answers design open question 1, and the answer is *yes*).
+What the evidence route has that the branch-tip route does not is *recovery of the record*, never
+prevention of the merge. The branch-tip route added by `a-loop-declares-whether-it-needs-evidence`
+has neither: coverage structurally cannot describe it, because `requirement_coverage` selects from
 `SpecRequirement` (`hub/hub/requirement_coverage.py:219`) and a documentless loop's task serves no
-requirement.
+requirement. That is why F162 was observed there first — not why it is confined there.
 
 Two further findings from the same drives share one cause — a loop being pushed through a review leg
 it has no second party for:
@@ -56,15 +69,31 @@ three.
   (`requirement_gate.py:288-292`): rigor is a claim about how well work must be proven; this is a
   claim about whether the work exists yet to be put anywhere.
 - **Liveness is tested, not read.** The condition is a `Run` row for this task with
-  `status == "running"` **and** a live pid. `reconcile_interrupted_runs` runs **only** in
+  `status == "running"` **and** a live process. `reconcile_interrupted_runs` runs **only** in
   `lifespan()` startup (`hub/hub/main.py:350`; stated at `hub/hub/pty_runner.py:150` and
   `hub/hub/run_reconciliation.py:143`), so a crashed agent leaves `status == "running"` until the Hub
   is restarted. Reading the column alone would wedge approval indefinitely on one crash.
+- **The run performing the transition is never counted against it**, and round 2 added this because
+  without it the change breaks the product's entire review leg. Since migration
+  `0092_review_divergence_regime`, a review run **is** bound to the task it inspects:
+  `run_task_binding.task_named_by` resolves `entry.task_id or entry.review_task_id`
+  (`run_task_binding.py:170-189`) and `run.task_id = task.id` follows (`:427`). So a flow's reviewer
+  approving the work it just read is, by this predicate, a live run bound to that task — its own —
+  and a naive check would refuse every flow review the product has. It would also be F155's exact
+  failure mode: a refusal whose only stated remedy is *wait for the turn to end*, given to the turn
+  that would have to end. `evaluate` therefore takes the acting run and excludes it.
 - **A loop never enters the review leg.** The scheduler stops selecting a loop's `completed` task for
   review, so `commit_for_task_review` is never asked for a commit and F161's sentence is never
   emitted — rather than being made true by teaching that function about branch tips. A loop has one
   agent and no second party; a review it staffs is the author reviewing itself, which
-  `_guard_reviewer_is_not_the_author` refuses anyway.
+  `_guard_reviewer_is_not_the_author` refuses anyway. **The operator's by-hand review is untouched**
+  (`task-lifecycle-governance:1481`), and so is the recovery of a loop's task already wedged in
+  `under_review` under its own author's name — only the *fresh* selection goes.
+- **The loop says what it is waiting for instead of falling silent.** With the review arm gone, a
+  loop whose only open task is `completed` would otherwise reach the generic
+  *"no claimable task among 1 open (1 completed)"* stall — the exact sentence F142 measured live and
+  removed for flows on 2026-08-30. The firing names the completed work as waiting for the operator's
+  landing action instead.
 - **Landing a loop's work becomes one operator action**, composed of the transitions that already
   exist — clear the assignee, `-> under_review`, `-> approved` — rather than three hand-made calls.
   The operator *is* the reviewer in that sequence, which is exactly the remedy the existing 403 names
@@ -106,12 +135,32 @@ None.
   itself.
 - `agent-loops`: a loop does not staff a review of its own agent's work, and landing a loop's
   approved work is one operator action rather than three.
-**`agent-flows` is deliberately not modified.** Its review requirements are already written about a
-flow — *"A flow resolves a reviewer by declaration, then by availability"* (`agent-flows:134`), whose
-scenarios all begin *"WHEN a flow fires"*. Nothing in the corpus says a **loop** staffs a review. The
-code applies the flow's review arm to loops anyway, which is what emits F161's sentence, so the
-breach is code exceeding its spec rather than a requirement needing amendment. The `agent-loops`
-delta states the negative that was never written down.
+**`agent-flows` is deliberately not modified — and round 3 replaced the reason.** Rounds 1 and 2 both
+argued from silence: *"no requirement anywhere in the corpus mandates that a loop staffs a review"*.
+That is true and it is the weakest ground a removal can stand on. The corpus is not silent. It
+**forbids** it. `agent-flows:13` says *"A loop that declares no document SHALL be unaffected by [this
+capability's requirements] and SHALL behave exactly as it does today"*, and that capability's Purpose
+names what it owns: *"firing-time agent resolution, **reviewer resolution, review dispatch and its
+handover briefings**, flow width, and the checkpoint lineage"* (`openspec/specs/agent-flows/spec.md:5-9`).
+Its scenario is flatter still: *"A loop without a document is unchanged — every firing fires the job's
+own agent, as before."* `decide_firing` resolves a *second* agent to review a documentless loop's
+task, which is neither unaffected nor the job's own agent.
+
+So the arm is a **breach of a shipped requirement**, not code running ahead of an unwritten one, and
+removing it restores the corpus rather than narrowing it. `agent-flows` still needs no delta, for a
+better reason than before: it already says this. The `agent-loops` delta states the consequence on the
+loop's side.
+
+**Round 2 narrowed that claim, because one requirement comes close to presupposing the opposite.**
+`agent-loops`' *"An agent attributed to a task SHALL be attributed in a stated capacity"*
+(`openspec/specs/agent-loops/spec.md:970`) reasons from *"for a completed one awaiting review it is
+whichever agent the next firing would hand the review to"*, and enumerates four capacities including
+*"an agent a firing would select next"*. It survives this change, and the reason is worth stating
+rather than leaving to a reader: it constrains how a capacity is **presented where one exists**, and
+each of its scenarios is conditioned on that existence (*"WHEN the named agent is who the next firing
+would give the task to"*). A loop that selects nobody produces no such name, so the requirement has
+nothing to say about it and continues to bind flows unchanged. Nothing in it obliges a firing to make
+the selection.
 
 ## Impact
 
@@ -126,6 +175,15 @@ delta states the negative that was never written down.
 
 **Tests:** `hub/tests/` — a reproduction of F162 before the fix, in the shape the drive proved
 (mark completed mid-turn, approve, assert the refusal rather than a stranded `approved`).
+
+**And a cost round 3 measured rather than estimated.** Five existing test files build `Loop(...)` with
+no `spec_document_id` and then exercise the review arm through `decide_firing` —
+`test_actor_aware_claimability.py` (14 tests), `test_a_flow_names_what_it_cannot_staff.py` (24),
+`test_review_dispatch_staffs_the_task.py` (12), `test_review_leaves_the_pool.py` (9),
+`test_a_review_needs_something_to_review.py` (5). They are **flow** requirements tested through
+**loop** fixtures, which is why the arm was never noticed running outside its capability. Those whose
+subject is a flow gain a declared document; those whose subject is genuinely a loop change with the
+requirement. This is real work, not a footnote, and it is why `tasks.md` carries it as its own item.
 
 **Drives:** `scripts/drive/t_f162_window.py` is the existing harness and should re-run to a different
 outcome; `t_drive2_loop_lands.py` covers the loop's landing route.

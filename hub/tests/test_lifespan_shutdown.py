@@ -15,19 +15,19 @@ import time
 
 from starlette.testclient import TestClient
 
-import hub.api.v1.agent_trigger as agent_trigger
+from hub import run_liveness
 from hub.main import create_app
 from hub.pty_runner import PtySession, pid_alive
 
 
 def test_hub_shutdown_kills_a_real_tracked_process():
-    # Populates _active_ptys directly with a real long-running OS subprocess, bypassing the
+    # Populates run_liveness.active_ptys directly with a real long-running OS subprocess, bypassing the
     # HTTP trigger endpoint — this test's only concern is whether the ASGI lifespan's
     # shutdown event reaches terminate_all_active_runs() and it actually kills what it
     # finds, not the trigger endpoint's own request handling (covered elsewhere).
     session = PtySession.spawn([sys.executable, "-c", "import time; time.sleep(30)"])
     pid = session.pid
-    agent_trigger._active_ptys["run-lifespan-test"] = session
+    run_liveness.active_ptys["run-lifespan-test"] = session
     try:
         assert pid_alive(pid) is True
 
@@ -49,6 +49,6 @@ def test_hub_shutdown_kills_a_real_tracked_process():
             time.sleep(0.1)
         assert pid_alive(pid) is False
     finally:
-        agent_trigger._active_ptys.pop("run-lifespan-test", None)
+        run_liveness.active_ptys.pop("run-lifespan-test", None)
         if session.isalive():
             session.terminate(force=True)

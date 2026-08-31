@@ -8,6 +8,10 @@ A loop has one agent and no second party. Every review it could staff would name
 
 Where a loop's task reaches `completed`, the loop SHALL leave it for the operator rather than attempting to advance it, and its firings SHALL NOT report the task as a step the flow could not staff. Nothing about the task is wrong, so nothing about it belongs in the report of what a firing could not do.
 
+Leaving it SHALL NOT mean saying nothing about it. Where a loop has nothing to claim and its queue holds completed work, the reason its firings give SHALL name that work as waiting for the operator to land it. A queue reported only as having no claimable task states a fact and withholds the one thing the operator needs, which is that the work is finished and the next move is theirs — and a loop in that position stays in it on every firing, forever, unless something says so.
+
+This requirement removes a loop's own **selection** of a review and nothing else. The operator SHALL still be able to dispatch a review of a loop's completed task by hand, and a loop's task already recorded in `under_review` under its own author's name SHALL still be recovered by reassignment without moving status. Neither is a loop staffing a review: the first is a person deciding, and the second repairs a holder that was already wrong.
+
 #### Scenario: A completed loop task is not selected for review
 
 - **WHEN** a loop fires and one of its queue's tasks is `completed`
@@ -24,6 +28,23 @@ Where a loop's task reaches `completed`, the loop SHALL leave it for the operato
 - **WHEN** a loop fires with a completed task in its queue and nothing else to do
 - **THEN** the firing reports no review it could not staff
 
+#### Scenario: The firing says the work is waiting for the operator
+
+- **WHEN** a loop fires with a completed task in its queue and nothing it can claim
+- **THEN** the reason it reports names that task as finished work waiting for the operator to land it
+- **AND** it is not reported merely as a queue with no claimable task
+
+#### Scenario: The operator can still review a loop's completed task by hand
+
+- **WHEN** the operator dispatches a review of a loop's completed task, naming a reviewer that is not its author
+- **THEN** the review is staffed and the turn begins, exactly as it would for any other task
+
+#### Scenario: A loop's wedged review still recovers
+
+- **WHEN** a loop's task is in `under_review` and still held by the agent recorded as completing it
+- **THEN** a reviewer that is not the author is resolved for it and the assignee is replaced
+- **AND** the task remains in `under_review`
+
 #### Scenario: A flow's review leg is unaffected
 
 - **WHEN** a flow fires and one of its document's tasks is `completed`
@@ -35,9 +56,15 @@ The Hub SHALL offer one operator action that carries a loop's completed task to 
 
 Landing a loop's work is the only route by which that work reaches the operator's main branch, and it costs three separate calls today, two of which begin as refusals — the task is still held by its author, and `completed` does not reach `approved` directly. Both refusals are correct, and neither is the operator's mistake: they are the shape of a route the product knows and the operator has to rediscover.
 
-The transitions performed SHALL be the ones that already exist, and each SHALL be recorded. The operator taking this action is the reviewer, which is what clearing the author's hold and passing through review already means; a route that recorded fewer transitions would be claiming a history that did not happen.
+The transitions performed SHALL be the ones that already exist, and each SHALL be recorded. The operator taking this action is the reviewer, which is what clearing the author's hold and passing through review already means; a route that recorded fewer transitions would be claiming a history that did not happen. No new edge SHALL be declared for it: the action composes moves the transition map already grants the operator, so the recorded history describes a sequence that was legal one step at a time.
+
+Releasing the author's hold is a change to the task, not a transition, and the record SHALL reflect that rather than claim a third row. The transition history is a record of moves between *statuses*; who holds a task has no history of its own, and the ordinary route already folds the same write into the request that carries the move it enables. What the record therefore says is that the task entered review and was approved, and that it no longer names its author.
+
+Each recorded transition SHALL name the operator as having asked for it, rather than as a move the system made on their behalf. The operator asked for all three; that they said it in one word instead of three does not make two of them the system's own bookkeeping.
 
 The action SHALL be refused on the same terms as approval itself. Where approval would be refused — including while the task's turn is still live — this action SHALL be refused with the same typed refusal, and SHALL perform none of its transitions.
+
+A refusal arising at any step SHALL leave the task as the action found it, and this SHALL hold for every reason a step can be refused rather than only for the ones the action can foresee. Checking approval's own preconditions first is what makes the refusal the one approval would have given; it is not what makes the action safe, and an action that had only that would release the author's hold before meeting a refusal on the step after.
 
 #### Scenario: One action lands a loop's completed work
 
@@ -48,8 +75,9 @@ The action SHALL be refused on the same terms as approval itself. Where approval
 #### Scenario: The history records each transition
 
 - **WHEN** the landing action completes
-- **THEN** the task's transition history records the release of its author's hold, the move into review, and the approval
-- **AND** each is attributed to the operator
+- **THEN** the task's transition history records the move into review and the approval
+- **AND** each names the operator as having asked for it, rather than the system as having made it
+- **AND** the task no longer names its author as its holder
 
 #### Scenario: The action is refused while the turn is live
 
@@ -61,3 +89,9 @@ The action SHALL be refused on the same terms as approval itself. Where approval
 
 - **WHEN** the landing action is refused for any reason
 - **THEN** the task's holder, status and integration record are all unchanged
+
+#### Scenario: A refusal on a later step undoes the earlier ones
+
+- **WHEN** the landing action's first step succeeds and a later one is refused
+- **THEN** the task still names the holder it had before the action began
+- **AND** no transition from the action is recorded in its history

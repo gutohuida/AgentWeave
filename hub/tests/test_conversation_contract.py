@@ -25,6 +25,7 @@ import sqlalchemy as sa
 from sqlalchemy import select
 
 import hub.api.v1.agent_trigger as agent_trigger
+from hub import run_liveness
 from hub.conversations import get_conversation_by_id, new_conversation
 from hub.db.engine import async_session_factory
 from hub.db.models import Conversation, EventLog, Run
@@ -39,7 +40,7 @@ async def _await_background_runs() -> None:
 async def _wait_for_active_pty(run_id, timeout=2.0):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if run_id in agent_trigger._active_ptys:
+        if run_id in run_liveness.active_ptys:
             return
         await asyncio.sleep(0.01)
     raise AssertionError(f"run {run_id} never registered an active pty")

@@ -37,6 +37,7 @@ from ... import (
     project_workspace,
     requirement_evidence,
     review_turn,
+    run_liveness,
     task_workspace,
     worktrees,
 )
@@ -141,16 +142,10 @@ router = APIRouter(prefix="/agent", tags=["agent-trigger"])
 # until it finishes, regardless of the triggering request's own lifecycle.
 _background_runs: set = set()
 
-# Live process session per in-progress run_id, so a stop request can reach the actual
-# process. `_execute_run` populates/clears this around its own read/wait loop, since that is
-# the only place the PTY-or-pipe session instance exists. The legacy internal name remains
-# to avoid churning lifecycle code that does not depend on the transport type.
-_active_ptys: Dict[str, PipeSession | PtySession] = {}
-# run_ids currently executing over the Codex app-server transport (task 2.8). This path has
-# no PtySession/PipeSession to register in `_active_ptys` — `codex_appserver.run_turn` owns
-# its own subprocess internally — so the stop endpoint and shutdown teardown need a separate
-# way to know such a run exists and is interruptible.
-_active_app_server_runs: set = set()
+# The two live-run registries moved to `run_liveness` (design D3, open question 2): the gate that
+# refuses approval while a turn is live has to read them, and `requirement_gate` importing a route
+# module would invert the layering. This module is still the only writer; the reads below are
+# unchanged apart from the name.
 # run_ids whose stop was requested via the endpoint below. `_execute_run`'s own completion
 # handling reads this once the process exits to tell "stopped deliberately" (final status
 # "stopped") apart from "crashed/exited non-zero on its own" (final status "failed") — the
@@ -1512,12 +1507,12 @@ async def stop_agent_run(
             detail=f"{agent} has no run in progress.",
         )
 
-    pty = _active_ptys.get(run.id)
+    pty = run_liveness.active_ptys.get(run.id)
     if pty is not None:
         _stop_requested.add(run.id)
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, lambda: pty.terminate(force=True))
-    elif run.id in _active_app_server_runs:
+    elif run.id in run_liveness.active_app_server_runs:
         # No process handle to terminate directly (codex_appserver.run_turn owns the
         # subprocess internally) — `_stop_requested` is itself the signal: `run_turn`'s
         # `should_interrupt` polls this same set and sends `turn/interrupt` within one poll
@@ -1559,10 +1554,10 @@ async def terminate_all_active_runs() -> int:
     Returns the number of runs terminated or signalled to stop.
     """
     loop = asyncio.get_running_loop()
-    ptys = list(_active_ptys.values())
+    ptys = list(run_liveness.active_ptys.values())
     for pty in ptys:
         await loop.run_in_executor(None, lambda p=pty: terminate_process_tree(p.pid, force=True))
-    app_server_run_ids = list(_active_app_server_runs)
+    app_server_run_ids = list(run_liveness.active_app_server_runs)
     _stop_requested.update(app_server_run_ids)
     return len(ptys) + len(app_server_run_ids)
 
@@ -1852,7 +1847,7 @@ async def _execute_run(
         await redrain_queued_agents(project_id)
         return
 
-    _active_ptys[run_id] = pty
+    run_liveness.active_ptys[run_id] = pty
     try:
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
@@ -2189,18 +2184,19 @@ async def _execute_run(
         # (`turn_scheduler.py:37-43`), so the agent silently queued every future trigger instead
         # of running it — an unbounded outage with no error anywhere a human would see. Measured
         # live in CI (`test_a_conversation_whose_model_changed_attributes_usage_per_turn`,
-        # 2026-08-17): `_active_ptys` and `_background_runs` both empty — the task had genuinely
-        # finished — while the `Run` row still read `running` with `error=None`, which ruled out
-        # every regular `Exception` (an `except Exception` guard here, tried first, changed
-        # nothing — same symptom, same `error=None` on the next CI run). `CancelledError` is a
-        # `BaseException` in Python 3.8+, not an `Exception`, and nothing in this codebase calls
-        # `.cancel()` on this task (`_stop_requested` is a cooperative flag the read loop checks
-        # itself, not a cancellation) — but that only means no *known* caller does; a test
-        # transport or event-loop teardown cancelling an orphaned background task is exactly the
-        # kind of thing that would vanish from view rather than log anything, since asyncio's own
-        # default handler does not warn on an unretrieved `CancelledError` the way it does for
-        # everything else. Re-raised below, once the row is marked, to preserve real cancellation
-        # semantics for anything that legitimately depends on it propagating.
+        # 2026-08-17): `run_liveness.active_ptys` and `_background_runs` both empty — the task
+        # had genuinely finished — while the `Run` row still read `running` with `error=None`,
+        # which ruled out every regular `Exception` (an `except Exception` guard here, tried
+        # first, changed nothing — same symptom, same `error=None` on the next CI run).
+        # `CancelledError` is a `BaseException` in Python 3.8+, not an `Exception`, and nothing
+        # in this codebase calls `.cancel()` on this task (`_stop_requested` is a cooperative
+        # flag the read loop checks itself, not a cancellation) — but that only means no *known*
+        # caller does; a test transport or event-loop teardown cancelling an orphaned background
+        # task is exactly the kind of thing that would vanish from view rather than log
+        # anything, since asyncio's own default handler does not warn on an unretrieved
+        # `CancelledError` the way it does for everything else. Re-raised below, once the row is
+        # marked, to preserve real cancellation semantics for anything that legitimately depends
+        # on it propagating.
         logger.exception("Unhandled error in run %s for %r", run_id, agent)
         already_terminal = False
         async with async_session_factory() as db:
@@ -2259,7 +2255,7 @@ async def _execute_run(
         if isinstance(exc, asyncio.CancelledError):
             raise
     finally:
-        _active_ptys.pop(run_id, None)
+        run_liveness.active_ptys.pop(run_id, None)
         _stop_requested.discard(run_id)
 
 
@@ -2413,7 +2409,7 @@ async def _execute_codex_appserver_run(
     stated goal) — a `Run`, its `AgentOutput` rows, its usage accounting, and its lifecycle
     broadcasts all look the same regardless of which transport produced them.
     """
-    _active_app_server_runs.add(run_id)
+    run_liveness.active_app_server_runs.add(run_id)
     try:
         async with async_session_factory() as db:
             await _broadcast_run_lifecycle(
@@ -2746,7 +2742,7 @@ async def _execute_codex_appserver_run(
         # See `_execute_run`: the same release, for the same reason.
         await redrain_queued_agents(project_id)
     finally:
-        _active_app_server_runs.discard(run_id)
+        run_liveness.active_app_server_runs.discard(run_id)
         _stop_requested.discard(run_id)
 
 

@@ -44,7 +44,15 @@ REVIEWER = "ev-reviewer"
 NOW = datetime.now(timezone.utc)
 
 
-async def _loop_with_completed_task(db, *, suffix):
+async def _flow_with_completed_task(db, *, suffix):
+    """A **flow** — it declares a document — and one task walked to `completed`.
+
+    Documentless until `approval-waits-for-the-turn-to-end` (design D5), which is the finding: the
+    subject of every test here is the review arm's `commit_for_task_review` gate, and that arm is
+    `agent-flows`' property. A loop declaring no document is required to be unaffected by it, so
+    the fixture had been standing in for a flow with a row the product does not treat as one. The
+    document is the one `_evidence_for` hangs its requirement on; callers pass the same `suffix`.
+    """
     job = AIJob(
         id=f"job-ev-{suffix}",
         project_id="proj-test",
@@ -57,8 +65,23 @@ async def _loop_with_completed_task(db, *, suffix):
     )
     db.add(job)
     await db.commit()
+    db.add(
+        SpecDocument(
+            id=f"doc-ev-{suffix}",
+            project_id="proj-test",
+            path=f"spec/ev-{suffix}.html",
+            title="Ledger",
+            phase="current",
+            kind="capability",
+        )
+    )
+    await db.commit()
     loop = Loop(
-        id=f"loop-ev-{suffix}", project_id="proj-test", job_id=job.id, purpose=f"ev {suffix}"
+        id=f"loop-ev-{suffix}",
+        project_id="proj-test",
+        job_id=job.id,
+        purpose=f"ev {suffix}",
+        spec_document_id=f"doc-ev-{suffix}",
     )
     db.add(loop)
     await db.commit()
@@ -83,16 +106,7 @@ async def _loop_with_completed_task(db, *, suffix):
 
 
 async def _evidence_for(db, task_id, *, suffix, commit_sha):
-    db.add(
-        SpecDocument(
-            id=f"doc-ev-{suffix}",
-            project_id="proj-test",
-            path=f"spec/ev-{suffix}.html",
-            title="Ledger",
-            phase="current",
-            kind="capability",
-        )
-    )
+    """Evidence against the document the flow declares — created there, not here."""
     db.add(
         SpecRequirement(
             id=f"req-ev-{suffix}",
@@ -147,7 +161,7 @@ async def test_a_completed_task_with_no_evidence_is_not_selected_for_review(
     """The reproduction, and the assertion that separates the fix from doing nothing."""
     await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
     async with async_session_factory() as db:
-        _job, loop, task = await _loop_with_completed_task(db, suffix="none")
+        _job, loop, task = await _flow_with_completed_task(db, suffix="none")
         decision = await decide_firing(db, loop, default_agent=AUTHOR)
 
     assert decision.kind != DECISION_CLAIM
@@ -163,7 +177,7 @@ async def test_the_task_is_left_in_completed_rather_than_wedged_in_under_review(
     """The damage the old order did. Selecting it is what moved it, and moving it is what stuck."""
     await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
     async with async_session_factory() as db:
-        _job, loop, task = await _loop_with_completed_task(db, suffix="wedge")
+        _job, loop, task = await _flow_with_completed_task(db, suffix="wedge")
         await decide_firing(db, loop, default_agent=AUTHOR)
 
     async with async_session_factory() as db:
@@ -178,7 +192,7 @@ async def test_a_completed_task_whose_evidence_names_a_commit_is_still_selected(
     """The other direction. The gate must refuse only what genuinely cannot be reviewed."""
     await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
     async with async_session_factory() as db:
-        _job, loop, task = await _loop_with_completed_task(db, suffix="good")
+        _job, loop, task = await _flow_with_completed_task(db, suffix="good")
         await _evidence_for(db, task.id, suffix="good", commit_sha="a" * 40)
         decision = await decide_firing(db, loop, default_agent=AUTHOR)
 
@@ -199,7 +213,7 @@ async def test_evidence_that_names_no_commit_is_refused_with_its_own_reason(
     """
     await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
     async with async_session_factory() as db:
-        _job, loop, task = await _loop_with_completed_task(db, suffix="nocommit")
+        _job, loop, task = await _flow_with_completed_task(db, suffix="nocommit")
         await _evidence_for(db, task.id, suffix="nocommit", commit_sha="")
         decision = await decide_firing(db, loop, default_agent=AUTHOR)
 
@@ -214,7 +228,7 @@ async def test_ordinary_work_behind_an_unreviewable_task_is_still_started(
     """D4: surface the step, do not stop the flow. `continue`, not `return`."""
     await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
     async with async_session_factory() as db:
-        _job, loop, stuck = await _loop_with_completed_task(db, suffix="behind")
+        _job, loop, stuck = await _flow_with_completed_task(db, suffix="behind")
         db.add(
             Task(
                 id="task-ev-behind-next",

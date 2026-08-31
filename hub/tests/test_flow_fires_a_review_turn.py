@@ -25,7 +25,7 @@ from sqlalchemy import select
 
 from hub import worktrees
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, InboundQueueEntry, Loop, Task
+from hub.db.models import AIJob, InboundQueueEntry, Loop, SpecDocument, Task
 from hub.scheduler import JobScheduler
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import run_actor
@@ -45,7 +45,14 @@ REVIEWER = "critic"
 
 
 async def _flow(db, *, suffix, agent=AUTHOR, task_id=None):
-    """A loop whose job belongs to *agent*, with an optional existing task adopted into its queue."""
+    """A flow whose job belongs to *agent*, with an optional existing task adopted into its queue.
+
+    **It declares a document, and that is what makes it a flow** (`agent-flows:13`). Until
+    `approval-waits-for-the-turn-to-end` (design D5) this built a documentless `Loop` and every test
+    in this file — all of them about a flow firing a review turn — was standing in for a flow with a
+    row the product does not treat as one. `decide_firing`'s review arm now reads the declaration,
+    so the fixture states what the file's name already claimed.
+    """
     job = AIJob(
         id=f"job-flow-{suffix}",
         project_id="proj-test",
@@ -57,9 +64,23 @@ async def _flow(db, *, suffix, agent=AUTHOR, task_id=None):
         enabled=True,
     )
     db.add(job)
+    db.add(
+        SpecDocument(
+            id=f"doc-flow-{suffix}",
+            project_id="proj-test",
+            path=f"spec/flow-{suffix}.html",
+            title=f"Flow {suffix}",
+            phase="current",
+            kind="capability",
+        )
+    )
     await db.commit()
     loop = Loop(
-        id=f"loop-flow-{suffix}", project_id="proj-test", job_id=job.id, purpose=f"flow {suffix}"
+        id=f"loop-flow-{suffix}",
+        project_id="proj-test",
+        job_id=job.id,
+        purpose=f"flow {suffix}",
+        spec_document_id=f"doc-flow-{suffix}",
     )
     db.add(loop)
     await db.commit()
