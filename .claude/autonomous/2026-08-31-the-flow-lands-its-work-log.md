@@ -1049,3 +1049,153 @@ is link-based and a shared requirement now couples two tasks' approvals? (c) F15
 `detail["message"]` — check nothing else depends on the dict repr reaching an agent, and that the
 `list` branch still wins for validation errors. And re-derive the scenarios again: round 2 found two
 whose WHEN was wider than the requirement and one that contradicted its own predicate.
+
+## Iteration 8 — 2026-08-31 01:54 to 02:0x (+01:00)
+
+Branch `autonomous/2026-08-31-the-flow-lands-its-work` at `0646ac8`, tree clean, `git log` matching
+STATE.json (iteration 7 done and released, `fce2867` carrying round 2). Nothing to reconcile.
+Heartbeat claimed at 01:54.
+
+### One item: `C-R3`
+
+Round 3 of `approval-refuses-unaccepted-evidence`. An independent re-derivation against the code, not
+a review of round 2. Three defects found — two in the proposal's mechanism, one between the two
+requirements this change ships together — and the three things round 2 asked to be attacked were each
+answered with a measurement rather than a reading.
+
+### The headline: the two SHALLs contradicted each other, and the reconciliation was in prose (D14)
+
+Not in the code at all. Round 2 corrected the MODIFIED enumeration and added *"or when no accepted
+evidence for the task names a commit to merge"* — unqualified, under a lead sentence reading *"The
+transition into `approved` SHALL still succeed where integration cannot be attempted."* The ADDED
+requirement refuses where the task has awaiting evidence naming a commit **and no accepted evidence
+naming one**, which is a strict subset of that. So on the same facts, in a configured repository, one
+SHALL said succeed and the other said refuse.
+
+Round 2 knew the case had to be excluded — it wrote *"The last of them is narrower than it reads"* in
+the paragraph beneath. **That is the defect.** A normative sentence is what a reader implements and
+what `--strict` reads; a narrowing that lives only in surrounding prose is a note, not a rule. This
+change exists because an enumeration did not say what the product did, and round 2 shipped a second
+one.
+
+Repaired in the sentence — *"…and no evidence awaiting review names one either"* — and checked
+against all four worlds rather than asserted:
+
+| the task's evidence | accepted names a commit | awaiting names a commit | in the skip list? |
+|---|---|---|---|
+| none at all | no | no | yes — MODIFIED |
+| `paths` footprint only | no | no | yes — MODIFIED |
+| rejected, named a commit | no | no | yes — MODIFIED |
+| awaiting, names a commit | no | **yes** | no — ADDED refuses |
+
+The two requirements now partition the world instead of overlapping it.
+
+### D5 shared the wrong half of the query, and the change's own requirement catches it
+
+Rounds 1 and 2 both wrote task 2.1 as *extract the body of `integration_targets`*. That body is two
+things:
+
+1. the **filter** — the join through `TaskRequirementLink` → `RequirementEvidence` →
+   `EvidenceFootprint`, project scope, review state, `kind == "git"`, the `commit_sha` guard;
+2. the **reduction** — `newest: Dict[Optional[str], Target]` keyed by branch, so only the newest
+   footprint per branch survives (`task_integration.py:178-185`).
+
+The reduction answers *what do I merge*. `awaiting_targets` is not deciding anything about merging —
+it enumerates what has not been judged. Inheriting the reduction breaches this change's **own**
+requirement 1: *"SHALL name each piece of evidence that is waiting rather than only how many there
+are."* Two awaiting rows on one branch — one agent, one task, two commits, the ordinary shape of a
+task worked in more than one sitting — collapse to one, and the refusal names one of the two. Round 2
+made that naming load-bearing (each row must carry the task that recorded it); a reduction that
+discards rows defeats exactly that.
+
+**And nothing is lost by splitting.** D5's property is about *non-emptiness* — the refusal fires
+precisely when acceptance would produce a target that is not there now — and a per-branch dedup of a
+non-empty list is non-empty. The property survives whole; the reduction was never carrying any of it.
+Tasks 2.1–2.3 rewritten, 2.5 added (both rows returned, one merged), 5.2a added (the sentence names
+both commits).
+
+### The identifier is not in `task_integration`'s reach
+
+Task 2.3 asked `_targets` to return "its requirement identifier". `RequirementEvidence.requirement_id`
+is the `spec_requirements.id` FK (`models.py:2334-2336`); the human identifier lives on
+`SpecRequirement`, which `task_integration` does not import. Reaching it means adding a join to the
+**merge** query for a field only the refusal's sentence uses — the drift D5 exists to prevent.
+`requirement_gate` already imports `SpecRequirement` at module level, so the resolution belongs where
+the sentence is composed. Tasks 2.3 and 3.4 corrected.
+
+### The three questions round 2 posed, each answered by measurement
+
+**(a) Is the DB row the right pre-filter, or should the repository be asked?** The licence is
+`integrate()` reaching `ALREADY_INTEGRATED` before every skip that could pre-empt it. Read
+(`task_integration.py:255-276`): the order is `branch_exists`, reachability, dirty, wrong-branch —
+and it is not only a reading, `test_already_integrated_wins_over_a_dirty_checkout`
+(`test_task_integration.py:566`) asserts that ordering and passes today. Only `branch_exists`
+precedes, and it cannot mis-fire. Both error directions weighed: a false positive costs one honest
+skip row (already accepted in D7); a false negative — a `MERGED` row for a commit main no longer
+contains — costs a missed retry, with "Try again" and the next acceptance still available. Round 2's
+answer stands, now for a measured reason.
+
+**(b) Does the refusal belong at approval, given the coupling?** Yes, and **D6 overstated its own
+cost**. The refusal needs `awaiting_targets` non-empty *and* `integration_targets` empty, both
+link-based over the same requirements. So a sibling task is refused only when the shared requirement
+carries **no accepted commit at all** — precisely when its own approval would merge nothing either.
+The moment any accepted commit exists, D3's mixed-case ALLOW applies and the sibling's awaiting row
+arrives as an advisory. The rule: *a task is never refused over a sibling's evidence while it has work
+of its own to merge.* Materially smaller than round 2 recorded, and the reason the coupling is
+tolerable rather than merely accepted.
+
+**(c) F152's `detail["message"]`.** Clean, and three checks say so rather than one. The `list` branch
+returns inside its own block (`mcp_server.py:119-134`) so a dict branch cannot pre-empt it. The
+reachable producers are narrower than round 2 implied: `_hub_request` builds every URL as
+`/api/v1/agent-actions{path}` (`mcp_server.py:147`), so `spec.py`'s two dozen dict details never
+arrive — the set is six `HTTPException(detail={...})` sites in `agent_actions.py`, `main.py`'s
+`TransitionRefusedError` handler (`to_dict()`, carries `message`) and its `TaskBindingError` handler
+(a plain `str`). All six carry `message` as the whole sentence. And the one field that could be lost,
+`field`, is **already inside the message**: `PayloadError.__init__` composes
+`f"{field}: {message}"` (`spec_payload.py:53-55`) and `spec_service` builds its `SaveRefusedError`
+from `str(exc)`. Task 6.3 stands as written; its guard is the right shape rather than a precaution.
+
+### Two facts and a measurement added for `C-IMPL`
+
+- **One footprint per evidence.** `UniqueConstraint("evidence_id")` (`models.py:2450-2453`), so
+  tasks 4.1/4.2 speaking of *"this evidence's commit"* in the singular is well-defined rather than a
+  simplification.
+- **`evaluate`'s early return is a live trap.** `if not enforced: return refusal, ""` sits two
+  statements after the `_check_mergeable` call (`requirement_gate.py:205-209`). A check placed after
+  it is dead in every default project — the same trap that let F122 survive, one layer down. Task 3.6
+  now says "beside" means *before* it.
+- **Blast radius measured, not feared.** Only a test that configures a main branch on a real
+  repository *and* leaves evidence awaiting can newly refuse. Grepping `main_branch` across
+  `hub/tests/` gives ten files; five never reach `approved`. The candidates are five:
+  `test_evidence_footprint_root`, `test_evidence_restamp`, `test_task_integration`,
+  `test_task_integration_retry`, `test_task_release`. `test_flow_chain_end_to_end.py` is **not**
+  among them, because it configures no main branch — which also means the flow suite cannot prove
+  this change and only a drive can.
+
+### Scenarios re-derived a third time
+
+Round 2's two `only` repairs and its split of the "already there" case were re-read against the
+predicate and are right. Requirement 1 enumerated four silent preconditions and scenarioed one, so a
+**not-a-repository** scenario was added; and the D5 defect got the scenario that would have caught it
+(*every waiting piece is named, not just one per branch*). The delta now carries 26 scenarios.
+
+### Verification
+
+- `openspec validate approval-refuses-unaccepted-evidence --strict` — valid, after each edit.
+- The MODIFIED requirement re-diffed line-by-line against `openspec/specs/` **independently of round
+  2**: the intended sentence, two paragraphs, one added scenario, nothing else.
+- Every `file:line` cited above was opened this iteration; four ranges were wrong on first writing
+  (`task_integration.py` dedup, `integrate()` preconditions, `mcp_server.py` list branch,
+  `requirement_gate.py` early return) and were corrected against the files.
+- The blast-radius list was corrected once: the first intersection named seven files, and counting
+  `approved` occurrences per file showed two of them never reach it.
+- No code changed, so no test run. That is `C-IMPL`'s.
+
+### Next
+
+**`C-IMPL`.** Three rounds are done and the change is implementable as written. Work group by group,
+1 through 8; group 1's reproductions must pass against unmodified code before anything is fixed.
+Round 3's rewrites are in tasks 2.1–2.3, 2.5, 3.4, 3.6 and 5.2a — read those before starting group 2,
+because the naive "extract the body" is the version that breaches requirement 1. Expect the five
+named test files to move, and nothing outside them; if a sixth starts refusing, that is a finding
+about the predicate, not a test to edit.

@@ -106,6 +106,18 @@ enforcement point.
 - **THEN** the approval succeeds
 - **AND** the skipped integration is recorded with its reason
 
+#### Scenario: A project that is not a repository is not blocked either
+
+- **WHEN** approval is requested for a task with awaiting evidence naming a commit, in a project
+  whose directory is not a git repository
+- **THEN** the approval succeeds
+
+#### Scenario: Every waiting piece of evidence is named, not just one per branch
+
+- **WHEN** approval is refused for a task carrying two pieces of awaiting evidence that name
+  different commits on the same branch
+- **THEN** the refusal names both of them
+
 #### Scenario: Work that can already be merged is approved and reported
 
 - **WHEN** approval is requested for a task with accepted evidence naming a commit and further
@@ -219,19 +231,27 @@ about the evidence, and a repository failure SHALL NOT reverse it.
 
 ### Requirement: An integration that cannot proceed does not block approval
 
-The transition into `approved` SHALL still succeed where integration cannot be attempted, and the integration SHALL be recorded as skipped together with the reason. Integration cannot be attempted when the project has no configured main branch, when the project's working directory cannot be resolved, when the project is not a repository, when the primary checkout has uncommitted changes to tracked files, when the primary checkout is not on the main branch, or when no accepted evidence for the task names a commit to merge.
+The transition into `approved` SHALL still succeed where integration cannot be attempted, and the integration SHALL be recorded as skipped together with the reason. Integration cannot be attempted when the project has no configured main branch, when the project's working directory cannot be resolved, when the project is not a repository, when the primary checkout has uncommitted changes to tracked files, when the primary checkout is not on the main branch, or when no accepted evidence for the task names a commit to merge and no evidence awaiting review names one either.
 
 Two of those are enumerated here for the first time. An unresolvable working directory has always
 been skipped this way and was simply missing from the list; it is added because this change argues
 from the list being closed, and an argument from a list that is not actually closed is worth
 nothing.
 
-The last of them is narrower than it reads. Work recorded but not yet judged is refused at approval
-rather than skipped after it, so what remains in this list is the task that genuinely produced no
-commit anyone is waiting to accept: work whose
-evidence records paths, work whose evidence was rejected, and work that produced no evidence at all.
-For those, nothing being merged is the true account rather than a gap, and blocking approval would
-block work the product supports.
+The last of them carries a second clause, and **round 3 moved that clause into the sentence itself**.
+Round 2 wrote it as *"or when no accepted evidence for the task names a commit to merge"*, unqualified,
+and left the narrowing to the paragraph below — which made this requirement's normative sentence say
+approval succeeds in precisely the case the refusal requirement above says it is refused. A
+reconciliation that lives only in explanatory prose is not a reconciliation; the two SHALLs have to
+agree on their own terms.
+
+So what remains in this list is the task that genuinely produced no commit anyone is waiting to
+accept: work whose evidence records paths, work whose evidence was rejected, and work that produced
+no evidence at all. In each of those, no accepted evidence names a commit and none awaiting review
+does either, which is what the sentence now says. Work recorded but not yet judged is refused at
+approval rather than skipped after it, so it never reaches this list. For the three that do, nothing
+being merged is the true account rather than a gap, and blocking approval would block work the
+product supports.
 
 Untracked files SHALL NOT prevent integration. The system writes specification documents into the
 project directory, so untracked content is the ordinary state of a working project rather than a

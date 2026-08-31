@@ -28,21 +28,39 @@
 
 ## 2. `awaiting_targets` — one query shape, two review states (D5)
 
-- [ ] 2.1 In `hub/hub/task_integration.py`, extract the body of `integration_targets` into a private
-  `_targets(session, task, review_state)` and make `integration_targets` call it with `ACCEPTED`.
-  The docstring stays on `integration_targets`; `_targets` gets the query's own reasoning.
-- [ ] 2.2 Add `awaiting_targets(session, task)`, calling `_targets` with
-  `requirement_evidence.AWAITING`. Its docstring states the property D5 buys: the refusal fires
-  precisely when acceptance would produce a target that does not exist now, and two independently
-  written queries would drift.
-- [ ] 2.3 Return the evidence id, its requirement identifier **and its `task_id`** alongside the
-  commit and branch — the refusal must **name each piece of evidence** and say which task recorded
-  it (round 2's D6), and `Target` carries only `commit_sha` and `branch` today. Decide between
-  widening `Target` with optional fields and returning a second shape; prefer widening, because the
-  accepted path can carry them harmlessly and a second shape is a second thing to keep in step.
+- [ ] 2.1 **Round 3 rewrote 2.1-2.3; do not extract the whole body.** In
+  `hub/hub/task_integration.py`, extract only the **filter** of `integration_targets` into a private
+  `_targets(session, task, review_state)`: the join through `TaskRequirementLink` →
+  `RequirementEvidence` → `EvidenceFootprint`, the project scope, the review state, `kind == "git"`,
+  and the `commit_sha` guard — including the `if not row.commit_sha: continue` that sits inside
+  today's loop but belongs to the filter. It returns the matching rows, **undeduplicated**, oldest
+  first. The docstring stays on `integration_targets`; `_targets` gets the filter's own reasoning.
+- [ ] 2.2 **The per-branch reduction stays in `integration_targets`, not in `_targets`.** Keying
+  `newest` by branch answers *what do I merge* and is a decision about merging;
+  `awaiting_targets(session, task)` is enumerating what has not been judged and returns every row.
+  Design D5 round 3: a shared reduction would collapse two awaiting rows on one branch into one and
+  breach requirement 1's *"SHALL name each piece of evidence that is waiting rather than only how
+  many there are"*. D5's actual property — the refusal fires precisely when acceptance would produce
+  a target that does not exist now — is about **non-emptiness**, which both reductions preserve
+  identically, so it survives the split whole. Say that in `awaiting_targets`' docstring.
+- [ ] 2.3 Carry the evidence id, the `RequirementEvidence.requirement_id`, **and the recording
+  `task_id`** alongside the commit and branch — the refusal must name each piece and say which task
+  recorded it (round 2's D6). All three are already on the joined `RequirementEvidence`, so this is a
+  wider `select`, **not a new join**. **Do not put the requirement's human identifier here** (round
+  3): `RequirementEvidence.requirement_id` is the `spec_requirements.id` FK
+  (`models.py:2334-2336`) and the identifier lives on `SpecRequirement`, which `task_integration`
+  does not import — reaching it would add a join to the *merge* query for a field only the sentence
+  uses, which is the drift D5 exists to prevent. `requirement_gate` already imports `SpecRequirement`
+  at module level; resolve `requirement_id` → identifier there, where the sentence is composed.
+  `Target` carries only `commit_sha` and `branch` today; widen it with optional fields rather than
+  returning a second shape, since the accepted path can carry them harmlessly.
 - [ ] 2.4 Unit-test `awaiting_targets` directly: awaiting-with-commit returns it; accepted does not;
-  rejected does not; `paths` footprint does not; evidence linked through a requirement this task is
-  not linked to does not.
+  rejected does not; `paths` footprint does not; a `git` footprint whose `commit_sha` is `""` does
+  not; evidence linked through a requirement this task is not linked to does not.
+- [ ] 2.5 **Round 3's regression test for the split.** Two awaiting evidence rows on the **same**
+  branch naming different commits: `awaiting_targets` returns **both**, and `integration_targets`
+  over the same two rows accepted returns **one**. This is the test that would have caught the shared
+  reduction, and without it the refusal silently names one of two waiting pieces.
 
 ## 3. The refusal (D1, D2, D4)
 
@@ -56,7 +74,8 @@
   immediately when `unmergeable` is set and nothing else is — a third category appended carelessly
   is dropped from the sentence in the case that matters most. Restructure so each category
   contributes its own sentence and the composition is explicit.
-- [ ] 3.4 The sentence names each awaiting evidence row — its requirement identifier, its commit,
+- [ ] 3.4 The sentence names each awaiting evidence row — its requirement identifier (resolved here
+  from `requirement_id` against `SpecRequirement`, per 2.3), its commit,
   **and the task that recorded it**, saying so explicitly where that is not the task being approved
   (round 2's D6: a shared `TaskRequirementLink` is ordinary, so this happens in normal use).
   `RequirementEvidence.task_id` carries it and is populated even when an agent omits it
@@ -67,7 +86,12 @@
   no surface at all.
 - [ ] 3.6 `_check_unaccepted(session, task, refusal)` in `requirement_gate.py`, called from
   `evaluate` beside `_check_mergeable`. Refuse when `awaiting_targets` is non-empty **and**
-  `integration_targets` is empty.
+  `integration_targets` is empty. **Round 3: "beside" means before `evaluate`'s early return**, which
+  is `if not enforced: return refusal, ""` two statements later (`requirement_gate.py:205-209`). A
+  call placed after it is dead in every default project, because `_enforced_requirements` filters
+  `sketch` out and a default document is a sketch — the same trap that let F122 survive, one layer
+  down. `_check_mergeable` is already on the correct side of it; put this one next to it and the trap
+  is closed by position.
 - [ ] 3.7 **Share `_check_mergeable`'s preconditions (D4)**, and share them by construction rather
   than by copying: resolve project, main branch, workspace and `is_repository`/`branch_exists` once
   and pass the result to both checks. Two copies of four preconditions is two things to keep in
@@ -122,6 +146,10 @@
   `TaskIntegration` row exists.
 - [ ] 5.2 The refusal's sentence contains the evidence's requirement identifier, the word for
   accepting, and the word for granting.
+- [ ] 5.2a **Round 3, the behavioural half of 2.5.** Two awaiting evidence rows on one branch: the
+  refusal's sentence names **both** commits, not one. Requirement 1 says each waiting piece is named
+  rather than only how many there are, and the shared-reduction defect round 3 found would have
+  passed 5.2 while failing this.
 - [ ] 5.3 Invert 1.4: accepting the evidence for an already-approved, unmerged task merges it, and
   the task is not reopened.
 - [ ] 5.4 1.5's two wedge cases still approve. These are the scoping constraint; if either fails the

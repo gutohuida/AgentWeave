@@ -107,9 +107,13 @@ Placement: a new `_check_unaccepted`, called from `requirement_gate.evaluate` be
 `_check_mergeable` is — `DEFAULT_SPEC_RIGOR = "sketch"` blocks nothing, so anything placed behind
 rigor is absent from a default project, which is how F122 survived.
 
-The awaiting rows are found by a new `task_integration.awaiting_targets`, the *same query* as
-`integration_targets` with `ACCEPTED` swapped for `AWAITING`. One query shape, so the refusal fires
-exactly when acceptance would produce a target that is not there now (D5).
+The awaiting rows are found by a new `task_integration.awaiting_targets`, sharing
+`integration_targets`' **filter** with `ACCEPTED` swapped for `AWAITING`. One filter, so the refusal
+fires exactly when acceptance would produce a target that is not there now (D5). **Round 3 narrowed
+what is shared**: the per-branch deduplication is a decision about *what to merge* and stays in
+`integration_targets`; sharing it would collapse two awaiting rows on one branch into one and breach
+this change's own requirement that each waiting piece be named. Non-emptiness — the property D5's
+argument actually rests on — is identical under both reductions, so nothing is lost.
 
 ### 2. Accepting evidence attempts the integration that wanted it
 

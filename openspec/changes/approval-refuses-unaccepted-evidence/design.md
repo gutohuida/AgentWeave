@@ -207,6 +207,43 @@ when acceptance would produce a target that does not exist now.** Two independen
 would drift — a filter added to one and not the other would produce either a refusal nothing can
 clear, or a silent non-merge of the kind this change exists to end.
 
+### Round 3: share the **filter**, not the **reduction** — as written, the refusal cannot name what it must
+
+Rounds 1 and 2 both wrote this as *extract the body of `integration_targets`*. That body is two
+things, and only the first of them is what D5's property depends on:
+
+1. **the filter** — the join through `TaskRequirementLink` → `RequirementEvidence` →
+   `EvidenceFootprint`, the project scope, the review state, `kind == "git"`, a non-null and
+   non-empty `commit_sha`;
+2. **the reduction** — `newest: Dict[Optional[str], Target]`, keyed by branch, so only the newest
+   footprint *per branch* survives (`task_integration.py:178-185`). Note that the empty-string
+   guard — `if not row.commit_sha: continue` — sits inside that loop today although it belongs to
+   the filter; the split must carry it into `_targets`, or `awaiting_targets` would refuse on a
+   `git` footprint whose `commit_sha` is `""` while `integration_targets` silently ignored one.
+
+The reduction exists to answer *what do I merge*: one target per branch, because merging two commits
+from one branch twice is pointless and dropping one of two branches would integrate half of what was
+approved. It is a decision about merging, and `awaiting_targets` is not deciding anything about
+merging — it is enumerating what has not been judged.
+
+**Inheriting it breaches requirement 1's own clause.** *"[The refusal] SHALL name each piece of
+evidence that is waiting rather than only how many there are."* Two awaiting evidence rows on the
+same branch — one agent, one task, two commits, which is the ordinary shape of a task worked in more
+than one sitting — collapse to one `Target`, and the refusal names one of the two. Round 2 made the
+naming load-bearing (each row must carry the task that recorded it, D6); a reduction that discards
+rows defeats exactly that.
+
+**And the property survives the split intact.** D5's claim is about *non-emptiness* — the refusal
+fires precisely when acceptance would produce a target that is not there now — and both reductions
+are empty on exactly the same row sets, because a per-branch dedup of a non-empty list is non-empty.
+So sharing the filter buys the whole of what D5 argued for, and the reduction was never carrying any
+of it.
+
+**`C-IMPL` therefore:** `_targets(session, task, review_state)` returns the filtered rows, undeduped.
+`integration_targets` applies the per-branch reduction and keeps its docstring; `awaiting_targets`
+returns them all. A test that two awaiting rows on one branch are both named is the one that would
+have caught this (`tasks.md` 2.5).
+
 ---
 
 ## D6 — link-based scope, and the consequence it carries
@@ -252,6 +289,24 @@ requirement identifier and commit. Where that task is not the one being approved
 so. `RequirementEvidence.task_id` (`models.py:2348-2350`) exists and is unread by integration — this
 is the one thing it is genuinely good for: not scoping the query, but explaining its result.
 
+### Round 3: the coupling is real but **narrower than this section states**, and the difference matters
+
+Round 2 measured that sharing a requirement is ordinary and concluded "two tasks linked to one
+requirement are coupled at approval". True as far as it goes, and it reads as though any awaiting row
+on a shared requirement stops the sibling task. It does not, because of the *other* half of the
+refusal's predicate (`tasks.md` 3.6): the refusal fires only where `awaiting_targets` is non-empty
+**and `integration_targets` is empty**. Both are link-based, over the same requirements.
+
+So the sibling task is refused only when the shared requirement carries **no accepted commit at
+all** — which is precisely the case where that task's own approval would merge nothing either. The
+moment any accepted commit exists on any requirement the task serves, D3's mixed-case ALLOW applies
+instead and the other task's awaiting row arrives as an **advisory**, not a refusal.
+
+Stated as the rule: *a task is never refused over a sibling's evidence while it has work of its own
+to merge.* That is a materially smaller cost than round 2 recorded, and it is the reason the coupling
+is tolerable rather than merely accepted — recorded here so a later reader does not re-open the
+question on the strength of round 2's wider sentence.
+
 ---
 
 ## D7 — half 2 fires on *a commit that is not in the product*, not on the previous attempt's reason
@@ -294,6 +349,27 @@ Multi-branch converges by construction: accepted `A` on `X` returns `ALREADY_INT
 accepted `B` on `Y` merges. Same-branch converges too, because `integration_targets` returns the
 newest accepted footprint per branch — after the acceptance that is `B`, and merging `B` carries
 `A`'s ancestry with it.
+
+**Round 3 checked the one thing that licence depends on, and there is a passing test for it.** The
+self-guard only licenses the wider predicate if `integrate()` reaches `ALREADY_INTEGRATED` *before*
+every skip that could pre-empt it — if a dirty checkout were tested first, an acceptance during an
+edit would record `CHECKOUT_DIRTY` for a commit that is already in, and the operator would be sent to
+stash for nothing. Read in the code (`task_integration.py:255-276`): the order is `branch_exists`,
+then reachability, then dirty, then wrong-branch, and the reason is written above it — *"Before any
+question about the working tree. Whether a commit is already in the target is a fact about the commit
+and the target alone."* And it is not only a reading: `test_already_integrated_wins_over_a_dirty_checkout`
+(`hub/tests/test_task_integration.py:566`) asserts exactly that ordering and passes today. Only
+`branch_exists` precedes it, which cannot mis-fire — a branch that does not exist has nothing a commit
+could already be in.
+
+**So the answer to round 3's question (a) is: the database row is a legitimate pre-filter, and the
+repository is the authority.** Its two error directions were weighed rather than assumed. A false
+*positive* (a task included that needed no merge) costs one honest skip row, which D7 already accepts
+above. A false *negative* — a `MERGED` row for a commit that main no longer contains, after a reset —
+costs a missed retry, and both the "Try again" route and the next acceptance remain. Asking git per
+candidate task on every acceptance would buy the second case at a subprocess apiece; `integrate()`
+asks anyway, one target at a time, only for tasks that survived the filter. Round 2's answer stands,
+now for a measured reason rather than a read one.
 
 **What this costs, named rather than discovered.** A task whose last attempt skipped
 `CHECKOUT_DIRTY` will now be attempted again when new evidence is accepted, and will record a second
@@ -422,6 +498,41 @@ and fastmcp. Where `detail` is a dict carrying a `message`, return that; otherwi
 today's behaviour. Filed as **F152**; fixed here rather than queued, because it is inside the
 sentence this change is about.
 
+### Round 3 checked the fix for collateral damage, and it is clean — three checks, all measured
+
+Round 2 proposed a change to a function every agent-facing error passes through, which deserves more
+than "it looks safe". The three ways it could go wrong were each checked in the code.
+
+**1. Does the `list` branch still win?** Yes, structurally: `isinstance(detail, list)` is tested
+first and returns inside its own block (`mcp_server.py:119-134`). A dict branch appended after it
+cannot pre-empt it, and a Pydantic error body is a list, never a dict.
+
+**2. Which producers can actually reach this?** Narrower than round 2 implied, and the narrowing is
+what makes the fix safe. `_hub_request` builds every URL as
+`f"{base_url}/api/v1/agent-actions{path}"` (`mcp_server.py:147`), so `_readable_detail` only ever
+sees bodies from the **agent-actions** router plus the two app-level handlers. `spec.py`'s two dozen
+dict details are on the operator plane and never arrive here. The reachable set is six
+`HTTPException(detail={...})` sites in `agent_actions.py` (`:1085`, `:1197`, `:1358`, `:1373`,
+`:1433`, `:1508`), `main.py`'s `TransitionRefusedError` handler (`refusal.to_dict()`, which carries
+`message`) and its `TaskBindingError` handler (whose `detail` is a plain `str`, so untouched).
+**All six carry `message` as the whole sentence.**
+
+**3. Does returning `message` discard anything an agent needs?** This is the real risk, because four
+of the six carry a second field. `code` is machine-readable and duplicated in the sentence's sense;
+`field` is the one that could matter — a payload rejection whose message was only *"Field required"*
+would become unactionable. It is not, and the reason is a deliberate one already in the code:
+`PayloadError.__init__` composes `super().__init__(f"{field}: {message}" if field else message)`
+(`spec_payload.py:53-55`), and `spec_service` builds its `SaveRefusedError` from `str(exc)`
+(`spec_service.py:151`, `:535`, `:766`) — so the field path is *already inside the message string*.
+The one hand-written `field_path="subject"` site (`spec_service.py:677-681`) has a message that names
+its own subject. Nothing is lost.
+
+So `tasks.md` 6.3 stands as written, and its guard — *return `message` only where it is a non-empty
+string, otherwise keep today's behaviour* — is the right shape rather than a precaution: it is what
+keeps `TaskBindingError`'s string detail and any future messageless dict on the old path. **The fix
+is also worth more than this change needs**: it repairs the sentence for all six agent-plane
+refusals, not only the gate's.
+
 ---
 
 ## D13 — round 2: four facts checked in the code that the implementation would otherwise assume
@@ -451,6 +562,47 @@ Recorded so `C-IMPL` does not re-derive them and round 3 can attack them rather 
 
 ---
 
+## D14 — round 3: the two SHALLs contradicted each other, and the reconciliation was in prose
+
+The sharpest thing round 3 found, and it is not in the code at all — it is between two requirements
+this change ships together.
+
+Round 2 corrected the MODIFIED enumeration to include the skip reasons it had missed, and added
+*"or when no accepted evidence for the task names a commit to merge"*. Unqualified, under a lead
+sentence reading *"The transition into `approved` SHALL still succeed where integration cannot be
+attempted"*. Meanwhile the ADDED requirement says the transition SHALL be **refused** where the task
+has awaiting evidence naming a commit and no accepted evidence naming one — which is a strict subset
+of *"no accepted evidence names a commit"*. So on the same facts, in a configured repository, one
+SHALL said succeed and the other said refuse.
+
+Round 2 knew the case had to be excluded and wrote the exclusion into the paragraph beneath: *"The
+last of them is narrower than it reads."* That is the defect. A normative sentence is what a reader
+implements and what `--strict` reads; a narrowing that lives only in the surrounding prose is a note,
+not a rule, and this repository's own experience is that the sentence is what survives into the code.
+The change is *about* an enumeration that did not say what the product did.
+
+**Repaired in the sentence**: *"…, or when no accepted evidence for the task names a commit to merge
+**and no evidence awaiting review names one either**."* Checked against all four worlds rather than
+asserted:
+
+| the task's evidence | accepted names a commit | awaiting names a commit | in the skip list? | governed by |
+|---|---|---|---|---|
+| none at all | no | no | **yes** | MODIFIED — approve, record the skip |
+| `paths` footprint only | no | no | **yes** | MODIFIED — approve, record the skip |
+| rejected, named a commit | no | no | **yes** | MODIFIED — approve, record the skip |
+| awaiting, names a commit | no | **yes** | **no** | ADDED — refuse |
+
+The two requirements now partition the world instead of overlapping it, and the prose beneath
+explains the sentence rather than correcting it.
+
+**Noted, not changed:** the live scenario *"A project without a repository approves unchanged"* has a
+`WHEN` about footprints recording paths rather than about a missing repository — a title that does not
+match its own scenario. It is pre-existing, it is inside the MODIFIED block, and touching it would
+widen this change's diff for a cosmetic reason. Left for whoever next edits that requirement for a
+real cause.
+
+---
+
 ## D11 — tripwires for `C-IMPL`
 
 - **`GateRefusal.refuses`** is `bool(self.blocking or self.diagnostics or self.unmergeable)`. A new
@@ -467,3 +619,25 @@ Recorded so `C-IMPL` does not re-derive them and round 3 can attack them rather 
   and every scheduler test that walks a task to `approved` with recorded evidence is a candidate to
   move. Grep before changing any of them, and write the reason into each — the discipline B-IMPL
   followed.
+
+### Round 3: two more facts, and the blast radius measured rather than feared
+
+- **An evidence row has at most one footprint.** `EvidenceFootprint.__table_args__` carries
+  `UniqueConstraint("evidence_id", name="uq_evidence_footprints_evidence")` (`models.py:2450-2453`).
+  So `tasks.md` 4.1 and 4.2 speaking of *"this evidence's commit"* in the singular is well-defined
+  rather than a simplification, `awaiting_targets` cannot return two rows for one evidence, and half
+  2 never has to choose between two commits for one acceptance. Worth stating because both tasks read
+  as though they were assuming it.
+- **The suite's blast radius is bounded by D4, and the bound was measured.** A test can only newly
+  refuse if it configures a main branch on a real repository *and* leaves evidence awaiting — D4's
+  preconditions make every other project silent. Grepping `main_branch` across `hub/tests/` returns
+  ten files; of those, five mention evidence but never reach `approved`
+  (`test_dashboard_truth.py`, `test_requirement_coverage.py`, `test_turn_workspace.py`,
+  `test_operator_projects_api.py`, `test_project_open_adopts_main_branch.py`). The candidates are the
+  remaining **five**: `test_evidence_footprint_root.py`, `test_evidence_restamp.py`,
+  `test_task_integration.py`, `test_task_integration_retry.py` and `test_task_release.py`. `tasks.md`
+  7.4 still stands — grep, read each, write the reason in — but it is a bounded list rather than an
+  open-ended sweep, and notably `test_flow_chain_end_to_end.py` is **not** in it, because it
+  configures no main branch, which also means the flow suite cannot prove this change and only a
+  drive can. If a test outside these five starts refusing, that is a finding about the predicate,
+  not a test to edit.
