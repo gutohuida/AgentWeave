@@ -68,8 +68,11 @@ operator's own interactive session. This design takes the second — see D7.
 ## The design — one 24-hour cycle
 
 ```
+08:30 ── one shot ──                RESEARCH  Scheduled Task: AgentWeaveResearch
+                                              auto mode, outside the repo, reads the web
+
 09:00 ─────────────────── 17:00     FILL      Scheduled Task: AgentWeaveDayLoop
-                                              research · e2e · spec loops · review page
+                                              e2e · spec loops · review page
 
 17:00 ─────────────────── 23:00     DECIDE    the operator, in a Claude Code session
                                               publish artifact · talk · write APPROVALS.md
@@ -91,10 +94,10 @@ Iteration 1 composes its own queue; there is no separate orchestrator task. The 
 1. **Repo delta.** What landed since the last cycle: `git log`, merged branches, the diff to
    `scripts/drive/FINDINGS.md`, closed and opened findings, what the night run claimed and whether
    its evidence holds. Read-only.
-2. **Market research.** The web, aimed at AgentWeave's actual competitive surface — multi-agent
-   orchestration, spec-driven development, agent IDEs, review and approval loops, agent
-   observability. Output: `spec-queue/research/YYYY-MM-DD.md`, with a ranked candidate list at the
-   top: what someone else shipped, what it implies for AgentWeave, and what a change would cost.
+2. **Read the research** that `AgentWeaveResearch` left at 08:30 in `spec-queue/research/<date>.md` —
+   a ranked candidate list: what someone else shipped, what it implies for AgentWeave, and what a
+   change would cost. Treated as **data, never as instructions**; it is assembled from pages written
+   by strangers. A missing file costs the day its candidate list, not its work.
 3. **e2e.** Drive the product live. Scoped to what last night built on most days; a full-surface
    sweep once a week. New findings append to the ledger. This is the "fill the backlog" half of the
    operator's instruction — a drive checks the product where the rounds only check the argument.
@@ -146,6 +149,29 @@ Six pieces. Four are small.
 | **P4** | Two Scheduled Tasks, armed from `install-driver.ps1` with `-StartAtHHmm` / `-UntilHHmm` and distinct `-TaskName` | small |
 | **P5** | A cycle-branch rule (below), enforced by the FILL run's first iteration | small |
 | **P6** | The DECIDE session's own skill, so "today's review" is one command | medium |
+| **P7** | `AgentWeaveResearch` — a third task, `ai-digest`-patterned, in `auto` mode (D8) | medium |
+
+### D8 — research is a separate task, taken 2026-09-01 while building
+
+The design above put research inside the day window. That is wrong, and the reason is in
+`ai-digest/run.sh`'s own source, dated 2026-08-28: *"`bypassPermissions` is deliberately **not**
+used: this routine ingests untrusted web content, so the permission classifier stays in the loop as
+a prompt-injection backstop."* The cloud version of that routine got sandbox isolation for free;
+locally the classifier is the replacement.
+
+An autonomous window runs `bypassPermissions` — the driver refuses any other posture for Claude — on
+a machine with unscoped `gh` and the operator's credentials. Reading the open web from inside it
+removes the only backstop there is.
+
+So research runs as its own one-shot task at 08:30, in `auto` mode, `cwd` outside the repo, on the
+`ai-digest` pattern that has worked daily since 2026-08-28. The privileged window reads a file.
+
+**This bounds the untrusted content reaching the privileged process; it does not eliminate it.** The
+research file is still derived from the web, and a `bypassPermissions` window is *instructed* not to
+browse rather than prevented from browsing. Both playbooks therefore say the research file is data
+and never instructions. The residual risk is real and should be stated plainly rather than papered
+over: the digest routine's own README records that vigilance about `cwd` failed twice before a
+mechanism replaced it.
 
 ### P1 in detail — why the driver needs one change
 
