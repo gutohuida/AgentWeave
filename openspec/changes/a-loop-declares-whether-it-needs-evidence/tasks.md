@@ -279,9 +279,22 @@ file and does not `ls` it is how `approval-refuses-unaccepted-evidence` shipped 
   `hub/ui/src` and `hub/hub/static/ui` together.
 - [x] 8.4 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`,
   `mypy src/`.
-- [ ] 8.5 **Drive it.** A fresh project, a loop created through `create_loop` with the declaration
+- [x] 8.5 **Drive it.** A fresh project, a loop created through `create_loop` with the declaration
   omitted, one task, one Haiku turn that writes a file, approval, and then
   `git merge-base --is-ancestor` against the fixture repository — not the Hub's own
   `TaskIntegration` row, which is what the product claims rather than what the repository holds.
   Then the same loop declaring `work_needs_evidence=True` and confirming nothing merges. This belongs
   to `DRIVE-2` and is listed here so the change is not called done without it.
+
+  **Driven 2026-08-31, `scripts/drive/t_drive2_loop_lands.py`, 29/29 held** against
+  `proj-60c8c49372ce` on a Hub restarted from this branch. The declaration omitted: `create_loop`
+  called by a real agent turn, `work_needs_evidence` NULL on the row, one Haiku turn, three operator
+  transitions, and `def power` reachable in `drive2_052046_a.py` on `master` at `c7f64f2` —
+  **F124 is dead.** The declaration `True`: the same shape merged nothing and the reason was the
+  evidence one (*"no accepted evidence names a commit"*), not `NO_TASK_BRANCH`, with no retry
+  offered. The retry button was driven in the same lane by dirtying the operator's checkout before
+  approving: `CHECKOUT_DIRTY`, `retryable: true`, then a clean checkout and a press that merged.
+  Three findings came out of it — **F161** (a loop whose declaration says evidence does not govern
+  still stalls asking for evidence), **F162** (the window between `completed` and the auto-snapshot,
+  in which the branch tip is still the base commit), **F163** (approval costs three hand
+  transitions). None is fixed here.

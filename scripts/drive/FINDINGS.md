@@ -11767,3 +11767,159 @@ once, and triaging those is its own piece of work with its own rounds.
 The inventory lines for `create_loop` and `create_flow` were updated by hand in this change (task
 7.3), so nothing is stale today. That is the point: it was correct by attention, and attention is
 what this repository's guards exist to stop relying on.
+
+## F161 (D) — a loop that declares its work needs no evidence still stalls asking for evidence
+
+Found by `t_drive2_loop_lands.py` on 2026-08-31, and not by any assertion in it: it is what the two
+loops' `stall_reason` said after the drive had finished with them. Both loops — the one whose
+declaration was **omitted** (`work_needs_evidence: null`, so the branch tip governs) and the one
+that declared **True** — carry the identical sentence:
+
+```
+task task-3b0ada995edf has no recorded evidence, so there is no commit to review. Evidence naming
+a commit is what a review turn is given. Until the work that finished this task is recorded as
+evidence naming a commit, no reviewer can be given anything to look at.
+```
+
+For the second loop that is exactly right. For the first it is false in the way that matters: there
+*is* a commit, it is the task's own branch tip, the operator was told at creation that this loop's
+work does not need evidence — and approving the task merged that very commit into `master` moments
+later, which the same drive proves (`8534ede` on `master`, `def power` in the file).
+
+**Where it comes from.** `scheduler.py:1472` asks `requirement_evidence.commit_for_task_review`,
+which resolves the commit from evidence rows and nothing else. Its docstring records the
+alternative it rejected while being designed:
+
+> Rejected while designing this: the task's latest run snapshot. It is the same commit in the
+> ordinary case and a different one whenever a run ended without recording evidence, and in that
+> case **there is nothing to review anyway**.
+
+That was true when it was written. `task_integration.merge_targets` has since learned a second
+answer to *which commit is this task's work* — the branch tip, for exactly the population this loop
+is in — so "there is nothing to review anyway" is no longer a fact about the product, it is a fact
+about one module. This is the drift F58 was about, arriving from the other side: two implementations
+of one question, and this time the newer one is the one that knows.
+
+**Why it is worth more than tidiness.** The declaration's whole promise to the operator is *this
+loop's work does not need evidence to reach the main branch*. The loop's own status line answers
+that promise with a demand for evidence, and there is no reviewer, no button and no queue movement
+behind it — the loop simply sits. What the operator does next is the three hand transitions below,
+having been told the opposite by the row they were reading.
+
+**Not fixed here.** The repair is not a one-liner and it is not obviously `commit_for_task_review`'s
+to make: the honest question is whether a *loop* should be staffing reviews of its own single
+agent's work at all, which is a design question about the loop/flow split rather than about this
+sentence. Filed with the measurement so the decision is made on evidence.
+
+## F162 (D) — a task reads `completed` before its work is committed, and the tip in that window is the base commit
+
+Measured twice on 2026-08-31, on two consecutive runs of `t_drive2_loop_lands.py`, before the
+harness was taught to wait for the turn to end:
+
+```
+[obs] branch tip the moment the task said `completed` -- 3a0c5a2ea063   <- the base commit
+[obs] branch tip once the turn ended              -- eabc80c20e0d       <- the agent's work
+```
+
+`completed` is written by the agent's own `update_task` **mid-turn**. The agent's edits are
+committed onto the task branch by the Hub's auto-snapshot at turn **end** (`worktrees.py:740`,
+`Auto-snapshot: <agent>'s turn on <task-id>`). Between the two the task's branch exists, points at
+the commit it was cut from, and `task_integration.task_branch_tip` answers with it.
+
+**Why that matters now and did not before.** Until this change nothing consulted the branch tip, so
+the window cost nothing. `merge_targets` now returns it as the merge target for every task on a
+documentless loop with no requirement link. An approval landing inside the window therefore resolves
+the *base commit* as the work, `integrate_task` finds it already reachable from the main branch, and
+records `ALREADY_INTEGRATED` — which `is_retryable` classifies as **not retryable**, deliberately
+("describes a fact a repeat cannot alter"). The work is then stranded: the task is `approved`, the
+integration row says the commit was already in, and the screen offers no button.
+
+**What is measured and what is not.** The window is measured — twice, at 6-second polling
+granularity, on both lanes. The consequence above is **read from the code, not driven**: on both
+runs the approval inside the window was refused for an unrelated reason (the 403/409 pair below), so
+no integration row was written. Driving it means approving while the agent is still mid-turn, which
+is the next thing to do to this finding.
+
+**How likely is an approval in that window?** By hand, unlikely. By a flow's next firing, no —
+firings are minutes apart. The realistic route is an operator watching the board react to a task
+flipping to `completed` and pressing approve, and any automation that approves on a status change.
+The window is one turn-teardown wide, seconds to tens of seconds.
+
+## F163 (D) — landing a loop's work costs the operator three hand transitions, and two of them are refusals
+
+Not a defect so much as the price of the feature, measured end to end for the first time now that a
+loop's approval merges anything at all. `t_drive2_loop_lands.py` drove every refusal:
+
+1. `PATCH {"status": "under_review"}` → **403**: *"it is still assigned to 'alpha', the agent
+   recorded as completing it, so the move would claim its own author is reviewing it. Assign a
+   different reviewer, or clear the assignee to review it yourself."*
+2. `PATCH {"status": "approved"}` from `completed` → **409**: *"From 'completed' the available
+   transitions are: rejected, under_review."*
+3. So the working sequence is `assignee → null`, `→ under_review`, `→ approved`.
+
+A **flow** never meets step 1: it resolves a reviewer who is not the author, and the reviewer's own
+`update_task` makes the hop. A **loop** has one agent and no review leg, so the operator is always
+the one making all three moves. `t_row11_loop.py` found the same three hops in 2026-08-29 for the
+loop-ending drive; what is new is that these three hops are now the only route by which a loop's work
+reaches the operator's main branch, so their cost is no longer incidental.
+
+Both refusals are good ones — each names its remedy and neither is silent. The finding is that
+nothing tells an operator this is the shape of the route *before* they are standing in front of the
+first 403, and `create_loop`'s `work_needs_evidence` documentation — which is where an agent or
+operator learns that approving a loop's task merges its branch — says nothing about approval costing
+three transitions.
+
+## F164 (D) — the flow still lands its work after groups 4 and 5, and F154's cause fired again on the way
+
+`DRIVE-2` item 3, 2026-08-31: `t_drive1_flow_lands.py` re-run against a fresh project
+(`proj-60c8c49372ce`) because D-IMPL groups 4 and 5 moved the code every flow's approval runs
+through — `merge_targets`, `_merge_situation`, the integration preview, `_prerequisite_commits`.
+DRIVE-1's green result does not carry across a change to the route it exercised, so it was asked
+again. **14/19**, and the answer to the question it was re-run for is yes:
+
+- both tasks staffed, worked and reached `completed` with no operator transition (**A** still
+  driven);
+- both recorded evidence naming a commit without being asked;
+- both reviewers were non-authors (**B** still driven);
+- `modulo` was approved by its reviewer with nobody's hand on it, and
+  `6e1dbac` **merged into `master`** at that moment — the pass condition of the whole run, re-proved
+  on the moved code.
+
+The five that did not hold are three separate things, none of them new and none of them the moved
+code:
+
+**1. F154's cause, second consecutive drive.** `beta` reviewed `power`, wrote a full verdict in
+prose — *"**Verdict: APPROVED**. The implementation meets all requirements"* — and never called
+`update_task`. Its transcript shows why, in its own words: *"I keep loading the schema but not
+actually calling the function... Looking at the system instructions, it says 'Deferred tools are now
+available via ToolSearch'"*. That is exactly what `alpha` did in DRIVE-1. Two drives, two different
+agents, same failure. It was recorded then as *"intermittent, not structural, and not the Hub's to
+fix"*; two for two makes **intermittent** the wrong word for how a review turn ends under this
+harness, even though the diagnosis is unchanged — the spawned Claude CLI presents the MCP tools as
+deferred and the model loops on `ToolSearch`.
+
+And F154 itself reproduced verbatim, which is the part that *is* the Hub's: with both agents idle,
+no run live and `power` wedged at `under_review` under a reviewer who never ran, every firing
+answers **409 "Every task on this loop's queue is already being worked. Nothing was started, and
+nothing is wrong — the next firing picks up whatever finishes."**
+
+**2. F155, and it is more ordinary than DRIVE-1 made it look.** The operator's approval of `power`
+was refused: *"This task's work does not merge cleanly into master: drive1_052304.py. Resolve the
+conflict on the branch, then approve — approving is what merges it."* Both tasks append to one file;
+`modulo` merged first, so `power`'s branch now conflicts. In DRIVE-1 both lanes landed, which made
+the conflict look like a thing that happens when a lane stalls. It is not: it happens whenever two
+parallel tasks touch one file and one lands first, which is the ordinary shape of a flow's work.
+
+**3. The F152 check could not fire.** The harness looks for change C's refusal sentence in the
+reviewer's output. C never refused anything this time, because the reviewer never attempted the
+transition (1). Not a regression — an assertion with no event to observe.
+
+`master` afterwards, with the loop drive's commit still in it from earlier in the same session:
+
+```
+f2c6a09 Integrate approved work 6e1dbacd75b6   <- the flow's modulo
+6e1dbac Auto-snapshot: beta's turn on task-ea0e06b29909
+c7f64f2 Integrate approved work 8534ede91e4f   <- the loop's power, F124 dead
+8534ede Auto-snapshot: alpha's turn on task-494c563cd6ef
+3a0c5a2 calc
+```

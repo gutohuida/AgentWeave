@@ -1992,3 +1992,96 @@ omitted, one Haiku turn that writes a file, approval, and then `git merge-base -
 against the repository itself — not the `TaskIntegration` row, which is what the product *claims*.
 Then the same loop declaring `work_needs_evidence=True` and confirming nothing merges. Then re-drive
 the flow, because groups 4 and 5 moved the code every flow's approval runs through.
+
+---
+
+## Iteration 15 — 2026-08-31 05:09 to 05:4x (+01:00) — `DRIVE-2`: **a loop lands its work too**
+
+**Item:** `DRIVE-2`, all four parts. **Status: done, and the headline held.** Task 8.5 —
+the only unticked item in `a-loop-declares-whether-it-needs-evidence` — is driven and ticked, so
+that change is complete. `git log master` in the fixture now carries a commit that got there by
+approving a **loop's** task, which is the thing F124 said could never happen.
+
+### The Hub on 8011 was stale again, and again the restart is how that was caught
+
+PID 9476, started **02:40**, and twelve `.py` files under `hub/hub` were newer than it — every file
+D-IMPL touched. Killed and restarted from `hub/` with the beta-profile `DATABASE_URL`; the new
+process ran `0099 -> 0100, a loop declares whether its work needs evidence before it reaches the
+main branch` on startup, which is the proof the old one predated the change being driven. Second
+run in a row where the state file's warning was load-bearing.
+
+### The fixture
+
+New project **`drive2-2026-08-31` = `proj-60c8c49372ce`** at `C:\Users\huida\Documents\drive2-2026-08-31`
+— `git init -b master`, one commit (`calc.py`, `.gitignore` for `.agentweave/`), `master` adopted as
+the main branch by `POST /projects/open` with no settings round trip. Runner `Haiku (cheap)`, agents
+`alpha` and `beta` bound to it, and **`allow_agent_jobs` turned on**, without which `create_loop` is
+not in an agent's inventory at all and task 8.5's named route is unreachable. Neither forbidden
+project touched.
+
+### `t_drive2_loop_lands.py` — 29/29 held on the third run
+
+Three lanes and the operator's route:
+
+- **the operator's route** (item 2): `POST /jobs` with `work_needs_evidence` on a job that is not
+  becoming a loop → **400** *"give this job a purpose or a stop condition to make it one"*, leaving
+  no row behind. `PATCH /jobs/{id}` → **400** naming the create-a-new-loop remedy, changing nothing.
+- **LANE A**, declaration omitted: `create_loop` called by a real `alpha` turn, `work_needs_evidence`
+  **NULL** on the row — not False. One Haiku turn wrote the file, the Hub auto-snapshotted it onto
+  `agentweave/task/<id>`, and approval merged `8534ede` into `master`. `git show master:<file>`
+  answers `def power(a, b): return a ** b`.
+- **LANE A′**, the retry button (item 4): the operator's checkout was made dirty on a **tracked**
+  file before approving. The integration skipped with `CHECKOUT_DIRTY`, `retryable: true`, nothing
+  on `master`; cleaning the checkout and pressing retry appended a **second** row with outcome
+  `merged`. Both halves of item 4 in one lane.
+- **LANE B**, declaration `True`: the same shape, `work_needs_evidence: true` carried through
+  `create_loop` to the row. Approval was **not** refused — there is no evidence to be unaccepted —
+  and nothing merged, with the reason `"no accepted evidence names a commit, so there is nothing to
+  merge"` and `retryable: false`. The **evidence** empty answer, not `NO_TASK_BRANCH`: the two
+  callers keeping their empty cases apart is exactly what group 4 was for, and it is now driven.
+
+**The first two runs failed 11 and 11 of 29, and both were the harness.** They are worth recording
+because one of them became a finding. Run 1 read the task branch tip the moment the task said
+`completed` and got the *base commit*; run 2 measured the same thing deliberately and got
+`3a0c5a2 -> eabc80c` across the turn boundary. That is **F162**. Run 1 and 2 also tried to approve in
+one PATCH and met a 409, then a 403 — **F163**.
+
+### Item 3 — the flow re-driven, because groups 4 and 5 moved its approval path
+
+`t_drive1_flow_lands.py` re-run against the same fresh project. **14/19**, and the question it was
+re-run to answer is answered: `modulo` went document → materialised task → staffed → worked →
+evidence naming a commit → reviewed by a non-author → `approved` **by its reviewer with nobody's
+hand on it** → `6e1dbac` merged into `master`. Changes A and B still driven on the moved code.
+
+The five that did not hold are **F154's cause for the second consecutive drive** (this time `beta`
+looping on `ToolSearch`, writing *"Verdict: APPROVED"* in prose and never calling `update_task`,
+after which every firing answers the false-healthy 409), and **F155** (`power` and `modulo` both
+append to one file; `modulo` landed first, so `power` no longer merges cleanly and the operator's
+approval is refused with a remedy nobody can follow). Neither is the moved code, and both were
+already filed. Recorded as **F164**, with the correction that F155 is far more ordinary than DRIVE-1
+suggested: two parallel tasks touching one file is the *shape* of a flow's work, not an accident of
+a stalled lane.
+
+### Findings filed
+
+- **F161** — a loop that declared its work needs no evidence still stalls with *"has no recorded
+  evidence, so there is no commit to review"*. `commit_for_task_review` resolves the review commit
+  from evidence and nothing else, and its docstring's rejected alternative (*"there is nothing to
+  review anyway"*) is now false: `merge_targets` knows a second answer for exactly this population.
+  Not fixed — whether a loop should staff reviews of its own single agent's work at all is a design
+  question about the loop/flow split.
+- **F162** — the window between `update_task(completed)` mid-turn and the auto-snapshot at turn end.
+  Measured twice. The consequence read from the code and **not driven**: an approval inside it
+  resolves the base commit, records `ALREADY_INTEGRATED`, and that skip is deliberately not
+  retryable, so the work would be stranded.
+- **F163** — landing a loop's work costs three operator transitions (`assignee → null`,
+  `→ under_review`, `→ approved`), two of them discovered as refusals. A flow never meets the first.
+- **F164** — the flow re-drive above.
+
+### Verification
+
+- `t_drive2_loop_lands.py` **29/29**; `t_drive1_flow_lands.py` **14/19** with every failure traced.
+- `openspec validate a-loop-declares-whether-it-needs-evidence --strict` — valid, and every task in
+  it now ticked.
+- The fixture is clean: no job enabled (all archived), both agents idle, checkout clean, nothing
+  queued, no permission card pending.
