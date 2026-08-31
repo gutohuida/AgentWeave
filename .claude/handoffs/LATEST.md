@@ -1,1 +1,1 @@
-handoff-0102-2026-08-31-2307-merged-the-afternoon-run-and-closed-f154.md
+handoff-0103-2026-09-01-0009-a-daily-research-spec-and-build-loop.md
