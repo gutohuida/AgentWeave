@@ -2280,3 +2280,67 @@ repair — and it needs a D-style decision raised first (which of the three cand
 whether a loop should staff reviews at all, per F161).
 
 **The branch remains offered, unchanged, at `6ef2195`.** This run does not merge.
+
+---
+
+## Iteration 18 — 2026-08-31T07:20+01:00 — the two decisions are raised where the operator will find them
+
+**Position reconciled first, and nothing had moved.** Branch
+`autonomous/2026-08-31-the-flow-lands-its-work`, `git status` clean, `HEAD == origin/…` at
+`bf04180`, log tail is iteration 17's. Iteration 17 re-verified the whole offer 30 minutes ago
+against the repository and this iteration did **not** repeat those five checks — nothing has
+changed for them to catch, and repeating them is the waste iteration 17's stand-down was written to
+avoid.
+
+**What was actually owed.** Iteration 17's own `next_action` names the next honest unit of work as
+*"a spec loop for F162's repair, preceded by raising the two decisions"*. The spec loop is barred —
+by the after-05:30 limit and by the fact that it cannot even be scoped before the decisions are
+answered. **Raising the decisions is not barred, and it had not been done.** Both questions existed
+only as prose in this log and in `carried_open_questions`; neither was in `decisions_for_user`,
+which is the structured place the operator reads and the driver's own instruction names
+(*"If a decision is genuinely the user's, add it to decisions_for_user rather than guessing"*).
+
+So `decisions_for_user` gained two entries, both with `pre_authorised_default: NONE` — deliberately,
+because a default here would be a guess dressed as authority:
+
+- **D20 — F162: which of the three candidate repairs?** Carries the measurement (the window is
+  **agent-sized**, 10.5s on an ordinary three-step turn, not a sub-second race), the harness
+  (`t_f162_window.py`, lanes 11/11 and 4/4), and each candidate **with the objection that stops it
+  being obvious**: (1) refuse `-> approved` during a live run makes approval depend on run state,
+  which nothing else does; (2) resolve the merge target after the snapshot makes approval
+  asynchronous and leaves the intervening screen undesigned; (3) retryable `ALREADY_INTEGRATED`
+  leaves the operator holding a button they have no reason to press. A read is offered and
+  explicitly not acted on.
+- **D21 — F161: should a loop staff reviews at all?** States plainly that the mechanical fix is
+  obvious and probably wrong: teaching `commit_for_task_review` the branch tip would silence the
+  stall in an afternoon, but a loop has one agent and no review leg, so the honest repair may be
+  that a loop never enters the review leg. Answering one way or the other picks **two different
+  changes**, which is exactly why it is not queued.
+
+**Both entries' code references were verified live rather than copied from the log**, since a
+decision citing a stale line is worse than one citing none:
+
+| Cited | Checked | Result |
+|---|---|---|
+| `commit_for_task_review` at `scheduler.py:1472` | `sed -n '1468,1476p'` | exact — `review_target = await requirement_evidence.commit_for_task_review(...)` on 1472 |
+| `ALREADY_INTEGRATED` is not retryable | `grep` in `task_integration.py` | in the non-retryable set at `:97`; docstring at `:127` — *"describe facts a repeat cannot alter"* |
+
+**One defect in the state file itself, fixed.** `decisions_for_user` carried **two entries with the
+id `D6`** — D-the-drive-defect-policy and D-the-explicit-`work_needs_evidence`-merge — so the second
+was unaddressable: the operator could not answer it without saying which D6 they meant. The later
+one is now **`D6b`**. Its text is untouched, so any existing reference to "D6" still resolves to the
+first, and both are now nameable.
+
+**No product code was touched.** `git diff --name-only master...HEAD` is unchanged from iteration
+17's check bar this log and STATE.json; the offer at the end of iteration 16 stands exactly as
+written, and the suite result recorded there (`hub/tests/` 3751 passed / 84 skipped / 1 xpassed)
+still describes the tree being offered.
+
+**The heartbeat is again not released, for the same reason plus one.** Iteration 17's argument holds
+— releasing hands *pending work* to the next firing and there is none. The addition: `stop_at` is
+**08:00**, about 35 minutes out, so a release buys at most one more firing whose only honest act
+would be to stand down again. The heartbeat is stamped at this iteration's real time.
+
+**The branch remains offered.** Four changes, all valid `--strict`, two end-to-end drives behind
+them, five findings inherited unfixed and now — for the two that block the next unit of work —
+raised as answerable questions rather than paragraphs. This run does not merge.
