@@ -77,6 +77,14 @@ mechanism that cannot deliver it:
 Both are recorded in `design.md` under *Round 3 corrections, 2026-09-01*, along with what was
 re-derived and left standing and one alarm raised and killed.
 
+Its supplementary pass over phase 2 — which the first sitting had not read — then found that
+`lastRunSettled`'s *other* signal has never fired either, for anyone, which subsumes round 2's
+correction and makes task 2.2 load-bearing for the working indicator rather than only for a durable
+exit code. It also corrected three task-level claims: `record_agent_output` cannot reproduce the
+`status-{run_id}` id, task 2.2's justification cites a Handoff consumer that was deleted, and the
+11-file fixture cost is concentrated in two files while the other nine would stay green un-updated.
+All are in `design.md` under *Supplementary pass, 2026-09-01*.
+
 ## What Changes
 
 - **BREAKING** `GET /api/v1/projects/{project_id}/agents/{name}/timeline` returns an envelope
@@ -167,8 +175,18 @@ polled roster field, which is the pre-fix behaviour the 2026-08-18 change was wr
 So the defeat is unconditional for any agent with two or more runs in its window: the tail fix
 (operator, 2026-08-18: *"It still linger a little bit"*) is defeated live and not merely on reload,
 and the stop-then-send fix (operator, 2026-08-20) is satisfied only vacuously — the indicator shows
-because it always shows, not because a second run is underway. A single-run conversation is
-unaffected, which is why this survived every manual look.
+because it always shows, not because a second run is underway.
+
+**And it is worse than that — corrected again in round 3's supplementary pass.** The last sentence
+here used to read "a single-run conversation is unaffected, which is why this survived every manual
+look." That is false. `lastRunSettled`'s other disjunct fails too, for every agent: the streamed
+status entry it looks for is broadcast over SSE and **never persisted**, while `entries` come only
+from `useAgentChatHistory`'s invalidate-and-refetch of persisted rows. `isSuccessCompletionEntry`
+has therefore never matched anything, `lastRunSettled` has always been `false`, and
+`runVisiblyActive` collapses to `isRunning` through the *left* branch whatever
+`anotherRunIsUnderway` says. Rounds 1 through 3 each read one disjunct and stopped. What actually
+survived every manual look is that `isRunning` is *usually right*, so the indicator is usually in
+the correct state for the wrong reason.
 
 ## Non-Goals
 

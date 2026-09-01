@@ -49,21 +49,56 @@
       with `output_recording.record_agent_output` (`hub/hub/output_recording.py:22`), which persists
       **and** broadcasts one row. Round 2's correction to D6: "persist in addition to broadcasting"
       invites a second insert beside the existing `sse_manager.broadcast` call and two sources of
-      the same row. Confirm the broadcast payload it emits is field-for-field what the hand-rolled
-      one emitted, since `AgentOutputPanel`'s Handoff flow scans for this exact shape.
+      the same row. Two corrections from round 3's supplementary pass:
+      - **The broadcast cannot be field-for-field identical, and does not need to be.** The key set
+        matches exactly, but `record_agent_output` hardcodes `id=f"out-{short_id()}"`
+        (`output_recording.py:81`) with no override, so the deterministic `status-{run_id}` id is
+        lost. Nothing in `hub/ui/src` keys on that id — verified by grep — so this is safe. Do not
+        add an id parameter to the helper for it.
+      - **The justification previously given here is stale.** The `AgentOutputPanel` Handoff effect
+        that scanned the output stream for this line was **deleted** (`AgentOutputPanel.tsx:148-151`
+        "`lines` is no longer read here", `:252-259` "deleted, not replaced"), though
+        `agent_trigger.py:2121-2126` still claims removing the broadcast "would silently break that
+        feature". The consumer that actually matters is `lastRunSettled`
+        (`AgentTimeline.tsx:115`), and it reads the **persisted** row through
+        `isSuccessCompletionEntry` — `kind='agent_output'`, `output_kind='status'`,
+        `payload.phase='completed'` — not the broadcast payload. Preserve *that* shape.
+      Also check `record_agent_output`'s own `await db.commit()` against what the call site has
+      pending in its session at that point.
 - [ ] 2.3 Do the same at `:2723-2736` (app-server path).
-- [ ] 2.4 Verify the row does not double-render: `isSuccessCompletionEntry` already hides the
-      completed-phase status row from the transcript, so confirm a *completed* run gains no visible
-      line while a stopped or failed run does.
+- [ ] 2.4 **Decide whether this row should be visible at all — the premise stated here in rounds 1
+      and 2 was false.** It said a completed run gains no visible line "while a stopped or failed
+      run does". It does not: both spawn paths hardcode `payload={"phase": "completed"}` regardless
+      of outcome, deliberately (`agent_trigger.py:2125-2126`, "`phase` stays 'completed' even for a
+      stopped/failed run — it means 'the run has ended', not 'it succeeded'"), and
+      `AgentTimeline.tsx:430` returns `null` for any entry `isSuccessCompletionEntry` matches. So
+      persisting the row adds **no visible line for any outcome**. That is acceptable — the visible
+      outcome is the terminal label from the `runs` map, and this row's job is `lastRunSettled` plus
+      a durable exit code. Confirm that is the intent rather than shipping a row nobody can see by
+      accident, and do **not** "fix" it by making `phase` outcome-dependent without checking every
+      other reader of `phase`.
 
 ## 3. The client consumes the envelope
 
 - [ ] 3.1 Move the 11 UI test fixtures to the envelope shape in one commit, before touching any
-      component: `agentHandoff`, `agentRunningComposer`, `batchedQuestionComposer`,
-      `composerPermissionDefault`, `continueStartsWhatItNames`, `conversationControls`,
-      `conversationDestination`, `handoffPlacement`, `specChatSurface`, `workingIndicator`,
-      `agentTimelineModel`. Landing these first makes any later failure attributable to the change
-      rather than to a fixture.
+      component. Landing these first makes any later failure attributable to the change rather than
+      to a fixture. **Round 3's supplementary pass measured the shape of this work, and it is not
+      what rounds 1 and 2 assumed:**
+      - **Nine of the eleven carry the identical one-liner** `useAgentTimeline: () => ({ data: [] })`
+        — `agentHandoff`, `agentRunningComposer`, `batchedQuestionComposer`,
+        `composerPermissionDefault`, `continueStartsWhatItNames`, `conversationControls`,
+        `conversationDestination`, `handoffPlacement`, `specChatSurface`. One line each; a single
+        find-and-replace to `({ data: { events: [], runs: {} } })`.
+      - **They will keep passing if you forget them**, which is the real hazard. `AgentOutputPanel`
+        destructures with `= []` (`:330`) and the new code reads `data?.events ?? []`, so a mock
+        still returning a bare `[]` yields an empty event list and a green test on a shape the route
+        no longer produces. That is this change's own new testing requirement, violated by its own
+        fixtures. Update all nine even though nothing forces you to.
+      - **The substantive two are `workingIndicator` and `agentTimelineModel`.**
+        `workingIndicator.test.tsx` never mocks the hook: it renders `AgentTimeline` with
+        `timelineEvents` as a prop (`:57-65`), imports `runDurationsByRunId` directly (`:7`) and has
+        its own describe block for it (`:84`ff), so it needs the new `runs` prop and loses that
+        block. Budget the effort there, not across eleven files.
 - [ ] 3.2 Update `useAgentTimeline` (`hub/ui/src/api/agents.ts:387-392`) and the
       `AgentTimelineEvent` types to the envelope, and check the SSE invalidation predicate at
       `:354-383` still names the right query key.
@@ -109,8 +144,16 @@
       - **Still-underway:** stop a turn and send a new message; assert the indicator *is* shown while
         run B has no entries yet. This is the 2026-08-20 fix, which currently passes only vacuously
         (the indicator shows because it always shows) and must still pass once it means something.
-      - **Single-run:** one run in the window — assert unchanged, since `anotherRunIsUnderway` was
-        always correctly false here, which is why the defect survived manual review.
+      - **Single-run:** one run in the window. **Round 3's supplementary pass corrects rounds 1-3
+        here: this case is broken too, and "assert unchanged" was wrong.** `lastRunSettled`'s first
+        signal has never fired for anyone — the status entry it looks for is only ever broadcast,
+        never persisted, while `entries` come exclusively from a database refetch
+        (`useAgentChatHistory` invalidates and refetches, with no optimistic append), so
+        `isSuccessCompletionEntry` never matches an entry that exists. `lastRunSettled` is therefore
+        always false and `runVisiblyActive` collapses to `isRunning` for **every** agent, not only
+        those with two or more runs. Assert the single-run case *changes*: once task 2.2 persists
+        the row, the indicator must disappear when the status entry lands rather than when the
+        roster poll catches up.
 
 ## 5. The testing rule is enforceable
 

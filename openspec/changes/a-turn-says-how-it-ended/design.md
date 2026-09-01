@@ -155,8 +155,21 @@ the exit code durable. The writer to use is `output_recording.record_agent_outpu
 sites collapse to it rather than gaining a second, hand-rolled insert beside the existing
 `sse_manager.broadcast`.
 
-This is independent of D1–D4: because lifecycle events are already persisted, reading `Run` alone
-restores the label. What D6 uniquely adds is the exit code and the in-stream sentence.
+This is independent of D1-D4: because lifecycle events are already persisted, reading `Run` alone
+restores the label. What D6 uniquely adds is a durable exit code and a working `lastRunSettled`.
+
+**Two corrections from round 3's supplementary pass.** First, D6 does not *restore* the first
+settled-signal — it makes it work for the first time. `entries` reach `AgentTimeline` only through
+`useAgentChatHistory`, which invalidates and refetches with no optimistic append
+(`agentChat.ts:296-312`), and the chat route builds them from persisted `AgentOutput` rows. A row
+that is only broadcast never becomes an entry, so `isSuccessCompletionEntry` has never matched
+anything, in any state. See the round 3 corrections section for what that means for the gate.
+
+Second, D6 does **not** add an "in-stream sentence". Both call sites hardcode
+`payload={"phase": "completed"}` whatever the outcome, on purpose (`agent_trigger.py:2125-2126`),
+and `AgentTimeline.tsx:430` returns `null` for every entry `isSuccessCompletionEntry` matches — so
+the persisted row is invisible for a stopped and failed run exactly as it is for a completed one.
+The visible outcome comes from the `runs` map's terminal label, not from this row.
 
 ### D7 — Coverage is exact by construction, not derived from a bound
 
@@ -349,3 +362,59 @@ it is named here so task 4.5 re-baselines rather than reconciles.
 missed three stale numbers. It did not: the proposal names the three lines that *read* `statusByRun`
 and the design names the three that *declare* what reads it. Both sets are correct against the
 current file. Do not "fix" either.
+
+### Supplementary pass, 2026-09-01 — phase 2 and the fixture claims
+
+Round 3's first sitting read phases 1 and 4 closely and left phase 2 and the test-fixture claims
+unread. Both findings above came out of the code that *was* read, which is exactly the bias worth
+distrusting, so this pass covered the rest. It found one thing that changes the proposal's central
+account and three that change tasks.
+
+**The first settled-signal has never fired, for anyone.** `AgentTimeline.tsx:88-113` documents two
+terminal signals — the streamed status entry, which "lands the instant the run ends", and the
+lifecycle event, which "arrives late". The first does not exist. The status row is broadcast over
+SSE and never written to `AgentOutput`; `entries` are supplied by `useAgentChatHistory`, which on
+an `agent_output` event calls `invalidateQueries` and nothing else (`agentChat.ts:296-312`), so the
+list is always a fresh read of persisted rows. A row that was never persisted never becomes an
+entry. `isSuccessCompletionEntry` has therefore never matched, `lastRunSettled` has always been
+`false`, and
+
+```
+runVisiblyActive = isRunning && (!lastRunSettled || anotherRunIsUnderway)
+```
+
+collapses to `isRunning` through the **left** branch, unconditionally, for every agent.
+
+This subsumes round 2's correction 1 and contradicts its scope. R2 derived the same collapse from
+`anotherRunIsUnderway` and concluded it needed two or more runs in the window, adding that "a
+single-run conversation is unaffected, which is why this survived manual review". Round 3's first
+sitting re-derived that and let it stand. Both were reading one disjunct. A single-run conversation
+is affected too, by the shorter path. The evidence was already in round 1's own measurement —
+`/agents/{name}/output` holds no status row for a stopped run — and nobody joined it to the fact
+that `entries` come only from the database.
+
+The practical consequence is that **task 2.2 is load-bearing for the working indicator**, not just
+for a durable exit code, and task 4.7's single-run case must assert a change rather than assert
+nothing changed.
+
+**Three smaller corrections, all recorded in `tasks.md`:**
+
+- `record_agent_output` hardcodes `id=f"out-{short_id()}"` (`output_recording.py:81`), so task 2.2's
+  "field-for-field" broadcast equality is unobtainable on `id`. The key set is otherwise identical,
+  and nothing in `hub/ui/src` keys on `status-{run_id}`, so the substitution is safe as long as the
+  task stops demanding an equality that cannot hold.
+- Task 2.2's stated reason for preserving the payload shape — `AgentOutputPanel`'s Handoff scan —
+  describes a consumer that was **deleted** (`AgentOutputPanel.tsx:148-151`, `:252-259`). The
+  `agent_trigger.py` comments still assert it. The shape that must actually be preserved is the
+  persisted row's, for `isSuccessCompletionEntry`.
+- The 11-file blast radius is real and its cost was mis-stated. Nine files carry one identical line;
+  the work is in `workingIndicator.test.tsx` and `agentTimelineModel.test.ts`. Worse, the nine would
+  stay green un-updated, because `AgentOutputPanel` destructures with `= []` — the change's own
+  testing requirement, violated by its own fixtures.
+
+**Verified and standing.** `agentTimelineModel.test.ts:223-235` does feed `run_started` before
+`run_completed` and assert `'completed'` — ascending input to a descending route. The proposal's
+claim and its line numbers are exact. `record_agent_output` does persist and broadcast one row with
+a matching key set. Every `Run` column the envelope reports is populated at all six terminal sites.
+No spec change follows from this pass: *A run's terminal status line is persisted* says "recoverable",
+not "displayed", and the visible-outcome requirement is served by the `runs` map.
