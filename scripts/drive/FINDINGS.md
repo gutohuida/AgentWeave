@@ -15495,3 +15495,80 @@ the two reds are this finding. It makes and deletes its own fixture project, so 
 `AW_PROJECT` and cannot touch a real one.
 
 **Proposed:** `openspec/changes/runner-model-is-chosen-from-the-catalog`, task 1.1.
+
+---
+
+## F220 (C) — a runner whose model the catalog does not declare cannot be saved at all
+
+Found by the F173 spec loop's **round 2** (2026-09-01), by asking a question round 1 did not:
+`_reject_undeclared_model(cli, model)` takes a provider and a model string and **cannot see the
+runner's stored model**, so it cannot tell a newly typed undeclared model from the one the runner
+already carries. Its own docstring (`hub/hub/api/v1/runners.py:25-27`) claims it can:
+
+> a model is refused only when it is being newly *set* — an already-stored, unrecognised model
+> (from before this catalog existed, or a future CLI release) is left alone
+
+Measured against the `:8011` Hub, fixture project `proj-e2f9642f615f`, created and deleted. The
+runner's row was set to an undeclared model directly, because no API path can produce one — which
+is itself the point: this state comes from before the catalog existed, or from a newer CLI release.
+
+```
+GET   /projects/<p>/runners/<r>
+  -> 200  model=claude-3-legacy-9  model_unrecognised=true
+
+PATCH /projects/<p>/runners/<r> {"name": "R2 legacy renamed"}
+  -> 200  model survives                                   <- absent field, left alone
+
+PATCH /projects/<p>/runners/<r> {"name": "...", "model": "claude-3-legacy-9"}
+      (the runner's OWN stored model, re-submitted unchanged)
+  -> 400  {"detail": "'claude-3-legacy-9' is not a model 'claude' declares"}
+```
+
+The docstring's claim is true today only by accident. `RunnersPage.tsx`'s free-text field sends
+`model: model || undefined`, which `JSON.stringify` drops, so an untouched model reaches the Hub as
+an absent key. **Any client that sends the field it is displaying gets a 400** — and the runner is
+then uneditable in every other respect too, because `name` and `model` travel in the same PATCH
+(`RunnersPage.tsx:149`).
+
+This is why it is filed rather than folded silently into the change that found it: the shipped
+`runner-registry` requirement says *"Existing runners keep working — that runner remains readable
+and its agents remain listable, and the operator is told the model is unrecognised when editing
+it"*. The Hub computes `model_unrecognised` (`schemas/runners.py:44-58`) so the operator **can** be
+told — and then refuses the save that telling them was supposed to lead to.
+
+**Reproduction:** `scripts/drive/t_r2_runner_update_semantics.py` — 18 passed / 1 failed, twice, the
+one red being this finding. Q1–Q4 of the same harness are round 2's checked negatives: a refused
+PATCH leaves nothing half-applied, a refused create leaves no row, and `PATCH {"flags": null}` is a
+no-op with `model`'s exact shape (`flags` escapes F219 only because `[]` is a reachable spelling
+that means the same thing at spawn).
+
+**Proposed:** `openspec/changes/runner-model-is-chosen-from-the-catalog`, task 1.3. It is in that
+change rather than deferred because the picker it proposes submits the displayed model on every
+save, so shipping the picker without this repair would turn an invisible wart into a screen where a
+legacy runner cannot be saved.
+
+---
+
+## F221 (D) — the Hub refuses a model alias its own catalog declares
+
+Found alongside F220. `ProviderDescriptor.model()` matches `m.id` only
+(`hub/hub/model_catalog.py:113-117`), and nothing outside the catalog module resolves aliases. But
+the catalog declares them: `ModelDescriptor(id="claude-opus-5", label="Opus 5", aliases=("opus",))`
+(`model_catalog.py:154`), and `GET /model-catalog` serves them to clients.
+
+So F173's exact reproduction is answered:
+
+```
+POST /projects/<p>/runners {"cli":"claude","model":"opus"}
+  -> 400  {"detail": "'opus' is not a model 'claude' declares"}
+```
+
+about a string the catalog **does** declare and `claude --model opus` accepts. The sentence the
+operator reads is not true.
+
+Low severity and deliberately left open: `openspec/changes/runner-model-is-chosen-from-the-catalog`
+replaces the free-text field with a picker that submits ids, after which this is unreachable from
+the screen and API-only. Named in that change's design.md as out of scope, with the reason.
+
+**Reproduction:** `scripts/drive/t_r2_runner_update_semantics.py` Q1 shows the 400;
+`GET /api/v1/model-catalog` shows `"aliases": ["opus"]` on `claude-opus-5` in the same run.

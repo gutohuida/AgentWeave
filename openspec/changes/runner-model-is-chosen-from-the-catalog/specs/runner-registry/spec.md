@@ -16,6 +16,11 @@ Where a runner already records a model the catalog does not declare, that model 
 the offered choices, selected, and marked as unrecognised, so that opening the runner for editing
 cannot silently re-point it at a different model.
 
+A model the catalog does not declare is refused where it is newly *set*, and only there. Where a
+request carries the model a runner already records, the Hub SHALL accept it, because that request
+changes nothing about the runner's model and refusing it would make an existing runner uneditable
+in every other respect as well.
+
 #### Scenario: Runner management offers declared models
 
 - **WHEN** the operator creates or edits a runner and selects its provider
@@ -44,6 +49,13 @@ cannot silently re-point it at a different model.
 - **THEN** that runner remains readable and its agents remain listable
 - **AND** the operator is told the model is unrecognised when editing it
 - **AND** that model is still offered and still selected, so saving the runner unchanged keeps it
+
+#### Scenario: A legacy runner can still be saved
+
+- **WHEN** the operator opens a runner whose model the catalog does not declare, changes its name,
+  and saves it with that model still selected
+- **THEN** the save is accepted and the runner keeps its unrecognised model
+- **AND** moving that runner to a *different* model the catalog does not declare is still refused
 
 ## ADDED Requirements
 

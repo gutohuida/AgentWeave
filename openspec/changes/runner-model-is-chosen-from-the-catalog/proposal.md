@@ -43,6 +43,22 @@ Driven live against the `:8011` Hub, fixture project `proj-876a250f7a16`, create
 | `PATCH /runners/{id} {"model": ""}` | 400 `'' is not a model 'claude' declares` |
 | `GET /model-catalog` | claude: 4 models, codex: 6 |
 
+Round 2 re-derived this against the code and measured what round 1 did not ask
+(`scripts/drive/t_r2_runner_update_semantics.py`, **18 passed / 1 failed**):
+
+| call | answer |
+|---|---|
+| `PATCH {"name":"x","model":"opus"}` then `GET` | **400**, and the name is *unchanged* — nothing half-applied |
+| `POST` with an undeclared model, then `GET /runners` | **400**, and no row created |
+| `PATCH {"flags":[]}` / `PATCH {"flags":null}` | `[]` / **no-op** — `flags` has `model`'s defect too |
+| `PATCH {"model":"<the runner's own unrecognised model>"}` | **400** `'claude-3-legacy-9' is not a model 'claude' declares` |
+
+**That last row is what round 2 changed the proposal for.** `_reject_undeclared_model` cannot see a
+runner's stored model, so re-submitting it is refused — and the picker submits it on every save.
+Round 1's design would have shipped a screen on which a legacy runner cannot be saved at all, which
+breaches the shipped "Existing runners keep working" scenario the change otherwise strengthens. The
+free-text box hides this only because an untouched field is dropped by `JSON.stringify`.
+
 **A runner's model cannot be cleared back to the provider's default, and the attempt is answered
 `200` with the runner's old model in the response body.** `update_runner`
 (`hub/hub/api/v1/runners.py:136-141`) gates every field on `is not None`, so an explicit `null` is
@@ -62,7 +78,9 @@ no model means the CLI's own default.
   runner's CLI, plus an explicit **Provider default** choice. The free-text input goes.
 - A runner already carrying a model the catalog does not declare keeps it, offered as a marked
   choice so the operator can keep or replace it, and is marked as unrecognised in the runner list.
-  `model_unrecognised` is declared on the UI's `Runner` type and read.
+  `model_unrecognised` is declared on the UI's `Runner` type and read. **The Hub accepts that model
+  being re-submitted unchanged**, which today it refuses — so a legacy runner becomes editable at
+  all, not merely legible.
 - A refused create or edit presents the refusal's own sentence in the dialog, through the
   `readableApiError` idiom the rest of the app already uses. The bespoke `extractErrorDetail` in
   `RunnersPage.tsx:19-30` is replaced by it.
