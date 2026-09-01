@@ -13,17 +13,24 @@ export interface Runner {
   flags?: string[] | null
   created_at: string
   updated_at: string
+  /** True when `model` is set but the catalog does not declare it for `cli` — a runner created
+   * before the catalog existed, or naming a model a newer CLI release added. Computed by the API
+   * (`RunnerResponse._flag_unrecognised_model`), not recomputed here, so the browser and the Hub
+   * cannot disagree about which models are recognised. */
+  model_unrecognised: boolean
 }
 
 export interface RunnerCreate {
   name: string
   cli: RunnerCli
-  model?: string
+  model?: string | null
 }
 
+/** `model` is omitted to leave it alone and sent as `null` to clear it back to the provider's
+ * default — two different requests the Hub distinguishes (`model_fields_set` in `update_runner`). */
 export interface RunnerUpdate {
   name?: string
-  model?: string
+  model?: string | null
 }
 
 export interface RunnerLaunchability {

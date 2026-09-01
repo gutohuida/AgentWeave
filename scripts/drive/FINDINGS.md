@@ -15467,6 +15467,17 @@ leaves. Watched red first, then green: `t_r2_runner_update_semantics.py` Q4 now 
 that sends the `null` is sections 2-3 of `runner-model-is-chosen-from-the-catalog`, not yet
 built. Retire only after that change's tasks 5.1, 5.2 and 5.6.
 
+**Picker built and driven 2026-09-02 (night window, N-3) — still not retired.** The screen this
+finding is about now exists: `RunnerForm`'s model control is a `<Select>` fed by
+`GET /model-catalog`, its unset choice is named "Provider default", and moving a runner back to it
+sends `{"model": null}` rather than dropping the key. Measured through a browser against the
+`:8011` Hub, fixture project `proj-3ad9e80184e1` (deleted): the PATCH on the wire carried
+`{"name": "N3 Declared", "model": null}` and `GET /runners/{id}` afterwards reported `model: null`
+— which is task 5.2's assertion, met early. Held back from retirement anyway, because that drive
+ran against the **Vite dev server**, not against `hub/hub/static/ui`, which is what an operator
+actually loads and which section 5 has not rebuilt yet. Retire after 5.1, 5.2 and 5.6 run against
+the built bundle, as originally written.
+
 Found by the F173 spec loop's round 1 (2026-09-01), not by a sweep — a picker has to name its unset
 choice out loud, so round 1 asked whether the API could honour one. It cannot.
 
@@ -15521,6 +15532,15 @@ model, and any undeclared model on create, are still refused — both covered by
 `hub/tests/test_runners_api.py`. `t_r2_runner_update_semantics.py` Q5 is green, and the whole
 harness is 19 passed / 0 failed. **Not retired** for the same reason as F219: the screen this
 finding is about does not exist yet.
+
+**Picker built and driven 2026-09-02 (night window, N-3) — still not retired.** The screen exists
+now, and the round-trip this finding is really about was driven end to end: a fixture runner whose
+row was set to `claude-3-legacy-9` directly is listed with an amber **Unrecognised** mark, opens
+with that model *selected* and labelled `claude-3-legacy-9 — unrecognised` among the four the
+catalog declares, and pressing Save re-submits it — one `PATCH` carrying
+`{"name": "N3 Legacy", "model": "claude-3-legacy-9"}`, answered `200`, model unchanged. Before
+N-2 that request was a `400`. Not retired for the same reason as F219: the drive was against the
+Vite dev server, not the committed bundle.
 
 Found by the F173 spec loop's **round 2** (2026-09-01), by asking a question round 1 did not:
 `_reject_undeclared_model(cli, model)` takes a provider and a model string and **cannot see the

@@ -39,26 +39,52 @@ nothing"); it now asserts the requirement, and says in a comment why it was flip
 
 ## 2. The model is chosen from the catalog
 
-- [ ] 2.1 `Runner` (`hub/ui/src/api/runners.ts:6-15`) declares `model_unrecognised: boolean`.
+- [x] 2.1 `Runner` (`hub/ui/src/api/runners.ts:6-15`) declares `model_unrecognised: boolean`.
       `RunnerCreate` and `RunnerUpdate` allow `model?: string | null`.
-- [ ] 2.2 `RunnerForm` (`RunnersPage.tsx:165-254`) reads `useModelCatalog()`, resolves the provider
+- [x] 2.2 `RunnerForm` (`RunnersPage.tsx:165-254`) reads `useModelCatalog()`, resolves the provider
       entry for the selected CLI, and replaces the free-text `<Input>` with a `<Select>` carrying:
       a `Provider default` option (unset), one option per declared model, and — when editing a
       runner whose `model_unrecognised` is true — its stored model, selected, labelled as
       unrecognised.
-- [ ] 2.3 Submitting sends `model: undefined` on create when unset, and `model: null` on edit when
+- [x] 2.3 Submitting sends `model: undefined` on create when unset, and `model: null` on edit when
       the operator moves a runner back to the provider default. The edit path currently sends
       `{ name, model }` (`RunnersPage.tsx:149`) and must keep sending `model` explicitly.
-- [ ] 2.4 Changing the CLI while creating resets the model selection to the **unset** `Provider
+- [x] 2.4 Changing the CLI while creating resets the model selection to the **unset** `Provider
       default` option — *not* to that provider's default model. Copy the shape of
       `AgentCreateDialog.tsx:176-181` but not its value: that dialog resets to a concrete model id
       because an agent must have one, and a runner must not have one chosen on its behalf
       (design.md says why). The CLI select is already disabled when editing.
-- [ ] 2.5 While the catalog is unavailable the model select is disabled and says so; Save stays
+- [x] 2.5 While the catalog is unavailable the model select is disabled and says so; Save stays
       enabled, because a runner with no model is valid.
-- [ ] 2.6 The runner list row marks a runner whose `model_unrecognised` is true, beside the
+- [x] 2.6 The runner list row marks a runner whose `model_unrecognised` is true, beside the
       model it already renders (`RunnersPage.tsx:109-113`). Round 3 added the clause and the
       scenario `AND` this implements; before that it was a task no requirement asked for.
+
+**Section 2 built and driven, 2026-09-02 (night window, N-3).** `Runner` carries
+`model_unrecognised`; `RunnerForm`'s free-text `<Input>` is a `<Select>` fed by `useModelCatalog()`,
+offering "Provider default" plus the models the catalog declares for the selected CLI, plus the
+runner's own stored model — selected and labelled `— unrecognised` — when the catalog does not
+declare it. Changing the CLI on create resets to **unset**. The edit path always sends `model`,
+`null` when the operator moves back to Provider default. The list row carries an amber
+`Unrecognised` chip.
+
+Driven through a browser against the `:8011` Hub, fixture project `proj-3ad9e80184e1` (created and
+deleted, count back to `0`): `scripts/drive/t_n3_runner_model_picker_ui.py`, **25 passed / 0
+failed**, including the wire payloads (`{"model": null}` on clearing, the legacy model re-submitted
+and accepted `200`) and `GET /runners/{id}` reporting `model: null` afterwards. That is the
+substance of tasks 5.1 and 5.2 — but against the **Vite dev server**, because
+`hub/hub/static/ui` is a committed build artefact this section deliberately does not rebuild
+(section 5 does, once). Section 5's drive still has to run against the served bundle.
+
+**Tasks 4.1, 4.2, 4.4 and 4.5 were done here rather than in section 4**, because leaving them
+would have left the vitest suite knowingly red between sittings: replacing the model `<Input>`
+breaks `runnersUi.test.tsx`'s `getByPlaceholderText('e.g. claude-sonnet-5')` immediately, and
+repairing it needs the fixture's model list (4.1) in the same edit. 4.1's stated blast radius was
+measured and is zero — **142 files / 1473 tests pass**, and no test depended on the empty list.
+4.4's "check that it fails first, against the API" was honoured in N-2, which watched that exact
+`400` before writing section 1's fix; the acceptance half is re-proved live above rather than only
+against a mock. **4.3 and 4.6 stay open** — both are assertions about section 3's error surface,
+which does not exist yet.
 
 ## 3. A refusal reaches the operator
 
@@ -82,10 +108,10 @@ nothing"); it now asserts the requirement, and says in a comment why it was flip
 
 ## 4. Tests
 
-- [ ] 4.1 `modelCatalogFixture.ts` declares a small model list per provider. Re-run the whole vitest
+- [x] 4.1 `modelCatalogFixture.ts` declares a small model list per provider. Re-run the whole vitest
       suite: 9 files import this fixture. If any test depends on the empty list, give that test its
       own fixture rather than leaving the shared one in a state the Hub cannot produce.
-- [ ] 4.2 `runnersUi.test.tsx`: **one** `getByPlaceholderText` assertion goes — line 85,
+- [x] 4.2 `runnersUi.test.tsx`: **one** `getByPlaceholderText` assertion goes — line 85,
       `'e.g. claude-sonnet-5'`, the model input. Line 84's `'e.g. Claude Opus'` is the **Name**
       field and must stay: `Save` is `disabled` on `!name.trim()` (`RunnersPage.tsx:246`), so
       dropping it leaves the button disabled and the test's own `createMutate` assertion fails.
@@ -95,11 +121,11 @@ nothing"); it now asserts the requirement, and says in a comment why it was flip
 - [ ] 4.3 A refused create renders the refusal's sentence and leaves the dialog open with its
       values. Drive it through a mocked `useCreateRunner` whose mutation reports an `ApiError`
       carrying `{"detail": "'opus' is not a model 'claude' declares"}`.
-- [ ] 4.4 Editing a runner whose `model_unrecognised` is true offers its stored model, selected and
+- [x] 4.4 Editing a runner whose `model_unrecognised` is true offers its stored model, selected and
       marked, and saving unchanged submits that same model **and is accepted**. This assertion is
       unsatisfiable without task 1.3 — check that it fails first, against the API, not only against
       a mock.
-- [ ] 4.5 Changing the CLI on create resets the model selection to `Provider default`.
+- [x] 4.5 Changing the CLI on create resets the model selection to `Provider default`.
 - [ ] 4.6 A refused create, then Cancel, then reopening "New Runner" shows **no** alert. Fails
       without task 3.4.
 

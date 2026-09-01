@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-02T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "N-3",
-    "next_action": "N-3: runner-model-is-chosen-from-the-catalog, tasks 2.1-2.6, UI ONLY (hub/ui/src). Runner type gains model_unrecognised (the API already returns it); RunnerCreate/RunnerUpdate allow model?: string | null. RunnerForm's free-text model Input becomes a Select fed by useModelCatalog(): a 'Provider default' option (unset), one option per declared model, plus the stored model when model_unrecognised, selected and labelled. 2.3: the edit path must keep sending `model` explicitly -- null when moved back to Provider default. 2.4: changing the CLI resets to UNSET, not to that provider's default model -- copy AgentCreateDialog.tsx:176-181's SHAPE but not its value. 2.5: catalog unavailable -> select disabled and says so, Save stays enabled. 2.6: mark model_unrecognised in the list row (RunnersPage.tsx:109-113). The backend half landed in N-2, so the null and the legacy re-submit both work now. Do NOT build the bundle (N-6 does it once). Do NOT start a-turn phase 1 -- it is blocked.",
+    "current": "N-4",
+    "next_action": "N-4: runner-model section 3, tasks 3.1-3.5. UI ONLY, and only hub/ui/src/components/runners/RunnersPage.tsx. Delete extractErrorDetail (now at the top of that file, ~lines 19-30) and import readableApiError from @/api/client -- it handles the Pydantic array body the local helper does not. 3.2: RunnerForm renders it in a role=\"alert\" block INSIDE the dialog, fed by createRunner.error / updateRunner.error -- which live in RunnersPage, so they must be passed down. Follow AgentCreateDialog.tsx:235's placement and tokens but NOT its errorDetail helper (lines 10-18), which is a twin of the one 3.1 deletes. 3.3 is an assertion, not a change: the dialog already stays open on failure. 3.4 is the one that matters -- reset() the mutation when the dialog opens AND when it is cancelled, or a reopened 'New Runner' shows the previous refusal. 3.5: the existing deleteError alert reads through readableApiError too. THEN do 4.3 and 4.6 in the same sitting (they are the vitest tests for exactly this, and are all that is left of section 4 -- 4.1/4.2/4.4/4.5 landed in N-3). Keep the vitest suite green. Do NOT build the bundle -- N-6 does it once.",
     "queue": [
         {
             "id": "N-1",
@@ -31,9 +31,10 @@
         },
         {
             "id": "N-3",
-            "status": "open",
+            "status": "done",
             "title": "runner-model: section 2 -- the model is chosen from the catalog",
-            "detail": "Tasks 2.1-2.6. UI: Runner type gains model_unrecognised; RunnerForm's free-text model Input becomes a Select fed by useModelCatalog() -- Provider default (unset), one option per declared model, plus the stored model when model_unrecognised. 2.4: changing the CLI resets to UNSET, not to that provider's default model -- copy AgentCreateDialog.tsx:176-181's shape but not its value. 2.5: catalog unavailable -> select disabled and says so, Save stays enabled. Do not build the bundle yet; N-6 does that once."
+            "detail": "Tasks 2.1-2.6. UI: Runner type gains model_unrecognised; RunnerForm's free-text model Input becomes a Select fed by useModelCatalog() -- Provider default (unset), one option per declared model, plus the stored model when model_unrecognised. 2.4: changing the CLI resets to UNSET, not to that provider's default model -- copy AgentCreateDialog.tsx:176-181's shape but not its value. 2.5: catalog unavailable -> select disabled and says so, Save stays enabled. Do not build the bundle yet; N-6 does that once.",
+            "result": "Built and driven 2026-09-02 00:10-00:2x. RunnerForm's free-text model Input is a Select fed by useModelCatalog(): 'Provider default' (unset), one option per declared model for the selected CLI, plus the stored model -- selected and labelled '-- unrecognised' -- when the catalog does not declare it. Runner gained model_unrecognised; RunnerCreate/RunnerUpdate widened to string|null; the edit path always sends model, null on Provider default; changing the CLI on create resets to UNSET (checked specifically against codex's own default); an unavailable catalog disables the select and says why with Save still enabled; the list row carries an amber Unrecognised chip. Form controls gained id/htmlFor. Driven through a browser against a Vite dev server on 5174 proxying the :8011 Hub (the Hub's own port serves the committed bundle, which does not have this yet): scripts/drive/t_n3_runner_model_picker_ui.py, 25 passed / 0 failed, fixture proj-3ad9e80184e1 deleted, count back to 0. Wire evidence: {'model': null} on clearing then GET /runners/{id} -> null (task 5.2's substance), and the legacy runner's own model re-submitted and answered 200 (section 1's repair reached from the screen). vitest 142 files / 1473 tests green; npm run lint, tsc, ruff clean. Tasks 4.1, 4.2, 4.4 and 4.5 were done here too -- see N-5. F219/F220 annotated a second time, still open."
         },
         {
             "id": "N-4",
@@ -44,14 +45,14 @@
         {
             "id": "N-5",
             "status": "open",
-            "title": "runner-model: section 4 -- the vitest tests",
-            "detail": "Tasks 4.1-4.6. modelCatalogFixture.ts gains a per-provider model list -- 9 files import it, re-run the whole vitest suite. 4.2: drop ONLY runnersUi.test.tsx line 85 (the model placeholder); line 84 is the Name field and removing it leaves Save disabled and breaks the test's own assertion. 4.4 is unsatisfiable without N-2's task 1.3 and must be checked against the API, not only a mock."
+            "title": "runner-model: section 4 -- the vitest tests that are LEFT (4.3 and 4.6 only)",
+            "detail": "ONLY 4.3 and 4.6 remain. 4.1 (fixture model list), 4.2 (runnersUi.test.tsx's model placeholder replaced by option-list assertions), 4.4 (legacy runner offered, selected, marked, and saving unchanged accepted) and 4.5 (CLI change resets to Provider default) all landed in N-3, because removing the model Input broke runnersUi.test.tsx immediately and repairing it needed the fixture in the same edit. 4.1's blast radius was measured: 142 test files / 1473 tests pass, nothing depended on the empty model list. 4.3 (a refused create renders the refusal's sentence, dialog stays open with its values) and 4.6 (refused create, Cancel, reopen -> NO alert; fails without 3.4) both need section 3, so DO THEM WITH N-4 in the same sitting and treat this item as already covered if N-4 did them."
         },
         {
             "id": "N-6",
             "status": "open",
             "title": "runner-model: section 5 -- drive it, then ship the bundle",
-            "detail": "Tasks 5.1-5.7. Drive on :8011 in a FRESH project. 5.1's reproduction has inverted: the typed value is no longer reachable, so the refusal is proved on the EDIT of a legacy runner. 5.2 proves the clear through the screen then GET /runners/{id} -> null. Then lint (ruff src/ hub/ tests/, black --target-version py311, mypy src/, npm run lint), both suites, npm run build + py -3.11 scripts/refresh_ui_bundle.py, and commit hub/ui/src with hub/hub/static/ui. 5.6 wants 19 passed / 0 failed from t_r2_runner_update_semantics.py. Retire F173/F219/F220 only after 5.1, 5.2 and 5.6 pass; F221 STAYS OPEN. SPLIT POINT if this runs long: 5.1-5.2 (drive) then 5.3-5.7 (ship)."
+            "detail": "Tasks 5.1-5.7. Drive on :8011 in a FRESH project, AGAINST THE BUILT BUNDLE this time -- N-3 drove the same surface through a Vite dev server on 5174, which is why F219/F220 were not retired. 5.1's reproduction has inverted: the typed value is no longer reachable, so the refusal is proved on the EDIT of a legacy runner. 5.2 proves the clear through the screen then GET /runners/{id} -> null (already measured on the dev server; redo it on the bundle). Then lint (ruff src/ hub/ tests/, black --target-version py311, mypy src/, npm run lint), both Python suites (NOT re-run since N-2 -- N-3 touched no .py), npm run build + py -3.11 scripts/refresh_ui_bundle.py, and commit hub/ui/src with hub/hub/static/ui. 5.6 wants 19 passed / 0 failed from t_r2_runner_update_semantics.py. scripts/drive/t_n3_runner_model_picker_ui.py can be re-pointed at the bundle with AW_UI=http://127.0.0.1:8011 once it is built -- that is most of 5.1/5.2 for free. Retire F173/F219/F220 only after 5.1, 5.2 and 5.6 pass; F221 STAYS OPEN. SPLIT POINT if this runs long: 5.1-5.2 (drive) then 5.3-5.7 (ship)."
         },
         {
             "id": "N-7",
@@ -75,16 +76,17 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-01T23:28:06+01:00",
+    "last_heartbeat": "2026-09-02T00:26:00+01:00",
     "status": "running",
     "queue_source": "spec-queue/APPROVALS.md, 2026-09-01 section, ORDER: line. Verbatim, so the playbook's default backlog-first shape is not used tonight.",
-    "green_at_compose": "Measured 2026-09-02T00:05+01:00, N-2: the FULL hub suite ran to completion on this branch for the first time -- `py -3.11 -m pytest tests/ -q -p no:randomly` from hub/, 25:34 wall clock, 1 failed / 3835 passed / 84 skipped / 1 xpassed. The one red is tests/test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work, which passes alone (1.39s) and with its whole file (7 passed) and is not reachable from N-2's diff: its bind_runner fixture POSTs a runner and PATCHes the AGENT, never PATCH /runners/{id}, and create_runner passes no `current` so the create path is behaviourally unchanged. NOT reproduced and NOT proven pre-existing -- that needs a second 25-minute run. Also green: CLI suite 440 passed / 3 skipped; ruff, black (536 files), mypy src/ (22 files) all clean.",
+    "green_at_compose": "Measured 2026-09-02T00:23+01:00, N-3: vitest 142 files / 1473 tests passed; npm run lint clean; tsc --noEmit clean; ruff check src/ hub/ tests/ clean. The Python suites were NOT re-run in N-3 -- no .py under hub/hub or src was touched, so N-2's numbers stand unrefreshed: full hub suite 1 failed / 3835 passed / 84 skipped / 1 xpassed, the one red being tests/test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work (see the OPEN QUESTION in notes); CLI suite 440 passed / 3 skipped.",
     "drive_port": 8011,
     "notes": [
         "F188 is NOT this window's work. DIRECTION.md's 2026-09-02 section already moved it to 2026-09-03, and this window does not write proposals. APPROVALS' closing suggestion to spec it is superseded by that.",
         "a-turn phases 1-7 are NOT tonight's work. APPROVALS' ORDER note: both changes touch hub/ui/src and hub/hub/static/ui is a committed build artefact, so exactly one UI change may be in flight tonight -- and that is runner-model. Phase 0 writes no UI, which is why the order is safe.",
         "Tomorrow's day window reads N-1's write-up as its D-0 and branches on it (spec-queue/DIRECTION.md). If N-1 never runs, the day window does phase 0 itself instead of its drive.",
         "N-1 done 2026-09-01. a-turn phases 1-7 are blocked in tasks.md, not merely deprioritised -- do not let a later firing pick them up as 'the next section of an approved change'.",
-        "OPEN QUESTION from N-2: the full hub suite reds on tests/test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work only in a full 25-minute run -- green alone and green in-file. Timing- or leakage-shaped, on a path N-2's diff cannot reach (argued in the log). A window with 25 spare minutes should re-run the full suite to decide whether it is pre-existing flake or a real ordering defect. Do not attribute it to runner-model without that second run."
+        "OPEN QUESTION from N-2: the full hub suite reds on tests/test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work only in a full 25-minute run -- green alone and green in-file. Timing- or leakage-shaped, on a path N-2's diff cannot reach (argued in the log). A window with 25 spare minutes should re-run the full suite to decide whether it is pre-existing flake or a real ordering defect. Do not attribute it to runner-model without that second run.",
+        "N-3 drove the model picker through a Vite dev server on 5174 (AW_DEV_HUB=http://127.0.0.1:8011), not through the Hub's own port -- hub/hub/static/ui is a committed build artefact and does not contain section 2. Anything a future window reads as 'the picker works' is true of the source, not yet of what an operator loads. N-6's drive against the built bundle is not a formality."
     ]
 }

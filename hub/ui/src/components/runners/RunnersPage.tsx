@@ -13,6 +13,7 @@ import {
   Runner,
   RunnerCli,
 } from '@/api/runners'
+import { useModelCatalog } from '@/api/modelCatalog'
 
 const CLI_OPTIONS: RunnerCli[] = ['claude', 'codex']
 
@@ -107,8 +108,17 @@ export function RunnersPage() {
                     </span>
                   </div>
                   {runner.model && (
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
-                      {runner.model}
+                    <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: 'var(--text-3)' }}>
+                      <span>{runner.model}</span>
+                      {runner.model_unrecognised && (
+                        <span
+                          className="aw-chip"
+                          style={{ background: tint('var(--amber)'), color: 'var(--amber)' }}
+                          title="The catalog does not declare this model for this CLI. The runner still works; editing it keeps the model unless you change it."
+                        >
+                          Unrecognised
+                        </span>
+                      )}
                     </p>
                   )}
                 </div>
@@ -146,7 +156,10 @@ export function RunnersPage() {
           onCancel={() => setEditing(null)}
           onSubmit={(values) =>
             updateRunner.mutate(
-              { id: editing.id, updates: { name: values.name, model: values.model } },
+              // `model` is always sent on edit, and `null` is how the operator's "Provider default"
+              // choice reaches the Hub — `undefined` would be dropped by JSON.stringify and read as
+              // "leave it alone" (RunnerUpdate, and update_runner's `model_fields_set` gate).
+              { id: editing.id, updates: { name: values.name, model: values.model ?? null } },
               { onSuccess: () => setEditing(null) },
             )
           }
@@ -177,7 +190,21 @@ function RunnerForm({
 }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [cli, setCli] = useState<RunnerCli>(initial?.cli ?? 'claude')
+  // '' is the unset model — the "Provider default" choice, a valid runner state, not a placeholder.
   const [model, setModel] = useState(initial?.model ?? '')
+  const { data: catalog } = useModelCatalog()
+
+  // Loading and failed both land here. An empty select would read as "this provider declares no
+  // models" rather than "we do not know yet", so the control is disabled and says which it is.
+  const catalogAvailable = !!catalog
+  const declaredModels = catalog?.providers.find((p) => p.provider === cli)?.models ?? []
+
+  // The runner's own stored model, kept as an offered and selected option when the catalog does not
+  // list it — without it, opening a legacy runner would silently re-point it at whatever option came
+  // first, and Save would destroy a working configuration.
+  const storedModel = initial?.model ?? null
+  const storedIsDeclared = declaredModels.some((m) => m.id === storedModel)
+  const storedOption = storedModel && !storedIsDeclared ? storedModel : null
 
   return (
     <div
@@ -198,10 +225,11 @@ function RunnerForm({
         </h2>
         <div className="space-y-3">
           <div>
-            <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>
+            <label htmlFor="runner-name" className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>
               Name
             </label>
             <Input
+              id="runner-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="px-3 py-2 text-sm"
@@ -209,13 +237,21 @@ function RunnerForm({
             />
           </div>
           <div>
-            <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>
+            <label htmlFor="runner-cli" className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>
               CLI
             </label>
             <Select
+              id="runner-cli"
               value={cli}
               disabled={!!initial}
-              onChange={(e) => setCli(e.target.value as RunnerCli)}
+              onChange={(e) => {
+                setCli(e.target.value as RunnerCli)
+                // Back to unset, not to the new provider's default model: unset is a valid runner
+                // state, and choosing a model on the operator's behalf is the same class of mistake
+                // as silently re-pointing a legacy runner. AgentCreateDialog resets to a concrete
+                // model id because an agent must have one; a runner must not.
+                setModel('')
+              }}
               className="px-3 py-2 text-sm capitalize"
             >
               {CLI_OPTIONS.map((option) => (
@@ -226,15 +262,33 @@ function RunnerForm({
             </Select>
           </div>
           <div>
-            <label className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>
-              Model (optional)
+            <label htmlFor="runner-model" className="block text-xs mb-1" style={{ color: 'var(--text-3)' }}>
+              Model
             </label>
-            <Input
+            <Select
+              id="runner-model"
               value={model}
+              disabled={!catalogAvailable}
               onChange={(e) => setModel(e.target.value)}
               className="px-3 py-2 text-sm"
-              placeholder="e.g. claude-sonnet-5"
-            />
+            >
+              <option value="">Provider default</option>
+              {storedOption && (
+                <option value={storedOption}>
+                  {initial?.model_unrecognised ? `${storedOption} — unrecognised` : storedOption}
+                </option>
+              )}
+              {declaredModels.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+            {!catalogAvailable && (
+              <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                The model catalog is unavailable — this runner will use the provider's default.
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 mt-5">
