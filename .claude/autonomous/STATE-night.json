@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "ad60b7b",
   "stop_at": "2026-09-01T07:00:00+01:00",
-  "iteration": 4,
+  "iteration": 5,
   "log_file": ".claude/autonomous/2026-09-01-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -99,5 +99,5 @@
     "F109: the hub suite shares one database connection per session and the retry chain can stall on it. If a test fails once and passes alone, suspect this before suspecting your change.",
     "test_relocate_repairs_and_redrains_queued_work was flaky and was fixed (d916861). A recurrence is a real finding, not a flake."
   ],
-  "last_heartbeat": "2026-09-01T01:44:42+01:00"
+  "last_heartbeat": "2026-09-01T02:27:11+01:00"
 }
