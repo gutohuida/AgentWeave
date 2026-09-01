@@ -13678,3 +13678,268 @@ than to **obey**, and carries a comment saying why.
 Nothing new, for the second row running. Both API passes scored 60/65 against the state the first
 left, and both UI passes 20/23. Row 1's F172 and row 2's F177 were each found only by a repeat, so
 the technique stays; recording that it fired on two of four rows is the honest number.
+
+---
+
+# Sweep, row 5 of 19: Runs — 2026-09-01
+
+The representative path from `SURVEY.md:26`: **trigger, stop, sessions, reconciliation,
+divergence, task binding**. Routes `hub/hub/api/v1/agent_trigger.py` — `POST /agent/trigger`
+(:1212), `POST /agent/{agent}/stop` (:1480), `GET /agent/sessions/{agent}` (:2749) — over
+`run_task_binding.py`, `run_liveness.py`, `run_divergence.py` and the rule in `turn_scheduler.py`.
+
+Harnesses kept: `scripts/drive/t_sweep_row5_runs.py` (**41/50**, three runs, the last two against
+the state the first left) and `scripts/drive/t_sweep_row5_ui.py` (**13/16**, twice). Fixture setup
+is `scripts/drive/setup_row5.py`. Five real Haiku turns, three of them stopped mid-sentence.
+
+Two measurements here deliberately leave the Hub's own record and ask the operating system and the
+filesystem instead, because row 4 paid for the lesson that a self-report is evidence about the
+reporter: whether a stopped process is actually **dead**, and whether the path the screen calls
+"where the agent's work happened" actually **exists**. The first vindicated the product; the
+second did not.
+
+## F188 (A) — a repairable workspace fault destroys the operator's message after three schedules, and the identical fault one line away holds it forever
+
+`hub/hub/api/v1/agent_trigger.py:879-883` raises the worktree refusal:
+
+```python
+except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
+    raise TriggerAgentError(
+        status.HTTP_409_CONFLICT,
+        f"Could not prepare isolated worktree for {agent}: {exc}",
+    ) from exc
+```
+
+No `agent_wide=True`. `turn_scheduler.py:204-231` is the rule that flag exists for, and its own
+comment states the test this site fails:
+
+> It does not hold where the refusal stops the agent running at all: no runner is bound, its CLI is
+> not installed, its runner row is gone. Nothing is starving behind that entry, because nothing for
+> that agent could run either way, so dropping the head of the queue buys nobody a turn — and it
+> costs the operator the input the product promised to hold until they performed the repair (F96).
+
+A blocked `.agentweave/worktrees/<agent>` with **no task in play** is exactly that condition. The
+comment's carve-out is explicitly for a *task's* checkout — *"a task's checkout that could not be
+prepared is the **task's** workspace, not the agent's, so other input really could run"* — and the
+raise site does not distinguish the two, so the agent-level case inherits the task-level rule.
+
+**Reproduction** (driven twice, on two different fresh projects):
+
+```
+mkdir <project>/.agentweave/worktrees/<agent>        # a plain directory, not a registered worktree
+POST /projects/{p}/agent/trigger {agent, message}    # x4
+GET  /projects/{p}/queue/{agent}
+```
+
+Run 1, `row5-r5a`, and again on `row5-r5b`:
+
+```
+entry-f1c4b3e23097 withdrawn 3 'blocked r5a' | delivery failed 3 times (Could not prepare isolated
+                                                worktree ...); the Hub stopped retrying
+entry-758804ddd0f2 queued    2 'blocked2'
+```
+
+**The contrast is what makes this a defect rather than a policy.** The *other* agent-wide refusal
+is flagged, and it behaves correctly against the same four schedules:
+
+```
+r5norun: [["queued", 0], ["queued", 0], ["queued", 0], ["queued", 0]]
+         waiting_reason: "No runner is bound to this agent. Bind one in the Hub UI before it can run."
+```
+
+Both are conditions only the operator can clear, both stop the agent running at all, and one of
+them eats the message. F114's own measured example — *"three messages to an unbound agent destroyed
+the first in under two seconds, and two clicks of the Continue button ... destroyed it faster"* —
+is reproduced here verbatim at a site the fix did not reach, and the Continue button is still the
+control the conversation view offers for exactly this situation.
+
+**Mitigation, measured and worth stating:** the loss is *loud*. `queue_entry_abandoned` fires at
+`severity="warn"`, and `AgentTimeline.tsx:805-807` renders `abandoned_reason` in the dropped
+entry's own conversation. Driven on screen (`t_sweep_row5_ui.py`): the operator does see that the
+message was never delivered. So this is destroyed-but-announced, not destroyed-silently — which is
+why it is A rather than higher.
+
+**Also on this sentence, and smaller (C):** it names the path and the branch precisely — *"refusing
+existing path C:\...\.agentweave\worktrees\r5runnerr5b: it is not the registered git worktree for
+refs/heads/agentweave/r5runnerr5b"* — and never says what would clear it. Removing that directory
+and pruning is the whole repair, and the operator has to know that from outside the product.
+
+## F189 (B) — the Workspace section shows a path that does not exist, and calls it where the work happened
+
+`hub/hub/api/v1/agent_trigger.py:2788` hardcodes, for every provider session it returns:
+
+```python
+"path": f".agentweave/agents/{agent}-session.json",
+```
+
+Nothing in the product writes that file. It is the shape of the deleted CLI session subsystem
+(`CLAUDE.md`: *"Deleted, and not to be recreated"*), and `grep` finds the string at exactly one
+site — this one. There is no reader, no writer, and no directory.
+
+`hub/ui/src/components/agents/AgentSettingsPage.tsx:435-442` renders it, under a docstring that
+says what it is for:
+
+> Provider sessions, with the directory each ran in. They sit under *Workspace* rather than with
+> the conversation because what makes them useful is **the path: this is where the agent's work
+> actually happened.**
+
+**Reproduction:** run one turn, then open `?project=<p>&agent=<a>&settings=workspace`. Screenshot
+`row5-03-workspace-sessions.png`. Driven:
+
+```
+API   : .agentweave/agents/r5runnerr5b-session.json
+screen: the same string, rendered under the session id
+disk  : C:\...\row5fixB\.agentweave\agents  -> does not exist (the .agentweave/ directory
+        contains project.json and worktrees/, nothing else)
+```
+
+A correct answer was available and was measured present in the same assertion:
+`.agentweave/worktrees/r5runnerr5b` **exists** and is where that turn actually ran. So the field is
+not merely unimplementable — the workspace resolution the run already performed knows the answer.
+
+## F190 (A) — no turn can ever say it was stopped, failed or interrupted, because the status map is built backwards from a payload sorted the other way
+
+The conversation surface has the feature. `AgentTimeline.tsx:56-60`:
+
+```ts
+const TERMINAL_LABEL: Partial<Record<RunLifecycleStatus, string>> = {
+  failed: 'Turn failed',
+  stopped: 'Turn stopped',
+  interrupted: 'Turn interrupted',
+}
+```
+
+and it is in the shipped bundle (`grep -c "Turn stopped" hub/hub/static/ui/assets/index-*.js` →
+`1`), keyed on `statusByRun[turn.runId]`. It never renders, and the reason is two files apart.
+
+`hub/ui/src/lib/agentTimelineModel.ts:187-199` assigns unconditionally as it iterates, so the
+**last** event it sees for a run wins:
+
+```ts
+for (const event of timelineEvents) {
+  const status = LIFECYCLE_EVENT_STATUS[event.event_type]
+  const runId = event.data?.run_id
+  if (status && typeof runId === 'string') result[runId] = status
+}
+```
+
+`hub/hub/api/v1/agents.py`'s `/agents/{name}/timeline` ends with
+`events.sort(key=lambda e: e.timestamp, reverse=True)` — **newest first**. The last lifecycle event
+the loop sees for any run is therefore its *oldest*, which is `run_started`, and
+`TERMINAL_LABEL['started']` is `undefined`.
+
+**Reproduction** — the shipped function's own loop, run over the real payload:
+
+```
+timestamps descending? ['2026-09-01T02:27:41Z', '2026-09-01T02:27:40Z', '2026-09-01T02:27:33Z']
+
+statusByRun as the shipped code computes it   what the runs table says
+  run-86742118f521  started                     stopped
+  run-20961fb46a72  started                     completed
+  run-457c08eefa5b  started                     completed
+  run-e74a0efe2b52  started                     stopped
+  run-6000c6a94554  started                     stopped
+```
+
+Six runs, six `started`, three of them stopped and two completed. On screen
+(`row5-01-after-stop.png`): the operator's message, then *"Worked for 8s / Work · 1 step"*, then
+nothing. No answer, no label, agent chip reads `idle`. A turn killed mid-sentence is
+indistinguishable from a turn that simply said nothing — and `Turn failed` is suppressed by the
+same line, so a **failed** turn is invisible too.
+
+**Its test passes, and cannot fire.** `hub/ui/src/__tests__/agentTimelineModel.test.ts:223-235`
+feeds `run_started` *then* `run_completed` — ascending, the opposite of what the route returns —
+and asserts `result['run-1'] === 'completed'`. This is the repository's named dominant failure
+mode, in a unit test: correct, green, and about an input the product never produces.
+
+**A second, independent gap behind the same symptom.** The terminal status line
+`f"Run {final_status} (exit {exit_code})."` (`agent_trigger.py:2135`, and :2729 for the app-server
+path) is only ever `sse_manager.broadcast`ed — it is never persisted as an `AgentOutput` row.
+Measured: the stopped run's `/agents/{agent}/output` holds exactly one row, `kind="thinking"`, and
+no `status` row at all. So even the live signal is gone the moment the page is reloaded, which is
+the ordinary way an operator returns to a run they stopped. Fixing `runStatusByRunId` alone would
+restore the label from the timeline event; this note is why the label is the *only* remaining
+carrier.
+
+## F191 (C) — `Conversation is unavailable` is one sentence for three different causes and names no repair
+
+`agent_trigger.py:1276`. Driven, three ways, all identical:
+
+```
+conversation_id belonging to another project        409  Conversation is unavailable
+conversation_id that does not exist at all          409  Conversation is unavailable
+(and by construction, one that is closed)           409  Conversation is unavailable
+```
+
+The operator cannot tell a typo from a boundary violation from a conversation that has ended, and
+the sentence does not say that omitting `conversation_id` starts a new one — which is the repair in
+all three cases. Compare the sibling refusals measured green in the same run: the archived agent
+says *"Unarchive it first"*, the unknown agent says *"Create it in the Hub UI, or correct the name"*,
+and the decided task says *"Move it to 'revision_needed' to reopen it, or start the turn without
+naming a task."* This one is the outlier on a route whose other refusals are exemplary.
+
+## F192 (C) — stop reports an agent that does not exist as merely idle
+
+`agent_trigger.py:1505-1507` selects a running `Run` by `(project_id, agent, status)` and, finding
+none, answers:
+
+```
+POST /projects/{p}/agent/r5ghostr5b/stop   ->  404  "r5ghostr5b has no run in progress."
+```
+
+There is no such agent. The trigger route in the same file distinguishes this precisely — *"is not
+an agent in this project, so there is nothing to trigger"* — so the information exists and this
+route declines to look. Small, but it is the shape that hides a typo in a script or a job.
+
+## What HELD — and the biggest of them was measured against the OS, not the record
+
+- **STOP KILLS THE PROCESS.** Not "the row says stopped" — the process tree is gone. The run's
+  `pid` was read straight out of the `runs` table (`33556`, `claude.exe`), its descendants
+  enumerated from a live `Win32_Process` snapshot, and after `POST /agent/{agent}/stop` every one
+  of them was absent within the polling window. `terminate_process_tree`'s `taskkill /F /T` does
+  what its docstring claims on this platform.
+- **A stop is recorded as a stop, not as a failure.** `status='stopped'`, `exit_code=2`. The
+  comment at `agent_trigger.py:1995-1999` — *"force-terminating a process rarely yields exit code 0,
+  so without this check a stop would be misreported as failed"* — now has a drive behind it.
+- **One run per agent held under a real concurrent trigger.** A second `POST /agent/trigger` while
+  the first was mid-turn returned `200 / status=queued` with `waiting_reason: "agent is already
+  running"`, and the queued input **started on its own** once the stop landed: `running: true,
+  waiting_count: 0`. A stop does not strand what was queued behind it.
+- **Every other refusal on this route names a repair that works.** Archived → *"Unarchive it
+  first."*; unknown agent → *"…Create it in the Hub UI, or correct the name — if a scheduled job
+  names it, that job will keep failing until the name is fixed."*; unknown task → names the id and
+  the project rule; approved task → *"Move it to 'revision_needed' to reopen it, or start the turn
+  without naming a task."*; bad `session_mode` → enumerates both; `resume` with no `session_id` →
+  names the field. Seven of nine refusals earn their keep; F191 and F192 are the two that do not.
+- **F114's fix works where it was applied.** Four messages to an agent with no runner bound, four
+  schedules, every entry still `queued` at `delivery_attempts: 0`. That is precisely what F188 asks
+  for at the neighbouring site.
+- **A message the Hub gave up on reaches the operator.** Driven on screen, not inferred: navigate
+  to the dropped entry's *own* conversation and `abandoned_reason` is rendered
+  (`AgentTimeline.tsx:805-807`).
+- **The project boundary holds.** A conversation id belonging to another project is refused (badly
+  worded — F191 — but refused).
+
+## Two harness bugs caught before they became findings
+
+Run 2 of the API harness reported the worktree block *not firing* — the turn started normally. It
+was the harness: run 1 had left a **registered** worktree at that path, and planting a file inside
+a registered worktree changes nothing, because `ensure_worktree` reads back the branch it expects
+and proceeds. The harness now runs `git worktree remove --force` **and `git worktree prune`**, then
+asserts the path is absent from `git worktree list` before planting the blocker — so the condition
+under test is created rather than assumed.
+
+The second: run 2 answered `200` to *"stopping an agent with no run in progress"*, because a
+previous invocation had left the agent blocked inside `ask_user`. Both harnesses now settle the
+agent — decline pending questions, stop, drain queued entries — before any assertion that depends
+on it being idle. And the UI harness stops on the *first* output row rather than the third, because
+a Haiku turn can finish inside the polling window and a stop that arrives late is answered `404`
+and measures nothing. Same shape as row 4's polling bug: **a harness that inherits state reports
+the product broken.**
+
+## What the second run bought
+
+Nothing new, for the third row running. The API harness scored 41/50 on the run after its own
+state, with the same nine reds, and F188 reproduced on both projects. Rows 1 and 2 each found a
+defect only a repeat could see; rows 3, 4 and 5 did not. Two of five is the honest number, and the
+technique stays.
