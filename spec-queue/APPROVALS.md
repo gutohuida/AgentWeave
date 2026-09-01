@@ -24,9 +24,7 @@ name. Leaving the row out entirely is undecided, not rejection. **No real token 
 the day window proposed this change and must not appear to have approved its own work, so the line
 below is a blank to fill, not a row.
 
-```
-- <APPROVED|REVISING|REJECTED>  runner-model-is-chosen-from-the-catalog
-```
+- APPROVED  runner-model-is-chosen-from-the-catalog   operator, 2026-09-01 17:40, in session
 
 `runner-model-is-chosen-from-the-catalog` — F173 (A). The runner screen free-types the model against
 a shipped requirement that says it must offer the catalog's, and swallows the backend's refusal

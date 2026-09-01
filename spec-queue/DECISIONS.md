@@ -31,7 +31,7 @@ What follows is the deduplicated set. Each row names the entries it absorbs, so 
 
 ### D-1 — Ratify or widen the `fastmcp <4` bound
 
-**OPEN.** Absorbs entries 17, 31. Severity: low, reversible in one line.
+**DECIDED 2026-09-01 — RATIFIED by the operator, in session.** The bound stands as taken. Absorbs entries 17, 31. Severity: low, reversible in one line.
 
 FastMCP 4.0.0 reached PyPI 2026-08-31T18:20:31Z. This repo declared `fastmcp>=2.0` **unbounded** in
 three places, and CI resolves fresh with no lockfile — so CI and this machine had already diverged
