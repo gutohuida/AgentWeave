@@ -87,5 +87,5 @@
 
 ## 6. Ordering
 
-- [ ] 6.1 Do not sync or archive this change into `openspec/specs/` before it has driven (5.4–5.5).
+- [x] 6.1 Do not sync or archive this change into `openspec/specs/` before it has driven (5.4–5.5).
   A firing sentence is exactly the kind of thing that reads right and cannot fire.
