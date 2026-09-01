@@ -1,1 +1,1 @@
-handoff-0104-2026-09-01-0115-the-daily-loop-built-armed-and-running.md
+handoff-0105-2026-09-01-1833-the-first-full-cycle-merged-and-f190-specced.md
