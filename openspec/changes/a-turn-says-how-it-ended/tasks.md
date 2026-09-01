@@ -15,9 +15,12 @@
 - [ ] 1.4 In `agent_timeline` (`hub/hub/api/v1/agents.py:729`), after the existing `asyncio.gather`
       and after the `events[:50]` truncation, collect the
       distinct `data["run_id"]` values the returned events carry, then read those rows with
-      `select(Run).where(Run.id.in_(run_ids))` (design D3, rewritten in round 3). No `ORDER BY`, no
-      `LIMIT`, and no `project_id`/`agent` scope on this query — the ids already came from rows the
-      route filtered. Skip the query entirely when the set is empty. Leave the three existing
+      `select(Run).where(Run.project_id == project_id, Run.id.in_(run_ids))` (design D3, rewritten
+      in round 3). No `ORDER BY` and no `LIMIT` — the ids are the bound. **Keep the `project_id`
+      predicate**: round 3's first draft of this task dropped it, reasoning that the ids already
+      came from rows the route had filtered. That is true and it is inference, not enforcement —
+      the `runs` map is a new cross-project leak surface and `ix_runs_project_agent` makes the
+      predicate free. Skip the query entirely when the id set is empty. Leave the three existing
       queries in the `gather` untouched.
 - [ ] 1.4a **Do not restore a concurrent, ordered, limited run query** — round 2 specified one
       ordered by `started_at` desc and round 3 reversed it, because a limit governs how many rows
@@ -39,6 +42,14 @@
       `test_codex_appserver_run_turn`, `test_failure_reporting`, `test_permission_approver` and
       `test_title_generation` match a grep for "timeline" but exercise the *chat* timeline, a
       different route. Check them, but expect the work to be in one file.
+      **What breaks there, precisely:** `test_cross_project_list_reads_return_empty_data`
+      (`test_bola.py:193`) puts the timeline in a `list_endpoints` loop that asserts
+      `isinstance(data, list)` and that no project-A id appears in any item (`:212-220`). Move it
+      out of that loop into its own block — the same treatment the agent-sessions dict wrapper
+      already gets at `:222-225` — and assert **both** halves are clean: no project-A id among
+      `events`, and `runs == {}`. Do **not** simply drop the path from the list: this is the only
+      cross-project isolation coverage this route has, and the `runs` map is a new leak surface that
+      needs it more than the events did.
 
 ## 2. The terminal status line is persisted
 

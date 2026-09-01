@@ -90,8 +90,14 @@ decision was reopened rather than merely tightened.
 
 **Chosen:** the three existing queries run concurrently as they do today; the merged, truncated
 event list is then scanned for `data.run_id`, and a second query reads exactly those rows —
-`select(Run).where(Run.id.in_(run_ids))`, a primary-key lookup with no limit and no ordering.
-An empty id set skips the query entirely.
+`select(Run).where(Run.project_id == project_id, Run.id.in_(run_ids))`, a primary-key lookup with
+no limit and no ordering. An empty id set skips the query entirely.
+
+The `project_id` predicate is deliberate and was added in round 3's final read, which caught this
+decision's own first draft dropping it. The ids do come from rows the route already filtered, so
+the query is safe by inference either way — but the `runs` map is a new cross-project leak surface,
+`test_bola.py`'s isolation test covers this route precisely because that matters, and
+`ix_runs_project_agent` makes the predicate free. Enforce it rather than infer it.
 
 *Rejected: a fourth concurrent query scoped by `project_id` and `agent`, ordered and limited.* This
 was the round 1/round 2 choice, and it saves one sequential database round trip. It was reversed
@@ -418,3 +424,27 @@ claim and its line numbers are exact. `record_agent_output` does persist and bro
 a matching key set. Every `Run` column the envelope reports is populated at all six terminal sites.
 No spec change follows from this pass: *A run's terminal status line is persisted* says "recoverable",
 not "displayed", and the visible-outcome requirement is served by the `runs` map.
+
+### Final read, 2026-09-01 — what the last sitting checked
+
+Three things, all confirming or tightening what is already here rather than reopening it.
+
+**The repair works end to end, which had been assumed and not traced.** The finding above — that
+`lastRunSettled`'s first signal has never fired — is only actionable if persisting the row makes it
+fire. It does: `_output_to_timeline` (`agent_chat.py:213-223`) maps `AgentOutput.kind` onto
+`output_kind` and carries `payload` and `run_id` through, so a row written by `record_agent_output`
+with `kind="status"` and `payload={"phase": "completed", ...}` satisfies `isSuccessCompletionEntry`
+exactly. `TimelineEntry.delivery_state` defaults to `"delivered"` (`agent_chat.py:70`) and
+`_output_to_timeline` does not override it, so the row survives `groupIntoTurns`' delivered-only
+filter and joins its own run's turn. Task 2.2 therefore repairs the working indicator, not just the
+exit code.
+
+**`test_bola.py` is a sharper break than "the shape changed".** The timeline sits inside a loop
+asserting `isinstance(data, list)` across nine endpoints, and it is the route's only cross-project
+isolation coverage. The envelope forces it out of that loop, and the lazy fix — deleting the path
+from the list — silently removes the coverage at the same moment the response gains a new map of
+run facts to leak. Task 1.6 now says what to write instead.
+
+**D3's first draft dropped a predicate it should not have.** Recorded above rather than quietly
+corrected, because "the ids already came from filtered rows" is exactly the kind of reasoning that
+is true today and stops being true when someone writes a new event source.
