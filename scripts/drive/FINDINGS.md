@@ -14656,3 +14656,269 @@ its own project. Run 2026-09-01 ~04:47 +01:00 against the same 8011 build.
 Both projects (`proj-887e34c7724b`, `proj-63e4a31bf689`) and both temporary repositories were
 deleted afterwards; the `aw-f155-*` directories left in `%TEMP%` by earlier sessions were not
 touched.
+
+---
+
+# Sweep, row 9a of 19: Spec flow — documents, and the phase machine
+
+Driven 2026-09-01 ~04:55–05:10 +01:00 against the `:8011` trial Hub (beta profile, PID 22908, this
+branch's code) on two throwaway projects built by `scripts/drive/setup_row7.py`, both deleted
+afterwards. Row 9 is the largest row in the coverage matrix; this is the **9a** split named in
+`STATE-night.json` — documents (create / adopt / arrange / merge / phase) and the phase machine.
+Requirements, coverage, rigor and proposals are **9b**; evidence, decisions, reviews, drift and
+reindex are **9c**, and neither was driven here.
+
+Kept: `scripts/drive/t_sweep_row9_documents.py` (**196 PASS / 11 FAIL**, then **195 / 10** on a
+second run over the state the first left — the one-assertion difference is the virgin-corpus branch
+in leg 6, and the substantive reds are the same set both times) and
+`scripts/drive/t_sweep_row9_ui.py` (**2 failing, twice, the same two**). Screenshots in
+`%TEMP%\row9shots`.
+
+## F204 (C) — the phase route is the one door in the machine that refuses a call with no body, and it refuses it as *malformed*
+
+`POST /api/v1/projects/{id}/project/documents/phase?path=…&to=approved`, called with **no request
+body**, is answered:
+
+```
+422 {"detail": [{"type": "missing", "loc": ["body"], "msg": "Field required", "input": null}]}
+```
+
+The phase machine is never consulted. `PhaseRequest` (`hub/hub/api/v1/spec.py:238-239`) declares
+exactly one field, `reason: str = Field(default="", max_length=2000)` — every field optional — but
+the parameter is `body: PhaseRequest` with no default (`spec.py:1487`), so FastAPI treats the body
+itself as required and rejects the request during parsing.
+
+**The asymmetry is what makes it a finding rather than a quirk.** Its two siblings on the same
+credential take no body at all and work without one, measured in the same run:
+
+| route | body | bodyless call |
+|---|---|---|
+| `POST /documents/close-exploration?path=…` | none | **200** |
+| `POST /documents/propose?path=…` | none | **200** |
+| `POST /documents/phase?path=…&to=…` | `PhaseRequest`, all fields optional | **422 "Field required"** |
+
+Reproduction: create a document, write content, close exploration, propose it, then
+`curl -X POST -H 'Authorization: Bearer …' '…/documents/phase?path=<path>&to=approved'` with no
+`-d`. Same shape as **F201** one subsystem over — a schema layer ordered ahead of the machine,
+turning a well-formed operator decision into a message about a field.
+
+**Held at C.** The Hub UI is unaffected: `useSetSpecPhase` (`hub/ui/src/api/spec.ts:302-309`) always
+posts `{ reason: reason ?? '' }`. The population is direct HTTP clients and scripted operators — and
+this harness, which lost its first run to it.
+
+## F205 (C) — the two phase edges added for F37 are offered by no screen, and the documents they were added for are exactly the ones the UI will not archive
+
+`spec_lifecycle.TRANSITIONS` (`hub/hub/spec_lifecycle.py:37-67`) declares seven edges. All seven
+were walked for real and all seven were accepted. Two of them — `exploring -> archived` and
+`proposed -> archived` — were added for **F37**, with a comment recording why: *"Confirmed live
+2026-08-25: an agent created a second document by mistake and the empty original was unreachable in
+every direction… It is not inert either — it leaves a standing spec manifest drift warning that
+nobody can clear."*
+
+`SpecPhaseBar.tsx` is the **only** component in the UI that calls `useSetSpecPhase` — measured, not
+assumed (`grep -rn useSetSpecPhase hub/ui/src` returns it, its own test, and the hook). Its Archive
+button renders under `document.phase === 'approved'` (`SpecPhaseBar.tsx:135-148`). So neither F37
+edge is reachable from any screen.
+
+Driven, six documents, each opened at its own URL, the Hub asked separately what it would accept for
+a throwaway twin of each:
+
+| document | Hub accepts `-> archived`? | controls the phase bar offers |
+|---|---|---|
+| `exploring`, empty, exploration open | **yes** | *Exploration is complete* — **no Archive** |
+| `exploring`, empty, exploration closed | **yes** | *Propose* — **no Archive** |
+| `exploring`, with requirements | no (`archive_would_orphan_work`) | *Exploration is complete* |
+| `proposed`, with requirements | no (`archive_would_orphan_work`) | *Approve*, *Reopen* |
+| `approved` | yes | *Archive*, *Reopen* |
+| `current` (capability) | no (`illegal_transition`) | none |
+
+`row9-empty.png` is the exhibit and it is the F37 scenario verbatim: a document titled
+*"empty (exploring-empty-closed)"*, body reading **"No requirements yet."**, phase pill `exploring`,
+a banner reading **"⚠ 1 spec manifest drift item"** — and a phase bar offering *Propose* and an
+Enforcement select, with nothing that retires it. The edge that clears exactly this state exists,
+answers 200, and no screen offers it.
+
+**And `proposed -> archived` is dead outright, not merely unreachable from the UI.** Reaching
+`proposed` through `POST /documents/propose` requires `spec_completeness.check` to return nothing,
+which requires requirements and tasks; a document that has produced requirements is then refused by
+`archive_would_orphan_work` (`spec_lifecycle.py:290-306`). The harness could only exercise that edge
+by building its subject through the **F207** door below — which is to say the only documents the
+edge can act on are ones that got to `proposed` around the completeness check.
+
+Severity C rather than B: the state is recoverable by any direct HTTP client, and the cost of not
+recovering it is a standing drift warning rather than lost work.
+
+## F206 (B) — five of the spec flow's operator-only routes have no operator surface
+
+Measured twice from outside the product: against `hub/hub/static/ui` (**the bundle this Hub
+actually serves**, 1,209,306 bytes of js/html/css read as bytes) and again against `hub/ui/src`.
+Both agree.
+
+| route | in the served bundle | in the UI source | agent plane has it |
+|---|---|---|---|
+| `POST /documents/propose` | yes | yes | no |
+| `POST /documents/phase` | yes | yes | no |
+| `POST /documents/close-exploration` | yes | yes | no |
+| `POST /documents/{path}/rigor` | yes | yes | no |
+| `POST /documents/adopt` | **no** | **no** | **no** |
+| `POST /spec/reindex` | **no** | **no** | **no** |
+| `POST /spec/documents/arrange` | **no** | **no** | **no** |
+| `POST /spec/adopt` | **no** | **no** | **no** |
+| `POST /documents/{path}/merge` | **no** | **no** | **no** |
+
+All five are documented as operator-only and all five work — this run drove every one of them and
+they held (see *What held*, below). `arrange`'s docstring says *"Operator-only — the agent
+capability plane has no equivalent"*, and the live OpenAPI confirms there is no agent route; so
+between the two planes, **nobody can call them from the product**. They are reachable only by a
+direct HTTP client.
+
+What that costs, concretely: the corpus's hierarchy — design D3's *"editorial judgement about what
+the project is"*, deliberately kept off the document payload so a document could not state its own
+place — can only be expressed with `curl`. `spec/index.json`, the only record of home, hierarchy and
+ordering that survives the project being copied to another machine, is never written by anything the
+operator can press. Adopting a document already on disk, and folding a finished change into a
+capability document, are likewise API-only. This is **F203's shape at five times the size**: F203
+was one read nothing could reach; this is five writes.
+
+Severity B because it is the corpus-shaping half of the spec flow, and because `spec/index.json`
+not being written is silently inherited by every later corpus read.
+
+## F207 (C) — two doors into `proposed`, and the second one skips the first one's checks
+
+`POST /documents/propose` (`spec.py:1452`) runs `spec_service.propose`, which reads the document's
+payload, validates it, and runs `spec_completeness.check`; findings are returned and the document
+does not move. `POST /documents/phase?to=proposed` (`spec.py:1485`) calls
+`spec_lifecycle.transition` directly, which checks only the phase map and `explore_closed_at`.
+
+Reproduced deterministically, in four calls on the same credential:
+
+1. `POST /documents` — a brand-new document, no content written.
+2. `POST /documents/close-exploration?path=…` → **200**.
+3. `POST /documents/propose?path=…` → **200**, `blocking` carrying **2** findings, document still
+   `exploring`. Correct.
+4. `POST /documents/phase?path=…&to=proposed` (body `{"reason": ""}`) → **200**, document
+   **`proposed`**. Then `…&to=approved` → **200**, document **`approved`**, with the same two
+   completeness findings unresolved.
+
+An empty document reaches `approved` in two calls. `set_phase`'s own docstring describes it as
+*"approving a document, or reopening one"* and the UI only ever sends `approved`, `exploring` or
+`archived` through it — so this is a door nothing in the product opens, which is why it is C and not
+B. It is also the door **F205**'s dead `proposed -> archived` edge needs, so the two findings are
+each other's context.
+
+## F208 (D) — the arrange refusal names neither the cause nor the remedy
+
+On a corpus that has never been indexed, `POST /spec/documents/arrange` answers:
+
+```
+409 {"message": "no usable index to arrange (absent)", "diagnostics": []}
+```
+
+The remedy is `POST /spec/reindex` **naming a home** — `_select_home` refuses to guess, and on this
+fixture the reindex reported `index.written: null` with diagnostics `home_ambiguous` and
+`index_home_required`, which is exactly right and exactly the sentence arrange should be echoing.
+Instead `diagnostics` is empty and the word "reindex" does not appear. Compare the same file's own
+standard: `archive_would_orphan_work` ends *"Approve it and archive that, or reopen it and decide
+about the work first."*
+
+Low, and it compounds **F206** rather than standing alone: nothing in the UI can call either route,
+so the only caller who meets this sentence is already using `curl`.
+
+## What held — and the machine itself is close to airtight
+
+The larger half of this row, and the right shape for a subsystem this well built.
+
+**The phase machine, walked whole.** Five phases × six targets = 30 ordered pairs, against a map
+**transcribed by hand** into the harness rather than imported (row 8's lesson 7 — importing
+`TRANSITIONS` would assert the product against itself).
+
+- **All 7 declared edges accepted**, each on a document walked into its from-phase through the real
+  routes, and each verified afterwards to be in the phase it claimed.
+- **All 23 non-edges refused 409**, every one with the right code: `phase_unchanged` for the four
+  self-moves; `unknown_phase` for `current` and for a nonsense target, at every from-phase;
+  `illegal_transition` for the rest, each naming **both** phases in its sentence.
+- **No refusal moved anything** — re-read after every one of the 23.
+- **`current` is exactly as unreachable as it is documented to be.** `to=current` is
+  `unknown_phase` from all five phases including `current` itself (the to-phase check runs before
+  the same-phase check, so `current -> current` is `unknown_phase` rather than `phase_unchanged`);
+  a capability document is created at `current` and refuses all four transitionable targets with
+  `illegal_transition`. **There is no exit from `archived` either**: all three attempts refused.
+
+**Every gate around it.** `explore_not_closed` refuses `exploring -> proposed` before exploration is
+closed and lets it through after; **reopening genuinely reopens** — the reopened document needs the
+operator to close exploration again; `archive_would_orphan_work` refuses and says what to do
+instead; and an empty `exploring` document **can** be archived, so F37's edge works even though
+F205 says nothing offers it. `first_approved_at`, read **read-only out of sqlite** because no route
+exposes it, is set on first approval and **survives a reopen-then-reapprove unchanged** — the
+column's own comment made a promise and the promise holds.
+
+**Creation.** A minted path is a valid spec path, `exploring`, `change-spec`, `sketch`. All five
+`SPEC_KINDS` create, and `capability` lands in `current` and nothing else does. **F112 stays
+fixed**: `kind: "change"` is `409 unknown_kind` listing all five kinds, not the 500 it once was.
+Seven unsafe paths — traversal, absolute, uppercase, wrong extension, outside `spec/`, hidden
+segment, backslash — all `400`. An unhonourable body field is `422` naming it.
+
+**Adoption.** A document copied onto disk beside the corpus adopts at `201` and **its phase is read
+from the file** — an `approved` document adopts as `approved`, not defaulted to `exploring`. Each
+refusal lands on its documented status: `document_exists` 409, `file_missing` 422, `payload_absent`
+422, unsafe path 400.
+
+**Arrange, once an index exists.** Parent set and cleared; self-parent, unknown parent and a
+two-document cycle each `422` from `load_manifest`'s own structural rules; a document not in the
+index `404`; an unsafe path `400`. Naming a home wrote `spec/index.json` over 30 documents, and a
+recorded home is preserved on a later reindex without restating it.
+
+**Merge.** Into a non-capability document `409 not_a_capability`; from an `exploring` source
+`409 source_not_finished`; from a path with no document `404`; naming no source `422`; an
+unhonourable field `422`. A real merge from one `approved` and one `archived` change returned
+`merged: 2`, left the capability document in `current`, and **left both sources in the phases they
+were in**.
+
+**The two planes stay separate.** Read off the **live** OpenAPI, not the source: the agent plane has
+no phase route, no `close-exploration` and no `propose`. Approval is not something an agent can
+reach by any path the running build serves.
+
+**F202's shape does NOT generalise to this subsystem, and that is a measurement, not an
+assumption.** The document list was asked the boundary question rather than read for a `limit`
+parameter: at **147 documents** it returned 147, and on the second run at **294** it returned 294.
+There is no `limit` or `offset` anywhere in `hub/hub/api/v1/spec.py`. `GET /specs` and
+`GET /documents` differ by exactly the files discovery found on disk that the Hub never created —
+each carrying `phase: null`, which is what `list_specs` documents — and every tracked path in
+`/specs` carries the phase `/documents` gave it. Coverage still answered at 294.
+
+## Considered and not filed
+
+- **`GET /specs` reporting more documents than `GET /documents`.** The first draft asserted the two
+  counts were equal and it went red at 148 vs 147. They answer different questions on purpose —
+  `/documents` is the Hub's record, `/specs` is disk discovery — and the extra path was the
+  payload-less file the adoption leg had just written, carrying `phase: null` exactly as
+  `list_specs` says it will. The assertion was wrong; the product was not. Rewritten to assert the
+  containment and the shape of the difference, which is what actually holds.
+- **The operator plane having no `rename` route.** `POST /agent-actions/spec/documents/rename`
+  exists; there is no operator equivalent, and the UI is built to *follow* a rename
+  (`hub/ui/src/api/spec.ts:162-171`, *"Follow the document when the agent renames it"*) rather than
+  to perform one. Left unfiled because unlike F206's five routes this may be a deliberate division —
+  an agent names the document it is exploring — and calling it a defect would be guessing at intent.
+  Recorded here so 9b can ask the operator rather than rediscover it.
+
+## Method notes worth carrying
+
+- **The bodyless probe is worth running once per subsystem.** F204 was found by the harness failing
+  on its own first call, not by an assertion anyone wrote. Three sibling routes, two of which need
+  no body — the odd one out is only visible if you call them the same way.
+- **Ask the product what it will accept, then ask the screen what it offers, and compare.** The UI
+  harness asks the Hub to archive a *throwaway twin* of each subject before opening the browser, so
+  the table in F205 is Hub-behaviour against screen-behaviour rather than screen-behaviour against
+  the harness author's belief.
+- **Row 8's lesson 8 fired twice more, both times against this harness.** The first UI run clicked
+  rows in the tree to open documents; the clicks silently did nothing and the phase pill read
+  `exploring` for all six subjects, so *four* assertions "measured" one document six times. And in
+  leg 6 every arrange refusal passed — for `409 no usable index`, not for the structural rule each
+  was named after. Both were caught by reading the reason for the green, not the green.
+- **State the precondition instead of asserting through it.** Run 2 of the API harness reported two
+  reds that were facts about run 1 (an index its first run wrote, and a home that is preserved).
+  The virgin-corpus checks are now gated on `index.written is None` and say so.
+- **`spec/index.json` is the second thing `reindex` rebuilds, and it can silently write nothing.**
+  A `200` from that route with `index.written: null` is the normal answer on a corpus with no home
+  recorded. Anything downstream that assumes an index exists because reindex succeeded is wrong;
+  9c should check that assumption where drift reads the manifest.
