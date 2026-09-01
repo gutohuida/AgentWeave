@@ -14358,7 +14358,7 @@ have not. Two of seven, and the technique stays.
 
 # Sweep, row 8 of 19: Tasks
 
-Driven 2026-09-01 04:35–05:10 +01:00 against the 8011 trial Hub (beta profile, PID 22908, this
+Driven 2026-09-01 04:29–04:47 +01:00 against the 8011 trial Hub (beta profile, PID 22908, this
 branch's code), on a fresh fixture project `proj-f2538b3807fe` built by `setup_row7.py`. Harnesses
 kept: `t_sweep_row8_tasks.py` (313 assertions, run twice on the final version, **19 failures both
 times, identical**) and `t_sweep_row8_ui.py` (8 assertions, 4 failures). Screenshots in
@@ -14632,7 +14632,7 @@ are holding.
 ## Row 8's inherited findings, re-driven the same night
 
 Both of these were queued for row 8 because each has a harness that costs no agent turn and builds
-its own project. Run 2026-09-01 ~05:25 +01:00 against the same 8011 build.
+its own project. Run 2026-09-01 ~04:47 +01:00 against the same 8011 build.
 
 - **`t_f154_wedged_review.py` — 18/18.** F154 stays **FIXED**. The firing answers `409` with
   *"beta is named on task-… ('Add one line to README') as its reviewer and is not reviewing it: no
