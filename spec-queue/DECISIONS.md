@@ -217,5 +217,15 @@ been carried for days without moving.
 
 ## Closed by measurement, 2026-09-01
 
-- **Entry 32 — "the hub suite has not run on this branch."** Answered, not decided: the suites were
-  run in the 2026-09-01 morning session before merging. See that day's handoff for the numbers.
+- **Entry 32 — "the hub suite has not run on this branch."** Answered by measurement, not decided.
+  Run in the 2026-09-01 morning session before merging:
+
+  | Suite | Result |
+  |---|---|
+  | `hub/tests/` | **3831 passed, 84 skipped, 1 xpassed** in 14:39 |
+  | `tests/` | **440 passed, 3 skipped** |
+  | `ruff` / `black --target-version py311` / `mypy src/` | clean over CI's own path lists |
+  | `hub/ui` | **not run, and not needed** — the branch's product-code diff is three files (`pyproject.toml`, `hub/pyproject.toml`, `hub/tests/test_fastmcp_api_contract.py`); `hub/ui` is untouched. Measured with `git diff --name-only`, not inferred. |
+
+  The baseline at `9fa4c4b` was 3,825 / 84 / 1, so **+6 is exactly the six new contract tests**.
+  CI was also confirmed green on `master@ad60b7b`, the merge base.
