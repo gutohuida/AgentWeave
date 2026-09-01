@@ -14922,3 +14922,268 @@ each carrying `phase: null`, which is what `list_specs` documents — and every 
   A `200` from that route with `index.written: null` is the normal answer on a corpus with no home
   recorded. Anything downstream that assumes an index exists because reindex succeeded is wrong;
   9c should check that assumption where drift reads the manifest.
+
+---
+
+# Sweep, row 9b of 19 — SPEC FLOW: requirements, coverage, rigor, proposals
+
+Driven 2026-09-01, iteration 12, against the trial Hub on **8011** (beta profile, this branch's
+code), fixture project `proj-401c38a75fcd`. Harness:
+`scripts/drive/t_sweep_row9b_requirements.py`, **129 passed / 10 failed, twice**, the second run on
+the state the first left. Every red below is one of those ten.
+
+Row 9a (documents, phase, adopt/arrange/merge) is the previous section. 9c — evidence, decisions,
+reviews, drift, reindex — is still unrun.
+
+## F209 (C) — the accept route takes the operator's reason and throws it away
+
+`POST /documents/{path}/proposals/{id}/accept` binds a `ProposalDecision` body whose `reason` field
+is declared `Field(default="", max_length=2000)` (`hub/hub/api/v1/spec.py:604`). The handler
+(`spec.py:614`) then calls:
+
+```python
+result = await spec_service.accept_proposal(
+    session, workspace, document, proposal,
+    actor=_operator(),
+    expected_digest=body.expected_digest,     # <- reason is not here
+)
+```
+
+`spec_service.accept_proposal` (`spec_service.py:485`) has **no `reason` parameter at all**, and its
+resolution block (`spec_service.py:552-553`) sets `resolved_at` and `resolved_by_actor_name` and
+stops. `reject_proposal` further down (`spec_service.py:578-580`) sets all three, including
+`proposal.resolution_reason = reason`, and its route does pass `reason=body.reason`.
+
+Reproduction, one call:
+
+```
+POST .../proposals/{id}/accept  {"reason": "looks right", "expected_digest": "<current>"}
+-> 200, proposal.status="accepted", proposal.resolution_reason=""
+```
+
+The API accepts a 2000-character justification, answers 200, and stores nothing. A reject of the
+same proposal with the same body keeps its reason verbatim — measured in the same leg. So the record
+of *why* a spec change was let in is the one half of the pair that is not kept, which is the half
+anyone auditing the corpus later actually wants.
+
+The UI never sends one (`useAcceptSpecProposal`, `hub/ui/src/api/spec.ts:349`, posts only
+`expected_digest`), so today's affected population is direct HTTP clients and anything built on the
+declared schema. That is why it is C and not B — but the field is declared, documented and
+size-limited, which is a promise.
+
+## F210 (C) — F204's shape, twice more: both proposal decisions refuse a bodyless call
+
+Every field of `ProposalDecision` is optional (`reason` defaults to `""`, `expected_digest` to
+`None`), so both routes have a complete meaning with no body at all. Neither parameter has a
+default, so FastAPI requires one:
+
+```
+POST .../proposals/{id}/accept   (no body, no Content-Type)
+-> 422 {"detail": [{"type": "missing", "loc": ["body"], "msg": "Field required"}]}
+POST .../proposals/{id}/reject   (no body)
+-> 422 (identical)
+```
+
+Neither proposal moved; both were still `pending` afterwards, measured. This is exactly F204
+(`/documents/phase`) one subsystem over, and the same one-word fix applies —
+`body: ProposalDecision = ProposalDecision()`. Filed separately from F204 because these are
+different routes with a different model, and because a fix to one will not touch the other.
+
+**Rigor is *not* this shape, and that is worth recording as a negative.** `RigorRequest.rigor` is
+genuinely required, so refusing a bodyless call is right; an empty-object call (`{}`) is refused
+`422` naming **`rigor`**, which is the correct answer. Measured, not assumed.
+
+## F211 (C) — F206's shape, three more routes with no operator surface
+
+Same measurement as F206, over 9b's routes: substring hits against **the bundle this Hub actually
+serves** (`hub/hub/static/ui`, read as bytes) and again against `hub/ui/src`. Both agree.
+
+| route | served bundle | UI source | agent plane |
+|---|---|---|---|
+| `GET /spec/coverage` | 1 | 1 | no |
+| `POST /documents/{path}/rigor` | 1 | 2 | no |
+| `GET /documents/{path}/proposals` (+accept/reject) | 3 | 3 | no |
+| `GET /spec/requirements` | **0** | **0** | **no** |
+| `GET /spec/requirements/{identifier}` | **0** | **0** | **no** |
+| `GET /documents/{path}/rigor-history` | **0** | **0** | **no** |
+
+The live OpenAPI confirms the agent plane carries only five spec routes (`documents`,
+`documents/create`, `documents/rename`, `evidence`, `evidence/{id}/decision`), none of them these.
+So all three are reachable only by a direct HTTP client.
+
+`rigor-history` is the sharpest of the three, because the module that writes it argues from its
+existence: `spec_rigor.py`'s docstring says **"Demotion is legitimate *because* this exists"**, and
+`hub/hub/api/v1/spec.py:538` repeats it. The justification for allowing an operator to lower a gate
+is an audit trail that no screen shows. This drive confirmed the trail itself is complete and
+ordered — three changes, each naming from, to, actor and reason — which makes the gap a surfacing
+gap, not a data gap.
+
+`GET /spec/requirements/{identifier}` is the route whose docstring says it is *"the other half of a
+navigation that only went one way"*. Neither half of that navigation is on a screen.
+
+## F212 (C) — coverage reports `unserved` as bare identifiers, which are not unique in a project
+
+`spec_index.resolve` (`hub/hub/spec_index.py:349`) states the design plainly: **"Identifiers are
+minted per document, so a bare `FR-8` names one requirement only when one document in the project
+declares it."** It refuses an ambiguous lookup rather than guessing, which is right.
+
+`GET /spec/coverage` then projects `unserved` through `[row.identifier for row in unserved]`
+(`hub/hub/api/v1/spec.py:711`) — dropping the document. In the fixture project, run A measured:
+
+```
+"unserved": ["FR-1", "FR-1", "FR-1", ... x34 ..., "FR-10", "FR-10", "FR-10", ...]
+```
+
+34 entries reading `FR-1`, naming 34 different requirements in 34 different documents, with nothing
+in the response to tell them apart. Meanwhile the **same response's** `requirements` array carries
+`document_id` on every entry — so the information exists and is discarded at exactly the point it is
+needed.
+
+And the list is a dead end in both directions: feeding the most-repeated identifier straight back
+into the route built to explain it answers
+
+```
+GET /spec/requirements/FR-1
+-> 422 "FR-1 is declared by more than one document in this project; name the document it belongs to"
+```
+
+`unserved` is described as *"the question the end-to-end run needed and could not ask"*
+(`requirement_links.py:335`). In any project with two documents, its answer names things the reader
+cannot look up. The fix is small — return objects carrying `identifier` and `document_id`, as the
+sibling array already does — and it is a response-shape change, so it is the operator's call.
+
+## F213 (D) — a resubmitted edit stacks a duplicate proposal, and the twin can never be resolved
+
+At `contract`/`gate` rigor a submission is diffed against the **live** document, which a pending
+proposal has by definition not touched. So submitting the same edit twice proposes it twice:
+
+```
+PUT .../content  (edit E)                          -> proposals: [fr-1 modify, fr-2 modify]
+PUT .../content  (edit E, byte-identical resubmit)  -> proposals: [fr-1 modify, fr-2 modify]
+GET .../proposals                                   -> 4 pending, {fr-1: 2, fr-2: 2}
+```
+
+The documented no-op case does hold and was measured separately: a submission identical to what is
+**stored** proposes nothing and names what it left unchanged. This is the other case — a retry, a
+double-click, an agent that re-submits after a timeout.
+
+Accepting one of a pair then strands the other:
+
+```
+POST .../proposals/{first}/accept  -> 200, applied
+POST .../proposals/{twin}/accept   -> 409 {"code": "proposal_stale",
+                                           "message": "the document changed since this proposal was
+                                                       created; it is now stale, not accepted"}
+```
+
+The proposal's own compare-and-swap catches it, so **nothing is misapplied** — that is why this is D
+and not higher. What is left is queue hygiene: the operator's pending list shows two identical
+proposals per unit with no way to tell which is which, and after accepting one the twin is
+permanently unacceptable. There is no withdraw or cancel route; the only exit is `reject`, which
+records a rejection that never happened as a judgement.
+
+## F214 (D) — a retired requirement is reported `unserved`, which is the one thing it is not
+
+`GET /spec/requirements/{identifier}` computes coverage with `include_retired=True`
+(`hub/hub/api/v1/spec.py:770`) and returns whatever `_state` produces — for a retired requirement
+with no links, `unserved`:
+
+```
+GET /spec/requirements/FR-3?document=<the document that retired it>
+-> 200 {"requirement": {"state": "retired"},
+        "coverage":    {"state": "unserved", "integration": "not_applicable"}}
+```
+
+`requirement_links.unserved()` excludes retired rows deliberately, and says why: **"a requirement
+nobody has to build any more is not unserved, it is over"** (`requirement_links.py:338`). The same
+word therefore carries two answers on two routes about the same requirement. `unserved` is the state
+that means *somebody should be building this*; a retired requirement is exactly the row for which
+that is false.
+
+Severity D: the requirement block right beside it says `retired`, so a careful reader is not misled.
+A counter is.
+
+## What held — and most of this subsystem is in good shape
+
+The reds above are six narrow things. 129 assertions passed, twice, across the four areas:
+
+**Requirements index.** Identifiers minted on write and reported back by the write; every row
+carrying key, digest, anchor, document and state; ordering by identifier; per-document filtering;
+`?document=` on an unknown path refused **404** rather than silently answering project-wide.
+Retirement is real and reversible-looking: dropping `fr-3` from a payload marks the row `retired`
+rather than deleting it, `include_retired=false` hides it, `true` shows it, and the default is
+`true`.
+
+**The boundary question, asked of a different table than 9a's.** F202's shape does not generalise
+here either: a **120-requirement** document returns 120, and the project-wide list returned **661**
+rows in one answer. There is no `limit` or `offset` anywhere in `spec.py`.
+
+**Requirement detail.** For an unambiguous identifier it answers 200 with `tasks`, `evidence` and
+`coverage`; coverage is never null for an indexed requirement and **never states a state without an
+integration answer** — the invariant `requirement_coverage.py` insists on, checked from outside. A
+fresh requirement reads `unserved`; creating a task naming it moves it to `not_started` and the
+requirement then names the task, closing the navigation the route exists for. Naming a different
+document returns *that* document's same-named requirement rather than guessing.
+
+**Ambiguity is refused, not resolved.** A bare identifier declared by 34 documents is **422** with
+"name the document it belongs to". A task naming that identifier is still created — and its create
+response says so: `unresolved_requirements: [{"reference": "FR-1", "reason": "ambiguous"}]`. Nothing
+is guessed and nothing is silently dropped, which is the whole point of the module.
+
+**Coverage.** Project-wide and per-document from one implementation; state totals and integration
+totals each summing to the entry count; `unserved` excluding retired rows (measured against the
+active twins of the same name, not assumed); an unknown document 404.
+
+**Rigor, which is the best-defended thing in this row.** Unknown rigor -> 409 `unknown_rigor` listing
+the three that exist. Same rigor -> 409 `rigor_unchanged`. Promoting a document with no payload ->
+409 `document_not_enforceable`, with `blocking` naming what to fix in the operator's words. Demoting
+the same unreadable document is **not** refused for enforceability — the asymmetry the module argues
+for, holding in practice. Compare-and-swap works both ways: a stale digest is refused `stale_digest`
+and **the rigor did not move**; the current digest lands. `contract -> gate -> sketch` all accepted,
+demotion destroyed no requirement rows, and `rigor-history` kept all three steps in order with
+actor, reason and timestamp. `rigor-history` on an unknown document is 404.
+
+**No agent plane, confirmed against the live OpenAPI.** No agent-plane rigor route, so an agent
+blocked by a gate genuinely cannot lower it; no agent-plane proposal-decision route; no agent-plane
+requirements or coverage route.
+
+**Proposals.** A `contract`-rigor write returns `proposals` instead of `identifiers` and **the live
+document is untouched**, verified by reading the content before and after. Pending list ordered by
+creation, each entry naming its proposer and carrying `resolved_at: null`. Accept on a stale digest
+refused; accept on the current digest applies and the live document changes. Accepting twice -> 409;
+rejecting twice -> 409; a proposal id under the wrong document -> 404; an unknown id -> 404; resolved
+proposals leave the pending list. Reject keeps its reason. A `sketch`-rigor write still writes and
+still reports identifiers — the contrast case that proves the gate is the document's property, not
+the caller's.
+
+## Considered and not filed
+
+- **Per-document identifier minting is not a defect.** `FR-1` in every document looks alarming and
+  is deliberate (`spec_index.py:349`), and the ambiguity refusal that follows from it is the correct
+  handling. What is filed is F212 — one *surface* that hands out identifiers it cannot resolve.
+- **The `?document=` requirement on the detail route.** Unusable bare in any multi-document project,
+  but that is the same design, correctly enforced. It becomes a real problem only in combination
+  with F211 (no screen calls it) and F212 (the one list that feeds it drops the document).
+- **Rigor's optional `expected_digest`.** Omitting it promotes a document the compare-and-swap had
+  just protected — driven both ways: the loser of a real race is refused `stale_digest`, and the
+  same document is then promoted by a call that simply omits the digest. This is **not** F207's
+  shape: it is one route with one documented, deliberate optionality (*"Optional so a caller that
+  has not read the document can still act"*), not a second route bypassing the first's checks. The
+  UI always sends one. Recorded because a reader of F207 will want to know it was asked.
+
+## Method notes
+
+- **Two harness bugs, both the same bug, both caught by reading the reason for the green (and the
+  red).** Run 1 assumed identifiers were project-unique and produced seven reds that were facts
+  about the harness. Run 2 fixed that by picking "the 119th requirement of the biggest document" —
+  which stopped being unique the moment the harness ran a second time in the same project. The fix
+  that stuck **measures**: count identifiers project-wide, build a document larger than every other
+  one, and take the identifiers only it can have. Row 9a's lesson 10 in its sharpest form — *a
+  harness that runs twice must state its precondition, not inherit it.*
+- **One of the seven false reds hid a real one.** "It is no longer unserved" passed in run 1 —
+  because coverage was `None`, and `None.get(...) != "unserved"` is true. A green for a reason you
+  cannot name has measured nothing; naming it is what turned the leg into F212's evidence.
+- **The bodyless probe found F210**, exactly as it found F204, and the *negative* result on rigor is
+  the same probe doing its other job: telling you which routes are fine.
+- **Ask both halves of a pair.** F209 exists because accept and reject were driven with the same
+  body and compared. Neither call is wrong on its own reading.
