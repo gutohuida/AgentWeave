@@ -21,6 +21,36 @@ Measured across six real runs: six `started`, of which three were stopped and tw
 
 This is filed as **F190 (severity A)** in `scripts/drive/FINDINGS.md`.
 
+### Round 2, 2026-09-01: what an independent re-derivation changed
+
+Round 2 read the code fresh against this proposal rather than re-reading round 1. The central
+argument **survives**: `runStatusByRunId` is last-wins over a newest-first array, the oldest event
+wins, the oldest is always `run_started`, and `TERMINAL_LABEL['started']` is `undefined`. So do the
+no-migration claim (no bulk `delete(Run)` exists anywhere, and `scheduler.py:940` is
+`_discard_unused_run(session, run: JobRun)`), D4's "`runDurationsByRunId` is currently correct", the
+11-test-file blast radius, and every backend line citation. Four things did not survive; the two
+that matter to a reader of this proposal are:
+
+- **The third consequence is not reload-only, and the proposal said it was.** See the corrected
+  paragraph below. `anotherRunIsUnderway` is OR'd into the gate, so it overrides the working
+  signal in *every* state — the live path included. The change's own verification task was scoped
+  to the reload case and would have passed while the live regression stood.
+- **The `runs` query needs a stated coverage bound, and had none.** Design D3 argued only that the
+  map may describe *more* runs than the events name, and the spec states that. Nobody argued the
+  other direction: task 1.4 asked for "its own limit" without naming it, and any limit below the
+  event limit silently omits older runs — which the spec's *An unknown run degrades rather than
+  fails* scenario then blesses as "presents that run exactly as it presents a run with no outcome
+  yet". That is the F190 symptom, re-shipped through the fix for it. Now design D7.
+
+The other two — `AgentOutputPanel` being the component that must carry the run facts, against a
+design risk line saying it was not expected to need them, and four stale UI line numbers — are in
+`design.md` under *Round 2 corrections, 2026-09-01*.
+
+One alarm was raised and killed rather than filed. `grep -E 'Run\.status == "[a-z_]+"'` reports
+`in_progress`, which would break D5's enumeration — but `Run\.status` matches inside
+`JobRun.status`, and the scheduler's `skipped`/`in_progress` writes are all under `run = JobRun(`.
+`Run.status` really is `{running, completed, failed, stopped, interrupted}`. D5 stands.
+
 ## What Changes
 
 - **BREAKING** `GET /api/v1/projects/{project_id}/agents/{name}/timeline` returns an envelope
@@ -84,13 +114,29 @@ None.
 `JobRun` (`hub/hub/scheduler.py:940`), and `_prune_job_history` prunes `JobRun`. Every historical
 run's status is already recorded, so existing conversations begin rendering correctly on first read.
 
-**Third consequence, repaired as a side effect.** `AgentTimeline.tsx:114-116` decides a run has
-settled from two signals: the streamed status entry, and the timeline status as a backstop "for
-history loaded fresh". The backstop is dead because every run reads `started`, and the streamed
-entry is dead because it is never persisted — so on a reloaded conversation both fail together, and
-`anotherRunIsUnderway` counts every older run as still underway. That defeats the exclusion written
-specifically to stop the working indicator lingering under a finished answer (operator, 2026-08-18:
-*"It still linger a little bit"*).
+**Third consequence, repaired as a side effect — corrected in round 2.** `AgentTimeline.tsx:114`
+decides a run has settled from two signals: the streamed status entry, and the timeline status as a
+backstop "for history loaded fresh". The backstop is dead because every run reads `started`, and the
+streamed entry is dead after a reload because it is never persisted.
+
+Round 1 stopped there and concluded the failure was a reloaded conversation's, where "both fail
+together". **It is not scoped to reload.** The gate is
+
+```
+runVisiblyActive = isRunning && (!lastRunSettled || anotherRunIsUnderway)
+```
+
+and `anotherRunIsUnderway` (`:131`) is true whenever the event window holds **two or more runs**,
+because every run reads `started` and `started` is not in `TERMINAL_STATUSES`. It is OR'd, so it
+overrides `lastRunSettled` whatever that says — including the live path, where the streamed status
+entry is present and working. `runVisiblyActive` therefore reduces to exactly `isRunning`, the
+polled roster field, which is the pre-fix behaviour the 2026-08-18 change was written to replace.
+
+So the defeat is unconditional for any agent with two or more runs in its window: the tail fix
+(operator, 2026-08-18: *"It still linger a little bit"*) is defeated live and not merely on reload,
+and the stop-then-send fix (operator, 2026-08-20) is satisfied only vacuously — the indicator shows
+because it always shows, not because a second run is underway. A single-run conversation is
+unaffected, which is why this survived every manual look.
 
 ## Non-Goals
 

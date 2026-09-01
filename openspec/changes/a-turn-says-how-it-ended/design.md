@@ -78,7 +78,7 @@ is a client-side reduction over run state, which is the exact shape being delete
 could not distinguish a harmless `keyBy` from the reducer that broke.
 
 The keyed map is chosen because **every consumer is a lookup or an unordered scan** — the terminal
-label (`AgentTimeline.tsx:202`), `lastRunSettled` (`:116`), `anotherRunIsUnderway` (`:133`) and the
+label (`AgentTimeline.tsx:220`), `lastRunSettled` (`:114`), `anotherRunIsUnderway` (`:131`) and the
 duration lookup. No consumer needs ordering. Precedent exists: `hub/hub/schemas/jobs.py:125`,
 `queue: Dict[str, int]`.
 
@@ -113,11 +113,37 @@ boundary. `skipped` and `in_progress` belong to `JobRun` and never appear here.
 
 `agent_trigger.py:2129-2142` (process path) and `:2723-2736` (app-server path) construct an
 `agent_output` payload with `id=f"status-{run_id}"` and `kind="status"` and only broadcast it.
-Persisting it restores the *first* of the two settled-signals in `AgentTimeline.tsx:96-112` and makes
-the exit code durable.
+Persisting it restores the *first* of the two settled-signals in `AgentTimeline.tsx:88-113` and makes
+the exit code durable. The writer to use is `output_recording.record_agent_output`
+(`hub/hub/output_recording.py:22`), which persists **and** broadcasts one row — so the two call
+sites collapse to it rather than gaining a second, hand-rolled insert beside the existing
+`sse_manager.broadcast`.
 
 This is independent of D1–D4: because lifecycle events are already persisted, reading `Run` alone
 restores the label. What D6 uniquely adds is the exit code and the in-stream sentence.
+
+### D7 — The `runs` map must cover every run the event window can name
+
+**Chosen:** the run query's limit is bound to the event limit rather than picked independently —
+it must be at least as large as the number of distinct runs the returned events can reference.
+
+D3 argues one direction only: the map may describe runs no returned event names, and that
+over-coverage is deliberate. Round 2 found nobody had argued the other direction, and the risk
+there is not cosmetic. `log_q` returns up to 50 `EventLog` rows; a run normally contributes two
+lifecycle events, but at the window boundary it contributes one, so **up to 50 distinct runs** can
+be named by the events in a single response. A run query limited to fewer than that silently drops
+the oldest of them.
+
+What makes it dangerous rather than merely wrong is that the spec already blesses the result. *An
+unknown run degrades rather than fails* says the client "presents that run exactly as it presents a
+run with no outcome yet" — which is precisely the F190 symptom. A limit chosen carelessly would
+therefore ship this change, satisfy its own specification, and still show no terminal label on
+older turns. The requirement now states the relationship so the limit cannot be chosen in
+isolation.
+
+*Rejected: no limit at all.* Correct and simplest, but an agent with thousands of runs would
+serialise a full scan into a route whose other three queries are all bounded. The bound exists;
+it just has to be derived from the event bound rather than invented.
 
 ## Risks / Trade-offs
 
@@ -125,7 +151,14 @@ restores the label. What D6 uniquely adds is the exit code and the in-stream sen
   one commit, before touching the component, so a failure is attributable to the fixture rather than
   to the change. Named in `proposal.md` so this is planned rather than discovered.
 - **`AgentActivityTab` and `AgentOutputPanel` also consume the shape** → they must be read before the
-  hook changes; neither is expected to need run facts, but both unwrap the response.
+  hook changes. **Corrected in round 2:** they are not symmetric, and the original line here —
+  "neither is expected to need run facts" — pointed the implementer away from the one component on
+  the critical path. `AgentActivityTab.tsx:24,39` genuinely only unwraps, mapping the events into
+  activity items. `AgentOutputPanel` is different: it holds the hook (`:330`) and its *only* other
+  use of the value is passing it to `AgentTimeline` (`:1033`), which is where all three consumers
+  live. Since `AgentTimeline` receives `timelineEvents` as a prop (`AgentTimeline.tsx:31`) rather
+  than calling the hook itself, `AgentOutputPanel` must gain the `runs` map and thread it through as
+  a new prop. It does not *read* the run facts; it is the only thing that can *carry* them.
 - **A past turn's label can change on a later read**, because `Run.status` is present-tense and
   `run_reconciliation.py:65` flips `running → interrupted` when the Hub restarted mid-run → accepted:
   the only mutation after a run ends corrects a status that was wrong.
@@ -154,3 +187,54 @@ read, because nothing is written at all.
   shape would not change.
 - Whether `AgentActivityTab` should also present the terminal outcome, or whether the conversation
   remains its only surface.
+
+## Round 2 corrections, 2026-09-01
+
+Round 2 re-derived the argument against the code rather than re-reading round 1. Four corrections,
+one alarm killed, and a list of what was checked and left standing.
+
+**Changed:**
+
+1. **The third consequence is unconditional, not reload-scoped** (`proposal.md`, and task 4.7).
+   `anotherRunIsUnderway` is OR'd into `runVisiblyActive`, so it overrides `lastRunSettled` in every
+   state, live included, whenever two or more runs sit in the event window. The gate collapses to
+   `isRunning` — the pre-fix behaviour. Round 1 described it as both signals failing together on a
+   reload, which is true but is the smaller half.
+2. **D7 added** — the `runs` query needs a coverage bound derived from the event bound. D3 argued
+   over-coverage was fine and nobody argued under-coverage, which the spec would then have excused
+   as legitimate degradation.
+3. **The `AgentOutputPanel` risk line was backwards** — it is the component that must carry the run
+   facts, because `AgentTimeline` takes them as a prop.
+4. **D6 names the writer.** `record_agent_output` already persists-and-broadcasts; the task said
+   "persist in addition to broadcasting", which invites a second insert beside the existing
+   broadcast rather than a substitution.
+
+**Alarm raised and killed rather than filed.** `Run.status == "in_progress"` appears to occur, which
+would break D5's enumeration and the `running -> started` boundary rename. It does not: `Run\.status`
+matches inside `JobRun.status`, and every `skipped`/`in_progress` write in `scheduler.py`
+(`:2580`, `:2609`, `:2762`, `:2884`) is under `run = JobRun(`. Filing this would have added a
+mapping for two statuses that cannot reach the route. Recorded so round 3 does not re-raise it.
+
+**Re-derived and left standing:**
+
+- The central mechanism. `runStatusByRunId` is last-wins over the newest-first array; the oldest
+  event wins; the oldest is `run_started`; `TERMINAL_LABEL['started']` is `undefined`.
+- **No migration.** `Run` already carries `status` (`:1110`), `exit_code` (`:1112`), `error`
+  (`:1113`), `started_at` and `ended_at`. No bulk `delete(Run)` exists anywhere in the Hub, and
+  `scheduler.py:940` is `_discard_unused_run(session, run: JobRun)` — a `JobRun` a firing built and
+  chose not to persist. "Run rows are never deleted" holds.
+- **D4's claim that `runDurationsByRunId` is currently correct.** Its `if / else if` keeps
+  `run_started` out of `endedAt`, and one run has one start and one terminal event, so last-wins
+  cannot bite. Deleting it really is cleanup, not repair.
+- **The misleading test.** `agentTimelineModel.test.ts:223-235` feeds `run_started` before
+  `run_completed` — ascending, the opposite of the route — and asserts `'completed'`.
+- **The 11-file blast radius**, exactly: nine mock `useAgentTimeline`, plus `workingIndicator`
+  (which imports `runDurationsByRunId` directly and so breaks on deletion) and `agentTimelineModel`.
+  A case-sensitive grep for `timeline` undercounts this to five; the hook is `useAgentTimeline`.
+- Every backend line citation: `agents.py:729-801`, `agent_trigger.py:1677` / `:2001-2006` /
+  `:2129-2142` / `:2723-2736`, `models.py:1110` / `:1152`, `agentTimelineModel.ts:112-118` /
+  `:138-168` / `:187-199`, `agents.ts:387-392`.
+
+**Stale UI line numbers, corrected throughout:** terminal label `:202` -> `:220`; `lastRunSettled`
+`:116` -> `:114`; `anotherRunIsUnderway` `:133` -> `:131`; the settled-signals comment `:96-112` ->
+`:88-113`; task 4.7's `:118-136` -> `:117-137`.

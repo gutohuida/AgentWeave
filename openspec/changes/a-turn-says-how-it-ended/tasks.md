@@ -10,8 +10,18 @@
       `runs: Dict[str, RunFacts]`. Follow the `queue: Dict[str, int]` precedent in
       `hub/hub/schemas/jobs.py:125`.
 - [ ] 1.4 Add the fourth query to `agent_timeline` (`hub/hub/api/v1/agents.py:729`) inside the
-      existing `asyncio.gather`, scoped by `project_id` and `agent`, ordered by `started_at` desc
-      with its own limit. Confirm by `EXPLAIN QUERY PLAN` that it uses `ix_runs_project_agent`.
+      existing `asyncio.gather`, scoped by `project_id` and `agent`, ordered by `started_at` desc.
+      Confirm by `EXPLAIN QUERY PLAN` that it uses `ix_runs_project_agent`.
+- [ ] 1.4a **Derive the run limit from the event limit, do not pick one** (design D7). `log_q` returns
+      up to 50 `EventLog` rows and a run at the window boundary contributes one lifecycle event
+      rather than two, so up to 50 distinct runs can be named. Bind the run limit to the event limit
+      in code — one named constant both queries read — so changing one cannot silently starve the
+      other.
+- [ ] 1.4b Write the test for it, from *The run facts cover every run the events name*: build an
+      agent whose returned event window names more distinct runs than a two-events-per-run
+      assumption would admit, and assert the **oldest** such run is present in the map and renders
+      its terminal outcome. This test must fail against a run query limited to half the event limit
+      — confirm that it does, rather than assuming it.
 - [ ] 1.5 Map `Run.status` `running` → `started` at the boundary (design D5) and change the route's
       `response_model`. Leave the `reverse=True` / `[:50]` event sort untouched.
 - [ ] 1.6 Run the Hub tests that touch this route — `test_agent_actions_coordination`,
@@ -23,9 +33,12 @@
 - [ ] 2.1 Write a Hub test asserting that after a run ends, `/agents/{name}/output` contains a
       `kind="status"` row carrying the exit code — asserted for **both** the process path and the
       app-server path, per *A run's terminal status line is persisted*.
-- [ ] 2.2 Persist the status row at `hub/hub/api/v1/agent_trigger.py:2129-2142` (process path) in
-      addition to broadcasting it, keeping the broadcast payload byte-identical so the live path is
-      unchanged.
+- [ ] 2.2 Replace the bare broadcast at `hub/hub/api/v1/agent_trigger.py:2129-2142` (process path)
+      with `output_recording.record_agent_output` (`hub/hub/output_recording.py:22`), which persists
+      **and** broadcasts one row. Round 2's correction to D6: "persist in addition to broadcasting"
+      invites a second insert beside the existing `sse_manager.broadcast` call and two sources of
+      the same row. Confirm the broadcast payload it emits is field-for-field what the hand-rolled
+      one emitted, since `AgentOutputPanel`'s Handoff flow scans for this exact shape.
 - [ ] 2.3 Do the same at `:2723-2736` (app-server path).
 - [ ] 2.4 Verify the row does not double-render: `isSuccessCompletionEntry` already hides the
       completed-phase status row from the transcript, so confirm a *completed* run gains no visible
@@ -42,8 +55,14 @@
 - [ ] 3.2 Update `useAgentTimeline` (`hub/ui/src/api/agents.ts:387-392`) and the
       `AgentTimelineEvent` types to the envelope, and check the SSE invalidation predicate at
       `:354-383` still names the right query key.
-- [ ] 3.3 Read `AgentActivityTab.tsx` and `AgentOutputPanel.tsx` and update them for the unwrap.
-      Neither is expected to need run facts; confirm that rather than assume it.
+- [ ] 3.3 Update `AgentActivityTab.tsx` for the unwrap only — it maps events into activity items
+      (`:24`, `:39`) and needs no run facts.
+- [ ] 3.3a **`AgentOutputPanel` is not symmetric with it** (round 2's correction to the design's risk
+      list). It holds the hook (`:330`) and its only other use of the value is passing it to
+      `AgentTimeline` (`:1033`), where all three consumers live — and `AgentTimeline` takes
+      `timelineEvents` as a prop (`AgentTimeline.tsx:31`) rather than calling the hook. So
+      `AgentOutputPanel` must gain the `runs` map and thread it through as a new prop. It never
+      reads the run facts; it is the only thing that can carry them.
 
 ## 4. The reducers are deleted
 
@@ -52,8 +71,8 @@
       outcome is visible*. This must fail before 4.3 and pass after.
 - [ ] 4.2 Write a component test asserting a `running` run presents no terminal label, and that a
       `failed` run and a silent `completed` run present different terminal states.
-- [ ] 4.3 Point `AgentTimeline.tsx`'s three consumers at the map: the terminal label (`:202`),
-      `lastRunSettled` (`:116`) and `anotherRunIsUnderway` (`:133`). Delete `runStatusByRunId`
+- [ ] 4.3 Point `AgentTimeline.tsx`'s three consumers at the map: the terminal label (`:220`),
+      `lastRunSettled` (`:114`) and `anotherRunIsUnderway` (`:131`). Delete `runStatusByRunId`
       (`agentTimelineModel.ts:187-199`).
 - [ ] 4.4 Point the duration display at `started_at`/`ended_at` and delete `runDurationsByRunId`
       (`:138-168`). **Carry its negative-duration guard across** — a clock that went backwards must
@@ -62,9 +81,19 @@
       function it used to live in is gone.
 - [ ] 4.6 Confirm `LIFECYCLE_EVENT_STATUS` has no remaining consumer; delete it if not, and keep it
       only if something still legitimately reads it.
-- [ ] 4.7 Verify the third consequence is repaired: with a reloaded conversation containing several
-      ended runs, the working indicator does not linger under a finished answer
-      (`AgentTimeline.tsx:118-136`).
+- [ ] 4.7 Verify the third consequence is repaired **in both states, not just on reload**
+      (`AgentTimeline.tsx:117-137`). Round 2's correction: `anotherRunIsUnderway` is OR'd into
+      `runVisiblyActive`, so it defeats the live path too, and a reload-only check would pass while
+      the live regression stood.
+      - **Live:** an agent with two or more ended runs in its window, `isRunning` still true from the
+        polled roster — assert the indicator is *not* shown once the newest run's status entry has
+        streamed in. This is the 2026-08-18 tail complaint, and it is the case round 1 missed.
+      - **Reloaded:** the same conversation loaded fresh with no live stream — assert the same.
+      - **Still-underway:** stop a turn and send a new message; assert the indicator *is* shown while
+        run B has no entries yet. This is the 2026-08-20 fix, which currently passes only vacuously
+        (the indicator shows because it always shows) and must still pass once it means something.
+      - **Single-run:** one run in the window — assert unchanged, since `anotherRunIsUnderway` was
+        always correctly false here, which is why the defect survived manual review.
 
 ## 5. The testing rule is enforceable
 

@@ -3,8 +3,9 @@
 ### Requirement: A run's terminal outcome is visible
 The conversation SHALL show, for every run that ended, whether it completed, failed, was stopped or was interrupted, and SHALL show it again after a page reload.
 
-A run whose row cannot be found is the only case that may present no outcome, and that case is
-already reported by the Hub rather than swallowed.
+A run whose row genuinely cannot be found is the only case that may present no outcome. That is
+distinct from a run whose row exists but was omitted from the response, which is a defect and is
+forbidden by *The run facts cover every run the events name*.
 
 #### Scenario: A stopped run says it was stopped
 
@@ -59,6 +60,29 @@ runs no returned event names. Narrowing it would serialise the concurrent querie
 
 - **WHEN** the agent has runs whose events fall outside the returned event window
 - **THEN** the map MAY contain entries for them and this is not an error
+
+### Requirement: The run facts cover every run the events name
+The run facts SHALL be bounded so that every run named by a returned event is present in the map, and any bound on the run query SHALL be derived from the event bound rather than chosen independently.
+
+The map is allowed to be larger than the events require and is forbidden from being smaller. The
+asymmetry is the point: an over-large map costs a few hundred bytes, while a map that omits a run
+the events name presents that turn as having no outcome — which is the exact defect this change
+exists to remove, reintroduced by the fix for it.
+
+A returned event window can name more distinct runs than it holds runs' worth of events, because a
+run at the window's boundary contributes one lifecycle event rather than two. A bound that assumes
+two events per run is therefore wrong by up to a factor of two.
+
+#### Scenario: An older run in the window keeps its outcome
+
+- **WHEN** the returned events name more distinct runs than a naive bound would admit, and the
+  oldest of those runs has ended
+- **THEN** that run's facts are present in the map and its turn presents its terminal outcome
+
+#### Scenario: The bound is not independent of the event bound
+
+- **WHEN** the number of events the route returns is changed
+- **THEN** the run query's bound changes with it rather than staying at a separately chosen number
 
 ### Requirement: A run's terminal status line is persisted
 The Hub SHALL persist a run's terminal status line as durable output, not only broadcast it, so the exit code remains recoverable after the live stream is gone.
