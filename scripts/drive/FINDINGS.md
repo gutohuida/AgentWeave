@@ -12704,3 +12704,213 @@ the surface an operator uses.
 **Bound.** Not driven. The claim is a code reading over four files, and the UI half is a negative
 grep, which is only as good as the two spellings searched (`approval_report`, `approvalReport`). No
 live approval was performed for this.
+
+---
+
+# Full-surface sweep, 2026-09-01 — row 1 of 19: Projects
+
+The night window's `N-2`, first feature area. Driven against the **8011** Hub, restarted from this
+branch's code onto the beta profile database, with a fresh git fixture outside the repository.
+Surfaces exercised: `projects`, `fs_browse`, `workspace`, `project_workspace`, `project_lifecycle`,
+`repo_hygiene`, and the `ProjectManagerModal` screen.
+
+**34 API assertions, 6 screen assertions, three findings.** Harnesses kept:
+`scripts/drive/t_sweep_row1_projects.py`, `scripts/drive/t_sweep_row1_ui.py`, and
+`scripts/drive/t_f172_relocate_onto_a_claimed_path.py`, which reproduces F172 from nothing.
+
+**One correction to this drive's own first pass, recorded because it is the failure mode the method
+is supposed to catch.** The first version of the harness reported three defects that were not
+defects: it asserted `main_branch` off `POST /projects/open`'s response (`ProjectSummary` carries no
+such field — F4's adoption is real and observable through `GET /settings`), and it asserted that
+`/fs/list` errors on a missing or non-directory path when it deliberately answers `200` with an
+empty listing, a walkable `parent`, and a `reason`, so the picker can keep navigating. Both were
+assertions about a product the drive had imagined. They are now assertions about the one that
+exists, with the reasoning written into the harness so the next run does not re-derive it.
+
+---
+
+## F170 (C) — the Hub's own project marker is the one working file it leaves untracked
+
+`repo_hygiene.py`'s opening sentence states its whole job: *"What the Hub leaves in someone else's
+repository, and how it stays out of their history."* `EXCLUDE_PATTERNS`
+(`hub/hub/repo_hygiene.py:60-83`) lists twelve patterns, six of them under `.agentweave/`.
+`.agentweave/project.json` — the marker the Hub writes into the operator's directory at
+registration, binding a project ID to *this machine's* database — is not among them.
+
+**Measured, on a repository the Hub had just registered:**
+
+```
+$ git check-ignore -v .agentweave/project.json ; echo "exit=$?"
+exit=1
+$ git status --porcelain
+?? .agentweave/
+?? NOTES.md
+```
+
+Two consequences, both driven:
+
+1. **The operator's own `git add -A` commits it.** A machine-bound identifier that means nothing on
+   another machine lands in their history, from a file they did not create and were not told about.
+2. **It is offered as a project file in the composer.** `list_workspace_paths`
+   (`hub/hub/workspace_paths.py:31`) runs `git ls-files --cached --others --exclude-standard`, which
+   honours `.git/info/exclude` — so the same omission puts the Hub's marker in the `@path` picker:
+
+   ```
+   GET /api/v1/projects/<p>/workspace/paths
+   [".agentweave/project.json", ".gitignore", "NOTES.md", "README.md", "src/calc.py"]
+   ```
+
+**One pattern fixes both**, verified by adding `.agentweave/project.json` to the seeded block by
+hand: `git ls-files --cached --others --exclude-standard` drops it and `git status` goes clean.
+
+**Honest about the module's own rule.** `repo_hygiene` says the test for adding a pattern is
+*"would the Hub's own commit sweep it in"*, and strictly it would not: `snapshot_worktree`'s
+`git add -A` (`hub/hub/worktrees.py:761`) runs inside `<root>/.agentweave/worktrees/<agent>`, where
+no marker exists. So this is not the `.pyc`-onto-master failure that motivated the list. It is the
+module's *title* rather than its extension rule — and the argument that it belongs is that this
+repository's own `.gitignore:65` ignores `.agentweave/` precisely because of this file. The product
+does not do for its users what its own repository had to do by hand.
+
+**Already noted, never filed.** The 2026-08-25 sweep's "what held" section recorded, in parentheses,
+*"`.agentweave/project.json` is not among them, and is machine-local — worth adding."* Filed properly
+now, with the second symptom it did not know about.
+
+**Regression assertion:** `scripts/drive/t_sweep_row1_projects.py`, *"F170: the Hub's own project
+marker is not offered as a workspace path"*.
+
+---
+
+## F171 (B) — the identity-conflict screen offers the right remedy under the wrong explanation
+
+Driven, not read: `scripts/drive/t_sweep_row1_ui.py` opens the real dashboard, opens **Add project**,
+types the path of a folder copied from a registered project, and reads what comes back.
+
+**What the operator sees**, verbatim from the dialog:
+
+> project marker was copied while the registered directory is still available
+>
+> This folder is already bound to a different AgentWeave database — usually another Hub instance on
+> this machine. Registering it as new gives it a fresh identity here; the other database keeps its
+> records but can no longer open this folder.
+>
+> `[ Register as a new project ]  [ Cancel ]  [ Add project ]`
+
+The first line is the server's, and it is correct. The paragraph beneath it is a fixed string
+(`hub/ui/src/components/projects/ProjectManagerModal.tsx:220-224`) and, in the situation actually
+driven, **all three of its clauses are false**: there is no different database, there is no other Hub
+instance, and there is no other database that loses the folder. The original project is registered in
+*this* database, at its own path, and is still perfectly openable. The two sentences contradict each
+other on screen.
+
+**Why it happens.** `project_identity_conflict` is raised from four distinct situations with four
+different messages —
+
+| Site | Message | Situation |
+|---|---|---|
+| `project_lifecycle.py:241` | *marker was copied while the registered directory is still available* | a copy, **same database** |
+| `project_workspace.py:262` | *marker identifies a different project* | marker names a project this database has never heard of |
+| `project_workspace.py:229` | *directory resolves to a different canonical path* | a symlink or junction moved |
+| `project_lifecycle.py:182` | *relocation target does not carry the project marker* | a relocate aimed at the wrong folder |
+
+— and the UI matches on the code, *deliberately*: its own comment says *"Matched on the code, never
+the prose."* That decision is right, and is why the remedy button is correctly offered in all four.
+The mistake is pairing a code that covers four situations with prose that describes only the second
+one.
+
+**Severity B, not C.** The remedy works, so nobody is blocked. But an operator following the
+explanation reasons about a second Hub instance that does not exist, and the sentence *"the other
+database keeps its records but can no longer open this folder"* invites them to go looking for
+records that are in the database they are already using.
+
+**The cheapest correct fix is to say less**: the two clauses the product actually knows are that
+this folder already carries another project's identity, and that registering it as new gives it a
+fresh one here. Everything about *which* database and *why* is inference the UI cannot make from a
+code shared by four call sites. Naming the four situations from their server message would be
+better still, but that requires the server to carry a discriminator the UI can switch on.
+
+**Regression assertion:** `scripts/drive/t_sweep_row1_ui.py`, *"F171: the conflict explanation does
+not assert a cause it cannot know"*.
+
+---
+
+## F172 (B) — relocating onto a path another project still claims answers a bare 500
+
+Found by the sweep by accident — a second run of the harness against a database that remembered the
+first — then reduced to a deterministic reproduction from nothing:
+`scripts/drive/t_f172_relocate_onto_a_claimed_path.py`.
+
+```
+A=proj-ac6ffb3df873 at C:\Users\huida\Documents\f172-a-24153
+B=proj-b9142e5e858e at C:\Users\huida\Documents\f172-b-24153
+--- POST relocate onto a path key another project still holds  [500]
+Internal Server Error
+```
+
+Server log:
+
+```
+sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: projects.path_key
+[SQL: UPDATE projects SET working_directory=?, path_key=?, directory_state=?, ... WHERE projects.id = ?]
+```
+
+**The gap.** `_guard_relocation` (`hub/hub/project_lifecycle.py:224-250`) asks three questions: has
+the path key changed, is the **old** directory still available, is a run active. It never asks
+whether the **destination** path key is already held by another project row. `Project.path_key` is
+unique, so `relocate` (`:170-188`) reaches `await self.session.commit()` and the constraint fires as
+an unhandled exception.
+
+**The operator's route to it is ordinary folder work.** Project A is moved or renamed away, leaving
+its row claiming a path nothing occupies. Project B's folder is later moved into the place A used to
+be — B's own marker travels with it, so the marker check at `:182` passes. Relocating B to say where
+it now lives is exactly the repair the product asks for, and it answers `500 Internal Server Error`
+with no body.
+
+**What makes this a finding rather than an edge case** is the contrast inside one router. Every other
+refusal here is typed, and the sweep confirmed each: `project_workspace_missing` *"project directory
+does not exist: <path>"*; `project_workspace_not_directory`; `invalid_project_path` *"create requires
+a target that does not exist; use open for a directory that already exists"*;
+`project_identity_conflict`. Each carries a `code`, a `message` and a `directory_state`, and each
+names a way forward. This one path returns a stack trace to the log and five words to the operator.
+
+**The remedy the product cannot currently state** is the one the operator needs: the path is claimed
+by project *X*, which is missing — delete X, or relocate X first. All of that is known at the moment
+of the collision.
+
+**Not attempted, and worth a second look when this is proposed:** whether the same gap exists on
+`POST /projects/create` and `POST /projects/open`. Both were driven and both refuse legibly (`422`
+and a returned existing project respectively), so relocate appears to be the only uncovered writer of
+`path_key`. That is a two-route check, not a proof.
+
+---
+
+## Row 1 — what held
+
+Recorded because the sweep's verdict rests on these as much as on the three above. Each was driven.
+
+- **F4's branch adoption.** Opening a git directory sets `main_branch` from the repository without
+  the operator confirming anything: `GET /settings` reads `"main"` immediately, and
+  `main-branch-suggestion` answers `{suggestion: "main", chosen: "main", is_repository: true}` — no
+  degraded window at all, which is the whole point of the 2026-08-24 fix.
+- **The settings merge rule.** `PUT /settings` with a single field left all fifteen others exactly
+  as they were. This is the defect the route's own comment describes having fixed, and it is fixed.
+- **Unknown settings fields are refused, not ignored.** `checkpoint_threshold_tokens: -5` → `422
+  extra_forbidden`, naming the field in `loc`. A misspelt field cannot silently do nothing.
+- **`/fs/list` is built for a picker, not for an API client.** A missing directory and a file path
+  each answer `200` with `entries: []`, a walkable `parent`, and the OS's own `reason`, so the
+  operator can see why this rung is empty and keep navigating. A *relative* path is refused outright
+  (`400 "path must be absolute"`). That split is the right one and it took a wrong assertion to see.
+- **The workspace listing respects git.** Tracked and untracked-but-not-ignored files listed;
+  `.gitignore`d ones absent. `GET /workspace/file` reads a tracked file and answers `404 "path not
+  found in this workspace: <path>"` for both an ignored file and `../../../Windows/win.ini` — the
+  same message for both, which `workspace_file.py:58` argues for deliberately.
+- **A vanished directory stays listable.** `GET /projects/{id}` after the folder moved answers `200`
+  with `directory_state: "missing"` rather than 404-ing the project out of reach of its own repair.
+- **Re-opening the same path is idempotent**, returning the same project id rather than a duplicate.
+- **The copy-marker guard fires.** Opening a copy of a registered project refuses `409
+  project_identity_conflict`; `register_copy_as_new: true` then succeeds. Both halves driven.
+- **The remedy is on the screen.** The dashboard rendered, the dialog opened, the refusal reached
+  the operator, and *"Register as a new project"* was there to click — the one thing that turns a
+  refusal into a way forward. F171 is about the paragraph next to that button, not the button.
+- **A non-git directory is a first-class project.** Opened `200`; `main-branch-suggestion` answers
+  `is_repository: false` rather than failing.
+- **No console errors** anywhere in the screen half, once the deliberate `409` is discounted.
