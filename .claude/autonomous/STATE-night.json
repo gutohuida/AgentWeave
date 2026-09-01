@@ -8,18 +8,19 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-02T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-09-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "N-1",
-    "next_action": "N-1: a-turn-says-how-it-ended PHASE 0 ONLY. Start the Hub on 8011 from hub/ with uvicorn from source, create a FRESH fixture project, bind every agent turn to claude-haiku-4-5, and perform observations 0.1-0.7 from openspec/changes/a-turn-says-how-it-ended/tasks.md. Task 0.3 is the one that can falsify the change: if the single-run working indicator releases cleanly when the answer lands, R3b is wrong -- say so and send the change back to a round rather than proceeding. Write the observations into scripts/drive/FINDINGS.md beside F190, clean up the fixture, and STOP -- do not start phase 1; the next firing takes N-2.",
+    "current": "N-2",
+    "next_action": "N-2: runner-model-is-chosen-from-the-catalog, tasks 1.1-1.5, BACKEND ONLY. RunnerUpdate must distinguish absent from explicit null via model_fields_set (do NOT touch the `is not None` gates on name/flags); _reject_undeclared_model must stop refusing a model identical to the one the runner already stores; '' stays 400. Tests in hub/tests/test_runners_api.py. Watch 1.4 and 1.5 FAIL against today's code before writing the fix -- the playbook's mutation-check rule. scripts/drive/t_r2_runner_update_semantics.py Q5 is the live reproduction of 1.5. Do NOT touch hub/ui/src this iteration; N-3 does that. Do NOT start a-turn phase 1 -- it is blocked.",
     "queue": [
         {
             "id": "N-1",
-            "status": "open",
+            "status": "done",
             "title": "a-turn-says-how-it-ended -- PHASE 0 ONLY, the observation gate",
-            "detail": "openspec/changes/a-turn-says-how-it-ended/tasks.md section 0, tasks 0.1 through 0.7. This is a gate the operator attached as a condition of approval: observe the defect live before a line is implemented. Do 0.2 (stopped turn shows no terminal label), 0.3 (THE ONE THAT MATTERS -- single-run working indicator; rounds 2 and 3 disagree, and if it releases cleanly the R3b finding is wrong and the change goes back to a round), 0.4 (multi-run indicator), 0.5 (reload + no kind=status row in /agents/{name}/output), 0.6 (DB read: run_interrupted EventLog carries restart-time while Run.started_at is old). Record everything in scripts/drive/FINDINGS.md beside F190, including anything that contradicts the design. Then delete the fixture project, confirm the count returned, sweep for enabled jobs. THEN STOP AND MOVE TO N-2 -- the tasks file forbids proceeding to phase 1 in the same sitting, and APPROVALS' ORDER note forbids a second UI change tonight anyway. PORT: task 0.1 says 8010; drive 8011 instead, per .claude/loops/night-window.md and to match runner-model task 5.1 and DIRECTION.md's D-1. 0.1's 8010 is a stale line -- correct it when you touch the file. Fresh fixture project, every real agent turn on claude-haiku-4-5, never 8000, never proj-5e960453 or proj-18e5d4e0."
+            "detail": "openspec/changes/a-turn-says-how-it-ended/tasks.md section 0, tasks 0.1 through 0.7. This is a gate the operator attached as a condition of approval: observe the defect live before a line is implemented. Do 0.2 (stopped turn shows no terminal label), 0.3 (THE ONE THAT MATTERS -- single-run working indicator; rounds 2 and 3 disagree, and if it releases cleanly the R3b finding is wrong and the change goes back to a round), 0.4 (multi-run indicator), 0.5 (reload + no kind=status row in /agents/{name}/output), 0.6 (DB read: run_interrupted EventLog carries restart-time while Run.started_at is old). Record everything in scripts/drive/FINDINGS.md beside F190, including anything that contradicts the design. Then delete the fixture project, confirm the count returned, sweep for enabled jobs. THEN STOP AND MOVE TO N-2 -- the tasks file forbids proceeding to phase 1 in the same sitting, and APPROVALS' ORDER note forbids a second UI change tonight anyway. PORT: task 0.1 says 8010; drive 8011 instead, per .claude/loops/night-window.md and to match runner-model task 5.1 and DIRECTION.md's D-1. 0.1's 8010 is a stale line -- correct it when you touch the file. Fresh fixture project, every real agent turn on claude-haiku-4-5, never 8000, never proj-5e960453 or proj-18e5d4e0.",
+            "result": "Driven 2026-09-01 23:11-23:35 on 8011, fixture proj-83415a23d9d5 (deleted). 0.2, 0.4, 0.5, 0.6 CONFIRMED; 0.3 FALSIFIED the change -- isSuccessCompletionEntry does match, the single-run indicator releases cleanly, round 2 was right and round 3b wrong. Phases 1-7 blocked at the top of tasks.md section 1 pending a round that re-argues D6. Write-up: scripts/drive/FINDINGS.md, 'F190 phase 0 -- the observation gate, driven 2026-09-01'. Task 0.1's stale 8010 corrected to 8011."
         },
         {
             "id": "N-2",
@@ -58,7 +59,9 @@
             "detail": "APPROVALS asks for this before anyone builds that change: task 4.2 names migration 0100, but hub/hub/migrations/versions/0100_loop_work_needs_evidence.py already exists, so it must be 0101. Verify the collision before editing. Do NOT build that change tonight -- it has no APPROVED row and collides with a-turn on three files. Documentation only."
         }
     ],
-    "decisions_for_user": [],
+    "decisions_for_user": [
+        "a-turn-says-how-it-ended is BLOCKED by its own approval gate. Phase 0 ran on 2026-09-01 and task 0.3 falsified round 3b: isSuccessCompletionEntry DOES match (the completed run's persisted status row comes from the stream parser, not the broadcast round 3b traced), and the single-run working indicator releases cleanly on the same snapshot the answer lands. Round 2 was right. The change's PURPOSE survives on a narrower premise -- signal 1 has never worked for a run that did NOT complete -- and everything else phase 0 checked (0.2, 0.4, 0.5, 0.6) held. Per tasks.md 0.7 and DIRECTION.md's own branch, the spec-loop slot in tomorrow's day window should go to repairing a-turn rather than to a new proposal. That reallocation is yours to confirm; the night window did not make it, only recorded the falsification."
+    ],
     "limits": [
         "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
@@ -71,14 +74,15 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-01T22:25:02+01:00",
+    "last_heartbeat": "2026-09-01T23:29:26+01:00",
     "status": "running",
     "queue_source": "spec-queue/APPROVALS.md, 2026-09-01 section, ORDER: line. Verbatim, so the playbook's default backlog-first shape is not used tonight.",
-    "green_at_compose": "Measured 2026-09-01T23:05+01:00: hub/tests/test_bola.py + test_agents.py = 12 passed. Also measured statically: `git diff master...HEAD -- hub/hub src hub/ui` is EMPTY, so this branch's product code is identical to master, and master's only product commit since the 2026-08-31 green point is 4ce24fc (the fastmcp bound, whose chunk ran green last night). The full hub suite has still never run on this branch.",
+    "green_at_compose": "Measured 2026-09-01T23:05+01:00: hub/tests/test_bola.py + test_agents.py = 12 passed. Also measured statically: `git diff master...HEAD -- hub/hub src hub/ui` is EMPTY, so this branch's product code is identical to master, and master's only product commit since the 2026-08-31 green point is 4ce24fc (the fastmcp bound, whose chunk ran green last night). The full hub suite has still never run on this branch. N-1 touched no product code, so this still holds unchanged entering N-2.",
     "drive_port": 8011,
     "notes": [
         "F188 is NOT this window's work. DIRECTION.md's 2026-09-02 section already moved it to 2026-09-03, and this window does not write proposals. APPROVALS' closing suggestion to spec it is superseded by that.",
         "a-turn phases 1-7 are NOT tonight's work. APPROVALS' ORDER note: both changes touch hub/ui/src and hub/hub/static/ui is a committed build artefact, so exactly one UI change may be in flight tonight -- and that is runner-model. Phase 0 writes no UI, which is why the order is safe.",
-        "Tomorrow's day window reads N-1's write-up as its D-0 and branches on it (spec-queue/DIRECTION.md). If N-1 never runs, the day window does phase 0 itself instead of its drive."
+        "Tomorrow's day window reads N-1's write-up as its D-0 and branches on it (spec-queue/DIRECTION.md). If N-1 never runs, the day window does phase 0 itself instead of its drive.",
+        "N-1 done 2026-09-01. a-turn phases 1-7 are blocked in tasks.md, not merely deprioritised -- do not let a later firing pick them up as 'the next section of an approved change'."
     ]
 }

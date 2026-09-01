@@ -448,3 +448,40 @@ run facts to leak. Task 1.6 now says what to write instead.
 **D3's first draft dropped a predicate it should not have.** Recorded above rather than quietly
 corrected, because "the ids already came from filtered rows" is exactly the kind of reasoning that
 is true today and stops being true when someone writes a new event source.
+## Phase 0 observations, 2026-09-01 — one decision's premise did not survive
+
+The operator approved this change on the condition that the defect be observed live first. It was,
+on a fresh fixture project against a Hub on 8011; the full write-up with timings and database reads
+is `scripts/drive/FINDINGS.md`, *F190 phase 0 — the observation gate, driven 2026-09-01*. Four of
+the five observations held. One did not.
+
+**D6's round-3 correction is false as written, and D6 survives on a narrower argument.** The
+correction says *"a row that is only broadcast never becomes an entry, so `isSuccessCompletionEntry`
+has never matched anything, in any state."* Measured: a completed run's conversation contains
+exactly one matching entry, `payload={"version": 1, "phase": "completed", "summary": "Completed"}`,
+and the working indicator on a single-run conversation went out **on the same snapshot the answer
+text landed** — 0.7 s before the roster poll, which is the atomic handover
+`AgentTimeline.tsx:88-113` was written to produce.
+
+The error is an identification. Round 3b traced the terminal status line at `agent_trigger.py:2135`,
+which is indeed only broadcast, and concluded that no entry of that shape exists. The entry that
+satisfies the predicate is written by something else — the stream parser's own
+`status_event("completed", ...)` — and is persisted. `FINDINGS.md` already carried that measurement
+("A refinement to F190's second half") before round 3b was written.
+
+**What this leaves.** Signal 1 works, but only for a run that *finishes*. A stopped run has no
+`status` row at all (measured: nine output rows for the agent, three of `kind="status"`, none of
+them the stopped run's), so `lastRunSettled` is False for the whole life of that conversation and
+the gate collapses to `isRunning`. D6's *purpose* is intact; its stated reason is not. A round must
+re-argue it from the measured premise — signal 1 has never worked **for a run that did not
+complete** — before phase 1 is implemented. `tasks.md` carries the block.
+
+**Confirmed unchanged, and not to be re-derived by that round:** the terminal label is absent for a
+stopped run and for an interrupted one, live (0.2); the timeline route returns newest-first and
+`runStatusByRunId` therefore reports `started` for every run in every snapshot (0.2, 0.4); the
+lingering-tail regression fires whenever two or more runs sit in the event window (0.4); the label
+is still absent on reload and the stopped run has no persisted `status` row (0.5); and
+`run_interrupted` carries restart time while `Run.started_at` stays old — 107.3 s apart, a gap equal
+to the outage and to nothing about the run — which is the decoupling D3's reversal rests on (0.6).
+The *miss* D3 protects against was not reproduced; it needs more runs than a drive can usefully
+spend, and only the decoupling and the unbounded sweep (`run_reconciliation.py:59`) were measured.

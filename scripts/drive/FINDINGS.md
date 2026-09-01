@@ -13861,6 +13861,13 @@ the ordinary way an operator returns to a run they stopped. Fixing `runStatusByR
 restore the label from the timeline event; this note is why the label is the *only* remaining
 carrier.
 
+**Driven 2026-09-01, and one half of the argument built on this finding does not survive it.**
+See *F190 phase 0 - the observation gate, driven* at the end of this file: the terminal-label
+mechanism above is confirmed live for a stopped run, for an interrupted run and for a completed
+one, but the claim that `isSuccessCompletionEntry` "has never matched anything, in any state"
+(round 3b of `a-turn-says-how-it-ended`) is **false**, and the working indicator on a single-run
+conversation releases cleanly.
+
 ## F191 (C) — `Conversation is unavailable` is one sentence for three different causes and names no repair
 
 `agent_trigger.py:1276`. Driven, three ways, all identical:
@@ -17281,3 +17288,169 @@ contaminated F264's second pass above — the defect is not hypothetical, it int
 measurement in the same run.)
 
 **Reproduction:** `scripts/drive/t_f264_live_loop_reason.py`, leg 2a (printed under LEG 1).
+
+
+# F190 phase 0 — the observation gate, driven 2026-09-01
+
+`openspec/changes/a-turn-says-how-it-ended` was approved by the operator **conditionally**: observe
+the defect live before a line is implemented. Four sittings of review had argued about it and none
+had watched it happen. This is what was watched.
+
+**The instrument.** `scripts/drive/f190_model.py` re-implements the six shipped predicates in
+Python — `isSuccessCompletionEntry`, `groupIntoTurns`, `runStatusByRunId`, `lastRunSettled`,
+`anotherRunIsUnderway`, `runVisiblyActive` — and feeds them from exactly the three HTTP routes the
+components read, polled every 0.6 s. That is a faithful stand-in and not a browser, and the reason
+it is faithful is measured rather than assumed: `useAgentChatHistory` performs **no optimistic
+append** (`agentChat.ts:296-312`), so the component's `entries` are only ever what that route
+returned. A poll therefore sees what the component sees, one refetch earlier at worst. Harnesses:
+`t_f190_phase0_observe.py` (0.3, 0.4, and a first attempt at 0.2), `t_f190_phase0_stop.py` (0.2 and
+0.5 properly).
+
+**The rig.** Hub on **8011** — task 0.1 said 8010, which was a stale line and is corrected in the
+tasks file; 8010 is the operator's trial instance. Started from `hub/` with uvicorn from source on
+a database of its own (`%TEMP%/aw0901n/aw0901n.db`, migration head `0100`), never 8000. PID 32012,
+created 23:23:59; `find hub/hub src -name '*.py' -newermt "2026-09-01 23:23:59"` returns **nothing**,
+so no Python under observation moved after the process started. Fresh fixture project
+`drive-0901-phase0` = `proj-83415a23d9d5`; neither protected project was opened. Agent `driver`,
+runner `runner-4087b438d6e7`, every turn on `claude-haiku-4-5-20251001`.
+
+## 0.3 — R3b IS WRONG. The single-run indicator releases cleanly, and round 2 was right.
+
+Conversation `conv-2f638d586e54`, one run `run-6d1f53add52e`, allowed to complete:
+
+```
+t=  0.0s  running=True  sig1_entry=False sig2_lifecycle=False settled=False  INDICATOR=True   answers=0
+t=  0.7s  running=True  sig1_entry=False sig2_lifecycle=False settled=False  INDICATOR=True   answers=0  statusByRun={'run-6d1f53add52e': 'started'}
+t=  7.9s  running=True  sig1_entry=True  sig2_lifecycle=False settled=True   INDICATOR=False  answers=1
+t=  8.6s  running=False sig1_entry=True  sig2_lifecycle=False settled=True   INDICATOR=False  answers=1
+```
+
+The answer text and `signal 1` land on the **same snapshot**, and the indicator goes out on that
+snapshot — 0.7 s *before* the roster poll flips `running` to `idle`. That is precisely the atomic
+handover `AgentTimeline.tsx:88-113` claims to have been built for, working.
+
+Round 3b's supplementary pass concluded the opposite, on this reasoning: *"`entries` reach
+`AgentTimeline` only through `useAgentChatHistory` ... the chat route builds them from persisted
+`AgentOutput` rows. A row that is only broadcast never becomes an entry, so
+`isSuccessCompletionEntry` has never matched anything, in any state."* Every clause of that is true
+except the conclusion. Measured: conversation A's chat entries contain **exactly one** match,
+`payload={"version": 1, "phase": "completed", "summary": "Completed"}`.
+
+The mistake is an identification, not a deduction. R3b traced the terminal status line at
+`agent_trigger.py:2135` — which is indeed only broadcast — and concluded no such *entry* exists.
+The entry that satisfies `isSuccessCompletionEntry` is a **different row from a different writer**:
+the stream parser's own `status_event("completed", ...)`, which is persisted. This ledger already
+recorded that, in *"A refinement to F190's second half, measured rather than assumed"* above:
+completed runs carry one persisted `status` row, stopped runs carry none. Round 3b read the code
+and did not read the measurement already in the file it was arguing about.
+
+**Consequence, per task 0.3's own instruction: the change goes back for a round before phase 1.**
+
+**What still stands, on a narrower argument than the proposal makes.** Signal 1 fires only for a run
+that *finishes*. For the stopped run below there are zero `status` rows and zero
+`isSuccessCompletionEntry` matches, so `lastRunSettled` is False for the whole life of the
+conversation and the gate collapses to `isRunning` alone. D6's *purpose* — a working
+`lastRunSettled` for runs that do not complete, plus a durable exit code — survives the drive
+intact. Only R3b's reason for it ("it has never worked at all") is false, and the proposal's phase 2
+should be re-argued from the true premise: it has never worked **for a run that did not complete**.
+
+## 0.4 — CONFIRMED, and caught happening rather than derived
+
+Round 2's correction 1 predicted `anotherRunIsUnderway` overrides `lastRunSettled` in every state
+once two or more runs sit in the event window, collapsing the gate to `isRunning`. It does, and the
+drive caught the regression live in the very next conversation:
+
+```
+conversation B (two runs in the window)
+t= 10.7s  running=True  sig1_entry=True  settled=True  another=True   INDICATOR=True   answers=1
+t= 11.3s  running=False sig1_entry=True  settled=True  another=True   INDICATOR=False  answers=1
+```
+
+Same agent, same instrument, ~40 seconds apart: with **one** run in the window the indicator went
+out the instant the answer arrived; with **two** it stayed lit under a finished answer until the
+roster poll caught up. That is the exact complaint the 2026-08-18 fix was written to remove
+(operator: *"the working indicator ... stays active for a couple more seconds then disappears"*),
+reappearing in every conversation on any agent with two or more runs in its event window — which,
+after a day's use, is every conversation. The tail measured here is one poll interval (0.6 s in the
+harness); on screen it is however long the roster poll takes.
+
+The cause is upstream and is F190's own: `statusByRun` was `'started'` for **every run in every
+snapshot of the whole drive** — five runs, five `started`, one of them stopped, one interrupted,
+three completed. `anotherRunIsUnderway` asks whether any run other than the last is non-terminal,
+and the answer is unconditionally yes.
+
+## 0.2 — CONFIRMED. A stopped turn presents nothing at all.
+
+`t_f190_phase0_observe.py`'s first attempt did **not** observe this and said so: the Haiku turn ended
+at 11.3 s and the stop was issued at 14 s, so `POST /stop` returned `404 driver has no run in
+progress` and what it measured was a completed run wearing the stop leg's name. Recorded because a
+harness that reports the right answer for the wrong reason is the failure mode this whole gate
+exists to catch. `t_f190_phase0_stop.py` redoes it with the stop at 4 s and checks the route
+returned 200 before believing anything downstream.
+
+Run `run-2ee37e1352f3`, `POST /stop` -> `200 {"status": "stopping"}`. The database is unambiguous:
+
+```
+runs:        run-2ee37e1352f3   status=stopped   started 22:21:16.783   ended 22:21:21.295
+event_logs:  22:21:21.358762  run_stopped
+             22:21:16.841635  run_started
+```
+
+and `/agents/driver/timeline` returns them in that order — **newest first**, live, exactly as
+`agents.py`'s `reverse=True` sort says. `runStatusByRunId` assigns unconditionally as it iterates,
+so the last event it sees is `run_started`, `statusByRun[run] = 'started'`, and
+`TERMINAL_LABEL['started']` is `undefined`.
+
+What the operator is left with, read from the route: conversation `conv-de81cf9f9e03` has **one**
+chat entry, `[operator_input]`. Their own message, and then nothing — no answer, no label, no trace
+that a turn was ever stopped.
+
+**The interrupted case is the same, and was not previously measured.** After 0.6's reconciliation,
+`conv-af5d7a6916fc` reports `statusByRun = 'started'` for `run-ac917a010c1d` and
+`TERMINAL_LABEL = None`, though `run_interrupted` is the newest event in the whole log. F190 named
+three statuses; two of the three are now driven, and the third (`failed`) follows from the same
+line.
+
+## 0.5 — CONFIRMED, unchanged from round 1's measurement
+
+A fresh read of both routes after the run ended: label still `None`. `/agents/driver/output` held
+**9 rows, 3 of `kind="status"`**, and **zero** of them belong to the stopped run — all three are
+the completed runs' `{"phase": "completed", "summary": "Completed"}`. The stopped conversation's
+`isSuccessCompletionEntry` match count is **0**.
+
+## 0.6 — CONFIRMED. The reconciliation event carries restart time, not run time.
+
+Run `run-ac917a010c1d` was started, the Hub was killed (`Stop-Process -Force`) with it in flight,
+and its process was gone. The row survived as `status=running`, which was read from the database
+while nothing was serving it. On restart: `WARNI [hub.run_reconciliation] Reconciled 1 orphaned
+run(s) to status=interrupted on Hub start`.
+
+```
+Run.started_at              2026-09-01 22:22:13.906755
+Run.ended_at                2026-09-01 22:24:01.188495
+event run_interrupted       2026-09-01 22:24:01.202550     <- 107.3s after the run started
+```
+
+The 107.3 s is the length of the outage, and nothing else — it is not a property of the run. The
+event is the **newest row in the entire log**, ahead of every event of every other run, while
+`Run.started_at` is untouched at its original value. `reconcile_interrupted_runs`
+(`run_reconciliation.py:59`) selects `Run.status == "running"` with **no age bound, no limit and no
+project scope**, so the same thing happens to a row from last week.
+
+**Stated as a limit rather than glossed:** this fixture had five runs and the interrupted one was
+also the newest by `started_at`, so a `started_at DESC LIMIT n` query would not have missed it
+*here*. What is measured is the decoupling — terminal event at restart time, `started_at` old — plus
+the code fact that the sweep is unbounded. The miss itself needs more runs than a drive can
+usefully spend and was not reproduced. Design D3's reversal rests on the decoupling, which held.
+
+## Housekeeping, and one thing seen in passing
+
+Fixture `proj-83415a23d9d5` deleted after the drive; the project count returned to its prior value.
+No job or loop was created, and the sweep for enabled jobs is recorded in the night log.
+
+Seen while building the rig, not a phase-0 observation and not filed as a finding:
+`POST /projects/{p}/runners` refuses `model: "claude-haiku-4-5"` with *"'claude-haiku-4-5' is not a
+model 'claude' declares"* — the catalog declares only the dated `claude-haiku-4-5-20251001`
+(`model_catalog.py:164`). Noted here because the rest of tonight's queue is
+`runner-model-is-chosen-from-the-catalog`, and a picker fed from the catalog will therefore offer
+dated ids only.

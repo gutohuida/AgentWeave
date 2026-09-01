@@ -13,33 +13,59 @@ window, and it does not proceed to phase 1 on the strength of having just done p
 observations are meant to be read by a person, or at minimum by a later sitting, before anything is
 built on them.
 
-- [ ] 0.1 Trial Hub on **8010**, started from `hub/` with uvicorn from source, against a **fresh
+- [x] 0.1 Trial Hub on **8011** — the night window's drive Hub (`.claude/loops/night-window.md`;
+      this line said 8010 until 2026-09-01, which was stale, and 8010 is the operator's trial
+      instance) — started from `hub/` with uvicorn from source, against a **fresh
       fixture project** — never `proj-5e960453` or `proj-18e5d4e0`. Bind every real agent turn to
       `claude-haiku-4-5`. Port 8000 is the operator's real usage: never touch it.
-- [ ] 0.2 **The headline.** Start a turn, stop it mid-run. Confirm the conversation presents **no
+- [x] 0.2 **The headline.** DONE 2026-09-01, **confirmed** — `run-2ee37e1352f3` stopped,
+      database says `stopped`, route says `started`, no label, and the conversation holds
+      the operator's message and nothing else. The `interrupted` case was measured too and
+      behaves identically. Start a turn, stop it mid-run. Confirm the conversation presents **no
       terminal label** — the turn simply ends. This is F190 as filed, and it is the one claim four
       rounds agree on.
-- [ ] 0.3 **The single-run indicator — the claim no round has observed and two rounds got wrong.**
+- [x] 0.3 **DONE 2026-09-01 — FALSIFIED. Round 2 was right; round 3b is wrong.** The
+      indicator released on the same snapshot the answer landed, 0.7 s before the roster
+      poll, gated by signal 1. `isSuccessCompletionEntry` **does** match: the completed
+      run's persisted `status` row comes from the stream parser, not from the broadcast at
+      `agent_trigger.py:2135` that round 3b traced. **Phase 1 onwards is blocked until a
+      round re-argues D6 from the true premise** — signal 1 has never worked *for a run
+      that did not complete*, which is narrower than the proposal claims and still real.
+      Superseded, kept for the record: **The single-run indicator — the claim no round has observed and two rounds got wrong.**
       In a conversation with exactly **one** run, watch the working indicator as the answer lands.
       Round 2 concluded this case was unaffected; round 3's supplementary pass concluded it is
       broken via `lastRunSettled`'s never-firing first signal. Confirm which is true: does the
       indicator disappear when the response text arrives, or does it linger until the roster poll
       catches up? **If it disappears cleanly, the R3b finding is wrong and the change must go back
       for another round before implementation.**
-- [ ] 0.4 **The multi-run indicator.** Same observation with **two or more** ended runs in the
+- [x] 0.4 **The multi-run indicator.** DONE 2026-09-01, **confirmed**, and caught live: the
+      same agent released cleanly with one run in the window and lingered under a finished
+      answer with two. Same observation with **two or more** ended runs in the
       window. Round 2's correction 1 predicts the indicator is governed by `isRunning` alone.
-- [ ] 0.5 **The reload.** Reload the conversation. Confirm the terminal label is still absent and
+- [x] 0.5 **The reload.** DONE 2026-09-01, **confirmed** — label still absent, and zero
+      `kind="status"` rows for the stopped run out of nine output rows. Reload the conversation. Confirm the terminal label is still absent and
       that `GET /agents/{name}/output` holds **no** `kind="status"` row for the stopped run —
       round 1 measured this; confirm it still holds.
-- [ ] 0.6 **The recency skew that reversed D3.** Leave a `Run` row at `running` whose process is
+- [x] 0.6 **The recency skew that reversed D3.** DONE 2026-09-01, **confirmed** —
+      `run_interrupted` at 22:24:01 against `Run.started_at` 22:22:13, a gap equal to the
+      outage and to nothing about the run. The *miss* was not reproduced (see the write-up). Leave a `Run` row at `running` whose process is
       gone, restart the Hub, and read the database directly: confirm the `run_interrupted` `EventLog`
       row carries a **restart-time** timestamp while that run's `Run.started_at` is old. This is the
       fact that makes a `started_at`-ordered run query miss runs the events name. A direct DB read
       is sufficient; no UI observation is needed.
-- [ ] 0.7 Record what was actually seen — including anything that contradicts the design — in
+- [x] 0.7 DONE 2026-09-01 — `scripts/drive/FINDINGS.md`, *F190 phase 0 — the observation
+      gate, driven 2026-09-01*. Fixture deleted, project count back to its prior value, no
+      job or loop created. Superseded, kept for the record: Record what was actually seen — including anything that contradicts the design — in
       `scripts/drive/FINDINGS.md` beside F190. **An observation that falsifies a claim stops the
       change and returns it to a round.** Then delete the fixture project, confirm the project count
       returns to its prior value, and sweep for enabled jobs.
+
+**BLOCKED by phase 0's result, 2026-09-01.** Phase 0 falsified round 3b's premise for D6 (task
+0.3). Per task 0.7 — *"an observation that falsifies a claim stops the change and returns it to a
+round"* — nothing below is implemented until a round has re-argued D6 and the proposal's phase-2
+consequences from what was measured. Everything phase 0 confirmed (0.2, 0.4, 0.5, 0.6) is untouched
+by this and the round should not re-derive it; the one thing to re-argue is what `lastRunSettled`
+does and does not already do.
 
 ## 1. The route carries the run's facts
 
