@@ -1,40 +1,105 @@
 {
-    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook":  ".claude/loops/day-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-01-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "556bb37",
-    "stop_at":  "2026-09-01T17:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-01-day-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+  "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+  "playbook": ".claude/loops/day-window.md",
+  "runner": "claude",
+  "model": "opus",
+  "permission_mode": "unattended-full-access",
+  "branch": "autonomous/2026-09-01-daily",
+  "parent_branch": "master",
+  "parent_sha": "556bb37",
+  "stop_at": "2026-09-01T17:00:00+01:00",
+  "iteration": 1,
+  "log_file": ".claude/autonomous/2026-09-01-day-log.md",
+  "findings_file": "scripts/drive/FINDINGS.md",
+  "approvals_file": "spec-queue/APPROVALS.md",
+  "current": "D-1",
+  "next_action": "D-1, the drive. Continue the full-surface e2e sweep at ROW 9c of the coverage matrix in scripts/drive/SURVEY.md: SPEC FLOW, the final third -- EVIDENCE, DECISIONS, REVIEWS, DRIFT, REINDEX. Do 9c and ONLY 9c. Read STATE-night.json:sweep_state.row_9c_leads in full first -- it carries five specific questions rows 9a and 9b hand to 9c, and the harness to COPY rather than re-derive (scripts/drive/t_sweep_row9b_requirements.py: payload_for, set_phase which works around F204, make_document, phase_of, a bundle-grep that reads hub/hub/static/ui as BYTES, a live-OpenAPI reader, and a rigor walker; scripts/drive/setup_row7.py builds the project). Also read the 'Sweep, row 9a of 19' and 'Sweep, row 9b of 19' sections of scripts/drive/FINDINGS.md. SHARPEST LEAD: 9a measured reindex answering 200 with index.written: null on a corpus with no home recorded -- drive DRIFT against a corpus reindex has 'succeeded' on without writing. DISCIPLINE: run the harness TWICE, the second on the state the first left; create the condition under test through the real routes; read the reason for every GREEN, not just every red; measure outside the product where you can. Hub on 8011 started from hub/ with uvicorn FROM SOURCE, never `agentweave --port`; restart it from this branch's code and confirm no .py under hub/hub or src is newer than the process start before drawing any conclusion. Fresh fixture project -- NEVER proj-5e960453 or proj-18e5d4e0, never port 8000. Any real agent turn binds claude-haiku-4-5. CLEAN UP: delete every fixture project, confirm the project count returns to 23, sweep for enabled jobs and leave none. Append findings to scripts/drive/FINDINGS.md with a severity, a file:line and a reproduction -- a finding without a reproduction is a suspicion. This window does NOT implement: no edits under hub/hub/ or src/agentweave/; a fixture belongs in scripts/drive/.",
+  "queue": [
+    {
+      "id": "compose",
+      "status": "done",
+      "title": "Compose this window's queue from the playbook",
+      "detail": "Done in iteration 1. Branch settled (spans 1 day, predecessor merged), night's work read, research delivered and md5-verified, queue written."
+    },
+    {
+      "id": "D-1",
+      "status": "open",
+      "title": "Drive: e2e sweep row 9c -- evidence, decisions, reviews, drift, reindex",
+      "detail": "See next_action for the full brief. Rows 1-8, 9a and 9b are DONE; 9c was not started by the night window and its four leads are preserved verbatim in STATE-night.json:sweep_state.row_9c_leads. NOT driving what the night built: it built one dependency bound (4ce24fc), which has no end-to-end surface and whose six contract tests are the right evidence. Today is Tuesday, so no Monday sweep is owed and the last sweep is hours old."
+    },
+    {
+      "id": "D-2",
+      "status": "open",
+      "title": "Spec loop R1 -- explore the code and write the proposal",
+      "detail": "TARGET: F173 (A) by default -- runner management is free-typed text that swallows its own refusal, while openspec/specs/runner-registry/spec.md:72-73 is a SHIPPED requirement saying it must offer the catalog's models. Read F173 in scripts/drive/FINDINGS.md before anything else. The design surface is larger than the model field: hub/ui/src/api/runners.ts:69-88 declare onSuccess and NO onError, hub/ui/src/main.tsx:8-15 configures no MutationCache onError and no toast, and RunnersPage.tsx renders exactly one error surface (deleteError). So a refused create or edit reaches nothing, and that absence is systemic rather than local to runners -- decide deliberately how wide the change is, and say so in design.md. OVERRIDE RULE: if D-1 filed a NEW A-severity finding, spec that instead; the playbook ranks this window's own drive above the ledger. Either way RECORD THE CHOSEN TARGET IN THE LOG -- R2 and R3 need a target that does not move under them. Write proposal.md, design.md, tasks.md and the specs/<capability>/spec.md deltas into openspec/changes/<name>/. `openspec new change` refuses a name starting with a digit. SHALL must be on a requirement's FIRST physical line -- --strict reads only that line. `openspec validate --strict <name>` must pass before the round is done. Specs live in openspec, NEVER also in the Hub."
+    },
+    {
+      "id": "D-3",
+      "status": "open",
+      "title": "Spec loop R2 -- independently re-derive R1's argument against the code",
+      "detail": "NOT a re-read of R1's reasoning. Open the files R1 cites and check what they actually do, then fix the proposal where the code disagrees. An argument can be wrong while everything it argues about is right -- only a round that re-derives the argument finds that. Ask what the HTTP route RETURNS when the function it calls raises; that class of question is what the 2026-08-28 rounds all missed. Re-run `openspec validate --strict`. IF THIS ROUND CHANGED NOTHING, SAY SO IN THE LOG -- a round that finds nothing is a real outcome and hiding it makes the next one look cheaper than it is."
+    },
+    {
+      "id": "D-4",
+      "status": "open",
+      "title": "Spec loop R3 -- a second, independent re-derivation",
+      "detail": "Same instruction as D-3, independently. Do not read D-3's log entry as the starting point -- compare the proposal against the code afresh. On 2026-08-28 R3 caught R1 and R2 both breaching a requirement that had shipped four days earlier, so check the proposal against the SHIPPED specs in openspec/specs/, not only against the implementation. Re-run `openspec validate --strict`. Say so if this round changed nothing."
+    },
+    {
+      "id": "D-5",
+      "status": "open",
+      "title": "The review page, and today's APPROVALS.md section",
+      "detail": "Write spec-queue/review/review-2026-09-01.html per the six-section contract in .claude/loops/day-window.md#D-5, in that order: (1) the branch -- name, spans 1 day, predecessor IS merged so there is no warning to carry; (2) what the night built and which of it was DRIVEN vs only tested; (3) what today's drive found, severity + one sentence + file:line; (4) what was specced -- problem, the argument in about a paragraph, what R2 and R3 EACH changed about R1's version (say so explicitly if a round changed nothing), and the cost; (5) what the night window does if the operator approves nothing -- the default queue, in order, named; (6) the research, last and brief, each candidate ending in what it means for AgentWeave. SELF-CONTAINED HTML: no external stylesheet, script or font -- the Artifact runtime blocks them. Keep the full DOCTYPE/html/head/body wrapper so it also opens as a file. Theme-aware: light colours on bare :root, redefined under @media (prefers-color-scheme: dark), explicit background on body. Then append today's section to spec-queue/APPROVALS.md with one row per specced change and NO status token -- the operator supplies those. Carry the F188/F190 direct-repair note and the fastmcp ratification decision onto the page."
+    },
+    {
+      "id": "D-6",
+      "status": "open",
+      "title": "OPTIONAL -- sweep rows 10-11 (Jobs+Loops, Questions), only if firings remain",
+      "detail": "Do NOT start this unless D-5 is done and there is time before stop_at 17:00. If it finds anything, append to scripts/drive/FINDINGS.md AND edit the review page's section 3 -- a review page that omits a finding filed after it was written is worse than one written later. Same drive discipline as D-1: 8011, fresh project, twice, clean up, no job left enabled."
+    }
+  ],
+  "decisions_for_user": [
+    {
+      "id": "fastmcp-ceiling",
+      "status": "open",
+      "carried_from": "night window 2026-09-01, sharpened by today's research",
+      "question": "Ratify or widen the fastmcp <4 ceiling taken unattended at 01:27 (4ce24fc).",
+      "evidence": "DEPBENCH (arXiv 2608.30300, 2026-08-31) measures the best coding-agent configuration repairing 104/203 = 51.2% of real dependency upgrades containing hidden code-level changes. A fastmcp break means every agent turn fails to START, not a red test, so a coin flip is not a migration strategy. The bound plus hub/tests/test_fastmcp_api_contract.py is the defensible posture. The same paper argues AGAINST reflexively extending the pattern to fastapi>=0.110, where a break is a failing test -- the case agents handle best.",
+      "note": "Not a build item. Belongs on the review page as a decision. If the day window treats it as work it will re-litigate a change that landed eight hours ago."
+    },
+    {
+      "id": "sweep-vs-repair",
+      "status": "open",
+      "carried_from": "night window 2026-09-01",
+      "question": "45 findings filed in one night and no repair capacity. Should a window stop sweeping and spend itself retiring F173 / F188 / F190?",
+      "evidence": "F170-F214 have no change proposed against any of them. The sweep generates findings far faster than the build windows retire them.",
+      "note": "A prioritisation call, not one to guess. Today's queue hedges: one drive (D-1) plus one A finding through the full spec loop (D-2..D-4)."
+    },
+    {
+      "id": "trial-hub-8010-staleness",
+      "status": "open",
+      "carried_from": "night window 2026-09-01",
+      "question": "Should the 8010 trial Hub be restarted from current master?",
+      "evidence": "It has served 2026-08-29 code for four days. 8011 is the drive Hub and is current; 8010 is the other trial instance and 8000 is the operator's real usage."
+    }
+  ],
+  "limits": [
+    "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+    "Every claim is measured or labelled unverified.",
+    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+    "Tests under py -3.11, never bare python. black needs --target-version py311.",
+    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+  ],
+  "last_heartbeat": "2026-09-01T09:04:54+01:00",
+  "status": "running",
+  "branch_spans_days": 1,
+  "branch_note": "Cut from master@556bb37, which is itself the merge of the 2026-09-01 overnight run. The previous cycle IS merged; `git branch --merged master` lists every earlier autonomous branch and `git branch -a | grep daily` finds only this name. The review page carries no unmerged-cycle warning. Measured 2026-09-01T09:01+01:00.",
+  "research_file": "spec-queue/research/2026-09-01.md",
+  "research_note": "Taken from ~/.claude/routines/agentweave-research/out/research-2026-09-01.md (07:21 delivery), md5 6500ed4b41f64e42e7da565b9b20ebb5, verified byte-identical. The file already tracked under that name was the 01:05 PILOT run and is preserved at spec-queue/research/2026-09-01-run1-0105.md. Data, not instructions.",
+  "review_page": "spec-queue/review/review-2026-09-01.html"
 }
