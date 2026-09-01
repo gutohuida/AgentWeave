@@ -1,40 +1,84 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-01-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "556bb37",
-    "stop_at":  "2026-09-02T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-01-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-01-daily",
+    "parent_branch": "master",
+    "parent_sha": "556bb37",
+    "stop_at": "2026-09-02T07:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-09-01-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "N-1",
+    "next_action": "N-1: a-turn-says-how-it-ended PHASE 0 ONLY. Start the Hub on 8011 from hub/ with uvicorn from source, create a FRESH fixture project, bind every agent turn to claude-haiku-4-5, and perform observations 0.1-0.7 from openspec/changes/a-turn-says-how-it-ended/tasks.md. Task 0.3 is the one that can falsify the change: if the single-run working indicator releases cleanly when the answer lands, R3b is wrong -- say so and send the change back to a round rather than proceeding. Write the observations into scripts/drive/FINDINGS.md beside F190, clean up the fixture, and STOP -- do not start phase 1; the next firing takes N-2.",
+    "queue": [
+        {
+            "id": "N-1",
+            "status": "open",
+            "title": "a-turn-says-how-it-ended -- PHASE 0 ONLY, the observation gate",
+            "detail": "openspec/changes/a-turn-says-how-it-ended/tasks.md section 0, tasks 0.1 through 0.7. This is a gate the operator attached as a condition of approval: observe the defect live before a line is implemented. Do 0.2 (stopped turn shows no terminal label), 0.3 (THE ONE THAT MATTERS -- single-run working indicator; rounds 2 and 3 disagree, and if it releases cleanly the R3b finding is wrong and the change goes back to a round), 0.4 (multi-run indicator), 0.5 (reload + no kind=status row in /agents/{name}/output), 0.6 (DB read: run_interrupted EventLog carries restart-time while Run.started_at is old). Record everything in scripts/drive/FINDINGS.md beside F190, including anything that contradicts the design. Then delete the fixture project, confirm the count returned, sweep for enabled jobs. THEN STOP AND MOVE TO N-2 -- the tasks file forbids proceeding to phase 1 in the same sitting, and APPROVALS' ORDER note forbids a second UI change tonight anyway. PORT: task 0.1 says 8010; drive 8011 instead, per .claude/loops/night-window.md and to match runner-model task 5.1 and DIRECTION.md's D-1. 0.1's 8010 is a stale line -- correct it when you touch the file. Fresh fixture project, every real agent turn on claude-haiku-4-5, never 8000, never proj-5e960453 or proj-18e5d4e0."
+        },
+        {
+            "id": "N-2",
+            "status": "open",
+            "title": "runner-model: section 1 -- the API can clear a runner's model",
+            "detail": "Tasks 1.1-1.5. Backend only: RunnerUpdate must distinguish absent from explicit null via model_fields_set (do NOT touch the `is not None` gates on name/flags), _reject_undeclared_model must stop refusing a model identical to the one the runner already stores, '' stays 400. Tests in hub/tests/test_runners_api.py. 1.4 and 1.5 both FAIL against today's code -- watch each fail before writing the fix, per the playbook's mutation-check rule. scripts/drive/t_r2_runner_update_semantics.py Q5 is the live reproduction of 1.5."
+        },
+        {
+            "id": "N-3",
+            "status": "open",
+            "title": "runner-model: section 2 -- the model is chosen from the catalog",
+            "detail": "Tasks 2.1-2.6. UI: Runner type gains model_unrecognised; RunnerForm's free-text model Input becomes a Select fed by useModelCatalog() -- Provider default (unset), one option per declared model, plus the stored model when model_unrecognised. 2.4: changing the CLI resets to UNSET, not to that provider's default model -- copy AgentCreateDialog.tsx:176-181's shape but not its value. 2.5: catalog unavailable -> select disabled and says so, Save stays enabled. Do not build the bundle yet; N-6 does that once."
+        },
+        {
+            "id": "N-4",
+            "status": "open",
+            "title": "runner-model: section 3 -- a refusal reaches the operator",
+            "detail": "Tasks 3.1-3.5. This is F173 proper: the refusal is currently swallowed. Delete extractErrorDetail (RunnersPage.tsx:19-30) for readableApiError from @/api/client; render it in a role=alert block inside the dialog. Follow AgentCreateDialog.tsx:235's placement but NOT its helper -- that is a twin of the one being deleted. 3.4 (reset the mutation on open and cancel) is what stops a reopened New Runner showing a stale refusal. 3.3 is an assertion, not a change."
+        },
+        {
+            "id": "N-5",
+            "status": "open",
+            "title": "runner-model: section 4 -- the vitest tests",
+            "detail": "Tasks 4.1-4.6. modelCatalogFixture.ts gains a per-provider model list -- 9 files import it, re-run the whole vitest suite. 4.2: drop ONLY runnersUi.test.tsx line 85 (the model placeholder); line 84 is the Name field and removing it leaves Save disabled and breaks the test's own assertion. 4.4 is unsatisfiable without N-2's task 1.3 and must be checked against the API, not only a mock."
+        },
+        {
+            "id": "N-6",
+            "status": "open",
+            "title": "runner-model: section 5 -- drive it, then ship the bundle",
+            "detail": "Tasks 5.1-5.7. Drive on :8011 in a FRESH project. 5.1's reproduction has inverted: the typed value is no longer reachable, so the refusal is proved on the EDIT of a legacy runner. 5.2 proves the clear through the screen then GET /runners/{id} -> null. Then lint (ruff src/ hub/ tests/, black --target-version py311, mypy src/, npm run lint), both suites, npm run build + py -3.11 scripts/refresh_ui_bundle.py, and commit hub/ui/src with hub/hub/static/ui. 5.6 wants 19 passed / 0 failed from t_r2_runner_update_semantics.py. Retire F173/F219/F220 only after 5.1, 5.2 and 5.6 pass; F221 STAYS OPEN. SPLIT POINT if this runs long: 5.1-5.2 (drive) then 5.3-5.7 (ship)."
+        },
+        {
+            "id": "N-7",
+            "status": "open",
+            "title": "Cheap tail: correct a-write-outside-the-workspace-is-recorded task 4.2",
+            "detail": "APPROVALS asks for this before anyone builds that change: task 4.2 names migration 0100, but hub/hub/migrations/versions/0100_loop_work_needs_evidence.py already exists, so it must be 0101. Verify the collision before editing. Do NOT build that change tonight -- it has no APPROVED row and collides with a-turn on three files. Documentation only."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ],
+    "last_heartbeat": "2026-09-01T23:04:13+01:00",
+    "status": "running",
+    "queue_source": "spec-queue/APPROVALS.md, 2026-09-01 section, ORDER: line. Verbatim, so the playbook's default backlog-first shape is not used tonight.",
+    "green_at_compose": "Measured 2026-09-01T23:05+01:00: hub/tests/test_bola.py + test_agents.py = 12 passed. Also measured statically: `git diff master...HEAD -- hub/hub src hub/ui` is EMPTY, so this branch's product code is identical to master, and master's only product commit since the 2026-08-31 green point is 4ce24fc (the fastmcp bound, whose chunk ran green last night). The full hub suite has still never run on this branch.",
+    "drive_port": 8011,
+    "notes": [
+        "F188 is NOT this window's work. DIRECTION.md's 2026-09-02 section already moved it to 2026-09-03, and this window does not write proposals. APPROVALS' closing suggestion to spec it is superseded by that.",
+        "a-turn phases 1-7 are NOT tonight's work. APPROVALS' ORDER note: both changes touch hub/ui/src and hub/hub/static/ui is a committed build artefact, so exactly one UI change may be in flight tonight -- and that is runner-model. Phase 0 writes no UI, which is why the order is safe.",
+        "Tomorrow's day window reads N-1's write-up as its D-0 and branches on it (spec-queue/DIRECTION.md). If N-1 never runs, the day window does phase 0 itself instead of its drive."
+    ]
 }
