@@ -15448,3 +15448,50 @@ it.
 - **Ask the screen what it says, not only what it calls.** F215's teeth are not the six zeros —
   F206 and F211 already established that shape. They are `SpecCoverageBar`'s two sentences, which
   are in the served bundle and instruct the operator to do something the bundle cannot do.
+
+---
+
+## F219 (C) — a runner's model cannot be cleared, and the attempt is answered `200`
+
+Found by the F173 spec loop's round 1 (2026-09-01), not by a sweep — a picker has to name its unset
+choice out loud, so round 1 asked whether the API could honour one. It cannot.
+
+Measured against the `:8011` Hub, fixture project `proj-876a250f7a16`, created and deleted:
+
+```
+POST  /projects/<p>/runners {"name":"valid","cli":"claude","model":"claude-haiku-4-5-20251001"}
+  -> 201  model=claude-haiku-4-5-20251001
+
+PATCH /projects/<p>/runners/<r> {"model": null}
+  -> 200  {"model": "claude-haiku-4-5-20251001", ...}      <- unchanged, and reported as a success
+GET   /projects/<p>/runners/<r>
+  -> 200  model=claude-haiku-4-5-20251001
+
+PATCH /projects/<p>/runners/<r> {"model": ""}
+  -> 400  {"detail": "'' is not a model 'claude' declares"}
+```
+
+`update_runner` (`hub/hub/api/v1/runners.py:136-141`) gates every field on `is not None`, and
+Pydantic gives an explicit `null` and an absent key the same value — so the one spelling that means
+*clear this* is indistinguishable from *do not touch this*, and the only other spelling is refused
+by the catalog check. **Once a runner has a model, it has one forever.**
+
+Two things make this worse than a missing feature:
+
+- **The response says it worked.** The `200` carries the runner's old model, which is also what the
+  UI would re-render, so a client that trusted the answer would show the change as saved.
+- **An unset model is a real state the product depends on.** Both seeded default runners have
+  `model: null` (measured: `Claude (default)`, `Codex (default)`), and
+  `_build_claude_command` emits `--model` only `if model` (`runner_commands.py:199-200`) — so unset
+  means "the CLI's own default", not "broken". It is reachable at create and unreachable after.
+
+Today's screen hides it: `RunnersPage.tsx`'s free-text model field turns an emptied box into
+`model: undefined`, which `JSON.stringify` drops, so the PATCH never carries `model` and the
+operator sees nothing change without ever being told why. That is F173's silence covering F219's
+no-op.
+
+**Reproduction:** `scripts/drive/t_f219_runner_model_clear.py` — 10 passed / 2 failed, twice, and
+the two reds are this finding. It makes and deletes its own fixture project, so it never needs
+`AW_PROJECT` and cannot touch a real one.
+
+**Proposed:** `openspec/changes/runner-model-is-chosen-from-the-catalog`, task 1.1.

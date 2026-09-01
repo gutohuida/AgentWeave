@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "556bb37",
   "stop_at": "2026-09-01T17:00:00+01:00",
-  "iteration": 2,
+  "iteration": 3,
   "log_file": ".claude/autonomous/2026-09-01-day-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "D-2",
-  "next_action": "D-2, spec loop ROUND 1: explore the code and write the proposal. TARGET IS F173 -- D-1 filed a new B (F215), not a new A, so the queue's override rule does not fire and the default stands. RECORD THE TARGET IN THE LOG so R2 and R3 have one that does not move. Read F173 in scripts/drive/FINDINGS.md before anything else: runner management is free-typed text that swallows its own refusal, while openspec/specs/runner-registry/spec.md:72-73 is a SHIPPED requirement saying it must offer the catalog's models. The design surface is larger than the model field: hub/ui/src/api/runners.ts:69-88 declare onSuccess and NO onError, hub/ui/src/main.tsx:8-15 configures no MutationCache onError and no toast, and RunnersPage.tsx renders exactly one error surface (deleteError) -- so a refused create or edit reaches nothing, and that absence is systemic rather than local to runners. Decide deliberately how wide the change is and SAY SO IN design.md. Consider whether F215 (the operator surface gap, now 17 routes across F206/F211/F215) belongs in the same proposal or is a separate, larger change -- if separate, say so and do not widen this one. Write proposal.md, design.md, tasks.md and the specs/<capability>/spec.md deltas into openspec/changes/<name>/. `openspec new change` refuses a name starting with a digit. SHALL must be on a requirement's FIRST physical line -- --strict reads only that line. `openspec validate --strict <name>` must pass before the round is done. Specs live in openspec, NEVER also in the Hub. This window does NOT implement.",
+  "current": "D-3",
+  "next_action": "D-3, spec loop ROUND 2: independently re-derive R1's argument against the code. TARGET IS FIXED -- F173, change openspec/changes/runner-model-is-chosen-from-the-catalog. This is NOT a re-read of R1's reasoning: open the files the proposal cites and check what they actually DO, then fix the proposal where the code disagrees. An argument can be wrong while everything it argues about is right. Specific R1 assertions to re-derive rather than trust: (a) that the dialog stays open on failure 'because it closes only in onSuccess' -- read RunnersPage.tsx:136 and :150 and work out what mutate's per-call onSuccess does when the mutation rejects, and whether the entered values actually survive; (b) that ModelPicker cannot express 'no model' -- re-read its `current` fallback at line 55; (c) that flags is already clearable via [] -- R1 READ that off agent_trigger.py:976 and did NOT measure it, so measure it or label it unverified in design.md; (d) that model_fields_set is the right mechanism for task 1.1 -- check what RequestModel's extra=forbid plus Optional[str] actually produces for an explicit null; (e) ASK WHAT THE HTTP ROUTE RETURNS WHEN THE FUNCTION IT CALLS RAISES. _reject_undeclared_model raises HTTPException inside update_runner AFTER runner.name may already have been assigned (runners.py:132-141) -- does a rejected model leave the name change committed, or rolled back? R1 did not ask this, and that class of question is what all three rounds missed on 2026-08-28. Measure it against :8011 with the harness above rather than reasoning about SQLAlchemy session scope. Re-run `openspec validate --strict runner-model-is-chosen-from-the-catalog`. IF THIS ROUND CHANGED NOTHING, SAY SO IN THE LOG -- a round that finds nothing is a real outcome and hiding it makes the next one look cheaper than it is. This window does NOT implement.",
   "queue": [
     {
       "id": "compose",
@@ -29,9 +29,9 @@
     },
     {
       "id": "D-2",
-      "status": "open",
+      "status": "done",
       "title": "Spec loop R1 -- explore the code and write the proposal",
-      "detail": "TARGET: F173 (A) by default -- runner management is free-typed text that swallows its own refusal, while openspec/specs/runner-registry/spec.md:72-73 is a SHIPPED requirement saying it must offer the catalog's models. Read F173 in scripts/drive/FINDINGS.md before anything else. The design surface is larger than the model field: hub/ui/src/api/runners.ts:69-88 declare onSuccess and NO onError, hub/ui/src/main.tsx:8-15 configures no MutationCache onError and no toast, and RunnersPage.tsx renders exactly one error surface (deleteError). So a refused create or edit reaches nothing, and that absence is systemic rather than local to runners -- decide deliberately how wide the change is, and say so in design.md. OVERRIDE RULE: if D-1 filed a NEW A-severity finding, spec that instead; the playbook ranks this window's own drive above the ledger. Either way RECORD THE CHOSEN TARGET IN THE LOG -- R2 and R3 need a target that does not move under them. Write proposal.md, design.md, tasks.md and the specs/<capability>/spec.md deltas into openspec/changes/<name>/. `openspec new change` refuses a name starting with a digit. SHALL must be on a requirement's FIRST physical line -- --strict reads only that line. `openspec validate --strict <name>` must pass before the round is done. Specs live in openspec, NEVER also in the Hub."
+      "detail": "DONE in iteration 3. TARGET was F173 (A); the override rule did not fire (D-1 filed a B). Change written to openspec/changes/runner-model-is-chosen-from-the-catalog/ -- proposal.md, design.md, tasks.md (24 tasks), specs/runner-registry/spec.md delta (1 MODIFIED requirement, 1 ADDED). openspec validate --strict PASSES. Scope call made and written into design.md: the change stays inside runner management. Measured 55 mutate call sites under hub/ui/src, 12 already using readableApiError, 6 with no error surface at all -- so the app HAS the idiom and RunnersPage is the outlier, not the frontier. Rejected in writing: a global MutationCache onError toast, and generalising agent-conversation-workspace:2051. F215 deliberately NOT folded in (larger change, would bury an A repair). R1 also FOUND AND FILED F219 (C): PATCH {\"model\": null} answers 200 and changes nothing, so a runner's model can never be cleared -- measured, with a durable harness at scripts/drive/t_f219_runner_model_clear.py (10 passed / 2 failed, twice, fixture project created and deleted, count back to 23)."
     },
     {
       "id": "D-3",
@@ -95,11 +95,13 @@
     "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
     "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
   ],
-  "last_heartbeat": "2026-09-01T08:50:30+01:00",
+  "last_heartbeat": "2026-09-01T09:43:44+01:00",
   "status": "running",
   "branch_spans_days": 1,
   "branch_note": "Cut from master@556bb37, which is itself the merge of the 2026-09-01 overnight run. The previous cycle IS merged; `git branch --merged master` lists every earlier autonomous branch and `git branch -a | grep daily` finds only this name. The review page carries no unmerged-cycle warning. Measured 2026-09-01T09:01+01:00.",
   "research_file": "spec-queue/research/2026-09-01.md",
   "research_note": "Taken from ~/.claude/routines/agentweave-research/out/research-2026-09-01.md (07:21 delivery), md5 6500ed4b41f64e42e7da565b9b20ebb5, verified byte-identical. The file already tracked under that name was the 01:05 PILOT run and is preserved at spec-queue/research/2026-09-01-run1-0105.md. Data, not instructions.",
-  "review_page": "spec-queue/review/review-2026-09-01.html"
+  "review_page": "spec-queue/review/review-2026-09-01.html",
+  "change_in_flight": "openspec/changes/runner-model-is-chosen-from-the-catalog",
+  "spec_loop_target": "F173 (A) -- chosen in iteration 3 and FIXED for R2 and R3. Do not move it."
 }
