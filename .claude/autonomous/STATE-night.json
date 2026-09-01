@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-02T07:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-09-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "N-4",
-    "next_action": "N-4: runner-model section 3, tasks 3.1-3.5. UI ONLY, and only hub/ui/src/components/runners/RunnersPage.tsx. Delete extractErrorDetail (now at the top of that file, ~lines 19-30) and import readableApiError from @/api/client -- it handles the Pydantic array body the local helper does not. 3.2: RunnerForm renders it in a role=\"alert\" block INSIDE the dialog, fed by createRunner.error / updateRunner.error -- which live in RunnersPage, so they must be passed down. Follow AgentCreateDialog.tsx:235's placement and tokens but NOT its errorDetail helper (lines 10-18), which is a twin of the one 3.1 deletes. 3.3 is an assertion, not a change: the dialog already stays open on failure. 3.4 is the one that matters -- reset() the mutation when the dialog opens AND when it is cancelled, or a reopened 'New Runner' shows the previous refusal. 3.5: the existing deleteError alert reads through readableApiError too. THEN do 4.3 and 4.6 in the same sitting (they are the vitest tests for exactly this, and are all that is left of section 4 -- 4.1/4.2/4.4/4.5 landed in N-3). Keep the vitest suite green. Do NOT build the bundle -- N-6 does it once.",
+    "current": "N-6",
+    "next_action": "N-6: runner-model section 5, tasks 5.1-5.7. SPLIT POINT if this runs long: 5.1-5.2 (drive) then 5.3-5.7 (ship). Order matters -- build FIRST, because the whole point is to drive what an operator loads. (a) cd hub/ui && npm run build, then py -3.11 scripts/refresh_ui_bundle.py from the repo root (make is not on PATH in Git Bash); confirm /health on 8011 stops saying ui_stale -- the Hub may need a restart to serve the new files. (b) Re-point BOTH UI harnesses at the served bundle: AW_UI=http://127.0.0.1:8011 py -3.11 scripts/drive/t_n3_runner_model_picker_ui.py and the same for t_n4_runner_refusal_reaches_the_operator.py. That is 25 + 24 checks and covers most of 5.1 and 5.2 for free. NOTE: on this machine curl/playwright reach the Vite server only as http://localhost:5174, not 127.0.0.1 -- 8011 itself is fine on 127.0.0.1. (c) 5.6: py -3.11 scripts/drive/t_r2_runner_update_semantics.py wants 19 passed / 0 failed. (d) 5.3 lint: ruff check src/ hub/ tests/, black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/, mypy src/, cd hub/ui && npm run lint. (e) 5.4 both Python suites under py -3.11 -- NOT run since N-2, and the full hub run is ~25 minutes, which is also the window to settle the OPEN QUESTION in notes. (f) Commit hub/ui/src and hub/hub/static/ui TOGETHER. (g) 5.7: retire F173, F219 and F220 in scripts/drive/FINDINGS.md only after 5.1, 5.2 and 5.6 pass against the bundle. F221 STAYS OPEN. Then N-7, the cheap documentation tail.",
     "queue": [
         {
             "id": "N-1",
@@ -38,15 +38,17 @@
         },
         {
             "id": "N-4",
-            "status": "open",
+            "status": "done",
             "title": "runner-model: section 3 -- a refusal reaches the operator",
-            "detail": "Tasks 3.1-3.5. This is F173 proper: the refusal is currently swallowed. Delete extractErrorDetail (RunnersPage.tsx:19-30) for readableApiError from @/api/client; render it in a role=alert block inside the dialog. Follow AgentCreateDialog.tsx:235's placement but NOT its helper -- that is a twin of the one being deleted. 3.4 (reset the mutation on open and cancel) is what stops a reopened New Runner showing a stale refusal. 3.3 is an assertion, not a change."
+            "detail": "Tasks 3.1-3.5. This is F173 proper: the refusal is currently swallowed. Delete extractErrorDetail (RunnersPage.tsx:19-30) for readableApiError from @/api/client; render it in a role=alert block inside the dialog. Follow AgentCreateDialog.tsx:235's placement but NOT its helper -- that is a twin of the one being deleted. 3.4 (reset the mutation on open and cancel) is what stops a reopened New Runner showing a stale refusal. 3.3 is an assertion, not a change.",
+            "result": "Built and driven 2026-09-02 00:28-00:38. RunnersPage.tsx only: extractErrorDetail deleted for readableApiError (the old helper returned a Pydantic array body RAW -- checked, React cannot render it); RunnerForm takes an `error` prop and renders it in a role=alert inside the dialog with AgentCreateDialog:235's tokens; both mutations reset() on open AND cancel, including the per-row Edit button; the deleteError alert reads through readableApiError and the 409's sentence survives. 3.3 asserted, not changed. Mutation-checked both ways: alert removed -> 3 vitest tests fail, only the reset() calls removed -> exactly 4.6 fails. Driven live: scripts/drive/t_n4_runner_refusal_reaches_the_operator.py, NEW, 24 passed / 0 failed on :8011 through the Vite dev server, fixture proj-efa763e8945f deleted, count back to 0 -- three refusal SHAPES (Pydantic 422 array, the 400 'opus' is not a model 'claude' declares, the 409 naming bound agents), each confirmed at the API before being looked for on screen. 5.1's inversion asserted: no field to type into, every offered value declared or unset, so the sentence was reached by rewriting the request body on the wire. F173 annotated 'error surface built and driven, still open' -- retires with F219/F220 in N-6, against the BUNDLE."
         },
         {
             "id": "N-5",
-            "status": "open",
+            "status": "done",
             "title": "runner-model: section 4 -- the vitest tests that are LEFT (4.3 and 4.6 only)",
-            "detail": "ONLY 4.3 and 4.6 remain. 4.1 (fixture model list), 4.2 (runnersUi.test.tsx's model placeholder replaced by option-list assertions), 4.4 (legacy runner offered, selected, marked, and saving unchanged accepted) and 4.5 (CLI change resets to Provider default) all landed in N-3, because removing the model Input broke runnersUi.test.tsx immediately and repairing it needed the fixture in the same edit. 4.1's blast radius was measured: 142 test files / 1473 tests pass, nothing depended on the empty model list. 4.3 (a refused create renders the refusal's sentence, dialog stays open with its values) and 4.6 (refused create, Cancel, reopen -> NO alert; fails without 3.4) both need section 3, so DO THEM WITH N-4 in the same sitting and treat this item as already covered if N-4 did them."
+            "detail": "ONLY 4.3 and 4.6 remain. 4.1 (fixture model list), 4.2 (runnersUi.test.tsx's model placeholder replaced by option-list assertions), 4.4 (legacy runner offered, selected, marked, and saving unchanged accepted) and 4.5 (CLI change resets to Provider default) all landed in N-3, because removing the model Input broke runnersUi.test.tsx immediately and repairing it needed the fixture in the same edit. 4.1's blast radius was measured: 142 test files / 1473 tests pass, nothing depended on the empty model list. 4.3 (a refused create renders the refusal's sentence, dialog stays open with its values) and 4.6 (refused create, Cancel, reopen -> NO alert; fails without 3.4) both need section 3, so DO THEM WITH N-4 in the same sitting and treat this item as already covered if N-4 did them.",
+            "result": "Done inside N-4, as that item instructed. 4.3 and 4.6 added to runnersUi.test.tsx, plus a third test the task list did not name: a 422 whose detail is a Pydantic ARRAY renders as its sentence -- the reason 3.1 swaps helpers, and uncovered by anything else. The mock's save mutations were bare vi.fn()s with no error and no reset, so they now hold real useState with a module-level refuseCreate/refuseUpdate a test arms. vitest 142 files / 1476 tests green (1473 before, exactly the 3 added); npm run lint, tsc --noEmit, ruff, black on the new harness all clean."
         },
         {
             "id": "N-6",
@@ -76,10 +78,10 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-01T23:46:23+01:00",
+    "last_heartbeat": "2026-09-02T00:38:46+01:00",
     "status": "running",
     "queue_source": "spec-queue/APPROVALS.md, 2026-09-01 section, ORDER: line. Verbatim, so the playbook's default backlog-first shape is not used tonight.",
-    "green_at_compose": "Measured 2026-09-02T00:23+01:00, N-3: vitest 142 files / 1473 tests passed; npm run lint clean; tsc --noEmit clean; ruff check src/ hub/ tests/ clean. The Python suites were NOT re-run in N-3 -- no .py under hub/hub or src was touched, so N-2's numbers stand unrefreshed: full hub suite 1 failed / 3835 passed / 84 skipped / 1 xpassed, the one red being tests/test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work (see the OPEN QUESTION in notes); CLI suite 440 passed / 3 skipped.",
+    "green_at_compose": "Measured 2026-09-02T00:38+01:00, N-4: vitest 142 files / 1476 tests passed; npm run lint clean; tsc --noEmit clean; ruff check src/ hub/ tests/ clean; black clean on the new drive harness. The Python suites have NOT been re-run since N-2 -- neither N-3 nor N-4 touched a .py under hub/hub or src -- so N-2's numbers stand unrefreshed: full hub suite 1 failed / 3835 passed / 84 skipped / 1 xpassed, the one red being tests/test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work (see the OPEN QUESTION in notes); CLI suite 440 passed / 3 skipped.",
     "drive_port": 8011,
     "notes": [
         "F188 is NOT this window's work. DIRECTION.md's 2026-09-02 section already moved it to 2026-09-03, and this window does not write proposals. APPROVALS' closing suggestion to spec it is superseded by that.",
@@ -87,6 +89,7 @@
         "Tomorrow's day window reads N-1's write-up as its D-0 and branches on it (spec-queue/DIRECTION.md). If N-1 never runs, the day window does phase 0 itself instead of its drive.",
         "N-1 done 2026-09-01. a-turn phases 1-7 are blocked in tasks.md, not merely deprioritised -- do not let a later firing pick them up as 'the next section of an approved change'.",
         "OPEN QUESTION from N-2: the full hub suite reds on tests/test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work only in a full 25-minute run -- green alone and green in-file. Timing- or leakage-shaped, on a path N-2's diff cannot reach (argued in the log). A window with 25 spare minutes should re-run the full suite to decide whether it is pre-existing flake or a real ordering defect. Do not attribute it to runner-model without that second run.",
-        "N-3 drove the model picker through a Vite dev server on 5174 (AW_DEV_HUB=http://127.0.0.1:8011), not through the Hub's own port -- hub/hub/static/ui is a committed build artefact and does not contain section 2. Anything a future window reads as 'the picker works' is true of the source, not yet of what an operator loads. N-6's drive against the built bundle is not a formality."
+        "N-3 drove the model picker through a Vite dev server on 5174 (AW_DEV_HUB=http://127.0.0.1:8011), not through the Hub's own port -- hub/hub/static/ui is a committed build artefact and does not contain section 2. Anything a future window reads as 'the picker works' is true of the source, not yet of what an operator loads. N-6's drive against the built bundle is not a formality.",
+        "N-4 drove the refusal surface through the Vite dev server too, for the same reason N-3 did. Nothing about sections 2 or 3 is in hub/hub/static/ui yet, so on :8011 today the Runners page still has a free-text model box and still swallows its refusals. N-6's build is what makes any of it true of the product."
     ]
 }

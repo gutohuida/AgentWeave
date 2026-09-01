@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from '@/api/client'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { RunnersPage } from '@/components/runners/RunnersPage'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
@@ -8,6 +10,12 @@ import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
 const createMutate = vi.fn()
 const updateMutate = vi.fn()
 const bindMutate = vi.fn()
+
+// Armed by a test to make the next save fail. The save mutations are mocked with real `useState`
+// rather than a bare `vi.fn`, because the refusal surface is *read off the mutation* — a plain spy
+// has no `error` to render and no `reset()` to clear, which is the whole of section 3.
+let refuseCreate: unknown = null
+let refuseUpdate: unknown = null
 
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({
@@ -50,8 +58,30 @@ vi.mock('@/api/runners', () => ({
     ],
     isLoading: false,
   }),
-  useCreateRunner: () => ({ mutate: createMutate, isPending: false }),
-  useUpdateRunner: () => ({ mutate: updateMutate, isPending: false }),
+  useCreateRunner: () => {
+    const [error, setError] = useState<unknown>(null)
+    return {
+      mutate: (values: unknown, options: unknown) => {
+        createMutate(values, options)
+        setError(refuseCreate)
+      },
+      isPending: false,
+      error,
+      reset: () => setError(null),
+    }
+  },
+  useUpdateRunner: () => {
+    const [error, setError] = useState<unknown>(null)
+    return {
+      mutate: (values: unknown, options: unknown) => {
+        updateMutate(values, options)
+        setError(refuseUpdate)
+      },
+      isPending: false,
+      error,
+      reset: () => setError(null),
+    }
+  },
   useDeleteRunner: () => ({ mutate: vi.fn(), isPending: false }),
   useBindAgentRunner: () => ({ mutate: bindMutate, isPending: false, isError: false }),
   useUpdateAgentWaiting: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
@@ -93,6 +123,8 @@ describe('runner management UI', () => {
     createMutate.mockReset()
     updateMutate.mockReset()
     bindMutate.mockReset()
+    refuseCreate = null
+    refuseUpdate = null
   })
 
   it('creates a custom runner variant without replacing the existing runner', async () => {
@@ -192,6 +224,58 @@ describe('runner management UI', () => {
       { id: 'runner-opus', updates: { name: 'Claude Opus', model: null } },
       expect.any(Object),
     )
+  })
+
+  it('reads the Hub refusal inside the dialog, which keeps what was entered', async () => {
+    const user = userEvent.setup()
+    // The exact body F173 was reported against.
+    refuseCreate = new ApiError(400, JSON.stringify({ detail: "'opus' is not a model 'claude' declares" }))
+    render(<RunnersPage />)
+
+    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.type(screen.getByPlaceholderText('e.g. Claude Opus'), 'Claude Opus 5')
+    await user.selectOptions(screen.getByLabelText('Model'), 'claude-opus-5')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("'opus' is not a model 'claude' declares")
+    // The dialog stays open holding the values that were refused, so the operator edits rather
+    // than retypes.
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect((screen.getByPlaceholderText('e.g. Claude Opus') as HTMLInputElement).value).toBe('Claude Opus 5')
+    expect((screen.getByLabelText('Model') as HTMLSelectElement).value).toBe('claude-opus-5')
+  })
+
+  it('reads a Pydantic refusal, which the deleted local helper could not', async () => {
+    const user = userEvent.setup()
+    refuseCreate = new ApiError(
+      422,
+      JSON.stringify({ detail: [{ type: 'value_error', loc: ['body', 'name'], msg: 'Value error, A runner name may not be blank.' }] }),
+    )
+    render(<RunnersPage />)
+
+    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.type(screen.getByPlaceholderText('e.g. Claude Opus'), 'x')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('A runner name may not be blank.')
+  })
+
+  it('does not show the previous refusal when New Runner is reopened', async () => {
+    const user = userEvent.setup()
+    refuseCreate = new ApiError(400, JSON.stringify({ detail: "'opus' is not a model 'claude' declares" }))
+    render(<RunnersPage />)
+
+    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.type(screen.getByPlaceholderText('e.g. Claude Opus'), 'Claude Opus 5')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+
+    // The mutation outlives the dialog, so without a reset the refusal is on screen before
+    // anything has been submitted.
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('rebinds an agent to a different runner', async () => {

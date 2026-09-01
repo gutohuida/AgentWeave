@@ -12988,6 +12988,21 @@ written and nothing was left open to say so.
 **Reproduction:** the harness above, or by hand — Environment, Runners, New Runner, type any model
 that is not an exact catalog id, Save.
 
+**2026-09-02 (night window, N-4): the error surface is built and driven, and F173 is still open.**
+`RunnerForm` now renders the save mutation's error in a `role="alert"` inside the dialog, read
+through `readableApiError`, and both mutations are reset when a dialog opens or is cancelled.
+Driven live: `scripts/drive/t_n4_runner_refusal_reaches_the_operator.py`, 24 passed / 0 failed,
+including the operator reading `'opus' is not a model 'claude' declares` on screen
+(`%TEMP%
+4-shots
+4-04-model-refusal.png`). The reproduction above has *inverted* — there is no
+longer a field to type an undeclared model into, so the sentence had to be reached by rewriting the
+request on the wire.
+
+It stays open for the same reason F219 and F220 do: **that drive ran against the Vite dev server,
+not against `hub/hub/static/ui`**, which is what an operator actually loads and which this change
+rebuilds once, in its section 5. Retirement waits on that drive.
+
 ---
 
 ## F174 (B) — the Codex catalog has drifted from the file it says it is copied from, and the drift includes the default

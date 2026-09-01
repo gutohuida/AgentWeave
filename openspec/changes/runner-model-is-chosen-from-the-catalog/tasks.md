@@ -88,23 +88,43 @@ which does not exist yet.
 
 ## 3. A refusal reaches the operator
 
-- [ ] 3.1 Delete `extractErrorDetail` (`RunnersPage.tsx:19-30`) and use `readableApiError` from
+- [x] 3.1 Delete `extractErrorDetail` (`RunnersPage.tsx:19-30`) and use `readableApiError` from
       `@/api/client` — it handles the Pydantic array body the local helper does not.
-- [ ] 3.2 `RunnerForm` renders `readableApiError(error, …)` in a `role="alert"` block inside the
+- [x] 3.2 `RunnerForm` renders `readableApiError(error, …)` in a `role="alert"` block inside the
       dialog, fed by `createRunner.error` / `updateRunner.error`. Follow
       `AgentCreateDialog.tsx:235`'s placement and tokens — and **not** its helper: line 235 calls a
       private `errorDetail` (lines 10-18) that is a twin of the one task 3.1 deletes.
-- [ ] 3.3 The dialog already stays open on failure (it closes only in the per-call `onSuccess` at
+- [x] 3.3 The dialog already stays open on failure (it closes only in the per-call `onSuccess` at
       `RunnersPage.tsx:136` and `:150`, and `RunnerForm` holds its own `useState`, so the entered
       values survive) — assert it rather than changing it.
-- [ ] 3.4 The mutation is `reset()` when the dialog opens and when it is cancelled. The mutations
+- [x] 3.4 The mutation is `reset()` when the dialog opens and when it is cancelled. The mutations
       live in `RunnersPage` and outlive `RunnerForm`, so without this a reopened "New Runner"
       shows the previous refusal before anything has been submitted (design.md, "the error surface
       must be reset").
-- [ ] 3.5 The existing `deleteError` alert keeps working and now reads through `readableApiError`.
+- [x] 3.5 The existing `deleteError` alert keeps working and now reads through `readableApiError`.
       `useDeleteRunner` throws a real `ApiError` (checked — `fetchWithAuth`, `client.ts:24-27`), so
       the refusal's sentence naming the bound agents survives the swap rather than degrading to the
       fallback.
+
+**Section 3 built and driven, 2026-09-02 (night window, N-4).** `extractErrorDetail` is gone;
+`handleDelete` and the dialog both read through `readableApiError`. `RunnerForm` takes the save
+mutation's `error` and renders it in a `role="alert"` inside the dialog, above the buttons, with
+`AgentCreateDialog`'s tokens. Both mutations are `reset()` when their dialog opens *and* when it is
+cancelled — the Edit button resets too, not only "New Runner".
+
+Driven live against the `:8011` Hub through the Vite dev server, fixture project
+`proj-efa763e8945f` (created and deleted, count back to `0`):
+`scripts/drive/t_n4_runner_refusal_reaches_the_operator.py`, **24 passed / 0 failed**, over three
+deliberately different refusal shapes — a Pydantic `422` whose `detail` is a *list* (which the
+deleted helper returned raw, as an array of objects React cannot render), the Hub's own `400`
+`'opus' is not a model 'claude' declares`, and the `409` naming the agents holding a runner. The
+model refusal can no longer be *produced* from the screen — task 5.1's inversion, asserted rather
+than assumed — so the sentence was reached by rewriting the request body on the wire; the refusal
+and its words are the Hub's.
+
+Both halves were mutation-checked against the vitest suite rather than argued: with the alert
+block removed 3 tests fail, and with only the two `reset()` calls removed exactly the 4.6 test
+fails.
 
 ## 4. Tests
 
@@ -118,7 +138,7 @@ which does not exist yet.
       Replace line 85 with — the select offers exactly `Provider default` plus the fixture's
       models for the chosen CLI; choosing one submits that model id; there is no free-text model
       field on screen.
-- [ ] 4.3 A refused create renders the refusal's sentence and leaves the dialog open with its
+- [x] 4.3 A refused create renders the refusal's sentence and leaves the dialog open with its
       values. Drive it through a mocked `useCreateRunner` whose mutation reports an `ApiError`
       carrying `{"detail": "'opus' is not a model 'claude' declares"}`.
 - [x] 4.4 Editing a runner whose `model_unrecognised` is true offers its stored model, selected and
@@ -126,8 +146,15 @@ which does not exist yet.
       unsatisfiable without task 1.3 — check that it fails first, against the API, not only against
       a mock.
 - [x] 4.5 Changing the CLI on create resets the model selection to `Provider default`.
-- [ ] 4.6 A refused create, then Cancel, then reopening "New Runner" shows **no** alert. Fails
+- [x] 4.6 A refused create, then Cancel, then reopening "New Runner" shows **no** alert. Fails
       without task 3.4.
+
+**Section 4 finished, 2026-09-02 (night window, N-4).** 4.1/4.2/4.4/4.5 landed with section 2;
+4.3 and 4.6 landed with section 3, in the same sitting, because both are assertions about a surface
+section 3 creates. A third test was added beside them: a `422` whose `detail` is a Pydantic *array*
+renders as its sentence, which is the behaviour task 3.1's swap exists for and which no other test
+covered. vitest is **142 files / 1476 tests** green (1473 before), `npm run lint` and
+`tsc --noEmit` clean.
 
 ## 5. Drive it, then ship the bundle
 

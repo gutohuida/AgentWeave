@@ -14,21 +14,9 @@ import {
   RunnerCli,
 } from '@/api/runners'
 import { useModelCatalog } from '@/api/modelCatalog'
+import { readableApiError } from '@/api/client'
 
 const CLI_OPTIONS: RunnerCli[] = ['claude', 'codex']
-
-function extractErrorDetail(err: unknown): string {
-  if (err instanceof Error) {
-    try {
-      const parsed = JSON.parse(err.message) as { detail?: string }
-      if (parsed.detail) return parsed.detail
-    } catch {
-      // not JSON — fall through to the raw message
-    }
-    return err.message
-  }
-  return 'Could not delete runner'
-}
 
 export function RunnersPage() {
   const { data: runners, isLoading } = useRunners()
@@ -44,7 +32,7 @@ export function RunnersPage() {
     setDeleteError(null)
     deleteRunner.mutate(id, {
       onError: (err: unknown) => {
-        setDeleteError(extractErrorDetail(err))
+        setDeleteError(readableApiError(err, 'Could not delete runner'))
       },
     })
   }
@@ -64,7 +52,16 @@ export function RunnersPage() {
       title="Runners"
       description="Reusable execution capability — which CLI and model an agent launches with."
       actions={(
-        <Button variant="primary" size="sm" onClick={() => setShowForm(true)}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => {
+            // The mutations live here and outlive the dialog, so a refusal from the last attempt
+            // would still be on `createRunner.error` when this one opens.
+            createRunner.reset()
+            setShowForm(true)
+          }}
+        >
           <Icon name="add" size={18} />
           New Runner
         </Button>
@@ -123,7 +120,7 @@ export function RunnersPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <Button variant="ghost" size="icon-xs" onClick={() => setEditing(runner)} title="Edit" aria-label={`Edit ${runner.name}`}>
+                  <Button variant="ghost" size="icon-xs" onClick={() => { updateRunner.reset(); setEditing(runner) }} title="Edit" aria-label={`Edit ${runner.name}`}>
                     <Icon name="edit" size={16} />
                   </Button>
                   <Button variant="ghost" size="icon-xs" onClick={() => handleDelete(runner.id)} disabled={deleteRunner.isPending} title="Delete" aria-label={`Delete ${runner.name}`}>
@@ -141,7 +138,8 @@ export function RunnersPage() {
           title="New Runner"
           initial={null}
           isPending={createRunner.isPending}
-          onCancel={() => setShowForm(false)}
+          error={createRunner.error}
+          onCancel={() => { createRunner.reset(); setShowForm(false) }}
           onSubmit={(values) =>
             createRunner.mutate(values, { onSuccess: () => setShowForm(false) })
           }
@@ -153,7 +151,8 @@ export function RunnersPage() {
           title="Edit Runner"
           initial={editing}
           isPending={updateRunner.isPending}
-          onCancel={() => setEditing(null)}
+          error={updateRunner.error}
+          onCancel={() => { updateRunner.reset(); setEditing(null) }}
           onSubmit={(values) =>
             updateRunner.mutate(
               // `model` is always sent on edit, and `null` is how the operator's "Provider default"
@@ -179,12 +178,16 @@ function RunnerForm({
   title,
   initial,
   isPending,
+  error,
   onCancel,
   onSubmit,
 }: {
   title: string
   initial: Runner | null
   isPending: boolean
+  /** The save mutation's error, owned by `RunnersPage` — the dialog stays open on failure and
+   * this is where the Hub's own sentence is read. */
+  error: unknown
   onCancel: () => void
   onSubmit: (values: RunnerFormValues) => void
 }) {
@@ -291,6 +294,15 @@ function RunnerForm({
             )}
           </div>
         </div>
+        {!!error && (
+          <div
+            role="alert"
+            className="mt-3 rounded-md px-3 py-2 text-xs"
+            style={{ background: 'var(--error-cont)', color: 'var(--red)' }}
+          >
+            {readableApiError(error, 'The runner could not be saved.')}
+          </div>
+        )}
         <div className="flex items-center justify-end gap-2 mt-5">
           <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
           <Button
