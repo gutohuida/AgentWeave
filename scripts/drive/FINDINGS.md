@@ -13189,3 +13189,262 @@ Recorded because a sweep that lists only defects describes a product that does n
   paths refuse an undeclared model, so only a row predating the catalog can carry one, and there are
   **zero** such rows across all 71 runners on the 8011 Hub. Its invisibility is part of F173; its
   unreachability is why that half of F173 has no live reproduction.
+
+---
+
+# Full-surface sweep, 2026-09-01 — row 3 of 19: Agents
+
+The night window's `N-2`, third feature area. Driven against the **8011** Hub on the beta profile
+(PID 22908, started 01:48:32; nothing under `hub/hub` or `src` newer, and the beta file's mtime
+moved on a `GET /projects` while `<repo>/hub/data` did not). Fresh project `proj-13d37dd33731` on a
+fresh git fixture outside the repository. Surfaces exercised: `agents`, `agent_lifecycle`,
+bindings, canonical context, timeline, `agents/launchability`, and the agent-settings screen.
+
+**85 API assertions, 19 screen assertions, one real agent turn, five findings.** Harnesses kept:
+`scripts/drive/t_sweep_row3_agents.py` (83/85 — the two reds are F182 and F181) and
+`scripts/drive/t_sweep_row3_ui.py` (15/19 — the four reds are F178 x2, F179 and F180). Both were
+run twice, per the standing instruction; the second API pass ran against the state the first left
+and scored identically, so unlike rows 1 and 2 the repeat surfaced nothing new here.
+
+**The row's load-bearing claim was driven, not read.** A charter was authored saying *"reply with
+exactly the single word ROW3023319"*, an agent was bound to it, and one real turn ran
+(`run-ca3ac9b518bd`, completed, exit 0, ~8s, `claude-haiku-4-5-20251001`). The marker came back in
+the output. **A Charter record reaches the process that runs**, and the timeline names the runner
+and model it used (`Run started (claude, claude-haiku-4-5-20251001)`).
+
+---
+
+## F178 (B) — the collaboration-readiness report the Hub computes on every call reaches no screen, and has not since 2026-08-08
+
+`hub/hub/api/v1/agents.py:159`'s `get_agents_launchability` states its own consumer in its
+docstring:
+
+> Feeds launchability indicators in the agent/runner selector.
+
+There is no such consumer. Measured from the wire, not grepped: a full load of the project screen
+with the agent rail open makes **41 requests, none of them to `/agents/launchability`**
+(`t_sweep_row3_ui.py`, first assertion). Following it through the UI source explains why:
+
+| | |
+|---|---|
+| `useAgentLaunchability` | `hub/ui/src/api/agents.ts:343` — imported by **ten** files, nine of them tests that mock it, and `api/agents.ts` itself. No component. |
+| `AgentCard` | `hub/ui/src/components/agents/AgentCard.tsx:18` — the only component taking a `launchability` prop and the only renderer of `collaboration_ready`. Imported by exactly one file: `hub/ui/src/__tests__/agentCardCollaboration.test.tsx:3`. |
+
+**This was known and written down at the time, in the commit that caused it.** `e4958fc`
+(2026-08-08, *"Handoff gets a home; the overflow menu and two dead pages go"*) says in its own body:
+
+> `AgentCard` is now unreachable too — left in place, because deleting it takes the
+> collaboration-readiness indicator with it and that was not asked for.
+
+That is an honest note about a deliberate deferral. What did not happen is anyone recording the
+*consequence*: for 24 days the sentence *"this Codex agent's runner opted out of the app-server
+transport ... AgentWeave tool calls will be silently denied with no operator present to approve
+them"* (`agents.py:225-233`) has been computed on every launchability call and shown to nobody. The
+test that guards it is worse than silent — `agentCardCollaboration.test.tsx:6-11` opens by
+explaining that the indicator *"moved here — the place an operator looks to understand an agent's
+configuration"*. It moved to a component nothing mounts, and the test passes.
+
+**No requirement is breached, and that is worth stating plainly.**
+`openspec/specs/runtime-diagnostics/spec.md:137` says *"The Hub SHALL be **able to report**"* — the
+API satisfies that literally. This is a product defect, not a spec breach: an operator-facing
+warning with no operator.
+
+**Reproduction:** `t_sweep_row3_ui.py`, first assertion (wire-level). By hand:
+`grep -rn "useAgentLaunchability\|AgentCard" hub/ui/src --include=*.tsx | grep -v __tests__` returns
+only the two definitions.
+
+---
+
+## F179 (B) — an agent that cannot run at all is presented as a neutral dropdown value
+
+The Execution section of agent settings — subtitle *"What this agent runs as when you give it a
+turn"* (`AgentSettingsPage.tsx:103-121`) — renders the runner binding as `RunnerPicker`
+(`AgentSettingsControls.tsx:219-254`), whose first option is a plain
+`<option value="">No runner</option>`. Nothing distinguishes it from a choice.
+
+The Hub already has the sentence, and says it in three places the screen does not read:
+
+- `hub/hub/launchability.py:80` — *"No runner is bound to this agent. Bind one in the Hub UI before
+  it can run."*, returned by `GET /agents/launchability` as `runnable: false` plus that reason.
+- The same sentence is stamped onto the undeliverable queue entry as `waiting_reason` and returned
+  by `GET /queue/{agent}/status` — driven: `{"waiting_count": 1, "waiting_reason": "No runner is
+  bound to this agent. Bind one in the Hub UI before it can run."}`.
+- `POST /agent/trigger` returns it in the response body (`"status": "queued"`, `waiting_reason`).
+
+So the screen showing "No runner" as an ordinary value is not a missing computation. It is the same
+shape as F178 one page over, and F169 and F173 before that: a fact produced server-side for an
+operator, with no file under `hub/ui/src` that reads it.
+
+`row3-08-no-runner-execution.png` is the finding in one frame — an agent with a message queued that
+can never be delivered, and its own Execution page saying nothing at all about why.
+
+**Reproduction:**
+
+```
+POST  /projects/<p>/agents          {"name":"q1","runner_id":"<r>"}  -> 201
+PATCH /projects/<p>/agents/q1       {"runner_id": null}              -> 200
+POST  /projects/<p>/agent/trigger   {"agent":"q1","message":"held"}  -> 200  status=queued
+open  /?project=<p>&agent=q1&settings=execution
+```
+
+---
+
+## F180 (C) — the archive refusal offers only the destructive remedy, and drops the reason the non-destructive one exists
+
+This one is sharp because the surrounding work is *good*. `ArchiveControl`
+(`AgentSettingsPage.tsx:223-262`) parses the 409, renders the reason as `role="alert"`, and offers a
+labelled destructive button — `row3-09-archive-refused.png` shows *"q023319 has 1 queued message.
+Discard them to archive the agent."* above *"Discard 1 queued message and archive — cannot be
+undone"*. That is a refusal done right, and its own comment says so: *"the error is rendered as the
+operator's next instruction, not as a failure."*
+
+The instruction is incomplete. Binding a runner would **deliver** those messages rather than destroy
+them, and the Hub itself treats binding as the repair: `agents.py:2025-2043` redrains the queue on
+`runner_newly_bound` specifically because *"an operator who does exactly what the product told them
+to do ... is left with the message still queued"* (the F96 comment). The screen never names it.
+Driven: `"bind"` does not appear in the page's visible text (`t_sweep_row3_ui.py`, last screen
+assertion).
+
+**Where the reason is lost is in the route, not the component.** `hub/hub/agent_lifecycle.py:46-58`
+composes a message that *does* explain the stake — *"has messages waiting to be delivered.
+Archiving it would strand them, because nothing delivers to an archived agent."*
+`hub/hub/api/v1/agents.py:2133-2157` then discards it: when there are queued entries it raises its
+own dict detail, *"{name} has N queued messages. Discard them to archive the agent."* The component
+renders `queueRefusal.message`, so the only sentence reaching the operator is the one naming
+discard.
+
+**Reproduction:** F179's setup, then press *Archive agent* on the Identity section.
+
+---
+
+## F181 (C) — `GET /agents/launchability` does not apply the lifecycle filter, and its docstring says it feeds a selector
+
+`list_agents` (`agents.py:249-263`) is explicit about why the filter lives where it does:
+
+> Archived agents are excluded by default, and **this one filter is what removes them from every
+> surface that offers an agent** — the rail, task assignment, the job form, peer recipients, the
+> new-conversation surface — because all of them read this endpoint. Adding the filter at each call
+> site instead would mean one missed site leaves an archived agent selectable.
+
+`get_agents_launchability` (`agents.py:159-243`) is a second surface that offers an agent — by its
+own docstring, *"the agent/runner selector"* — and it iterates
+`select(Agent).where(Agent.project_id == project_id)` with no lifecycle predicate. An archived agent
+is reported there, `runnable: true`, one call after `POST /agent/trigger` refused it with *"is
+archived and cannot be triggered."*
+
+Driven, both passes:
+
+```
+POST /projects/<p>/agents/pmb023319/archive  -> 200  lifecycle=archived
+GET  /projects/<p>/agents                    -> pmb023319 ABSENT   (correct)
+POST /projects/<p>/agent/trigger             -> 409  "is archived and cannot be triggered"
+GET  /projects/<p>/agents/launchability      -> pmb023319 PRESENT, runnable: true
+```
+
+**Severity C, and only because of F178.** Nothing reads this route today, so no operator can see the
+inconsistency. That is exactly the reason to file it: the day someone wires the indicator up — which
+is what fixing F178 means — they inherit an archived agent in the selector, and the docstring that
+promised one filter would prevent it.
+
+---
+
+## F182 (C) — F175's refusal, restated at a second site, still naming nothing that would work
+
+`agents.py:630-634`:
+
+```python
+raise HTTPException(
+    status_code=400,
+    detail=f"{body.model!r} is not a model {body.provider!r} declares",
+)
+```
+
+Driven: `POST /agents {"name":"...","provider":"claude","model":"opus"}` -> `400 'opus' is not a
+model 'claude' declares`. Identical wording, identical omission, and the same alias — `opus` is
+published by this Hub over `GET /model-catalog` — as F175 recorded against `runners.py`'s
+`_reject_undeclared_model` on row 2. Filed separately rather than folded into F175 because it is a
+second file:line and a fix to one does not touch the other; whatever change answers F175 should
+answer both.
+
+**Not reachable from the create dialog**, which is why it is C rather than B: `AgentCreateDialog`
+sources the model from a `<select>` over the catalog, so an operator cannot provoke it. It is the
+API's answer to an API caller.
+
+---
+
+## Suspicion, not a finding — no reproduction
+
+`agent_lifecycle.archivable` (`agent_lifecycle.py:46-58`) detects queued work by **joining
+Conversation** on `Conversation.agent == agent.name`, while the route's own follow-up query
+(`agents.py:2136-2146`) and the scheduler's `inbound_queue.queued_entries`
+(`inbound_queue.py:74-88`) both filter on `InboundQueueEntry.agent`. `conversation_id` is nullable
+(`models.py:595-597`). If any path ever enqueues without one, or with a conversation belonging to a
+different agent, the archivability check would say "archivable" about an agent with undelivered work
+— the exact thing its own message exists to prevent. All eight `new_entry` call sites pass a
+`conversation_id` today, so **this could not be reproduced** and is recorded only so a future change
+to any of them does not have to rediscover the asymmetry.
+
+---
+
+## What held, under row 3
+
+Recorded because a sweep that lists only defects describes a product that does not exist. Each of
+these is an assertion in one of the two harnesses, not an impression.
+
+**The create-agent dialog is the counter-example to F173.** Same codebase, one surface over, and it
+does everything the Runners dialog does not: the model comes from a `<select>` over the catalog, not
+free text; `createAgent.error` is rendered as `role="alert"` with the Hub's own `detail` parsed out
+(`AgentCreateDialog.tsx:10-17, 235`); the dialog stays open. Driven — typing an existing agent name
+and pressing Create produced *"Agent name 'rid023319' already exists in this project"* on screen
+(`row3-04-duplicate-refused.png`). This makes F173 an **omission**, not a missing convention.
+
+**The provider picker uses the launchability it does fetch.** `ProviderPicker`
+(`AgentCreateDialog.tsx:83-110`) disables a provider that cannot launch and prints its reason beside
+it. Provider-level launchability (`/runners/launchability-by-provider`) has a real consumer; only
+the *agent*-level one (F178) does not.
+
+**find-or-create is genuinely atomic and does not duplicate.** Two agents created on the same
+`provider` + `model` bound the *same* runner id, and the project's runner count did not move.
+
+**Every binding refusal names the id it could not find**, and none leaks cross-project existence: an
+unknown runner, an unknown charter, and a runner belonging to another project all answer
+`404 "Runner '<id>' not found"` — the foreign one indistinguishable from the absent one.
+
+**`_exactly_one_capability_source` says which combination is accepted.** Both `runner_id` +
+`provider`/`model` together and neither of them answer `422 "Provide either runner_id or both
+provider and model, not both or neither"`. That is the shape F175/F182 lack, in the same file.
+
+**The archive lifecycle is complete and correctly filtered.** Archive and unarchive are both
+idempotent; `?lifecycle=` accepts `open`/`archived`/`all` and refuses anything else with `422`; an
+archived agent leaves the default roster, stays resolvable under `all` (so there is somewhere to
+unarchive it from), and cannot be triggered — with a refusal that names unarchiving as the repair.
+Archiving an agent whose run has *finished* is permitted; archiving one with queued work is not.
+
+**Canonical context carries the charter.** `GET /agents/agent-context` renders the bound charter's
+authored content, names the agent, and for an unknown agent answers `200` with an onboarding
+document (team roster, what the agent may not decide, "you are not registered yet") rather than a
+`404`. Cross-project, the same call does not leak the charter.
+
+**The timeline is per-agent and starts at creation.** `agent_created` is on it before anything else
+happens; an unknown agent's timeline is `[]`, not someone else's; a completed run contributes
+`run_triggered`, `queue_entry_queued`, `queue_entry_delivered`, `run_started`, `run_completed`, with
+`Run started (claude, claude-haiku-4-5-20251001)` naming the runner and model.
+
+**A known past defect is still fixed.** The turn produced two `context_warning` rows 30 ms apart,
+the later one carrying `status: "measured"` with `context_tokens: null`. `context_readings.py`
+exists for exactly that (*"what made Claude agents report nothing for 329 samples"*) and picks the
+complete row. Worth recording that the failure condition still occurs and the guard still holds.
+
+**An empty agent name is refused `422`** — F176's shape on the runner surface does not repeat here.
+
+### Noted, not filed (severity D)
+
+- `POST /agents/{name}/heartbeat`, `/output`, `/context-usage` and `/compact` take a `{name}` that is
+  never checked against a real agent row, unlike every route that goes through `_owned_agent`. These
+  are agent-side write paths, not operator ones, and identity is bound by the run credential rather
+  than the path — so this is a shape to watch, not a defect.
+- The `context_warning` event type is used for a routine 17%-of-window reading. Nothing is wrong; the
+  name just describes an alarm the row is not.
+- One trap this harness fell into and now carries a comment about: asserting on `page.content()`
+  rather than `page.inner_text()`. Searching the HTML for `"bind"` matched `tabindex` and turned
+  F180 into a green row until it was checked by hand.
