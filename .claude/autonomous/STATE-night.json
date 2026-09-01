@@ -78,7 +78,7 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-02T00:38:46+01:00",
+    "last_heartbeat": "2026-09-01T23:59:11+01:00",
     "status": "running",
     "queue_source": "spec-queue/APPROVALS.md, 2026-09-01 section, ORDER: line. Verbatim, so the playbook's default backlog-first shape is not used tonight.",
     "green_at_compose": "Measured 2026-09-02T00:38+01:00, N-4: vitest 142 files / 1476 tests passed; npm run lint clean; tsc --noEmit clean; ruff check src/ hub/ tests/ clean; black clean on the new drive harness. The Python suites have NOT been re-run since N-2 -- neither N-3 nor N-4 touched a .py under hub/hub or src -- so N-2's numbers stand unrefreshed: full hub suite 1 failed / 3835 passed / 84 skipped / 1 xpassed, the one red being tests/test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work (see the OPEN QUESTION in notes); CLI suite 440 passed / 3 skipped.",
