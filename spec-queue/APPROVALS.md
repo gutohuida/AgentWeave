@@ -25,6 +25,30 @@ the day window proposed this change and must not appear to have approved its own
 below is a blank to fill, not a row.
 
 - APPROVED  runner-model-is-chosen-from-the-catalog   operator, 2026-09-01 17:40, in session
+- APPROVED  a-turn-says-how-it-ended   operator, 2026-09-01 20:15, in session -- CONDITIONAL, see below
+
+`a-turn-says-how-it-ended` -- F190 (A). Approved with a condition the operator stated when
+approving: **observed first, and tested after implementation by a new round.** The contract here has
+only three tokens and no way to say "approved with a precondition", so the condition is encoded as
+blocking structure inside the change instead:
+
+- **Phase 0 is a gate.** It says, in the tasks file itself: if phase 0 has not been completed and
+  recorded, do phase 0 and stop. A window reaching this change with no observation record performs
+  the six observations, writes them up, and ends its turn. Nothing is implemented.
+- **Phase 7 is a separate round.** Implementation does not close the change and task 6.7 no longer
+  retires F190; a sitting that did not write the code re-runs phase 0's observations against the
+  built product and closes it.
+- **Phase 0 can falsify the design.** Task 0.3 in particular: rounds 2 and 3 disagree about whether
+  a single-run conversation is affected, and if the indicator releases cleanly there, the round 3b
+  finding is wrong and the change returns to a round rather than proceeding.
+
+Why the condition is right, in one line: four rounds of review each found the defect nearest the
+code that sitting happened to read, three of them read the same gate expression, and none of them
+checked where its inputs come from. Every claim in the change is derivation; none is observation.
+
+Note also that `DECISIONS.md` **D-7 is OPEN** and groups response-shape changes as ones "no window
+took unattended". This change is a BREAKING envelope. The phase 0 gate is what makes an unattended
+window safe to let near it; D-7 itself is still undecided.
 
 `runner-model-is-chosen-from-the-catalog` — F173 (A). The runner screen free-types the model against
 a shipped requirement that says it must offer the catalog's, and swallows the backend's refusal

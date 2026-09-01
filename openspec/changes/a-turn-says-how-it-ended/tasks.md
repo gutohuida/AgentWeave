@@ -1,3 +1,43 @@
+## 0. Observed before anything is built — a gate, not a preamble
+
+**Operator condition of approval, 2026-09-01: this change is approved on the condition that the
+defect is observed live before a line is implemented.** Every behavioural claim in `proposal.md` and
+`design.md` is read from code and none has been watched happen. Four sittings of review each found
+the defect nearest the code that sitting happened to read; three of them read the gate expression
+and none checked where its inputs come from. A drive is what checks the product.
+
+**If phase 0 has not been completed and recorded, do phase 0 and stop.** Do not begin phase 1.
+An unattended window that reaches this change with no observation record does the observations,
+writes them up, and ends its turn there.
+
+- [ ] 0.1 Trial Hub on **8010**, started from `hub/` with uvicorn from source, against a **fresh
+      fixture project** — never `proj-5e960453` or `proj-18e5d4e0`. Bind every real agent turn to
+      `claude-haiku-4-5`. Port 8000 is the operator's real usage: never touch it.
+- [ ] 0.2 **The headline.** Start a turn, stop it mid-run. Confirm the conversation presents **no
+      terminal label** — the turn simply ends. This is F190 as filed, and it is the one claim four
+      rounds agree on.
+- [ ] 0.3 **The single-run indicator — the claim no round has observed and two rounds got wrong.**
+      In a conversation with exactly **one** run, watch the working indicator as the answer lands.
+      Round 2 concluded this case was unaffected; round 3's supplementary pass concluded it is
+      broken via `lastRunSettled`'s never-firing first signal. Confirm which is true: does the
+      indicator disappear when the response text arrives, or does it linger until the roster poll
+      catches up? **If it disappears cleanly, the R3b finding is wrong and the change must go back
+      for another round before implementation.**
+- [ ] 0.4 **The multi-run indicator.** Same observation with **two or more** ended runs in the
+      window. Round 2's correction 1 predicts the indicator is governed by `isRunning` alone.
+- [ ] 0.5 **The reload.** Reload the conversation. Confirm the terminal label is still absent and
+      that `GET /agents/{name}/output` holds **no** `kind="status"` row for the stopped run —
+      round 1 measured this; confirm it still holds.
+- [ ] 0.6 **The recency skew that reversed D3.** Leave a `Run` row at `running` whose process is
+      gone, restart the Hub, and read the database directly: confirm the `run_interrupted` `EventLog`
+      row carries a **restart-time** timestamp while that run's `Run.started_at` is old. This is the
+      fact that makes a `started_at`-ordered run query miss runs the events name. A direct DB read
+      is sufficient; no UI observation is needed.
+- [ ] 0.7 Record what was actually seen — including anything that contradicts the design — in
+      `scripts/drive/FINDINGS.md` beside F190. **An observation that falsifies a claim stops the
+      change and returns it to a round.** Then delete the fixture project, confirm the project count
+      returns to its prior value, and sweep for enabled jobs.
+
 ## 1. The route carries the run's facts
 
 - [ ] 1.1 Write a Hub test asserting the timeline response is an envelope carrying `events` and a
@@ -176,7 +216,7 @@
 - [ ] 5.3 Record the rule where a reviewer will meet it, and note in `spec-queue/DECISIONS.md` (D-4)
       that the rule is now stated and only its sweep remains open.
 
-## 6. Verified against a running Hub
+## 6. Verified by the implementer against a running Hub
 
 - [ ] 6.1 Drive it: on the trial Hub with a fresh fixture project, start a turn, stop it mid-run,
       and confirm the conversation names the stop. Bind every real agent turn to `claude-haiku-4-5`.
@@ -192,5 +232,26 @@
 - [ ] 6.6 Run `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
       hub/tests/ tests/`, `mypy src/`, the Hub suite and the UI suite. Record the numbers rather than
       asserting green.
-- [ ] 6.7 Mark F190 retired in `scripts/drive/FINDINGS.md` only after 6.1–6.3 have actually been
-      observed.
+- [ ] 6.7 Do **not** mark F190 retired here. Phase 7 closes it — the operator's approval condition
+      is that a round which did not build the change verifies it.
+
+## 7. Verified by a round that did not build it
+
+**Operator condition of approval, 2026-09-01: after implementation, a new round tests it.** Phase 6
+is the implementer checking its own work, which is necessary and is not this. This phase is a fresh
+sitting that did not write the code.
+
+- [ ] 7.1 Re-run the phase 0 observations against the implemented change and confirm each one now
+      behaves differently — the stopped turn names its stop, the single-run indicator releases on
+      the status entry rather than on the roster poll, the multi-run case likewise, and both survive
+      a reload. Phase 0's record is the baseline; this is the comparison.
+- [ ] 7.2 Read the implemented route against *The run facts cover every run the events name*
+      specifically: confirm the run lookup is keyed by the ids the returned events carry, carries
+      the `project_id` predicate, and has no `ORDER BY` or `LIMIT` that could reintroduce the
+      coverage gap. This requirement was breached by two consecutive rounds' own design; it is the
+      one most likely to be breached again by the implementation.
+- [ ] 7.3 Confirm `test_bola.py`'s cross-project coverage for this route still exists and asserts
+      both halves of the envelope — that it was moved out of the `isinstance(data, list)` loop
+      rather than deleted from it.
+- [ ] 7.4 Re-read the four artifacts against the built code and correct whatever the implementation
+      taught. Only then mark F190 retired.
