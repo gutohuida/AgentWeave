@@ -14353,3 +14353,306 @@ Nothing new. 42 passed / 10 failed on both runs of `t_sweep_row7_queue.py`, the 
 the first left, with the same reds (three of the ten are F196 legs added between the runs; the seven
 common to both are identical). Rows 1 and 2 each found a defect only a repeat could see; rows 3–7
 have not. Two of seven, and the technique stays.
+
+---
+
+# Sweep, row 8 of 19: Tasks
+
+Driven 2026-09-01 04:35–05:10 +01:00 against the 8011 trial Hub (beta profile, PID 22908, this
+branch's code), on a fresh fixture project `proj-f2538b3807fe` built by `setup_row7.py`. Harnesses
+kept: `t_sweep_row8_tasks.py` (313 assertions, run twice on the final version, **19 failures both
+times, identical**) and `t_sweep_row8_ui.py` (8 assertions, 4 failures). Screenshots in
+`%TEMP%\row8shots`.
+
+`SURVEY.md`'s architecture notes call this the most carefully built subsystem in the Hub. The drive
+agrees with that assessment, and the three findings are all *outside* the machine: none of them is
+a wrong edge, a bypassed gate or a corrupt record. The machine itself came through a total sweep
+clean — see "What the machine survived" below, which is the more important half of this row.
+
+## F201 (C) — an illegal move to `blocked` is refused as **malformed** rather than as illegal, and the sentence tells the caller to send more
+
+`task-lifecycle-governance` states the standard as a MUST:
+
+> A refusal MUST name the task's current status and the statuses reachable from it, so a caller can
+> correct itself without guessing.
+
+and carries a named scenario for this exact edge:
+
+> #### Scenario: Work not yet started cannot be waiting
+> - **WHEN** a task that has not been started is moved to the waiting status
+> - **THEN** the move is refused as illegal
+> - **AND** **the refusal names what is reachable instead**
+
+Driven, live, on a `pending` task:
+
+```
+PATCH /api/v1/projects/{p}/tasks/{id}   {"status": "blocked"}
+422  {"detail": [{"type": "value_error", "loc": ["body"],
+                  "msg": "Value error, blocked_reason is required when setting a task to blocked"}]}
+```
+
+The second bullet fails. The refusal names neither the current status nor anything reachable; it
+names a **missing field**, which reads as *supply this and the move will work*. Only on the second
+call does the product say the move never existed:
+
+```
+PATCH ... {"status": "blocked", "blocked_reason": "x"}
+409  "Cannot move a task from 'pending' to 'blocked'. From 'pending' the available transitions
+      are: assigned, in_progress, rejected."
+```
+
+**The cause is ordering, not a wrong rule.** `TaskUpdate.blocking_by_hand_must_say_what_for`
+(`hub/hub/schemas/tasks.py:154-167`) is a Pydantic `model_validator(mode="after")`, so FastAPI runs
+it while parsing the body — before `update_task_for_actor` is entered, and therefore before
+`apply_transition` can consult the map. R5's rule ("a hand-set block names what it is waiting for")
+is right and its message is right; it is simply asked first, on a request the machine would have
+refused outright.
+
+Reproduced at **all seven** from-statuses where `-> blocked` is not an edge (`pending`, `assigned`,
+`completed`, `under_review`, `revision_needed`, `approved`, `rejected`), on both runs. Fourteen of
+`t_sweep_row8_tasks.py`'s nineteen failures are this one finding.
+
+**Scoped honestly, which is what holds it at C.** Three of the four ways to reach this route do not
+produce it:
+
+- **The operator in the UI cannot.** `TaskDetailDrawer.tsx:397-400` collects the reason in a field
+  before sending anything — *"Required by the Hub, so the control collects it rather than sending a
+  status that would be refused"* — and the status control only offers moves the published map
+  allows (design D13, and the API sweep confirmed published == enforced at all nine statuses).
+- **An MCP agent cannot ask for it.** `TaskStatus` in `hub/hub/mcp_server.py:42-51` omits `blocked`
+  deliberately.
+- **An operator or agent hitting the HTTP route directly can**, and is the population.
+
+**The half not driven, and labelled as such.** `PATCH /api/v1/agent-actions/tasks/{id}` takes the
+same `TaskUpdate` (`agent_actions.py:276`), so an agent asking for `blocked` there would be answered
+"blocked_reason is required" instead of the deliberate 403 that route wrote for exactly this case
+(*"A task is recorded as waiting on a person because AgentWeave saw the run end with an unanswered
+blocking question, not because an agent said so. Use `ask_user` to ask…"*, `tasks.py:1283-1291`).
+That is derived from the ordering above and is **not measured** — it needs a live run credential,
+which this drive did not mint.
+
+**No test found that would catch it.** A grep over `hub/tests/` finds no test that PATCHes a task
+to `blocked` from a non-`in_progress` status over HTTP and asserts the refusal; the coverage for
+this status is the runtime parking path. Stated as the result of that search, not as a proof of
+absence.
+
+**Reproduction:** `py -3.11 scripts/drive/t_sweep_row8_tasks.py`, LEG 3b.
+
+## F202 (B) — the Overview says "100 tasks" about a project with 241, and the board silently drops the newest work
+
+`GET /api/v1/projects/{id}/tasks` declares `limit: int = Query(100, ge=1, le=1000)` and
+`offset: int = Query(0, ge=0)` (`hub/hub/api/v1/tasks.py:849-850`), orders by `Task.created_at`
+**ascending**, and returns a **bare JSON array** — no `total`, no `has_more`, no `next`, no `Link`
+header. Nothing in the response says it was cut, and the cut takes the *newest* rows.
+
+Measured on the fixture at 241 tasks:
+
+```
+GET /tasks                      -> 200, 100 rows
+GET /tasks?limit=1000           -> 200, 241 rows
+GET /tasks/board                -> 200, 241 tasks      <- no limit at all on this route
+sqlite: select count(*) ...     ->      241
+```
+
+**The screen, driven** (`row8-01-overview.png`, `row8-02-tasks.png`):
+
+- the Overview header reads **"3 agents · 100 tasks · row7-042844"**;
+- its NAVIGATE card reads **"Tasks — 100 total"**;
+- its status chips read Assigned 12 · Pending 19 · Revision Needed 8 · In Progress 22 · Rejected 18
+  · Under Review 5 · Completed 5 · Approved 7 · Blocked 4 — **summing to exactly 100**;
+- the Tasks board renders **82 cards** and its column counts are the truncated page's;
+- a task created seconds before the page loaded is **not on the board**, and
+  `[data-testid="task-open-{id}"]` does not exist for it, while `GET /tasks/{id}` returns it 200.
+
+`useTasks` (`hub/ui/src/api/tasks.ts:210-225`) sends no `limit` and no `offset`, and
+`OverviewPage.tsx:86` is `const taskCount = tasks.length`. `TasksBoard`, `QualityHealthPanel` and
+`JobCard` read the same hook. So the count is not a truncated list an operator can scroll past —
+it is a **wrong number presented as a fact**, and it is pinned at 100 however much the project
+grows.
+
+**The agent's half is worse, because it cannot page at all.** `mcp_server.py:278-280`:
+
+```python
+def list_tasks(agent: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Read the shared task ledger, optionally filtered by assignee."""
+    return _hub_request("GET", "/tasks", params={"agent": agent})
+```
+
+No `limit`, no `offset`, and no parameter a caller could use to ask for more. On a project past 100
+tasks an agent told to "read the shared task ledger" receives the oldest hundred and is told
+nothing — and the work it would have been given is by construction the newest. Reproduced:
+
+```
+POST /tasks {"title": "FIND-ME-ROW8", "assignee": "r7a042844"}   -> 201
+GET  /tasks                        -> 100 rows, FIND-ME-ROW8 absent
+GET  /tasks?agent=r7a042844        -> 1 row,   FIND-ME-ROW8 present
+GET  /tasks/{id}                   -> 200,     FIND-ME-ROW8
+```
+
+The `agent=` filter narrows below the cut and is the mitigation — but it is optional, the docstring
+presents the unfiltered call as the ordinary one, and no caller can know it needed a filter.
+
+**Severity B, not A.** It needs more than 100 tasks in a single project, which no project on the
+trial Hub had before this drive; a real project reaches it over weeks rather than in an hour. But
+nothing warns, nothing degrades gracefully, and the surface that breaks first is the one an
+operator reads to know how much work exists. Contrast `GET /tasks/board`, over the same table, with
+no limit at all — the two routes disagree about how many tasks a project has, and the silent one is
+what the Overview reads.
+
+**Reproduction:** `t_sweep_row8_tasks.py` LEG 7b and `t_sweep_row8_ui.py`. Both refuse to run their
+truncation legs on a project with 100 tasks or fewer, and say so.
+
+## F203 (C) — nothing can read a task's transition history
+
+`task_transitions` is append-only, written inside `apply_transition` for every accepted move, and
+carries `from_status`, `to_status`, `actor_kind`, `actor_agent`, `run_id`, `origin` and
+`policy_digest`. `task_transition_service.history_for()` (`:811`) exists to read it. The machine's
+own docstring gives this as the reason the operator is bound by the map at all:
+
+> So the operator is still bound by the machine, and every recorded history therefore describes a
+> legal sequence. **That is what makes the history worth reading.**
+
+Read off the **live** OpenAPI of the running Hub — 158 paths, 17 of them task routes — there is no
+route matching `*/tasks/{task_id}/transitions*`, on the operator plane or the agent plane, and no
+MCP tool for it. `history_for` is called by `hub/tests/` and by nothing else under `hub/hub/`.
+
+The consequence is concrete rather than aesthetic: an operator who finds a task somewhere they did
+not expect has no way to ask who moved it, when, or from what — and this repository's own drives
+have had to open the sqlite file to say anything about attribution (`t_f154_wedged_review.py`,
+`t_f167_agent_walked_edge.py`, and LEG 7 of this sweep). `policy_digest`, which records what
+governed an approval, is written on every gated transition and has never been readable by anyone.
+
+**Reproduction:** `t_sweep_row8_tasks.py` LEG 8, which asserts against the live OpenAPI rather than
+against the source, so it goes green on its own the day a route is added.
+
+## What the machine survived — the larger half of this row
+
+Every one of these was driven in this session, on this build, rather than read.
+
+- **All 30 declared operator edges walked for real**, each on its own freshly created task reached
+  only through declared edges, each accepted `200` with the row reading the new status.
+- **All 50 non-edges refused**, every one `409`, every one naming the current status, and every one
+  listing **exactly** `allowed_targets(from, operator)` — parsed back out of the sentence and
+  compared set-for-set, not merely checked for plausibility.
+- **No refusal moved anything.** After each from-status absorbed its full run of illegal requests,
+  the task still read that status.
+- **Published == enforced == observed, at all nine statuses.** `GET /tasks/transitions/allowed` was
+  compared three ways: against the declared map, against the set that actually succeeded in LEG 2,
+  and against the set the refusals named in LEG 3. This is design D13's whole claim — the client
+  never holds a second copy of the map — and it holds exactly.
+- **Restating the current status is a no-op that records nothing** (D7), confirmed by counting
+  `task_transitions` rows before and after out of sqlite rather than by trusting the 200.
+- **The dependency gate**: refuses `pending -> in_progress` with a structured
+  `{"code": "dependency_unmet", "unmet": [...], "rejected": [...], "message": ...}` naming the
+  prerequisite by id, title and current status; reports a `rejected` prerequisite in a separate
+  list with a different remedy in the sentence ("reopen it, or edit the document that declared this
+  dependency"); does **not** gate `-> assigned` or `-> rejected`, so a wave can be routed ahead;
+  opens the moment the prerequisite is approved.
+- **Design D5's exemption, and its mirror.** A dependency declared while a task waits does not stop
+  it resuming: `blocked -> in_progress` was accepted `200` with the regressed prerequisite in
+  place, and the task came back reading `dependency_state: "running_on_regressed"` — flagged, not
+  stopped. The same prerequisite on a task at `pending` still refuses `409`. Both halves of the
+  reversal ship together, as the design says they must.
+- **The declare route's four refusals**: self (400, "a task cannot depend on itself"), missing
+  (404, naming both ids), cycle (409, "so this would make each wait on the other forever"),
+  duplicate (201, `outcome: "duplicate"` — a restatement is not a conflict). Removing an edge that
+  is not there is 404; removing a real one is 204.
+- **The board answers question (c) affirmatively.** A gated card carries
+  `dependency_state: "gated"` and a `prerequisites` list with the blocking task's id, title and
+  status; the flat `edges` list carries the edge and every edge on it has both ends on the board.
+  On screen the badge reads "Waiting on 1 task", with the prerequisite named in its `title`
+  tooltip and the edge drawn on the Dependencies view — so the reason is on the card, at badge
+  weight, not only in a 409.
+- **The picker's arithmetic**: `outstanding` excluded exactly the two terminal statuses and matched
+  a count taken independently off the board; `total` matched the board exactly.
+- **Isolation**: a foreign task id is 404 on this project's `GET` and `PATCH`, and a cross-project
+  dependency is refused 404 naming both ids.
+- **The database agrees with the routes.** 415 transition rows read read-only out of
+  `task_transitions`: every one an edge the map declares, every one `actor_kind: operator` with
+  `actor_agent` and `run_id` null, every one `origin: actor`, and not one restating a status. Task
+  statuses matched row-for-row once the list route was paged to the end.
+
+## Considered and not filed
+
+- **No route deletes a task.** There is no `DELETE` on any `*/tasks/{task_id}` and no UI mutation
+  for one. This is coherent rather than missing: `rejected` is the lifecycle's answer to "this
+  should not have been made", `rejected -> pending` reopens it, `TERMINAL_FOR_BINDING` treats it as
+  resolved and the picker's `outstanding` excludes it. The only cost is that a mistyped task stays
+  in `total` forever, which is a smaller harm than a delete that destroys a transition history.
+  Recorded as an assertion in LEG 8 so a future decision to add one is noticed, not as a defect.
+- **Creating a task in a non-entry status is refused 422 by the schema, not 409 by the service.**
+  `TaskCreate.validate_status` (`schemas/tasks.py:102-110`) fires first, so
+  `InvalidEntryStatusError`'s declared 409 and its "Every other status is reached by transitioning"
+  sentence are unreachable on this route. Belt and braces, and the belt still names both entry
+  points ("a new task must start at one of ['assigned', 'pending']"), so a caller can correct
+  itself. Not filed — but note the contrast with F201, where the schema firing first *does* cost
+  the caller the sentence that would have helped.
+- **`main.py:406` sends `detail` as an object for the two gates and as a string everywhere else.**
+  A client reading `detail` as a string gets `"{'code': 'dependency_unmet', ...}"` unless it handles
+  both. `hub/ui/src/api/client.ts:82-93` handles all three shapes (string, object with `message`,
+  Pydantic array), so the product's own client is fine. Recorded because a third-party one would
+  not be.
+
+## Method
+
+Two runs of the final `t_sweep_row8_tasks.py`, the second on the state the first left: **19
+failures both times, the same nineteen**. Rows 1 and 2 each found a defect only a repeat could see;
+rows 3–8 have not. Two of eight, and the technique stays.
+
+Row 8's "measure outside the product" leg was the **live OpenAPI** rather than the source — LEG 8
+asks the running Hub what routes it serves, so its two failures are facts about the deployed build
+and will flip on their own when a route is added. LEG 7 read `tasks` and `task_transitions` out of
+the beta database over a read-only sqlite URI, and that is what produced F202: the assertion "the
+route reports every task the table holds" was green at 91 tasks and red at 100, and the boundary is
+where the finding was. Neither surface alone would have shown it — the route answered `200` both
+times.
+
+The transition map in the harness is an **independent transcription** of
+`hub/hub/task_transitions.py`, typed by hand rather than imported. A harness that imported the
+product's own map would have asserted the product against itself and could not have caught a wrong
+edge in either direction.
+
+**Two of the UI harness's legs never executed, and the reason is F202 itself.** The drawer legs —
+does the block control collect a reason before sending (F201's screen half), and does the status
+control offer only published edges (D13's screen half) — both act on a task the harness creates at
+the top of the run. That task is the newest in the project, so the board does not render it, so
+there was nothing to click. The harness reported that as a failure with the reason named rather
+than skipping quietly, which is right; but it means F201's "the operator in the UI cannot produce
+this" is **read from `TaskDetailDrawer.tsx`, not driven**, and the paragraph above says so. On a
+project under 100 tasks those legs would run.
+
+One assertion in the UI half was **wrong and was caught before it was believed**: *"the Overview
+page does not state a task count capped at 100"* passed, because it looked for the truncated number
+near the word "Tasks" and the page renders it as "100 tasks" in a subtitle that check never
+reached. The screenshot is what settled it. Row 7's lesson — scope every screen assertion to the
+panel under test — has a companion, and this is it: a screen assertion that passes for a reason you
+cannot name has measured nothing, and a screenshot is the cheapest way to find out which kind you
+are holding.
+
+## Row 8's inherited findings, re-driven the same night
+
+Both of these were queued for row 8 because each has a harness that costs no agent turn and builds
+its own project. Run 2026-09-01 ~05:25 +01:00 against the same 8011 build.
+
+- **`t_f154_wedged_review.py` — 18/18.** F154 stays **FIXED**. The firing answers `409` with
+  *"beta is named on task-… ('Add one line to README') as its reviewer and is not reviewing it: no
+  turn is running on that task and none is queued. Nothing will move it on its own. Ask beta again,
+  review it yourself, or send it back with revision_needed."* — on both presses, with no run
+  started either time, `stall_reason` carrying the same sentence rather than null, the walk still
+  listing the task as current with `agent_capacity: "held"`, and the loop moving again once the
+  operator takes one of the three exits. The harness's fifth lane also shows **F167's row reaching
+  the same named refusal**: the predicate never asks who the assignee is, so an author-wedged task
+  is covered by the sentence even though F70's recovery cannot recognise it. That is unchanged from
+  2026-08-31 and is re-measured here, not assumed.
+- **`t_f156_preview_promises_the_merge.py` — 21/21.** F156 reproduces **verbatim and stays open**.
+  `integration-preview` answered `will_merge: true` with an empty reason over the exact commit the
+  gate refused seconds later for a conflict; the drawer's amber *"it cherry-picks &lt;sha&gt; from
+  &lt;branch&gt; into &lt;main&gt;"* is rendered from those fields; the preview was byte-identical
+  after the refusal, having learned nothing; and the contrast lane's clean task got the same
+  `will_merge: true` and merged. One word covered both outcomes and distinguished nothing. This is
+  the third consecutive drive to reproduce it, and it is the finding N-3..N-6's spec loop is queued
+  behind.
+
+Both projects (`proj-887e34c7724b`, `proj-63e4a31bf689`) and both temporary repositories were
+deleted afterwards; the `aw-f155-*` directories left in `%TEMP%` by earlier sessions were not
+touched.
