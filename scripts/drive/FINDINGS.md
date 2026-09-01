@@ -14155,3 +14155,201 @@ Nothing new on the API half — 75/79 twice, the same four reds, the second time
 carrying run 1's state. The UI half's second run bought two of its three failures back by fixing
 harness bug 1 above, and reproduced F193 identically. Rows 1 and 2 each found a defect only a
 repeat could see; rows 3, 4, 5 and 6 did not. Two of six, and the technique stays.
+
+# Sweep, row 7 of 19: Inbound queue — 2026-09-01
+
+Row 7 of the coverage matrix (`SURVEY.md:28`): *per-agent durable queue, hop budget, turn delivery
+cap, withdraw*. Six routes under `/queue` (`hub/hub/api/v1/inbound_queue.py`) over
+`hub/hub/inbound_queue.py` and `hub/hub/turn_scheduler.py`, driven live against `:8011` on a fresh
+project (`row7-r7a`, `proj-9e1979fcc8ac`) with three agents: two bound to a Haiku runner, one
+created bound and then unbound through `PATCH /agents/{name} {"runner_id": null}` — `POST /agents`
+refuses an unbound agent with a 422, which is why `setup_row7.py` exists beside `setup_row5.py`.
+
+Harnesses kept: `t_sweep_row7_queue.py` (52 API assertions, run twice), `t_sweep_row7_ui.py`
+(13 screen assertions), and `t_row6_hop_chain.py` re-run on this fixture for the hop leg. Five
+findings, four of them about what a refusal or a write *says*; the queue's mechanics themselves
+came through clean.
+
+## F196 (B) — one route writes a value another route's response model cannot serialise, and the project settings page is then unreachable in both directions
+
+`PATCH /queue/settings` validates its four fields with `Field(ge=1)` and **no upper bound**
+(`hub/hub/api/v1/inbound_queue.py:48-52`). `ProjectSettings`, the model behind
+`GET`/`PUT /projects/{id}/settings`, declares `Field(ge=1, le=1000)` for the same four columns
+(`hub/hub/api/v1/projects.py:76-78`). Two models over one set of columns, disagreeing about the
+range.
+
+**Reproduction** (both runs of `t_sweep_row7_queue.py`, leg 1b, and `t_sweep_row7_ui.py`):
+
+```
+PATCH /projects/{p}/queue/settings {"hop_budget": 1001, ...}   -> 200  {'hop_budget': 1001, ...}
+GET   /projects/{p}/queue/settings                             -> 200  {'hop_budget': 1001, ...}
+GET   /projects/{p}/settings                                   -> 500  Internal Server Error
+PUT   /projects/{p}/settings {"hop_budget": 6}                 -> 500  Internal Server Error
+```
+
+The read fails because the response model rejects the stored value. The **write** fails for a
+sharper reason: `update_project_settings` begins with
+`current = ProjectSettings.model_validate(project, from_attributes=True)` (`projects.py:463`),
+*outside* the `try` that catches `PydanticValidationError`. So the handler cannot even read the
+state it is being asked to repair, and the repair route is wedged by the value it exists to change.
+Confirmed directly rather than inferred: `ProjectSettings(hop_budget=1001, …)` raises
+`ValidationError` on `hop_budget`.
+
+The only routes that can put the value back are `PATCH /queue/settings` itself — which the Hub UI
+never calls (`grep` for `queue/settings` under `hub/ui/src` finds nothing; the panel writes these
+columns through `PUT /projects/{id}/settings`) — or the database. An operator who did this from the
+API has no way back from inside the product.
+
+**Not reachable by an agent.** No MCP tool writes queue settings, so this is operator/API surface
+only, which is why it is B and not higher.
+
+## F197 (B) — the settings page has no error state, so a failing settings query renders a loading skeleton forever
+
+The screen half of F196, and a defect in its own right because *any* failure of that one query
+produces it. `ProjectSettingsPanel` early-returns a skeleton whenever `form` is unset
+(`hub/ui/src/components/environment/ProjectSettingsPanel.tsx:76-86`), and `form` is only ever set
+from the `useProjectSettings` query's data (`:66-68`). The panel's only error branch is
+`const error = update.error ?? relocate.error` (`:88`) — the two **mutations**. The query's own
+`error` is never read.
+
+Driven: `row7-02-settings-wedged.png` is the whole finding in one frame — the Settings heading, its
+description, and five grey bars, indefinitely. `page.inner_text("body")` contains no "could not",
+"failed", "unavailable", "error" or "try again". `row7-01-settings-ok.png` and
+`row7-03-settings-recovered.png` are the same page either side of the write, so the skeleton is
+attributable to the query rather than to the fixture.
+
+Same family as F187's six sites — a sentence the Hub has and the screen does not — with one
+difference worth stating: here the Hub does not have a sentence either. It has a 500.
+
+## F198 (C) — `PATCH /queue/settings` silently resets the two fields a body omits
+
+`QueueSettings` gives `agent_budget` a default of 8 and `allow_agent_jobs` a default of `False`
+(`inbound_queue.py:50-51`), and the handler assigns all four columns unconditionally (`:88-91`). So
+a **PATCH** that names only the two fields it wants to change is accepted with a 200 and quietly
+reverts the other two.
+
+**Reproduction:**
+
+```
+stored:  {'hop_budget': 6, 'turn_delivery_cap': 10, 'agent_budget': 25, 'allow_agent_jobs': True}
+PATCH    {'hop_budget': 6, 'turn_delivery_cap': 10}                                  -> 200
+stored:  {'hop_budget': 6, 'turn_delivery_cap': 10, 'agent_budget': 8,  'allow_agent_jobs': False}
+```
+
+`agent_budget` is the cap on how many agents may exist (`agents.py:1590`); `allow_agent_jobs` is the
+permission that lets agents reach the job tools at all (`mcp_server.py:806`). A partial PATCH
+therefore revokes a permission the operator granted, and answers 200.
+
+**The sibling route already solved this, and recorded why.** `PUT /projects/{id}/settings` derives
+its request model field-by-field from `ProjectSettings` with every field made optional, merges with
+`exclude_unset=True`, and carries a comment naming the live incident that forced it — *"Observed: a
+settings save clearing a project's entire checkpoint configuration"* (`projects.py:150-181`). The
+queue router writes four of the same columns and has none of it.
+
+## F199 (C) — `GET /queue/{agent}` and `/queue/{agent}/status` answer 200 for an agent that does not exist
+
+F194's shape at a second router, and the status route is the worse of the two because its answer
+looks healthy rather than empty:
+
+```
+GET /projects/{p}/queue/no-such-agent-row7          -> 200  []
+GET /projects/{p}/queue/no-such-agent-row7/status   -> 200  {"agent": "no-such-agent-row7",
+                                                             "waiting_count": 0, "running": false,
+                                                             "waiting_reason": null,
+                                                             "delivery_attempts": 0}
+```
+
+A typo reads as *"this agent is idle with nothing waiting"* — a sentence about an agent that is not
+on the roster. `POST /agent/trigger` refuses the identical mistake by name, so the roster lookup
+this needs is one call away and already written.
+
+**Also in this leg, smaller:** `GET /queue/{agent}?state=<anything else>` answers
+`400 {"detail": "Invalid queue entry state"}` and does not name the three that *are* valid, though
+the route holds them in a literal tuple on the line that raises (`inbound_queue.py:212-214`).
+
+## F200 (C) — one refusal string for four distinguishable states, and it asserts a delivery that never happened
+
+`withdraw_entry` and `release_entry` both refuse with *"Queue entry is absent or has already been
+delivered/withdrawn"* (`inbound_queue.py:277-279`, `api/v1/inbound_queue.py:265-268`) when the id is
+unknown, **belongs to another project**, is delivered, or is withdrawn. Driven with a real entry id
+from `row7-r7a` passed to a different project's route:
+
+```
+DELETE /projects/proj-7ddc22215adf/queue/entries/entry-7c10edcf7600         -> 409 "…already been delivered/withdrawn"
+POST   /projects/proj-7ddc22215adf/queue/entries/entry-7c10edcf7600/release -> 409 "…already been delivered/withdrawn"
+GET    /projects/{row7}/queue/{agent}    # the entry is still 'queued', untouched
+```
+
+The isolation is correct — the entry is not touched — and the refusal is the only thing wrong: it
+tells the operator their message was *delivered*, which is a claim about the product's behaviour and
+it is false. The contrast is one function away: `release_entry`'s **other** refusal is a model of
+the house style, naming the entry's depth, the project's budget, why this is not the control that
+would help, and where to look instead — *"Queue entry is at hop 0, within the project's hop budget
+of 6, so the hop budget is not what is holding it. Check the agent's queue status for the reason it
+is waiting."*
+
+## What HELD — including the one mechanism nothing had ever driven
+
+- **The turn delivery cap works, and the entries it batches actually reach the model.** Never
+  measured live before. With `turn_delivery_cap = 2`, an occupied agent, and four operator messages
+  queued behind the running turn (`ALPHA`, `BETA`, `GAMMA`, `DELTA`, one conversation), the drain
+  produced **exactly two runs of two**, both times:
+
+  ```
+  run-30dc05e21e14: 2 entries ['ALPHA', 'BETA']
+  run-abb0563affe9: 2 entries ['GAMMA', 'DELTA']
+  ```
+
+  and the *agent's own output* for each run mentions both of its words — so `format_turn_prompt` did
+  not quietly drop the second entry of a batch. Nothing was abandoned; all four ended `delivered`.
+- **The hop budget stops a chain, and the operator can see it and undo it.** `t_row6_hop_chain.py`
+  re-run on this fixture: **12/12, first attempt** (F139's tool-name lottery did not fire). Under
+  `hop_budget = 1`, `r7a → r7b → r7a` leaves the return message queued at hop 2, the timeline marks
+  it `hop_budget_exceeded`, the status route says *"hop budget exhausted"*, an operator message
+  injected alongside is **not** caught by the budget, and `release` re-bases it to depth 0 and it is
+  delivered within ~8s.
+- **F114's fix still holds where it was applied.** Four messages to an unbound agent, four
+  schedules: `[('queued', 0), ('queued', 0), ('queued', 0), ('queued', 0)]`. Nothing lost, no
+  attempt burned, and the status route says *"No runner is bound to this agent. Bind one in the Hub
+  UI before it can run."* — a refusal that names the repair.
+- **And the operator reads that sentence on screen.** `row7-04-unbound-waiting.png`: the
+  conversation panel shows `QUEUED`, the message, and *"1 waiting — No runner is bound to this
+  agent. Bind one in the Hub UI before it can run."*, with the Continue control beside it. Measured
+  inside `[data-testid="conversation-workspace"]`, not on the body — see the harness bug below.
+- **Withdrawal is clean.** An entry held behind a running turn withdraws with a 200, stays listed in
+  state `withdrawn` with `delivered_in_run_id: null`, is found by `?state=withdrawn`, carries no
+  `abandoned_reason` (which is what distinguishes an operator withdrawal from a Hub abandonment),
+  and a second withdrawal is refused 409.
+- **The route and the table agree.** 26 entries read straight out of `inbound_queue_entries` with a
+  read-only sqlite connection and compared field by field against `GET /queue/{agent}` — `state`,
+  `hop_depth`, `delivery_attempts`, `abandoned_reason`, `delivered_in_run_id`: zero mismatches, and
+  no entry the table holds that the route hides.
+- **The validation refusals on `/queue/settings` say what would work.** `hop_budget: 0`, `-1`,
+  `turn_delivery_cap: 0` and `agent_budget: -5` are each refused 422 with *"Input should be greater
+  than or equal to 1"*, naming the field. It is the *absence* of an upper bound that is F196, not
+  the lower one.
+
+## Considered and NOT filed: the withdrawn entry that leaves the timeline
+
+`GET /agent/{agent}/chat` does not return an entry the operator withdrew, and the first version of
+the harness asserted that it should — one keystroke from filing a deliberate decision as a defect.
+The timeline query keys its withdrawn branch on `abandoned_reason IS NOT NULL`
+(`agent_chat.py:262-269`), and the comment above it says why: an entry the **Hub** dropped must stay
+in the thread (F87), an entry the **operator** withdrew was never delivered and its removal is the
+thing they asked for. The assertion now checks the deliberate behaviour instead.
+
+## A harness bug caught before it became a finding
+
+Row 6's fifth lesson at a third site. *"the screen gives the reason the status route already
+knows"* was **green against `page.inner_text("body")`** for the unbound agent — because the sidebar
+carries an Environment link labelled **Runners**, so `"runner" in text` matches on every page in the
+product, including a blank one. Scoped to `[data-testid="conversation-workspace"]` it is still
+green, and now for the right reason. Believed as first written, it would have vindicated a sentence
+without ever confirming it was on screen — the mirror image of row 6's false red.
+
+## What the second run bought
+
+Nothing new. 42 passed / 10 failed on both runs of `t_sweep_row7_queue.py`, the second on the state
+the first left, with the same reds (three of the ten are F196 legs added between the runs; the seven
+common to both are identical). Rows 1 and 2 each found a defect only a repeat could see; rows 3–7
+have not. Two of seven, and the technique stays.
