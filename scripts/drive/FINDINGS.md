@@ -13448,3 +13448,233 @@ complete row. Worth recording that the failure condition still occurs and the gu
 - One trap this harness fell into and now carries a comment about: asserting on `page.content()`
   rather than `page.inner_text()`. Searching the HTML for `"bind"` matched `tabindex` and turned
   F180 into a green row until it was checked by hand.
+
+---
+
+# Full-surface sweep, row 4 of 19: Charters
+
+Driven 2026-09-01 (iteration 6) against the 8011 Hub on the beta profile, PID 22908 started
+01:48:32, with nothing under `hub/hub` or `src` newer than that. Two fresh projects
+(`proj-395817998d65`, then `proj-92ff8c6881f8`), both deleted afterwards. Harnesses kept:
+`scripts/drive/t_sweep_row4_charters.py` (60/65, twice) and `scripts/drive/t_sweep_row4_ui.py`
+(20/23, twice). Screenshots in `%TEMP%\row4shots`. Every agent turn bound
+`claude-haiku-4-5-20251001`.
+
+## F183 (C) — charter names have no uniqueness rule anywhere, and the one place a charter is chosen shows nothing else
+
+**Severity:** C. Nothing in the Hub resolves a charter by name, so no run misbehaves. What breaks
+is the operator's ability to pick the right one.
+
+**Where.** `hub/hub/api/v1/charters.py:19-34` (create) and `:62-80` (update) both write
+`body.name` straight onto the row. `hub/hub/schemas/charters.py:11-12` constrains only length.
+There is no unique constraint on `Charter.name` in `hub/hub/db/models.py`. So a project can hold
+any number of charters called `Developer`.
+
+The contrast is one file away: `hub/hub/api/v1/agents.py:612-617` refuses a duplicate **agent**
+name with a 409 that names it — *"Agent name 'x' already exists in this project"* — which row 3
+drove on screen (`row3-04-duplicate-refused.png`). Agents refuse it; charters do not.
+
+**Why it matters at the picker.** `hub/ui/src/components/agents/AgentSettingsControls.tsx:283`
+renders each option as `<option key={charter.id} value={charter.id}>{charter.name}</option>` — the
+id is the value, the name is everything the operator can read. Two charters under one name are
+indistinguishable at the only place the binding decision is made. Measured on screen: the picker
+listed **four** options reading exactly `Code Reviewer` (`row4-08-picker.png`).
+
+The seeded set is what makes this reachable rather than theoretical. An operator who wants their
+own take on the `Developer` starter has no reason to think the name is taken by something they
+must not collide with, and no refusal tells them.
+
+**Reproduction (API).**
+
+    POST  /projects/{pid}/charters {"name": "Code Reviewer", "content": "..."}  -> 201
+    GET   /projects/{pid}/charters                                             -> two rows, one name
+    PATCH /projects/{pid}/charters/{other} {"name": "Code Reviewer"}            -> 200, now three
+
+Three assertions in `t_sweep_row4_charters.py` hold this open; both the create door and the rename
+door are probed, because closing one leaves the other.
+
+## F184 (C) — a whitespace-only charter name is accepted by the API and renders as a blank row
+
+**Severity:** C, and it is F183's sibling rather than a separate mechanism.
+
+`CharterCreate.name` is `Field(min_length=1, max_length=256)`, which `"   "` satisfies. The dialog
+already refuses it — `ChartersPage.tsx:267-268` submits `name.trim()` and disables Save on
+`!name.trim()` — so the screen is **stricter than the API it calls**. An agent, a script, or
+anything reaching the route directly creates a row whose name renders as nothing.
+
+Measured: the charter picker's option list came back containing a literal `'   '` between two
+named entries (`row4-08-picker.png`, both UI runs). It is selectable and it says nothing.
+
+**Reproduction.** `POST /projects/{pid}/charters {"name": "   ", "content": "x"}` returns `201`, and
+the response echoes `"name": "   "`.
+
+## F185 (B) — a charter held only by an ARCHIVED agent cannot be deleted, and the refusal names an agent the roster does not show
+
+**Severity:** B. The operator is stopped by a name they cannot find.
+
+**Where.** `hub/hub/api/v1/charters.py:95-98`:
+
+```python
+bound = await session.execute(
+    select(Agent.name).where(Agent.project_id == project_id, Agent.charter_id == charter_id)
+)
+```
+
+No `Agent.lifecycle` filter. `Agent.lifecycle` is `('open', 'archived')` — `db/models.py`, check
+constraint `ck_agents_lifecycle` — and archiving does **not** clear `charter_id`. The roster the
+operator reads (`GET /agents`) filters archived agents out; row 3 measured that and recorded it as
+working correctly.
+
+So the two behaviours compose into a wall: delete the charter, get
+*"Charter is bound to agent(s): aq2. Unbind before deleting."*, go to the roster, and `aq2` is not
+there. The refusal names a real repair on a real record — the archived agent **can** be unbound,
+which the harness asserts and which passes — but it never says the holder is archived, and there is
+no hint that `?lifecycle=archived` is where to look.
+
+**This is F181's shape at a second site.** F181 is `/agents/launchability` missing the same
+lifecycle filter. Two routes now, both selecting agents without asking whether the agent is still
+in the roster.
+
+**Reproduction.**
+
+    POST   /projects/{pid}/charters {"name":"held","content":"x"}       -> 201 charter-X
+    POST   /projects/{pid}/agents   {"name":"a1","charter_id":"charter-X","runner_id":...}
+    POST   /projects/{pid}/agents/a1/archive                            -> 200 {"lifecycle":"archived"}
+    GET    /projects/{pid}/agents                                       -> a1 absent
+    DELETE /projects/{pid}/charters/charter-X                           -> 409 "...bound to agent(s): a1..."
+
+## F186 (B) — the charter screen destroys authored text on one click, with no confirmation and no undo
+
+**Severity:** B. Destructive, immediate, irreversible, and the record it destroys is the one thing
+on this screen that cannot be recreated by the product.
+
+`hub/ui/src/components/charters/ChartersPage.tsx:143-155` — the delete control calls
+`deleteCharter.mutate(charter.id, ...)` straight out of `onClick`. There is no confirmation dialog,
+no hold-to-confirm, no two-step. `DELETE /charters/{id}` hard-deletes the row
+(`charters.py:105-106`); there is no soft delete, no `archived` flag on `Charter`, and no undo
+anywhere in the surface.
+
+Nine of the rows are seeded starters and are recoverable from the bundle in principle. The tenth is
+the one an operator wrote, and it is gone.
+
+The file's own comment two lines above shows the risk was seen and answered only halfway:
+
+> *"The toggle target is the text region only. The destructive control deliberately sits outside it
+> — a click meant for the row must not be able to land on delete."*
+
+That protects against a **mis-aimed** click. It does nothing about a deliberate one on the wrong
+row — which, given F183, is a row that may be one of several with the same name.
+
+**Reproduction (driven).** Create a charter with content, open
+`?project={pid}&tab=environment&section=charters`, click `Delete <name>`. No dialog appears
+(`page.locator('[role="dialog"], [role="alertdialog"]').count() == 0`), and
+`GET /charters/{id}` answers 404 within the same second. `row4-05-deleted-no-confirm.png`.
+
+## F187 (B) — the charter form swallows its own refusal: the operator clicks Save and is told nothing
+
+**Severity:** B. F173's exact shape, at a third site.
+
+`ChartersPage.tsx:191` and `:198-203` pass **only** `onSuccess` to the create and update mutations:
+
+```tsx
+onSubmit={(values) => createCharter.mutate(values, { onSuccess: () => setCreating(false) })}
+```
+
+`CharterForm` holds no error state and renders no `role="alert"`. So when the API refuses — a name
+past 256 characters is a 422, and F183/F184 are the other two things it *should* refuse — the
+dialog simply stays open, the button returns from `Saving...` to `Save`, and nothing is said. The
+operator's only signal is that the list did not grow.
+
+The delete path on the same screen does it correctly (`:77-87`, `errorDetail`, `role="alert"`),
+which is what makes this an omission rather than a missing convention — the same file already knows
+how.
+
+**Reproduction (driven).** Open the charter screen, click `New Charter`, type a 300-character name
+and any content, click Save. Measured: charter count `30 -> 30` (the API refused), dialog still
+open, and `page.inner_text("body")` contains neither `256` nor any word for refusal.
+`row4-07-refusal-swallowed.png`.
+
+**This is the fifth instance of the shape** already in `decisions_for_user` — a sentence the Hub
+computes for the operator with no file under `hub/ui/src` that reads it (F169, F173, F178, F179,
+F180). This one is slightly different and slightly worse: the Hub's sentence is a plain FastAPI 422
+the client already receives, so nothing needed computing at all. The client just drops it.
+
+---
+
+## What HELD — and one thing this row set out to prove, proved, then had to disprove
+
+**An edit to a bound charter reaches the next turn, including in a resumed conversation.** This was
+the row's headline question and the API half cannot answer it. Driven with real turns: author a
+charter saying *"reply with exactly the single word ALPHAq1"*, bind it, run a turn (`ALPHAq1` comes
+back), `PATCH` the content to `BETAq1`, then run a second turn **in the same conversation** —
+`conv-45b7db016716 -> conv-45b7db016716`, `--resume` on provider session
+`bd6c486c-9a8e-4a43-8303-85e26a18cd6c` — and ask the agent to quote its `## Charter` section
+verbatim. It returned the **new** text, word for word. The claim in `agent_trigger.py:893-895` —
+*"an edited charter is therefore visible on the next run"* — holds, and now has a drive behind it.
+
+**The thing that almost became F188, and did not.** The first version of this probe asked turn 2 to
+*obey* rather than to *quote*, and in `run-2e5fae78696a` the agent replied with the **superseded**
+marker. Its thinking then quoted a charter that was neither version — the new sentence with the old
+marker word spliced in. The next run's thinking was more specific still: *"There are two charter
+instructions in my system prompt... 1. ALPHAq1... 2. BETAq1."* That reads exactly like the system
+prompt accumulating one canonical-context block per resumed turn — a real defect if true, and an
+expensive one, since the block is ~7.7 kB.
+
+Three things were measured before writing it up, and the third killed it:
+
+1. **The materialized context file is correct.**
+   `.agentweave/worktrees/tq1/.agentweave/context/tq1.md` line 77 carried only the new text,
+   written at 02:53:02, immediately before the second spawn.
+2. **The session transcript holds no system prompt at all**, so the accumulation could not be
+   confirmed from disk. `~/.claude/projects/.../bd6c486c-....jsonl` is 21 rows of user turns,
+   attachments and assistant messages; the appended system prompt is not among them.
+3. **A three-turn probe counted it.** Charter edited before turn 2 and again before turn 3, then:
+   *"Count the number of lines in your system prompt that begin 'Your marker word is'. Then list
+   every marker word, in order."* Answer: **`1` / `WORDTHREE`.** One block, the current one.
+
+So there is no accumulation. What the model was reading in turn 2 was **its own earlier reply**,
+which had quoted the old charter verbatim inside a thinking block, and which is in the conversation
+history where it belongs. The Hub replaces the charter cleanly on resume.
+
+Worth keeping as method, not just as an outcome: an agent's self-report about its own system prompt
+is evidence about the *conversation*, not about what the harness delivered. Two runs agreed with
+each other and were both wrong about the mechanism. The harness now asks turn 2 to **quote** rather
+than to **obey**, and carries a comment saying why.
+
+**Everything else that held:**
+
+- **Seeding is exactly the manifest, byte for byte, once.** Nine charters, names matching
+  `hub/hub/data/charters/charters.json`, and `Code Reviewer`'s 4,731 characters identical to
+  `code_reviewer.md` on disk. Re-opening the project through `POST /projects/open` re-enters
+  registration and does not re-seed — `9 -> 9`.
+- **Cross-project isolation is complete and silent about it.** Reading, editing and deleting this
+  project's charter id under another project's route all answer `404 Charter not found`, as does
+  `GET /agents/context?charter=` — the same wording an unknown id gets, so nothing leaks the fact
+  that the charter exists. The charter survived every attempt with its content intact.
+- **The bound-delete refusal names the holder and the repair, and the repair works.**
+  *"Charter is bound to agent(s): b025056. Unbind before deleting."* — then `PATCH` `charter_id:
+  null`, then `DELETE` returns `204`. The whole loop drives. (F185 is the archived case of the same
+  refusal, not a defect in this one.)
+- **The canonical context is rendered live, not cached.** A `PATCH` to the content is visible in the
+  very next `GET /agents/agent-context?agent=` with no restart and no invalidation step.
+- **An agent with no charter stays usable and says so.** `"No charter is assigned to this agent."`
+  in the rendered context and `"charter"` in `missing` — `agent-charter:58-59` satisfied.
+- **`agent-charter`'s three UI requirements are all satisfied by the shipped screen**, which is
+  worth saying out loud after row 2 found a shipped requirement with no UI at all (F173). Driven:
+  every charter collapsed on first open with no full document on screen (the longest starter is
+  8,529 characters and none of it is there); expanding one shows its content with zero dialogs and
+  zero textareas, so reading opens nothing that can modify; and opening a second leaves the first
+  open — `2` elements at `aria-expanded="true"`. `row4-02-one-expanded.png`,
+  `row4-03-two-expanded.png`.
+- **An empty-content charter is allowed on purpose and the screen says what that means** — *"This
+  charter has no content, so it contributes nothing to an agent's turn."* (`ChartersPage.tsx:171`).
+  A permission with a sentence attached, which is the right shape.
+- **The 422s are well worded where they reach anyone.** `"String should have at least 1 character"`,
+  `"String should have at most 256 characters"` — both name the constraint. F187 is that the screen
+  drops them, not that they are bad.
+
+## What the second run bought
+
+Nothing new, for the second row running. Both API passes scored 60/65 against the state the first
+left, and both UI passes 20/23. Row 1's F172 and row 2's F177 were each found only by a repeat, so
+the technique stays; recording that it fired on two of four rows is the honest number.
