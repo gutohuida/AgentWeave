@@ -81,7 +81,9 @@ if ($Until)   { $w.Until   = $Until }
 # RETURN VALUE, so logging from inside Invoke-Git made it return an array of log lines with the
 # exit code appended -- and `(Invoke-Git ...) -ne 0` then compared an array, which is truthy.
 # Third PowerShell trap in these twenty lines, measured 2026-09-01.
-function Say([string] $m) { [Console]::WriteLine("[arm-{0}] {1}" -f $Window, $m) }
+# Plain interpolation, no -f: inside a method call the comma in `"..." -f $a, $b` is parsed as an
+# argument separator for WriteLine, so only $a reaches the format string and it throws.
+function Say([string] $m) { [Console]::WriteLine("[arm-$Window] $m") }
 
 # git writes ordinary progress to stderr -- "Already on 'master'", "Switched to a new branch".
 # Windows PowerShell wraps every stderr line as a NativeCommandError, and with
