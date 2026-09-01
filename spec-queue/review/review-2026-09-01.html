@@ -533,6 +533,113 @@
   orphaned <code>event_logs</code> row behind.
 </p>
 
+
+<p>
+  <strong>Row 17 &mdash; Messages &mdash; is the last row of the sweep, and it closes it.</strong>
+  <code>t_sweep_row17_messages.py</code>, 82&nbsp;passed / 0&nbsp;failed, run twice on the state the
+  first run left with an identical assertion set, two fixture projects, one real
+  <code>claude-haiku-4-5</code> exchange per run. Prior coverage first: across 95 harnesses in
+  <code>scripts/drive</code>, exactly one line had ever touched these routes, and it printed the
+  body without asserting on it. The queue half of peer mail is thoroughly ploughed; the messages
+  half had never been driven.
+</p>
+
+<p>
+  <strong>Every message the operator sends through <code>POST /messages</code> is born one hop past
+  the budget.</strong> <code>create_message_for_actor</code> sets
+  <code>hop_depth = hop_budget + 1</code> as its default and corrects it only when the caller
+  supplies a live <code>run_id</code> &mdash; which only a running agent has. So the operator plane
+  always mints an over-budget entry: 201 Created, <code>queue_chain_suspended</code> at severity
+  <em>warn</em>, depth 7 against a budget of 6, and no turn. Not a race: five such entries were
+  still queued at depth 7 after the recipient had run <strong>two</strong> later turns for other
+  entries, because <code>schedule_agent</code> selects only entries within budget and steps over
+  them every time. The agent's queue panel does show them &mdash; and explains them as
+  <em>"hop budget exhausted"</em>, which describes a chain that ran out of hops. Nothing hopped;
+  this is the operator's own first message, and it arrived spent. There is a way out and it works:
+  releasing the entry re-bases it to depth 0 and the recipient's turn starts immediately, measured
+  twice. The defect is that the documented send route needs an undocumented second call before it
+  does anything.
+</p>
+
+<p>
+  <strong>Nothing in the product ever marks a message read.</strong>
+  <code>msg.read = True</code> occurs exactly once in the whole Hub, in
+  <code>PATCH /messages/{id}/read</code>, whose only caller is <code>useMarkRead</code> &rarr;
+  <code>MessageCard</code> &rarr; <code>MessagesFeed</code> &mdash; a screen that is imported by
+  nothing and absent from the served bundle. Delivery does not mark read either: the live turn's
+  message was delivered, answered, and left <code>read = 0</code>. Two things depend on the flag.
+  The StatusBar renders the unread count as its <code>N&nbsp;msgs</code> chip, between
+  <code>N tasks</code> (active only) and <code>N questions</code> (unanswered only), both of which
+  fall as the operator works; this one cannot. Measured read-only across every pre-existing project
+  on the instance: <strong>82 messages, none ever read</strong>, the oldest dating to 2026-08-22.
+  The route itself is fine &mdash; called by hand, the count fell by one and <code>read_at</code>
+  was stamped. It is the caller that is missing.
+</p>
+
+<p>
+  <strong>The screen those three routes were built for ships in no bundle.</strong>
+  <code>MessagesFeed</code> (163 lines), <code>MessageCard</code> (155) and
+  <code>ConversationGroup</code> (40) are referenced by no file outside their own directory, by no
+  route and by no sidebar entry, so Vite tree-shakes them: four literals unique to that screen are
+  absent from the served assets, while control strings from screens that <em>are</em> shipped are
+  present. Peer mail is not invisible &mdash; a delivered message appears in the recipient's
+  conversation, which is where an operator actually reads it. What is gone is the cross-agent view,
+  and with it the only caller of three route-level behaviours that have therefore sat undisturbed:
+  the read flag above, and both query filters below.
+</p>
+
+<p>
+  <strong>The recipient is checked against the roster and the sender is not.</strong> An unknown
+  recipient is refused 404 with an <code>agent_action_rejected</code> event; <code>from</code> is a
+  64-character string nobody looks at. The forged name does not stay in the row: it is reported by
+  <code>GET /status</code> as an active agent, and listed by <code>GET /agents</code> on the
+  <strong>roster</strong> as an agent with runner <code>native</code> &mdash; because
+  <code>list_agents</code> falls back to "names seen in 24h of activity", with distinct message
+  senders among its sources, and a synthesised name has no row to be archived. That endpoint's own
+  docstring names what reads it: the rail, task assignment, the job form, peer recipients, the
+  new-conversation surface. And the two halves then disagree: the roster lists
+  <code>ghost-140008</code>, and sending to <code>ghost-140008</code> answers
+  <em>404 &mdash; no agent by that name is registered</em>. The credential is the operator's, so this
+  is a naming hole rather than an identity one, exactly as F256 was one route over.
+</p>
+
+<p>
+  <strong>Two filters that answer as though they had been honoured.</strong>
+  <code>GET /messages?conversation=</code> splits on <code>":"</code> and means an agent
+  <em>pair</em>; everywhere else in the product <code>conversation</code> is a thread id. Passing a
+  real one returns the project's entire mail, 200: 26 of 26, the same as no filter at all. And
+  <code>sort</code> reverses only for the exact literal <code>desc</code> &mdash;
+  <code>DESC</code>, <code>descending</code>, <code>newest</code> and <code>()</code> all answer 200
+  ascending &mdash; so the default page (<code>limit=100</code>, ascending, no offset) is the
+  <strong>oldest</strong> hundred messages a project ever recorded. That is F252's shape on a second
+  route.
+</p>
+
+<p>
+  <strong>And one query with no project filter at all.</strong> <code>_pending_loop_request</code>
+  &mdash; what the loop board tells the operator its loop is waiting on &mdash; selects the newest
+  unread message between two agent names with no <code>project_id</code> predicate. Agent names are
+  project-scoped and repeat freely, so the row it picks can belong to another project and its
+  content is returned as the loop's reason. The unread flag that would bound it never changes, so
+  the candidate set is every message ever sent between those two names anywhere on the instance.
+  Mirrored read-only rather than driven &mdash; reaching the branch needs a loop created by an agent
+  rather than by the operator &mdash; and the mirror was validated against the project-scoped form
+  of the same query first; with the same two agent names in two fixture projects, the newest row it
+  would pick belonged to the other one.
+</p>
+
+<p>
+  <strong>Negatives recorded on purpose.</strong> Peer mail sent by a real agent works end to end:
+  the message is attributed to the run that sent it, with the sender the Hub derived rather than one
+  the caller supplied, its entry inside the hop budget, delivered, and a turn started for the
+  recipient. Isolation holds everywhere it was checked except the query above: one project's mail is
+  not listed by another, a cross-project <code>PATCH /read</code> is refused 404, a foreign
+  <code>conversation_id</code> is refused 404, a foreign <code>task_id</code> is refused. So are an
+  unknown message type, a body past 10,000 characters, an archived recipient (409, with the sender's
+  own content handed back so it need not reconstruct it), an archived conversation, and
+  <code>conversation_id</code> combined with <code>start_new_thread</code>.
+</p>
+
 <table>
   <thead>
     <tr><th style="width:4.5rem">Sev</th><th style="width:4rem">ID</th><th>What is wrong</th><th style="width:23%">Where</th></tr>
@@ -1016,6 +1123,83 @@
         &mdash; on the one screen whose job is saying whether something happened.</td>
       <td class="loc">hub/hub/api/v1/logs.py:57<br>hub/hub/api/v1/events.py:42</td>
     </tr>
+    <tr>
+      <td colspan="4" class="small" style="text-align:center; opacity:.7">&mdash; row 17, messages &mdash;</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F258</td>
+      <td>Every message the operator sends through <code>POST /messages</code> is created at
+        <code>hop_budget + 1</code> &mdash; the default, corrected only for a caller with a live
+        <code>run_id</code>, which only a running agent has. 201 Created, then queued forever: five
+        entries still at depth 7 after the recipient ran two later turns. The queue panel calls it
+        <em>"hop budget exhausted"</em>, a chain that never hopped, and attributes the operator's own
+        send to an agent. Releasing the entry does deliver it &mdash; an undocumented second call the
+        documented route needs.</td>
+      <td class="loc">hub/hub/api/v1/messages.py:56-57<br>turn_scheduler.py:92<br>docs/reference/hub-api.md:25</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F259</td>
+      <td>Nothing in the product ever marks a message read, so the StatusBar's
+        <code>N&nbsp;msgs</code> chip counts every message the project ever received and can only
+        rise &mdash; beside two neighbours that both fall. <code>msg.read = True</code> occurs once
+        in the Hub and its only caller is on a screen that ships in no bundle. Measured across the
+        instance: 82 messages, 0 read, oldest unread 2026-08-22. Delivery does not mark read either
+        &mdash; the live turn's message was answered and left <code>read = 0</code>.</td>
+      <td class="loc">hub/hub/api/v1/messages.py:375<br>api/v1/status.py:44<br>StatusBar.tsx:25</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F264</td>
+      <td>The query that decides what a loop is waiting on has no <code>project_id</code> filter, so
+        the message whose content becomes the operator-facing reason can belong to another project
+        &mdash; agent names are project-scoped and repeat. F259 removes the only other bound: the
+        <code>read == False</code> predicate excludes nothing, so the candidate set is every message
+        ever sent between those two names on the instance. Mirrored read-only, validated against the
+        scoped form first; the branch itself needs an agent-created loop and was not driven.</td>
+      <td class="loc">hub/hub/scheduler.py:415-421</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F260</td>
+      <td>Row 17's whole operator surface is unreachable: three routes, three hooks and three
+        components (358 lines), referenced by no route, no sidebar entry and no file outside their
+        own directory, and tree-shaken out of the served bundle. Peer mail is still readable in the
+        recipient's conversation; the cross-agent view is not. It took the only caller of the read
+        flag and of both query filters with it.</td>
+      <td class="loc">hub/ui/src/components/messages/<br>hub/ui/src/api/messages.ts</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F261</td>
+      <td>The recipient is checked against the roster and the sender is not, so a name nobody
+        registered becomes a listed agent: <code>GET /agents</code> falls back to "names seen in 24h
+        of activity" &mdash; message senders among them &mdash; and a synthesised name has no row to
+        archive. It then appears with runner <code>native</code> on the roster every agent-picker
+        reads, while sending <em>to</em> that same name answers 404. F256's shape one route over.</td>
+      <td class="loc">hub/hub/api/v1/messages.py:74<br>api/v1/agents.py:275,362</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F262</td>
+      <td><code>GET /messages?conversation=</code> means an agent <em>pair</em>, split on
+        <code>":"</code>; everywhere else in the product that word is a thread id. A real
+        conversation id has no colon, so the filter is dropped rather than refused and the route
+        answers with the project's entire mail &mdash; 26 of 26 &mdash; as though it had filtered.
+        F255's shape one row over.</td>
+      <td class="loc">hub/hub/api/v1/messages.py:349</td>
+    </tr>
+    <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F263</td>
+      <td><code>sort</code> reverses only for the exact literal <code>desc</code>:
+        <code>DESC</code>, <code>descending</code>, <code>newest</code> and <code>()</code> all
+        answer 200 ascending. So the default page is the <strong>oldest</strong> hundred messages a
+        project ever recorded &mdash; F252's shape on a second route, inherited by the dead screen,
+        which sends no limit.</td>
+      <td class="loc">hub/hub/api/v1/messages.py:356</td>
+    </tr>
   </tbody>
 </table>
 
@@ -1028,9 +1212,9 @@
 </p>
 
 <p class="small">
-  Running total: <strong>262 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10
-  through 16 are now closed as well. Row 17 of the sweep — Messages — is the only
-  one left untouched.
+  Running total: <strong>269 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10
+  through 17 are now closed as well, which closes <strong>every row of the sweep</strong>: all 17
+  feature areas have been driven at least once.
 </p>
 
 <!-- ============================= 4 ============================= -->

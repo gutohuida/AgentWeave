@@ -16923,3 +16923,286 @@ The four legal values are already enumerated client-side (`LogsView.tsx:11`), an
 them one import away.
 
 **Reproduction:** `t_sweep_row16_logs_events_sse.py`, leg 8.
+
+---
+
+## F258 (B) — every message the operator sends through `POST /messages` is born one hop past the budget, and waits there until somebody releases it by hand
+
+`create_message_for_actor` (`hub/hub/api/v1/messages.py:56`) opens with:
+
+```python
+hop_budget, _ = await project_limits(session, project_id)
+hop_depth = hop_budget + 1          # messages.py:56-57
+...
+if run_id:                          # messages.py:58
+    ...
+    hop_depth = source_run.turn_depth + 1
+```
+
+The over-budget value is the **default**, corrected only when the caller supplies a live `run_id`.
+Only a running agent has one — `agent_actions.py:203` fills it in from the bound actor. So every
+call to the operator-plane route is created at `hop_budget + 1` by construction, and
+`turn_scheduler.can_start` refuses a turn whose every entry is over budget.
+
+Measured on a fixture whose `hop_budget` is the default 6:
+
+```
+POST /projects/{p}/messages {"from":"alpha","to":"bravo",...}   ->  201  msg-1333da76a0cf
+entry-bd92f443eb13  agent=bravo  hop_depth=7  state=queued
+event_logs: queue_chain_suspended (severity warn)
+45s later: runs for bravo unchanged, entry still queued
+```
+
+It is not a race. Five such entries (sequences 329–333) were still `queued` at depth 7 after the
+recipient had run **two** later turns for other entries — the depth filter in `schedule_agent`
+selects only entries within budget, so a turn admitted by an agent-sent message steps over them
+every time.
+
+The operator is not left blind, but is told the wrong thing. `GET /queue/{agent}/status` answers:
+
+```json
+{"agent":"bravo","waiting_count":5,"running":false,"waiting_reason":"hop budget exhausted"}
+```
+
+*Exhausted* describes a chain that ran out of hops. Nothing hopped: this is the operator's own
+first message, and it arrived spent. The entries themselves list as `origin_type: "agent"` with
+`origin_agent` set to whatever the caller put in `from`, so the panel attributes the operator's
+send to an agent as well.
+
+There **is** a way out, and it works: `POST /queue/entries/{id}/release` re-bases the entry to
+depth 0 (`inbound_queue.py:267`, "a bound with no exit is a wedge") and the recipient's turn starts
+immediately — measured, twice, entry `delivered` and a new run for the recipient within the wait.
+So the defect is not lost mail; it is that the documented send route needs an undocumented second
+call before it does anything, and explains itself with a reason that is about somebody else's
+runaway.
+
+Nothing in the shipped UI calls `POST /messages` (see F260), so no operator reaches this through
+the app today. `docs/reference/hub-api.md:25` does advertise it — *"`POST` `/messages` — Send a
+message"* — and that table is also stale on the route shape, which is project-scoped.
+
+**Reproduction:** `t_sweep_row17_messages.py`, legs 1 and 1b.
+
+---
+
+## F259 (B) — nothing in the product ever marks a message read, so the StatusBar's `N msgs` chip only ever counts up
+
+`msg.read = True` occurs exactly once in the entire Hub:
+
+```python
+# hub/hub/api/v1/messages.py:375, PATCH /messages/{id}/read
+msg.read = True
+msg.read_at = datetime.now(timezone.utc)
+```
+
+Its only caller is `useMarkRead` (`hub/ui/src/api/messages.ts:45`), used by `MessageCard`, used by
+`MessagesFeed`, which is imported by nothing and is absent from the served bundle (F260). Delivery
+does not mark read: an entry that reaches an agent, is delivered in a real turn and answered leaves
+`messages.read = 0` — measured on the live turn in leg 7.
+
+Two things depend on the flag. `GET /status` (`status.py:44`) counts unread as
+`message_counts.pending`, and `StatusBar.tsx:25` renders it:
+
+```tsx
+const pendingMsgs = data?.message_counts?.pending ?? 0
+...
+<Icon name="chat" size={14} /> {pendingMsgs} <span>msgs</span>
+```
+
+That chip sits between `N tasks` (active only) and `N questions` (unanswered only), both of which
+fall as the operator works. This one cannot. Measured across every pre-existing project on the
+trial instance, read-only:
+
+```
+AgentWeave         36 messages,  0 read      oldest unread 2026-08-22 09:52
+ledger-stress      34 messages,  0 read      oldest unread 2026-08-23 17:49
+snakeGame          11 messages,  0 read      oldest unread 2026-08-22 11:40
+drive3-2026-08-31   1 message,   0 read
+```
+
+82 messages, none ever read, across ten days of use. The only `read = 1` rows anywhere on the
+instance are the ones this harness marked itself. The route works when something calls it — the
+harness called it and watched `pending` fall by exactly one, `read_at` stamped, the message leave
+the default listing — which is what makes this a missing caller rather than a broken endpoint.
+
+The second consumer is `scheduler.py:420`, and it is worse there: see F264.
+
+**Reproduction:** `t_sweep_row17_messages.py`, leg 2.
+
+---
+
+## F260 (C) — row 17's whole operator surface is unreachable: three routes, three hooks, three components, none of them in the shipped app
+
+`api/v1/messages.py` exposes `POST /messages`, `GET /messages` and `PATCH /messages/{id}/read`.
+`hub/ui/src/api/messages.ts` wraps two of them in `useMessages`, `useMessageHistory` and
+`useMarkRead`. `components/messages/` implements the screen: `MessagesFeed` (163 lines),
+`MessageCard` (155), `ConversationGroup` (40) — inbox/history toggle, per-agent chips, sort
+control, group-by-conversation.
+
+Measured: no file under `hub/ui/src` outside `components/messages/` names `MessagesFeed`,
+`MessageCard` or `ConversationGroup`; no file outside that directory calls any of the three hooks;
+there is no route and no sidebar entry. Vite therefore tree-shakes the lot, and the served bundle
+confirms it:
+
+```
+served bundle does NOT contain 'Loading messages'
+served bundle does NOT contain 'No message history'
+served bundle does NOT contain 'Messages between agents will appear here.'
+served bundle does NOT contain 'Group by conversation'
+control: a StatusBar literal ('msgs')      IS in the bundle
+control: a live event name ('agent_output') IS in the bundle
+```
+
+The controls matter: the same grep finds strings from screens that *are* shipped, so the misses
+above are absence, not a broken search.
+
+Peer mail itself is not invisible — a message delivered to an agent appears in that agent's
+conversation, which is where the operator actually reads it. What is gone is the cross-agent view:
+who wrote to whom, in what order, across the project. And with the screen went the only caller of
+`PATCH /read` (F259) and the only caller of `GET /messages`'s filters (F262, F263), which is why
+three separate route-level defects have sat undisturbed.
+
+**Reproduction:** `t_sweep_row17_messages.py`, leg 3.
+
+---
+
+## F261 (C) — the recipient is checked against the roster and the sender is not, so a name nobody registered becomes a listed agent
+
+`POST /messages` resolves `body.recipient` against the `agents` table and refuses an unknown one
+with a 404 and a persisted `agent_action_rejected` event (`messages.py:74-105`). `body.sender` is
+a 64-character string that is never looked at:
+
+```
+POST /projects/{p}/messages {"from":"ghost-140008","to":"bravo",...}  ->  201
+messages row: sender='ghost-140008'
+SELECT name FROM agents WHERE project_id=...  ->  ['alpha','bravo','retired']   (no ghost)
+```
+
+The name does not stay in the row. `GET /status` reports it as an active agent
+(`status.py:58` — distinct message senders in the last 24h). More consequentially, `GET /agents`
+lists it on the **roster**:
+
+```json
+{"name":"ghost-140008","runner":"native","display_model":"Native","runner_id":null,
+ "lifecycle":"open","message_count":1}
+```
+
+`list_agents` (`agents.py:275`) falls back to "names seen in 24 h of activity" — distinct message
+senders among its sources — whenever there is no session config, which is every project now that
+nothing writes one. A synthesised name has no `Agent` row, and the archive filter reads
+`db_agents[name].lifecycle if name in db_agents else "open"`, so it is never filtered out. That
+endpoint's own docstring lists what reads it: *"the rail, task assignment, the job form, peer
+recipients, the new-conversation surface"*.
+
+And then the two halves disagree:
+
+```
+GET  /projects/{p}/agents         ->  includes ghost-140008
+POST /projects/{p}/messages {"to":"ghost-140008"}  ->  404 "no agent by that name is registered"
+```
+
+The roster offers a recipient the send route rejects. The same asymmetry writes an
+`agent_action_rejected` event onto the timeline of an agent that does not exist — measured: the
+refusal for an unknown recipient is stored with `agent='ghost-140008'`.
+
+The credential is the operator's, so this is not an identity hole of the kind `agent_auth.py`
+guards, and it is the same *shape* as F256 one route over. It is C rather than B because reaching
+it needs a direct API call: no shipped UI posts a message (F260).
+
+**Reproduction:** `t_sweep_row17_messages.py`, leg 4.
+
+---
+
+## F262 (C) — `GET /messages?conversation=` means an agent pair, and a real conversation id is silently ignored
+
+```python
+# messages.py:349
+if conversation:
+    parts = conversation.split(":", 1)
+    if len(parts) == 2:
+        ...  # sender/recipient pair filter
+```
+
+No colon, no filter — and no refusal. Everywhere else in the product `conversation` is a thread id
+(`conv-…`); here it is `"alpha:bravo"`. So the natural call answers 200 with the project's entire
+mail:
+
+```
+GET /messages?history=true&limit=1000                                 ->  26
+GET /messages?history=true&limit=1000&conversation=conv-cfb1ab8dd65b  ->  26   (unfiltered)
+GET /messages?history=true&limit=1000&conversation=alpha:bravo        ->  18   (filtered)
+GET /messages?history=true&limit=1000&conversation=zzz                ->  26   (unfiltered)
+```
+
+Same shape as F255 one row over: a filter the route cannot honour is dropped rather than refused,
+so the answer reads as *"this is everything for that thread"*. `useMessageHistory` accepts a
+`conversation` option and no shipped call site passes one (F260), so nothing hits it today.
+
+**Reproduction:** `t_sweep_row17_messages.py`, leg 6.
+
+---
+
+## F263 (D) — `sort` accepts any string and quietly means ascending, and the default page is the oldest 100 messages
+
+```python
+# messages.py:356
+order_col = Message.timestamp.desc() if sort == "desc" else Message.timestamp.asc()
+q = q.order_by(order_col).offset(offset).limit(limit)
+```
+
+Only the exact literal `"desc"` reverses anything. Measured — each of these answers 200 with the
+same first row as `sort=asc`:
+
+```
+sort=DESC        sort=descending        sort=newest        sort=()
+```
+
+The default (`limit=100`, `sort=asc`, no offset) is therefore the **oldest** hundred messages a
+project ever recorded, which is F252's shape on a second route: past a hundred, the page can never
+show a recent one. `useMessageHistory` sends no limit, so the dead screen would have inherited it.
+
+**Reproduction:** `t_sweep_row17_messages.py`, leg 6.
+
+---
+
+## F264 (B) — the query that decides what a loop is waiting on has no project filter, and the flag it depends on is never set
+
+`_pending_loop_request` (`hub/hub/scheduler.py:415`) explains the loop's stall to the operator. Its
+message branch is:
+
+```python
+select(Message).where(
+    Message.sender == job.agent,
+    Message.recipient == creator_agent,
+    Message.read == False,
+).order_by(Message.timestamp.desc())
+```
+
+There is no `Message.project_id ==` in it. Agent names are project-scoped and repeat freely across
+projects — the seeded and conventional ones most of all — so the row this picks can belong to a
+different project, and its `subject`/`content` is returned to the caller as the loop's `reason`,
+truncated to 300 characters. Every neighbouring query in the same file is project-scoped; this one
+is the exception, and the isolation this harness checked elsewhere held on every other axis (mail
+listed per project, cross-project `PATCH /read` refused 404, a foreign `conversation_id` refused
+404, a foreign `task_id` refused).
+
+F259 sharpens it: because nothing ever marks a message read, `read == False` excludes nothing, so
+the candidate set is *every message ever sent between those two names in any project on the
+instance*, and "most recent" can be days old.
+
+Measured by mirroring the exact SQL read-only, with the same two agent names present in two fixture
+projects and one message sent in each:
+
+```
+scoped   (project_id = fixture)          -> rows all belong to the fixture
+unfiltered (the query as written)        -> {'proj-e55bb7f8c913', 'proj-1af6c7ad7ecd'}
+newest row it would pick                 -> msg-de443740f446 in proj-1af6c7ad7ecd (the OTHER project)
+```
+
+**Labelled honestly: mirrored, not driven.** Reaching the branch needs a loop whose
+`created_by_run_id` resolves to an agent — that is, a loop created by an agent through
+`create_loop`, not by the operator — which this harness does not build. What is measured is that
+the query as written selects across projects and that the `read` predicate excludes nothing; what
+is not measured is a live loop printing another project's message. The mirror was validated against
+the project-scoped form of the same query on the fixture's own rows before being trusted.
+
+**Reproduction:** `t_sweep_row17_messages.py`, leg 8.
