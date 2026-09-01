@@ -15572,3 +15572,231 @@ the screen and API-only. Named in that change's design.md as out of scope, with 
 
 **Reproduction:** `scripts/drive/t_r2_runner_update_semantics.py` Q1 shows the 400;
 `GET /api/v1/model-catalog` shows `"aliases": ["opus"]` on `claude-opus-5` in the same run.
+
+---
+
+# Sweep, row 10 of 19 — JOBS + LOOPS: cron jobs, history, manual run, archive, loop control
+
+Driven 2026-09-01 by the day window, against the `:8011` Hub (process started 01:48:32; no `.py`
+under `hub/hub` or `src` newer than that, measured) and a fresh fixture project
+`proj-d8d207e6e845`. Twelve routes: eight in `hub/hub/api/v1/jobs.py`, four in
+`hub/hub/api/v1/loops.py`.
+
+**Harness:** `scripts/drive/t_sweep_row10_jobs_loops.py` — **66 passed / 9 failed**, run four
+times, the last two after one mis-specified assertion was corrected (see F225). The failure set is
+identical across runs apart from ids and timestamps. Every job it creates uses the cron
+`0 0 1 1 *` so the scheduler cannot fire one behind it, and every job is archived and disabled in a
+`finally` that then re-reads the project to prove nothing is left enabled. Four real agent turns
+were spent, all bound to `claude-haiku-4-5-20251001` (measured off `run_started` events).
+
+**What held, and is worth recording as a negative.** Every one of the four documented loop opt-in
+refusals fires and leaves nothing behind (`work_needs_evidence` without a loop, `session_mode=resume`
+on a loop, an ambiguous cron, an invalid cron — F54's "a refusal creates no row" rule verified for
+all four). `DELETE /jobs/{id}` refuses with a stated remedy, and answers `404` first for an unknown
+id. The staged-edit machinery (design D11) is exactly as specified: the edit is accepted, reported
+as `pending_edit` with `staged_by` and `staged_at`, the live `purpose` is untouched, and a
+`loop_edit_staged` event lands on that loop and no other. `LoopSummary` carries its own `id` and
+`GET /tasks?loop_id=` really does accept it — F212's shape is **absent** here. Cross-project
+isolation holds on all five mutating and reading routes tried. `GET /history` refuses `limit=0` and
+`limit=1001` rather than clamping. The initial-tasks queue is counted in the create response, not
+after it. There is no agent-plane route onto a loop's own record.
+
+**The boundary question, asked once and then dropped for this router:** `GET /jobs` and `GET /loops`
+take no `limit` at all and are unbounded; `GET /jobs/{id}`'s embedded history is hard-limited to 10
+with no parameter; only `GET /jobs/{id}/history` is bounded and parameterised. Nothing here is at
+risk today (4 jobs, 1 loop in the fixture), and this router is not where that boundary would first
+hurt.
+
+---
+
+## F222 (B) — an archived job can be switched back on, and an archived loop then works a real task
+
+`POST /jobs/{id}/archive` is the product's only way to retire a job. Its own docstring calls the
+alternative "the exact governance failure loops exist to make impossible (D17)": a loop hidden from
+the default listing while it keeps firing. That state is one PATCH away.
+
+Measured twice, identically, in `proj-d8d207e6e845`:
+
+```
+POST  /projects/<p>/jobs {"purpose": "...", "stop_when_queue_empties": true,
+                          "initial_tasks": [{"title": "row10 seed"}], "enabled": true}
+  -> 201  job-cd5dde4f77d0, loop-dba582c52ada, queue counted
+
+POST  /projects/<p>/jobs/job-cd5dde4f77d0/archive
+  -> 200  archived_at 2026-09-01T09:25:08.342874Z, enabled false
+GET   /projects/<p>/loops            -> the loop is gone from the listing
+GET   /projects/<p>/jobs             -> the job is gone from the listing
+
+PATCH /projects/<p>/jobs/job-cd5dde4f77d0 {"enabled": true}
+  -> 200  {"enabled": true, "archived_at": "2026-09-01T09:25:08.342874Z", ...}   <- both at once
+GET   /projects/<p>/jobs             -> still absent. Enabled, registered, invisible.
+
+POST  /projects/<p>/jobs/job-cd5dde4f77d0/run
+  -> 200  {"success": true, "run_id": "run-ad841e386601"}
+```
+
+And it did real work. From the project's own event log, 0.4 s after the archive:
+
+```
+09:25:08.342  job_archived        {"id": "job-cd5dde4f77d0"}
+09:25:08.757  run_triggered       {"agent": "r7a102303", "run_id": "run-9a090650dc99", ...}
+09:25:14.463  run_started         {"runner": "claude", "model": "claude-haiku-4-5-20251001"}
+09:25:16.903  run_completed       {"exit_code": 0}
+```
+
+`GET /loops/loop-dba582c52ada` afterwards: `archived_at` set, `queue {"in_progress": 1}`,
+`current_tasks` naming `task-bec308ca4d24` and the agent working it, and `loop_edit_applied` in its
+own event list — the archived loop applied its staged definition edit, claimed its task and spent a
+Haiku turn on it.
+
+**Where.** `update_job` (`hub/hub/api/v1/jobs.py:819`) reads `job.archived_at` nowhere. Its
+`if body.enabled is not None: job.enabled = body.enabled` at `:1039` is followed by
+`_hand_job_to_scheduler(session, job_id, job if job.enabled else None)` at `:1063`, which registers
+an archived job with the scheduler exactly as it would a live one. `run_job` (`:1207`) checks
+`if not job.enabled` at `:1219` and likewise never looks at `archived_at`, so once the PATCH lands
+the manual-fire route agrees the job is fine. `archive_job` (`:1105`) is the only route in the file
+that knows about `archived_at`, and it only refuses a *second* archive.
+
+**Why B and not A.** The shipped UI cannot reach it: `useJobs` (`hub/ui/src/api/jobs.ts:166`) never
+sends `include_archived`, so an archived job never appears on a screen with an enable control on it,
+and the one hook that would do this — `useEnableJob` (`jobs.ts:232`, a bare
+`PATCH {"enabled": true}`) — has no archived row to fire at. It is reachable by any caller holding
+the id: a script, a restored fixture, or a future archived-jobs view that reuses the existing card.
+The invariant is not enforced where the write happens, only where the write is currently absent.
+
+**Reproduction:** `scripts/drive/t_sweep_row10_jobs_loops.py`, leg 6. Three of the nine reds are
+this finding.
+
+---
+
+## F223 (C) — `GET /jobs/{id}` reports a `source` the job does not have
+
+`create_job` stores `source` as either `"local"` or `"hub"` (`hub/hub/api/v1/jobs.py:652`). The list
+route serialises the ORM row and reports it truthfully. The detail route hand-builds a dict and
+does not put `source` in it, so `JobResponse.source`'s own default — `"hub"` — fills the hole.
+
+```
+POST /projects/<p>/jobs {..., "source": "local"}   -> 201  "source": "local"
+GET  /projects/<p>/jobs                            -> 200  "source": "local"
+GET  /projects/<p>/jobs/job-5c078f4a81bd           -> 200  "source": "hub"     <- never stored
+```
+
+`get_job` (`hub/hub/api/v1/jobs.py:765`) builds `job_dict` at `:788-815` with nineteen keys; `source`
+is not one of them. Every other key the list route returns *is* present, so this is a single
+omission rather than a differently-shaped response — which is why it reads as a value rather than as
+a gap. `hub/ui/src/api/jobs.ts:111` declares the field as a non-optional `'local' | 'hub'`, so a
+TypeScript caller has no way to notice.
+
+This is F212's shape on a second router: a route answering with a value its sibling route
+contradicts. It differs from F212 in the direction that matters — F212 projected a field **away**,
+so a caller saw an absence; this one substitutes a plausible wrong value, so a caller sees a fact.
+
+**Reproduction:** `scripts/drive/t_sweep_row10_jobs_loops.py`, leg 1. Two of the nine reds.
+
+---
+
+## F224 (C) — a loop archived through its job is told "this loop is still running", forever
+
+`archive_job` archives the loop alongside the job (`hub/hub/api/v1/jobs.py:1156`:
+`loop.archived_at = archived_at`) and never touches `ending_state`. `archive_loop`
+(`hub/hub/api/v1/loops.py:152`) refuses in this order:
+
+```python
+if loop.ending_state is None:          # :167
+    raise HTTPException(400, "this loop is still running; it must stop or complete ...")
+if loop.archived_at is not None:       # :173
+    raise HTTPException(400, "loop is already archived")
+```
+
+So a loop archived by the job route reaches the first check and never the second:
+
+```
+POST /projects/<p>/jobs/job-cd5dde4f77d0/archive   -> 200  loop archived_at set, ending_state null
+POST /projects/<p>/loops/loop-dba582c52ada/archive
+  -> 400 {"detail": "this loop is still running; it must stop or complete before it can be archived"}
+```
+
+Two things are wrong, and only the second is cosmetic:
+
+1. **The loop has no ending and can never be given one.** `ending_state` is written by `end_loop`,
+   reached from a firing that meets a stop condition or from `PATCH /jobs/{id}` with `stop_reason`.
+   The PATCH path needs the job, and the job is archived — so the operator's remaining move is
+   F222's: switch the archived job back on in order to stop the loop properly. The loop's own record
+   therefore says, permanently, that it is running.
+2. **The sentence is false in the one case a reader most needs it true.** An operator tidying up is
+   told to wait for a loop to stop that the same Hub has already hidden from them.
+
+The teardown note above (under the 2026-08-29 loop-endings drive) records the sibling case — a loop
+whose job is merely *disabled* also cannot be archived, for the same `ending_state` reason. That one
+is defensible: a disabled loop genuinely has not ended. This one is not: the loop is already
+archived.
+
+**Reproduction:** `scripts/drive/t_sweep_row10_jobs_loops.py`, leg 6. Two of the nine reds.
+
+---
+
+## F225 (C) — a loop's two operator-only actions have no operator surface
+
+`POST /loops/{id}/control` and `POST /loops/{id}/archive` are both `_require_operator` — no agent
+credential authenticates against either. Neither has a call site anywhere in the UI.
+
+Measured with the route as a caller would have to write it, `/loops/${...}/control|archive`, over
+both trees:
+
+```
+hub/ui/src              0 call sites
+hub/hub/static/ui       0 call sites   (served bundle, read as bytes)
+```
+
+`hub/ui/src/api/loops.ts` is 56 lines and exports exactly two hooks, `useLoops` and `useLoop`, both
+`useQuery`. There is no `useLoopControl` and no `useArchiveLoop` — measured, not inferred.
+
+The first run of this harness asserted "the served bundle reaches `/control`" and went red at
+bundle 0 / source 5, which reads like F215's stale-bundle shape and **is not one**: all five source
+hits are the words *"model/control catalog"* in comments. The assertion was rewritten to measure the
+route rather than the word, and the corrected form is what the last two runs report. Recorded
+because the wrong version of this check would have filed a stale-bundle finding that does not exist.
+
+Two details sharpen it:
+
+- **`LoopSummary.control` is returned on every loop route and rendered nowhere**, so delegation is
+  invisible as well as unreachable. `LoopTab`'s timeline does render `loop_control_changed` events,
+  so the operator can be *shown* a delegation they can neither make nor take back.
+- **`LoopsIndexTab` has a "Show archived" toggle** (`LoopsIndexTab.tsx:152`) — the UI expects
+  archived loops to exist while offering no way to archive one. The only reachable route to that
+  state is archiving the loop's *job*, which is the path that produces F224.
+
+Unlike F215, nothing on the screen instructs the operator to use these, which is why this is a C.
+
+**Reproduction:** `scripts/drive/t_sweep_row10_jobs_loops.py`, leg 9. One of the nine reds.
+
+---
+
+## F226 (D) — the job detail view's embedded history drops the two fields a failure is read by
+
+`GET /jobs/{id}/history` returns `JobRunResponse`, which carries `error_summary` and `tick_count`.
+`GET /jobs/{id}` embeds the last ten firings as a hand-built list (`hub/hub/api/v1/jobs.py:805-814`)
+with six keys, and neither of those two is among them.
+
+```
+GET /projects/<p>/jobs/job-967e65617c73/history
+  -> {"id": "run-b0450241f8a3", ..., "error_summary": null, "tick_count": 1}
+GET /projects/<p>/jobs/job-967e65617c73
+  -> history[0] keys: id, job_id, fired_at, status, trigger, session_id
+     dropped: ['error_summary', 'tick_count']
+```
+
+No reader is harmed today, which is why this is a D: `JobCard` is only ever fed from `useJobs`
+(`JobsPage.tsx:154`), the list route carries no `history` at all, and `useJob` — the detail hook —
+has no component caller. But the card is already written to prefer the embedded copy when it exists:
+
+```tsx
+// hub/ui/src/components/jobs/JobCard.tsx:359
+const history = job.history ?? fetchedHistory
+```
+
+and forty lines above it renders `run.error_summary` for exactly the `failed` and `skipped` statuses
+(`:205-211`). The first caller that hands `JobCard` a detail-shaped job gets a failure list with no
+reasons in it and no error — `??` is satisfied by the six-key rows.
+
+**Reproduction:** `scripts/drive/t_sweep_row10_jobs_loops.py`, leg 7. One of the nine reds.

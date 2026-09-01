@@ -261,6 +261,14 @@
   finding never asked keeps finding things.
 </p>
 
+<p>
+  <strong>Row 10 — Jobs and Loops — was then driven as well</strong>, in the window's optional last
+  iteration. <code>t_sweep_row10_jobs_loops.py</code>, 66 passed / 9 failed, run four times with an
+  identical failure set; four real <code>claude-haiku-4-5</code> turns; fixture project created and
+  deleted, count back to 23, zero enabled jobs anywhere. It produced the five rows below the rule in
+  the table, and the sharpest of them is the one the loop design says must be impossible.
+</p>
+
 <table>
   <thead>
     <tr><th style="width:4.5rem">Sev</th><th style="width:4rem">ID</th><th>What is wrong</th><th style="width:23%">Where</th></tr>
@@ -327,6 +335,56 @@
         <span class="small">Named out of scope in the change's design.md, with the reason.</span></td>
       <td class="loc">hub/hub/model_catalog.py:113-117</td>
     </tr>
+    <tr>
+      <td colspan="4" class="small" style="text-align:center; opacity:.7">— row 10, jobs and loops —</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F222</td>
+      <td>An <strong>archived</strong> job is put back to work by one
+        <code>PATCH {"enabled": true}</code> — accepted, re-registered with the scheduler, and still
+        absent from <code>GET /jobs</code>. Driven to the end: the archived loop applied its staged
+        edit, claimed its task and spent a real Haiku turn 0.4&nbsp;s after being archived.
+        <span class="small">This is the state <code>archive_loop</code>'s own docstring calls
+        "the exact governance failure loops exist to make impossible".</span></td>
+      <td class="loc">hub/hub/api/v1/jobs.py:1039,1063<br>jobs.py:1219 (run_job)</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F223</td>
+      <td><code>GET /jobs/{id}</code> reports <code>source: "hub"</code> for a job stored
+        <code>"local"</code> — the detail route hand-builds its dict, omits the key, and the schema
+        default fills the hole. The list route reports it correctly, so the two disagree.</td>
+      <td class="loc">hub/hub/api/v1/jobs.py:788-815</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F224</td>
+      <td>A loop archived through its job is told <em>"this loop is still running"</em> when the
+        operator tries to archive it — permanently. <code>archive_job</code> sets
+        <code>archived_at</code> and never <code>ending_state</code>, and
+        <code>archive_loop</code> checks the second before the first.</td>
+      <td class="loc">hub/hub/api/v1/loops.py:167,173<br>jobs.py:1156</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F225</td>
+      <td>Neither of a loop's two operator-only actions — <code>/control</code> and
+        <code>/archive</code> — has a call site anywhere in the UI source or the served bundle.
+        <code>loops.ts</code> exports two queries and no mutation, while
+        <code>LoopsIndexTab</code> offers a "Show archived" toggle for a state nothing on screen can
+        produce.</td>
+      <td class="loc">hub/ui/src/api/loops.ts (56 lines)<br>LoopsIndexTab.tsx:152</td>
+    </tr>
+    <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F226</td>
+      <td>The job detail route's embedded history drops <code>error_summary</code> and
+        <code>tick_count</code>, which <code>GET /history</code> carries. No reader is harmed today,
+        but <code>JobCard</code> already prefers the embedded copy and renders
+        <code>error_summary</code> for failed runs.</td>
+      <td class="loc">hub/hub/api/v1/jobs.py:805-814<br>JobCard.tsx:359,205</td>
+    </tr>
   </tbody>
 </table>
 
@@ -339,9 +397,9 @@
 </p>
 
 <p class="small">
-  Running total: <strong>226 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10–17
-  of the sweep — Jobs+Loops, Questions, Permissions, Checkpoints, Accounting, Worktrees,
-  Logs/Events/SSE, Messages — remain untouched.
+  Running total: <strong>231 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Row 10 is
+  now closed as well. Rows 11–17 of the sweep — Questions, Permissions, Checkpoints, Accounting,
+  Worktrees, Logs/Events/SSE, Messages — remain untouched.
 </p>
 
 <!-- ============================= 4 ============================= -->
@@ -595,8 +653,11 @@
 <p class="small">
   The drift surface (run 1's candidate 2) is <strong>stronger than when it was filed</strong>:
   <code>grep -rn 'spec/drift' hub/ui/src/</code> still returns nothing, while the night filed F178,
-  F206 and F211 and today filed F215 — that is now <strong>a pattern with a name</strong>, routes
-  shipped without an operator surface, rather than one orphaned feature.
+  F206 and F211 and today filed F215 and F225 — that is now <strong>a pattern with a name</strong>,
+  routes shipped without an operator surface, rather than one orphaned feature. F225 is the same
+  shape on a router that is otherwise <em>fully</em> on the operator's screen, which is the version
+  that is hardest to notice: the jobs UI is complete, so the two missing loop actions look like a
+  gap in a feature rather than a feature with no surface.
 </p>
 
 <h4>Seen and deliberately not proposed</h4>
