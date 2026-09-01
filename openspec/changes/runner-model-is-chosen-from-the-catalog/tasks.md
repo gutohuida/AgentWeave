@@ -1,30 +1,41 @@
 ## 1. The API can clear a runner's model
 
-- [ ] 1.1 `RunnerUpdate` distinguishes an absent `model` from an explicit `null`. `update_runner`
+- [x] 1.1 `RunnerUpdate` distinguishes an absent `model` from an explicit `null`. `update_runner`
       (`hub/hub/api/v1/runners.py:120-147`) applies `model` when the field was *sent*, not when it
       is `is not None`, so `PATCH {"model": null}` clears the model and `PATCH {}` leaves it. Use
       `model_fields_set` or an equivalent sentinel; do not change the `is not None` gates on `name`
       or `flags` (design.md says why).
-- [ ] 1.2 `_reject_undeclared_model` is not called for a cleared model — `None` already returns
+- [x] 1.2 `_reject_undeclared_model` is not called for a cleared model — `None` already returns
       early. `""` stays refused.
-- [ ] 1.3 `update_runner` does not refuse a model **identical to the one the runner already
+- [x] 1.3 `update_runner` does not refuse a model **identical to the one the runner already
       records**. Today `_reject_undeclared_model(runner.cli, body.model)` cannot see the stored
       model, so re-submitting a legacy runner's own unrecognised model is answered `400` — which
       the new picker does on every save (design.md, "a legacy runner cannot be saved unchanged").
       A *different* undeclared model, and any undeclared model on create, stay refused. Update the
       function's docstring, which already claims this behaviour and does not have it.
-- [ ] 1.4 `hub/tests/test_runners_api.py`: `PATCH {"model": null}` clears and the response body
+- [x] 1.4 `hub/tests/test_runners_api.py`: `PATCH {"model": null}` clears and the response body
       carries `model: null` (scenario "The provider's default is a choice, and clearing is
       honoured"); `PATCH {"name": "x"}` alone leaves the model untouched (scenario "A request
       carrying no model at all leaves the model alone");
       `PATCH {"model": ""}` is still `400`. The first of these fails against today's code with
       `200` and the old model — check that it does before writing the fix.
-- [ ] 1.5 `hub/tests/test_runners_api.py`: a runner whose stored model the catalog does not declare
+- [x] 1.5 `hub/tests/test_runners_api.py`: a runner whose stored model the catalog does not declare
       accepts a `PATCH` re-submitting that same model (`200`, model unchanged), and still refuses a
       `PATCH` moving it to a *different* undeclared model (`400`). This one also fails today —
       `scripts/drive/t_r2_runner_update_semantics.py` Q5 is the live reproduction. The row cannot
       be created through the API, so the test builds it through the session as that harness does
       through sqlite.
+
+**Section 1 built and driven, 2026-09-01 (night window, N-2).** Both predicted failures were
+watched red first: `PATCH {"model": null}` answered `200` with `'claude-sonnet-5'` still in the body,
+and re-submitting a legacy runner's own stored model answered `400`. `update_runner` now gates
+`model` on `"model" in body.model_fields_set` (the `is not None` gates on `name` and `flags` are
+untouched), and `_reject_undeclared_model` takes the runner's `current` model and returns early when
+the submitted one equals it. Five tests added to `hub/tests/test_runners_api.py` (21 passed).
+Driven live on `:8011` against a fresh fixture project, deleted afterwards:
+`scripts/drive/t_r2_runner_update_semantics.py` is now **19 passed / 0 failed**, which is task 5.6's
+target already met at the API level. That harness's Q4 asserted the *defect* ("the request did
+nothing"); it now asserts the requirement, and says in a comment why it was flipped.
 
 ## 2. The model is chosen from the catalog
 

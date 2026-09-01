@@ -15460,6 +15460,13 @@ it.
 
 ## F219 (C) — a runner's model cannot be cleared, and the attempt is answered `200`
 
+**API side repaired 2026-09-01 (night window, N-2), still open.** `update_runner` now gates
+`model` on `"model" in body.model_fields_set`, so an explicit `null` clears and an absent key
+leaves. Watched red first, then green: `t_r2_runner_update_semantics.py` Q4 now returns
+`model=None`. **Not retired** — the finding is about what the operator can do, and the picker
+that sends the `null` is sections 2-3 of `runner-model-is-chosen-from-the-catalog`, not yet
+built. Retire only after that change's tasks 5.1, 5.2 and 5.6.
+
 Found by the F173 spec loop's round 1 (2026-09-01), not by a sweep — a picker has to name its unset
 choice out loud, so round 1 asked whether the API could honour one. It cannot.
 
@@ -15506,6 +15513,14 @@ the two reds are this finding. It makes and deletes its own fixture project, so 
 ---
 
 ## F220 (C) — a runner whose model the catalog does not declare cannot be saved at all
+
+**API side repaired 2026-09-01 (night window, N-2), still open.** `_reject_undeclared_model`
+now takes the runner's `current` model and returns early when the submitted model equals it, so
+the docstring quoted below is true rather than accidentally true. A *different* undeclared
+model, and any undeclared model on create, are still refused — both covered by new tests in
+`hub/tests/test_runners_api.py`. `t_r2_runner_update_semantics.py` Q5 is green, and the whole
+harness is 19 passed / 0 failed. **Not retired** for the same reason as F219: the screen this
+finding is about does not exist yet.
 
 Found by the F173 spec loop's **round 2** (2026-09-01), by asking a question round 1 did not:
 `_reject_undeclared_model(cli, model)` takes a provider and a model string and **cannot see the

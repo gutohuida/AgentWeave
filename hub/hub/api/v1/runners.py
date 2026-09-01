@@ -21,11 +21,20 @@ from ...utils import short_id
 router = APIRouter(prefix="/runners", tags=["runners"])
 
 
-def _reject_undeclared_model(cli: str, model: Optional[str]) -> None:
+def _reject_undeclared_model(cli: str, model: Optional[str], current: Optional[str] = None) -> None:
     """Runner management offers catalog models, not free-typed text (runner-registry spec):
     a model is refused only when it is being newly *set* — an already-stored, unrecognised
-    model (from before this catalog existed, or a future CLI release) is left alone."""
-    if model is None:
+    model (from before this catalog existed, or a future CLI release) is left alone.
+
+    `current` is the model the runner already records, and passing it is what makes that
+    second sentence true rather than accidentally true. It used to hold only because the
+    free-text field dropped an untouched model from the request body; a picker's selected
+    value *is* the stored model, so every save of a legacy runner carries it back here.
+    Refusing that would make such a runner uneditable in every other respect as well
+    (runner-registry: "A legacy runner can still be saved"). Moving it to a *different*
+    undeclared model, and any undeclared model on create, stay refused.
+    """
+    if model is None or model == current:
         return
     provider_entry = get_provider(cli)
     if provider_entry is None or provider_entry.model(model) is None:
@@ -136,8 +145,13 @@ async def update_runner(
 
     if body.name is not None:
         runner.name = body.name
-    if body.model is not None:
-        _reject_undeclared_model(runner.cli, body.model)
+    # `model` is gated on whether the field was *sent*, not on whether it is non-None:
+    # a picker's unset option sends an explicit `null` to mean "the provider's default",
+    # and Pydantic gives that the same value as an absent key. `name` and `flags` keep
+    # the `is not None` gate deliberately — design.md, "The fix distinguishes absent from
+    # explicit-null ... for `model` only".
+    if "model" in body.model_fields_set:
+        _reject_undeclared_model(runner.cli, body.model, current=runner.model)
         runner.model = body.model
     if body.flags is not None:
         runner.flags = body.flags

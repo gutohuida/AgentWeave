@@ -43,7 +43,7 @@ if HUB.endswith(":8000"):
     print("REFUSING TO RUN: 8000 is the operator's real usage.")
     sys.exit(1)
 
-CANDIDATE_DBS = [
+CANDIDATE_DBS = [p for p in [os.environ.get("AW_DB")] if p] + [
     os.path.expanduser("~/.agentweave/hub/profiles/beta/agentweave.db"),
     os.path.join("hub", "data", "agentweave.db"),
     os.path.expanduser("~/.agentweave/hub/profiles/trial/agentweave.db"),
@@ -147,13 +147,19 @@ try:
     call("PATCH", f"/projects/{PID}/runners/{RID}", {"flags": []})
 
     # ---------------------------------------------------------------- Q4
-    print("\nQ4 — F219 re-measured independently of round 1")
+    # Round 2 wrote this section to MEASURE F219: PATCH {"model": null} answered 200 and
+    # changed nothing, so a picker's unset option would have silently done nothing. That
+    # measurement is preserved in design.md and in the finding; the section now asserts what
+    # the shipped requirement asks for instead ("The provider's default is a choice, and
+    # clearing is honoured"), so it is a regression check rather than a record of the defect.
+    print("\nQ4 — F219: the provider's default is a choice, and clearing is honoured")
     status, body = call("PATCH", f"/projects/{PID}/runners/{RID}", {"model": None})
     check(status == 200, f"PATCH model:null answers {status}")
     check(
-        body.get("model") == good,
-        f"...and the model is UNCHANGED — the request did nothing (model={body.get('model')!r})",
+        body.get("model") is None,
+        f"...and the answer carries the model as it now stands (model={body.get('model')!r})",
     )
+    call("PATCH", f"/projects/{PID}/runners/{RID}", {"model": good})
     status, body = call("PATCH", f"/projects/{PID}/runners/{RID}", {"model": ""})
     check(status == 400, f'PATCH model:"" is refused ({status})')
 

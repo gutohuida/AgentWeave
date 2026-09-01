@@ -308,3 +308,156 @@ async def test_bind_agent_to_unknown_runner_is_refused(app, auth_headers):
         headers=auth_headers,
     )
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Clearing a model, and re-submitting one the runner already records
+# (runner-model-is-chosen-from-the-catalog, tasks 1.4 and 1.5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_patch_with_an_explicit_null_model_clears_it(app, auth_headers):
+    """runner-registry: 'The provider's default is a choice, and clearing is honoured.'
+
+    A picker's unset option sends `model: null`. Gating on `is not None` made that a
+    silent no-op answered 200 with the old model, so the screen was wrong in a way the
+    operator could not see.
+    """
+    created = (
+        await app.post(
+            "/api/v1/projects/proj-test/runners",
+            json={"name": "Has a model", "cli": "claude", "model": "claude-sonnet-5"},
+            headers=auth_headers,
+        )
+    ).json()
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/runners/{created['id']}",
+        json={"model": None},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["model"] is None
+
+    fetched = await app.get(
+        f"/api/v1/projects/proj-test/runners/{created['id']}", headers=auth_headers
+    )
+    assert fetched.json()["model"] is None
+
+
+@pytest.mark.asyncio
+async def test_patch_carrying_no_model_at_all_leaves_the_model_alone(app, auth_headers):
+    """runner-registry: 'A request carrying no model at all leaves the model alone.'
+
+    The companion of the test above: absent and explicit-null are different requests and
+    must be answered differently.
+    """
+    created = (
+        await app.post(
+            "/api/v1/projects/proj-test/runners",
+            json={"name": "Keeps its model", "cli": "claude", "model": "claude-sonnet-5"},
+            headers=auth_headers,
+        )
+    ).json()
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/runners/{created['id']}",
+        json={"name": "Renamed but unchanged model"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Renamed but unchanged model"
+    assert resp.json()["model"] == "claude-sonnet-5"
+
+
+@pytest.mark.asyncio
+async def test_patch_with_an_empty_string_model_is_still_refused(app, auth_headers):
+    """`""` is not a spelling of "unset" — a caller sending it is asking for a model
+    named the empty string, which no provider declares."""
+    created = (
+        await app.post(
+            "/api/v1/projects/proj-test/runners",
+            json={"name": "Empty string", "cli": "claude", "model": "claude-sonnet-5"},
+            headers=auth_headers,
+        )
+    ).json()
+
+    resp = await app.patch(
+        f"/api/v1/projects/proj-test/runners/{created['id']}",
+        json={"model": ""},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    assert (
+        await app.get(f"/api/v1/projects/proj-test/runners/{created['id']}", headers=auth_headers)
+    ).json()["model"] == "claude-sonnet-5"
+
+
+@pytest.mark.asyncio
+async def test_a_legacy_runner_accepts_a_resubmission_of_the_model_it_already_records(
+    app, auth_headers
+):
+    """runner-registry: 'A legacy runner can still be saved.'
+
+    A picker's selected value *is* the stored model, so every save of a legacy runner
+    carries its unrecognised model back to the Hub. Refusing that would make such a
+    runner uneditable in every other respect too. The row cannot be created through the
+    API, so it is built through the session.
+    """
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Runner
+
+    async with async_session_factory() as session:
+        session.add(
+            Runner(
+                id="runner-legacy-resubmit",
+                project_id="proj-test",
+                name="Legacy resubmit",
+                cli="claude",
+                model="claude-3-legacy-9",
+            )
+        )
+        await session.commit()
+
+    resp = await app.patch(
+        "/api/v1/projects/proj-test/runners/runner-legacy-resubmit",
+        json={"name": "Legacy renamed", "model": "claude-3-legacy-9"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "Legacy renamed"
+    assert resp.json()["model"] == "claude-3-legacy-9"
+    assert resp.json()["model_unrecognised"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_legacy_runner_still_refuses_a_different_undeclared_model(app, auth_headers):
+    """The carve-out above is for the model the runner already records, and only that
+    one: moving it to a *different* undeclared model is genuinely a new setting."""
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Runner
+
+    async with async_session_factory() as session:
+        session.add(
+            Runner(
+                id="runner-legacy-moved",
+                project_id="proj-test",
+                name="Legacy moved",
+                cli="claude",
+                model="claude-3-legacy-9",
+            )
+        )
+        await session.commit()
+
+    resp = await app.patch(
+        "/api/v1/projects/proj-test/runners/runner-legacy-moved",
+        json={"model": "claude-4-legacy-7"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    assert (
+        await app.get(
+            "/api/v1/projects/proj-test/runners/runner-legacy-moved", headers=auth_headers
+        )
+    ).json()["model"] == "claude-3-legacy-9"

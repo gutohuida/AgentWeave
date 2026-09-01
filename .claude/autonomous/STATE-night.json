@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-02T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-09-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "N-2",
-    "next_action": "N-2: runner-model-is-chosen-from-the-catalog, tasks 1.1-1.5, BACKEND ONLY. RunnerUpdate must distinguish absent from explicit null via model_fields_set (do NOT touch the `is not None` gates on name/flags); _reject_undeclared_model must stop refusing a model identical to the one the runner already stores; '' stays 400. Tests in hub/tests/test_runners_api.py. Watch 1.4 and 1.5 FAIL against today's code before writing the fix -- the playbook's mutation-check rule. scripts/drive/t_r2_runner_update_semantics.py Q5 is the live reproduction of 1.5. Do NOT touch hub/ui/src this iteration; N-3 does that. Do NOT start a-turn phase 1 -- it is blocked.",
+    "current": "N-3",
+    "next_action": "N-3: runner-model-is-chosen-from-the-catalog, tasks 2.1-2.6, UI ONLY (hub/ui/src). Runner type gains model_unrecognised (the API already returns it); RunnerCreate/RunnerUpdate allow model?: string | null. RunnerForm's free-text model Input becomes a Select fed by useModelCatalog(): a 'Provider default' option (unset), one option per declared model, plus the stored model when model_unrecognised, selected and labelled. 2.3: the edit path must keep sending `model` explicitly -- null when moved back to Provider default. 2.4: changing the CLI resets to UNSET, not to that provider's default model -- copy AgentCreateDialog.tsx:176-181's SHAPE but not its value. 2.5: catalog unavailable -> select disabled and says so, Save stays enabled. 2.6: mark model_unrecognised in the list row (RunnersPage.tsx:109-113). The backend half landed in N-2, so the null and the legacy re-submit both work now. Do NOT build the bundle (N-6 does it once). Do NOT start a-turn phase 1 -- it is blocked.",
     "queue": [
         {
             "id": "N-1",
@@ -24,9 +24,10 @@
         },
         {
             "id": "N-2",
-            "status": "open",
+            "status": "done",
             "title": "runner-model: section 1 -- the API can clear a runner's model",
-            "detail": "Tasks 1.1-1.5. Backend only: RunnerUpdate must distinguish absent from explicit null via model_fields_set (do NOT touch the `is not None` gates on name/flags), _reject_undeclared_model must stop refusing a model identical to the one the runner already stores, '' stays 400. Tests in hub/tests/test_runners_api.py. 1.4 and 1.5 both FAIL against today's code -- watch each fail before writing the fix, per the playbook's mutation-check rule. scripts/drive/t_r2_runner_update_semantics.py Q5 is the live reproduction of 1.5."
+            "detail": "Tasks 1.1-1.5. Backend only: RunnerUpdate must distinguish absent from explicit null via model_fields_set (do NOT touch the `is not None` gates on name/flags), _reject_undeclared_model must stop refusing a model identical to the one the runner already stores, '' stays 400. Tests in hub/tests/test_runners_api.py. 1.4 and 1.5 both FAIL against today's code -- watch each fail before writing the fix, per the playbook's mutation-check rule. scripts/drive/t_r2_runner_update_semantics.py Q5 is the live reproduction of 1.5.",
+            "result": "Built and driven 2026-09-01 23:35-00:0x. Both predicted failures watched red first: PATCH {model: null} answered 200 with 'claude-sonnet-5' still in the body; a legacy runner re-submitting its own stored model answered 400. update_runner now gates model on 'model' in body.model_fields_set (name/flags untouched); _reject_undeclared_model takes the runner's `current` model and returns early when equal -- create_runner passes no current, so create is unchanged. 5 tests added, test_runners_api.py 21 passed. Driven on :8011 (restarted onto the same temp DB first) with fresh fixture proj-8c8d5565ae15, deleted, count back to 0: t_r2_runner_update_semantics.py is 19 passed / 0 failed, which is task 5.6's target already met at the API level. That harness's Q4 asserted the DEFECT and was flipped to assert the requirement (comment says why); it also learned an AW_DB override so Q5 is not silently skipped against a temp-dir database. F219/F220 annotated 'API side repaired, still open' -- NOT retired, the picker does not exist yet."
         },
         {
             "id": "N-3",
@@ -74,7 +75,7 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-01T22:49:56+01:00",
+    "last_heartbeat": "2026-09-01T23:53:11+01:00",
     "status": "running",
     "queue_source": "spec-queue/APPROVALS.md, 2026-09-01 section, ORDER: line. Verbatim, so the playbook's default backlog-first shape is not used tonight.",
     "green_at_compose": "Measured 2026-09-01T23:05+01:00: hub/tests/test_bola.py + test_agents.py = 12 passed. Also measured statically: `git diff master...HEAD -- hub/hub src hub/ui` is EMPTY, so this branch's product code is identical to master, and master's only product commit since the 2026-08-31 green point is 4ce24fc (the fastmcp bound, whose chunk ran green last night). The full hub suite has still never run on this branch. N-1 touched no product code, so this still holds unchanged entering N-2.",
