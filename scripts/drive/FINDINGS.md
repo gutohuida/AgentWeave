@@ -13943,3 +13943,215 @@ Nothing new, for the third row running. The API harness scored 41/50 on the run 
 state, with the same nine reds, and F188 reproduced on both projects. Rows 1 and 2 each found a
 defect only a repeat could see; rows 3, 4 and 5 did not. Two of five is the honest number, and the
 technique stays.
+
+# Sweep, row 6 of 19: Conversations — 2026-09-01
+
+Driven against the trial Hub on `:8011` (beta profile, this branch's code) with two fresh fixture
+projects and real `claude-haiku-4-5` turns. Harnesses kept: `t_sweep_row6_conversations.py`
+(79 API assertions, run twice, 75/79 both times, same four reds) and `t_sweep_row6_ui.py`
+(15 screen assertions, run twice, 13/15 on the second). Screenshots in `%TEMP%\row6shots`.
+
+The representative path from `SURVEY.md:27` — list, rename, release-task, chat history, lineage,
+titles — over `hub/hub/api/v1/agent_chat.py`, `hub/hub/conversations.py` and
+`hub/hub/conversation_titles.py`. Lineage was read straight out of sqlite, read-only, because no
+route exposes it.
+
+**This row's headline questions all held, and two of them held in a way worth stating outright: a
+worker-generated title really does replace the truncated one, and an operator's title really does
+survive the next turn's titler.** The three findings are at the seams around them.
+
+## F193 (B) — an open conversation whose agent is archived vanishes from one rail view, survives in the other, and opens on the words "Agent unavailable."
+
+Archiving an agent does **not** archive or close the conversations it owns — measured: the
+conversation stayed `lifecycle: "open"`. The two rail views then disagree about whether it exists,
+because they iterate opposite collections:
+
+| | iterates | what happens to the row |
+|---|---|---|
+| `AgentTree.tsx:82` | `agents.map(...)`, then `byAgent.get(agent.name)` | the archived agent is not in the roster, so its bucket is never read — **the row is silently dropped** |
+| `RecencyView.tsx:55,66` | `open.data.conversations`, mapped as rows | **the row is listed**, and consumes one of the 15 `RECENCY_DISPLAY_CAP` slots |
+
+`GET /agents` excludes the archived agent; `GET /conversations` — the single request the whole rail
+is built on — still returns its open conversation. Neither list route filters on the owner's
+lifecycle (`agent_chat.py:406`, `:430`).
+
+**Reproduction**, driven twice:
+
+```
+POST /projects/{p}/agents            {"name": "orph...", "runner_id": ...}   201
+POST /projects/{p}/agent/trigger     {"agent": "orph...", "message": ...}    200   conv-e074f178d5be
+POST /projects/{p}/agents/orph.../archive                                    200
+
+GET  /projects/{p}/agents            -> ['r5runnerr6a']            (owner gone)
+GET  /projects/{p}/conversations     -> 1 row, agent='orph...', lifecycle='open'
+
+on screen:   tree view    shows it: False
+             recency view shows it: True
+```
+
+Then open it. `App.tsx:371-374` renders the whole main panel as two words:
+
+```
+Agent unavailable.
+```
+
+No agent name, no reason, no remedy — and the reason is knowable and the remedy is one click
+(`POST /agents/{name}/unarchive`). The refusal the operator would get from typing into it is the
+good one — *"orph... is archived and cannot be triggered. Unarchive it first."* — and they never
+reach it, because the composer is not rendered. `row6-05-orphan-opened.png` is the whole finding in
+one frame: the row selected in the rail on the left, two grey words filling everything else.
+
+This is F187's shape (a sentence the product knows and the screen does not say) crossed with a
+consistency bug: the same conversation is present or absent depending on a rail toggle, which is a
+preference, not a filter.
+
+## F194 (C) — the conversation and chat routes answer 200 for an agent that does not exist
+
+`agent_chat.py:406` (`list_conversations`) and `:645` (`get_recent_chat`) take `{agent}` as a path
+parameter and never ask whether it names an agent:
+
+```
+GET /projects/{p}/agent/nosuchagentr6a/conversations   ->  200  []
+GET /projects/{p}/agent/nosuchagentr6a/chat            ->  200  {"entries": [], "agent": "nosuchagentr6a"}
+```
+
+A typo'd agent name is indistinguishable from an agent with nothing to show. The trigger route in
+this same product refuses the identical mistake precisely — *"... is not an agent in this project,
+so there is nothing to trigger. Create it in the Hub UI, or correct the name"* (measured in row 5)
+— so the information exists and these routes decline to look. Same seam as F193: nothing in this
+file consults the roster.
+
+Small on its own; it is the mechanism by which F193 stays quiet, and it is the shape that hides a
+typo in a script or a scheduled job.
+
+## F195 (C) — the conversation titler does not run in the project's directory, and the parameter that would make it is dead
+
+`conversation_titles.generate_conversation_title(*, project_id, conversation_id, cwd=None)` passes
+`cwd` to `_run_titler`, which passes it to `subprocess.run`. **Neither caller ever supplies one** —
+`agent_trigger.py:2146` and `:2738` both call
+`maybe_generate_title(project_id=..., conversation_id=...)` and nothing else. So `cwd` is always
+`None`, and every titling spawn inherits the *Hub process's* working directory.
+
+CLAUDE.md's local-multi-project rule is the one this breaks: *"Resolve every project filesystem
+path through `ProjectWorkspace`; never use the Hub process's `Path.cwd()` as project identity."*
+
+**Measured, with a positive control**, on the fixture project at `%TEMP%\row6a`, whose root was
+given a `CLAUDE.md` reading *"any title you write MUST begin with the single word ZEBRA"*:
+
+```
+control — `claude --model claude-haiku-4-5-20251001 -p "<the module's own _PROMPT>"`,
+          run from the project directory:
+              ZEBRA B-tree indexes for database lookups      <- honours the project's memory
+
+product — the same model, the same prompt, the same project, through the titler:
+              B-tree indexes explained                       <- does not
+```
+
+The control proves the mechanism works and the project's instructions are loadable; the product's
+title proves the spawn is not in that directory. On this machine the Hub is started from
+`<repo>/hub`, so every project's titler is reading the AgentWeave repository's own memory rather
+than the project's.
+
+Cheap to fix (the project's `ProjectWorkspace` path, threaded through the two call sites) and the
+parameter is already there waiting for it. Filed C rather than B because the titler is best-effort
+by design and a wrong title costs a rename — but it is a real cross-project leak of whatever
+configuration happens to sit above the Hub's launch directory.
+
+## What HELD — including the two things this row existed to ask
+
+- **A worker-generated title actually replaces the truncated one.** Not "the code path exists" —
+  driven three times, end to end: `conversation_title_mode: "generate"`, a real Haiku turn, then
+  the `conversations.title` column read straight out of sqlite.
+  `'In one short sentence, explain what a semaphore does in concurrent programming. Do not use any
+  tools.'` became `'Semaphore explained as concurrency synchronization primitive'`; a second
+  conversation became `'Write-ahead log in databases'`. The `conversation_titled` event is written,
+  and no `Run` row is — which is what the module's docstring says must not happen, because a
+  titling run under the agent's name would make the agent look busy and stall its queue.
+- **It is what the operator reads.** `row6-04-generated-title.png`: the rail row and the
+  conversation header both carry the generated title, not the first message.
+- **An operator-set title survives the next turn.** Renamed to `'operator keeps this r6a'`, another
+  real turn driven into the same conversation with generation still on, and the title is unchanged
+  afterwards. `title_set_by_operator` is checked twice in `generate_conversation_title` — once
+  before the spawn and once *after*, on a re-read, so a rename made while the model was thinking
+  also wins. Both guards are live.
+- **Title generation is off by default** (`conversation_title_mode: "truncate"`), so no project
+  pays for a spawn it did not ask for.
+- **Lineage survives a checkpoint cutover.** Measured in sqlite, not asked of a route: a new
+  conversation founds its own lineage (`lineage_id == id`), and after
+  `POST /checkpoints/{id}/cutover` the successor `conv-4d3564b7ec05` carries the predecessor's
+  `lineage_id` `conv-2a78c785ef1b`. The predecessor is archived, the successor is titled
+  `Continued: ...` and marked `title_set_by_operator` so the titler cannot overwrite it, and the
+  screen shows `Continuing Continued: renamed while archived r6a` above the composer.
+- **A rename the Hub refuses reaches the operator, in the Hub's own words.** Driven on screen: a
+  400-character title typed into the rail's rename input produced *"A title cannot exceed 120
+  characters"* rendered under the row (`ConversationRow.tsx:291-301`, `role="alert"` at :295), and the
+  refused title was not stored. After six sites where a refusal was swallowed (F169, F173, F178,
+  F179, F180, F187) this one is wired correctly — the counter-example that shows the pattern is a
+  gap, not a house style.
+- **The archived conversations are reachable and counted.** `Show archived (1)` in the agent's row
+  menu, backed by `archived_by_agent` on the project-wide response, and `?lifecycle=archived`
+  returns exactly the archived rows. An unknown `?lifecycle=` value is a 422 that enumerates the
+  three that work.
+- **Archiving refuses while a run is live, and says what to do:** *"This conversation has a run in
+  progress. Wait for it to finish, or stop it first."* Archiving an already-archived conversation
+  is a no-op, not an error; releasing a task from a thread that holds none is a 200, exactly as its
+  docstring promises.
+- **The project and agent boundaries hold.** A conversation id from another project is 404 on
+  rename and on chat history, and the refusal does not disclose that the id exists elsewhere. The
+  same id addressed to the wrong *agent* in the right project is also 404.
+- **Rename validation is exact.** `'  operator  title  r6a  '` is stored as `'operator title r6a'`;
+  whitespace-only is refused *"A title cannot be empty"*; over-long names the limit (120); a body
+  with no title at all is a 422.
+- **A task binding is recorded and releasable.** A turn carrying `task_id` binds the conversation,
+  `DELETE .../conversations/{id}/task` clears it, and the clear reaches the database.
+
+## Considered and NOT filed: `lineage_id` is not on `ConversationResponse`
+
+The harness asserts it and the assertion is red, deliberately, as a marker rather than a finding.
+`ConversationResponse` (`agent_chat.py:108-150`) carries sixteen fields and `lineage_id` is not one
+of them, so nothing on screen can say "these two threads are the same line of work". On the
+evidence that is fine: the operator-facing answer is carried by the `Continued: ` title prefix and
+by the checkpoint the successor opens on, both of which were driven and both of which read
+correctly. Lineage is a *routing* fact — `conversations.py:218-240` matches a peer's reply on the
+sender's lineage so correspondents survive a cutover — and exposing it would be a field with no
+reader. Recorded so a later row does not re-derive it.
+
+## A refinement to F190's second half, measured rather than assumed
+
+Row 5 recorded that the `Run {status} (exit {code}).` line at `agent_trigger.py:2135` is only ever
+broadcast and never persisted. That is correct, and this row sharpens what it means. Counting
+`agent_outputs` by run over the fixture project:
+
+```
+run-354d90af3912  completed   status rows: 1   total rows: 3
+run-a0a2397be2fb  stopped     status rows: 0   total rows: 0
+run-f444fe7b46a8  completed   status rows: 1   total rows: 3
+run-07cf8bebd337  stopped     status rows: 0   total rows: 0
+... 5 completed runs with one status row each, 5 stopped runs with none
+```
+
+A **completed** run does leave a persisted `status` row — but it comes from the stream parser and
+its whole content is the word `Completed` (`payload: {"phase": "completed", "summary":
+"Completed"}`). It can never say *stopped*, *failed* or *interrupted*, because it is only written
+on the path that finished. So F190's conclusion stands unchanged — the terminal label has exactly
+one carrier and that carrier is broken — and the reason is narrower than "nothing is persisted".
+
+## Two harness bugs caught before they became findings
+
+Row 5's lesson at two more sites, both the same shape: **a harness that inherits state reports the
+product broken.**
+
+1. The UI harness clicked `project-expander-{PROJECT}` unconditionally and **closed** the project
+   the operator was already inside, then measured an empty rail and called four things broken. It
+   now reads `aria-label`/`aria-expanded` and expands only what is collapsed.
+2. The assertion *"the conversation is on the rail by its title, never by its id"* was red against
+   the whole sidebar, because an earlier drive left an agent in **another project** literally named
+   `conv-probe`. Scoped to `rail-project-{PROJECT}` it is green. Had it been believed, it would
+   have been written up as a product defect that does not exist.
+
+## What the second run bought
+
+Nothing new on the API half — 75/79 twice, the same four reds, the second time on a project already
+carrying run 1's state. The UI half's second run bought two of its three failures back by fixing
+harness bug 1 above, and reproduced F193 identically. Rows 1 and 2 each found a defect only a
+repeat could see; rows 3, 4, 5 and 6 did not. Two of six, and the technique stays.
