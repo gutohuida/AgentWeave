@@ -8,11 +8,11 @@
   "parent_branch": "master",
   "parent_sha": "556bb37",
   "stop_at": "2026-09-01T17:00:00+01:00",
-  "iteration": 13,
+  "iteration": 14,
   "log_file": ".claude/autonomous/2026-09-01-day-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "D-11 is DONE. Row 15 (worktrees) is closed. The queue is complete again. Ten findings filed, F241-F250, running total 255.",
+  "current": "Iteration 14 CLAIMED for D-12: e2e sweep row 16 -- Logs, Events and SSE. Started 2026-09-01T13:25:50+01:00. A full iteration remains before stop_at 17:00.",
   "next_action": "NOTHING IS OUTSTANDING. The day window's required queue was complete at the end of iteration 6 (D-1 row 9c, D-2/D-3/D-4 the full three-round spec loop on F173, D-5 the review page and today's APPROVALS section), and iterations 7-13 took six optional drives: D-6 closed row 10 (jobs and loops), D-7 row 11 (questions), D-8 row 12 (permissions), D-9 row 13 (checkpoints), D-10 row 14 (accounting), D-11 ROW 15 (worktrees). Stopping here leaves a complete cycle: the operator has a review page carrying every finding filed today (F215-F250, running total 255) and tonight's FIX window has spec-queue/APPROVALS.md with today's section awaiting a status token that only the operator writes. If a firing remains before stop_at 17:00 and the operator has NOT since queued anything, the next unit is ROW 16 of the sweep -- LOGS, EVENTS AND SSE -- and ONLY if a FULL iteration remains; an unfinished drive is worse than none now that the review page is published. Same drive discipline as D-1 and D-6..D-11: the :8011 Hub (never 8010, never 8000, never proj-5e960453 or proj-18e5d4e0), a FRESH fixture project the harness SETS UP ITSELF including git init and an initial commit (copy ensure_repo() out of t_sweep_row15_worktrees.py -- a repository with no commits cannot run a turn, and rmtree needs the read-only onerror handler or .git survives teardown on Windows), every harness run TWICE ON THE STATE THE FIRST LEFT, every real agent turn bound to claude-haiku-4-5, the fixture deleted and the project count confirmed back at 23, and NO job left enabled. Confirm before drawing conclusions that no .py under hub/hub or src is newer than the Hub process start time. READ PRIOR COVERAGE FIRST -- grep scripts/drive for the row's existing harnesses and drive what they do not, exactly as D-7 through D-11 did; note that the OLD row numbering is off by one above row 9, so row 16 in the SURVEY is row 17 in the old t_row*.py names. BEWARE THE MISTAKES ALREADY MADE AND CAUGHT, which now number TEN: do not put a route's NORMAL call into the bodyless-probe loop that runs before a 'nothing changed' assertion; do not match a run marker that also appears in your own trigger prompt; do not pipe a live drive through `head`; re-read anything written into the review page, because a backslash escape can eat a character; DO NOT TRUST AN AGENT'S PROSE AS EVIDENCE -- agent_outputs.payload holds every tool call and its verbatim result; MAKE THE HARNESS RE-RUNNABLE -- if a leg grants or configures something, reset it AND ASSERT THE RESET LANDED (D-11: a reset that answered 200 and did nothing corrupted the whole of run 2); WRITE NO ABSOLUTE COUNTS -- assert deltas against a baseline captured in the leg; A FALSE PASS IS WORSE THAN A RED -- compare rows with their timestamps, not their types; NEW IN D-11: LEAVE THE FIXTURE'S WORKING TREE CLEAN, because a later leg that runs `git add` will sweep the previous leg's stray work into a commit and silently invalidate the next run; and NEW IN D-11: SWEEP THE BOARD BEFORE CREATING TASKS -- an agent holding two live tasks CHOOSES between them and may implement the wrong one. Anything filed must ALSO be added to section 3 of spec-queue/review/review-2026-09-01.html, the running total there (now 255) moved with it, and `py -3.11 scripts/drive/check_review_page.py` run afterwards -- it is a script, not a habit.",
   "queue": [
     {
@@ -86,6 +86,12 @@
       "status": "done",
       "title": "Drive: e2e sweep row 15 -- worktrees, per-agent isolation and conflicts",
       "detail": "DONE in iteration 13. Row 15 is CLOSED. Harness kept: scripts/drive/t_sweep_row15_worktrees.py (40 passed / 14 failed, TWICE, the second run on the state the first left; three real claude-haiku-4-5 turns per run; two fixture projects, one a git repo and one deliberately not, both created and destroyed by the script). Prior coverage read first -- t_row16_worktrees.py drove the mechanism on 2026-08-29 and asserts nothing, so this starts where it stops. TEN findings: F241 (B) the conflict report has zero call sites in the UI and is absent from the served bundle; F242 (B) one PATCH moves an agent off isolation mid-task and the next task-bound turn writes uncommitted into the operator's checkout, which AgentSettingsPage.tsx:290 declines to offer for exactly that reason; F243 (C) config {} and null both answer 200 and clear nothing (F219's shape, second route); F244 (C) the roster carries no config; F245 (B) the conflict check never compares a task branch against the branch it merges into; F246 (C) release takes a conflict off the report while the divergence remains; F247 (C) GET /worktrees/{agent} invents a workspace for an agent that does not exist (third instance after F216/F239); F248 (C) an agent named 'conflicts' can never have its workspace read; F249 (D) the list cannot say 'not a repository'; F250 (D) nothing invalidates the worktrees query. NEGATIVES recorded: isolation holds, the endpoint agrees with git's own merge-tree, reads provision nothing, release keeps the branch and records unmerged_commits, a self-registered read_only agent behaves as designed, and the one-run-per-task refusal caught an agent implementing the wrong task. Two fixture projects deleted, count back at 23, zero enabled jobs."
+    },
+    {
+      "id": "D-12",
+      "status": "in_progress",
+      "title": "Drive: e2e sweep row 16 -- Logs, Events, SSE (the seventh optional item, taken)",
+      "detail": "Claimed in iteration 14 at 2026-09-01T13:25:50+01:00."
     }
   ],
   "decisions_for_user": [
@@ -125,7 +131,7 @@
     "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
     "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
   ],
-  "last_heartbeat": "2026-09-01T12:41:49+01:00",
+  "last_heartbeat": "2026-09-01T13:25:50+01:00",
   "status": "running",
   "branch_spans_days": 1,
   "branch_note": "Cut from master@556bb37, which is itself the merge of the 2026-09-01 overnight run. The previous cycle IS merged; `git branch --merged master` lists every earlier autonomous branch and `git branch -a | grep daily` finds only this name. The review page carries no unmerged-cycle warning. Measured 2026-09-01T09:01+01:00.",
