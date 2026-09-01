@@ -19,9 +19,15 @@ Design: `openspec/explorations/2026-09-01-a-daily-research-spec-and-build-loop.m
 | Path | Written by | Read by |
 |---|---|---|
 | `APPROVALS.md` | the DECIDE session | the FIX window, and nothing else |
+| `DIRECTION.md` | the operator, or a DECIDE session on their behalf | the FILL window, and nothing else |
 | `DECISIONS.md` | both windows *add* rows; only the operator marks one DECIDED | the DECIDE session, and any window deciding what it may take alone |
 | `research/YYYY-MM-DD.md` | the FILL window | the DECIDE session, and tomorrow's FILL |
 | `review/review-YYYY-MM-DD.html` | the FILL window | the operator, via an Artifact published in the DECIDE session |
+
+`DIRECTION.md` exists because `APPROVALS.md` steers only the night. Until 2026-09-01 the day
+window had no operator channel at all, so steering a day meant editing the loop's own standing
+instructions and remembering to un-edit them. Same contract as `APPROVALS.md`: newest day first,
+only the newest section is read, and absence means "compose as usual" rather than "stop".
 
 `DECISIONS.md` exists because the backlog used to live only in `STATE-night.json`, which each window
 rewrites — so it survived by being copied forward by hand, and by 2026-09-01 had drifted into 32
