@@ -93,5 +93,5 @@
     "F109: the hub suite shares one database connection per session and the retry chain can stall on it. If a test fails once and passes alone, suspect this before suspecting your change.",
     "test_relocate_repairs_and_redrains_queued_work was flaky and was fixed (d916861). A recurrence is a real finding, not a flake."
   ],
-  "last_heartbeat": "2026-09-01T01:26:29+01:00"
+  "last_heartbeat": "2026-09-01T00:47:35+01:00"
 }
