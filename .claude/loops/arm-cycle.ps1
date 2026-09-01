@@ -85,8 +85,11 @@ function Say([string] $m) { Write-Output ("[arm-{0}] {1}" -f $Window, $m) }
 # `git checkout master` when it was already on master, before creating anything. run-iteration.ps1
 # carries a comment about the same trap; this is the same lesson learned twice.
 # Exit code is the authority, never the presence of stderr output.
+# Takes an ARRAY, never loose arguments: PowerShell binds a bare `-b` as a parameter name of this
+# function, not as a git flag, and the call fails before git runs. Measured 2026-09-01, one attempt
+# after the stderr trap below.
 function Invoke-Git {
-  param([Parameter(ValueFromRemainingArguments = $true)][string[]] $GitArgs)
+  param([string[]] $GitArgs)
   $previous = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   try {
@@ -145,14 +148,14 @@ if ($DryRun) {
 if ($currentBranch -ne $targetBranch) {
   $known = @(& git -C $Repo branch --list $targetBranch)
   if ($known.Count -gt 0) {
-    if ((Invoke-Git checkout $targetBranch) -ne 0) { throw "Could not checkout existing $targetBranch." }
+    if ((Invoke-Git @('checkout', $targetBranch)) -ne 0) { throw "Could not checkout existing $targetBranch." }
   } else {
     # Only if we are not already there -- `git checkout master` on master succeeds but prints to
     # stderr, which used to be fatal here.
     if ($currentBranch -ne "master") {
-      if ((Invoke-Git checkout master) -ne 0) { throw "Could not checkout master to cut the cycle branch from." }
+      if ((Invoke-Git @('checkout', 'master')) -ne 0) { throw "Could not checkout master to cut the cycle branch from." }
     }
-    if ((Invoke-Git checkout -b $targetBranch) -ne 0) { throw "Could not create $targetBranch." }
+    if ((Invoke-Git @('checkout', '-b', $targetBranch)) -ne 0) { throw "Could not create $targetBranch." }
   }
 }
 
@@ -212,15 +215,15 @@ if (-not (Test-Path $logPath)) {
   Say "opened $logName"
 }
 
-if ((Invoke-Git add -- $w.StateFile $logName) -ne 0) { throw "Could not stage the state file and log." }
-if ((Invoke-Git commit -q -m "arm($Window): $today cycle on $targetBranch") -ne 0) {
+if ((Invoke-Git @('add', '--', $w.StateFile, $logName)) -ne 0) { throw "Could not stage the state file and log." }
+if ((Invoke-Git @('commit', '-q', '-m', "arm($Window): $today cycle on $targetBranch")) -ne 0) {
   Say "nothing to commit (state unchanged) -- continuing."
 }
 
 # Publish the branch with an upstream, so the window's own `git push` every iteration works without
 # it having to discover that there is no upstream yet. Non-fatal: an unpushed branch still works
 # locally, and a window that cannot push says so in its log.
-if ((Invoke-Git push -u origin $targetBranch) -ne 0) {
+if ((Invoke-Git @('push', '-u', 'origin', $targetBranch)) -ne 0) {
   Say "WARNING: could not push $targetBranch. The window will still run, but its work is local only."
 }
 
