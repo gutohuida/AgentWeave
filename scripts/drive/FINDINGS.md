@@ -17206,3 +17206,78 @@ is not measured is a live loop printing another project's message. The mirror wa
 the project-scoped form of the same query on the fixture's own rows before being trusted.
 
 **Reproduction:** `t_sweep_row17_messages.py`, leg 8.
+
+### Second pass, 2026-09-01 16:41–16:50 — driven live; the branch fires, the leak did not reproduce
+
+`scripts/drive/t_f264_live_loop_reason.py` builds the situation the mirror could not: two fixture
+projects with the same two agent names, a **real `claude-haiku-4-5` turn** as `boss` in the victim
+project calling `create_loop(agent="worker", stop_when_queue_empties=True)`, one unread
+`worker -> boss` message in each project with the foreign one seeded last, the operator seeding and
+then draining the loop's queue, and a manual `POST /jobs/{id}/run`. **48 passed / 7 failed.**
+
+What is now driven rather than argued:
+
+* the branch fires for real. `loop.created_by_run_id` resolved to the creating run, `creator_agent`
+  came out as `boss`, the manual fire was answered `409 {"detail": "loop queue is empty"}` and
+  emitted `loop_queue_exhausted` carrying a genuine
+  `pending_request {"kind": "message", "to": "boss", "reason": <a message's subject>}`. The
+  operator-facing reason **is** a message's text selected by this query — measured, not mirrored.
+* it is reachable. `GET /loops/{id}` hands the whole payload to the caller and
+  `GET /logs?event_type=loop_queue_exhausted` serves it too (8 rows), which is the route the shipped
+  Logs screen reads (`LogLine.tsx:132` renders raw data on expand). Meanwhile **no shipped component
+  reads `pending_request` at all**, the served bundle contains no reader, and the timeline's entire
+  sentence for the event is ``loop ${data.loop_id ?? data.job_id} has no queued work left`` — the
+  reason is dropped. Two routes serve the text; nothing explains it.
+* F259's half: **28 `worker -> boss` messages instance-wide, 0 read**, so `read == False` excludes
+  nothing in practice.
+
+**The leak itself did not reproduce, and the run is inconclusive rather than negative.** The row the
+product chose was the *victim's own* newest unread `worker -> boss` message —
+`msg-80d3b11d35b7`, 15:49:24Z, subject *"Blocked: Need you to run grep searches from main
+project"* — not the foreign fixture `msg-51cf45936ab0` at 15:46:25Z. The foreign row **was** the
+newest when leg 2 seeded it (asserted, and it passed). Three minutes later a turn still in flight
+from leg 1 — the orphan loop of F265 spending a real turn on an empty queue — had `worker` send
+`boss` a genuine message in the victim project, which became the newest candidate anywhere. The
+harness's own precondition caught it: `wait_idle` returned **1 busy run after 300 s** and leg 2
+failed *before* the candidates were written, so the contamination is recorded rather than inferred.
+
+So the selection behaved exactly as an unscoped "newest anywhere" query does; it simply happened
+that the newest anywhere was in-project. The code fact is unchanged — `scheduler.py:415` still has
+no `Message.project_id ==` and is still the only unscoped query in that file — and the two halves
+the mirror measured (cross-project candidate set, inert `read` predicate) both held again live.
+
+**Still to drive:** one more full pass in which the foreign row is the newest *at firing time*.
+The cost is letting leg 1's orphan turn finish before leg 2 seeds; 300 s was not enough on this run.
+
+**Reproduction:** `scripts/drive/t_f264_live_loop_reason.py` (the 7 failures are the six leak
+assertions, which fail because the leak did not occur, plus the precondition that explains why).
+
+## F265 (B) — an agent's `create_loop` with `initial_tasks` is refused 403 *after* the loop and job it refused have been committed and left enabled
+
+A real `claude-haiku-4-5` turn as `boss` called `create_loop` with `agent="worker"` and
+`initial_tasks=[...]` — exactly as the tool's own docstring advertises. What came back to the agent:
+
+```
+Error calling tool 'create_loop': Hub rejected POST /jobs (403): Only this loop's creator,
+or the operator, may add tasks to its queue directly. Use send_message to ask the ...
+```
+
+D8 collapses *"the loop's creator"* into `AIJob.agent` — the agent the loop **triggers** — so an
+agent may never seed a loop it creates for anybody but itself, which is the ordinary case the
+parameter exists for.
+
+The refusal arrives **after the commit**, and this is the defect rather than the policy:
+
+* `loop-0ebfbcc264e4` and `job-605126e6853a` exist. F54's rule — a refused call leaves no rows —
+  is breached.
+* the job is left **enabled**, with a next firing already stamped by the scheduler.
+* its stop condition can never fire: `stop_when_queue_empties` means *drained*, and a queue that
+  never filled is not drained. Measured: `POST /jobs/{id}/run` against it was **not** skipped, and
+  it spent a real agent turn on a loop with nothing in its queue.
+
+So the caller is told the call failed and has nothing to clean up by, while the operator acquires an
+enabled cron loop nobody asked for that burns a real agent turn on every firing. (That turn is what
+contaminated F264's second pass above — the defect is not hypothetical, it interfered with another
+measurement in the same run.)
+
+**Reproduction:** `scripts/drive/t_f264_live_loop_reason.py`, leg 2a (printed under LEG 1).

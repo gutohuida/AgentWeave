@@ -1157,8 +1157,22 @@
         &mdash; agent names are project-scoped and repeat. F259 removes the only other bound: the
         <code>read == False</code> predicate excludes nothing, so the candidate set is every message
         ever sent between those two names on the instance. Mirrored read-only, validated against the
-        scoped form first; the branch itself needs an agent-created loop and was not driven.</td>
+        scoped form first. <strong>Driven live on a second pass</strong>: the branch fires, the reason
+        an operator is shown really is a message's text, and two routes serve it &mdash; but the row
+        the product picked was in-project, so the leak itself is <em>not yet reproduced live</em>.</td>
       <td class="loc">hub/hub/scheduler.py:415-421</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F265</td>
+      <td>An agent's <code>create_loop</code> with <code>initial_tasks</code> &mdash; the call the
+        tool's own docstring advertises &mdash; is refused <code>403 "Only this loop's creator &hellip;
+        may add tasks"</code>, because D8 collapses <em>creator</em> into the agent the loop
+        <em>triggers</em>. The refusal arrives <strong>after the commit</strong>: the loop and job
+        exist, the job is left <strong>enabled</strong> with a next firing stamped, and its
+        <code>stop_when_queue_empties</code> can never fire because a queue that never filled is not
+        drained. Measured: a firing was not skipped and spent a real agent turn on an empty queue.</td>
+      <td class="loc">hub/hub/mcp_server.py (create_loop)<br>hub/hub/api/v1/tasks.py (D8)</td>
     </tr>
     <tr>
       <td><span class="sev c">C</span></td>
@@ -1204,6 +1218,20 @@
 </table>
 
 <p class="small">
+  <strong>The sweep's one second pass, and what it cost to take a mirror live.</strong> F264 was
+  filed honestly as <em>mirrored, not driven</em> &mdash; its branch needs a loop an agent created,
+  which no sweep harness had built. Building one drove it: a real turn's <code>create_loop</code>,
+  a queue seeded and drained by the operator, a manual firing, and a genuine
+  <code>pending_request</code> in the event. That much is now measured rather than argued, including
+  that <code>GET /loops/{id}</code> and the Logs route both serve the text while no shipped component
+  reads it and the timeline's summary drops the reason. The leak did not reproduce: three minutes
+  after the fixtures were seeded, a turn still in flight &mdash; the orphan loop of F265, spending a
+  real turn on an empty queue &mdash; sent an in-project message that became the newest candidate. The
+  harness caught its own contamination (its idle precondition failed before the seeds were written),
+  so the run is <em>inconclusive, not negative</em>, and the second pass's real yield is F265.
+</p>
+
+<p class="small">
   Two leads were <strong>closed</strong> rather than carried: row 9a's sharpest question — whether
   anything downstream assumes an index because <code>reindex</code> answered 200 without writing one
   — is answered <em>no</em> (drift never reads the manifest, and the one route that refuses is F208,
@@ -1212,7 +1240,7 @@
 </p>
 
 <p class="small">
-  Running total: <strong>269 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10
+  Running total: <strong>270 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10
   through 17 are now closed as well, which closes <strong>every row of the sweep</strong>: all 17
   feature areas have been driven at least once.
 </p>
