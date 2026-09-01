@@ -7,8 +7,11 @@ the defect nearest the code that sitting happened to read; three of them read th
 and none checked where its inputs come from. A drive is what checks the product.
 
 **If phase 0 has not been completed and recorded, do phase 0 and stop.** Do not begin phase 1.
-An unattended window that reaches this change with no observation record does the observations,
-writes them up, and ends its turn there.
+An unattended window that reaches this change with no observation record performs the observations,
+commits the write-up, and then **moves on to the next item in its queue** — it does not end the
+window, and it does not proceed to phase 1 on the strength of having just done phase 0. The
+observations are meant to be read by a person, or at minimum by a later sitting, before anything is
+built on them.
 
 - [ ] 0.1 Trial Hub on **8010**, started from `hub/` with uvicorn from source, against a **fresh
       fixture project** — never `proj-5e960453` or `proj-18e5d4e0`. Bind every real agent turn to

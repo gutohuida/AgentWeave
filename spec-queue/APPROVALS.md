@@ -62,3 +62,28 @@ first — which is F173 again, by the finding route and without this design. `OR
 
 Two decisions on the page are **not** work and want no row here: ratifying the `fastmcp<4` ceiling,
 and leaving F188/F190 unproposed as direct repairs.
+
+---
+
+ORDER: a-turn-says-how-it-ended, runner-model-is-chosen-from-the-catalog
+
+**Why this order.** `a-turn`'s phase 0 is a gate: it observes and stops, touching no product code,
+so it cannot collide with anything and cannot run long. Putting it first spends perhaps an hour to
+learn whether the design is *right* — task 0.3 can falsify it outright, since rounds 2 and 3
+disagree about whether a single-run conversation is affected. Learning that tonight is worth more
+than learning it after the change is built. `runner-model` then gets the rest of the window; it is
+approved unconditionally, disjoint from everything else in flight, and is the item that actually
+ships.
+
+**Both touch `hub/ui/src`, and that is safe only because of the order.** `hub/hub/static/ui` is a
+committed build artefact and two UI changes in flight conflict on it every time. Phase 0 writes no
+UI, so there is exactly one UI change tonight.
+
+`a-write-outside-the-workspace-is-recorded` has **no row** and is therefore undecided, not rejected
+— it is R3-complete but never approved, and it collides with `a-turn` on three files. Do not build
+it tonight. Before anyone does, fix its task 4.2: it names migration `0100`, and
+`hub/hub/migrations/versions/0100_loop_work_needs_evidence.py` already exists, so it must be `0101`.
+
+If the window finishes both, the next most valuable thing is **F188** — the last severity-A finding
+with no change and no design (see `DECISIONS.md`, *Not decisions*). Spec it; do not repair it
+directly.
