@@ -1,1 +1,1 @@
-handoff-0105-2026-09-01-1833-the-first-full-cycle-merged-and-f190-specced.md
+handoff-0106-2026-09-01-1923-the-open-specs-triaged-and-f190-reaches-r2.md
