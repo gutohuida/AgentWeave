@@ -49,7 +49,7 @@ Read the write-up before deciding anything else about the day. Then branch:
 ```
 D-0  read       last night's phase 0 observations, and branch as above
 D-1  drive      e2e, scoped to runner-model-is-chosen-from-the-catalog
-D-2  spec R1    F188  (or a-turn's repair, if phase 0 falsified it)
+D-2  spec R1    a-refusal-reaches-the-operator   (or a-turn's repair, if phase 0 falsified it)
 D-3  spec R2    re-derive R1's argument against the code
 D-4  spec R3    re-derive again, independently
 D-5  review     the review page
@@ -61,10 +61,18 @@ create a runner, try to free-type a model, confirm the refusal now reaches the s
 being swallowed (`F173`), and confirm the catalog's models are what is offered
 (`runner-registry/spec.md:72-73`, the shipped requirement whose UI half was never built).
 
-**D-2 through D-4** are the spec loop on **F188**, which after tonight is the **only unaddressed
-severity-A finding**: F173 is built, F190 is gated with its observation in hand, F188 has no change
-and no design at all. A repairable workspace fault destroys the operator's message after three
-schedules, while the identical fault one line away holds it forever.
+**D-2 through D-4** are the spec loop on **`a-refusal-reaches-the-operator`**, at the operator's
+direction, 2026-09-01. Its seed is
+`openspec/explorations/2026-09-01-a-refusal-reaches-the-operator.md` — read it first. It carries the
+measurement (244 refusal sentences, 50 `.mutate(` sites with 13 `onError`, five partial conventions,
+`@radix-ui/react-toast` installed and unimported), a sketched shape, and a list of questions R1 must
+**answer rather than inherit**. It is an exploration, not a proposal: R1 owns the decisions and must
+re-derive them against the code, and R2 and R3 must not treat the exploration as settled.
+
+**F188 moves to 2026-09-03.** It is the only unaddressed severity-A — a repairable workspace fault
+destroys the operator's message after three schedules, while the identical fault one line away
+holds it forever — and it lost tomorrow's single spec slot to the operator's direct request, not to
+a judgement that it matters less. It takes the next slot.
 
 ### Do not resume the coverage sweep
 
@@ -77,8 +85,9 @@ It still waits one more day. The ledger holds **289 findings against three specc
 them filed in a single night with none fixed. Sweeping further while a severity-A sits unspecced
 adds to the half of the pipeline that is already oversupplied.
 
-**The trigger to resume is explicit: once F188 has a proposal, all three severity-A findings are
-addressed and the argument for pausing expires.** Resume at row 9c the following day.
+**The trigger to resume is explicit and unchanged in substance: once F188 has a proposal, all three
+severity-A findings are addressed and the argument for pausing expires.** F188 is now scheduled for
+2026-09-03 rather than 2026-09-02, so the earliest resumption is 2026-09-04, at row 9c.
 
 ### If the window finishes early
 
