@@ -12654,3 +12654,53 @@ for it. Naming the wedge and recovering from it are different repairs.
 **The reviewer harness failure is still not the Hub's.** Two of three live drives had a reviewer
 loop on `ToolSearch` and never deliver a verdict it had reached. What the Hub owns is what happens
 afterwards, and afterwards is now correct.
+
+---
+
+## F169 (C) — the approval advisory is produced for the operator and reaches no surface, then is unrecoverable
+
+**Filed 2026-09-01 by the night window's N-1, closing task 8.3 of
+`approval-refuses-unaccepted-evidence`** — *"the `approval_report` advisory reaches no UI component
+(D3's named gap). Confirm during `DRIVE-1` and file it; do not fix it here."* `DRIVE-1` ran and
+passed on 2026-08-31 and this was never confirmed or filed, so the change's own record of what it
+deliberately did not fix was about to be archived with the deferral unexecuted. Confirmed by reading
+the code rather than by a drive, and labelled as such below.
+
+**What the advisory is.** `task_transition_service.py:571` builds `reported =
+list(refusal.reported) + list(refusal.advisory)` and hangs it on the transition object at `:590`
+with a comment stating plainly that it is *"Not a column … nothing persists it"*. Two kinds travel
+on it, each tagged with a `kind`: `contract`-rigor requirements that were unverified at the moment
+of approval, and evidence still awaiting review on a task that had accepted evidence to merge as
+well. Both are things the product decided to tell the operator instead of refusing them.
+
+**Where it goes.** `hub/hub/api/v1/tasks.py:1340` and `:1551` read it back off the transition and
+pass it to `_task_response(..., approval_report=…)`, which sets it on `TaskResponse`
+(`hub/hub/schemas/tasks.py:298`). So it is in the JSON body of the response to the approving
+request, and nowhere else.
+
+**Where it does not go.** `grep -rn "approval_report\|approvalReport" hub/ui/src` returns **nothing**.
+No component, no hook, no type. An operator who approves a task in the Hub UI is sent the advisory
+and is shown none of it.
+
+**Why it is not merely invisible but unrecoverable.** `_task_response`'s parameter defaults to
+`None` and line `:102` writes `list(approval_report or [])`, so every other call site — every `GET`,
+every list — answers with `[]`. Nothing persists it, by design (`task_transition_service.py:588-590`).
+So the one response that carried it is the only copy that ever existed: refetch the task and the
+advisory is gone, with no record that there was one.
+
+**Reproduction (read from the code, not driven).** Approve a task under a `contract`-rigor document
+with an unverified requirement, or one with accepted evidence to merge plus further evidence still
+awaiting review. The `POST /api/v1/projects/{p}/tasks/{t}/status` response body carries a non-empty
+`approval_report`. Immediately `GET` the same task: `approval_report` is `[]`. In the UI, neither
+step shows anything at all.
+
+**Severity C, deliberately.** Nothing is mis-stated and nothing is lost from the audit trail —
+`requirement_coverage` and evidence review still hold the underlying facts, as the code's own
+comment says. What is lost is the product's chosen way of telling the operator *at the moment of
+approval* that it approved something with a caveat. The design chose to report rather than refuse;
+reporting to nobody is the same as refusing to report, so the choice is not currently implemented on
+the surface an operator uses.
+
+**Bound.** Not driven. The claim is a code reading over four files, and the UI half is a negative
+grep, which is only as good as the two spellings searched (`approval_report`, `approvalReport`). No
+live approval was performed for this.
