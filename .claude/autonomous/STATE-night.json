@@ -74,7 +74,7 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-01T23:29:26+01:00",
+    "last_heartbeat": "2026-09-01T22:49:56+01:00",
     "status": "running",
     "queue_source": "spec-queue/APPROVALS.md, 2026-09-01 section, ORDER: line. Verbatim, so the playbook's default backlog-first shape is not used tonight.",
     "green_at_compose": "Measured 2026-09-01T23:05+01:00: hub/tests/test_bola.py + test_agents.py = 12 passed. Also measured statically: `git diff master...HEAD -- hub/hub src hub/ui` is EMPTY, so this branch's product code is identical to master, and master's only product commit since the 2026-08-31 green point is 4ce24fc (the fastmcp bound, whose chunk ran green last night). The full hub suite has still never run on this branch. N-1 touched no product code, so this still holds unchanged entering N-2.",
