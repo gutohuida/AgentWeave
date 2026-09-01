@@ -269,6 +269,18 @@
   the table, and the sharpest of them is the one the loop design says must be impossible.
 </p>
 
+<p>
+  <strong>Row 11 — Questions — was driven after it</strong>, in two halves. The operator plane
+  (<code>t_sweep_row11_questions.py</code>, 55&nbsp;passed / 5&nbsp;failed, run three times with an
+  identical failure set) and the batch half, which needs a real turn because there is no other way
+  to make a batch (<code>t_sweep_row11_batch.py</code>, 28&nbsp;passed / 1&nbsp;failed, twice, on
+  real <code>claude-haiku-4-5</code> turns). Row 11 had prior coverage under an older numbering —
+  four <code>t_row13_*</code> and <code>t_row19_*</code> harnesses — so what was driven is what none
+  of them touches: the <strong>decline</strong> route, which had never been driven at all, and what
+  the operator's lists say after one. The batch design came through almost untouched; the decline
+  path did not.
+</p>
+
 <table>
   <thead>
     <tr><th style="width:4.5rem">Sev</th><th style="width:4rem">ID</th><th>What is wrong</th><th style="width:23%">Where</th></tr>
@@ -377,6 +389,41 @@
       <td class="loc">hub/ui/src/api/loops.ts (56 lines)<br>LoopsIndexTab.tsx:152</td>
     </tr>
     <tr>
+      <td colspan="4" class="small" style="text-align:center; opacity:.7">— row 11, questions —</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F227</td>
+      <td>The operator declines a question, then answers it, and <strong>a real agent turn is spent
+        on it</strong>. Declining an answered question is a 409 with a reason; the mirror is
+        accepted silently, because <code>PATCH</code> never reads <code>declined</code>. The row ends
+        up <code>answered</code> <em>and</em> <code>declined</code> — two of the three outcomes
+        <code>ask_user</code> documents as distinct — and the answer is queued and
+        <code>delivered_in_run_id</code> shows which run consumed it.
+        <span class="small">The agent had already been told "nothing further is coming, decide it
+        yourself".</span></td>
+      <td class="loc">hub/hub/api/v1/questions.py:304-393<br>mcp_server.py:338-343</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F228</td>
+      <td>A declined question never leaves the list the Questions page labels <em>Unanswered</em> —
+        the route filters on <code>answered</code> alone, and no component in the UI reads
+        <code>declined</code> at all (0 hits, measured). Every row still renders an
+        <code>AnswerForm</code>, which is the reachable path to F227. Shown on a real three-question
+        batch that was answered, declined and delivered.</td>
+      <td class="loc">questions.py:239-240<br>QuestionsPanel.tsx:86,150,79</td>
+    </tr>
+    <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F229</td>
+      <td>The page named <em>Questions</em> is the one page that cannot decline one. The route
+        <strong>is</strong> in the served bundle — so F215/F225's shape is absent here — but its only
+        call site is the in-run card in <code>AgentOutputPanel</code>. <code>QuestionsPanel.tsx</code>
+        contains the string <code>declin</code> zero times.</td>
+      <td class="loc">AgentOutputPanel.tsx:200<br>QuestionsPanel.tsx</td>
+    </tr>
+    <tr>
       <td><span class="sev d">D</span></td>
       <td class="fid">F226</td>
       <td>The job detail route's embedded history drops <code>error_summary</code> and
@@ -397,8 +444,8 @@
 </p>
 
 <p class="small">
-  Running total: <strong>231 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Row 10 is
-  now closed as well. Rows 11–17 of the sweep — Questions, Permissions, Checkpoints, Accounting,
+  Running total: <strong>234 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10
+  and 11 are now closed as well. Rows 12–17 of the sweep — Permissions, Checkpoints, Accounting,
   Worktrees, Logs/Events/SSE, Messages — remain untouched.
 </p>
 
@@ -658,6 +705,16 @@
   shape on a router that is otherwise <em>fully</em> on the operator's screen, which is the version
   that is hardest to notice: the jobs UI is complete, so the two missing loop actions look like a
   gap in a feature rather than a feature with no surface.
+</p>
+
+<p>
+  Row 11 supplies the <strong>counter-example that keeps the pattern honest</strong>, and it is worth
+  reading before treating "route with no surface" as a universal diagnosis. Decline <em>is</em> in the
+  served bundle, so F229 is only a D. What it is missing is not a call site but a <em>place</em>: the
+  one screen named after the feature cannot reach it. That variant is worse than an orphaned route in
+  one respect — the operator is not stuck, they are quietly split across two screens that disagree,
+  which is how F228 turns into F227 and costs a real turn. A repair aimed only at "is there a call
+  site anywhere" would score this router green.
 </p>
 
 <h4>Seen and deliberately not proposed</h4>

@@ -15800,3 +15800,111 @@ and forty lines above it renders `run.error_summary` for exactly the `failed` an
 reasons in it and no error — `??` is satisfied by the six-key rows.
 
 **Reproduction:** `scripts/drive/t_sweep_row10_jobs_loops.py`, leg 7. One of the nine reds.
+
+---
+
+## F227 (B) — the operator declines a question, then answers it, and a real turn is spent on it
+
+Two routes resolve a question and they are not symmetric. `POST /questions/{id}/decline` refuses a
+question that has already been answered, with a sentence naming the reason:
+
+```
+POST /projects/<p>/questions/<already answered>/decline
+  -> 409 {"detail": "This question has already been answered. Declining it would discard a
+          decision that was already made."}
+```
+
+`PATCH /questions/{id}` never looks at `question.declined` at all (`hub/hub/api/v1/questions.py:
+304-393`), so the same pair of operator actions in the other order is accepted silently:
+
+```
+POST /projects/<p>/questions/q-7952ca64e756/decline   -> 200  declined=True
+PATCH /projects/<p>/questions/q-7952ca64e756          -> 200
+GET  /projects/<p>/questions/q-7952ca64e756
+  -> {"answered": true, "declined": true, "answer": "right"}
+```
+
+**The row now satisfies two of three mutually exclusive outcomes.** `ask_user`'s own docstring
+(`hub/hub/mcp_server.py:338-343`) enumerates them as distinct and tells the agent what each means —
+`declined=True` reads *"Nothing further is coming, so do not ask the same thing again. Decide it
+yourself and say plainly which way you went and why."*
+
+This would be a C if the contradictory row sat there inertly. It does not. `answer_question` runs
+`_deliver_batch_if_complete` on the way out, which queues the answer as depth-zero operator input
+and calls `schedule_agent`. Measured end to end on a fixture whose worktree works:
+
+```
+GET /projects/<p>/queue/asker
+  {"id": "entry-a122898689f8",
+   "state": "delivered",
+   "delivered_in_run_id": "run-993559fe8a6e",
+   "content": "Question: r11-DL1-decline-first: which way should this go?\n\nAnswer: right"}
+```
+
+A real agent run was spent acting on a decision the operator had already closed, delivering an
+answer to an agent that had already been told none was coming and had already decided for itself.
+The control is in the same leg: an ordinary answer queues one entry, so the check is measuring the
+delivery path and not an artefact.
+
+The reachable path to it is F228: the Questions page still lists a declined question as
+*Unanswered*, with a live `AnswerForm` under it.
+
+**Reproduction:** `scripts/drive/t_sweep_row11_questions.py`, legs 6 and 7. Three of the five reds.
+
+---
+
+## F228 (C) — a declined question never leaves the list the operator reads as "Unanswered"
+
+`QuestionsPanel` is the whole Questions page and it makes exactly two calls
+(`QuestionsPanel.tsx:86-87`): `useQuestions(false)` renders *Unanswered*, `useQuestions(true)`
+renders the collapsed *Answered* block. Those become `?answered=false` and `?answered=true`, and
+the route filters on one column — `Question.answered` (`questions.py:239-240`).
+
+A declined question has `answered=False`. So it is returned by the first call, forever:
+
+```
+POST /projects/<p>/questions/q-8f36918c54db/decline  -> 200  declined=True, declined_at set
+GET  /projects/<p>/questions?answered=false          -> still contains q-8f36918c54db
+```
+
+Nothing downstream rescues it. `QuestionsPanel.tsx:150-151` partitions the unanswered list on
+`blocking` and `asker_waiting` only, and **no component anywhere reads a question's `declined`
+flag** — measured across `hub/ui/src/components`, 0 hits, while `hub/ui/src/api/questions.ts:34`
+declares the field. Every row in either partition renders `<AnswerForm>` (`:79`), so the operator
+is offered an answer box for a question they have already closed. That is the reachable path to
+F227.
+
+It is not confined to a hand-made question. Driven on a real three-question `ask_user` batch that
+was answered twice, declined once, and **delivered** — the batch is finished, the agent has the
+result, and the declined row is still in the Unanswered list:
+
+```
+rows of this batch still in ?answered=false: ['q-8f31d6c35f51']   (the declined one)
+```
+
+`decline_question`'s docstring says the route exists for the question that "otherwise sits at the
+head of the queue in front of the question someone is actually waiting on". On this page it still
+does.
+
+**Reproduction:** `scripts/drive/t_sweep_row11_questions.py` leg 5, and
+`scripts/drive/t_sweep_row11_batch.py` leg 5.
+
+---
+
+## F229 (D) — the page named after questions is the one page that cannot decline one
+
+`POST /questions/{id}/decline` **is** reachable from the served bundle — measured as a caller has
+to write it, `questions/${...}/decline`: 1 source call site, 1 in `hub/hub/static/ui`. So F215 and
+F225's stale-bundle shape is **absent** here, which is why this is a D and not a B.
+
+But the single call site is `AgentOutputPanel.tsx:200`, the in-run card beside a live turn.
+`QuestionsPanel.tsx` — the screen the sidebar labels *Questions*, whose subtitle reads "Decisions
+waiting for an operator answer" — contains the string `declin` zero times: no decline control, and
+no rendering of the flag either.
+
+The result is that the two halves of the feature live on different screens with no overlap. An
+operator on the Questions page can only answer; an operator who declines from the run card then
+sees the question still listed as unanswered on the Questions page (F228), with no indication that
+it was declined and no way to have declined it there in the first place.
+
+**Reproduction:** `scripts/drive/t_sweep_row11_questions.py`, leg 10.
