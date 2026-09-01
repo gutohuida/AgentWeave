@@ -12914,3 +12914,278 @@ Recorded because the sweep's verdict rests on these as much as on the three abov
 - **A non-git directory is a first-class project.** Opened `200`; `main-branch-suggestion` answers
   `is_repository: false` rather than failing.
 - **No console errors** anywhere in the screen half, once the deliberate `409` is discounted.
+
+---
+
+# Full-surface sweep, 2026-09-01 — row 2 of 19: Runners
+
+The night window's `N-2`, second feature area. Driven against the **8011** Hub on the beta profile,
+with a fresh git fixture outside the repository and a fresh project per run. Surfaces exercised:
+`runners`, `launchability`, `model_catalog`, `runner_commands`, and the `RunnersPage` screen.
+
+**64 API assertions, 13 screen assertions, one real agent turn, five findings.** Harnesses kept:
+`scripts/drive/t_sweep_row2_runners.py` (58 or 59 of 64 — five reds are F174, F175 and F176, and the
+sixth is F177, which by its nature only fires on a `created_at` tie) and
+`scripts/drive/t_sweep_row2_ui.py` (10/13 — the three reds are all F173).
+
+**The row's load-bearing claim was driven, not read.** A runner on `claude-haiku-4-5-20251001`, an
+agent bound to it, one real turn (`run-86669729ee1d`, completed, exit 0, 7s). `turn_usage.model` is
+`claude-haiku-4-5-20251001` — the model Claude itself reported back, not the one the Hub sent. A
+Runner record reaches the provider process intact. Codex runners were created, listed and probed
+but never spawned, per the standing operator decision that Codex is undrivable.
+
+---
+
+## F173 (A) — runner management is free-typed text that swallows its own refusal, and the spec says otherwise
+
+`openspec/specs/runner-registry/spec.md:72-73` is a **shipped** requirement, not a proposal:
+
+> Runner management SHALL offer the catalog's models for the chosen provider rather than accepting
+> free-typed text.
+>
+> #### Scenario: Runner management offers declared models
+> - **WHEN** the operator creates or edits a runner and selects its provider
+> - **THEN** the models offered are those the catalog declares for that provider
+
+The backend honours it. `runners.py:23-35`'s `_reject_undeclared_model` cites that spec by name and
+refuses an undeclared model with `400`. **The screen does not.**
+`RunnersPage.tsx:229-237` renders the model field as a free-text `<Input placeholder="e.g.
+claude-sonnet-5">`, and `useCreateRunner` / `useUpdateRunner` (`api/runners.ts:69-88`) declare
+`onSuccess` and **no `onError`**. `RunnersPage` renders exactly one error surface — `deleteError`,
+set only by `handleDelete` (`RunnersPage.tsx:42-49`) — and `main.tsx:8-15` configures no
+`MutationCache` `onError` and no toast. So a refused create or edit reaches nothing.
+
+**Driven, not inferred** (`t_sweep_row2_ui.py`, screenshots in `%TEMP%\row2shots`):
+
+```
+New Runner -> Name "Row 2 typed model", CLI Claude, Model "opus" -> Save
+  POST /api/v1/projects/<p>/runners  ->  400  {"detail": "'opus' is not a model 'claude' declares"}
+  [PASS] the dialog stays open rather than closing on a failure — 1 dialog(s) on screen
+  [FAIL] the operator is told the runner was not created, and why
+         — no alert, no message, nothing changed on screen
+  [PASS] the refusals did reach the browser — 2 refused responses logged
+```
+
+`row2-04-after-save.png` is the whole finding in one frame: the dialog exactly as it was, the Save
+button back to "Save", no message anywhere, and no runner created. The operator's only feedback is
+that nothing happened, and pressing Save again does the same thing forever. The same is true of the
+edit dialog (`PATCH` -> `400`, same silence).
+
+**One defect or a design gap?** A gap, and the ledger already knows its shape — this is F169's
+pattern (an advisory computed server-side that reaches no file under `hub/ui/src`) on a *writing*
+surface rather than a reporting one. The same requirement's third scenario says *"the operator is
+told the model is unrecognised when editing it"*; `RunnerResponse.model_unrecognised`
+(`schemas/runners.py:46-58`) computes exactly that, and `grep -rn model_unrecognised hub/ui/src`
+returns **nothing**. Two of that requirement's three scenarios are unimplemented on the screen.
+
+**Does an existing change cover it?** No — and this is how it got here.
+`openspec/changes/archive/2026-08-04-hub-model-control-and-provisioning/tasks.md:169-173`, task
+`6.5`, is ticked, and its own evidence names only `_reject_undeclared_model` and
+`model_unrecognised`. The backend half was built, the task was closed on it, and the requirement
+moved into `openspec/specs/` as shipped behaviour. Nothing lied; the UI half was simply never
+written and nothing was left open to say so.
+
+**Reproduction:** the harness above, or by hand — Environment, Runners, New Runner, type any model
+that is not an exact catalog id, Save.
+
+---
+
+## F174 (B) — the Codex catalog has drifted from the file it says it is copied from, and the drift includes the default
+
+`model_catalog.py`'s docstring states its own source of truth:
+
+> Codex: read directly from `~/.codex/models_cache.json`, the CLI's own server-synced catalog ...
+> Only entries with `"visibility": "list"` are included
+
+That file, on this machine (`fetched_at 2026-08-29T10:33:58Z`, `client_version 0.146.0`), lists
+four models. The catalog (`model_catalog.py:213-227`) declares six:
+
+```
+cache lists:       ['gpt-5.4-mini', 'gpt-5.5', 'gpt-5.6-luna', 'gpt-5.6-terra']
+catalog declares:  ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.5', 'gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra']
+offered but not listed: ['gpt-5.4', 'gpt-5.6-sol']
+```
+
+`gpt-5.6-sol` is the entry carrying `default=True`. So the Hub offers, and accepts, a Codex model
+the installed CLI's own server-synced catalog no longer lists — and offers it *first*:
+
+```
+POST /projects/<p>/runners {"name":"Codex sol","cli":"codex","model":"gpt-5.6-sol"}  ->  201
+```
+
+The catalog was authored 2026-08-05 (`e7ed91e`) and nothing re-checks it. Twelve test files hardcode
+`gpt-5.6-sol` (`test_worker.py`, `test_model_catalog.py`, `test_agent_trigger_overrides.py`, ...), so
+the drift leaves the suite entirely green — the tests assert the catalog against itself.
+
+**Labelled honestly: measured, not spawned.** What is proven is that the catalog disagrees with the
+file it declares as its source, by that file's own rule. What is *not* proven is what Codex does
+when handed `gpt-5.6-sol`, because the standing operator decision is that Codex is undrivable and no
+Codex run was started. The failure mode is inferred; the disagreement is measured.
+
+`t_sweep_row2_runners.py` now carries the comparison, so the next sweep re-measures it rather than
+trusting a 2026-08-05 snapshot. The effort control was re-checked the same way and **still holds**:
+the cache's intersection across listed models is still `low, medium, high, xhigh`, exactly what the
+catalog declares.
+
+**Reproduction:**
+`py -3.11 scripts/drive/t_sweep_row2_runners.py <project>` — the two `(F174)` assertions.
+
+---
+
+## F175 (C) — the model refusal is the one gate in the catalog that names nothing that would work
+
+Every other refusal this row can provoke says what would work instead:
+
+```
+POST /runners {"cli":"kimi"}          -> 422  "cli must be one of ('claude', 'codex')"
+DELETE /runners/<bound>               -> 409  "Runner is bound to agent(s): row2-probe. Unbind before deleting."
+validate_overrides("claude", effort)  -> 400  "... (permitted: high, low, max, medium, xhigh)"
+```
+
+The model refusal does not:
+
+```
+POST /runners {"cli":"claude","model":"claude-opus-9"} -> 400  "'claude-opus-9' is not a model 'claude' declares"
+```
+
+`model_catalog.py:352-357` and `runners.py:31-35` both produce that sentence, and it sits ten lines
+from the enum rejection at `model_catalog.py:365-370` that *does* list its permitted values. The
+provider descriptor is right there in the function; naming its four models costs one join.
+
+**And it is not quite true.** The catalog publishes `aliases` per model, over the wire:
+
+```
+GET /model-catalog -> {"id":"claude-opus-5","label":"Opus 5","aliases":["opus"], ...}
+POST /runners {"cli":"claude","model":"opus"} -> 400  "'opus' is not a model 'claude' declares"
+```
+
+The Hub declares `opus` in one endpoint and denies declaring it in another. `aliases` is consumed by
+exactly one function — `context_window_for_model` (`model_catalog.py:279-296`), which resolves an
+alias when *reading* a usage sample — is typed in the UI (`api/modelCatalog.ts:8`), and is rendered
+by no component. It is publishable output everywhere and acceptable input nowhere.
+
+Graded **C** rather than B on purpose: refusing an alias and storing canonical ids is a defensible
+choice. What is wrong is the sentence, and that it leaves the caller with nowhere to go — which is
+precisely what F173 makes invisible, since on the screen the operator does not even get the
+sentence.
+
+**Reproduction:** the two `(F175)` assertions in `t_sweep_row2_runners.py`.
+
+---
+
+## F176 (C) — the API creates a nameless runner the dialog refuses to create
+
+```
+POST /projects/<p>/runners {"name":"","cli":"claude"}  ->  201  {"name":"", ...}
+```
+
+`RunnerCreate.name` (`schemas/runners.py:16`) declares `max_length=256` and no minimum, so the empty
+string passes. The dialog disables Save on `!name.trim()` (`RunnersPage.tsx:245`), so the guard
+exists — on the client only. The resulting row renders as a bare CLI chip with no label and an
+`aria-label` of `"Delete "`; it is visible in `row2-04-after-save.png`, fourth row, left behind by
+the API half of this drive.
+
+The name is a runner's whole identity in every picker that binds one — the agent-create dialog, the
+agent settings runner select, `ProjectSettingsPanel`'s checkpoint-runner select. A nameless row in
+those is unselectable in practice.
+
+**Reproduction:** the `(F176)` assertion, or the one call above.
+
+---
+
+## F177 (C) — the runner list's "order by creation" silently becomes "order by name" about half the time
+
+`runners.py:73` orders by `Runner.created_at` alone. `Runner` has no sequence column and its `id`
+is random (`runner-` plus `short_id()`), so a tie has no tiebreaker. Ties are not theoretical:
+Windows' default timer granularity is ~15.6 ms, and two consecutive `POST /runners` land inside one
+tick **about half the time**.
+
+```
+20 x (create "Haiku drive", create "Codex exec", GET /runners)
+  -> 10 runs listed them in creation order
+  -> 10 runs listed "Codex exec" first, every one of those a created_at tie
+```
+
+The fallback is not random, which is what makes it worth naming — it is **alphabetical**:
+
+```
+EXPLAIN QUERY PLAN select * from runners where project_id=? order by created_at
+  SEARCH runners USING INDEX ix_runners_project_name (project_id=?)
+  USE TEMP B-TREE FOR ORDER BY
+```
+
+The scan feeds the sorter in `(project_id, name)` order (`models.py:330`) and SQLite's sorter keeps
+the input order for equal keys. Proven by naming the rows against their creation order — created
+`ZB-created-first` then `ZA-created-second`, both tied at `2026-09-01T01:18:14.184230Z`:
+
+```
+GET /runners -> [... 'ZA-created-second', 'ZB-created-first']
+```
+
+So renaming a runner can move a *different* runner in the list, and a list that looks stable on a
+seeded project reorders as soon as two runners are created together.
+
+**This codebase has already fixed this five times, with a finding number.** `models.py` carries the
+same paragraph at `:405` (`Conversation.sequence` — *"Windows' default timer granularity is ~15.6ms,
+so this is not a theoretical race"*), `:859` (`RunDivergence`), `:1558` (`Checkpoint`, citing **F55**:
+*"picked the wrong one roughly half the time"*), and names `TaskTransition` and `InboundQueueEntry`
+as the same shape. `Runner` is that shape and was not covered. The measured 10-of-20 is F55's own
+phrase, arrived at independently.
+
+Graded **C**: the list is a presentation surface, and no correctness decision is read off its order
+today. The reason to fix it is that the next thing to read "the first runner" off this query would
+inherit a coin flip.
+
+**Reproduction:** the `(F177)` assertion — flaky by construction, which is the point — or the
+20-iteration loop above.
+
+---
+
+## What held, under row 2
+
+Recorded because a sweep that lists only defects describes a product that does not exist.
+
+- **A Runner record reaches the provider intact.** One real Haiku turn, and `turn_usage.model` is
+  `claude-haiku-4-5-20251001` as reported by Claude itself. The whole point of the runner concept,
+  driven end to end rather than asserted about argv.
+- **A fresh project seeds exactly one runner per supported CLI**, both with `model: null`, so an
+  unconfigured project runs each CLI's own default rather than a Hub guess.
+- **The catalog is internally coherent.** Both providers declare exactly one default model, a
+  context window for every model, both controls, a default that is one of that control's own values,
+  and a renderable `apply` style — 16 assertions, all green. Codex's `permission_mode` correctly
+  renders `style: "none"` (it is answered over app-server, not argv) and its `effort` renders
+  `style: "config"`.
+- **The catalog needs no project.** `GET /model-catalog` answers on operator auth alone, as its
+  docstring argues it should.
+- **Cross-project isolation holds.** A runner id from project A, read under project B's scope,
+  answers `404 "Runner not found"` — not 403, not the row.
+- **The bound-runner delete refusal is exemplary.** `409 "Runner is bound to agent(s): row2-probe.
+  Unbind before deleting."` — names the blocker, names the remedy, and the remedy works.
+- **A refused PATCH changes nothing.** After `400` on an undeclared model, the stored model is
+  still what it was.
+- **`flags` round-trip verbatim**, including the `--no-app-server` transport sentinel.
+- **Unknown fields are named, not absorbed.** `{"colour":"red"}` gives `422` with `colour` in `loc`.
+- **`/runners/launchability` is not shadowed by `/runners/{runner_id}`.** The literal segment is
+  declared first and resolves as the collection endpoint; every runner in the project gets a
+  verdict, every verdict states a reason whenever it is not runnable, and `runnable` is exactly
+  `present and authorized` in all of them.
+- **`launchability-by-provider` covers every catalog provider** without needing a runner row to
+  exist, which is what agent-creation-by-provider depends on.
+- **`probe_agent`'s unbound case is real.** `RUNNER_UNBOUND` (`launchability.py:38-43`) answers
+  *"No runner is bound to this agent. Bind one in the Hub UI before it can run."* rather than
+  falling through to the agent-name fallback that once sent an operator hunting for a binary named
+  after their own agent.
+- **No uncaught JavaScript error** on the Runners screen through create, refused create, edit,
+  refused edit and cancel — only the two `400`s the drive provoked on purpose.
+
+### Noted, not filed (severity D)
+
+- **`PATCH /runners/{id} {"cli":"codex"}` answers `422 "Extra inputs are not permitted"`.** The
+  refusal is right and `RequestModel` does name `cli` in `loc`, so the caller is told which field.
+  But the reason given is "unknown field" where the truth is "known field, deliberately fixed after
+  creation" — the dialog knows this and disables the CLI select on edit (`RunnersPage.tsx:216`).
+  Not held open in the harness; recorded here.
+- **`model_unrecognised` is currently unreachable in practice as well as unrendered.** Both write
+  paths refuse an undeclared model, so only a row predating the catalog can carry one, and there are
+  **zero** such rows across all 71 runners on the 8011 Hub. Its invisibility is part of F173; its
+  unreachability is why that half of F173 has no live reproduction.
