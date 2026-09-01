@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave daily review — 2026-09-01</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --panel-2: #f4f4f2;
+    --ink: #1c1c1a;
+    --ink-dim: #5c5c56;
+    --ink-faint: #85857d;
+    --rule: #e0e0da;
+    --rule-strong: #c9c9c1;
+    --accent: #6b4fbb;
+    --sev-a: #b3261e;
+    --sev-a-bg: #fbe9e7;
+    --sev-b: #a8590a;
+    --sev-b-bg: #fdf0e0;
+    --sev-c: #4d6a1f;
+    --sev-c-bg: #eef4e2;
+    --sev-d: #4a5568;
+    --sev-d-bg: #eceef2;
+    --ok: #2f6b3a;
+    --ok-bg: #e8f3ea;
+    --warn-bg: #fdf6e0;
+    --warn-rule: #d9b84a;
+    --code-bg: #f2f2ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --panel: #1e1e23;
+      --panel-2: #26262c;
+      --ink: #e9e9e6;
+      --ink-dim: #b0b0a8;
+      --ink-faint: #86867e;
+      --rule: #33333a;
+      --rule-strong: #4a4a52;
+      --accent: #b09aec;
+      --sev-a: #ff9c92;
+      --sev-a-bg: #3a1f1d;
+      --sev-b: #f0b878;
+      --sev-b-bg: #392a17;
+      --sev-c: #b3d67a;
+      --sev-c-bg: #26301a;
+      --sev-d: #b4c0d4;
+      --sev-d-bg: #24282f;
+      --ok: #8fd39c;
+      --ok-bg: #1c2c20;
+      --warn-bg: #322a14;
+      --warn-rule: #8a7527;
+      --code-bg: #24242a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    padding: 2.2rem 1.25rem 5rem;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  header.page { border-bottom: 2px solid var(--rule-strong); padding-bottom: 1.1rem; margin-bottom: 1.6rem; }
+  header.page h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -0.015em; }
+  header.page .sub { color: var(--ink-dim); font-size: .95rem; }
+  h2 {
+    font-size: 1.22rem; letter-spacing: -0.01em;
+    margin: 2.6rem 0 .5rem; padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: .5rem; }
+  h3 { font-size: 1.02rem; margin: 1.5rem 0 .4rem; }
+  h4 { font-size: .93rem; margin: 1.1rem 0 .3rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .8rem; padding-left: 1.35rem; }
+  li { margin: .3rem 0; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .875em;
+  }
+  code { background: var(--code-bg); padding: .1em .34em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule);
+    border-radius: 6px; padding: .75rem .9rem; overflow-x: auto; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0 1rem; font-size: .93rem; }
+  th, td { text-align: left; padding: .48rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); border-bottom: 1px solid var(--rule-strong); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0; }
+  .note { border-left: 3px solid var(--warn-rule); background: var(--warn-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .note strong:first-child { display: block; margin-bottom: .2rem; }
+  .sev { display: inline-block; min-width: 1.35rem; text-align: center; font-weight: 700; font-size: .78rem; padding: .1rem .38rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+  .sev.a { color: var(--sev-a); background: var(--sev-a-bg); }
+  .sev.b { color: var(--sev-b); background: var(--sev-b-bg); }
+  .sev.c { color: var(--sev-c); background: var(--sev-c-bg); }
+  .sev.d { color: var(--sev-d); background: var(--sev-d-bg); }
+  .pill { display: inline-block; font-size: .76rem; font-weight: 600; letter-spacing: .03em; padding: .12rem .5rem; border-radius: 999px; border: 1px solid var(--rule-strong); color: var(--ink-dim); }
+  .pill.ok, .pill.driven { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .pill.tested { color: var(--sev-b); background: var(--sev-b-bg); border-color: transparent; }
+  .fid { font-family: ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
+  .loc { font-family: ui-monospace, monospace; font-size: .82em; color: var(--ink-faint); white-space: nowrap; }
+  .lede { font-size: 1.02rem; color: var(--ink-dim); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .28rem 1rem; font-size: .93rem; margin: .6rem 0; }
+  .kv dt { color: var(--ink-faint); }
+  .kv dd { margin: 0; }
+  .ask { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1.1rem; margin: 1rem 0; background: var(--panel); }
+  .ask h4 { color: var(--accent); margin-top: 0; }
+  footer.page { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .85rem; }
+  .small { font-size: .88rem; color: var(--ink-dim); }
+  .measured { color: var(--ink-faint); font-size: .82rem; font-style: italic; }
+  @media (max-width: 34rem) {
+    body { padding: 1.4rem .8rem 3rem; font-size: 15px; }
+    table { font-size: .86rem; }
+    .kv { grid-template-columns: 1fr; gap: .1rem .5rem; }
+    .kv dd { margin-bottom: .45rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>AgentWeave daily review — Tuesday 2026-09-01</h1>
+  <div class="sub">
+    Written by the FILL window (09:00–17:00) on <code>autonomous/2026-09-01-daily</code>.
+    You decide; the FIX window (23:00–07:00) builds what you approved.
+    Approvals go in <code>spec-queue/APPROVALS.md</code>.
+  </div>
+</header>
+
+<p class="lede">
+  One drive (row 9c of the sweep, which closes row 9), one change taken through all three spec
+  rounds, seven new findings, and two decisions that are not work. Both review rounds changed the
+  proposal, so the change in front of you is not the one round 1 wrote.
+</p>
+
+<!-- ============================= 1 ============================= -->
+<h2><span class="num">1</span>The branch</h2>
+
+<dl class="kv">
+  <dt>Branch</dt><dd><code>autonomous/2026-09-01-daily</code></dd>
+  <dt>Spans</dt><dd>1 day — cut this morning from <code>master@556bb37</code></dd>
+  <dt>Predecessor</dt><dd><span class="pill ok">merged</span> the 2026-09-01 overnight run is in <code>master</code> as <code>556bb37</code></dd>
+  <dt>Carries</dt><dd>the night window's 47 commits (already merged) plus today's six</dd>
+</dl>
+
+<p>
+  <strong>There is no unmerged-cycle warning on this page, and that is a measurement rather than an
+  assumption.</strong> <code>git branch --merged master</code> lists every earlier autonomous
+  branch, and <code>git branch -a | grep daily</code> finds only this name. Checked at 09:01+01:00.
+  Nothing from a previous cycle is stranded.
+</p>
+
+<p class="small">
+  Today's branch carries <strong>no product code</strong>. Everything below is a drive harness, a
+  finding, a proposal, or this page.
+</p>
+
+<!-- ============================= 2 ============================= -->
+<h2><span class="num">2</span>What the night window built</h2>
+
+<p>
+  Thirteen iterations, 01:22–06:50, closed at <code>stop_at</code> and unregistered cleanly. The
+  headline is that <strong>the night was a sweep, not a repair run</strong>: one commit of product
+  code, seven archives, ten drives.
+</p>
+
+<table>
+  <thead>
+    <tr><th style="width:34%">What</th><th style="width:15%">Proof</th><th>Detail</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>fastmcp bounded to <code>&lt;4</code></strong><br><span class="loc">4ce24fc</span></td>
+      <td><span class="pill tested">tested only</span></td>
+      <td>
+        FastMCP 4.0.0 reached PyPI 2026-08-31T18:20:31Z against an unbounded
+        <code>fastmcp&gt;=2.0</code>. New <code>hub/tests/test_fastmcp_api_contract.py</code> (6 tests)
+        names each FastMCP API the tool surface stands on. <strong>Mutation-checked both ways</strong>
+        — the pin was unbounded again and a <em>named</em> test failed, twice. The run also
+        <em>refuted its own queue item</em>: no test calls <code>get_tools()</code>; they call
+        <code>list_tools()</code>, which survives 4.0.0.
+        <br><span class="measured">Not driven: no resolve was re-run under the new bound and no agent
+        turn was spawned against a 4.x install. The 8011 Hub kept serving the installed fastmcp 3.1.0.</span>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>Seven openspec changes archived</strong><br><span class="loc">48ed2ba … a0fd855</span></td>
+      <td><span class="pill">corpus</span></td>
+      <td>
+        Archived in the order their own tasks demanded, specs synced. <strong>One archive silently
+        reverted another's MODIFIED block</strong> — caught by reading the diff rather than trusting
+        the tool, repaired, and the other six swept for the same collision. No <code>.py</code>,
+        <code>.ts</code> or <code>.tsx</code> touched.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>Sweep rows 1–9b</strong><br><span class="loc">F170–F214 · 3 A, 14 B, 25 C, 3 D</span></td>
+      <td><span class="pill driven">driven</span></td>
+      <td>
+        Live against the <code>:8011</code> Hub, a fresh fixture project per row, every harness run
+        <strong>twice</strong> — the second run on the state the first left. Route inventories read
+        from the <em>live OpenAPI</em>; the UI bundle grepped as <em>bytes</em> off
+        <code>hub/hub/static/ui</code>, so the "no operator surface" findings are claims about the
+        shipped artefact, not about the repository.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h4>Driven vs. tested, stated plainly</h4>
+<ul>
+  <li><strong>Driven:</strong> rows 1–9b of the sweep. Every <code>F170</code>–<code>F214</code> not
+    explicitly labelled otherwise came out of an HTTP call or a real browser page.</li>
+  <li><strong>Read, not driven, and labelled so in the ledger:</strong> <code>F169</code>, and the
+    static half of <code>F209</code>–<code>F214</code>.</li>
+  <li><strong>Tested but never driven:</strong> the fastmcp bound — the night's <em>only</em> product
+    change. It is a dependency declaration, so driving it means a fresh resolve, and none was run.</li>
+</ul>
+
+<div class="note">
+  <strong>What the night itself said to distrust.</strong>
+  The full hub suite (~25 min) <strong>has not run on this branch</strong>; iteration 1 ran only the
+  chunks covering its own change (82 + 31 + 3 passed, with ruff/black/mypy clean over CI's path
+  lists). <code>green_at_arming</code> was inferred, not measured. Row 9b's drive numbers
+  (129 passed / 10 failed) are a previous process's measurement, recovered from a dirty tree and
+  re-derived only statically. And <code>scripts/</code> is outside both linters' CI path lists, so
+  the harnesses passing ruff is tidiness, not a gate.
+</div>
+
+<p class="small">
+  Vindications were recorded alongside the findings rather than left implicit: the task transition
+  machine, the spec phase machine, the turn delivery cap, conversation titles and run
+  <code>stop</code> each survived a deliberate attempt to break them, and one row-4 finding was
+  <strong>disproved</strong>.
+</p>
+
+<!-- ============================= 3 ============================= -->
+<h2><span class="num">3</span>What today's drive found</h2>
+
+<p>
+  <strong>Row 9c is closed, and with it row 9</strong> — evidence, decisions, reviews, drift and
+  reindex, driven against the <code>:8011</code> Hub. Two harnesses kept:
+  <code>t_sweep_row9c_evidence.py</code> (operator plane, 91 passed / 3 failed, twice) and
+  <code>t_sweep_row9c_agent_plane.py</code> (agent plane, <strong>six real
+  <code>claude-haiku-4-5</code> turns</strong>, 21 passed / 0 failed, twice). Four fixture projects
+  created and deleted; project count back to 23; zero enabled jobs.
+</p>
+
+<p>
+  Three more findings came out of the spec loop itself — a round that asks the code a question the
+  finding never asked keeps finding things.
+</p>
+
+<table>
+  <thead>
+    <tr><th style="width:4.5rem">Sev</th><th style="width:4rem">ID</th><th>What is wrong</th><th style="width:23%">Where</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F215</td>
+      <td>The document screen renders the sentence <em>"Someone needs to say which one was wrong"</em>
+        while every route that would let them say it — evidence, decisions, reviews, drift, reindex,
+        retention — is absent from the bundle the Hub actually serves.</td>
+      <td class="loc">SpecCoverageBar.tsx:10-27<br>SpecDocumentPanel.tsx:240</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F216</td>
+      <td>A drift candidate identifies itself only by database ids — no <code>FR-n</code>, no document
+        path, no actor, no timestamp. Resolving <code>spreq-5833eebd679b</code> needs a sibling route
+        that has no screen either.</td>
+      <td class="loc">hub/hub/api/v1/spec.py:951-982</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F217</td>
+      <td>An agent's accepted evidence is never drift-checked in practice while an operator's for the
+        same requirement is: agent footprints are always a worktree branch, and drift compares against
+        the footprint's branch. The docstring calls this a general deferral; it falls entirely on the
+        agent plane.</td>
+      <td class="loc">hub/hub/requirement_evidence.py:1067-1077</td>
+    </tr>
+    <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F218</td>
+      <td><code>POST /spec/evidence</code> answers <code>latest_review: null</code> about a review it
+        wrote one line earlier; the next <code>GET</code> on the same row carries it. F71's fix, one
+        field over, on the same call.</td>
+      <td class="loc">hub/hub/api/v1/spec.py:833</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F219</td>
+      <td>A runner's model cannot be cleared, and the attempt is answered <code>200</code> carrying
+        the old model. <code>null</code> and an absent key are indistinguishable, and <code>""</code>
+        is refused by the catalog. <em>Once a runner has a model, it has one forever.</em>
+        <span class="small">Found by spec-loop round 1.</span></td>
+      <td class="loc">hub/hub/api/v1/runners.py:136-141</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F220</td>
+      <td>A runner whose model the catalog does not declare cannot be saved at all: re-submitting its
+        <em>own stored</em> model is refused 400, and name and model travel in the same PATCH. The
+        docstring claims the opposite, and is true today only because the current field drops itself
+        from the JSON.
+        <span class="small">Found by round 2 — and it is what round 2 changed the proposal for.</span></td>
+      <td class="loc">hub/hub/api/v1/runners.py:25-27</td>
+    </tr>
+    <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F221</td>
+      <td>The Hub refuses <code>opus</code> — a model alias its own catalog declares and serves to
+        clients — because <code>ProviderDescriptor.model()</code> matches <code>id</code> only. The
+        refusal sentence the operator reads is not true.
+        <span class="small">Named out of scope in the change's design.md, with the reason.</span></td>
+      <td class="loc">hub/hub/model_catalog.py:113-117</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="small">
+  Two leads were <strong>closed</strong> rather than carried: row 9a's sharpest question — whether
+  anything downstream assumes an index because <code>reindex</code> answered 200 without writing one
+  — is answered <em>no</em> (drift never reads the manifest, and the one route that refuses is F208,
+  already filed); and F204/F210's shape is <strong>absent</strong> from 9c, measured rather than
+  assumed.
+</p>
+
+<p class="small">
+  Running total: <strong>226 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10–17
+  of the sweep — Jobs+Loops, Questions, Permissions, Checkpoints, Accounting, Worktrees,
+  Logs/Events/SSE, Messages — remain untouched.
+</p>
+
+<!-- ============================= 4 ============================= -->
+<h2><span class="num">4</span>What was specced</h2>
+
+<h3><code>runner-model-is-chosen-from-the-catalog</code> — F173 (A)</h3>
+
+<h4>The problem</h4>
+<p>
+  <code>openspec/specs/runner-registry/spec.md:72-73</code> is a <strong>shipped</strong>
+  requirement, not a proposal: <em>"Runner management SHALL offer the catalog's models for the chosen
+  provider rather than accepting free-typed text."</em> The backend honours it. The screen does not —
+  <code>RunnersPage.tsx:228-238</code> is a free-text <code>&lt;Input&gt;</code> — and when the
+  backend refuses what the screen let the operator type, <strong>the screen says nothing at
+  all</strong>. <code>useCreateRunner</code>/<code>useUpdateRunner</code> declare
+  <code>onSuccess</code> and no <code>onError</code>; <code>main.tsx</code> configures no
+  <code>MutationCache</code> handler and no toast. Driven: typing <code>opus</code> and pressing Save
+  produces a 400 and no alert, no message, nothing changed on screen. Two of that requirement's three
+  scenarios are unimplemented on the screen — and the third's field,
+  <code>model_unrecognised</code>, is computed by the API and not even declared on the UI's type.
+</p>
+
+<h4>The argument</h4>
+<p>
+  Replace the free-text field with a select built from <code>GET /model-catalog</code>, and give
+  <code>RunnerForm</code> the error surface it has never had, reusing the app's existing
+  <code>readableApiError</code> idiom rather than inventing one. The scope call is deliberate and
+  written into <code>design.md</code>: the change stays <em>inside runner management</em>. Round 1
+  measured 55 mutate call sites under <code>hub/ui/src</code>, 12 already using
+  <code>readableApiError</code> and 6 with no error surface at all — so the app <em>has</em> the
+  idiom and RunnersPage is the outlier, not the frontier. A global <code>MutationCache onError</code>
+  toast was <strong>rejected in writing</strong>, as was generalising the pattern from
+  <code>agent-conversation-workspace</code>. F215 was deliberately <em>not</em> folded in: it is a
+  larger change and would bury an A repair. The one place this reaches past the UI is the API, and it
+  has to — a picker must be able to name its unset choice, and today the API cannot honour one (F219)
+  and refuses a legacy runner its own model (F220). Those two are prerequisites of the picker, not
+  scope creep.
+</p>
+
+<h4>What round 2 changed</h4>
+<div class="card">
+  <p style="margin-top:0">
+    <strong>Round 2 changed the proposal.</strong> <code>_reject_undeclared_model(cli, model)</code>
+    takes a provider and a model string and <em>cannot see the runner's stored model</em> — so
+    re-submitting a legacy runner's own unrecognised model is answered 400. Round 1's task 4.4
+    asserted the opposite of what the code does, and shipping it would have produced a screen on
+    which <strong>a legacy runner cannot be saved at all</strong> (name and model travel in the same
+    PATCH), breaching the <em>shipped</em> "Existing runners keep working" scenario the change
+    otherwise strengthens. Measured live, filed as <span class="fid">F220</span>, and repaired with
+    new tasks 1.3/1.5, a rewritten 4.4, a normative clause and a new scenario in the spec delta.
+  </p>
+  <p>Three smaller corrections, each from re-reading the code rather than round 1's reasoning:</p>
+  <ul>
+    <li><code>AgentCreateDialog</code> is only <em>half</em> an exemplar — line 235 calls a private
+      <code>errorDetail</code> twin of the very helper this change deletes, not
+      <code>readableApiError</code>.</li>
+    <li>"Copy AgentCreateDialog:180" was wrong: it resets to a concrete model id because an agent
+      <em>must</em> have one, whereas a runner must reset to <strong>unset</strong>. Task 2.4
+      rewritten.</li>
+    <li>The mutation error is stale on reopen, because the mutations live in <code>RunnersPage</code>
+      and outlive <code>RunnerForm</code>. New tasks 3.4 and 4.6.</li>
+  </ul>
+  <p class="small" style="margin-bottom:0">
+    Round 2 also recorded its <em>checked negatives</em> on purpose: a refused PATCH leaves nothing
+    half-applied (driven twice); a refused create leaves no row; <code>flags</code> has
+    <code>model</code>'s exact defect and escapes notice only because <code>[]</code> is reachable;
+    <code>useDeleteRunner</code> does throw a real <code>ApiError</code>. Harness:
+    <code>scripts/drive/t_r2_runner_update_semantics.py</code>, 18 passed / 1 failed, twice.
+  </p>
+</div>
+
+<h4>What round 3 changed</h4>
+<div class="card">
+  <p style="margin-top:0">
+    <strong>Round 3 changed the proposal too — its spec text, not its argument.</strong> Round 2's
+    clause and every one of its measurements were independently re-confirmed. What round 3 caught is
+    that <em>round 2's own repair</em> left the requirement self-contradictory: the new scenario
+    "A legacy runner can still be saved" sat beside the untouched "An undeclared model is refused",
+    and the second scenario's <code>WHEN</code> is an <em>instance</em> of the first's with the
+    opposite outcome — <strong>the two cannot both become passing tests</strong>. Both were narrowed:
+    the bare SHALL now refuses a request that <em>sets</em> a runner's model, and the refusal scenario
+    gains <em>"AND the runner does not already record that model"</em>.
+  </p>
+  <p>Three more, all in the same class — proposal defects, not product ones, so nothing was filed:</p>
+  <ul>
+    <li>A scenario written for F219 before task 1.3 existed now <em>forbade what 1.3 requires</em>.
+      Replaced with the absent-model scenario the normative text asks for and had none.</li>
+    <li>Task 2.6 (the list-row marker) traced to <strong>no requirement</strong>. Backed with a clause
+      and a scenario rather than dropped — legibility is the requirement's purpose, and the list is
+      where runners are seen.</li>
+    <li>Task 4.2 said two assertions go; <strong>one of them is the name field</strong>, and Save is
+      disabled on <code>!name.trim()</code>, so following it literally breaks the test it rewrites.
+      Narrowed to the one line that actually goes.</li>
+  </ul>
+  <p class="small" style="margin-bottom:0">
+    Checked negatives: the Codex command gates <code>--model</code> the same way Claude's does (the
+    design cited only Claude); both readers of <code>runner.flags</code> use <code>or []</code>, so
+    leaving flags alone breaches nothing; <code>RunnersPage</code> is the <em>only</em> writer of
+    runners, so task 1.3's relaxation is reachable only there; and the ADDED requirement is a sibling
+    of the two nearest shipped requirements, not a duplicate.
+  </p>
+</div>
+
+<h4>The cost, if you approve it</h4>
+<dl class="kv">
+  <dt>Tasks</dt><dd><strong>29</strong>, in five sections: the API (5), the picker (6), the error surface (5), tests (6), drive-and-ship (7)</dd>
+  <dt>Touches</dt><dd><code>hub/hub/api/v1/runners.py</code> + schema · <code>RunnersPage.tsx</code> · <code>hub/ui/src/api/runners.ts</code> · <code>hub/tests/test_runners_api.py</code> · <code>runnersUi.test.tsx</code></dd>
+  <dt>Also needs</dt><dd>a UI bundle refresh (<code>npm run build</code> then <code>scripts/refresh_ui_bundle.py</code>), and a live drive on <code>:8011</code> before anything is marked done</dd>
+  <dt>Retires</dt><dd><span class="fid">F173</span> (A), <span class="fid">F219</span> (C), <span class="fid">F220</span> (C) — but only after the drive, by task 5.7</dd>
+  <dt>Validation</dt><dd><code>openspec validate --strict</code> passes, re-run at the end of every round</dd>
+</dl>
+
+<p class="small">
+  There is no second change on this page. One drive plus one change through three rounds is a
+  realistic day, and collapsing the rounds to fit more in is precisely the failure this loop exists to
+  prevent — both rounds changing something is the evidence for that, not an argument against it.
+</p>
+
+<!-- ============================= 5 ============================= -->
+<h2><span class="num">5</span>What tonight does if you approve nothing</h2>
+
+<p>
+  The FIX window reads only <code>spec-queue/APPROVALS.md</code>. With no section for today, or a
+  section with no <code>APPROVED</code> row, it falls to the default queue decided 2026-09-01 —
+  <strong>backlog first</strong>. In order, and what each step resolves to tonight:
+</p>
+
+<ol>
+  <li>
+    <strong>Unarchived changes that are implemented and only need archiving.</strong>
+    <span class="pill ok">empty tonight</span><br>
+    <span class="small">Measured: <code>openspec/changes/</code> holds <code>archive/</code>,
+    <code>a-write-outside-the-workspace-is-recorded</code> (0 of 54 tasks done) and
+    <code>runner-model-is-chosen-from-the-catalog</code> (0 of 29). Neither is implemented, so there
+    is nothing to archive — the night window cleared this step by archiving seven.</span>
+  </li>
+  <li>
+    <strong>Open findings in <code>scripts/drive/FINDINGS.md</code>, severity A before B before C.</strong>
+    <span class="pill">this is where it lands</span><br>
+    <span class="small">The A list it reaches, in order:
+    <span class="fid">F173</span> (now specced — see the caution below);
+    <span class="fid">F188</span>, a repairable workspace fault that destroys the operator's message
+    after three schedules while the identical fault one line away holds it forever; and
+    <span class="fid">F190</span>, no turn can ever say it was stopped, failed or interrupted, because
+    the status map is built backwards from a payload sorted the other way. Both are in Runs, both
+    silent, and neither is visible to a user who does not already suspect it.</span>
+  </li>
+  <li>
+    <strong><code>APPROVED</code> rows from <code>APPROVALS.md</code>.</strong>
+    <span class="small">Nothing, unless you write one.</span>
+  </li>
+</ol>
+
+<div class="note">
+  <strong>The one thing worth knowing before you close this page.</strong>
+  F173 sits at the top of the A list <em>and</em> now has a proposal that survived three rounds. If
+  you approve nothing, tonight's window reaches F173 by the <em>finding</em> route and repairs it
+  without the design — after the loop spent a whole day producing one. Approving
+  <code>runner-model-is-chosen-from-the-catalog</code> is the difference between the night building
+  the reviewed design and the night improvising over it. <code>NOTHING TONIGHT</code> and an explicit
+  <code>ORDER:</code> line are both available if you would rather it went elsewhere.
+</div>
+
+<!-- ======================= decisions, not work ======================= -->
+<h2><span class="num">·</span>Two decisions — neither of them work</h2>
+
+<div class="ask">
+  <h4>Ratify or widen the <code>fastmcp &lt; 4</code> ceiling</h4>
+  <p>
+    Taken unattended at 01:27 (<code>4ce24fc</code>) and filed for ratification the same hour. Today's
+    research supplies the number the decision was missing: <strong>DEPBENCH</strong>
+    (arXiv 2608.30300, 2026-08-31) measures the best coding-agent configuration repairing
+    <strong>104 of 203</strong> real dependency upgrades containing hidden code-level changes —
+    <strong>51.2%</strong>. On a dependency where a break means <em>every agent turn fails to
+    start</em> rather than a red test, a coin flip is not a migration strategy. The bound plus
+    <code>test_fastmcp_api_contract.py</code> is the defensible posture, and raising it later has a
+    named test to answer to instead of a red board to bisect.
+  </p>
+  <p style="margin-bottom:0">
+    The same paper argues <em>against</em> extending the pattern reflexively to the still-unbounded
+    <code>fastapi&gt;=0.110</code>: a FastAPI break is a failing test, which is the case agents handle
+    best. That is a separate open decision and is not asking for an answer today.
+  </p>
+</div>
+
+<div class="ask">
+  <h4>F188 and F190 stay unproposed, on purpose</h4>
+  <p style="margin-bottom:0">
+    Both are close to one-line repairs, and spending three rounds on a one-liner is the cost of the
+    discipline without the benefit. They are recorded here as the two A findings the night window can
+    take <strong>directly</strong>, without a spec loop. Say so with an <code>ORDER:</code> line if
+    you want them ahead of everything else — otherwise the default queue reaches them at step 2
+    anyway, behind F173.
+  </p>
+</div>
+
+<p class="small">
+  Still open and untouched today, carried from the night: whether the sweep should pause and spend
+  windows retiring findings instead of filing them (45 filed in one night, none repaired), and whether
+  the 8010 trial Hub should be restarted from current master. On the latter, today's round 2 measured
+  something relevant — the Hub on 8011 serves
+  <code>~/.agentweave/hub/profiles/beta/agentweave.db</code>, the same file CLAUDE.md records for
+  8010, so the two trial Hubs appear to <em>share one database</em> and restarting 8010 would not
+  isolate it from the drive Hub's data. Full list: <code>spec-queue/DECISIONS.md</code>.
+</p>
+
+<!-- ============================= 6 ============================= -->
+<h2><span class="num">6</span>The research</h2>
+
+<p class="small">
+  <code>spec-queue/research/2026-09-01.md</code>, delivered 07:21 and verified byte-identical to the
+  routine's output. Ranked on being things the internal backlog does <em>not</em> already contain,
+  because they come from outside it. The 01:05 pilot run is preserved separately; its top candidate
+  had already shipped by the time this one was written.
+</p>
+
+<h3>1 · Name and test the context-elevation boundary <span class="pill">S</span></h3>
+<p>
+  <em>"When Context Gets Root"</em> (arXiv 2608.27299) achieved <strong>13 of 13 attack objectives on
+  all six coding harnesses tested</strong>, including all three that offer automatic permission
+  review, by getting the harness to promote low-privilege text into the system prompt.
+  <strong>For AgentWeave:</strong> four defences already hold — the context file is re-rendered from
+  Hub state every turn, <code>request_agent</code> takes a template rather than text, agent jobs are
+  off by default, and spec bodies stay behind a tool call. But one agent-authored string does reach
+  another agent's system prompt (a task title, 256 characters, unescaped, into the <em>reviewer's</em>
+  context), and <strong>nothing tests the property</strong> — it rests on statement ordering, so a
+  refactor removes it with a green board. Sell it as an undefended property, not a vulnerability; the
+  exploit alone will not survive contact with the code.
+</p>
+
+<h3>2 · Record the runner CLI version on every run <span class="pill">S/M</span></h3>
+<p>
+  Claude Code v2.1.251 (2026-08-28) fixed four permission-boundary defects in one release, including a
+  post-check symlink swap that read and wrote outside the approved location.
+  <strong>For AgentWeave:</strong> the Hub answers permission <em>prompts</em>, but the CLI's own
+  engine opens the file — and every one of those four defects lived in that engine. The Hub records no
+  CLI version anywhere, so two runs a week apart under identical settings can have materially
+  different containment and nothing in the record distinguishes them. Take the cheap half only
+  (capture it, store it on the run, show it in diagnostics); a <em>minimum</em>-version gate is a
+  support burden that should wait for a second machine to exist.
+</p>
+
+<h3>3 · Ratify the fastmcp ceiling <span class="pill">a decision, not a build</span></h3>
+<p>
+  Covered above. <strong>For AgentWeave:</strong> nothing in code changes; one line in the decisions
+  file gains a citation. It is on the research list only because a decision with a measurement behind
+  it gets made and one without it gets deferred a fourth time.
+</p>
+
+<h4>Reinforced, not restated</h4>
+<p class="small">
+  The drift surface (run 1's candidate 2) is <strong>stronger than when it was filed</strong>:
+  <code>grep -rn 'spec/drift' hub/ui/src/</code> still returns nothing, while the night filed F178,
+  F206 and F211 and today filed F215 — that is now <strong>a pattern with a name</strong>, routes
+  shipped without an operator surface, rather than one orphaned feature.
+</p>
+
+<h4>Seen and deliberately not proposed</h4>
+<ul class="small">
+  <li><strong>Google Antigravity</strong> — agent teams, a permissions surface, Artifact Review,
+    subagents and SDK-level policies across IDE/CLI/SDK. Flagged rather than characterised, because
+    only the Boost page was read. <em>The highest-value unread thing on the list</em>, and where the
+    next run starts: the closest first-party competitor found this week.</li>
+  <li><strong>OpenClaw 2.0</strong> — 16,000 PRs, 933 contributors. Their shared cloud sessions are the
+    multiplayer version of <code>agent-conversation-handoff</code>, but human-to-human on a cloud
+    service, which is the bet AgentWeave declines. Nothing to copy this week.</li>
+  <li><strong>ChatGPT Work</strong> — the useful part is the criticism: it is explained by what it is
+    for rather than what it does, and its system prompt and 223 tools are hidden. AgentWeave's charter
+    is an editable, readable contract over 26 declared tools (the research said 27; measured today,
+    <code>mcp_server.py</code> carries 26 <code>@mcp.tool()</code> decorators, 25 of them
+    agent-callable). A positioning line, not a build item.</li>
+  <li><strong>The Meta inbox anecdote</strong> — a permission posture that lived in the conversation
+    and was erased by compaction, after which the agent deleted the inbox.
+    <code>hub/hub/checkpoint_policy.py:24-26</code> reasons about exactly this, and the posture is a
+    Hub-supplied flag rather than a sentence in a prompt. Nothing to fix; it is the best one-paragraph
+    argument for the architecture and belongs in the docs rewrite.</li>
+  <li><strong>Dropped:</strong> DUOTRACE (it attributes failures across a trajectory; AgentWeave's
+    problem is recording <em>who acted</em> in the first place — a different problem wearing the same
+    word), a phased-workflow practitioner report with no evaluation, and plugin-marketplace ecosystem
+    sizing with no decision attached.</li>
+</ul>
+
+<footer class="page">
+  Written 2026-09-01T10:11+01:00 by the FILL window, iteration 6, on
+  <code>autonomous/2026-09-01-daily</code>.
+  Sources: <code>.claude/autonomous/2026-09-01-day-log.md</code>,
+  <code>.claude/autonomous/2026-09-01-night-log.md</code>,
+  <code>scripts/drive/FINDINGS.md</code>,
+  <code>openspec/changes/runner-model-is-chosen-from-the-catalog/</code>,
+  <code>spec-queue/research/2026-09-01.md</code>.
+  Every number on this page is measured or labelled otherwise.
+</footer>
+
+</div>
+</body>
+</html>

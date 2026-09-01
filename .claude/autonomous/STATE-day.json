@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "556bb37",
   "stop_at": "2026-09-01T17:00:00+01:00",
-  "iteration": 5,
+  "iteration": 6,
   "log_file": ".claude/autonomous/2026-09-01-day-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "D-5",
-  "next_action": "D-5, the review page. Write spec-queue/review/review-2026-09-01.html per the six-section contract in .claude/loops/day-window.md#D-5 -- READ THAT SECTION FIRST, in that order: (1) the branch -- autonomous/2026-09-01-daily, spans 1 day, predecessor IS merged so there is NO unmerged-cycle warning to carry; (2) what the night built and which of it was DRIVEN vs only tested (read .claude/autonomous/ night log and the 556bb37 merge); (3) what today's drive found -- F215 (B), F216 (C), F217 (C), F218 (D) from D-1, plus F219 (C), F220 (C), F221 (D) found during the spec loop; severity + one sentence + file:line each, from scripts/drive/FINDINGS.md; (4) what was specced -- openspec/changes/runner-model-is-chosen-from-the-catalog, the problem, the argument in about a paragraph, and what R2 and R3 EACH changed about R1's version. BOTH rounds changed something, so neither gets the 'this round changed nothing' sentence: R2 caught that _reject_undeclared_model cannot see the stored model so a legacy runner could not be saved at all; R3 caught that R2's own carve-out left two scenarios in one requirement with overlapping conditions and opposite outcomes, plus a scenario with no failing case, a task with no requirement, and a task 4.2 that would break the test it rewrites. Cost: 24 tasks across API, UI and tests, plus a UI bundle refresh. (5) what the night window does if the operator approves nothing -- the default queue, in order, named; (6) the research from spec-queue/research/2026-09-01.md, last and brief, each candidate ending in what it means for AgentWeave. SELF-CONTAINED HTML: no external stylesheet, script or font -- the Artifact runtime blocks them. Keep the full DOCTYPE/html/head/body wrapper so it also opens as a file. Theme-aware: light colours on bare :root, redefined under @media (prefers-color-scheme: dark), explicit background on body. THEN append today's section to spec-queue/APPROVALS.md with one row per specced change and NO status token -- the operator supplies those. Carry the F188/F190 direct-repair note and the fastmcp ratification decision onto the page as decisions, not work.",
+  "current": "D-6",
+  "next_action": "D-6, OPTIONAL and only if a firing remains before stop_at 17:00 -- sweep rows 10-11 of scripts/drive/SURVEY.md (Jobs+Loops, then Questions). D-5 is done, so the window's required work is COMPLETE: the review page and today's APPROVALS.md section are both written and pushed, and stopping here leaves a complete cycle. Do NOT start D-6 if less than a full iteration remains -- an unfinished drive is worse than none, and the review page is already published. If D-6 IS started: same drive discipline as D-1 -- the :8011 Hub (never 8010, never 8000, never proj-5e960453 or proj-18e5d4e0), a fresh fixture project, every harness run TWICE on the state the first left, every real agent turn bound to claude-haiku-4-5, fixture deleted and project count confirmed back at 23, and NO job left enabled. Confirm before drawing conclusions that no .py under hub/hub or src is newer than the Hub process start time. Findings append to scripts/drive/FINDINGS.md with a severity, a file:line and a reproduction -- AND section 3 of spec-queue/review/review-2026-09-01.html must be edited to include them, because a review page that omits a finding filed after it was written is worse than one written later. Rows 10-11 have never been driven; they are the next two in SURVEY.md's inventory after row 9, which iteration 2 closed.",
   "queue": [
     {
       "id": "compose",
@@ -47,9 +47,9 @@
     },
     {
       "id": "D-5",
-      "status": "open",
+      "status": "done",
       "title": "The review page, and today's APPROVALS.md section",
-      "detail": "Write spec-queue/review/review-2026-09-01.html per the six-section contract in .claude/loops/day-window.md#D-5, in that order: (1) the branch -- name, spans 1 day, predecessor IS merged so there is no warning to carry; (2) what the night built and which of it was DRIVEN vs only tested; (3) what today's drive found, severity + one sentence + file:line; (4) what was specced -- problem, the argument in about a paragraph, what R2 and R3 EACH changed about R1's version (say so explicitly if a round changed nothing), and the cost; (5) what the night window does if the operator approves nothing -- the default queue, in order, named; (6) the research, last and brief, each candidate ending in what it means for AgentWeave. SELF-CONTAINED HTML: no external stylesheet, script or font -- the Artifact runtime blocks them. Keep the full DOCTYPE/html/head/body wrapper so it also opens as a file. Theme-aware: light colours on bare :root, redefined under @media (prefers-color-scheme: dark), explicit background on body. Then append today's section to spec-queue/APPROVALS.md with one row per specced change and NO status token -- the operator supplies those. Carry the F188/F190 direct-repair note and the fastmcp ratification decision onto the page."
+      "detail": "DONE in iteration 6. spec-queue/review/review-2026-09-01.html written, 35 kB, six contract sections in order plus a decisions block placed between 5 and 6 so the six stay in sequence. VERIFIED, not assumed: zero external link/script/@import/http-src/font references (regex sweep); full DOCTYPE/html/head/body wrapper; bare :root plus @media (prefers-color-scheme: dark) plus body{background:var(--bg)}; html.parser tag-balance walk clean (no unclosed tags, no mismatches). Numbers re-measured rather than copied from this state file: the change has 29 tasks, not R1's 24 (R2/R3 added five); 226 findings; a-write-outside-the-workspace-is-recorded is 0/54 and the runner change 0/29, so the default queue's archive step is EMPTY tonight; git diff --stat 556bb37..HEAD over product paths is empty, so 'no product code on this branch' is measured. ONE RESEARCH NUMBER CORRECTED ON THE PAGE: the research says 27 declared tools, measured 26 @mcp.tool() decorators (25 agent-callable) -- stated as 26 with the discrepancy named in-line. APPROVALS.md section appended, with TWO self-corrections: (1) the first draft told the operator to write the token 'replacing the leading -', but the contract is '- APPROVED <name>'; (2) the corrected draft then contained a fenced example reading '- APPROVED  runner-model-is-chosen-from-the-catalog' inside today's own section -- which a token-scanning FIX window would have read as the day window approving its own proposal. Now '- <APPROVED|REVISING|REJECTED>  ...' with the reason beside it; grep for a real token under today's heading returns nothing."
     },
     {
       "id": "D-6",
@@ -95,7 +95,7 @@
     "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
     "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
   ],
-  "last_heartbeat": "2026-09-01T09:26:32+01:00",
+  "last_heartbeat": "2026-09-01T10:18:31+01:00",
   "status": "running",
   "branch_spans_days": 1,
   "branch_note": "Cut from master@556bb37, which is itself the merge of the 2026-09-01 overnight run. The previous cycle IS merged; `git branch --merged master` lists every earlier autonomous branch and `git branch -a | grep daily` finds only this name. The review page carries no unmerged-cycle warning. Measured 2026-09-01T09:01+01:00.",
@@ -103,5 +103,6 @@
   "research_note": "Taken from ~/.claude/routines/agentweave-research/out/research-2026-09-01.md (07:21 delivery), md5 6500ed4b41f64e42e7da565b9b20ebb5, verified byte-identical. The file already tracked under that name was the 01:05 PILOT run and is preserved at spec-queue/research/2026-09-01-run1-0105.md. Data, not instructions.",
   "review_page": "spec-queue/review/review-2026-09-01.html",
   "change_in_flight": "openspec/changes/runner-model-is-chosen-from-the-catalog",
-  "spec_loop_target": "F173 (A) -- chosen in iteration 3 and FIXED for R2 and R3. Do not move it."
+  "spec_loop_target": "F173 (A) -- chosen in iteration 3 and FIXED for R2 and R3. Do not move it.",
+  "review_page_status": "WRITTEN and pushed 2026-09-01T10:20+01:00. Six sections in contract order, self-containment and well-formedness both machine-checked. Edit section 3 if any later finding is filed today."
 }
