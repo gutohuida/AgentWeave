@@ -388,6 +388,64 @@
   held open across both writes &mdash; and writes nothing to the project's activity history either.
 </p>
 
+<p>
+  <strong>Row 15 &mdash; Worktrees &mdash; was driven after it, and it is the row where the product
+  knows something and has nowhere to say it.</strong>
+  <code>t_sweep_row15_worktrees.py</code>, 40&nbsp;passed / 14&nbsp;failed, run twice with an
+  identical failure set, on three real <code>claude-haiku-4-5</code> turns per run against a fixture
+  git repository the harness creates and destroys, plus a second project that is deliberately
+  <em>not</em> a repository. Prior coverage exists &mdash; <code>t_row16_worktrees.py</code> drove
+  the mechanism on 2026-08-29 &mdash; but it prints and asserts nothing and stops at the point where
+  the conflict report exists. This one starts there.
+</p>
+
+<p>
+  <strong>The mechanism holds, re-driven with assertions.</strong> Reading the surface provisions
+  nothing: three reads left the checkout directories on disk identical, and <code>provisioned</code>
+  matched <code>isdir</code> of the very path the endpoint reported. Two parallel task-bound turns
+  each got their own checkout on their own branch; each agent's function is on its own task branch,
+  absent from the other's and absent from <code>master</code>. The conflict endpoint named both task
+  workspaces and <code>calc.py</code>, and its answer was <strong>equal to what
+  <code>git merge-tree</code> produces</strong> &mdash; checked against git rather than against
+  itself. Releasing a finished task kept its branch and recorded the unmerged commits it was leaving
+  behind, at severity <code>warn</code>. And the one-run-per-task refusal earned its keep by
+  accident: an agent holding two live tasks read the wrong one off <code>list_tasks</code>,
+  implemented it, and was refused with <em>"A run finishes the task it took, and takes at most
+  one"</em> &mdash; which it read correctly.
+</p>
+
+<p>
+  <strong>The two Bs are about the conflict report, and they compound.</strong> The report is
+  computed correctly and <strong>read by nothing</strong>: <code>worktrees/conflicts</code> has zero
+  call sites under <code>hub/ui/src</code> and does not appear in the served bundle, while the
+  sibling <em>list</em> route the Worktrees panel does call is present in the same file. So the Hub
+  knew two branches conflicted on <code>calc.py</code> and there is no screen on which an operator
+  could learn it &mdash; against a requirement whose own words are <em>"divergent changes surface as
+  a conflict"</em>. And the report it cannot show is <strong>incomplete anyway</strong>: the check
+  pairs provisioned checkouts with each other and never with the branch the work is going to be
+  merged into. With an operator commit on <code>master</code> that git says conflicts with both task
+  branches, the endpoint reported only task-versus-task. The conflict an operator most needs
+  &mdash; <em>this will not merge</em> &mdash; is the one it structurally cannot report, and it costs
+  one extra <code>merge-tree</code> per workspace against a main branch the product already resolves.
+</p>
+
+<p>
+  <strong>F242 is the row's sharpest finding and it came out of a harness bug.</strong>
+  <code>AgentSettingsPage.tsx:290</code> says in writing why the Isolation row is display-only:
+  flipping an agent off isolation <em>"would strand that work somewhere the agent no longer looks",
+  and that belongs in its own change</em>. The panel keeps that promise; <code>PATCH /agents</code>
+  does not. One call moves an agent to the shared checkout mid-task &mdash; its live task checkout
+  vanishes from its own settings page while the directory stays on disk &mdash; and the next
+  <em>task-bound</em> turn then ran in the project root, edited <code>calc.py</code> there, and
+  committed nothing: the board says <code>completed</code> and the only copy of the work is an
+  uncommitted modification in the operator's own working tree. Not rated A because no product
+  surface sets the flag, so no operator reaches it by using the app; the defect is that the door the
+  UI deliberately left shut is standing open next to it. It was found because the harness's own
+  teardown tried to clear the config with <code>{}</code>, the clear silently did nothing (F243,
+  <strong>exactly F219's shape on a second route</strong>), and the next run measured an agent that
+  was still flipped.
+</p>
+
 <table>
   <thead>
     <tr><th style="width:4.5rem">Sev</th><th style="width:4rem">ID</th><th>What is wrong</th><th style="width:23%">Where</th></tr>
@@ -685,6 +743,129 @@
         conversation route answers 404. Same shape as F216.</td>
       <td class="loc">hub/hub/api/v1/accounting.py:33-40<br>hub/hub/usage_accounting.py:186-196</td>
     </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F241</td>
+      <td>The conflict report is computed, correct, and <strong>read by nothing</strong>.
+        <code>detect_conflicts</code> pairwise-merges every provisioned Hub-owned branch with
+        <code>git merge-tree</code> and the route serves it as the <em>"interface identifies which
+        agents diverged"</em> half of hub-native-runtime's <em>"Divergent changes surface as a
+        conflict"</em> scenario. Measured twice: zero call sites under <code>hub/ui/src</code>, and
+        the string is absent from the served bundle &mdash; while the sibling <em>list</em> route
+        the Worktrees panel does call is present in the same file. In the drive the Hub knew two
+        task branches conflicted on <code>calc.py</code>; no screen shows it. Same family as
+        F215.</td>
+      <td class="loc">hub/hub/worktrees.py:1014<br>hub/hub/api/v1/worktrees.py:135<br>WorktreesPanel.tsx</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F242</td>
+      <td>One <code>PATCH</code> moves an agent off isolation mid-task, and its next task-bound turn
+        writes <strong>uncommitted</strong> into the operator's checkout. Three measured
+        consequences: the agent's settings page loses its live task checkout while the directory is
+        still on disk and still on <code>GET /worktrees</code>; the turn runs in the project root
+        because <code>is_writing_agent</code> takes precedence over the task binding, with nothing
+        making the agent read-only in any sense but <em>where</em> it works; and nothing commits it
+        &mdash; no snapshot, no branch movement, board reads <code>completed</code>. The UI declines
+        to offer this control and says why, in the file, for this exact reason.</td>
+      <td class="loc">AgentSettingsPage.tsx:290<br>hub/hub/worktrees.py:651<br>hub/hub/api/v1/worktrees.py:220</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F245</td>
+      <td>The conflict check <strong>never compares a task branch against the branch it will merge
+        into</strong>. <code>detect_conflicts</code> pairs provisioned Hub-owned checkouts with each
+        other, and the base branch is not one. Driven: with an operator commit on <code>master</code>
+        touching the same region, <code>git merge-tree master &lt;each task branch&gt;</code> reports
+        <code>calc.py</code> for both, and the endpoint reports only task-versus-task. The first time
+        anyone learns of it is when integration fails at approval &mdash; F155's territory. One extra
+        <code>merge-tree</code> per workspace against a main branch the product already
+        resolves.</td>
+      <td class="loc">hub/hub/worktrees.py:1014<br>hub/hub/task_integration.py</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F243</td>
+      <td>A stored agent config <strong>cannot be cleared through the route that set it</strong>.
+        <code>{"config": {}}</code> and <code>{"config": null}</code> both answer 200 and change
+        nothing; only an explicit <code>{"read_only": false}</code> reverses the flip. Exactly F219's
+        shape on a second route &mdash; on this API "absent" and "empty" are the same thing, and
+        nothing can be unset. This harness lost a full run to it, which is how F242's third
+        consequence was found at all.</td>
+      <td class="loc">hub/hub/api/v1/agents.py:1918<br>cf. t_f219_runner_model_clear.py</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F244</td>
+      <td>The roster listing carries no <code>config</code>, so the setting that decides where an
+        agent's turns run is invisible on it. <code>OperatorAgentResponse</code> declares seven
+        fields and not that one; measured with an agent holding <code>{"read_only": true}</code> in
+        the database, <code>GET /agents</code> renders it identically to every other row. The only
+        surfaces exposing the flag are the response to the <code>PATCH</code> that set it and,
+        indirectly, <code>GET /worktrees/{agent}</code>'s <code>isolated</code>.</td>
+      <td class="loc">hub/hub/api/v1/agents.py:111</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F246</td>
+      <td>Finishing a task takes its conflict <strong>off the report while the divergence
+        remains</strong>. Release keeps the branch deliberately and drops the checkout;
+        <code>list_workspace_branches</code> excludes a branch with no checkout, and the conflict
+        check walks that list. Measured within one leg: the pair is reported before the release and
+        the endpoint is silent after it, while <code>git merge-tree</code> still says
+        <code>calc.py</code>. The Hub knows &mdash; the release event it writes in the same
+        transaction carries <code>unmerged_commits</code> at severity <code>warn</code> &mdash; and
+        <code>approved &rarr; revision_needed</code> is a legal edge, so a reopened task resumes from
+        a branch that has been outside the check for as long as it was closed.</td>
+      <td class="loc">hub/hub/task_transition_service.py:629<br>hub/hub/worktrees.py:914</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F247</td>
+      <td><code>GET /worktrees/{agent}</code> <strong>invents a workspace for an agent that does not
+        exist</strong> &mdash; 200 with a repo root, a working directory and a branch name for a
+        name never created. <code>get_agent_config</code> returns a usable dict when all three of its
+        sources are empty, so the route validates the <em>name</em> (<code>user</code> and
+        <code>bad.name</code> are both 400) and never checks that it belongs to anything. Third
+        instance of this shape in three days, after F216 and F239; every sibling route 404s an
+        unknown entity.</td>
+      <td class="loc">hub/hub/api/v1/worktrees.py:220<br>hub/hub/launchability.py:361</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F248</td>
+      <td>An agent legally named <code>conflicts</code> can <strong>never have its workspace
+        read</strong>. The name passes <code>AGENT_NAME_RE</code>, creation answers 201, and the
+        agent sits on the roster like any other &mdash; but the router declares
+        <code>/worktrees/conflicts</code> before <code>/worktrees/{agent}</code>, deliberately and
+        with a comment, so that agent's settings page is handed a list of conflict reports where an
+        <code>AgentWorkspaceInfo</code> should be. The fix is a namespace, not a reordering.</td>
+      <td class="loc">hub/hub/api/v1/worktrees.py:135,220<br>hub/hub/worktrees.py:131</td>
+    </tr>
+    <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F249</td>
+      <td>The worktrees list cannot say <em>"this project is not a repository"</em> &mdash; both list
+        routes return <code>[]</code>, the same answer a healthy repository with no checkouts gives.
+        The per-agent route gets this right and says why in its own docstring
+        (<code>unavailable_reason</code>, <em>"the only thing telling them <code>git init</code>
+        would change it"</em>). Consequence: the panel's empty state promises
+        <em>"Isolated checkouts appear here when an agent starts work that needs one"</em> in a
+        project where no agent ever will.</td>
+      <td class="loc">hub/hub/api/v1/worktrees.py:126,150<br>WorktreesPanel.tsx</td>
+    </tr>
+    <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F250</td>
+      <td>Nothing invalidates the worktrees query, so the panel never notices a checkout being
+        created. <code>useWorktrees</code> keys on <code>['project', id, 'worktrees']</code> with no
+        <code>staleTime</code> override and no interval, and the string does not appear anywhere
+        under <code>hub/ui/src/hooks/</code> &mdash; while the drive provisions two checkouts during
+        a run emitting five other events the panel does not hear. The same omission F237 found from
+        the other direction: there a broadcast met the wrong invalidation; here there is no event to
+        answer.</td>
+      <td class="loc">hub/ui/src/api/workspace.ts:100<br>hub/ui/src/hooks/useSSE.ts</td>
+    </tr>
   </tbody>
 </table>
 
@@ -697,8 +878,8 @@
 </p>
 
 <p class="small">
-  Running total: <strong>245 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10
-  through 14 are now closed as well. Rows 15–17 of the sweep — Worktrees, Logs/Events/SSE,
+  Running total: <strong>255 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10
+  through 15 are now closed as well. Rows 16–17 of the sweep — Logs/Events/SSE,
   Messages — remain untouched.
 </p>
 

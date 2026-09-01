@@ -16368,3 +16368,301 @@ rate-limit telemetry — `{"rateLimitType": "five_hour", "status": "allowed", "o
 operator language rather than as raw JSON.
 
 **Reproduction:** `scripts/drive/t_sweep_row14_accounting.py`, legs 6-8.
+
+---
+
+## Row 15 WORKTREES — per-agent isolation and conflicts, driven 2026-09-01
+
+Driven on the `:8011` Hub (pid 22908, started 01:48:32; no `.py` under `hub/hub` or `src` newer
+than it) against a fixture this harness creates and destroys: `aw-drive-row15`
+(`proj-a214ba696422`, a git repository seeded with `calc.py`) plus `aw-drive-row15-nogit`
+(deliberately not a repository), three roster agents, one self-registered agent, three real
+`claude-haiku-4-5` turns per run. Reproduction throughout:
+`scripts/drive/t_sweep_row15_worktrees.py`, **40 passed / 14 failed, twice, the second run on the
+state the first left**.
+
+**Prior coverage was read first.** `t_row16_worktrees.py` (old row numbering) drove the mechanism
+on 2026-08-29 and the block at `FINDINGS.md:8093` records the result: isolation holds, each task
+edits on its own branch, `main` untouched, `GET /worktrees/conflicts` naming both *task*
+workspaces and `calc.py`. That harness prints and asserts nothing, and it stops where the conflict
+report exists. This one starts there.
+
+### The mechanism, re-driven with assertions — it holds
+
+Recorded first, because a sweep that reports only defects is not a measurement. All of the
+following passed twice:
+
+* Reading the surface **provisions nothing**: three reads (`GET /worktrees`,
+  `/worktrees/conflicts`, `/worktrees/{agent}`) left the set of directories under
+  `.agentweave/{worktrees,tasks,reviews}` identical, and `provisioned` matched `os.path.isdir` of
+  the very path the endpoint reported.
+* Two parallel task-bound turns each got **their own checkout on their own branch**; `alpha`'s
+  function is on `alpha`'s task branch and absent from `beta`'s and from `master`, and the
+  converse; `git show master:calc.py` is unchanged by either turn.
+* `GET /worktrees/conflicts` named both task workspaces and `calc.py`, and its answer is
+  **equal to the paths `git merge-tree --write-tree --name-only` produces here** — checked against
+  git rather than against itself.
+* `GET /worktrees/{agent}` listed the agent's live task checkout with `provisioned: true` and
+  `grandfathered: false`.
+* Refusals held: the reserved name `user`, a name with a dot in it, and a 40-character name are
+  all 400; an unknown project is 404.
+* Releasing a finished task **keeps its branch** and records the release with the unmerged commits
+  it is leaving behind: `task_worktree_released ... "unmerged_commits":
+  ["0a05f571307f1da100ff5315763b4ffd08d6a375"]`, severity `warn`.
+* A **self-registered** agent with `config: {"read_only": true}` shares the project checkout, with
+  `isolated: false` and `working_dir` equal to the project root — exactly as designed.
+* The one-run-per-task refusal earned its keep by accident. Run 2's `beta` held two live tasks,
+  read the wrong one off `list_tasks` and implemented it, then tried to close it — `update_task`
+  refused with *"A run finishes the task it took, and takes at most one."* The agent read the
+  refusal correctly and closed the task it was actually bound to.
+
+---
+
+## F241 (B) — the conflict report is computed, correct, and read by nothing
+
+`hub/hub/worktrees.py:1014` `detect_conflicts` pairwise-merges every provisioned Hub-owned branch
+with `git merge-tree`; `hub/hub/api/v1/worktrees.py:135` serves it as
+`GET /projects/{p}/worktrees/conflicts`, with a docstring calling it *"the interface identifies
+which agents diverged"* half of hub-native-runtime's **"Divergent changes surface as a conflict"**
+scenario.
+
+Measured, twice: **zero call sites.** No `.ts`/`.tsx` under `hub/ui/src` (tests excluded) contains
+the string `worktrees/conflicts`, and it does not appear in the served bundle under
+`hub/hub/static/ui/assets/` either — while `worktrees` (the *list* route, which
+`WorktreesPanel.tsx` does call) is present in the same bundle. The Worktrees settings page renders
+the list of checkouts and nothing else.
+
+So in the drive above, the product knew that `alpha`'s and `beta`'s task branches conflicted on
+`calc.py`, and there is no screen on which an operator could learn it. The requirement's own words
+are *"surface as a conflict"*.
+
+**B.** A shipped capability with no surface. Same family as F215 (every 9c route absent from the
+bundle), and worth queueing with it: both are "the endpoint exists, the UI never asks".
+
+**Reproduction:** `t_sweep_row15_worktrees.py`, leg 5.
+
+---
+
+## F242 (B) — one PATCH moves an agent off isolation mid-task, and its next task-bound turn writes uncommitted into the operator's checkout
+
+`hub/ui/src/components/agents/AgentSettingsPage.tsx:290` states, in writing, why the Isolation row
+is display-only:
+
+> Isolation itself is not editable here. It is a real stored setting (`config.read_only`) that
+> nothing offers today, and giving it a control is a change of behaviour — flipping an agent with
+> uncommitted work in its worktree to the shared checkout would strand that work somewhere the
+> agent no longer looks. That belongs in its own change, with a decision about what happens to the
+> existing worktree.
+
+The panel keeps that promise. `PATCH /api/v1/projects/{p}/agents/{name}` does not. Driven, twice,
+in this order:
+
+```
+PATCH /agents/beta {"config": {"read_only": true}}   -> 200, config {"read_only": true}
+GET   /worktrees/beta                                -> isolated: false,
+                                                        working_dir: <project root>,
+                                                        task_checkouts: []   (was ["task-..."])
+   ... while .agentweave/tasks/task-... is still on disk and still on GET /worktrees
+POST  /agent/trigger {agent: beta, task_id: task-...} -> run completed
+git status (project root)                             -> " M calc.py"
+git show agentweave/task/task-...:calc.py             -> does NOT contain the turn's function
+```
+
+Three separate consequences, each measured:
+
+1. **The agent's own settings page loses the work.** `get_agent_workspace`
+   (`api/v1/worktrees.py:220`) returns early for a non-isolated agent, and that early return
+   carries no `task_checkouts` — deliberately, and correctly for a read-only agent, but the flip
+   makes an agent *holding a provisioned task checkout* take that branch. The directory is still
+   there and the project-wide list still shows it; the panel an operator would open to find it
+   does not.
+2. **The turn ran in the project checkout.** `resolve_turn_workspace` (`worktrees.py:651`) gives
+   `is_writing_agent` precedence over the task binding, by design and with the reasoning stated
+   ("a task checkout it may not write to would be an empty gesture"). But nothing makes the agent
+   read-only in any sense other than *where it works* — it is spawned with the same permissions —
+   so it edited `calc.py` at the repo root.
+3. **Nothing committed it.** No snapshot commit, no task branch movement. The board says
+   `completed`; the only copy of the work is an uncommitted modification in the operator's own
+   working tree, which integration cannot merge and which the next `git checkout` discards.
+
+**Not rated A, and here is why:** no product surface sets `read_only` — the UI declines to, by the
+comment above — so no operator reaches this state by using the app. The API is the only door, and
+it is the operator's own API. The defect is that the door the UI deliberately left shut is
+standing open next to it, with none of the protection the comment says the change would need.
+
+**Reproduction:** `t_sweep_row15_worktrees.py`, leg 8.
+
+---
+
+## F243 (C) — a stored agent config cannot be cleared through the route that set it
+
+Immediately after the flip above, twice:
+
+```
+PATCH /agents/beta {"config": {}}                    -> 200, still {"read_only": true}, isolated false
+PATCH /agents/beta {"config": null}                  -> 200, still {"read_only": true}, isolated false
+PATCH /agents/beta {"config": {"read_only": false}}  -> 200, {"read_only": false},       isolated true
+```
+
+Both clears answer 200 and change nothing, so the obvious operator move — *put it back the way it
+was* — silently fails, and only an explicit falsy value for the key you happen to remember
+reverses it. This is **exactly F219's shape** on a different route (`PATCH` a runner with
+`{"model": null}` answers 200 and never clears the model), which makes it a pattern rather than a
+slip: on this API, "absent" and "empty" are the same thing, and nothing can be unset.
+
+This harness lost a full run to it. Run 1's teardown leg cleared `beta`'s config with
+`{"config": {}}`, the clear did nothing, and run 2's isolation assertions measured an agent that
+was still un-isolated — which is how F242's third consequence was found at all.
+
+**Reproduction:** `t_sweep_row15_worktrees.py`, leg 8; cross-reference `t_f219_runner_model_clear.py`.
+
+---
+
+## F244 (C) — the roster listing carries no `config`, so the setting that decides where an agent works is invisible on it
+
+`OperatorAgentResponse` (`hub/hub/api/v1/agents.py:111`) declares `id`, `name`, `runner_id`,
+`charter_id`, `color_index`, `contact_mode`, `self_registered` — and no `config`. Measured with
+`beta` holding `{"read_only": true}` in the database:
+
+```
+GET /agents -> [{"name":"alpha","config":null},{"name":"beta","config":null},
+                {"name":"conflicts","config":null},{"name":"readerbot","config":null}]
+```
+
+`readerbot` is self-registered with `{"read_only": true}` and reads the same. The only surfaces
+that expose the flag are the response to the `PATCH` that set it and, indirectly,
+`GET /worktrees/{agent}`'s `isolated`. An agent that has been moved off isolation is
+indistinguishable from every other one on the roster.
+
+**Reproduction:** `t_sweep_row15_worktrees.py`, leg 8.
+
+---
+
+## F245 (B) — the conflict check never compares a task branch against the branch it will merge into
+
+`detect_conflicts` (`worktrees.py:1014`) walks `list_workspace_branches` and pairs each
+*provisioned Hub-owned checkout* with each other. The base branch is not a Hub-owned checkout, so
+it is never one of the pair. Driven, twice: with an operator commit on `master` touching the same
+region of `calc.py`,
+
+```
+git merge-tree --write-tree --name-only master agentweave/task/<alpha's task>  -> calc.py
+git merge-tree --write-tree --name-only master agentweave/task/<beta's task>   -> calc.py
+GET /worktrees/conflicts -> workspaces are only ["task-...","task-..."];  master is absent
+```
+
+The conflict an operator most needs — *this task's work will not merge* — is the one the endpoint
+structurally cannot report, and it is the cheapest to compute: one extra `merge-tree` per
+workspace against `Project.main_branch`, which `task_integration.detect_main_branch` already
+resolves. Today the first time anyone learns of it is when integration fails at approval (the
+territory of F155's conflict remedy).
+
+**Reproduction:** `t_sweep_row15_worktrees.py`, leg 6.
+
+---
+
+## F246 (C) — finishing a task takes its conflict off the report while the divergence remains
+
+`release_task_workspace` (`task_transition_service.py:629`) removes the checkout on `approved` or
+`rejected` and **keeps the branch**, deliberately: *"the branch is the record of what the task did,
+and deleting it would destroy both the history an operator reads after the fact and the work a
+reopened task resumes from."* `list_workspace_branches` (`worktrees.py:914`) excludes a branch with
+no checkout. `detect_conflicts` walks that list. So the moment a task ends, its branch stops being
+conflict-checked.
+
+Measured, twice, within one leg:
+
+```
+before the release   GET /worktrees/conflicts -> [("task-alpha...","task-beta...")] on calc.py
+PATCH task -> completed -> rejected
+after  the release   git merge-tree(alpha's branch, beta's branch) -> ["calc.py"]   (still conflicts)
+                     GET /worktrees/conflicts -> []                                 (silent)
+```
+
+The Hub knows the branch has work nobody has merged — the release event it writes in the same
+transaction says `"unmerged_commits": ["0a05f57..."]` and is raised at severity `warn` for exactly
+that reason. A `rejected` task's branch going quiet is arguable; `approved` uses the same path,
+and `approved -> revision_needed` is a legal edge, so a reopened task resumes from a branch that
+has been outside the conflict check for as long as it was closed.
+
+**Reproduction:** `t_sweep_row15_worktrees.py`, leg 7.
+
+---
+
+## F247 (C) — `GET /worktrees/{agent}` invents a workspace for an agent that does not exist
+
+```
+GET /projects/proj-a214ba696422/worktrees/ghostr15c
+200 {"agent":"ghostr15c",
+     "repo_root":"C:\\Users\\huida\\Documents\\aw-drive-row15",
+     "working_dir":"...\\.agentweave\\worktrees\\ghostr15c",
+     "isolated":true,"branch":"agentweave/ghostr15c","provisioned":false,"task_checkouts":[]}
+```
+
+There is no agent by that name. `get_agent_config` (`launchability.py:361`) merges three sources
+and returns a usable dict when all three are empty, so the endpoint answers about a roster entry
+that was never created. The route validates the *name* (`user` and `bad.name` are both 400) and
+never checks that the name belongs to anything.
+
+Third instance of this shape in three days — F216 (the drift candidate projects only database ids)
+and F239 (the per-conversation rollup answers 200 with a zeroed summary for a conversation that
+does not exist) are the same defect on different routes. Every sibling route on this project 404s
+an unknown entity.
+
+**Reproduction:** `t_sweep_row15_worktrees.py`, leg 2.
+
+---
+
+## F248 (C) — an agent legally named `conflicts` can never have its workspace read
+
+`AGENT_NAME_RE` accepts `conflicts`; `POST /projects/{p}/agents {"name": "conflicts"}` creates it,
+201, and it appears on the roster like any other. `api/v1/worktrees.py` declares
+`GET /worktrees/conflicts` before `GET /worktrees/{agent}` — with a comment saying so, because the
+path parameter would otherwise claim it. Consequence, measured:
+
+```
+GET /projects/{p}/worktrees/conflicts   ->  200  []      (a list of ConflictInfo)
+                                            not         {"agent":"conflicts", ...}
+```
+
+`useAgentWorkspace('conflicts')` therefore hands `AgentWorkspaceInfo`-typed code an array, and that
+agent's settings page cannot render its working directory, its branch or its task checkouts. The
+fix is a namespace, not a reordering: the sibling route needs to sit somewhere a legal agent name
+cannot reach.
+
+**Reproduction:** `t_sweep_row15_worktrees.py`, leg 2.
+
+---
+
+## F249 (D) — the worktrees list cannot say "this project is not a repository"
+
+For a project whose directory is not a git repository, `list_worktrees` and
+`get_worktree_conflicts` both `return []` (`api/v1/worktrees.py:126` and `:150`) — the same answer
+a healthy repository with no checkouts gives. Measured on `aw-drive-row15-nogit`: list `[]`,
+conflicts `[]`.
+
+`get_agent_workspace` gets this right and says why in its own docstring — it returns
+`unavailable_reason: "<root> is not a git repository, so there is no isolated checkout..."`,
+described as *"the only thing telling them `git init` would change it"*. The list has no field to
+carry that, and `WorktreesPanel.tsx`'s empty state consequently promises something that will never
+happen: *"Isolated checkouts appear here when an agent starts work that needs one."* In a
+non-repository project no agent will ever start such work.
+
+**Reproduction:** `t_sweep_row15_worktrees.py`, leg 3.
+
+---
+
+## F250 (D) — nothing invalidates the worktrees query, so the panel does not notice a checkout being created
+
+`useWorktrees` (`hub/ui/src/api/workspace.ts:100`) keys on `['project', projectId, 'worktrees']`
+with no `staleTime` override and no refetch interval. Measured: the string `'worktrees'` does not
+appear anywhere under `hub/ui/src/hooks/`, so no SSE event invalidates it — and the drive
+provisions two checkouts during a run that emits `run_started`, `queue_entry_delivered`,
+`task_updated`, `run_completed` and `task_worktree_released`, none of which the panel hears.
+
+An operator with the Worktrees page open while agents work sees whatever was true when the page
+mounted, until a remount or a window refocus. Small, and the same omission that F237 found on the
+budget surfaces from the other direction: there the server broadcast an event the client answered
+with the wrong invalidation; here there is no event to answer.
+
+**Reproduction:** `t_sweep_row15_worktrees.py`, leg 5.
