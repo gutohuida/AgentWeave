@@ -51,19 +51,49 @@ One alarm was raised and killed rather than filed. `grep -E 'Run\.status == "[a-
 `JobRun.status`, and the scheduler's `skipped`/`in_progress` writes are all under `run = JobRun(`.
 `Run.status` really is `{running, completed, failed, stopped, interrupted}`. D5 stands.
 
+### Round 3, 2026-09-01: what a second independent re-derivation changed
+
+Round 3 read the model, the component, the route, the `Run` table and both terminal paths before
+reading either earlier round's reasoning. The central argument survives a second time, as does
+round 2's correction that `anotherRunIsUnderway` defeats the working indicator live and not only on
+reload. Two things did not survive, and both are cases of a *right* observation reaching a
+mechanism that cannot deliver it:
+
+- **Round 2 bounded the run query's size when the problem was its ordering.** Its arithmetic — up to
+  50 distinct runs can be named, so the run limit must be at least 50 — is correct and is not the
+  operative constraint. A limit decides how many rows return, not which, and task 1.4 ranked them
+  by `started_at`. `run_reconciliation.reconcile_interrupted_runs` sweeps every still-`running` row
+  in the database at Hub start and writes its lifecycle event *then*, so one bounce makes an
+  agent's newest events name its oldest runs. An implementation obeying round 2 to the letter would
+  drop exactly those, satisfy D7 as written, pass the test D7 commissioned, and still show older
+  turns with no outcome — F190 again, through its own fix, for the second round running. The map is
+  now read by id off the events themselves, so coverage is a property of the query rather than an
+  argument about limits. D3 is reversed; D7 is rewritten.
+- **`Run.started_at` is not the `run_started` event's timestamp.** The row is constructed inside the
+  trigger request, before workspace preparation and spawn; the event is written once the process
+  exists. D4 called them "the same fact, recorded". Durations will read longer, and a run whose
+  spawn failed gains one it does not have today.
+
+Both are recorded in `design.md` under *Round 3 corrections, 2026-09-01*, along with what was
+re-derived and left standing and one alarm raised and killed.
+
 ## What Changes
 
 - **BREAKING** `GET /api/v1/projects/{project_id}/agents/{name}/timeline` returns an envelope
   `{ events, runs }` instead of a bare `AgentTimelineEvent[]`. `runs` is a map keyed by `run_id`
   carrying each run's own facts — `status`, `exit_code`, `started_at`, `ended_at` — read from the
   `Run` table.
-- The route gains a fourth concurrent query alongside the three it already runs
-  (`hub/hub/api/v1/agents.py:737-763`), filtered by `project_id` and `agent` on the existing
-  `Index("ix_runs_project_agent", ...)` (`hub/hub/db/models.py:1152`).
+- The route gains a fourth query after the three it already runs
+  (`hub/hub/api/v1/agents.py:737-763`) — a primary-key `IN` lookup on the run ids the returned
+  events name, so the map covers exactly them. **Changed in round 3**: rounds 1 and 2 specified a
+  fourth *concurrent* query scoped by `project_id` and `agent`, which cannot know those ids and had
+  to approximate coverage with an ordering and a limit. See design D3 and D7.
 - **`runStatusByRunId` is deleted** (`hub/ui/src/lib/agentTimelineModel.ts:187-199`). The client
   stops decoding a status out of an event name and reads the one the server already decided.
 - **`runDurationsByRunId` is deleted** (`:138-168`). `Run.started_at` and `Run.ended_at` carry the
-  same fact the function reconstructed from event timestamps.
+  fact the function reconstructed from event timestamps — **not to the same instant**, corrected in
+  round 3: the row is stamped before the spawn and the `run_started` event after it, so every
+  rendered duration grows by the spawn cost. The row's figure is adopted deliberately.
 - The terminal status line is **persisted as an `AgentOutput` row**, not only broadcast
   (`agent_trigger.py:2129-2142` and `:2723-2736`). Today `/agents/{name}/output` for a stopped run
   holds one `kind="thinking"` row and no status row at all, so the exit code is unrecoverable after
@@ -91,7 +121,9 @@ None.
 **Affected APIs**
 
 - `GET /projects/{project_id}/agents/{name}/timeline` — response shape changes. One hook consumes it,
-  `useAgentTimeline` (`hub/ui/src/api/agents.ts:387-392`).
+  `useAgentTimeline` (`hub/ui/src/api/agents.ts:387-392`), but **two components call that hook
+  independently** — `AgentOutputPanel.tsx:330` and `AgentActivityTab.tsx:24` — so both break on the
+  envelope, not just the one that renders the run facts.
 
 **Affected code**
 
@@ -146,10 +178,11 @@ unaffected, which is why this survived every manual look.
   whose ordering is implicit — is separate work and is recorded as D-4 in `spec-queue/DECISIONS.md`.
 - **Not changing the route's sort order.** `reverse=True` then `[:50]` is correct: it means "the 50
   most recent events". Reversing it would return the oldest 50.
-- **Not narrowing the `runs` map to the run ids the returned events mention.** The fourth query runs
-  concurrently with the other three and therefore cannot know them; discovering them first would
-  serialise the `asyncio.gather` to save a few hundred bytes. The over-fetch is deliberate and is
-  stated so nobody "optimises" it later.
+- **Not keeping the map wider than the events.** Rounds 1 and 2 made the opposite non-goal here,
+  on the grounds that narrowing would serialise the `asyncio.gather` to save a few hundred bytes.
+  Round 3 reversed it: the over-fetch was never about bytes, it was an approximation of a coverage
+  property the spec states absolutely, and no ordering on `Run` tracks the recency of the events
+  that name it. The map is now exactly the runs the response talks about.
 - **Not adding a `/runs` API.** No such route exists today and none is introduced; the run facts are
   carried by the timeline that describes them.
 - **Not reconciling `Run.status` with `JobRun.status`.** They are different tables with different

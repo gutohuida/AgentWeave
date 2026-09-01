@@ -35,9 +35,10 @@ The response is an envelope of the events and a map of run facts keyed by `run_i
 rather than listed because every consumer of it is a lookup or an unordered scan; a list would
 require the client to build the index and would reintroduce the derivation this requirement removes.
 
-The run query runs concurrently with the event queries and is therefore scoped by project and agent
-rather than by the run ids the returned events happen to mention. The map MAY therefore describe
-runs no returned event names. Narrowing it would serialise the concurrent queries.
+The run facts are read by primary key, using the run ids the returned events name, after those
+events have been merged and truncated. The map therefore describes exactly the runs the response
+talks about: it is not scoped by project and agent, and it carries no bound that could be chosen
+too small.
 
 #### Scenario: The response carries both halves
 
@@ -56,33 +57,35 @@ runs no returned event names. Narrowing it would serialise the concurrent querie
 - **THEN** the map omits that key and the client presents that run exactly as it presents a run with
   no outcome yet
 
-#### Scenario: The map may exceed the events
+#### Scenario: The map is scoped to the events
 
-- **WHEN** the agent has runs whose events fall outside the returned event window
-- **THEN** the map MAY contain entries for them and this is not an error
+- **WHEN** the agent has runs whose events fall entirely outside the returned event window
+- **THEN** the map contains no entries for them
 
 ### Requirement: The run facts cover every run the events name
-The run facts SHALL be bounded so that every run named by a returned event is present in the map, and any bound on the run query SHALL be derived from the event bound rather than chosen independently.
+Every run named by a returned event SHALL be present in the run facts map, and the map SHALL be obtained by looking those runs up by id rather than by any query whose coverage depends on an ordering or a limit.
 
-The map is allowed to be larger than the events require and is forbidden from being smaller. The
-asymmetry is the point: an over-large map costs a few hundred bytes, while a map that omits a run
-the events name presents that turn as having no outcome — which is the exact defect this change
-exists to remove, reintroduced by the fix for it.
+Coverage is the property; a bound is not a way to get it. A limit decides how many rows return, not
+which, and no ordering available on the run row tracks the recency of the events that name it.
+`run_reconciliation` sweeps every still-`running` row at Hub start and writes its lifecycle event
+then, so an agent's newest events routinely name its oldest runs. A query ranked by start time and
+capped at any number can miss exactly those.
 
-A returned event window can name more distinct runs than it holds runs' worth of events, because a
-run at the window's boundary contributes one lifecycle event rather than two. A bound that assumes
-two events per run is therefore wrong by up to a factor of two.
+Omitting a run the events name presents that turn as having no outcome — which is the defect this
+change exists to remove, reintroduced by the fix for it, and blessed by *An unknown run degrades
+rather than fails*. That is why the requirement is on the construction of the query and not on the
+size of its result.
 
-#### Scenario: An older run in the window keeps its outcome
+#### Scenario: An old run named by a recent event keeps its outcome
 
-- **WHEN** the returned events name more distinct runs than a naive bound would admit, and the
-  oldest of those runs has ended
+- **WHEN** a returned event names a run that started long before the agent's most recent runs,
+  because the run's lifecycle event was written at Hub restart rather than when the run began
 - **THEN** that run's facts are present in the map and its turn presents its terminal outcome
 
-#### Scenario: The bound is not independent of the event bound
+#### Scenario: Coverage does not depend on how many runs the window names
 
-- **WHEN** the number of events the route returns is changed
-- **THEN** the run query's bound changes with it rather than staying at a separately chosen number
+- **WHEN** the returned events name any number of distinct runs, up to the number of events returned
+- **THEN** every one of those runs is present in the map
 
 ### Requirement: A run's terminal status line is persisted
 The Hub SHALL persist a run's terminal status line as durable output, not only broadcast it, so the exit code remains recoverable after the live stream is gone.

@@ -5,28 +5,40 @@
       that a run whose status was corrected after its events were written reports the **corrected**
       status. Both scenarios come from *The timeline carries each run's own facts*.
 - [ ] 1.2 Write a Hub test asserting an event naming a `run_id` with no row leaves that key absent
-      rather than erroring, and a test asserting the map MAY contain runs no returned event names.
+      rather than erroring, and a test asserting the map contains **no** entries for runs the
+      returned events do not name — *The map is scoped to the events*. Round 2 asked for the
+      opposite assertion here; round 3's D3 narrowed the query, so the over-coverage it blessed no
+      longer occurs.
 - [ ] 1.3 Add the envelope schema beside `AgentTimelineEvent` in `hub/hub/schemas/agents.py`, with
       `runs: Dict[str, RunFacts]`. Follow the `queue: Dict[str, int]` precedent in
       `hub/hub/schemas/jobs.py:125`.
-- [ ] 1.4 Add the fourth query to `agent_timeline` (`hub/hub/api/v1/agents.py:729`) inside the
-      existing `asyncio.gather`, scoped by `project_id` and `agent`, ordered by `started_at` desc.
-      Confirm by `EXPLAIN QUERY PLAN` that it uses `ix_runs_project_agent`.
-- [ ] 1.4a **Derive the run limit from the event limit, do not pick one** (design D7). `log_q` returns
-      up to 50 `EventLog` rows and a run at the window boundary contributes one lifecycle event
-      rather than two, so up to 50 distinct runs can be named. Bind the run limit to the event limit
-      in code — one named constant both queries read — so changing one cannot silently starve the
-      other.
-- [ ] 1.4b Write the test for it, from *The run facts cover every run the events name*: build an
-      agent whose returned event window names more distinct runs than a two-events-per-run
-      assumption would admit, and assert the **oldest** such run is present in the map and renders
-      its terminal outcome. This test must fail against a run query limited to half the event limit
-      — confirm that it does, rather than assuming it.
+- [ ] 1.4 In `agent_timeline` (`hub/hub/api/v1/agents.py:729`), after the existing `asyncio.gather`
+      and after the `events[:50]` truncation, collect the
+      distinct `data["run_id"]` values the returned events carry, then read those rows with
+      `select(Run).where(Run.id.in_(run_ids))` (design D3, rewritten in round 3). No `ORDER BY`, no
+      `LIMIT`, and no `project_id`/`agent` scope on this query — the ids already came from rows the
+      route filtered. Skip the query entirely when the set is empty. Leave the three existing
+      queries in the `gather` untouched.
+- [ ] 1.4a **Do not restore a concurrent, ordered, limited run query** — round 2 specified one
+      ordered by `started_at` desc and round 3 reversed it, because a limit governs how many rows
+      return and not which. `run_reconciliation.reconcile_interrupted_runs`
+      (`run_reconciliation.py:59-66`) sweeps every still-`running` row in the database at Hub start
+      and writes its `run_interrupted` event *then*, so an agent's newest events routinely name its
+      oldest runs and a start-time ranking misses exactly those. If the round trip ever has to come
+      back, read D3's rejected alternatives first.
+- [ ] 1.4b Write the test from *An old run named by a recent event keeps its outcome*: give an agent
+      a run that started well before its most recent ones, write that run's terminal `EventLog` row
+      with a **current** timestamp (the shape reconciliation produces), fill the window with newer
+      runs, and assert the old run is present in the map and renders its terminal outcome. Confirm
+      it fails against a `Run` query ordered by `started_at` desc and limited, rather than assuming
+      it does — that is the implementation this test exists to reject.
 - [ ] 1.5 Map `Run.status` `running` → `started` at the boundary (design D5) and change the route's
       `response_model`. Leave the `reverse=True` / `[:50]` event sort untouched.
-- [ ] 1.6 Run the Hub tests that touch this route — `test_agent_actions_coordination`,
-      `test_agent_chat`, `test_bola`, `test_codex_appserver_run_turn`, `test_failure_reporting`,
-      `test_permission_approver`, `test_title_generation` — and fix what the shape change breaks.
+- [ ] 1.6 Fix what the shape change breaks in the Hub suite. Only `hub/tests/test_bola.py` actually
+      requests `/agents/{name}/timeline`; `test_agent_actions_coordination`, `test_agent_chat`,
+      `test_codex_appserver_run_turn`, `test_failure_reporting`, `test_permission_approver` and
+      `test_title_generation` match a grep for "timeline" but exercise the *chat* timeline, a
+      different route. Check them, but expect the work to be in one file.
 
 ## 2. The terminal status line is persisted
 
@@ -78,7 +90,12 @@
       (`:138-168`). **Carry its negative-duration guard across** — a clock that went backwards must
       still not render "Worked for -3s" (design D4).
 - [ ] 4.5 Assert duration rendering in the component test, not only in a model test, since the model
-      function it used to live in is gone.
+      function it used to live in is gone. **Re-baseline it rather than reconciling it** (design D4,
+      round 3): `Run.started_at` is stamped at row construction (`agent_trigger.py:1073`) and the
+      `run_started` event only once the pty exists (`:1857-1864`), so every duration now includes the
+      spawn and reads longer than the event-derived figure. A run whose spawn failed (`:1798-1804`)
+      also gains a duration it does not have today — confirm that renders acceptably rather than
+      treating it as a regression.
 - [ ] 4.6 Confirm `LIFECYCLE_EVENT_STATUS` has no remaining consumer; delete it if not, and keep it
       only if something still legitimately reads it.
 - [ ] 4.7 Verify the third consequence is repaired **in both states, not just on reload**

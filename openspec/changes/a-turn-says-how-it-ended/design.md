@@ -82,15 +82,33 @@ label (`AgentTimeline.tsx:220`), `lastRunSettled` (`:114`), `anotherRunIsUnderwa
 duration lookup. No consumer needs ordering. Precedent exists: `hub/hub/schemas/jobs.py:125`,
 `queue: Dict[str, int]`.
 
-### D3 — The `runs` map is scoped by agent, not narrowed to the returned events
+### D3 — The `runs` map is looked up by the run ids the returned events name
 
-The fourth query runs inside the same `asyncio.gather` as the other three and therefore cannot know
-which run ids the merged events reference. Narrowing would require merging first and issuing a
-second query, serialising the gather to save a few hundred bytes.
+**Superseded in round 3.** Rounds 1 and 2 chose a fourth query inside the existing
+`asyncio.gather`, scoped by `project_id` and `agent`. That is reversed here, and D7 records why the
+decision was reopened rather than merely tightened.
 
-The map may therefore describe runs no returned event names. This is stated in the spec so that it
-reads as intent rather than as an oversight to be optimised away later.
+**Chosen:** the three existing queries run concurrently as they do today; the merged, truncated
+event list is then scanned for `data.run_id`, and a second query reads exactly those rows —
+`select(Run).where(Run.id.in_(run_ids))`, a primary-key lookup with no limit and no ordering.
+An empty id set skips the query entirely.
 
+*Rejected: a fourth concurrent query scoped by `project_id` and `agent`, ordered and limited.* This
+was the round 1/round 2 choice, and it saves one sequential database round trip. It was reversed
+because the round trip is not what it costs. A query that cannot know the run ids must approximate
+coverage with an ordering and a limit, and **no ordering available on `Run` tracks the recency of
+the events** — see D7. Buying one round trip with an approximation of a property the spec states
+absolutely is the wrong trade, and it was only ever made when the currency was "a few hundred
+bytes" rather than correctness.
+
+*Rejected: keeping the concurrent query and ordering it by `COALESCE(ended_at, started_at)`
+instead.* This is closer — that expression tracks the run's own latest lifecycle moment, so it
+mostly ranks runs the way `EventLog` does. But "mostly" is the whole objection: it is still a
+heuristic standing in for a set the route can compute exactly, and it would need its own boundary
+argument, its own test, and its own paragraph explaining when it is allowed to be wrong.
+
+The consequence for the response shape is that the map no longer describes runs the events do not
+name. That is a simplification of the contract, not a loss: nothing consumed the surplus.
 ### D4 — Both reducers go, not one
 
 `runDurationsByRunId` (`:138-168`) is currently **correct** — it splits `run_started` from terminal
@@ -103,6 +121,24 @@ The negative-duration guard that function carries (a clock that went backwards y
 "Worked for -3s") must be preserved at the new call site; the concern does not disappear with the
 function.
 
+
+**The two timestamps are not the same instant, and round 3 corrects "the same fact, recorded" to
+say so.** `Run.started_at` defaults at row construction (`agent_trigger.py:1073`), inside the
+trigger request, before workspace preparation and before anything is spawned. The `run_started`
+`EventLog` row is written only once the pty exists (`:1857-1864`). Substituting the row for the
+events therefore makes every rendered duration *longer* by whatever spawn cost — the figure starts
+measuring from when the operator's turn began rather than from when the process did.
+
+That is arguably the more honest number and it is the one this change adopts, but it is a visible
+behavioural change and it has to be decided rather than absorbed: a component test written against
+the event-derived figure will disagree with it, and the right response is to re-baseline the test,
+not to reconcile the two.
+
+The same substitution gives a duration to a run that never spawned. `_execute_run`'s spawn-failure
+branch (`:1798-1804`) sets `status`, `error` and `ended_at` but never persisted a `run_started`, so
+`runDurationsByRunId` renders nothing for it today; `started_at`/`ended_at` both exist, so the
+envelope will. "Worked for 0s" on a run that failed to start is acceptable and arguably correct —
+it is named here so it is recognised as intended rather than filed as a regression.
 ### D5 — `running` maps to the client's `started`
 
 `Run.status` is `{running, completed, failed, stopped, interrupted}`. The client's
@@ -122,29 +158,44 @@ sites collapse to it rather than gaining a second, hand-rolled insert beside the
 This is independent of D1–D4: because lifecycle events are already persisted, reading `Run` alone
 restores the label. What D6 uniquely adds is the exit code and the in-stream sentence.
 
-### D7 — The `runs` map must cover every run the event window can name
+### D7 — Coverage is exact by construction, not derived from a bound
 
-**Chosen:** the run query's limit is bound to the event limit rather than picked independently —
-it must be at least as large as the number of distinct runs the returned events can reference.
+**Chosen:** the run facts are read by id, so "every run the events name is in the map" is a property
+of the query rather than an arithmetic claim about two limits. There is no bound to derive.
 
-D3 argues one direction only: the map may describe runs no returned event names, and that
-over-coverage is deliberate. Round 2 found nobody had argued the other direction, and the risk
-there is not cosmetic. `log_q` returns up to 50 `EventLog` rows; a run normally contributes two
-lifecycle events, but at the window boundary it contributes one, so **up to 50 distinct runs** can
-be named by the events in a single response. A run query limited to fewer than that silently drops
-the oldest of them.
+Round 2 created this decision to fix a real gap: D3 argued only that the map may describe *more*
+runs than the events name, nobody had argued the other direction, and task 1.4 asked for "its own
+limit" without naming one. Its remedy was to derive the run limit from the event limit — `log_q`
+returns up to 50 `EventLog` rows, a run at the window boundary contributes one lifecycle event
+rather than two, so up to 50 distinct runs can be named, so the run limit must be at least 50.
 
-What makes it dangerous rather than merely wrong is that the spec already blesses the result. *An
-unknown run degrades rather than fails* says the client "presents that run exactly as it presents a
-run with no outcome yet" — which is precisely the F190 symptom. A limit chosen carelessly would
-therefore ship this change, satisfy its own specification, and still show no terminal label on
-older turns. The requirement now states the relationship so the limit cannot be chosen in
-isolation.
+**Round 3 found that remedy insufficient, and insufficient in the direction it was written to
+close.** The arithmetic is right and it is not the operative constraint: a limit only decides *how
+many* rows come back, and coverage depends on *which*. Task 1.4 said `ORDER BY started_at DESC`,
+and the recency of a run's row is not the recency of its events.
 
-*Rejected: no limit at all.* Correct and simplest, but an agent with thousands of runs would
-serialise a full scan into a route whose other three queries are all bounded. The bound exists;
-it just has to be derived from the event bound rather than invented.
+`run_reconciliation.reconcile_interrupted_runs` (`run_reconciliation.py:59-66`) selects **every**
+`Run` still marked `running` — across the whole database, with no project scope and no time bound —
+sets it `interrupted`, and calls `persist_event` for each. Those `EventLog` rows are stamped at
+*restart* time. So one Hub bounce in a long-lived project writes a burst of `run_interrupted` events
+for runs that started arbitrarily long ago, and those rows are now the **newest** events for their
+agents. The returned event window is then dominated by old runs, while `ORDER BY started_at DESC
+LIMIT 50` returns the fifty newest-*started* runs — a set that can be almost disjoint from them.
 
+An implementation following round 2's tasks would therefore satisfy every word of D7 as written,
+pass task 1.4b's test (which varies runs-per-window, not recency skew), and still present older
+turns with no terminal outcome — F190's exact symptom, blessed once again by *An unknown run
+degrades rather than fails*. The failure is one restart away in this repository's own dogfooding
+project, and the change's own task 6.3 creates the mechanism deliberately, with a single run, which
+is why it would pass.
+
+The requirement *The run facts cover every run the events name* is unchanged in intent and was
+already stated absolutely. What changes is that it is now met by construction rather than by an
+argument about limits — which is the only form in which it can be checked by reading the query.
+
+*Rejected: keeping the derived bound and adding an ordering argument to it.* Every candidate
+ordering is an approximation of "which runs do the returned events mention", a set the route can
+simply compute. Approximating an available answer is how the original defect was written.
 ## Risks / Trade-offs
 
 - **11 UI test files mock the timeline response shape** → the largest mechanical cost. Move them in
@@ -162,9 +213,14 @@ it just has to be derived from the event bound rather than invented.
 - **A past turn's label can change on a later read**, because `Run.status` is present-tense and
   `run_reconciliation.py:65` flips `running → interrupted` when the Hub restarted mid-run → accepted:
   the only mutation after a run ends corrects a status that was wrong.
-- **The route gains a fourth table** → mitigated by using the existing composite index
-  `ix_runs_project_agent` (`models.py:1152`) and by keeping the query in the same `gather`, so the
-  added latency is one concurrent indexed `SELECT`, not a serial one.
+- **The route gains a fourth table, and after round 3 a second round trip** → the run query is a
+  primary-key `IN` lookup over ids the route already holds, so it is the cheapest read of the four;
+  `ix_runs_project_agent` (`models.py:1152`) is no longer what serves it. The cost is one sequential
+  step after the `gather` rather than a fourth concurrent query, accepted in D3 because it is what
+  makes coverage exact rather than approximate.
+- **Duration figures shift when `runDurationsByRunId` goes** → `Run.started_at` predates the
+  `run_started` event by the spawn, so every "Worked for Xs" grows; see D4. Re-baseline the
+  component test rather than reconciling the two.
 - **Breaking response shape with no consumer outside this repo** → the Hub UI is the only client;
   there is no published API contract for this route.
 - **Deleting a correct function (`runDurationsByRunId`) risks regressing "Worked for 8s"** →
@@ -238,3 +294,58 @@ mapping for two statuses that cannot reach the route. Recorded so round 3 does n
 **Stale UI line numbers, corrected throughout:** terminal label `:202` -> `:220`; `lastRunSettled`
 `:116` -> `:114`; `anotherRunIsUnderway` `:133` -> `:131`; the settled-signals comment `:96-112` ->
 `:88-113`; task 4.7's `:118-136` -> `:117-137`.
+
+## Round 3 corrections, 2026-09-01
+
+Round 3 read `agentTimelineModel.ts`, `AgentTimeline.tsx`, the timeline route, the `Run` model,
+`agent_trigger.py`'s five terminal sites and `run_reconciliation.py` against this proposal, before
+reading either round's own reasoning. Two things did not survive.
+
+**1. D3 is reversed and D7 is rewritten — the run query's *ordering*, not its limit, decides
+coverage.** Round 2 correctly found that the run bound had to be derived rather than picked, and
+derived it. But a limit governs how many rows return, not which; task 1.4's `ORDER BY started_at
+DESC` ranks runs by when they *started*, and the events that name them are ranked by when they were
+*written*. `reconcile_interrupted_runs` decouples the two on purpose: it sweeps every `running` row
+in the database at Hub start and stamps a `run_interrupted` event at restart time, so one bounce
+makes the newest events for an agent name its oldest runs. An implementation obeying round 2's
+tasks to the letter would omit exactly those runs, satisfy D7 as written, pass task 1.4b, and
+present older turns with no terminal outcome. Reading the ids off the merged events and looking
+them up by primary key removes the question instead of answering it. This is the second time in
+this change that a value the server already knows was going to be approximated on the strength of
+an ordering — which is what F190 is.
+
+**2. D4's "the same fact, recorded" is not exact.** `Run.started_at` is stamped at row construction
+inside the trigger request (`agent_trigger.py:1073`); the `run_started` event is written after the
+pty exists (`:1857-1864`). Every duration therefore grows by the spawn cost, and a run whose spawn
+failed gains a duration it does not have today. The change adopts the row's figure deliberately —
+it is named here so task 4.5 re-baselines rather than reconciles.
+
+**Re-derived and left standing** — do not re-raise these:
+
+- The central mechanism. `runStatusByRunId` (`agentTimelineModel.ts:186-199`) is last-wins over the
+  route's `reverse=True` array (`agents.py:800`), so the oldest event wins, the oldest is
+  `run_started`, and `TERMINAL_LABEL` (`AgentTimeline.tsx:56-60`) has no `started` key. Verified at
+  the render site: `:202` reads `statusByRun[turn.runId]`, `:220` indexes `TERMINAL_LABEL` with it.
+- Round 2's correction 1. `runVisiblyActive = isRunning && (!lastRunSettled || anotherRunIsUnderway)`
+  (`:139`), and `anotherRunIsUnderway` (`:131`) is true whenever a second run sits in the window,
+  since every run reads `started` and `started` is not in `TERMINAL_STATUSES`. Re-derived from the
+  three lines alone. Stands.
+- Round 2's correction 3, and more strongly than it was stated. `AgentActivityTab.tsx:24` does not
+  merely receive the value — it calls `useAgentTimeline` itself and maps the array at `:39`, so it
+  is a second independent hook holder that breaks on the envelope. Task 3.3 covers it.
+- The 11 test files. `grep -rln 'useAgentTimeline\|agentTimelineModel\|runDurationsByRunId\|runStatusByRunId' hub/ui/src/__tests__`
+  returns exactly the 11 named.
+- Every `Run` column the envelope reports exists with the right nullability — `status`, `exit_code`,
+  `error`, `started_at` (NOT NULL), `ended_at` (nullable) — and all six sites that set a terminal
+  status set `ended_at` with it (`agent_trigger.py:1804`, `:2035`, `:2213`, `:2571`, `:2648`,
+  `run_reconciliation.py:66`). `ended_at` is populated wherever a status is terminal.
+- D5's enumeration, by a second route. `run_interrupted` is deliberately **absent** from
+  `_RUN_LIFECYCLE_EVENTS` (`agent_trigger.py:1674`), which `_broadcast_run_lifecycle` asserts
+  against; reconciliation writes it through `persist_event` instead. The client's
+  `LIFECYCLE_EVENT_STATUS` still covers all five, and D5 is unaffected.
+
+**One alarm raised and killed rather than filed.** `proposal.md`'s Impact section cites `:202`,
+`:116` and `:133` where `design.md` cites `:220`, `:114` and `:131`, which reads as round 2 having
+missed three stale numbers. It did not: the proposal names the three lines that *read* `statusByRun`
+and the design names the three that *declare* what reads it. Both sets are correct against the
+current file. Do not "fix" either.
