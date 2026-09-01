@@ -107,7 +107,7 @@
     "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
     "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
   ],
-  "last_heartbeat": "2026-09-01T11:54:41+01:00",
+  "last_heartbeat": "2026-09-01T11:15:07+01:00",
   "status": "running",
   "branch_spans_days": 1,
   "branch_note": "Cut from master@556bb37, which is itself the merge of the 2026-09-01 overnight run. The previous cycle IS merged; `git branch --merged master` lists every earlier autonomous branch and `git branch -a | grep daily` finds only this name. The review page carries no unmerged-cycle warning. Measured 2026-09-01T09:01+01:00.",
