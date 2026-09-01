@@ -84,7 +84,6 @@ timestamps.
 
 ### Requirement: A loop surfaces its current state without a caller assembling it by hand
 
-
 For a job that is a loop, the Hub SHALL surface: its stated purpose; its stop condition and, once stopped, the reason and time it stopped; a count of its queue's tasks by status; which task, if any, is its current item; and a count of questions raised across its own firing history that are unanswered, non-declined, and still being waited on. A job that is not a loop SHALL surface none of this.
 
 The last clause is new and it narrows the count. A question whose bounded wait ended without an
@@ -245,6 +244,7 @@ unchanged.
 
 - **WHEN** a flow's firing selects a task
 - **THEN** it also determines which agent is fired for it, without asking any agent
+
 ### Requirement: A loop's continuity across firings is by checkpoint, not by resumed session
 
 Each firing of a loop's job SHALL be briefed with the most recent checkpoint recorded by any prior
@@ -814,9 +814,7 @@ agent is free.
 
 ### Requirement: A firing is refused while its queue is stalled
 
-The Hub SHALL refuse a firing whose queue is stalled, before queueing any input, and SHALL record a
-reason naming what the queue is waiting on. A queue is stalled when it holds tasks that are not
-terminal and none of them is claimable.
+The Hub SHALL refuse a firing whose queue is stalled, before queueing any input, and SHALL record a reason naming what the queue is waiting on. A queue is stalled when it holds tasks that are not terminal and none of them is claimable.
 
 Where nothing is claimable and no dependency gate is involved, that reason SHALL name how many tasks
 are open and in which statuses. Where instead a dependency gate refuses every candidate, the reason
@@ -825,6 +823,13 @@ distinguish an unmet prerequisite from a rejected one. That reason names counts 
 than statuses, and this requirement SHALL NOT be read to demand both of it: the operator's remedy
 there is the prerequisite, not the queue's own status breakdown.
 
+**Where the firing's own walk attributed the stall to a specific task, that SHALL be the recorded
+reason in place of the status breakdown.** The breakdown is
+the reason of last resort — it is what the queue can say about itself when nothing more specific was
+established — and the same argument the gated case makes applies here unchanged: the operator's
+remedy is the named task, not a count. A firing that established a specific cause and then reported a
+histogram has discarded the only part of what it knows that can be acted on.
+
 The loop's job SHALL remain enabled and remain scheduled. A stalled queue is not a finished one, and
 the operator resolving the stall SHALL be sufficient for a later firing to proceed with no further
 action.
@@ -832,7 +837,7 @@ action.
 #### Scenario: A stalled queue refuses the firing and states why
 
 - **WHEN** a loop's job fires and every non-terminal task in its queue is unclaimable, with no
-  dependency gate involved
+  dependency gate involved and no specific cause established
 - **THEN** the firing is refused
 - **AND** the recorded reason names the count and statuses of the open tasks
 
@@ -841,6 +846,13 @@ action.
 - **WHEN** a loop's job fires and every candidate in its queue is refused by the dependency gate
 - **THEN** the firing is refused
 - **AND** the recorded reason names the gating rather than the queue's status breakdown
+
+#### Scenario: An attributed stall names its task rather than the queue
+
+- **WHEN** a loop's job fires, nothing is claimable, and the walk recorded a staffing outcome naming
+  a task
+- **THEN** the firing is refused
+- **AND** the recorded reason is that outcome rather than the queue's status breakdown
 
 #### Scenario: A stalled loop is not disabled
 
@@ -968,7 +980,6 @@ them.
 
 ### Requirement: An agent attributed to a task SHALL be attributed in a stated capacity
 
-
 Where a surface names the agent associated with a task, it SHALL state what that association means,
 and that meaning SHALL NOT vary silently with the task's status.
 
@@ -1051,4 +1062,284 @@ sense on the same word makes each unreadable.
 #### Scenario: The determination's inputs are unreachable
 - **WHEN** any module other than the one that determines capacity is examined
 - **THEN** it does not read the firing decision's collection of work a firing cannot staff
+
+### Requirement: A loop declares at creation whether its work needs evidence
+
+A loop SHALL be creatable with a declaration of whether the work it produces needs evidence before that work can reach the project's main branch, and the system SHALL apply the product's current default where a loop was created without one.
+
+A loop is documentless by definition — declaring a specification document is what makes it a flow —
+so a loop's project mints no requirements for it, its tasks can record no evidence against them, and
+the chain that carries approved work to the main branch begins at a requirement link. Before this
+requirement, every loop task that was ever approved recorded that nothing was merged, and no
+configuration, no permission and no operator action could change that. A loop could not land work at
+all, structurally, and the product never said so.
+
+A loop that declares its work **does** need evidence SHALL behave exactly as loops behave today: its
+tasks reach the main branch through the requirements they are individually linked to and the evidence
+accepted against them, and where nothing is accepted, nothing is merged. This is a coherent
+declaration rather than a promise the product cannot keep, because a loop's tasks may be linked to
+requirements individually even though the loop declares no document.
+
+A loop that declares its work does **not** need evidence SHALL have its tasks' work integrated on
+approval without any requirement link or accepted evidence, from the source stated in
+`task-lifecycle-governance`.
+
+**The default SHALL be that evidence governs the work of a loop that declares a specification
+document, and governs the work of any task that is linked to a requirement, and does not govern the
+work of a task on a loop that declares neither.** A loop and a flow are the same kind of thing
+wearing different queues — declaring a document is the only thing that separates them — so a single
+default that ignored the distinction would answer for both, and answering "no evidence needed" for a
+flow would end the requirement-and-evidence chain that a flow exists to run.
+
+The second half of the default is the same correction one step further in. A loop's tasks may be
+linked to requirements individually even though the loop declares no document, and such a task can
+record evidence and have its work integrated **today**, before this capability exists. The default
+SHALL NOT take that away from it: evidence recorded against a shared requirement by a different task
+is integrated by this task, and no branch belonging to this task can carry that work, so a default
+that ignored the link would stop merging work that merges today and record nothing about the loss.
+A default may create a capability where none existed; it SHALL NOT remove one.
+
+A declaration that was actually made SHALL take precedence over the default in either direction, for
+both halves of it. A loop whose operator declares that its work needs no evidence SHALL have its
+tasks' work integrated from their branches even where those tasks are linked to requirements — that
+is what declaring it means, and the surfaces that accept the declaration SHALL say so.
+
+The declaration SHALL be recorded as made or not made, and SHALL NOT be stored as a copy of whatever
+the default is at the moment of creation. A loop created before this capability existed, and a loop
+created without stating a preference, are the same case and SHALL be answered by resolving the
+default at the moment the question is asked. A row that stores today's default would keep asserting
+it after the default moved.
+
+The declaration SHALL be accepted at creation only. An attempt to change it afterwards SHALL be
+refused, naming why. The declaration decides what approving a task writes into the operator's
+repository; a queue that is part-way through being approved would otherwise have two different
+answers applied to two halves of the same work, and the mechanism that defers a loop's edits to its
+next firing cannot help, because this is not read by a firing at all.
+
+Supplying the declaration SHALL NOT, by itself, opt a job into being a loop. The fields that opt a
+job in are unchanged. Where the declaration is supplied for a job that is not becoming a loop, the
+request SHALL be refused, naming what to supply instead, and SHALL NOT be accepted with the
+declaration silently discarded. A declaration that decides what an approval writes into the
+operator's repository is not visible in its absence: unlike a loop's other fields, nothing on any
+screen shows that it was dropped, and the first evidence of the loss is a merge that did or did not
+happen long afterwards.
+
+#### Scenario: A loop created without stating a preference gets the default
+
+- **WHEN** a loop is created without saying whether its work needs evidence
+- **THEN** the loop is created
+- **AND** no declaration is recorded against it
+- **AND** the question is answered by the product's current default wherever it is asked
+
+#### Scenario: A loop that declares its work needs no evidence can land work
+
+- **WHEN** a loop declaring that its work needs no evidence has a task approved, in a project with a
+  configured main branch
+- **THEN** the task's work is integrated
+- **AND** no requirement link and no accepted evidence were needed for it
+
+#### Scenario: A loop task linked to a requirement has its work governed by evidence
+
+- **WHEN** a task on a loop that declares no specification document and no preference about evidence
+  is linked to a requirement, and is approved with accepted evidence naming a commit
+- **THEN** the commit that evidence names is what is integrated
+- **AND** the tip of that task's own branch is not integrated in its place
+
+#### Scenario: A declaration overrides the requirement link
+
+- **WHEN** a task linked to a requirement belongs to a loop that declared its work needs no evidence,
+  and it is approved
+- **THEN** the commit at the tip of that task's own branch is what is integrated
+
+#### Scenario: A flow that declares nothing has its work governed by evidence
+
+- **WHEN** a loop that declares a specification document is created without saying whether its work
+  needs evidence, and one of its tasks is approved
+- **THEN** what is integrated is what that task's accepted evidence names
+- **AND** the default did not make its work evidence-free by virtue of no declaration having been made
+
+#### Scenario: A loop that declares its work needs evidence is unchanged
+
+- **WHEN** a loop declaring that its work needs evidence has a task approved with no accepted
+  evidence naming a commit
+- **THEN** the approval succeeds
+- **AND** nothing is merged
+- **AND** the skipped integration is recorded with its reason
+
+#### Scenario: The declaration cannot be changed after the loop exists
+
+- **WHEN** an update supplies a different declaration for an existing loop
+- **THEN** the request is refused, naming why the declaration is fixed at creation
+- **AND** the loop's recorded declaration is unchanged
+
+#### Scenario: The declaration alone does not create a loop
+
+- **WHEN** a job is created supplying only the declaration, and none of purpose, a stop time, or a
+  queue-emptiness stop condition
+- **THEN** the request is refused, naming what else must be supplied for the job to be a loop
+- **AND** no job and no loop state are created
+
+### Requirement: A loop does not staff a review of its own agent's work
+
+A loop's firing SHALL NOT select one of its own completed tasks for review, and SHALL NOT report a review it could not staff for such a task.
+
+A loop has one agent and no second party. Every review it could staff would name the agent that completed the work, which author/reviewer separation refuses on arrival — so the review leg produces no reviewer, and the machinery it runs on the way there produces sentences that are false for a loop. The requirements that resolve a reviewer are written for a flow, which declares a specification document and can therefore resolve someone who is not the author; applying them to a loop is what makes a loop ask for a commit it was never going to be given.
+
+Where a loop's task reaches `completed`, the loop SHALL leave it for the operator rather than attempting to advance it, and its firings SHALL NOT report the task as a step the flow could not staff. Nothing about the task is wrong, so nothing about it belongs in the report of what a firing could not do.
+
+Leaving it SHALL NOT mean saying nothing about it. Where a loop has nothing to claim and its queue holds completed work, the reason its firings give SHALL name that work as waiting for the operator to land it. A queue reported only as having no claimable task states a fact and withholds the one thing the operator needs, which is that the work is finished and the next move is theirs — and a loop in that position stays in it on every firing, forever, unless something says so.
+
+This requirement removes a loop's own **selection** of a review and nothing else. The operator SHALL still be able to dispatch a review of a loop's completed task by hand, and a loop's task already recorded in `under_review` under its own author's name SHALL still be recovered by reassignment without moving status. Neither is a loop staffing a review: the first is a person deciding, and the second repairs a holder that was already wrong.
+
+#### Scenario: A completed loop task is not selected for review
+
+- **WHEN** a loop fires and one of its queue's tasks is `completed`
+- **THEN** no agent is fired to review that task
+- **AND** the task's status is unchanged
+
+#### Scenario: A loop does not ask for evidence its declaration excused
+
+- **WHEN** a loop that declared its work does not need evidence has a task in `completed`
+- **THEN** no firing reports that the task has no recorded evidence or no commit to review
+
+#### Scenario: A loop's unstaffed report stays empty for its own completed work
+
+- **WHEN** a loop fires with a completed task in its queue and nothing else to do
+- **THEN** the firing reports no review it could not staff
+
+#### Scenario: The firing says the work is waiting for the operator
+
+- **WHEN** a loop fires with a completed task in its queue and nothing it can claim
+- **THEN** the reason it reports names that task as finished work waiting for the operator to land it
+- **AND** it is not reported merely as a queue with no claimable task
+
+#### Scenario: The operator can still review a loop's completed task by hand
+
+- **WHEN** the operator dispatches a review of a loop's completed task, naming a reviewer that is not its author
+- **THEN** the review is staffed and the turn begins, exactly as it would for any other task
+
+#### Scenario: A loop's wedged review still recovers
+
+- **WHEN** a loop's task is in `under_review` and still held by the agent recorded as completing it
+- **THEN** a reviewer that is not the author is resolved for it and the assignee is replaced
+- **AND** the task remains in `under_review`
+
+#### Scenario: A flow's review leg is unaffected
+
+- **WHEN** a flow fires and one of its document's tasks is `completed`
+- **THEN** a reviewer that is not the author is resolved and fired, exactly as before
+
+### Requirement: A loop's approved work is landed in one operator action
+
+The Hub SHALL offer one operator action that carries a loop's completed task to `approved`, performing every transition the lifecycle requires rather than requiring the operator to issue them one at a time.
+
+Landing a loop's work is the only route by which that work reaches the operator's main branch, and it costs three separate calls today, two of which begin as refusals — the task is still held by its author, and `completed` does not reach `approved` directly. Both refusals are correct, and neither is the operator's mistake: they are the shape of a route the product knows and the operator has to rediscover.
+
+The transitions performed SHALL be the ones that already exist, and each SHALL be recorded. The operator taking this action is the reviewer, which is what clearing the author's hold and passing through review already means; a route that recorded fewer transitions would be claiming a history that did not happen. No new edge SHALL be declared for it: the action composes moves the transition map already grants the operator, so the recorded history describes a sequence that was legal one step at a time.
+
+Releasing the author's hold is a change to the task, not a transition, and the record SHALL reflect that rather than claim a third row. The transition history is a record of moves between *statuses*; who holds a task has no history of its own, and the ordinary route already folds the same write into the request that carries the move it enables. What the record therefore says is that the task entered review and was approved, and that it no longer names its author.
+
+Each recorded transition SHALL name the operator as having asked for it, rather than as a move the system made on their behalf. The operator asked for all three; that they said it in one word instead of three does not make two of them the system's own bookkeeping.
+
+The action SHALL be refused on the same terms as approval itself. Where approval would be refused — including while the task's turn is still live — this action SHALL be refused with the same typed refusal, and SHALL perform none of its transitions.
+
+A refusal arising at any step SHALL leave the task as the action found it, and this SHALL hold for every reason a step can be refused rather than only for the ones the action can foresee. Checking approval's own preconditions first is what makes the refusal the one approval would have given; it is not what makes the action safe, and an action that had only that would release the author's hold before meeting a refusal on the step after.
+
+#### Scenario: One action lands a loop's completed work
+
+- **WHEN** the operator takes the landing action on a loop's completed task whose turn has ended
+- **THEN** the task reaches `approved`
+- **AND** its work is merged into the project's main branch
+
+#### Scenario: The history records each transition
+
+- **WHEN** the landing action completes
+- **THEN** the task's transition history records the move into review and the approval
+- **AND** each names the operator as having asked for it, rather than the system as having made it
+- **AND** the task no longer names its author as its holder
+
+#### Scenario: The action is refused while the turn is live
+
+- **WHEN** the operator takes the landing action while the task's agent still has a running turn
+- **THEN** the action is refused with the same typed refusal approval would have given
+- **AND** the task's status is unchanged
+
+#### Scenario: A refused landing leaves nothing half-applied
+
+- **WHEN** the landing action is refused for any reason
+- **THEN** the task's holder, status and integration record are all unchanged
+
+#### Scenario: A refusal on a later step undoes the earlier ones
+
+- **WHEN** the landing action's first step succeeds and a later one is refused
+- **THEN** the task still names the holder it had before the action began
+- **AND** no transition from the action is recorded in its history
+
+### Requirement: A task reported as in flight is one an agent is actually working
+
+A firing SHALL classify a task as in flight only where an agent is actually working it: a turn bound to that task is running, or input naming that task is queued for delivery and has not yet been delivered. A name written in the task's assignee SHALL NOT by itself be sufficient.
+
+Where a non-terminal task has an assignee and neither condition holds, the firing SHALL record it as a step it could not staff, naming the task and the agent whose name is on it, and that reason SHALL reach the loop's stall reason and the loop's own state surface. The refusal's sentence SHALL NOT state or imply that the work is being done, that nothing is wrong, or that a later firing will pick it up.
+
+An assignee is a record of who holds a task, not evidence that a turn exists. Reading it as evidence lets a firing report a queue as busy while every agent in the project is idle, which is worse than silence: the operator is not merely uninformed, they are told the flow is healthy, and the remedy is theirs alone to apply.
+
+#### Scenario: A review with no turn behind it is not counted as in flight
+
+- **WHEN** a loop fires and its only non-terminal task is under review with an assignee, and no run bound to that task is running and no undelivered queue entry names it
+- **THEN** the firing does not report the task as in flight
+- **AND** the recorded reason names the task and the agent whose name is on it
+
+#### Scenario: The refusal does not claim the work is being done
+
+- **WHEN** a firing is refused for a task whose assignee holds no turn
+- **THEN** the refusal's reason does not state that the task is already being worked
+- **AND** it does not state that a later firing will pick up whatever finishes
+
+#### Scenario: The loop's state surface names it too
+
+- **WHEN** a loop's state is read while it holds a review nobody is doing
+- **THEN** the loop's stall reason names that review rather than being absent
+
+#### Scenario: A review whose turn is running is still in flight
+
+- **WHEN** a loop fires while a run bound to its under-review task is running
+- **THEN** the firing reports that task as in flight, as it does today
+- **AND** the loop records no stall for it
+
+#### Scenario: A staffed review still waiting in the queue is still attended
+
+- **WHEN** a review has been staffed and its input is queued for an agent that has not yet been given a turn
+- **THEN** the firing does not report that review as unstaffed
+- **AND** no stall is recorded for it
+
+#### Scenario: The board still says the agent holds it rather than merely being assigned it
+
+- **WHEN** a loop's state is read while it holds a review nobody is doing
+- **THEN** the task's agent capacity still reports that the agent holds it, distinct from the value used when a turn is running and distinct from the value used for a task's own assignee
+
+#### Scenario: A busy flow is still not reported as stalled
+
+- **WHEN** every candidate in a loop's queue is held by a running turn
+- **THEN** the firing reports in flight rather than stalled
+
+### Requirement: A surfaced step is recorded once, not once per tick
+
+The Hub SHALL surface a step a firing could not take when that fact is new or has changed for the task, and SHALL NOT persist a further record of it on each subsequent firing that finds the same fact unchanged.
+
+A condition an operator must resolve can outlive many firings, and one that only the operator can clear outlives all of them. Repeating it every tick buries the records of the firings that did work, which is the same harm the loop's own execution history is already required to avoid.
+
+#### Scenario: An unchanged surfaced step is recorded once
+
+- **WHEN** a loop fires repeatedly and each firing finds the same step unsurfaceable for the same reason
+- **THEN** exactly one record of that surfacing exists
+
+#### Scenario: A changed reason is recorded again
+
+- **WHEN** the reason a step cannot be taken changes between firings
+- **THEN** a further record is persisted, carrying the new reason
+
+#### Scenario: The first firing still surfaces it
+
+- **WHEN** a firing is the first to find a step it cannot take
+- **THEN** that surfacing is recorded and broadcast
 

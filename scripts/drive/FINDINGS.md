@@ -12654,3 +12654,2536 @@ for it. Naming the wedge and recovering from it are different repairs.
 **The reviewer harness failure is still not the Hub's.** Two of three live drives had a reviewer
 loop on `ToolSearch` and never deliver a verdict it had reached. What the Hub owns is what happens
 afterwards, and afterwards is now correct.
+
+---
+
+## F169 (C) — the approval advisory is produced for the operator and reaches no surface, then is unrecoverable
+
+**Filed 2026-09-01 by the night window's N-1, closing task 8.3 of
+`approval-refuses-unaccepted-evidence`** — *"the `approval_report` advisory reaches no UI component
+(D3's named gap). Confirm during `DRIVE-1` and file it; do not fix it here."* `DRIVE-1` ran and
+passed on 2026-08-31 and this was never confirmed or filed, so the change's own record of what it
+deliberately did not fix was about to be archived with the deferral unexecuted. Confirmed by reading
+the code rather than by a drive, and labelled as such below.
+
+**What the advisory is.** `task_transition_service.py:571` builds `reported =
+list(refusal.reported) + list(refusal.advisory)` and hangs it on the transition object at `:590`
+with a comment stating plainly that it is *"Not a column … nothing persists it"*. Two kinds travel
+on it, each tagged with a `kind`: `contract`-rigor requirements that were unverified at the moment
+of approval, and evidence still awaiting review on a task that had accepted evidence to merge as
+well. Both are things the product decided to tell the operator instead of refusing them.
+
+**Where it goes.** `hub/hub/api/v1/tasks.py:1340` and `:1551` read it back off the transition and
+pass it to `_task_response(..., approval_report=…)`, which sets it on `TaskResponse`
+(`hub/hub/schemas/tasks.py:298`). So it is in the JSON body of the response to the approving
+request, and nowhere else.
+
+**Where it does not go.** `grep -rn "approval_report\|approvalReport" hub/ui/src` returns **nothing**.
+No component, no hook, no type. An operator who approves a task in the Hub UI is sent the advisory
+and is shown none of it.
+
+**Why it is not merely invisible but unrecoverable.** `_task_response`'s parameter defaults to
+`None` and line `:102` writes `list(approval_report or [])`, so every other call site — every `GET`,
+every list — answers with `[]`. Nothing persists it, by design (`task_transition_service.py:588-590`).
+So the one response that carried it is the only copy that ever existed: refetch the task and the
+advisory is gone, with no record that there was one.
+
+**Reproduction (read from the code, not driven).** Approve a task under a `contract`-rigor document
+with an unverified requirement, or one with accepted evidence to merge plus further evidence still
+awaiting review. The `POST /api/v1/projects/{p}/tasks/{t}/status` response body carries a non-empty
+`approval_report`. Immediately `GET` the same task: `approval_report` is `[]`. In the UI, neither
+step shows anything at all.
+
+**Severity C, deliberately.** Nothing is mis-stated and nothing is lost from the audit trail —
+`requirement_coverage` and evidence review still hold the underlying facts, as the code's own
+comment says. What is lost is the product's chosen way of telling the operator *at the moment of
+approval* that it approved something with a caveat. The design chose to report rather than refuse;
+reporting to nobody is the same as refusing to report, so the choice is not currently implemented on
+the surface an operator uses.
+
+**Bound.** Not driven. The claim is a code reading over four files, and the UI half is a negative
+grep, which is only as good as the two spellings searched (`approval_report`, `approvalReport`). No
+live approval was performed for this.
+
+---
+
+# Full-surface sweep, 2026-09-01 — row 1 of 19: Projects
+
+The night window's `N-2`, first feature area. Driven against the **8011** Hub, restarted from this
+branch's code onto the beta profile database, with a fresh git fixture outside the repository.
+Surfaces exercised: `projects`, `fs_browse`, `workspace`, `project_workspace`, `project_lifecycle`,
+`repo_hygiene`, and the `ProjectManagerModal` screen.
+
+**34 API assertions, 6 screen assertions, three findings.** Harnesses kept:
+`scripts/drive/t_sweep_row1_projects.py`, `scripts/drive/t_sweep_row1_ui.py`, and
+`scripts/drive/t_f172_relocate_onto_a_claimed_path.py`, which reproduces F172 from nothing.
+
+**One correction to this drive's own first pass, recorded because it is the failure mode the method
+is supposed to catch.** The first version of the harness reported three defects that were not
+defects: it asserted `main_branch` off `POST /projects/open`'s response (`ProjectSummary` carries no
+such field — F4's adoption is real and observable through `GET /settings`), and it asserted that
+`/fs/list` errors on a missing or non-directory path when it deliberately answers `200` with an
+empty listing, a walkable `parent`, and a `reason`, so the picker can keep navigating. Both were
+assertions about a product the drive had imagined. They are now assertions about the one that
+exists, with the reasoning written into the harness so the next run does not re-derive it.
+
+---
+
+## F170 (C) — the Hub's own project marker is the one working file it leaves untracked
+
+`repo_hygiene.py`'s opening sentence states its whole job: *"What the Hub leaves in someone else's
+repository, and how it stays out of their history."* `EXCLUDE_PATTERNS`
+(`hub/hub/repo_hygiene.py:60-83`) lists twelve patterns, six of them under `.agentweave/`.
+`.agentweave/project.json` — the marker the Hub writes into the operator's directory at
+registration, binding a project ID to *this machine's* database — is not among them.
+
+**Measured, on a repository the Hub had just registered:**
+
+```
+$ git check-ignore -v .agentweave/project.json ; echo "exit=$?"
+exit=1
+$ git status --porcelain
+?? .agentweave/
+?? NOTES.md
+```
+
+Two consequences, both driven:
+
+1. **The operator's own `git add -A` commits it.** A machine-bound identifier that means nothing on
+   another machine lands in their history, from a file they did not create and were not told about.
+2. **It is offered as a project file in the composer.** `list_workspace_paths`
+   (`hub/hub/workspace_paths.py:31`) runs `git ls-files --cached --others --exclude-standard`, which
+   honours `.git/info/exclude` — so the same omission puts the Hub's marker in the `@path` picker:
+
+   ```
+   GET /api/v1/projects/<p>/workspace/paths
+   [".agentweave/project.json", ".gitignore", "NOTES.md", "README.md", "src/calc.py"]
+   ```
+
+**One pattern fixes both**, verified by adding `.agentweave/project.json` to the seeded block by
+hand: `git ls-files --cached --others --exclude-standard` drops it and `git status` goes clean.
+
+**Honest about the module's own rule.** `repo_hygiene` says the test for adding a pattern is
+*"would the Hub's own commit sweep it in"*, and strictly it would not: `snapshot_worktree`'s
+`git add -A` (`hub/hub/worktrees.py:761`) runs inside `<root>/.agentweave/worktrees/<agent>`, where
+no marker exists. So this is not the `.pyc`-onto-master failure that motivated the list. It is the
+module's *title* rather than its extension rule — and the argument that it belongs is that this
+repository's own `.gitignore:65` ignores `.agentweave/` precisely because of this file. The product
+does not do for its users what its own repository had to do by hand.
+
+**Already noted, never filed.** The 2026-08-25 sweep's "what held" section recorded, in parentheses,
+*"`.agentweave/project.json` is not among them, and is machine-local — worth adding."* Filed properly
+now, with the second symptom it did not know about.
+
+**Regression assertion:** `scripts/drive/t_sweep_row1_projects.py`, *"F170: the Hub's own project
+marker is not offered as a workspace path"*.
+
+---
+
+## F171 (B) — the identity-conflict screen offers the right remedy under the wrong explanation
+
+Driven, not read: `scripts/drive/t_sweep_row1_ui.py` opens the real dashboard, opens **Add project**,
+types the path of a folder copied from a registered project, and reads what comes back.
+
+**What the operator sees**, verbatim from the dialog:
+
+> project marker was copied while the registered directory is still available
+>
+> This folder is already bound to a different AgentWeave database — usually another Hub instance on
+> this machine. Registering it as new gives it a fresh identity here; the other database keeps its
+> records but can no longer open this folder.
+>
+> `[ Register as a new project ]  [ Cancel ]  [ Add project ]`
+
+The first line is the server's, and it is correct. The paragraph beneath it is a fixed string
+(`hub/ui/src/components/projects/ProjectManagerModal.tsx:220-224`) and, in the situation actually
+driven, **all three of its clauses are false**: there is no different database, there is no other Hub
+instance, and there is no other database that loses the folder. The original project is registered in
+*this* database, at its own path, and is still perfectly openable. The two sentences contradict each
+other on screen.
+
+**Why it happens.** `project_identity_conflict` is raised from four distinct situations with four
+different messages —
+
+| Site | Message | Situation |
+|---|---|---|
+| `project_lifecycle.py:241` | *marker was copied while the registered directory is still available* | a copy, **same database** |
+| `project_workspace.py:262` | *marker identifies a different project* | marker names a project this database has never heard of |
+| `project_workspace.py:229` | *directory resolves to a different canonical path* | a symlink or junction moved |
+| `project_lifecycle.py:182` | *relocation target does not carry the project marker* | a relocate aimed at the wrong folder |
+
+— and the UI matches on the code, *deliberately*: its own comment says *"Matched on the code, never
+the prose."* That decision is right, and is why the remedy button is correctly offered in all four.
+The mistake is pairing a code that covers four situations with prose that describes only the second
+one.
+
+**Severity B, not C.** The remedy works, so nobody is blocked. But an operator following the
+explanation reasons about a second Hub instance that does not exist, and the sentence *"the other
+database keeps its records but can no longer open this folder"* invites them to go looking for
+records that are in the database they are already using.
+
+**The cheapest correct fix is to say less**: the two clauses the product actually knows are that
+this folder already carries another project's identity, and that registering it as new gives it a
+fresh one here. Everything about *which* database and *why* is inference the UI cannot make from a
+code shared by four call sites. Naming the four situations from their server message would be
+better still, but that requires the server to carry a discriminator the UI can switch on.
+
+**Regression assertion:** `scripts/drive/t_sweep_row1_ui.py`, *"F171: the conflict explanation does
+not assert a cause it cannot know"*.
+
+---
+
+## F172 (B) — relocating onto a path another project still claims answers a bare 500
+
+Found by the sweep by accident — a second run of the harness against a database that remembered the
+first — then reduced to a deterministic reproduction from nothing:
+`scripts/drive/t_f172_relocate_onto_a_claimed_path.py`.
+
+```
+A=proj-ac6ffb3df873 at C:\Users\huida\Documents\f172-a-24153
+B=proj-b9142e5e858e at C:\Users\huida\Documents\f172-b-24153
+--- POST relocate onto a path key another project still holds  [500]
+Internal Server Error
+```
+
+Server log:
+
+```
+sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: projects.path_key
+[SQL: UPDATE projects SET working_directory=?, path_key=?, directory_state=?, ... WHERE projects.id = ?]
+```
+
+**The gap.** `_guard_relocation` (`hub/hub/project_lifecycle.py:224-250`) asks three questions: has
+the path key changed, is the **old** directory still available, is a run active. It never asks
+whether the **destination** path key is already held by another project row. `Project.path_key` is
+unique, so `relocate` (`:170-188`) reaches `await self.session.commit()` and the constraint fires as
+an unhandled exception.
+
+**The operator's route to it is ordinary folder work.** Project A is moved or renamed away, leaving
+its row claiming a path nothing occupies. Project B's folder is later moved into the place A used to
+be — B's own marker travels with it, so the marker check at `:182` passes. Relocating B to say where
+it now lives is exactly the repair the product asks for, and it answers `500 Internal Server Error`
+with no body.
+
+**What makes this a finding rather than an edge case** is the contrast inside one router. Every other
+refusal here is typed, and the sweep confirmed each: `project_workspace_missing` *"project directory
+does not exist: <path>"*; `project_workspace_not_directory`; `invalid_project_path` *"create requires
+a target that does not exist; use open for a directory that already exists"*;
+`project_identity_conflict`. Each carries a `code`, a `message` and a `directory_state`, and each
+names a way forward. This one path returns a stack trace to the log and five words to the operator.
+
+**The remedy the product cannot currently state** is the one the operator needs: the path is claimed
+by project *X*, which is missing — delete X, or relocate X first. All of that is known at the moment
+of the collision.
+
+**Not attempted, and worth a second look when this is proposed:** whether the same gap exists on
+`POST /projects/create` and `POST /projects/open`. Both were driven and both refuse legibly (`422`
+and a returned existing project respectively), so relocate appears to be the only uncovered writer of
+`path_key`. That is a two-route check, not a proof.
+
+---
+
+## Row 1 — what held
+
+Recorded because the sweep's verdict rests on these as much as on the three above. Each was driven.
+
+- **F4's branch adoption.** Opening a git directory sets `main_branch` from the repository without
+  the operator confirming anything: `GET /settings` reads `"main"` immediately, and
+  `main-branch-suggestion` answers `{suggestion: "main", chosen: "main", is_repository: true}` — no
+  degraded window at all, which is the whole point of the 2026-08-24 fix.
+- **The settings merge rule.** `PUT /settings` with a single field left all fifteen others exactly
+  as they were. This is the defect the route's own comment describes having fixed, and it is fixed.
+- **Unknown settings fields are refused, not ignored.** `checkpoint_threshold_tokens: -5` → `422
+  extra_forbidden`, naming the field in `loc`. A misspelt field cannot silently do nothing.
+- **`/fs/list` is built for a picker, not for an API client.** A missing directory and a file path
+  each answer `200` with `entries: []`, a walkable `parent`, and the OS's own `reason`, so the
+  operator can see why this rung is empty and keep navigating. A *relative* path is refused outright
+  (`400 "path must be absolute"`). That split is the right one and it took a wrong assertion to see.
+- **The workspace listing respects git.** Tracked and untracked-but-not-ignored files listed;
+  `.gitignore`d ones absent. `GET /workspace/file` reads a tracked file and answers `404 "path not
+  found in this workspace: <path>"` for both an ignored file and `../../../Windows/win.ini` — the
+  same message for both, which `workspace_file.py:58` argues for deliberately.
+- **A vanished directory stays listable.** `GET /projects/{id}` after the folder moved answers `200`
+  with `directory_state: "missing"` rather than 404-ing the project out of reach of its own repair.
+- **Re-opening the same path is idempotent**, returning the same project id rather than a duplicate.
+- **The copy-marker guard fires.** Opening a copy of a registered project refuses `409
+  project_identity_conflict`; `register_copy_as_new: true` then succeeds. Both halves driven.
+- **The remedy is on the screen.** The dashboard rendered, the dialog opened, the refusal reached
+  the operator, and *"Register as a new project"* was there to click — the one thing that turns a
+  refusal into a way forward. F171 is about the paragraph next to that button, not the button.
+- **A non-git directory is a first-class project.** Opened `200`; `main-branch-suggestion` answers
+  `is_repository: false` rather than failing.
+- **No console errors** anywhere in the screen half, once the deliberate `409` is discounted.
+
+---
+
+# Full-surface sweep, 2026-09-01 — row 2 of 19: Runners
+
+The night window's `N-2`, second feature area. Driven against the **8011** Hub on the beta profile,
+with a fresh git fixture outside the repository and a fresh project per run. Surfaces exercised:
+`runners`, `launchability`, `model_catalog`, `runner_commands`, and the `RunnersPage` screen.
+
+**64 API assertions, 13 screen assertions, one real agent turn, five findings.** Harnesses kept:
+`scripts/drive/t_sweep_row2_runners.py` (58 or 59 of 64 — five reds are F174, F175 and F176, and the
+sixth is F177, which by its nature only fires on a `created_at` tie) and
+`scripts/drive/t_sweep_row2_ui.py` (10/13 — the three reds are all F173).
+
+**The row's load-bearing claim was driven, not read.** A runner on `claude-haiku-4-5-20251001`, an
+agent bound to it, one real turn (`run-86669729ee1d`, completed, exit 0, 7s). `turn_usage.model` is
+`claude-haiku-4-5-20251001` — the model Claude itself reported back, not the one the Hub sent. A
+Runner record reaches the provider process intact. Codex runners were created, listed and probed
+but never spawned, per the standing operator decision that Codex is undrivable.
+
+---
+
+## F173 (A) — runner management is free-typed text that swallows its own refusal, and the spec says otherwise
+
+`openspec/specs/runner-registry/spec.md:72-73` is a **shipped** requirement, not a proposal:
+
+> Runner management SHALL offer the catalog's models for the chosen provider rather than accepting
+> free-typed text.
+>
+> #### Scenario: Runner management offers declared models
+> - **WHEN** the operator creates or edits a runner and selects its provider
+> - **THEN** the models offered are those the catalog declares for that provider
+
+The backend honours it. `runners.py:23-35`'s `_reject_undeclared_model` cites that spec by name and
+refuses an undeclared model with `400`. **The screen does not.**
+`RunnersPage.tsx:229-237` renders the model field as a free-text `<Input placeholder="e.g.
+claude-sonnet-5">`, and `useCreateRunner` / `useUpdateRunner` (`api/runners.ts:69-88`) declare
+`onSuccess` and **no `onError`**. `RunnersPage` renders exactly one error surface — `deleteError`,
+set only by `handleDelete` (`RunnersPage.tsx:42-49`) — and `main.tsx:8-15` configures no
+`MutationCache` `onError` and no toast. So a refused create or edit reaches nothing.
+
+**Driven, not inferred** (`t_sweep_row2_ui.py`, screenshots in `%TEMP%\row2shots`):
+
+```
+New Runner -> Name "Row 2 typed model", CLI Claude, Model "opus" -> Save
+  POST /api/v1/projects/<p>/runners  ->  400  {"detail": "'opus' is not a model 'claude' declares"}
+  [PASS] the dialog stays open rather than closing on a failure — 1 dialog(s) on screen
+  [FAIL] the operator is told the runner was not created, and why
+         — no alert, no message, nothing changed on screen
+  [PASS] the refusals did reach the browser — 2 refused responses logged
+```
+
+`row2-04-after-save.png` is the whole finding in one frame: the dialog exactly as it was, the Save
+button back to "Save", no message anywhere, and no runner created. The operator's only feedback is
+that nothing happened, and pressing Save again does the same thing forever. The same is true of the
+edit dialog (`PATCH` -> `400`, same silence).
+
+**One defect or a design gap?** A gap, and the ledger already knows its shape — this is F169's
+pattern (an advisory computed server-side that reaches no file under `hub/ui/src`) on a *writing*
+surface rather than a reporting one. The same requirement's third scenario says *"the operator is
+told the model is unrecognised when editing it"*; `RunnerResponse.model_unrecognised`
+(`schemas/runners.py:46-58`) computes exactly that, and `grep -rn model_unrecognised hub/ui/src`
+returns **nothing**. Two of that requirement's three scenarios are unimplemented on the screen.
+
+**Does an existing change cover it?** No — and this is how it got here.
+`openspec/changes/archive/2026-08-04-hub-model-control-and-provisioning/tasks.md:169-173`, task
+`6.5`, is ticked, and its own evidence names only `_reject_undeclared_model` and
+`model_unrecognised`. The backend half was built, the task was closed on it, and the requirement
+moved into `openspec/specs/` as shipped behaviour. Nothing lied; the UI half was simply never
+written and nothing was left open to say so.
+
+**Reproduction:** the harness above, or by hand — Environment, Runners, New Runner, type any model
+that is not an exact catalog id, Save.
+
+---
+
+## F174 (B) — the Codex catalog has drifted from the file it says it is copied from, and the drift includes the default
+
+`model_catalog.py`'s docstring states its own source of truth:
+
+> Codex: read directly from `~/.codex/models_cache.json`, the CLI's own server-synced catalog ...
+> Only entries with `"visibility": "list"` are included
+
+That file, on this machine (`fetched_at 2026-08-29T10:33:58Z`, `client_version 0.146.0`), lists
+four models. The catalog (`model_catalog.py:213-227`) declares six:
+
+```
+cache lists:       ['gpt-5.4-mini', 'gpt-5.5', 'gpt-5.6-luna', 'gpt-5.6-terra']
+catalog declares:  ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.5', 'gpt-5.6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra']
+offered but not listed: ['gpt-5.4', 'gpt-5.6-sol']
+```
+
+`gpt-5.6-sol` is the entry carrying `default=True`. So the Hub offers, and accepts, a Codex model
+the installed CLI's own server-synced catalog no longer lists — and offers it *first*:
+
+```
+POST /projects/<p>/runners {"name":"Codex sol","cli":"codex","model":"gpt-5.6-sol"}  ->  201
+```
+
+The catalog was authored 2026-08-05 (`e7ed91e`) and nothing re-checks it. Twelve test files hardcode
+`gpt-5.6-sol` (`test_worker.py`, `test_model_catalog.py`, `test_agent_trigger_overrides.py`, ...), so
+the drift leaves the suite entirely green — the tests assert the catalog against itself.
+
+**Labelled honestly: measured, not spawned.** What is proven is that the catalog disagrees with the
+file it declares as its source, by that file's own rule. What is *not* proven is what Codex does
+when handed `gpt-5.6-sol`, because the standing operator decision is that Codex is undrivable and no
+Codex run was started. The failure mode is inferred; the disagreement is measured.
+
+`t_sweep_row2_runners.py` now carries the comparison, so the next sweep re-measures it rather than
+trusting a 2026-08-05 snapshot. The effort control was re-checked the same way and **still holds**:
+the cache's intersection across listed models is still `low, medium, high, xhigh`, exactly what the
+catalog declares.
+
+**Reproduction:**
+`py -3.11 scripts/drive/t_sweep_row2_runners.py <project>` — the two `(F174)` assertions.
+
+---
+
+## F175 (C) — the model refusal is the one gate in the catalog that names nothing that would work
+
+Every other refusal this row can provoke says what would work instead:
+
+```
+POST /runners {"cli":"kimi"}          -> 422  "cli must be one of ('claude', 'codex')"
+DELETE /runners/<bound>               -> 409  "Runner is bound to agent(s): row2-probe. Unbind before deleting."
+validate_overrides("claude", effort)  -> 400  "... (permitted: high, low, max, medium, xhigh)"
+```
+
+The model refusal does not:
+
+```
+POST /runners {"cli":"claude","model":"claude-opus-9"} -> 400  "'claude-opus-9' is not a model 'claude' declares"
+```
+
+`model_catalog.py:352-357` and `runners.py:31-35` both produce that sentence, and it sits ten lines
+from the enum rejection at `model_catalog.py:365-370` that *does* list its permitted values. The
+provider descriptor is right there in the function; naming its four models costs one join.
+
+**And it is not quite true.** The catalog publishes `aliases` per model, over the wire:
+
+```
+GET /model-catalog -> {"id":"claude-opus-5","label":"Opus 5","aliases":["opus"], ...}
+POST /runners {"cli":"claude","model":"opus"} -> 400  "'opus' is not a model 'claude' declares"
+```
+
+The Hub declares `opus` in one endpoint and denies declaring it in another. `aliases` is consumed by
+exactly one function — `context_window_for_model` (`model_catalog.py:279-296`), which resolves an
+alias when *reading* a usage sample — is typed in the UI (`api/modelCatalog.ts:8`), and is rendered
+by no component. It is publishable output everywhere and acceptable input nowhere.
+
+Graded **C** rather than B on purpose: refusing an alias and storing canonical ids is a defensible
+choice. What is wrong is the sentence, and that it leaves the caller with nowhere to go — which is
+precisely what F173 makes invisible, since on the screen the operator does not even get the
+sentence.
+
+**Reproduction:** the two `(F175)` assertions in `t_sweep_row2_runners.py`.
+
+---
+
+## F176 (C) — the API creates a nameless runner the dialog refuses to create
+
+```
+POST /projects/<p>/runners {"name":"","cli":"claude"}  ->  201  {"name":"", ...}
+```
+
+`RunnerCreate.name` (`schemas/runners.py:16`) declares `max_length=256` and no minimum, so the empty
+string passes. The dialog disables Save on `!name.trim()` (`RunnersPage.tsx:245`), so the guard
+exists — on the client only. The resulting row renders as a bare CLI chip with no label and an
+`aria-label` of `"Delete "`; it is visible in `row2-04-after-save.png`, fourth row, left behind by
+the API half of this drive.
+
+The name is a runner's whole identity in every picker that binds one — the agent-create dialog, the
+agent settings runner select, `ProjectSettingsPanel`'s checkpoint-runner select. A nameless row in
+those is unselectable in practice.
+
+**Reproduction:** the `(F176)` assertion, or the one call above.
+
+---
+
+## F177 (C) — the runner list's "order by creation" silently becomes "order by name" about half the time
+
+`runners.py:73` orders by `Runner.created_at` alone. `Runner` has no sequence column and its `id`
+is random (`runner-` plus `short_id()`), so a tie has no tiebreaker. Ties are not theoretical:
+Windows' default timer granularity is ~15.6 ms, and two consecutive `POST /runners` land inside one
+tick **about half the time**.
+
+```
+20 x (create "Haiku drive", create "Codex exec", GET /runners)
+  -> 10 runs listed them in creation order
+  -> 10 runs listed "Codex exec" first, every one of those a created_at tie
+```
+
+The fallback is not random, which is what makes it worth naming — it is **alphabetical**:
+
+```
+EXPLAIN QUERY PLAN select * from runners where project_id=? order by created_at
+  SEARCH runners USING INDEX ix_runners_project_name (project_id=?)
+  USE TEMP B-TREE FOR ORDER BY
+```
+
+The scan feeds the sorter in `(project_id, name)` order (`models.py:330`) and SQLite's sorter keeps
+the input order for equal keys. Proven by naming the rows against their creation order — created
+`ZB-created-first` then `ZA-created-second`, both tied at `2026-09-01T01:18:14.184230Z`:
+
+```
+GET /runners -> [... 'ZA-created-second', 'ZB-created-first']
+```
+
+So renaming a runner can move a *different* runner in the list, and a list that looks stable on a
+seeded project reorders as soon as two runners are created together.
+
+**This codebase has already fixed this five times, with a finding number.** `models.py` carries the
+same paragraph at `:405` (`Conversation.sequence` — *"Windows' default timer granularity is ~15.6ms,
+so this is not a theoretical race"*), `:859` (`RunDivergence`), `:1558` (`Checkpoint`, citing **F55**:
+*"picked the wrong one roughly half the time"*), and names `TaskTransition` and `InboundQueueEntry`
+as the same shape. `Runner` is that shape and was not covered. The measured 10-of-20 is F55's own
+phrase, arrived at independently.
+
+Graded **C**: the list is a presentation surface, and no correctness decision is read off its order
+today. The reason to fix it is that the next thing to read "the first runner" off this query would
+inherit a coin flip.
+
+**Reproduction:** the `(F177)` assertion — flaky by construction, which is the point — or the
+20-iteration loop above.
+
+---
+
+## What held, under row 2
+
+Recorded because a sweep that lists only defects describes a product that does not exist.
+
+- **A Runner record reaches the provider intact.** One real Haiku turn, and `turn_usage.model` is
+  `claude-haiku-4-5-20251001` as reported by Claude itself. The whole point of the runner concept,
+  driven end to end rather than asserted about argv.
+- **A fresh project seeds exactly one runner per supported CLI**, both with `model: null`, so an
+  unconfigured project runs each CLI's own default rather than a Hub guess.
+- **The catalog is internally coherent.** Both providers declare exactly one default model, a
+  context window for every model, both controls, a default that is one of that control's own values,
+  and a renderable `apply` style — 16 assertions, all green. Codex's `permission_mode` correctly
+  renders `style: "none"` (it is answered over app-server, not argv) and its `effort` renders
+  `style: "config"`.
+- **The catalog needs no project.** `GET /model-catalog` answers on operator auth alone, as its
+  docstring argues it should.
+- **Cross-project isolation holds.** A runner id from project A, read under project B's scope,
+  answers `404 "Runner not found"` — not 403, not the row.
+- **The bound-runner delete refusal is exemplary.** `409 "Runner is bound to agent(s): row2-probe.
+  Unbind before deleting."` — names the blocker, names the remedy, and the remedy works.
+- **A refused PATCH changes nothing.** After `400` on an undeclared model, the stored model is
+  still what it was.
+- **`flags` round-trip verbatim**, including the `--no-app-server` transport sentinel.
+- **Unknown fields are named, not absorbed.** `{"colour":"red"}` gives `422` with `colour` in `loc`.
+- **`/runners/launchability` is not shadowed by `/runners/{runner_id}`.** The literal segment is
+  declared first and resolves as the collection endpoint; every runner in the project gets a
+  verdict, every verdict states a reason whenever it is not runnable, and `runnable` is exactly
+  `present and authorized` in all of them.
+- **`launchability-by-provider` covers every catalog provider** without needing a runner row to
+  exist, which is what agent-creation-by-provider depends on.
+- **`probe_agent`'s unbound case is real.** `RUNNER_UNBOUND` (`launchability.py:38-43`) answers
+  *"No runner is bound to this agent. Bind one in the Hub UI before it can run."* rather than
+  falling through to the agent-name fallback that once sent an operator hunting for a binary named
+  after their own agent.
+- **No uncaught JavaScript error** on the Runners screen through create, refused create, edit,
+  refused edit and cancel — only the two `400`s the drive provoked on purpose.
+
+### Noted, not filed (severity D)
+
+- **`PATCH /runners/{id} {"cli":"codex"}` answers `422 "Extra inputs are not permitted"`.** The
+  refusal is right and `RequestModel` does name `cli` in `loc`, so the caller is told which field.
+  But the reason given is "unknown field" where the truth is "known field, deliberately fixed after
+  creation" — the dialog knows this and disables the CLI select on edit (`RunnersPage.tsx:216`).
+  Not held open in the harness; recorded here.
+- **`model_unrecognised` is currently unreachable in practice as well as unrendered.** Both write
+  paths refuse an undeclared model, so only a row predating the catalog can carry one, and there are
+  **zero** such rows across all 71 runners on the 8011 Hub. Its invisibility is part of F173; its
+  unreachability is why that half of F173 has no live reproduction.
+
+---
+
+# Full-surface sweep, 2026-09-01 — row 3 of 19: Agents
+
+The night window's `N-2`, third feature area. Driven against the **8011** Hub on the beta profile
+(PID 22908, started 01:48:32; nothing under `hub/hub` or `src` newer, and the beta file's mtime
+moved on a `GET /projects` while `<repo>/hub/data` did not). Fresh project `proj-13d37dd33731` on a
+fresh git fixture outside the repository. Surfaces exercised: `agents`, `agent_lifecycle`,
+bindings, canonical context, timeline, `agents/launchability`, and the agent-settings screen.
+
+**85 API assertions, 19 screen assertions, one real agent turn, five findings.** Harnesses kept:
+`scripts/drive/t_sweep_row3_agents.py` (83/85 — the two reds are F182 and F181) and
+`scripts/drive/t_sweep_row3_ui.py` (15/19 — the four reds are F178 x2, F179 and F180). Both were
+run twice, per the standing instruction; the second API pass ran against the state the first left
+and scored identically, so unlike rows 1 and 2 the repeat surfaced nothing new here.
+
+**The row's load-bearing claim was driven, not read.** A charter was authored saying *"reply with
+exactly the single word ROW3023319"*, an agent was bound to it, and one real turn ran
+(`run-ca3ac9b518bd`, completed, exit 0, ~8s, `claude-haiku-4-5-20251001`). The marker came back in
+the output. **A Charter record reaches the process that runs**, and the timeline names the runner
+and model it used (`Run started (claude, claude-haiku-4-5-20251001)`).
+
+---
+
+## F178 (B) — the collaboration-readiness report the Hub computes on every call reaches no screen, and has not since 2026-08-08
+
+`hub/hub/api/v1/agents.py:159`'s `get_agents_launchability` states its own consumer in its
+docstring:
+
+> Feeds launchability indicators in the agent/runner selector.
+
+There is no such consumer. Measured from the wire, not grepped: a full load of the project screen
+with the agent rail open makes **41 requests, none of them to `/agents/launchability`**
+(`t_sweep_row3_ui.py`, first assertion). Following it through the UI source explains why:
+
+| | |
+|---|---|
+| `useAgentLaunchability` | `hub/ui/src/api/agents.ts:343` — imported by **ten** files, nine of them tests that mock it, and `api/agents.ts` itself. No component. |
+| `AgentCard` | `hub/ui/src/components/agents/AgentCard.tsx:18` — the only component taking a `launchability` prop and the only renderer of `collaboration_ready`. Imported by exactly one file: `hub/ui/src/__tests__/agentCardCollaboration.test.tsx:3`. |
+
+**This was known and written down at the time, in the commit that caused it.** `e4958fc`
+(2026-08-08, *"Handoff gets a home; the overflow menu and two dead pages go"*) says in its own body:
+
+> `AgentCard` is now unreachable too — left in place, because deleting it takes the
+> collaboration-readiness indicator with it and that was not asked for.
+
+That is an honest note about a deliberate deferral. What did not happen is anyone recording the
+*consequence*: for 24 days the sentence *"this Codex agent's runner opted out of the app-server
+transport ... AgentWeave tool calls will be silently denied with no operator present to approve
+them"* (`agents.py:225-233`) has been computed on every launchability call and shown to nobody. The
+test that guards it is worse than silent — `agentCardCollaboration.test.tsx:6-11` opens by
+explaining that the indicator *"moved here — the place an operator looks to understand an agent's
+configuration"*. It moved to a component nothing mounts, and the test passes.
+
+**No requirement is breached, and that is worth stating plainly.**
+`openspec/specs/runtime-diagnostics/spec.md:137` says *"The Hub SHALL be **able to report**"* — the
+API satisfies that literally. This is a product defect, not a spec breach: an operator-facing
+warning with no operator.
+
+**Reproduction:** `t_sweep_row3_ui.py`, first assertion (wire-level). By hand:
+`grep -rn "useAgentLaunchability\|AgentCard" hub/ui/src --include=*.tsx | grep -v __tests__` returns
+only the two definitions.
+
+---
+
+## F179 (B) — an agent that cannot run at all is presented as a neutral dropdown value
+
+The Execution section of agent settings — subtitle *"What this agent runs as when you give it a
+turn"* (`AgentSettingsPage.tsx:103-121`) — renders the runner binding as `RunnerPicker`
+(`AgentSettingsControls.tsx:219-254`), whose first option is a plain
+`<option value="">No runner</option>`. Nothing distinguishes it from a choice.
+
+The Hub already has the sentence, and says it in three places the screen does not read:
+
+- `hub/hub/launchability.py:80` — *"No runner is bound to this agent. Bind one in the Hub UI before
+  it can run."*, returned by `GET /agents/launchability` as `runnable: false` plus that reason.
+- The same sentence is stamped onto the undeliverable queue entry as `waiting_reason` and returned
+  by `GET /queue/{agent}/status` — driven: `{"waiting_count": 1, "waiting_reason": "No runner is
+  bound to this agent. Bind one in the Hub UI before it can run."}`.
+- `POST /agent/trigger` returns it in the response body (`"status": "queued"`, `waiting_reason`).
+
+So the screen showing "No runner" as an ordinary value is not a missing computation. It is the same
+shape as F178 one page over, and F169 and F173 before that: a fact produced server-side for an
+operator, with no file under `hub/ui/src` that reads it.
+
+`row3-08-no-runner-execution.png` is the finding in one frame — an agent with a message queued that
+can never be delivered, and its own Execution page saying nothing at all about why.
+
+**Reproduction:**
+
+```
+POST  /projects/<p>/agents          {"name":"q1","runner_id":"<r>"}  -> 201
+PATCH /projects/<p>/agents/q1       {"runner_id": null}              -> 200
+POST  /projects/<p>/agent/trigger   {"agent":"q1","message":"held"}  -> 200  status=queued
+open  /?project=<p>&agent=q1&settings=execution
+```
+
+---
+
+## F180 (C) — the archive refusal offers only the destructive remedy, and drops the reason the non-destructive one exists
+
+This one is sharp because the surrounding work is *good*. `ArchiveControl`
+(`AgentSettingsPage.tsx:223-262`) parses the 409, renders the reason as `role="alert"`, and offers a
+labelled destructive button — `row3-09-archive-refused.png` shows *"q023319 has 1 queued message.
+Discard them to archive the agent."* above *"Discard 1 queued message and archive — cannot be
+undone"*. That is a refusal done right, and its own comment says so: *"the error is rendered as the
+operator's next instruction, not as a failure."*
+
+The instruction is incomplete. Binding a runner would **deliver** those messages rather than destroy
+them, and the Hub itself treats binding as the repair: `agents.py:2025-2043` redrains the queue on
+`runner_newly_bound` specifically because *"an operator who does exactly what the product told them
+to do ... is left with the message still queued"* (the F96 comment). The screen never names it.
+Driven: `"bind"` does not appear in the page's visible text (`t_sweep_row3_ui.py`, last screen
+assertion).
+
+**Where the reason is lost is in the route, not the component.** `hub/hub/agent_lifecycle.py:46-58`
+composes a message that *does* explain the stake — *"has messages waiting to be delivered.
+Archiving it would strand them, because nothing delivers to an archived agent."*
+`hub/hub/api/v1/agents.py:2133-2157` then discards it: when there are queued entries it raises its
+own dict detail, *"{name} has N queued messages. Discard them to archive the agent."* The component
+renders `queueRefusal.message`, so the only sentence reaching the operator is the one naming
+discard.
+
+**Reproduction:** F179's setup, then press *Archive agent* on the Identity section.
+
+---
+
+## F181 (C) — `GET /agents/launchability` does not apply the lifecycle filter, and its docstring says it feeds a selector
+
+`list_agents` (`agents.py:249-263`) is explicit about why the filter lives where it does:
+
+> Archived agents are excluded by default, and **this one filter is what removes them from every
+> surface that offers an agent** — the rail, task assignment, the job form, peer recipients, the
+> new-conversation surface — because all of them read this endpoint. Adding the filter at each call
+> site instead would mean one missed site leaves an archived agent selectable.
+
+`get_agents_launchability` (`agents.py:159-243`) is a second surface that offers an agent — by its
+own docstring, *"the agent/runner selector"* — and it iterates
+`select(Agent).where(Agent.project_id == project_id)` with no lifecycle predicate. An archived agent
+is reported there, `runnable: true`, one call after `POST /agent/trigger` refused it with *"is
+archived and cannot be triggered."*
+
+Driven, both passes:
+
+```
+POST /projects/<p>/agents/pmb023319/archive  -> 200  lifecycle=archived
+GET  /projects/<p>/agents                    -> pmb023319 ABSENT   (correct)
+POST /projects/<p>/agent/trigger             -> 409  "is archived and cannot be triggered"
+GET  /projects/<p>/agents/launchability      -> pmb023319 PRESENT, runnable: true
+```
+
+**Severity C, and only because of F178.** Nothing reads this route today, so no operator can see the
+inconsistency. That is exactly the reason to file it: the day someone wires the indicator up — which
+is what fixing F178 means — they inherit an archived agent in the selector, and the docstring that
+promised one filter would prevent it.
+
+---
+
+## F182 (C) — F175's refusal, restated at a second site, still naming nothing that would work
+
+`agents.py:630-634`:
+
+```python
+raise HTTPException(
+    status_code=400,
+    detail=f"{body.model!r} is not a model {body.provider!r} declares",
+)
+```
+
+Driven: `POST /agents {"name":"...","provider":"claude","model":"opus"}` -> `400 'opus' is not a
+model 'claude' declares`. Identical wording, identical omission, and the same alias — `opus` is
+published by this Hub over `GET /model-catalog` — as F175 recorded against `runners.py`'s
+`_reject_undeclared_model` on row 2. Filed separately rather than folded into F175 because it is a
+second file:line and a fix to one does not touch the other; whatever change answers F175 should
+answer both.
+
+**Not reachable from the create dialog**, which is why it is C rather than B: `AgentCreateDialog`
+sources the model from a `<select>` over the catalog, so an operator cannot provoke it. It is the
+API's answer to an API caller.
+
+---
+
+## Suspicion, not a finding — no reproduction
+
+`agent_lifecycle.archivable` (`agent_lifecycle.py:46-58`) detects queued work by **joining
+Conversation** on `Conversation.agent == agent.name`, while the route's own follow-up query
+(`agents.py:2136-2146`) and the scheduler's `inbound_queue.queued_entries`
+(`inbound_queue.py:74-88`) both filter on `InboundQueueEntry.agent`. `conversation_id` is nullable
+(`models.py:595-597`). If any path ever enqueues without one, or with a conversation belonging to a
+different agent, the archivability check would say "archivable" about an agent with undelivered work
+— the exact thing its own message exists to prevent. All eight `new_entry` call sites pass a
+`conversation_id` today, so **this could not be reproduced** and is recorded only so a future change
+to any of them does not have to rediscover the asymmetry.
+
+---
+
+## What held, under row 3
+
+Recorded because a sweep that lists only defects describes a product that does not exist. Each of
+these is an assertion in one of the two harnesses, not an impression.
+
+**The create-agent dialog is the counter-example to F173.** Same codebase, one surface over, and it
+does everything the Runners dialog does not: the model comes from a `<select>` over the catalog, not
+free text; `createAgent.error` is rendered as `role="alert"` with the Hub's own `detail` parsed out
+(`AgentCreateDialog.tsx:10-17, 235`); the dialog stays open. Driven — typing an existing agent name
+and pressing Create produced *"Agent name 'rid023319' already exists in this project"* on screen
+(`row3-04-duplicate-refused.png`). This makes F173 an **omission**, not a missing convention.
+
+**The provider picker uses the launchability it does fetch.** `ProviderPicker`
+(`AgentCreateDialog.tsx:83-110`) disables a provider that cannot launch and prints its reason beside
+it. Provider-level launchability (`/runners/launchability-by-provider`) has a real consumer; only
+the *agent*-level one (F178) does not.
+
+**find-or-create is genuinely atomic and does not duplicate.** Two agents created on the same
+`provider` + `model` bound the *same* runner id, and the project's runner count did not move.
+
+**Every binding refusal names the id it could not find**, and none leaks cross-project existence: an
+unknown runner, an unknown charter, and a runner belonging to another project all answer
+`404 "Runner '<id>' not found"` — the foreign one indistinguishable from the absent one.
+
+**`_exactly_one_capability_source` says which combination is accepted.** Both `runner_id` +
+`provider`/`model` together and neither of them answer `422 "Provide either runner_id or both
+provider and model, not both or neither"`. That is the shape F175/F182 lack, in the same file.
+
+**The archive lifecycle is complete and correctly filtered.** Archive and unarchive are both
+idempotent; `?lifecycle=` accepts `open`/`archived`/`all` and refuses anything else with `422`; an
+archived agent leaves the default roster, stays resolvable under `all` (so there is somewhere to
+unarchive it from), and cannot be triggered — with a refusal that names unarchiving as the repair.
+Archiving an agent whose run has *finished* is permitted; archiving one with queued work is not.
+
+**Canonical context carries the charter.** `GET /agents/agent-context` renders the bound charter's
+authored content, names the agent, and for an unknown agent answers `200` with an onboarding
+document (team roster, what the agent may not decide, "you are not registered yet") rather than a
+`404`. Cross-project, the same call does not leak the charter.
+
+**The timeline is per-agent and starts at creation.** `agent_created` is on it before anything else
+happens; an unknown agent's timeline is `[]`, not someone else's; a completed run contributes
+`run_triggered`, `queue_entry_queued`, `queue_entry_delivered`, `run_started`, `run_completed`, with
+`Run started (claude, claude-haiku-4-5-20251001)` naming the runner and model.
+
+**A known past defect is still fixed.** The turn produced two `context_warning` rows 30 ms apart,
+the later one carrying `status: "measured"` with `context_tokens: null`. `context_readings.py`
+exists for exactly that (*"what made Claude agents report nothing for 329 samples"*) and picks the
+complete row. Worth recording that the failure condition still occurs and the guard still holds.
+
+**An empty agent name is refused `422`** — F176's shape on the runner surface does not repeat here.
+
+### Noted, not filed (severity D)
+
+- `POST /agents/{name}/heartbeat`, `/output`, `/context-usage` and `/compact` take a `{name}` that is
+  never checked against a real agent row, unlike every route that goes through `_owned_agent`. These
+  are agent-side write paths, not operator ones, and identity is bound by the run credential rather
+  than the path — so this is a shape to watch, not a defect.
+- The `context_warning` event type is used for a routine 17%-of-window reading. Nothing is wrong; the
+  name just describes an alarm the row is not.
+- One trap this harness fell into and now carries a comment about: asserting on `page.content()`
+  rather than `page.inner_text()`. Searching the HTML for `"bind"` matched `tabindex` and turned
+  F180 into a green row until it was checked by hand.
+
+---
+
+# Full-surface sweep, row 4 of 19: Charters
+
+Driven 2026-09-01 (iteration 6) against the 8011 Hub on the beta profile, PID 22908 started
+01:48:32, with nothing under `hub/hub` or `src` newer than that. Two fresh projects
+(`proj-395817998d65`, then `proj-92ff8c6881f8`), both deleted afterwards. Harnesses kept:
+`scripts/drive/t_sweep_row4_charters.py` (60/65, twice) and `scripts/drive/t_sweep_row4_ui.py`
+(20/23, twice). Screenshots in `%TEMP%\row4shots`. Every agent turn bound
+`claude-haiku-4-5-20251001`.
+
+## F183 (C) — charter names have no uniqueness rule anywhere, and the one place a charter is chosen shows nothing else
+
+**Severity:** C. Nothing in the Hub resolves a charter by name, so no run misbehaves. What breaks
+is the operator's ability to pick the right one.
+
+**Where.** `hub/hub/api/v1/charters.py:19-34` (create) and `:62-80` (update) both write
+`body.name` straight onto the row. `hub/hub/schemas/charters.py:11-12` constrains only length.
+There is no unique constraint on `Charter.name` in `hub/hub/db/models.py`. So a project can hold
+any number of charters called `Developer`.
+
+The contrast is one file away: `hub/hub/api/v1/agents.py:612-617` refuses a duplicate **agent**
+name with a 409 that names it — *"Agent name 'x' already exists in this project"* — which row 3
+drove on screen (`row3-04-duplicate-refused.png`). Agents refuse it; charters do not.
+
+**Why it matters at the picker.** `hub/ui/src/components/agents/AgentSettingsControls.tsx:283`
+renders each option as `<option key={charter.id} value={charter.id}>{charter.name}</option>` — the
+id is the value, the name is everything the operator can read. Two charters under one name are
+indistinguishable at the only place the binding decision is made. Measured on screen: the picker
+listed **four** options reading exactly `Code Reviewer` (`row4-08-picker.png`).
+
+The seeded set is what makes this reachable rather than theoretical. An operator who wants their
+own take on the `Developer` starter has no reason to think the name is taken by something they
+must not collide with, and no refusal tells them.
+
+**Reproduction (API).**
+
+    POST  /projects/{pid}/charters {"name": "Code Reviewer", "content": "..."}  -> 201
+    GET   /projects/{pid}/charters                                             -> two rows, one name
+    PATCH /projects/{pid}/charters/{other} {"name": "Code Reviewer"}            -> 200, now three
+
+Three assertions in `t_sweep_row4_charters.py` hold this open; both the create door and the rename
+door are probed, because closing one leaves the other.
+
+## F184 (C) — a whitespace-only charter name is accepted by the API and renders as a blank row
+
+**Severity:** C, and it is F183's sibling rather than a separate mechanism.
+
+`CharterCreate.name` is `Field(min_length=1, max_length=256)`, which `"   "` satisfies. The dialog
+already refuses it — `ChartersPage.tsx:267-268` submits `name.trim()` and disables Save on
+`!name.trim()` — so the screen is **stricter than the API it calls**. An agent, a script, or
+anything reaching the route directly creates a row whose name renders as nothing.
+
+Measured: the charter picker's option list came back containing a literal `'   '` between two
+named entries (`row4-08-picker.png`, both UI runs). It is selectable and it says nothing.
+
+**Reproduction.** `POST /projects/{pid}/charters {"name": "   ", "content": "x"}` returns `201`, and
+the response echoes `"name": "   "`.
+
+## F185 (B) — a charter held only by an ARCHIVED agent cannot be deleted, and the refusal names an agent the roster does not show
+
+**Severity:** B. The operator is stopped by a name they cannot find.
+
+**Where.** `hub/hub/api/v1/charters.py:95-98`:
+
+```python
+bound = await session.execute(
+    select(Agent.name).where(Agent.project_id == project_id, Agent.charter_id == charter_id)
+)
+```
+
+No `Agent.lifecycle` filter. `Agent.lifecycle` is `('open', 'archived')` — `db/models.py`, check
+constraint `ck_agents_lifecycle` — and archiving does **not** clear `charter_id`. The roster the
+operator reads (`GET /agents`) filters archived agents out; row 3 measured that and recorded it as
+working correctly.
+
+So the two behaviours compose into a wall: delete the charter, get
+*"Charter is bound to agent(s): aq2. Unbind before deleting."*, go to the roster, and `aq2` is not
+there. The refusal names a real repair on a real record — the archived agent **can** be unbound,
+which the harness asserts and which passes — but it never says the holder is archived, and there is
+no hint that `?lifecycle=archived` is where to look.
+
+**This is F181's shape at a second site.** F181 is `/agents/launchability` missing the same
+lifecycle filter. Two routes now, both selecting agents without asking whether the agent is still
+in the roster.
+
+**Reproduction.**
+
+    POST   /projects/{pid}/charters {"name":"held","content":"x"}       -> 201 charter-X
+    POST   /projects/{pid}/agents   {"name":"a1","charter_id":"charter-X","runner_id":...}
+    POST   /projects/{pid}/agents/a1/archive                            -> 200 {"lifecycle":"archived"}
+    GET    /projects/{pid}/agents                                       -> a1 absent
+    DELETE /projects/{pid}/charters/charter-X                           -> 409 "...bound to agent(s): a1..."
+
+## F186 (B) — the charter screen destroys authored text on one click, with no confirmation and no undo
+
+**Severity:** B. Destructive, immediate, irreversible, and the record it destroys is the one thing
+on this screen that cannot be recreated by the product.
+
+`hub/ui/src/components/charters/ChartersPage.tsx:143-155` — the delete control calls
+`deleteCharter.mutate(charter.id, ...)` straight out of `onClick`. There is no confirmation dialog,
+no hold-to-confirm, no two-step. `DELETE /charters/{id}` hard-deletes the row
+(`charters.py:105-106`); there is no soft delete, no `archived` flag on `Charter`, and no undo
+anywhere in the surface.
+
+Nine of the rows are seeded starters and are recoverable from the bundle in principle. The tenth is
+the one an operator wrote, and it is gone.
+
+The file's own comment two lines above shows the risk was seen and answered only halfway:
+
+> *"The toggle target is the text region only. The destructive control deliberately sits outside it
+> — a click meant for the row must not be able to land on delete."*
+
+That protects against a **mis-aimed** click. It does nothing about a deliberate one on the wrong
+row — which, given F183, is a row that may be one of several with the same name.
+
+**Reproduction (driven).** Create a charter with content, open
+`?project={pid}&tab=environment&section=charters`, click `Delete <name>`. No dialog appears
+(`page.locator('[role="dialog"], [role="alertdialog"]').count() == 0`), and
+`GET /charters/{id}` answers 404 within the same second. `row4-05-deleted-no-confirm.png`.
+
+## F187 (B) — the charter form swallows its own refusal: the operator clicks Save and is told nothing
+
+**Severity:** B. F173's exact shape, at a third site.
+
+`ChartersPage.tsx:191` and `:198-203` pass **only** `onSuccess` to the create and update mutations:
+
+```tsx
+onSubmit={(values) => createCharter.mutate(values, { onSuccess: () => setCreating(false) })}
+```
+
+`CharterForm` holds no error state and renders no `role="alert"`. So when the API refuses — a name
+past 256 characters is a 422, and F183/F184 are the other two things it *should* refuse — the
+dialog simply stays open, the button returns from `Saving...` to `Save`, and nothing is said. The
+operator's only signal is that the list did not grow.
+
+The delete path on the same screen does it correctly (`:77-87`, `errorDetail`, `role="alert"`),
+which is what makes this an omission rather than a missing convention — the same file already knows
+how.
+
+**Reproduction (driven).** Open the charter screen, click `New Charter`, type a 300-character name
+and any content, click Save. Measured: charter count `30 -> 30` (the API refused), dialog still
+open, and `page.inner_text("body")` contains neither `256` nor any word for refusal.
+`row4-07-refusal-swallowed.png`.
+
+**This is the fifth instance of the shape** already in `decisions_for_user` — a sentence the Hub
+computes for the operator with no file under `hub/ui/src` that reads it (F169, F173, F178, F179,
+F180). This one is slightly different and slightly worse: the Hub's sentence is a plain FastAPI 422
+the client already receives, so nothing needed computing at all. The client just drops it.
+
+---
+
+## What HELD — and one thing this row set out to prove, proved, then had to disprove
+
+**An edit to a bound charter reaches the next turn, including in a resumed conversation.** This was
+the row's headline question and the API half cannot answer it. Driven with real turns: author a
+charter saying *"reply with exactly the single word ALPHAq1"*, bind it, run a turn (`ALPHAq1` comes
+back), `PATCH` the content to `BETAq1`, then run a second turn **in the same conversation** —
+`conv-45b7db016716 -> conv-45b7db016716`, `--resume` on provider session
+`bd6c486c-9a8e-4a43-8303-85e26a18cd6c` — and ask the agent to quote its `## Charter` section
+verbatim. It returned the **new** text, word for word. The claim in `agent_trigger.py:893-895` —
+*"an edited charter is therefore visible on the next run"* — holds, and now has a drive behind it.
+
+**The thing that almost became F188, and did not.** The first version of this probe asked turn 2 to
+*obey* rather than to *quote*, and in `run-2e5fae78696a` the agent replied with the **superseded**
+marker. Its thinking then quoted a charter that was neither version — the new sentence with the old
+marker word spliced in. The next run's thinking was more specific still: *"There are two charter
+instructions in my system prompt... 1. ALPHAq1... 2. BETAq1."* That reads exactly like the system
+prompt accumulating one canonical-context block per resumed turn — a real defect if true, and an
+expensive one, since the block is ~7.7 kB.
+
+Three things were measured before writing it up, and the third killed it:
+
+1. **The materialized context file is correct.**
+   `.agentweave/worktrees/tq1/.agentweave/context/tq1.md` line 77 carried only the new text,
+   written at 02:53:02, immediately before the second spawn.
+2. **The session transcript holds no system prompt at all**, so the accumulation could not be
+   confirmed from disk. `~/.claude/projects/.../bd6c486c-....jsonl` is 21 rows of user turns,
+   attachments and assistant messages; the appended system prompt is not among them.
+3. **A three-turn probe counted it.** Charter edited before turn 2 and again before turn 3, then:
+   *"Count the number of lines in your system prompt that begin 'Your marker word is'. Then list
+   every marker word, in order."* Answer: **`1` / `WORDTHREE`.** One block, the current one.
+
+So there is no accumulation. What the model was reading in turn 2 was **its own earlier reply**,
+which had quoted the old charter verbatim inside a thinking block, and which is in the conversation
+history where it belongs. The Hub replaces the charter cleanly on resume.
+
+Worth keeping as method, not just as an outcome: an agent's self-report about its own system prompt
+is evidence about the *conversation*, not about what the harness delivered. Two runs agreed with
+each other and were both wrong about the mechanism. The harness now asks turn 2 to **quote** rather
+than to **obey**, and carries a comment saying why.
+
+**Everything else that held:**
+
+- **Seeding is exactly the manifest, byte for byte, once.** Nine charters, names matching
+  `hub/hub/data/charters/charters.json`, and `Code Reviewer`'s 4,731 characters identical to
+  `code_reviewer.md` on disk. Re-opening the project through `POST /projects/open` re-enters
+  registration and does not re-seed — `9 -> 9`.
+- **Cross-project isolation is complete and silent about it.** Reading, editing and deleting this
+  project's charter id under another project's route all answer `404 Charter not found`, as does
+  `GET /agents/context?charter=` — the same wording an unknown id gets, so nothing leaks the fact
+  that the charter exists. The charter survived every attempt with its content intact.
+- **The bound-delete refusal names the holder and the repair, and the repair works.**
+  *"Charter is bound to agent(s): b025056. Unbind before deleting."* — then `PATCH` `charter_id:
+  null`, then `DELETE` returns `204`. The whole loop drives. (F185 is the archived case of the same
+  refusal, not a defect in this one.)
+- **The canonical context is rendered live, not cached.** A `PATCH` to the content is visible in the
+  very next `GET /agents/agent-context?agent=` with no restart and no invalidation step.
+- **An agent with no charter stays usable and says so.** `"No charter is assigned to this agent."`
+  in the rendered context and `"charter"` in `missing` — `agent-charter:58-59` satisfied.
+- **`agent-charter`'s three UI requirements are all satisfied by the shipped screen**, which is
+  worth saying out loud after row 2 found a shipped requirement with no UI at all (F173). Driven:
+  every charter collapsed on first open with no full document on screen (the longest starter is
+  8,529 characters and none of it is there); expanding one shows its content with zero dialogs and
+  zero textareas, so reading opens nothing that can modify; and opening a second leaves the first
+  open — `2` elements at `aria-expanded="true"`. `row4-02-one-expanded.png`,
+  `row4-03-two-expanded.png`.
+- **An empty-content charter is allowed on purpose and the screen says what that means** — *"This
+  charter has no content, so it contributes nothing to an agent's turn."* (`ChartersPage.tsx:171`).
+  A permission with a sentence attached, which is the right shape.
+- **The 422s are well worded where they reach anyone.** `"String should have at least 1 character"`,
+  `"String should have at most 256 characters"` — both name the constraint. F187 is that the screen
+  drops them, not that they are bad.
+
+## What the second run bought
+
+Nothing new, for the second row running. Both API passes scored 60/65 against the state the first
+left, and both UI passes 20/23. Row 1's F172 and row 2's F177 were each found only by a repeat, so
+the technique stays; recording that it fired on two of four rows is the honest number.
+
+---
+
+# Sweep, row 5 of 19: Runs — 2026-09-01
+
+The representative path from `SURVEY.md:26`: **trigger, stop, sessions, reconciliation,
+divergence, task binding**. Routes `hub/hub/api/v1/agent_trigger.py` — `POST /agent/trigger`
+(:1212), `POST /agent/{agent}/stop` (:1480), `GET /agent/sessions/{agent}` (:2749) — over
+`run_task_binding.py`, `run_liveness.py`, `run_divergence.py` and the rule in `turn_scheduler.py`.
+
+Harnesses kept: `scripts/drive/t_sweep_row5_runs.py` (**41/50**, three runs, the last two against
+the state the first left) and `scripts/drive/t_sweep_row5_ui.py` (**13/16**, twice). Fixture setup
+is `scripts/drive/setup_row5.py`. Five real Haiku turns, three of them stopped mid-sentence.
+
+Two measurements here deliberately leave the Hub's own record and ask the operating system and the
+filesystem instead, because row 4 paid for the lesson that a self-report is evidence about the
+reporter: whether a stopped process is actually **dead**, and whether the path the screen calls
+"where the agent's work happened" actually **exists**. The first vindicated the product; the
+second did not.
+
+## F188 (A) — a repairable workspace fault destroys the operator's message after three schedules, and the identical fault one line away holds it forever
+
+`hub/hub/api/v1/agent_trigger.py:879-883` raises the worktree refusal:
+
+```python
+except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
+    raise TriggerAgentError(
+        status.HTTP_409_CONFLICT,
+        f"Could not prepare isolated worktree for {agent}: {exc}",
+    ) from exc
+```
+
+No `agent_wide=True`. `turn_scheduler.py:204-231` is the rule that flag exists for, and its own
+comment states the test this site fails:
+
+> It does not hold where the refusal stops the agent running at all: no runner is bound, its CLI is
+> not installed, its runner row is gone. Nothing is starving behind that entry, because nothing for
+> that agent could run either way, so dropping the head of the queue buys nobody a turn — and it
+> costs the operator the input the product promised to hold until they performed the repair (F96).
+
+A blocked `.agentweave/worktrees/<agent>` with **no task in play** is exactly that condition. The
+comment's carve-out is explicitly for a *task's* checkout — *"a task's checkout that could not be
+prepared is the **task's** workspace, not the agent's, so other input really could run"* — and the
+raise site does not distinguish the two, so the agent-level case inherits the task-level rule.
+
+**Reproduction** (driven twice, on two different fresh projects):
+
+```
+mkdir <project>/.agentweave/worktrees/<agent>        # a plain directory, not a registered worktree
+POST /projects/{p}/agent/trigger {agent, message}    # x4
+GET  /projects/{p}/queue/{agent}
+```
+
+Run 1, `row5-r5a`, and again on `row5-r5b`:
+
+```
+entry-f1c4b3e23097 withdrawn 3 'blocked r5a' | delivery failed 3 times (Could not prepare isolated
+                                                worktree ...); the Hub stopped retrying
+entry-758804ddd0f2 queued    2 'blocked2'
+```
+
+**The contrast is what makes this a defect rather than a policy.** The *other* agent-wide refusal
+is flagged, and it behaves correctly against the same four schedules:
+
+```
+r5norun: [["queued", 0], ["queued", 0], ["queued", 0], ["queued", 0]]
+         waiting_reason: "No runner is bound to this agent. Bind one in the Hub UI before it can run."
+```
+
+Both are conditions only the operator can clear, both stop the agent running at all, and one of
+them eats the message. F114's own measured example — *"three messages to an unbound agent destroyed
+the first in under two seconds, and two clicks of the Continue button ... destroyed it faster"* —
+is reproduced here verbatim at a site the fix did not reach, and the Continue button is still the
+control the conversation view offers for exactly this situation.
+
+**Mitigation, measured and worth stating:** the loss is *loud*. `queue_entry_abandoned` fires at
+`severity="warn"`, and `AgentTimeline.tsx:805-807` renders `abandoned_reason` in the dropped
+entry's own conversation. Driven on screen (`t_sweep_row5_ui.py`): the operator does see that the
+message was never delivered. So this is destroyed-but-announced, not destroyed-silently — which is
+why it is A rather than higher.
+
+**Also on this sentence, and smaller (C):** it names the path and the branch precisely — *"refusing
+existing path C:\...\.agentweave\worktrees\r5runnerr5b: it is not the registered git worktree for
+refs/heads/agentweave/r5runnerr5b"* — and never says what would clear it. Removing that directory
+and pruning is the whole repair, and the operator has to know that from outside the product.
+
+## F189 (B) — the Workspace section shows a path that does not exist, and calls it where the work happened
+
+`hub/hub/api/v1/agent_trigger.py:2788` hardcodes, for every provider session it returns:
+
+```python
+"path": f".agentweave/agents/{agent}-session.json",
+```
+
+Nothing in the product writes that file. It is the shape of the deleted CLI session subsystem
+(`CLAUDE.md`: *"Deleted, and not to be recreated"*), and `grep` finds the string at exactly one
+site — this one. There is no reader, no writer, and no directory.
+
+`hub/ui/src/components/agents/AgentSettingsPage.tsx:435-442` renders it, under a docstring that
+says what it is for:
+
+> Provider sessions, with the directory each ran in. They sit under *Workspace* rather than with
+> the conversation because what makes them useful is **the path: this is where the agent's work
+> actually happened.**
+
+**Reproduction:** run one turn, then open `?project=<p>&agent=<a>&settings=workspace`. Screenshot
+`row5-03-workspace-sessions.png`. Driven:
+
+```
+API   : .agentweave/agents/r5runnerr5b-session.json
+screen: the same string, rendered under the session id
+disk  : C:\...\row5fixB\.agentweave\agents  -> does not exist (the .agentweave/ directory
+        contains project.json and worktrees/, nothing else)
+```
+
+A correct answer was available and was measured present in the same assertion:
+`.agentweave/worktrees/r5runnerr5b` **exists** and is where that turn actually ran. So the field is
+not merely unimplementable — the workspace resolution the run already performed knows the answer.
+
+## F190 (A) — no turn can ever say it was stopped, failed or interrupted, because the status map is built backwards from a payload sorted the other way
+
+The conversation surface has the feature. `AgentTimeline.tsx:56-60`:
+
+```ts
+const TERMINAL_LABEL: Partial<Record<RunLifecycleStatus, string>> = {
+  failed: 'Turn failed',
+  stopped: 'Turn stopped',
+  interrupted: 'Turn interrupted',
+}
+```
+
+and it is in the shipped bundle (`grep -c "Turn stopped" hub/hub/static/ui/assets/index-*.js` →
+`1`), keyed on `statusByRun[turn.runId]`. It never renders, and the reason is two files apart.
+
+`hub/ui/src/lib/agentTimelineModel.ts:187-199` assigns unconditionally as it iterates, so the
+**last** event it sees for a run wins:
+
+```ts
+for (const event of timelineEvents) {
+  const status = LIFECYCLE_EVENT_STATUS[event.event_type]
+  const runId = event.data?.run_id
+  if (status && typeof runId === 'string') result[runId] = status
+}
+```
+
+`hub/hub/api/v1/agents.py`'s `/agents/{name}/timeline` ends with
+`events.sort(key=lambda e: e.timestamp, reverse=True)` — **newest first**. The last lifecycle event
+the loop sees for any run is therefore its *oldest*, which is `run_started`, and
+`TERMINAL_LABEL['started']` is `undefined`.
+
+**Reproduction** — the shipped function's own loop, run over the real payload:
+
+```
+timestamps descending? ['2026-09-01T02:27:41Z', '2026-09-01T02:27:40Z', '2026-09-01T02:27:33Z']
+
+statusByRun as the shipped code computes it   what the runs table says
+  run-86742118f521  started                     stopped
+  run-20961fb46a72  started                     completed
+  run-457c08eefa5b  started                     completed
+  run-e74a0efe2b52  started                     stopped
+  run-6000c6a94554  started                     stopped
+```
+
+Six runs, six `started`, three of them stopped and two completed. On screen
+(`row5-01-after-stop.png`): the operator's message, then *"Worked for 8s / Work · 1 step"*, then
+nothing. No answer, no label, agent chip reads `idle`. A turn killed mid-sentence is
+indistinguishable from a turn that simply said nothing — and `Turn failed` is suppressed by the
+same line, so a **failed** turn is invisible too.
+
+**Its test passes, and cannot fire.** `hub/ui/src/__tests__/agentTimelineModel.test.ts:223-235`
+feeds `run_started` *then* `run_completed` — ascending, the opposite of what the route returns —
+and asserts `result['run-1'] === 'completed'`. This is the repository's named dominant failure
+mode, in a unit test: correct, green, and about an input the product never produces.
+
+**A second, independent gap behind the same symptom.** The terminal status line
+`f"Run {final_status} (exit {exit_code})."` (`agent_trigger.py:2135`, and :2729 for the app-server
+path) is only ever `sse_manager.broadcast`ed — it is never persisted as an `AgentOutput` row.
+Measured: the stopped run's `/agents/{agent}/output` holds exactly one row, `kind="thinking"`, and
+no `status` row at all. So even the live signal is gone the moment the page is reloaded, which is
+the ordinary way an operator returns to a run they stopped. Fixing `runStatusByRunId` alone would
+restore the label from the timeline event; this note is why the label is the *only* remaining
+carrier.
+
+## F191 (C) — `Conversation is unavailable` is one sentence for three different causes and names no repair
+
+`agent_trigger.py:1276`. Driven, three ways, all identical:
+
+```
+conversation_id belonging to another project        409  Conversation is unavailable
+conversation_id that does not exist at all          409  Conversation is unavailable
+(and by construction, one that is closed)           409  Conversation is unavailable
+```
+
+The operator cannot tell a typo from a boundary violation from a conversation that has ended, and
+the sentence does not say that omitting `conversation_id` starts a new one — which is the repair in
+all three cases. Compare the sibling refusals measured green in the same run: the archived agent
+says *"Unarchive it first"*, the unknown agent says *"Create it in the Hub UI, or correct the name"*,
+and the decided task says *"Move it to 'revision_needed' to reopen it, or start the turn without
+naming a task."* This one is the outlier on a route whose other refusals are exemplary.
+
+## F192 (C) — stop reports an agent that does not exist as merely idle
+
+`agent_trigger.py:1505-1507` selects a running `Run` by `(project_id, agent, status)` and, finding
+none, answers:
+
+```
+POST /projects/{p}/agent/r5ghostr5b/stop   ->  404  "r5ghostr5b has no run in progress."
+```
+
+There is no such agent. The trigger route in the same file distinguishes this precisely — *"is not
+an agent in this project, so there is nothing to trigger"* — so the information exists and this
+route declines to look. Small, but it is the shape that hides a typo in a script or a job.
+
+## What HELD — and the biggest of them was measured against the OS, not the record
+
+- **STOP KILLS THE PROCESS.** Not "the row says stopped" — the process tree is gone. The run's
+  `pid` was read straight out of the `runs` table (`33556`, `claude.exe`), its descendants
+  enumerated from a live `Win32_Process` snapshot, and after `POST /agent/{agent}/stop` every one
+  of them was absent within the polling window. `terminate_process_tree`'s `taskkill /F /T` does
+  what its docstring claims on this platform.
+- **A stop is recorded as a stop, not as a failure.** `status='stopped'`, `exit_code=2`. The
+  comment at `agent_trigger.py:1995-1999` — *"force-terminating a process rarely yields exit code 0,
+  so without this check a stop would be misreported as failed"* — now has a drive behind it.
+- **One run per agent held under a real concurrent trigger.** A second `POST /agent/trigger` while
+  the first was mid-turn returned `200 / status=queued` with `waiting_reason: "agent is already
+  running"`, and the queued input **started on its own** once the stop landed: `running: true,
+  waiting_count: 0`. A stop does not strand what was queued behind it.
+- **Every other refusal on this route names a repair that works.** Archived → *"Unarchive it
+  first."*; unknown agent → *"…Create it in the Hub UI, or correct the name — if a scheduled job
+  names it, that job will keep failing until the name is fixed."*; unknown task → names the id and
+  the project rule; approved task → *"Move it to 'revision_needed' to reopen it, or start the turn
+  without naming a task."*; bad `session_mode` → enumerates both; `resume` with no `session_id` →
+  names the field. Seven of nine refusals earn their keep; F191 and F192 are the two that do not.
+- **F114's fix works where it was applied.** Four messages to an agent with no runner bound, four
+  schedules, every entry still `queued` at `delivery_attempts: 0`. That is precisely what F188 asks
+  for at the neighbouring site.
+- **A message the Hub gave up on reaches the operator.** Driven on screen, not inferred: navigate
+  to the dropped entry's *own* conversation and `abandoned_reason` is rendered
+  (`AgentTimeline.tsx:805-807`).
+- **The project boundary holds.** A conversation id belonging to another project is refused (badly
+  worded — F191 — but refused).
+
+## Two harness bugs caught before they became findings
+
+Run 2 of the API harness reported the worktree block *not firing* — the turn started normally. It
+was the harness: run 1 had left a **registered** worktree at that path, and planting a file inside
+a registered worktree changes nothing, because `ensure_worktree` reads back the branch it expects
+and proceeds. The harness now runs `git worktree remove --force` **and `git worktree prune`**, then
+asserts the path is absent from `git worktree list` before planting the blocker — so the condition
+under test is created rather than assumed.
+
+The second: run 2 answered `200` to *"stopping an agent with no run in progress"*, because a
+previous invocation had left the agent blocked inside `ask_user`. Both harnesses now settle the
+agent — decline pending questions, stop, drain queued entries — before any assertion that depends
+on it being idle. And the UI harness stops on the *first* output row rather than the third, because
+a Haiku turn can finish inside the polling window and a stop that arrives late is answered `404`
+and measures nothing. Same shape as row 4's polling bug: **a harness that inherits state reports
+the product broken.**
+
+## What the second run bought
+
+Nothing new, for the third row running. The API harness scored 41/50 on the run after its own
+state, with the same nine reds, and F188 reproduced on both projects. Rows 1 and 2 each found a
+defect only a repeat could see; rows 3, 4 and 5 did not. Two of five is the honest number, and the
+technique stays.
+
+# Sweep, row 6 of 19: Conversations — 2026-09-01
+
+Driven against the trial Hub on `:8011` (beta profile, this branch's code) with two fresh fixture
+projects and real `claude-haiku-4-5` turns. Harnesses kept: `t_sweep_row6_conversations.py`
+(79 API assertions, run twice, 75/79 both times, same four reds) and `t_sweep_row6_ui.py`
+(15 screen assertions, run twice, 13/15 on the second). Screenshots in `%TEMP%\row6shots`.
+
+The representative path from `SURVEY.md:27` — list, rename, release-task, chat history, lineage,
+titles — over `hub/hub/api/v1/agent_chat.py`, `hub/hub/conversations.py` and
+`hub/hub/conversation_titles.py`. Lineage was read straight out of sqlite, read-only, because no
+route exposes it.
+
+**This row's headline questions all held, and two of them held in a way worth stating outright: a
+worker-generated title really does replace the truncated one, and an operator's title really does
+survive the next turn's titler.** The three findings are at the seams around them.
+
+## F193 (B) — an open conversation whose agent is archived vanishes from one rail view, survives in the other, and opens on the words "Agent unavailable."
+
+Archiving an agent does **not** archive or close the conversations it owns — measured: the
+conversation stayed `lifecycle: "open"`. The two rail views then disagree about whether it exists,
+because they iterate opposite collections:
+
+| | iterates | what happens to the row |
+|---|---|---|
+| `AgentTree.tsx:82` | `agents.map(...)`, then `byAgent.get(agent.name)` | the archived agent is not in the roster, so its bucket is never read — **the row is silently dropped** |
+| `RecencyView.tsx:55,66` | `open.data.conversations`, mapped as rows | **the row is listed**, and consumes one of the 15 `RECENCY_DISPLAY_CAP` slots |
+
+`GET /agents` excludes the archived agent; `GET /conversations` — the single request the whole rail
+is built on — still returns its open conversation. Neither list route filters on the owner's
+lifecycle (`agent_chat.py:406`, `:430`).
+
+**Reproduction**, driven twice:
+
+```
+POST /projects/{p}/agents            {"name": "orph...", "runner_id": ...}   201
+POST /projects/{p}/agent/trigger     {"agent": "orph...", "message": ...}    200   conv-e074f178d5be
+POST /projects/{p}/agents/orph.../archive                                    200
+
+GET  /projects/{p}/agents            -> ['r5runnerr6a']            (owner gone)
+GET  /projects/{p}/conversations     -> 1 row, agent='orph...', lifecycle='open'
+
+on screen:   tree view    shows it: False
+             recency view shows it: True
+```
+
+Then open it. `App.tsx:371-374` renders the whole main panel as two words:
+
+```
+Agent unavailable.
+```
+
+No agent name, no reason, no remedy — and the reason is knowable and the remedy is one click
+(`POST /agents/{name}/unarchive`). The refusal the operator would get from typing into it is the
+good one — *"orph... is archived and cannot be triggered. Unarchive it first."* — and they never
+reach it, because the composer is not rendered. `row6-05-orphan-opened.png` is the whole finding in
+one frame: the row selected in the rail on the left, two grey words filling everything else.
+
+This is F187's shape (a sentence the product knows and the screen does not say) crossed with a
+consistency bug: the same conversation is present or absent depending on a rail toggle, which is a
+preference, not a filter.
+
+## F194 (C) — the conversation and chat routes answer 200 for an agent that does not exist
+
+`agent_chat.py:406` (`list_conversations`) and `:645` (`get_recent_chat`) take `{agent}` as a path
+parameter and never ask whether it names an agent:
+
+```
+GET /projects/{p}/agent/nosuchagentr6a/conversations   ->  200  []
+GET /projects/{p}/agent/nosuchagentr6a/chat            ->  200  {"entries": [], "agent": "nosuchagentr6a"}
+```
+
+A typo'd agent name is indistinguishable from an agent with nothing to show. The trigger route in
+this same product refuses the identical mistake precisely — *"... is not an agent in this project,
+so there is nothing to trigger. Create it in the Hub UI, or correct the name"* (measured in row 5)
+— so the information exists and these routes decline to look. Same seam as F193: nothing in this
+file consults the roster.
+
+Small on its own; it is the mechanism by which F193 stays quiet, and it is the shape that hides a
+typo in a script or a scheduled job.
+
+## F195 (C) — the conversation titler does not run in the project's directory, and the parameter that would make it is dead
+
+`conversation_titles.generate_conversation_title(*, project_id, conversation_id, cwd=None)` passes
+`cwd` to `_run_titler`, which passes it to `subprocess.run`. **Neither caller ever supplies one** —
+`agent_trigger.py:2146` and `:2738` both call
+`maybe_generate_title(project_id=..., conversation_id=...)` and nothing else. So `cwd` is always
+`None`, and every titling spawn inherits the *Hub process's* working directory.
+
+CLAUDE.md's local-multi-project rule is the one this breaks: *"Resolve every project filesystem
+path through `ProjectWorkspace`; never use the Hub process's `Path.cwd()` as project identity."*
+
+**Measured, with a positive control**, on the fixture project at `%TEMP%\row6a`, whose root was
+given a `CLAUDE.md` reading *"any title you write MUST begin with the single word ZEBRA"*:
+
+```
+control — `claude --model claude-haiku-4-5-20251001 -p "<the module's own _PROMPT>"`,
+          run from the project directory:
+              ZEBRA B-tree indexes for database lookups      <- honours the project's memory
+
+product — the same model, the same prompt, the same project, through the titler:
+              B-tree indexes explained                       <- does not
+```
+
+The control proves the mechanism works and the project's instructions are loadable; the product's
+title proves the spawn is not in that directory. On this machine the Hub is started from
+`<repo>/hub`, so every project's titler is reading the AgentWeave repository's own memory rather
+than the project's.
+
+Cheap to fix (the project's `ProjectWorkspace` path, threaded through the two call sites) and the
+parameter is already there waiting for it. Filed C rather than B because the titler is best-effort
+by design and a wrong title costs a rename — but it is a real cross-project leak of whatever
+configuration happens to sit above the Hub's launch directory.
+
+## What HELD — including the two things this row existed to ask
+
+- **A worker-generated title actually replaces the truncated one.** Not "the code path exists" —
+  driven three times, end to end: `conversation_title_mode: "generate"`, a real Haiku turn, then
+  the `conversations.title` column read straight out of sqlite.
+  `'In one short sentence, explain what a semaphore does in concurrent programming. Do not use any
+  tools.'` became `'Semaphore explained as concurrency synchronization primitive'`; a second
+  conversation became `'Write-ahead log in databases'`. The `conversation_titled` event is written,
+  and no `Run` row is — which is what the module's docstring says must not happen, because a
+  titling run under the agent's name would make the agent look busy and stall its queue.
+- **It is what the operator reads.** `row6-04-generated-title.png`: the rail row and the
+  conversation header both carry the generated title, not the first message.
+- **An operator-set title survives the next turn.** Renamed to `'operator keeps this r6a'`, another
+  real turn driven into the same conversation with generation still on, and the title is unchanged
+  afterwards. `title_set_by_operator` is checked twice in `generate_conversation_title` — once
+  before the spawn and once *after*, on a re-read, so a rename made while the model was thinking
+  also wins. Both guards are live.
+- **Title generation is off by default** (`conversation_title_mode: "truncate"`), so no project
+  pays for a spawn it did not ask for.
+- **Lineage survives a checkpoint cutover.** Measured in sqlite, not asked of a route: a new
+  conversation founds its own lineage (`lineage_id == id`), and after
+  `POST /checkpoints/{id}/cutover` the successor `conv-4d3564b7ec05` carries the predecessor's
+  `lineage_id` `conv-2a78c785ef1b`. The predecessor is archived, the successor is titled
+  `Continued: ...` and marked `title_set_by_operator` so the titler cannot overwrite it, and the
+  screen shows `Continuing Continued: renamed while archived r6a` above the composer.
+- **A rename the Hub refuses reaches the operator, in the Hub's own words.** Driven on screen: a
+  400-character title typed into the rail's rename input produced *"A title cannot exceed 120
+  characters"* rendered under the row (`ConversationRow.tsx:291-301`, `role="alert"` at :295), and the
+  refused title was not stored. After six sites where a refusal was swallowed (F169, F173, F178,
+  F179, F180, F187) this one is wired correctly — the counter-example that shows the pattern is a
+  gap, not a house style.
+- **The archived conversations are reachable and counted.** `Show archived (1)` in the agent's row
+  menu, backed by `archived_by_agent` on the project-wide response, and `?lifecycle=archived`
+  returns exactly the archived rows. An unknown `?lifecycle=` value is a 422 that enumerates the
+  three that work.
+- **Archiving refuses while a run is live, and says what to do:** *"This conversation has a run in
+  progress. Wait for it to finish, or stop it first."* Archiving an already-archived conversation
+  is a no-op, not an error; releasing a task from a thread that holds none is a 200, exactly as its
+  docstring promises.
+- **The project and agent boundaries hold.** A conversation id from another project is 404 on
+  rename and on chat history, and the refusal does not disclose that the id exists elsewhere. The
+  same id addressed to the wrong *agent* in the right project is also 404.
+- **Rename validation is exact.** `'  operator  title  r6a  '` is stored as `'operator title r6a'`;
+  whitespace-only is refused *"A title cannot be empty"*; over-long names the limit (120); a body
+  with no title at all is a 422.
+- **A task binding is recorded and releasable.** A turn carrying `task_id` binds the conversation,
+  `DELETE .../conversations/{id}/task` clears it, and the clear reaches the database.
+
+## Considered and NOT filed: `lineage_id` is not on `ConversationResponse`
+
+The harness asserts it and the assertion is red, deliberately, as a marker rather than a finding.
+`ConversationResponse` (`agent_chat.py:108-150`) carries sixteen fields and `lineage_id` is not one
+of them, so nothing on screen can say "these two threads are the same line of work". On the
+evidence that is fine: the operator-facing answer is carried by the `Continued: ` title prefix and
+by the checkpoint the successor opens on, both of which were driven and both of which read
+correctly. Lineage is a *routing* fact — `conversations.py:218-240` matches a peer's reply on the
+sender's lineage so correspondents survive a cutover — and exposing it would be a field with no
+reader. Recorded so a later row does not re-derive it.
+
+## A refinement to F190's second half, measured rather than assumed
+
+Row 5 recorded that the `Run {status} (exit {code}).` line at `agent_trigger.py:2135` is only ever
+broadcast and never persisted. That is correct, and this row sharpens what it means. Counting
+`agent_outputs` by run over the fixture project:
+
+```
+run-354d90af3912  completed   status rows: 1   total rows: 3
+run-a0a2397be2fb  stopped     status rows: 0   total rows: 0
+run-f444fe7b46a8  completed   status rows: 1   total rows: 3
+run-07cf8bebd337  stopped     status rows: 0   total rows: 0
+... 5 completed runs with one status row each, 5 stopped runs with none
+```
+
+A **completed** run does leave a persisted `status` row — but it comes from the stream parser and
+its whole content is the word `Completed` (`payload: {"phase": "completed", "summary":
+"Completed"}`). It can never say *stopped*, *failed* or *interrupted*, because it is only written
+on the path that finished. So F190's conclusion stands unchanged — the terminal label has exactly
+one carrier and that carrier is broken — and the reason is narrower than "nothing is persisted".
+
+## Two harness bugs caught before they became findings
+
+Row 5's lesson at two more sites, both the same shape: **a harness that inherits state reports the
+product broken.**
+
+1. The UI harness clicked `project-expander-{PROJECT}` unconditionally and **closed** the project
+   the operator was already inside, then measured an empty rail and called four things broken. It
+   now reads `aria-label`/`aria-expanded` and expands only what is collapsed.
+2. The assertion *"the conversation is on the rail by its title, never by its id"* was red against
+   the whole sidebar, because an earlier drive left an agent in **another project** literally named
+   `conv-probe`. Scoped to `rail-project-{PROJECT}` it is green. Had it been believed, it would
+   have been written up as a product defect that does not exist.
+
+## What the second run bought
+
+Nothing new on the API half — 75/79 twice, the same four reds, the second time on a project already
+carrying run 1's state. The UI half's second run bought two of its three failures back by fixing
+harness bug 1 above, and reproduced F193 identically. Rows 1 and 2 each found a defect only a
+repeat could see; rows 3, 4, 5 and 6 did not. Two of six, and the technique stays.
+
+# Sweep, row 7 of 19: Inbound queue — 2026-09-01
+
+Row 7 of the coverage matrix (`SURVEY.md:28`): *per-agent durable queue, hop budget, turn delivery
+cap, withdraw*. Six routes under `/queue` (`hub/hub/api/v1/inbound_queue.py`) over
+`hub/hub/inbound_queue.py` and `hub/hub/turn_scheduler.py`, driven live against `:8011` on a fresh
+project (`row7-r7a`, `proj-9e1979fcc8ac`) with three agents: two bound to a Haiku runner, one
+created bound and then unbound through `PATCH /agents/{name} {"runner_id": null}` — `POST /agents`
+refuses an unbound agent with a 422, which is why `setup_row7.py` exists beside `setup_row5.py`.
+
+Harnesses kept: `t_sweep_row7_queue.py` (52 API assertions, run twice), `t_sweep_row7_ui.py`
+(13 screen assertions), and `t_row6_hop_chain.py` re-run on this fixture for the hop leg. Five
+findings, four of them about what a refusal or a write *says*; the queue's mechanics themselves
+came through clean.
+
+## F196 (B) — one route writes a value another route's response model cannot serialise, and the project settings page is then unreachable in both directions
+
+`PATCH /queue/settings` validates its four fields with `Field(ge=1)` and **no upper bound**
+(`hub/hub/api/v1/inbound_queue.py:48-52`). `ProjectSettings`, the model behind
+`GET`/`PUT /projects/{id}/settings`, declares `Field(ge=1, le=1000)` for the same four columns
+(`hub/hub/api/v1/projects.py:76-78`). Two models over one set of columns, disagreeing about the
+range.
+
+**Reproduction** (both runs of `t_sweep_row7_queue.py`, leg 1b, and `t_sweep_row7_ui.py`):
+
+```
+PATCH /projects/{p}/queue/settings {"hop_budget": 1001, ...}   -> 200  {'hop_budget': 1001, ...}
+GET   /projects/{p}/queue/settings                             -> 200  {'hop_budget': 1001, ...}
+GET   /projects/{p}/settings                                   -> 500  Internal Server Error
+PUT   /projects/{p}/settings {"hop_budget": 6}                 -> 500  Internal Server Error
+```
+
+The read fails because the response model rejects the stored value. The **write** fails for a
+sharper reason: `update_project_settings` begins with
+`current = ProjectSettings.model_validate(project, from_attributes=True)` (`projects.py:463`),
+*outside* the `try` that catches `PydanticValidationError`. So the handler cannot even read the
+state it is being asked to repair, and the repair route is wedged by the value it exists to change.
+Confirmed directly rather than inferred: `ProjectSettings(hop_budget=1001, …)` raises
+`ValidationError` on `hop_budget`.
+
+The only routes that can put the value back are `PATCH /queue/settings` itself — which the Hub UI
+never calls (`grep` for `queue/settings` under `hub/ui/src` finds nothing; the panel writes these
+columns through `PUT /projects/{id}/settings`) — or the database. An operator who did this from the
+API has no way back from inside the product.
+
+**Not reachable by an agent.** No MCP tool writes queue settings, so this is operator/API surface
+only, which is why it is B and not higher.
+
+## F197 (B) — the settings page has no error state, so a failing settings query renders a loading skeleton forever
+
+The screen half of F196, and a defect in its own right because *any* failure of that one query
+produces it. `ProjectSettingsPanel` early-returns a skeleton whenever `form` is unset
+(`hub/ui/src/components/environment/ProjectSettingsPanel.tsx:76-86`), and `form` is only ever set
+from the `useProjectSettings` query's data (`:66-68`). The panel's only error branch is
+`const error = update.error ?? relocate.error` (`:88`) — the two **mutations**. The query's own
+`error` is never read.
+
+Driven: `row7-02-settings-wedged.png` is the whole finding in one frame — the Settings heading, its
+description, and five grey bars, indefinitely. `page.inner_text("body")` contains no "could not",
+"failed", "unavailable", "error" or "try again". `row7-01-settings-ok.png` and
+`row7-03-settings-recovered.png` are the same page either side of the write, so the skeleton is
+attributable to the query rather than to the fixture.
+
+Same family as F187's six sites — a sentence the Hub has and the screen does not — with one
+difference worth stating: here the Hub does not have a sentence either. It has a 500.
+
+## F198 (C) — `PATCH /queue/settings` silently resets the two fields a body omits
+
+`QueueSettings` gives `agent_budget` a default of 8 and `allow_agent_jobs` a default of `False`
+(`inbound_queue.py:50-51`), and the handler assigns all four columns unconditionally (`:88-91`). So
+a **PATCH** that names only the two fields it wants to change is accepted with a 200 and quietly
+reverts the other two.
+
+**Reproduction:**
+
+```
+stored:  {'hop_budget': 6, 'turn_delivery_cap': 10, 'agent_budget': 25, 'allow_agent_jobs': True}
+PATCH    {'hop_budget': 6, 'turn_delivery_cap': 10}                                  -> 200
+stored:  {'hop_budget': 6, 'turn_delivery_cap': 10, 'agent_budget': 8,  'allow_agent_jobs': False}
+```
+
+`agent_budget` is the cap on how many agents may exist (`agents.py:1590`); `allow_agent_jobs` is the
+permission that lets agents reach the job tools at all (`mcp_server.py:806`). A partial PATCH
+therefore revokes a permission the operator granted, and answers 200.
+
+**The sibling route already solved this, and recorded why.** `PUT /projects/{id}/settings` derives
+its request model field-by-field from `ProjectSettings` with every field made optional, merges with
+`exclude_unset=True`, and carries a comment naming the live incident that forced it — *"Observed: a
+settings save clearing a project's entire checkpoint configuration"* (`projects.py:150-181`). The
+queue router writes four of the same columns and has none of it.
+
+## F199 (C) — `GET /queue/{agent}` and `/queue/{agent}/status` answer 200 for an agent that does not exist
+
+F194's shape at a second router, and the status route is the worse of the two because its answer
+looks healthy rather than empty:
+
+```
+GET /projects/{p}/queue/no-such-agent-row7          -> 200  []
+GET /projects/{p}/queue/no-such-agent-row7/status   -> 200  {"agent": "no-such-agent-row7",
+                                                             "waiting_count": 0, "running": false,
+                                                             "waiting_reason": null,
+                                                             "delivery_attempts": 0}
+```
+
+A typo reads as *"this agent is idle with nothing waiting"* — a sentence about an agent that is not
+on the roster. `POST /agent/trigger` refuses the identical mistake by name, so the roster lookup
+this needs is one call away and already written.
+
+**Also in this leg, smaller:** `GET /queue/{agent}?state=<anything else>` answers
+`400 {"detail": "Invalid queue entry state"}` and does not name the three that *are* valid, though
+the route holds them in a literal tuple on the line that raises (`inbound_queue.py:212-214`).
+
+## F200 (C) — one refusal string for four distinguishable states, and it asserts a delivery that never happened
+
+`withdraw_entry` and `release_entry` both refuse with *"Queue entry is absent or has already been
+delivered/withdrawn"* (`inbound_queue.py:277-279`, `api/v1/inbound_queue.py:265-268`) when the id is
+unknown, **belongs to another project**, is delivered, or is withdrawn. Driven with a real entry id
+from `row7-r7a` passed to a different project's route:
+
+```
+DELETE /projects/proj-7ddc22215adf/queue/entries/entry-7c10edcf7600         -> 409 "…already been delivered/withdrawn"
+POST   /projects/proj-7ddc22215adf/queue/entries/entry-7c10edcf7600/release -> 409 "…already been delivered/withdrawn"
+GET    /projects/{row7}/queue/{agent}    # the entry is still 'queued', untouched
+```
+
+The isolation is correct — the entry is not touched — and the refusal is the only thing wrong: it
+tells the operator their message was *delivered*, which is a claim about the product's behaviour and
+it is false. The contrast is one function away: `release_entry`'s **other** refusal is a model of
+the house style, naming the entry's depth, the project's budget, why this is not the control that
+would help, and where to look instead — *"Queue entry is at hop 0, within the project's hop budget
+of 6, so the hop budget is not what is holding it. Check the agent's queue status for the reason it
+is waiting."*
+
+## What HELD — including the one mechanism nothing had ever driven
+
+- **The turn delivery cap works, and the entries it batches actually reach the model.** Never
+  measured live before. With `turn_delivery_cap = 2`, an occupied agent, and four operator messages
+  queued behind the running turn (`ALPHA`, `BETA`, `GAMMA`, `DELTA`, one conversation), the drain
+  produced **exactly two runs of two**, both times:
+
+  ```
+  run-30dc05e21e14: 2 entries ['ALPHA', 'BETA']
+  run-abb0563affe9: 2 entries ['GAMMA', 'DELTA']
+  ```
+
+  and the *agent's own output* for each run mentions both of its words — so `format_turn_prompt` did
+  not quietly drop the second entry of a batch. Nothing was abandoned; all four ended `delivered`.
+- **The hop budget stops a chain, and the operator can see it and undo it.** `t_row6_hop_chain.py`
+  re-run on this fixture: **12/12, first attempt** (F139's tool-name lottery did not fire). Under
+  `hop_budget = 1`, `r7a → r7b → r7a` leaves the return message queued at hop 2, the timeline marks
+  it `hop_budget_exceeded`, the status route says *"hop budget exhausted"*, an operator message
+  injected alongside is **not** caught by the budget, and `release` re-bases it to depth 0 and it is
+  delivered within ~8s.
+- **F114's fix still holds where it was applied.** Four messages to an unbound agent, four
+  schedules: `[('queued', 0), ('queued', 0), ('queued', 0), ('queued', 0)]`. Nothing lost, no
+  attempt burned, and the status route says *"No runner is bound to this agent. Bind one in the Hub
+  UI before it can run."* — a refusal that names the repair.
+- **And the operator reads that sentence on screen.** `row7-04-unbound-waiting.png`: the
+  conversation panel shows `QUEUED`, the message, and *"1 waiting — No runner is bound to this
+  agent. Bind one in the Hub UI before it can run."*, with the Continue control beside it. Measured
+  inside `[data-testid="conversation-workspace"]`, not on the body — see the harness bug below.
+- **Withdrawal is clean.** An entry held behind a running turn withdraws with a 200, stays listed in
+  state `withdrawn` with `delivered_in_run_id: null`, is found by `?state=withdrawn`, carries no
+  `abandoned_reason` (which is what distinguishes an operator withdrawal from a Hub abandonment),
+  and a second withdrawal is refused 409.
+- **The route and the table agree.** 26 entries read straight out of `inbound_queue_entries` with a
+  read-only sqlite connection and compared field by field against `GET /queue/{agent}` — `state`,
+  `hop_depth`, `delivery_attempts`, `abandoned_reason`, `delivered_in_run_id`: zero mismatches, and
+  no entry the table holds that the route hides.
+- **The validation refusals on `/queue/settings` say what would work.** `hop_budget: 0`, `-1`,
+  `turn_delivery_cap: 0` and `agent_budget: -5` are each refused 422 with *"Input should be greater
+  than or equal to 1"*, naming the field. It is the *absence* of an upper bound that is F196, not
+  the lower one.
+
+## Considered and NOT filed: the withdrawn entry that leaves the timeline
+
+`GET /agent/{agent}/chat` does not return an entry the operator withdrew, and the first version of
+the harness asserted that it should — one keystroke from filing a deliberate decision as a defect.
+The timeline query keys its withdrawn branch on `abandoned_reason IS NOT NULL`
+(`agent_chat.py:262-269`), and the comment above it says why: an entry the **Hub** dropped must stay
+in the thread (F87), an entry the **operator** withdrew was never delivered and its removal is the
+thing they asked for. The assertion now checks the deliberate behaviour instead.
+
+## A harness bug caught before it became a finding
+
+Row 6's fifth lesson at a third site. *"the screen gives the reason the status route already
+knows"* was **green against `page.inner_text("body")`** for the unbound agent — because the sidebar
+carries an Environment link labelled **Runners**, so `"runner" in text` matches on every page in the
+product, including a blank one. Scoped to `[data-testid="conversation-workspace"]` it is still
+green, and now for the right reason. Believed as first written, it would have vindicated a sentence
+without ever confirming it was on screen — the mirror image of row 6's false red.
+
+## What the second run bought
+
+Nothing new. 42 passed / 10 failed on both runs of `t_sweep_row7_queue.py`, the second on the state
+the first left, with the same reds (three of the ten are F196 legs added between the runs; the seven
+common to both are identical). Rows 1 and 2 each found a defect only a repeat could see; rows 3–7
+have not. Two of seven, and the technique stays.
+
+---
+
+# Sweep, row 8 of 19: Tasks
+
+Driven 2026-09-01 04:29–04:47 +01:00 against the 8011 trial Hub (beta profile, PID 22908, this
+branch's code), on a fresh fixture project `proj-f2538b3807fe` built by `setup_row7.py`. Harnesses
+kept: `t_sweep_row8_tasks.py` (313 assertions, run twice on the final version, **19 failures both
+times, identical**) and `t_sweep_row8_ui.py` (8 assertions, 4 failures). Screenshots in
+`%TEMP%\row8shots`.
+
+`SURVEY.md`'s architecture notes call this the most carefully built subsystem in the Hub. The drive
+agrees with that assessment, and the three findings are all *outside* the machine: none of them is
+a wrong edge, a bypassed gate or a corrupt record. The machine itself came through a total sweep
+clean — see "What the machine survived" below, which is the more important half of this row.
+
+## F201 (C) — an illegal move to `blocked` is refused as **malformed** rather than as illegal, and the sentence tells the caller to send more
+
+`task-lifecycle-governance` states the standard as a MUST:
+
+> A refusal MUST name the task's current status and the statuses reachable from it, so a caller can
+> correct itself without guessing.
+
+and carries a named scenario for this exact edge:
+
+> #### Scenario: Work not yet started cannot be waiting
+> - **WHEN** a task that has not been started is moved to the waiting status
+> - **THEN** the move is refused as illegal
+> - **AND** **the refusal names what is reachable instead**
+
+Driven, live, on a `pending` task:
+
+```
+PATCH /api/v1/projects/{p}/tasks/{id}   {"status": "blocked"}
+422  {"detail": [{"type": "value_error", "loc": ["body"],
+                  "msg": "Value error, blocked_reason is required when setting a task to blocked"}]}
+```
+
+The second bullet fails. The refusal names neither the current status nor anything reachable; it
+names a **missing field**, which reads as *supply this and the move will work*. Only on the second
+call does the product say the move never existed:
+
+```
+PATCH ... {"status": "blocked", "blocked_reason": "x"}
+409  "Cannot move a task from 'pending' to 'blocked'. From 'pending' the available transitions
+      are: assigned, in_progress, rejected."
+```
+
+**The cause is ordering, not a wrong rule.** `TaskUpdate.blocking_by_hand_must_say_what_for`
+(`hub/hub/schemas/tasks.py:154-167`) is a Pydantic `model_validator(mode="after")`, so FastAPI runs
+it while parsing the body — before `update_task_for_actor` is entered, and therefore before
+`apply_transition` can consult the map. R5's rule ("a hand-set block names what it is waiting for")
+is right and its message is right; it is simply asked first, on a request the machine would have
+refused outright.
+
+Reproduced at **all seven** from-statuses where `-> blocked` is not an edge (`pending`, `assigned`,
+`completed`, `under_review`, `revision_needed`, `approved`, `rejected`), on both runs. Fourteen of
+`t_sweep_row8_tasks.py`'s nineteen failures are this one finding.
+
+**Scoped honestly, which is what holds it at C.** Three of the four ways to reach this route do not
+produce it:
+
+- **The operator in the UI cannot.** `TaskDetailDrawer.tsx:397-400` collects the reason in a field
+  before sending anything — *"Required by the Hub, so the control collects it rather than sending a
+  status that would be refused"* — and the status control only offers moves the published map
+  allows (design D13, and the API sweep confirmed published == enforced at all nine statuses).
+- **An MCP agent cannot ask for it.** `TaskStatus` in `hub/hub/mcp_server.py:42-51` omits `blocked`
+  deliberately.
+- **An operator or agent hitting the HTTP route directly can**, and is the population.
+
+**The half not driven, and labelled as such.** `PATCH /api/v1/agent-actions/tasks/{id}` takes the
+same `TaskUpdate` (`agent_actions.py:276`), so an agent asking for `blocked` there would be answered
+"blocked_reason is required" instead of the deliberate 403 that route wrote for exactly this case
+(*"A task is recorded as waiting on a person because AgentWeave saw the run end with an unanswered
+blocking question, not because an agent said so. Use `ask_user` to ask…"*, `tasks.py:1283-1291`).
+That is derived from the ordering above and is **not measured** — it needs a live run credential,
+which this drive did not mint.
+
+**No test found that would catch it.** A grep over `hub/tests/` finds no test that PATCHes a task
+to `blocked` from a non-`in_progress` status over HTTP and asserts the refusal; the coverage for
+this status is the runtime parking path. Stated as the result of that search, not as a proof of
+absence.
+
+**Reproduction:** `py -3.11 scripts/drive/t_sweep_row8_tasks.py`, LEG 3b.
+
+## F202 (B) — the Overview says "100 tasks" about a project with 241, and the board silently drops the newest work
+
+`GET /api/v1/projects/{id}/tasks` declares `limit: int = Query(100, ge=1, le=1000)` and
+`offset: int = Query(0, ge=0)` (`hub/hub/api/v1/tasks.py:849-850`), orders by `Task.created_at`
+**ascending**, and returns a **bare JSON array** — no `total`, no `has_more`, no `next`, no `Link`
+header. Nothing in the response says it was cut, and the cut takes the *newest* rows.
+
+Measured on the fixture at 241 tasks:
+
+```
+GET /tasks                      -> 200, 100 rows
+GET /tasks?limit=1000           -> 200, 241 rows
+GET /tasks/board                -> 200, 241 tasks      <- no limit at all on this route
+sqlite: select count(*) ...     ->      241
+```
+
+**The screen, driven** (`row8-01-overview.png`, `row8-02-tasks.png`):
+
+- the Overview header reads **"3 agents · 100 tasks · row7-042844"**;
+- its NAVIGATE card reads **"Tasks — 100 total"**;
+- its status chips read Assigned 12 · Pending 19 · Revision Needed 8 · In Progress 22 · Rejected 18
+  · Under Review 5 · Completed 5 · Approved 7 · Blocked 4 — **summing to exactly 100**;
+- the Tasks board renders **82 cards** and its column counts are the truncated page's;
+- a task created seconds before the page loaded is **not on the board**, and
+  `[data-testid="task-open-{id}"]` does not exist for it, while `GET /tasks/{id}` returns it 200.
+
+`useTasks` (`hub/ui/src/api/tasks.ts:210-225`) sends no `limit` and no `offset`, and
+`OverviewPage.tsx:86` is `const taskCount = tasks.length`. `TasksBoard`, `QualityHealthPanel` and
+`JobCard` read the same hook. So the count is not a truncated list an operator can scroll past —
+it is a **wrong number presented as a fact**, and it is pinned at 100 however much the project
+grows.
+
+**The agent's half is worse, because it cannot page at all.** `mcp_server.py:278-280`:
+
+```python
+def list_tasks(agent: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Read the shared task ledger, optionally filtered by assignee."""
+    return _hub_request("GET", "/tasks", params={"agent": agent})
+```
+
+No `limit`, no `offset`, and no parameter a caller could use to ask for more. On a project past 100
+tasks an agent told to "read the shared task ledger" receives the oldest hundred and is told
+nothing — and the work it would have been given is by construction the newest. Reproduced:
+
+```
+POST /tasks {"title": "FIND-ME-ROW8", "assignee": "r7a042844"}   -> 201
+GET  /tasks                        -> 100 rows, FIND-ME-ROW8 absent
+GET  /tasks?agent=r7a042844        -> 1 row,   FIND-ME-ROW8 present
+GET  /tasks/{id}                   -> 200,     FIND-ME-ROW8
+```
+
+The `agent=` filter narrows below the cut and is the mitigation — but it is optional, the docstring
+presents the unfiltered call as the ordinary one, and no caller can know it needed a filter.
+
+**Severity B, not A.** It needs more than 100 tasks in a single project, which no project on the
+trial Hub had before this drive; a real project reaches it over weeks rather than in an hour. But
+nothing warns, nothing degrades gracefully, and the surface that breaks first is the one an
+operator reads to know how much work exists. Contrast `GET /tasks/board`, over the same table, with
+no limit at all — the two routes disagree about how many tasks a project has, and the silent one is
+what the Overview reads.
+
+**Reproduction:** `t_sweep_row8_tasks.py` LEG 7b and `t_sweep_row8_ui.py`. Both refuse to run their
+truncation legs on a project with 100 tasks or fewer, and say so.
+
+## F203 (C) — nothing can read a task's transition history
+
+`task_transitions` is append-only, written inside `apply_transition` for every accepted move, and
+carries `from_status`, `to_status`, `actor_kind`, `actor_agent`, `run_id`, `origin` and
+`policy_digest`. `task_transition_service.history_for()` (`:811`) exists to read it. The machine's
+own docstring gives this as the reason the operator is bound by the map at all:
+
+> So the operator is still bound by the machine, and every recorded history therefore describes a
+> legal sequence. **That is what makes the history worth reading.**
+
+Read off the **live** OpenAPI of the running Hub — 158 paths, 17 of them task routes — there is no
+route matching `*/tasks/{task_id}/transitions*`, on the operator plane or the agent plane, and no
+MCP tool for it. `history_for` is called by `hub/tests/` and by nothing else under `hub/hub/`.
+
+The consequence is concrete rather than aesthetic: an operator who finds a task somewhere they did
+not expect has no way to ask who moved it, when, or from what — and this repository's own drives
+have had to open the sqlite file to say anything about attribution (`t_f154_wedged_review.py`,
+`t_f167_agent_walked_edge.py`, and LEG 7 of this sweep). `policy_digest`, which records what
+governed an approval, is written on every gated transition and has never been readable by anyone.
+
+**Reproduction:** `t_sweep_row8_tasks.py` LEG 8, which asserts against the live OpenAPI rather than
+against the source, so it goes green on its own the day a route is added.
+
+## What the machine survived — the larger half of this row
+
+Every one of these was driven in this session, on this build, rather than read.
+
+- **All 30 declared operator edges walked for real**, each on its own freshly created task reached
+  only through declared edges, each accepted `200` with the row reading the new status.
+- **All 50 non-edges refused**, every one `409`, every one naming the current status, and every one
+  listing **exactly** `allowed_targets(from, operator)` — parsed back out of the sentence and
+  compared set-for-set, not merely checked for plausibility.
+- **No refusal moved anything.** After each from-status absorbed its full run of illegal requests,
+  the task still read that status.
+- **Published == enforced == observed, at all nine statuses.** `GET /tasks/transitions/allowed` was
+  compared three ways: against the declared map, against the set that actually succeeded in LEG 2,
+  and against the set the refusals named in LEG 3. This is design D13's whole claim — the client
+  never holds a second copy of the map — and it holds exactly.
+- **Restating the current status is a no-op that records nothing** (D7), confirmed by counting
+  `task_transitions` rows before and after out of sqlite rather than by trusting the 200.
+- **The dependency gate**: refuses `pending -> in_progress` with a structured
+  `{"code": "dependency_unmet", "unmet": [...], "rejected": [...], "message": ...}` naming the
+  prerequisite by id, title and current status; reports a `rejected` prerequisite in a separate
+  list with a different remedy in the sentence ("reopen it, or edit the document that declared this
+  dependency"); does **not** gate `-> assigned` or `-> rejected`, so a wave can be routed ahead;
+  opens the moment the prerequisite is approved.
+- **Design D5's exemption, and its mirror.** A dependency declared while a task waits does not stop
+  it resuming: `blocked -> in_progress` was accepted `200` with the regressed prerequisite in
+  place, and the task came back reading `dependency_state: "running_on_regressed"` — flagged, not
+  stopped. The same prerequisite on a task at `pending` still refuses `409`. Both halves of the
+  reversal ship together, as the design says they must.
+- **The declare route's four refusals**: self (400, "a task cannot depend on itself"), missing
+  (404, naming both ids), cycle (409, "so this would make each wait on the other forever"),
+  duplicate (201, `outcome: "duplicate"` — a restatement is not a conflict). Removing an edge that
+  is not there is 404; removing a real one is 204.
+- **The board answers question (c) affirmatively.** A gated card carries
+  `dependency_state: "gated"` and a `prerequisites` list with the blocking task's id, title and
+  status; the flat `edges` list carries the edge and every edge on it has both ends on the board.
+  On screen the badge reads "Waiting on 1 task", with the prerequisite named in its `title`
+  tooltip and the edge drawn on the Dependencies view — so the reason is on the card, at badge
+  weight, not only in a 409.
+- **The picker's arithmetic**: `outstanding` excluded exactly the two terminal statuses and matched
+  a count taken independently off the board; `total` matched the board exactly.
+- **Isolation**: a foreign task id is 404 on this project's `GET` and `PATCH`, and a cross-project
+  dependency is refused 404 naming both ids.
+- **The database agrees with the routes.** 415 transition rows read read-only out of
+  `task_transitions`: every one an edge the map declares, every one `actor_kind: operator` with
+  `actor_agent` and `run_id` null, every one `origin: actor`, and not one restating a status. Task
+  statuses matched row-for-row once the list route was paged to the end.
+
+## Considered and not filed
+
+- **No route deletes a task.** There is no `DELETE` on any `*/tasks/{task_id}` and no UI mutation
+  for one. This is coherent rather than missing: `rejected` is the lifecycle's answer to "this
+  should not have been made", `rejected -> pending` reopens it, `TERMINAL_FOR_BINDING` treats it as
+  resolved and the picker's `outstanding` excludes it. The only cost is that a mistyped task stays
+  in `total` forever, which is a smaller harm than a delete that destroys a transition history.
+  Recorded as an assertion in LEG 8 so a future decision to add one is noticed, not as a defect.
+- **Creating a task in a non-entry status is refused 422 by the schema, not 409 by the service.**
+  `TaskCreate.validate_status` (`schemas/tasks.py:102-110`) fires first, so
+  `InvalidEntryStatusError`'s declared 409 and its "Every other status is reached by transitioning"
+  sentence are unreachable on this route. Belt and braces, and the belt still names both entry
+  points ("a new task must start at one of ['assigned', 'pending']"), so a caller can correct
+  itself. Not filed — but note the contrast with F201, where the schema firing first *does* cost
+  the caller the sentence that would have helped.
+- **`main.py:406` sends `detail` as an object for the two gates and as a string everywhere else.**
+  A client reading `detail` as a string gets `"{'code': 'dependency_unmet', ...}"` unless it handles
+  both. `hub/ui/src/api/client.ts:82-93` handles all three shapes (string, object with `message`,
+  Pydantic array), so the product's own client is fine. Recorded because a third-party one would
+  not be.
+
+## Method
+
+Two runs of the final `t_sweep_row8_tasks.py`, the second on the state the first left: **19
+failures both times, the same nineteen**. Rows 1 and 2 each found a defect only a repeat could see;
+rows 3–8 have not. Two of eight, and the technique stays.
+
+Row 8's "measure outside the product" leg was the **live OpenAPI** rather than the source — LEG 8
+asks the running Hub what routes it serves, so its two failures are facts about the deployed build
+and will flip on their own when a route is added. LEG 7 read `tasks` and `task_transitions` out of
+the beta database over a read-only sqlite URI, and that is what produced F202: the assertion "the
+route reports every task the table holds" was green at 91 tasks and red at 100, and the boundary is
+where the finding was. Neither surface alone would have shown it — the route answered `200` both
+times.
+
+The transition map in the harness is an **independent transcription** of
+`hub/hub/task_transitions.py`, typed by hand rather than imported. A harness that imported the
+product's own map would have asserted the product against itself and could not have caught a wrong
+edge in either direction.
+
+**Two of the UI harness's legs never executed, and the reason is F202 itself.** The drawer legs —
+does the block control collect a reason before sending (F201's screen half), and does the status
+control offer only published edges (D13's screen half) — both act on a task the harness creates at
+the top of the run. That task is the newest in the project, so the board does not render it, so
+there was nothing to click. The harness reported that as a failure with the reason named rather
+than skipping quietly, which is right; but it means F201's "the operator in the UI cannot produce
+this" is **read from `TaskDetailDrawer.tsx`, not driven**, and the paragraph above says so. On a
+project under 100 tasks those legs would run.
+
+One assertion in the UI half was **wrong and was caught before it was believed**: *"the Overview
+page does not state a task count capped at 100"* passed, because it looked for the truncated number
+near the word "Tasks" and the page renders it as "100 tasks" in a subtitle that check never
+reached. The screenshot is what settled it. Row 7's lesson — scope every screen assertion to the
+panel under test — has a companion, and this is it: a screen assertion that passes for a reason you
+cannot name has measured nothing, and a screenshot is the cheapest way to find out which kind you
+are holding.
+
+## Row 8's inherited findings, re-driven the same night
+
+Both of these were queued for row 8 because each has a harness that costs no agent turn and builds
+its own project. Run 2026-09-01 ~04:47 +01:00 against the same 8011 build.
+
+- **`t_f154_wedged_review.py` — 18/18.** F154 stays **FIXED**. The firing answers `409` with
+  *"beta is named on task-… ('Add one line to README') as its reviewer and is not reviewing it: no
+  turn is running on that task and none is queued. Nothing will move it on its own. Ask beta again,
+  review it yourself, or send it back with revision_needed."* — on both presses, with no run
+  started either time, `stall_reason` carrying the same sentence rather than null, the walk still
+  listing the task as current with `agent_capacity: "held"`, and the loop moving again once the
+  operator takes one of the three exits. The harness's fifth lane also shows **F167's row reaching
+  the same named refusal**: the predicate never asks who the assignee is, so an author-wedged task
+  is covered by the sentence even though F70's recovery cannot recognise it. That is unchanged from
+  2026-08-31 and is re-measured here, not assumed.
+- **`t_f156_preview_promises_the_merge.py` — 21/21.** F156 reproduces **verbatim and stays open**.
+  `integration-preview` answered `will_merge: true` with an empty reason over the exact commit the
+  gate refused seconds later for a conflict; the drawer's amber *"it cherry-picks &lt;sha&gt; from
+  &lt;branch&gt; into &lt;main&gt;"* is rendered from those fields; the preview was byte-identical
+  after the refusal, having learned nothing; and the contrast lane's clean task got the same
+  `will_merge: true` and merged. One word covered both outcomes and distinguished nothing. This is
+  the third consecutive drive to reproduce it, and it is the finding N-3..N-6's spec loop is queued
+  behind.
+
+Both projects (`proj-887e34c7724b`, `proj-63e4a31bf689`) and both temporary repositories were
+deleted afterwards; the `aw-f155-*` directories left in `%TEMP%` by earlier sessions were not
+touched.
+
+---
+
+# Sweep, row 9a of 19: Spec flow — documents, and the phase machine
+
+Driven 2026-09-01 ~04:55–05:10 +01:00 against the `:8011` trial Hub (beta profile, PID 22908, this
+branch's code) on two throwaway projects built by `scripts/drive/setup_row7.py`, both deleted
+afterwards. Row 9 is the largest row in the coverage matrix; this is the **9a** split named in
+`STATE-night.json` — documents (create / adopt / arrange / merge / phase) and the phase machine.
+Requirements, coverage, rigor and proposals are **9b**; evidence, decisions, reviews, drift and
+reindex are **9c**, and neither was driven here.
+
+Kept: `scripts/drive/t_sweep_row9_documents.py` (**196 PASS / 11 FAIL**, then **195 / 10** on a
+second run over the state the first left — the one-assertion difference is the virgin-corpus branch
+in leg 6, and the substantive reds are the same set both times) and
+`scripts/drive/t_sweep_row9_ui.py` (**2 failing, twice, the same two**). Screenshots in
+`%TEMP%\row9shots`.
+
+## F204 (C) — the phase route is the one door in the machine that refuses a call with no body, and it refuses it as *malformed*
+
+`POST /api/v1/projects/{id}/project/documents/phase?path=…&to=approved`, called with **no request
+body**, is answered:
+
+```
+422 {"detail": [{"type": "missing", "loc": ["body"], "msg": "Field required", "input": null}]}
+```
+
+The phase machine is never consulted. `PhaseRequest` (`hub/hub/api/v1/spec.py:238-239`) declares
+exactly one field, `reason: str = Field(default="", max_length=2000)` — every field optional — but
+the parameter is `body: PhaseRequest` with no default (`spec.py:1487`), so FastAPI treats the body
+itself as required and rejects the request during parsing.
+
+**The asymmetry is what makes it a finding rather than a quirk.** Its two siblings on the same
+credential take no body at all and work without one, measured in the same run:
+
+| route | body | bodyless call |
+|---|---|---|
+| `POST /documents/close-exploration?path=…` | none | **200** |
+| `POST /documents/propose?path=…` | none | **200** |
+| `POST /documents/phase?path=…&to=…` | `PhaseRequest`, all fields optional | **422 "Field required"** |
+
+Reproduction: create a document, write content, close exploration, propose it, then
+`curl -X POST -H 'Authorization: Bearer …' '…/documents/phase?path=<path>&to=approved'` with no
+`-d`. Same shape as **F201** one subsystem over — a schema layer ordered ahead of the machine,
+turning a well-formed operator decision into a message about a field.
+
+**Held at C.** The Hub UI is unaffected: `useSetSpecPhase` (`hub/ui/src/api/spec.ts:302-309`) always
+posts `{ reason: reason ?? '' }`. The population is direct HTTP clients and scripted operators — and
+this harness, which lost its first run to it.
+
+## F205 (C) — the two phase edges added for F37 are offered by no screen, and the documents they were added for are exactly the ones the UI will not archive
+
+`spec_lifecycle.TRANSITIONS` (`hub/hub/spec_lifecycle.py:37-67`) declares seven edges. All seven
+were walked for real and all seven were accepted. Two of them — `exploring -> archived` and
+`proposed -> archived` — were added for **F37**, with a comment recording why: *"Confirmed live
+2026-08-25: an agent created a second document by mistake and the empty original was unreachable in
+every direction… It is not inert either — it leaves a standing spec manifest drift warning that
+nobody can clear."*
+
+`SpecPhaseBar.tsx` is the **only** component in the UI that calls `useSetSpecPhase` — measured, not
+assumed (`grep -rn useSetSpecPhase hub/ui/src` returns it, its own test, and the hook). Its Archive
+button renders under `document.phase === 'approved'` (`SpecPhaseBar.tsx:135-148`). So neither F37
+edge is reachable from any screen.
+
+Driven, six documents, each opened at its own URL, the Hub asked separately what it would accept for
+a throwaway twin of each:
+
+| document | Hub accepts `-> archived`? | controls the phase bar offers |
+|---|---|---|
+| `exploring`, empty, exploration open | **yes** | *Exploration is complete* — **no Archive** |
+| `exploring`, empty, exploration closed | **yes** | *Propose* — **no Archive** |
+| `exploring`, with requirements | no (`archive_would_orphan_work`) | *Exploration is complete* |
+| `proposed`, with requirements | no (`archive_would_orphan_work`) | *Approve*, *Reopen* |
+| `approved` | yes | *Archive*, *Reopen* |
+| `current` (capability) | no (`illegal_transition`) | none |
+
+`row9-empty.png` is the exhibit and it is the F37 scenario verbatim: a document titled
+*"empty (exploring-empty-closed)"*, body reading **"No requirements yet."**, phase pill `exploring`,
+a banner reading **"⚠ 1 spec manifest drift item"** — and a phase bar offering *Propose* and an
+Enforcement select, with nothing that retires it. The edge that clears exactly this state exists,
+answers 200, and no screen offers it.
+
+**And `proposed -> archived` is dead outright, not merely unreachable from the UI.** Reaching
+`proposed` through `POST /documents/propose` requires `spec_completeness.check` to return nothing,
+which requires requirements and tasks; a document that has produced requirements is then refused by
+`archive_would_orphan_work` (`spec_lifecycle.py:290-306`). The harness could only exercise that edge
+by building its subject through the **F207** door below — which is to say the only documents the
+edge can act on are ones that got to `proposed` around the completeness check.
+
+Severity C rather than B: the state is recoverable by any direct HTTP client, and the cost of not
+recovering it is a standing drift warning rather than lost work.
+
+## F206 (B) — five of the spec flow's operator-only routes have no operator surface
+
+Measured twice from outside the product: against `hub/hub/static/ui` (**the bundle this Hub
+actually serves**, 1,209,306 bytes of js/html/css read as bytes) and again against `hub/ui/src`.
+Both agree.
+
+| route | in the served bundle | in the UI source | agent plane has it |
+|---|---|---|---|
+| `POST /documents/propose` | yes | yes | no |
+| `POST /documents/phase` | yes | yes | no |
+| `POST /documents/close-exploration` | yes | yes | no |
+| `POST /documents/{path}/rigor` | yes | yes | no |
+| `POST /documents/adopt` | **no** | **no** | **no** |
+| `POST /spec/reindex` | **no** | **no** | **no** |
+| `POST /spec/documents/arrange` | **no** | **no** | **no** |
+| `POST /spec/adopt` | **no** | **no** | **no** |
+| `POST /documents/{path}/merge` | **no** | **no** | **no** |
+
+All five are documented as operator-only and all five work — this run drove every one of them and
+they held (see *What held*, below). `arrange`'s docstring says *"Operator-only — the agent
+capability plane has no equivalent"*, and the live OpenAPI confirms there is no agent route; so
+between the two planes, **nobody can call them from the product**. They are reachable only by a
+direct HTTP client.
+
+What that costs, concretely: the corpus's hierarchy — design D3's *"editorial judgement about what
+the project is"*, deliberately kept off the document payload so a document could not state its own
+place — can only be expressed with `curl`. `spec/index.json`, the only record of home, hierarchy and
+ordering that survives the project being copied to another machine, is never written by anything the
+operator can press. Adopting a document already on disk, and folding a finished change into a
+capability document, are likewise API-only. This is **F203's shape at five times the size**: F203
+was one read nothing could reach; this is five writes.
+
+Severity B because it is the corpus-shaping half of the spec flow, and because `spec/index.json`
+not being written is silently inherited by every later corpus read.
+
+## F207 (C) — two doors into `proposed`, and the second one skips the first one's checks
+
+`POST /documents/propose` (`spec.py:1452`) runs `spec_service.propose`, which reads the document's
+payload, validates it, and runs `spec_completeness.check`; findings are returned and the document
+does not move. `POST /documents/phase?to=proposed` (`spec.py:1485`) calls
+`spec_lifecycle.transition` directly, which checks only the phase map and `explore_closed_at`.
+
+Reproduced deterministically, in four calls on the same credential:
+
+1. `POST /documents` — a brand-new document, no content written.
+2. `POST /documents/close-exploration?path=…` → **200**.
+3. `POST /documents/propose?path=…` → **200**, `blocking` carrying **2** findings, document still
+   `exploring`. Correct.
+4. `POST /documents/phase?path=…&to=proposed` (body `{"reason": ""}`) → **200**, document
+   **`proposed`**. Then `…&to=approved` → **200**, document **`approved`**, with the same two
+   completeness findings unresolved.
+
+An empty document reaches `approved` in two calls. `set_phase`'s own docstring describes it as
+*"approving a document, or reopening one"* and the UI only ever sends `approved`, `exploring` or
+`archived` through it — so this is a door nothing in the product opens, which is why it is C and not
+B. It is also the door **F205**'s dead `proposed -> archived` edge needs, so the two findings are
+each other's context.
+
+## F208 (D) — the arrange refusal names neither the cause nor the remedy
+
+On a corpus that has never been indexed, `POST /spec/documents/arrange` answers:
+
+```
+409 {"message": "no usable index to arrange (absent)", "diagnostics": []}
+```
+
+The remedy is `POST /spec/reindex` **naming a home** — `_select_home` refuses to guess, and on this
+fixture the reindex reported `index.written: null` with diagnostics `home_ambiguous` and
+`index_home_required`, which is exactly right and exactly the sentence arrange should be echoing.
+Instead `diagnostics` is empty and the word "reindex" does not appear. Compare the same file's own
+standard: `archive_would_orphan_work` ends *"Approve it and archive that, or reopen it and decide
+about the work first."*
+
+Low, and it compounds **F206** rather than standing alone: nothing in the UI can call either route,
+so the only caller who meets this sentence is already using `curl`.
+
+## What held — and the machine itself is close to airtight
+
+The larger half of this row, and the right shape for a subsystem this well built.
+
+**The phase machine, walked whole.** Five phases × six targets = 30 ordered pairs, against a map
+**transcribed by hand** into the harness rather than imported (row 8's lesson 7 — importing
+`TRANSITIONS` would assert the product against itself).
+
+- **All 7 declared edges accepted**, each on a document walked into its from-phase through the real
+  routes, and each verified afterwards to be in the phase it claimed.
+- **All 23 non-edges refused 409**, every one with the right code: `phase_unchanged` for the four
+  self-moves; `unknown_phase` for `current` and for a nonsense target, at every from-phase;
+  `illegal_transition` for the rest, each naming **both** phases in its sentence.
+- **No refusal moved anything** — re-read after every one of the 23.
+- **`current` is exactly as unreachable as it is documented to be.** `to=current` is
+  `unknown_phase` from all five phases including `current` itself (the to-phase check runs before
+  the same-phase check, so `current -> current` is `unknown_phase` rather than `phase_unchanged`);
+  a capability document is created at `current` and refuses all four transitionable targets with
+  `illegal_transition`. **There is no exit from `archived` either**: all three attempts refused.
+
+**Every gate around it.** `explore_not_closed` refuses `exploring -> proposed` before exploration is
+closed and lets it through after; **reopening genuinely reopens** — the reopened document needs the
+operator to close exploration again; `archive_would_orphan_work` refuses and says what to do
+instead; and an empty `exploring` document **can** be archived, so F37's edge works even though
+F205 says nothing offers it. `first_approved_at`, read **read-only out of sqlite** because no route
+exposes it, is set on first approval and **survives a reopen-then-reapprove unchanged** — the
+column's own comment made a promise and the promise holds.
+
+**Creation.** A minted path is a valid spec path, `exploring`, `change-spec`, `sketch`. All five
+`SPEC_KINDS` create, and `capability` lands in `current` and nothing else does. **F112 stays
+fixed**: `kind: "change"` is `409 unknown_kind` listing all five kinds, not the 500 it once was.
+Seven unsafe paths — traversal, absolute, uppercase, wrong extension, outside `spec/`, hidden
+segment, backslash — all `400`. An unhonourable body field is `422` naming it.
+
+**Adoption.** A document copied onto disk beside the corpus adopts at `201` and **its phase is read
+from the file** — an `approved` document adopts as `approved`, not defaulted to `exploring`. Each
+refusal lands on its documented status: `document_exists` 409, `file_missing` 422, `payload_absent`
+422, unsafe path 400.
+
+**Arrange, once an index exists.** Parent set and cleared; self-parent, unknown parent and a
+two-document cycle each `422` from `load_manifest`'s own structural rules; a document not in the
+index `404`; an unsafe path `400`. Naming a home wrote `spec/index.json` over 30 documents, and a
+recorded home is preserved on a later reindex without restating it.
+
+**Merge.** Into a non-capability document `409 not_a_capability`; from an `exploring` source
+`409 source_not_finished`; from a path with no document `404`; naming no source `422`; an
+unhonourable field `422`. A real merge from one `approved` and one `archived` change returned
+`merged: 2`, left the capability document in `current`, and **left both sources in the phases they
+were in**.
+
+**The two planes stay separate.** Read off the **live** OpenAPI, not the source: the agent plane has
+no phase route, no `close-exploration` and no `propose`. Approval is not something an agent can
+reach by any path the running build serves.
+
+**F202's shape does NOT generalise to this subsystem, and that is a measurement, not an
+assumption.** The document list was asked the boundary question rather than read for a `limit`
+parameter: at **147 documents** it returned 147, and on the second run at **294** it returned 294.
+There is no `limit` or `offset` anywhere in `hub/hub/api/v1/spec.py`. `GET /specs` and
+`GET /documents` differ by exactly the files discovery found on disk that the Hub never created —
+each carrying `phase: null`, which is what `list_specs` documents — and every tracked path in
+`/specs` carries the phase `/documents` gave it. Coverage still answered at 294.
+
+## Considered and not filed
+
+- **`GET /specs` reporting more documents than `GET /documents`.** The first draft asserted the two
+  counts were equal and it went red at 148 vs 147. They answer different questions on purpose —
+  `/documents` is the Hub's record, `/specs` is disk discovery — and the extra path was the
+  payload-less file the adoption leg had just written, carrying `phase: null` exactly as
+  `list_specs` says it will. The assertion was wrong; the product was not. Rewritten to assert the
+  containment and the shape of the difference, which is what actually holds.
+- **The operator plane having no `rename` route.** `POST /agent-actions/spec/documents/rename`
+  exists; there is no operator equivalent, and the UI is built to *follow* a rename
+  (`hub/ui/src/api/spec.ts:162-171`, *"Follow the document when the agent renames it"*) rather than
+  to perform one. Left unfiled because unlike F206's five routes this may be a deliberate division —
+  an agent names the document it is exploring — and calling it a defect would be guessing at intent.
+  Recorded here so 9b can ask the operator rather than rediscover it.
+
+## Method notes worth carrying
+
+- **The bodyless probe is worth running once per subsystem.** F204 was found by the harness failing
+  on its own first call, not by an assertion anyone wrote. Three sibling routes, two of which need
+  no body — the odd one out is only visible if you call them the same way.
+- **Ask the product what it will accept, then ask the screen what it offers, and compare.** The UI
+  harness asks the Hub to archive a *throwaway twin* of each subject before opening the browser, so
+  the table in F205 is Hub-behaviour against screen-behaviour rather than screen-behaviour against
+  the harness author's belief.
+- **Row 8's lesson 8 fired twice more, both times against this harness.** The first UI run clicked
+  rows in the tree to open documents; the clicks silently did nothing and the phase pill read
+  `exploring` for all six subjects, so *four* assertions "measured" one document six times. And in
+  leg 6 every arrange refusal passed — for `409 no usable index`, not for the structural rule each
+  was named after. Both were caught by reading the reason for the green, not the green.
+- **State the precondition instead of asserting through it.** Run 2 of the API harness reported two
+  reds that were facts about run 1 (an index its first run wrote, and a home that is preserved).
+  The virgin-corpus checks are now gated on `index.written is None` and say so.
+- **`spec/index.json` is the second thing `reindex` rebuilds, and it can silently write nothing.**
+  A `200` from that route with `index.written: null` is the normal answer on a corpus with no home
+  recorded. Anything downstream that assumes an index exists because reindex succeeded is wrong;
+  9c should check that assumption where drift reads the manifest.
+
+---
+
+# Sweep, row 9b of 19 — SPEC FLOW: requirements, coverage, rigor, proposals
+
+Driven 2026-09-01, iteration 12, against the trial Hub on **8011** (beta profile, this branch's
+code), fixture project `proj-401c38a75fcd`. Harness:
+`scripts/drive/t_sweep_row9b_requirements.py`, **129 passed / 10 failed, twice**, the second run on
+the state the first left. Every red below is one of those ten.
+
+Row 9a (documents, phase, adopt/arrange/merge) is the previous section. 9c — evidence, decisions,
+reviews, drift, reindex — is still unrun.
+
+## F209 (C) — the accept route takes the operator's reason and throws it away
+
+`POST /documents/{path}/proposals/{id}/accept` binds a `ProposalDecision` body whose `reason` field
+is declared `Field(default="", max_length=2000)` (`hub/hub/api/v1/spec.py:604`). The handler
+(`spec.py:614`) then calls:
+
+```python
+result = await spec_service.accept_proposal(
+    session, workspace, document, proposal,
+    actor=_operator(),
+    expected_digest=body.expected_digest,     # <- reason is not here
+)
+```
+
+`spec_service.accept_proposal` (`spec_service.py:485`) has **no `reason` parameter at all**, and its
+resolution block (`spec_service.py:552-553`) sets `resolved_at` and `resolved_by_actor_name` and
+stops. `reject_proposal` further down (`spec_service.py:578-580`) sets all three, including
+`proposal.resolution_reason = reason`, and its route does pass `reason=body.reason`.
+
+Reproduction, one call:
+
+```
+POST .../proposals/{id}/accept  {"reason": "looks right", "expected_digest": "<current>"}
+-> 200, proposal.status="accepted", proposal.resolution_reason=""
+```
+
+The API accepts a 2000-character justification, answers 200, and stores nothing. A reject of the
+same proposal with the same body keeps its reason verbatim — measured in the same leg. So the record
+of *why* a spec change was let in is the one half of the pair that is not kept, which is the half
+anyone auditing the corpus later actually wants.
+
+The UI never sends one (`useAcceptSpecProposal`, `hub/ui/src/api/spec.ts:349`, posts only
+`expected_digest`), so today's affected population is direct HTTP clients and anything built on the
+declared schema. That is why it is C and not B — but the field is declared, documented and
+size-limited, which is a promise.
+
+## F210 (C) — F204's shape, twice more: both proposal decisions refuse a bodyless call
+
+Every field of `ProposalDecision` is optional (`reason` defaults to `""`, `expected_digest` to
+`None`), so both routes have a complete meaning with no body at all. Neither parameter has a
+default, so FastAPI requires one:
+
+```
+POST .../proposals/{id}/accept   (no body, no Content-Type)
+-> 422 {"detail": [{"type": "missing", "loc": ["body"], "msg": "Field required"}]}
+POST .../proposals/{id}/reject   (no body)
+-> 422 (identical)
+```
+
+Neither proposal moved; both were still `pending` afterwards, measured. This is exactly F204
+(`/documents/phase`) one subsystem over, and the same one-word fix applies —
+`body: ProposalDecision = ProposalDecision()`. Filed separately from F204 because these are
+different routes with a different model, and because a fix to one will not touch the other.
+
+**Rigor is *not* this shape, and that is worth recording as a negative.** `RigorRequest.rigor` is
+genuinely required, so refusing a bodyless call is right; an empty-object call (`{}`) is refused
+`422` naming **`rigor`**, which is the correct answer. Measured, not assumed.
+
+## F211 (C) — F206's shape, three more routes with no operator surface
+
+Same measurement as F206, over 9b's routes: substring hits against **the bundle this Hub actually
+serves** (`hub/hub/static/ui`, read as bytes) and again against `hub/ui/src`. Both agree.
+
+| route | served bundle | UI source | agent plane |
+|---|---|---|---|
+| `GET /spec/coverage` | 1 | 1 | no |
+| `POST /documents/{path}/rigor` | 1 | 2 | no |
+| `GET /documents/{path}/proposals` (+accept/reject) | 3 | 3 | no |
+| `GET /spec/requirements` | **0** | **0** | **no** |
+| `GET /spec/requirements/{identifier}` | **0** | **0** | **no** |
+| `GET /documents/{path}/rigor-history` | **0** | **0** | **no** |
+
+The live OpenAPI confirms the agent plane carries only five spec routes (`documents`,
+`documents/create`, `documents/rename`, `evidence`, `evidence/{id}/decision`), none of them these.
+So all three are reachable only by a direct HTTP client.
+
+`rigor-history` is the sharpest of the three, because the module that writes it argues from its
+existence: `spec_rigor.py`'s docstring says **"Demotion is legitimate *because* this exists"**, and
+`hub/hub/api/v1/spec.py:538` repeats it. The justification for allowing an operator to lower a gate
+is an audit trail that no screen shows. This drive confirmed the trail itself is complete and
+ordered — three changes, each naming from, to, actor and reason — which makes the gap a surfacing
+gap, not a data gap.
+
+`GET /spec/requirements/{identifier}` is the route whose docstring says it is *"the other half of a
+navigation that only went one way"*. Neither half of that navigation is on a screen.
+
+## F212 (C) — coverage reports `unserved` as bare identifiers, which are not unique in a project
+
+`spec_index.resolve` (`hub/hub/spec_index.py:349`) states the design plainly: **"Identifiers are
+minted per document, so a bare `FR-8` names one requirement only when one document in the project
+declares it."** It refuses an ambiguous lookup rather than guessing, which is right.
+
+`GET /spec/coverage` then projects `unserved` through `[row.identifier for row in unserved]`
+(`hub/hub/api/v1/spec.py:711`) — dropping the document. In the fixture project, run A measured:
+
+```
+"unserved": ["FR-1", "FR-1", "FR-1", ... x34 ..., "FR-10", "FR-10", "FR-10", ...]
+```
+
+34 entries reading `FR-1`, naming 34 different requirements in 34 different documents, with nothing
+in the response to tell them apart. Meanwhile the **same response's** `requirements` array carries
+`document_id` on every entry — so the information exists and is discarded at exactly the point it is
+needed.
+
+And the list is a dead end in both directions: feeding the most-repeated identifier straight back
+into the route built to explain it answers
+
+```
+GET /spec/requirements/FR-1
+-> 422 "FR-1 is declared by more than one document in this project; name the document it belongs to"
+```
+
+`unserved` is described as *"the question the end-to-end run needed and could not ask"*
+(`requirement_links.py:335`). In any project with two documents, its answer names things the reader
+cannot look up. The fix is small — return objects carrying `identifier` and `document_id`, as the
+sibling array already does — and it is a response-shape change, so it is the operator's call.
+
+## F213 (D) — a resubmitted edit stacks a duplicate proposal, and the twin can never be resolved
+
+At `contract`/`gate` rigor a submission is diffed against the **live** document, which a pending
+proposal has by definition not touched. So submitting the same edit twice proposes it twice:
+
+```
+PUT .../content  (edit E)                          -> proposals: [fr-1 modify, fr-2 modify]
+PUT .../content  (edit E, byte-identical resubmit)  -> proposals: [fr-1 modify, fr-2 modify]
+GET .../proposals                                   -> 4 pending, {fr-1: 2, fr-2: 2}
+```
+
+The documented no-op case does hold and was measured separately: a submission identical to what is
+**stored** proposes nothing and names what it left unchanged. This is the other case — a retry, a
+double-click, an agent that re-submits after a timeout.
+
+Accepting one of a pair then strands the other:
+
+```
+POST .../proposals/{first}/accept  -> 200, applied
+POST .../proposals/{twin}/accept   -> 409 {"code": "proposal_stale",
+                                           "message": "the document changed since this proposal was
+                                                       created; it is now stale, not accepted"}
+```
+
+The proposal's own compare-and-swap catches it, so **nothing is misapplied** — that is why this is D
+and not higher. What is left is queue hygiene: the operator's pending list shows two identical
+proposals per unit with no way to tell which is which, and after accepting one the twin is
+permanently unacceptable. There is no withdraw or cancel route; the only exit is `reject`, which
+records a rejection that never happened as a judgement.
+
+## F214 (D) — a retired requirement is reported `unserved`, which is the one thing it is not
+
+`GET /spec/requirements/{identifier}` computes coverage with `include_retired=True`
+(`hub/hub/api/v1/spec.py:770`) and returns whatever `_state` produces — for a retired requirement
+with no links, `unserved`:
+
+```
+GET /spec/requirements/FR-3?document=<the document that retired it>
+-> 200 {"requirement": {"state": "retired"},
+        "coverage":    {"state": "unserved", "integration": "not_applicable"}}
+```
+
+`requirement_links.unserved()` excludes retired rows deliberately, and says why: **"a requirement
+nobody has to build any more is not unserved, it is over"** (`requirement_links.py:338`). The same
+word therefore carries two answers on two routes about the same requirement. `unserved` is the state
+that means *somebody should be building this*; a retired requirement is exactly the row for which
+that is false.
+
+Severity D: the requirement block right beside it says `retired`, so a careful reader is not misled.
+A counter is.
+
+## What held — and most of this subsystem is in good shape
+
+The reds above are six narrow things. 129 assertions passed, twice, across the four areas:
+
+**Requirements index.** Identifiers minted on write and reported back by the write; every row
+carrying key, digest, anchor, document and state; ordering by identifier; per-document filtering;
+`?document=` on an unknown path refused **404** rather than silently answering project-wide.
+Retirement is real and reversible-looking: dropping `fr-3` from a payload marks the row `retired`
+rather than deleting it, `include_retired=false` hides it, `true` shows it, and the default is
+`true`.
+
+**The boundary question, asked of a different table than 9a's.** F202's shape does not generalise
+here either: a **120-requirement** document returns 120, and the project-wide list returned **661**
+rows in one answer. There is no `limit` or `offset` anywhere in `spec.py`.
+
+**Requirement detail.** For an unambiguous identifier it answers 200 with `tasks`, `evidence` and
+`coverage`; coverage is never null for an indexed requirement and **never states a state without an
+integration answer** — the invariant `requirement_coverage.py` insists on, checked from outside. A
+fresh requirement reads `unserved`; creating a task naming it moves it to `not_started` and the
+requirement then names the task, closing the navigation the route exists for. Naming a different
+document returns *that* document's same-named requirement rather than guessing.
+
+**Ambiguity is refused, not resolved.** A bare identifier declared by 34 documents is **422** with
+"name the document it belongs to". A task naming that identifier is still created — and its create
+response says so: `unresolved_requirements: [{"reference": "FR-1", "reason": "ambiguous"}]`. Nothing
+is guessed and nothing is silently dropped, which is the whole point of the module.
+
+**Coverage.** Project-wide and per-document from one implementation; state totals and integration
+totals each summing to the entry count; `unserved` excluding retired rows (measured against the
+active twins of the same name, not assumed); an unknown document 404.
+
+**Rigor, which is the best-defended thing in this row.** Unknown rigor -> 409 `unknown_rigor` listing
+the three that exist. Same rigor -> 409 `rigor_unchanged`. Promoting a document with no payload ->
+409 `document_not_enforceable`, with `blocking` naming what to fix in the operator's words. Demoting
+the same unreadable document is **not** refused for enforceability — the asymmetry the module argues
+for, holding in practice. Compare-and-swap works both ways: a stale digest is refused `stale_digest`
+and **the rigor did not move**; the current digest lands. `contract -> gate -> sketch` all accepted,
+demotion destroyed no requirement rows, and `rigor-history` kept all three steps in order with
+actor, reason and timestamp. `rigor-history` on an unknown document is 404.
+
+**No agent plane, confirmed against the live OpenAPI.** No agent-plane rigor route, so an agent
+blocked by a gate genuinely cannot lower it; no agent-plane proposal-decision route; no agent-plane
+requirements or coverage route.
+
+**Proposals.** A `contract`-rigor write returns `proposals` instead of `identifiers` and **the live
+document is untouched**, verified by reading the content before and after. Pending list ordered by
+creation, each entry naming its proposer and carrying `resolved_at: null`. Accept on a stale digest
+refused; accept on the current digest applies and the live document changes. Accepting twice -> 409;
+rejecting twice -> 409; a proposal id under the wrong document -> 404; an unknown id -> 404; resolved
+proposals leave the pending list. Reject keeps its reason. A `sketch`-rigor write still writes and
+still reports identifiers — the contrast case that proves the gate is the document's property, not
+the caller's.
+
+## Considered and not filed
+
+- **Per-document identifier minting is not a defect.** `FR-1` in every document looks alarming and
+  is deliberate (`spec_index.py:349`), and the ambiguity refusal that follows from it is the correct
+  handling. What is filed is F212 — one *surface* that hands out identifiers it cannot resolve.
+- **The `?document=` requirement on the detail route.** Unusable bare in any multi-document project,
+  but that is the same design, correctly enforced. It becomes a real problem only in combination
+  with F211 (no screen calls it) and F212 (the one list that feeds it drops the document).
+- **Rigor's optional `expected_digest`.** Omitting it promotes a document the compare-and-swap had
+  just protected — driven both ways: the loser of a real race is refused `stale_digest`, and the
+  same document is then promoted by a call that simply omits the digest. This is **not** F207's
+  shape: it is one route with one documented, deliberate optionality (*"Optional so a caller that
+  has not read the document can still act"*), not a second route bypassing the first's checks. The
+  UI always sends one. Recorded because a reader of F207 will want to know it was asked.
+
+## Method notes
+
+- **Two harness bugs, both the same bug, both caught by reading the reason for the green (and the
+  red).** Run 1 assumed identifiers were project-unique and produced seven reds that were facts
+  about the harness. Run 2 fixed that by picking "the 119th requirement of the biggest document" —
+  which stopped being unique the moment the harness ran a second time in the same project. The fix
+  that stuck **measures**: count identifiers project-wide, build a document larger than every other
+  one, and take the identifiers only it can have. Row 9a's lesson 10 in its sharpest form — *a
+  harness that runs twice must state its precondition, not inherit it.*
+- **One of the seven false reds hid a real one.** "It is no longer unserved" passed in run 1 —
+  because coverage was `None`, and `None.get(...) != "unserved"` is true. A green for a reason you
+  cannot name has measured nothing; naming it is what turned the leg into F212's evidence.
+- **The bodyless probe found F210**, exactly as it found F204, and the *negative* result on rigor is
+  the same probe doing its other job: telling you which routes are fine.
+- **Ask both halves of a pair.** F209 exists because accept and reject were driven with the same
+  body and compared. Neither call is wrong on its own reading.

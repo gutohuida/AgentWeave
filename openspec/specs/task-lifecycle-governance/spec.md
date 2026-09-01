@@ -312,14 +312,38 @@ reviewer and sending the task to review is accepted rather than refused on the a
 
 ### Requirement: A review a flow cannot staff is not reported as staffed
 
-A flow SHALL NOT treat a task in `under_review` as held by a reviewer when that task's assignee is
-the agent recorded as completing it. It SHALL instead resolve a reviewer for it through the ordinary
-reviewer ladder, which excludes the author, and record the result as a staffing outcome.
+A flow SHALL NOT treat a task in `under_review` as held by a reviewer when that task's assignee is an agent that produced the work, and SHALL instead resolve a reviewer for it through the ordinary reviewer ladder and record the result as a staffing outcome.
 
 Such a task is claimable by nobody and its assignee counts as holding active work, so left
 unrecognised it is never reviewed and its assignee is unavailable to review anything else in the
 project, with nothing reporting either fact. This rule is what lets a task recorded that way before
 the refusal above existed recover, rather than remaining stuck behind a rule that arrived later.
+
+**Who produced the work SHALL be read from the recorded completion where one names an agent, and from
+the task's recorded transitions where it does not.** A completion the operator recorded names no
+agent, and a rule keyed only on the completion therefore reports such a task as held by a reviewer —
+which is the false statement this requirement exists to prevent, reached one case over. Measured
+live: an operator who moved a stuck task to `under_review` by hand, following the only route the
+lifecycle offers them, produced exactly that.
+
+**This determination SHALL be drawn from the task's recorded transitions alone, and SHALL NOT
+include the agent the task is assigned to or the agents whose runs were bound to it**, and that is
+the one place it differs from the determination used to exclude an agent from reviewing. The
+question here is whether the assignee is one of the agents that produced the work; an assignee
+counted as a producer by definition answers yes for every task that has one, and every review
+genuinely in progress would be reported as one nobody is doing. The bound runs answer yes very
+nearly as often, since a staffed reviewer's own run is bound to the task it is inspecting. A
+reviewer legitimately staffed onto a task is absent from its **transitions**, and that absence is
+what carries the distinction — so the wider determination the exclusion uses cannot be reused here,
+however tempting one determination for two questions looks.
+
+Where nothing is recorded as completing the task at all **and its assignee is one of the agents its
+transitions name**, the ladder SHALL surface it rather than staff it, naming the task. Recovery is
+not possible for such a task — no agent can be ruled out as its author — and saying so is what this
+requirement asks for in place of reporting a reviewer that is not there. Where instead its assignee
+appears on none of its transitions, the task SHALL still be reported as held: an agent may be
+dispatched as reviewer by hand for a task no agent is recorded as completing, and that review is
+genuinely in progress.
 
 Recovery SHALL be a reassignment and SHALL NOT move the task to another status: the task is already
 in review, and only who holds it was wrong.
@@ -335,6 +359,39 @@ in review, and only who holds it was wrong.
 
 - **WHEN** a reviewer is resolved for such a task
 - **THEN** the agent that completed the work is not among the candidates
+
+#### Scenario: An operator-completed task held by its worker is recognised
+
+- **WHEN** a task the operator moved to `completed` is in `under_review` with an agent recorded on
+  its earlier transitions as its assignee
+- **THEN** it is not reported as held by a reviewer
+- **AND** a reviewer is resolved for it through the ordinary ladder
+
+#### Scenario: A review genuinely in progress is still reported as held
+
+- **WHEN** a task the operator moved to `completed` is in `under_review` and is assigned to a
+  reviewer that no transition on that task names
+- **THEN** it is reported as held by that reviewer
+- **AND** no reviewer is resolved for it
+
+#### Scenario: A task with no recorded completion held by an agent that moved it is surfaced, not restaffed
+
+- **WHEN** a task in `under_review` has no recorded completion at all and its assignee is recorded
+  on one of its transitions
+- **THEN** it is not reported as held by a reviewer
+- **AND** the operator is notified, naming the task
+
+#### Scenario: A review dispatched by hand on a task with no recorded completion is still held
+
+- **WHEN** a task in `under_review` has no recorded completion at all and its assignee is an agent
+  that no transition on it names
+- **THEN** it is reported as held by that assignee
+
+The route is supported and produces a review that is genuinely in progress: dispatching a review by
+hand refuses only an agent *recorded* as completing the task, so on a task with no recorded
+completion any agent may be dispatched, and dispatching staffs the task. Treating every such task as
+unstaffable would report a real reviewer's work as nobody's — which is the same false statement this
+requirement exists to prevent, made in the opposite direction.
 
 ### Requirement: Governance holds identically over HTTP and MCP
 
@@ -437,7 +494,6 @@ history states a task was completed while still waiting on a person who never an
 - **THEN** the transition is accepted
 
 ### Requirement: A task is recorded as waiting because the system observed it
-
 
 The system SHALL move a task into the waiting status when it observes that a run bound to that task has asked a blocking question that is not yet answered, attributed to that run and recorded as system-caused.
 
@@ -557,7 +613,6 @@ were already in when the task said work was under way and nothing was happening.
 - **THEN** it obtains the statement before requesting the move
 
 ### Requirement: Only an unanswered blocking question makes a task wait
-
 
 The system SHALL record a task as waiting only on account of a question that is unanswered, not declined, marked as blocking, whose wait has not already ended, and that was asked by the run whose ask or whose end is being evaluated.
 
@@ -687,8 +742,7 @@ Integration SHALL occur regardless of the rigor of any document the task's requi
 
 ### Requirement: Approval is refused when the work cannot be merged cleanly
 
-Where the work to be integrated would conflict with the project's main branch, the system SHALL
-refuse the transition into `approved`.
+Where the work to be integrated would conflict with the project's main branch, the system SHALL refuse the transition into `approved`, and the refusal SHALL name a remedy that the party it refuses can actually take.
 
 The conflict SHALL be detected before the transition is recorded, by a test merge that modifies
 neither the working tree nor the index. A conflict discovered during the merge itself would leave a
@@ -697,6 +751,68 @@ task recorded as approved and a repository in a state the operator did not ask f
 The refusal SHALL be carried in the same typed refusal that reports unverified requirements, and
 SHALL name the conflicting paths. An operator learning that approval failed SHALL learn why in the
 same response, not by inspecting the repository.
+
+The refusal SHALL name the commit it judged. A conflict is a fact about one commit and the main
+branch, not about a branch as a whole. A reader told only that "this task's work" conflicts cannot
+check the claim, cannot tell which of a branch's commits was probed, and cannot tell whether a change
+they have since made to that branch was seen at all.
+
+**The remedy SHALL be determined by where the judged commit came from.** The system resolves what a
+task's approval would merge in one of two ways, and an instruction that clears the refusal under one
+of them does not clear it under the other:
+
+- Where the commit is named by **accepted evidence**, resolving the conflict on the branch SHALL NOT
+  be stated as the remedy. It does not clear the refusal: the resolution is a new commit that no
+  evidence names, the system goes on judging the commit the evidence still names, and the answer
+  cannot change however many times approval is retried. The remedy SHALL instead be to resolve the
+  conflict, record evidence naming the resolved commit, and have that evidence accepted — and SHALL
+  say that accepting is the operator's unless an agent has been granted it, in the same terms the
+  refusal for unjudged evidence already uses.
+- Where the commit is the task's **own branch tip**, resolving the conflict on the branch and
+  approving again SHALL be stated as the remedy, because there the commit judged is whatever the
+  branch then points at.
+
+The refusal SHALL name the branch the judged commit was recorded on, distinctly from the branch the
+work would merge into. Both are branches and the refusal speaks about both, so naming only one of
+them makes every later sentence ambiguous between them — and the ambiguity resolves the wrong way,
+because the branch a reader is being asked to act on is the one the refusal has not been naming.
+
+The remedy for the evidence route SHALL state the condition under which the fresh evidence replaces
+the one being judged, in terms of something the party it refuses can arrange. The system decides
+what to merge per branch, keeping the most recently recorded accepted evidence for each; the branch
+a piece of evidence belongs to is derived from the repository at the moment it is recorded and is
+not a value anybody supplies. So the refusal SHALL say that the resolved commit must be on the
+branch the judged commit was recorded on, and that the evidence must be recorded from a checkout of
+that same branch, and SHALL NOT instruct the reader to state a branch. A remedy expressed as a field
+the reader cannot set is a remedy that has not been stated.
+
+The remedy SHALL NOT state that recording from that branch happens of its own accord. Where the
+evidence is recorded is decided by the repository the recorder is in, and for an agent that is the
+directory its turn ran in only while that directory still exists; a released or never-recorded
+workspace falls back to a checkout on another branch, and evidence recorded there adds a second
+branch to what would merge rather than replacing what is being judged.
+
+The remedy SHALL NOT claim that the fresh evidence must demonstrate the same requirement as the
+evidence it replaces, because it need not: the system's choice is made per branch across all of the
+task's evidence. A remedy that overstates what is required blocks a reader who is not blocked.
+
+**Where the evidence naming the judged commit was recorded by a different task, the refusal SHALL
+say so.** Evidence is reached through the requirements a task serves and a requirement may be served
+by more than one task, so a task is refused over a commit another task recorded, on a branch that is
+not its own. That is already required of the refusal for evidence nobody has judged, for a reason
+given in terms of this one — that the commit is part of what this task's approval merges — and it
+binds harder here, because this remedy asks the reader to act on the branch rather than only to wait
+for someone to judge it. Under per-task isolation the reader has no checkout of another task's
+branch, so a remedy addressed to them as though they had one cannot be followed. The refusal SHALL
+name the recording task and SHALL NOT be worded as though the branch were the reader's; it SHALL NOT
+prescribe which of the other task's holder and the operator the reader should approach, because that
+is a judgement the refusal is not in a position to make.
+
+Where the judged commit is **no longer present on the branch the refusal names it on**, the refusal
+SHALL say so. That state is reached by rewriting the branch — the reasonable response to a remedy
+that appeared not to work — and it is the state in which a reader comparing the refusal against the
+repository finds the two disagree with no way to tell which is stale. Where the system cannot
+determine whether the commit is on that branch, it SHALL say nothing rather than guess.
 
 This refusal SHALL apply regardless of rigor. It is not an assertion about whether the work is
 verified; it is an assertion that the work cannot go where approval says it goes.
@@ -717,13 +833,95 @@ enforcement point.
 - **WHEN** approval is requested for a task with conflicting work whose documents are all `sketch`
 - **THEN** the transition is refused
 
+#### Scenario: The refusal names the commit it judged
+
+- **WHEN** approval is refused because the work would not merge cleanly
+- **THEN** the refusal names the commit that was tested against the main branch
+- **AND** it names it in the same sentence a reader is given, not only in the refusal's structured half
+
+#### Scenario: An evidence-named commit is not answered with "resolve it on the branch"
+
+- **WHEN** approval is refused for a task whose merge target came from accepted evidence
+- **THEN** the refusal does not instruct the reader to resolve the conflict on the branch and approve again
+- **AND** it instructs them to record evidence naming the resolved commit and have it accepted
+- **AND** it states that accepting the evidence is the operator's, or a capability an agent must be granted
+
+#### Scenario: Following the stated remedy clears the refusal
+
+- **WHEN** the conflict is resolved on the branch the refusal names, evidence is recorded from that branch and accepted, and approval is requested again
+- **THEN** the transition is permitted
+- **AND** the resolved commit is what integration merges
+- **AND** the evidence that was being judged before is no longer what integration merges
+
+#### Scenario: The remedy does not ask for a branch to be named
+
+- **WHEN** approval is refused for a task whose merge target came from accepted evidence
+- **THEN** the refusal names the branch the resolved commit must be on
+- **AND** it does not instruct the reader to supply or record a branch, which is not something the reader can set
+
+#### Scenario: The branch to act on is named apart from the branch to merge into
+
+- **WHEN** approval is refused because the work would not merge cleanly
+- **THEN** the refusal names the branch the judged commit was recorded on
+- **AND** it names the branch the work would merge into
+- **AND** the two are distinguishable to a reader, so that the branch the remedy asks them to act on is not the branch the work is being merged into
+
+#### Scenario: A commit another task recorded is attributed to it
+
+- **WHEN** approval is refused over a commit named by evidence that a different task recorded against a requirement the two tasks share
+- **THEN** the refusal names the task that recorded it
+- **AND** the remedy does not address the reader as though that branch were their own
+
+#### Scenario: A commit this task recorded is not attributed elsewhere
+
+- **WHEN** approval is refused over a commit named by evidence this same task recorded
+- **THEN** the refusal names no other task
+
+#### Scenario: A branch-tip commit is answered with the branch
+
+- **WHEN** approval is refused for a task whose merge target is its own branch tip
+- **THEN** the refusal instructs the reader to resolve the conflict on the branch and approve again
+- **AND** approving after the branch is resolved is permitted, because the commit judged is the branch's new tip
+
+#### Scenario: A judged commit that has left its branch is reported as such
+
+- **WHEN** approval is refused over a commit that is no longer reachable from the branch the refusal names
+- **THEN** the refusal says the commit is no longer on that branch
+
+#### Scenario: An undeterminable branch is not asserted about
+
+- **WHEN** the refusal cannot determine whether the judged commit is on the branch it names
+- **THEN** it makes no claim either way
+
 ### Requirement: An integration that cannot proceed does not block approval
 
-The transition into `approved` SHALL still succeed where integration cannot be attempted, and the
-integration SHALL be recorded as skipped together with the reason. Integration cannot be attempted
-when the project has no configured main branch, when the project is not a repository, when the
-primary checkout has uncommitted changes to tracked files, or when the primary checkout is not on
-the main branch.
+The transition into `approved` SHALL still succeed where integration cannot be attempted, and the integration SHALL be recorded as skipped together with the reason. Integration cannot be attempted when the project has no configured main branch, when the project's working directory cannot be resolved, when the project is not a repository, when the primary checkout has uncommitted changes to tracked files, when the primary checkout is not on the main branch, when evidence governs the task and no accepted evidence for it names a commit to merge and no evidence awaiting review names one either, or when evidence does not govern the task and the task has no branch of its own.
+
+Two of those were enumerated for the first time by `approval-refuses-unaccepted-evidence`. An
+unresolvable working directory had always been skipped this way and was simply missing from the list;
+it was added because that change argues from the list being closed, and an argument from a list that
+is not actually closed is worth nothing.
+
+The evidence clause carries a second clause of its own, so that this requirement's normative sentence
+does not say approval succeeds in precisely the case the refusal requirement says it is refused. A
+reconciliation that lives only in explanatory prose is not a reconciliation; the two SHALLs have to
+agree on their own terms.
+
+**This change qualifies that clause with "where evidence governs the task", and adds the sixth
+entry.** Both halves are the same correction: the old sentence assumed evidence is the only thing
+that can name what to merge, which was true of every task when it was written and is no longer true
+of a task on a loop that declares its work needs no evidence. Such a task with no accepted evidence
+is not a task with nothing to merge — its branch is what merges — so leaving the clause unqualified
+would excuse a skip in exactly the case this change exists to end. The sixth entry is the case that
+genuinely remains: no evidence governs the task and it has no branch either, so there is no commit
+this system is willing to name.
+
+So what remains in this list is the task that genuinely produced no commit anyone is waiting to
+accept: work whose evidence records paths, work whose evidence was rejected, work that produced no
+evidence at all on a loop where evidence governs, and work with no branch of its own on a loop where
+it does not. Work recorded but not yet judged is refused at approval rather than skipped after it, so
+it never reaches this list. For those that do, nothing being merged is the true account rather than a
+gap, and blocking approval would block work the product supports.
 
 Untracked files SHALL NOT prevent integration. The system writes specification documents into the
 project directory, so untracked content is the ordinary state of a working project rather than a
@@ -762,6 +960,19 @@ A project that is not a repository SHALL be no less approvable than before this 
 
 - **WHEN** a task is approved in a project whose evidence footprints record paths rather than commits
 - **THEN** the approval succeeds and no integration is attempted
+
+#### Scenario: A task whose evidence was rejected approves and merges nothing
+
+- **WHEN** a task whose only evidence naming a commit was rejected is approved
+- **THEN** the approval succeeds
+- **AND** the skipped integration is recorded
+
+#### Scenario: A task with no evidence governing it and no branch approves and merges nothing
+
+- **WHEN** a task on a loop that declares its work needs no evidence is approved and has no branch of
+  its own
+- **THEN** the approval succeeds
+- **AND** the skipped integration is recorded, naming the absence of a branch
 
 ### Requirement: Every integration attempt is recorded
 
@@ -864,13 +1075,12 @@ created and the unresolved reference SHALL be preserved rather than discarded.
 
 ### Requirement: An integration that was skipped can be attempted again
 
-The system SHALL offer a way to attempt integration again for an approved task whose work has not been integrated, and SHALL name that way when it reports a skip the operator can put right.
+The system SHALL offer a way to attempt integration again for an approved task whose work has not been integrated, and SHALL offer it only where attempting it again could change the outcome.
 
-Integration is attempted when a task becomes approved. Where it is skipped, the cause is usually
-something the operator can then put right — a main branch that was never named, a checkout with
-uncommitted changes, a checkout parked on another branch. Restating the approval does not attempt it
-again, because restating a status is deliberately a no-op, so without this the remediation the
-system asked for accomplishes nothing.
+Integration is attempted when a task becomes approved. Where it is skipped, the cause is often
+something the operator can then put right — a checkout with uncommitted changes, a checkout parked on
+another branch. Restating the approval does not attempt it again, because restating a status is
+deliberately a no-op, so without this the remediation the system asked for accomplishes nothing.
 
 A skip SHALL NOT instruct the operator to approve the task again. The task is already approved by the
 time the skip is read, and following that instruction provably does nothing: the request succeeds,
@@ -880,53 +1090,49 @@ silently is worse than none, because it spends the operator's confidence as well
 Where a skip names a cause the operator can put right, it SHALL point at the remedy that works —
 retrying the integration, or the setting whose absence caused the skip.
 
+**Whether retrying can change the outcome SHALL be decided by the same component that produces the
+reason, and SHALL be carried on the record of the attempt wherever that record is read.** A surface that offers the retry SHALL read that answer
+rather than deriving one from the wording of the reason. A reason is a sentence written for a person;
+deriving behaviour from its text means every new reason is offered a retry by default, including the
+ones that are terminal, and the surface making the offer is the one place that cannot know which is
+which.
+
+**A skip whose cause a retry cannot clear SHALL NOT be offered one.** A retry offered on a cause
+nothing has changed re-runs the same question, receives the same answer, and appends a second record
+identical to the first: the operator is told to act, acts, and observes nothing happen. That is the
+same failure as instructing them to approve again, reached by a different route. Where the cause is
+something the operator can put right somewhere else, the skip SHALL point there instead.
+
 Retrying SHALL be available to the operator and to agents, and SHALL be refused for a task that is
-not approved.
+not approved. This requirement constrains what is **offered**, not what is permitted: a retry
+requested directly SHALL still be attempted and recorded, whatever the previous reason was, because
+the world may have moved in a way no classification made at the time of the skip could know about.
 
-Retrying a task whose work has already been integrated SHALL be permitted and SHALL merge nothing.
-Whether work has reached the main line is a question about the repository, so it is asked again
-rather than inferred from what was previously attempted.
+#### Scenario: A retryable skip offers the retry
 
-Every retry SHALL be recorded exactly as a first attempt is.
+- **WHEN** an approved task's integration was skipped because the primary checkout had uncommitted
+  changes
+- **THEN** the record marks the attempt as one worth repeating
+- **AND** the operator is offered a way to attempt it again
 
-An agent able to retry SHALL be able to read what the attempts reported. An agent that can act on an
-outcome it cannot see is acting blind.
+#### Scenario: A terminal skip offers no retry
 
-#### Scenario: Work a skip left behind is merged on retry
+- **WHEN** an approved task's integration was skipped because there was nothing to merge, or because
+  the task has no branch of its own, or because the commit was already in the main branch
+- **THEN** the record marks the attempt as one repeating cannot change
+- **AND** no retry is offered for it
 
-- **WHEN** an approved task's integration was skipped
-- **AND** the cause is put right and integration is retried
-- **THEN** the work is merged into the project's main branch
-- **AND** the retry is recorded
+#### Scenario: A missing main branch points at the setting
 
-#### Scenario: Retrying an unapproved task is refused
+- **WHEN** an approved task's integration was skipped for want of a configured main branch
+- **THEN** no retry is offered
+- **AND** the operator is pointed at the setting, whose saving attempts the integration
 
-- **WHEN** integration is retried for a task that is not approved
-- **THEN** the request is refused
-- **AND** nothing is merged
+#### Scenario: A retry requested directly is attempted whatever the reason was
 
-#### Scenario: Retrying after a merge merges nothing
-
-- **WHEN** integration is retried for a task whose work is already on the main branch
-- **THEN** nothing is merged
-- **AND** the attempt is recorded as skipped because the work is already there
-
-#### Scenario: An agent reads and retries
-
-- **WHEN** an agent asks what a task's integration attempts reported
-- **THEN** it receives them
-- **AND** it may retry the integration
-
-#### Scenario: A skip does not send the operator back to approval
-
-- **WHEN** integration is skipped because the checkout has uncommitted changes
-- **THEN** the reason does not instruct the operator to approve the task again
-
-#### Scenario: A skip names the remedy that works
-
-- **WHEN** integration is skipped because the checkout has uncommitted changes or is on another
-  branch
-- **THEN** the reason directs the operator to retry the integration once the cause is put right
+- **WHEN** a retry is requested for an approved task whose last skip was one no retry is offered for
+- **THEN** the integration is attempted
+- **AND** its outcome is recorded
 
 ### Requirement: Naming the main branch attempts the integrations that wanted one
 
@@ -1259,7 +1465,6 @@ from that history — unable to answer what work the loop was ever given.
 
 ### Requirement: Starting work is gated on its prerequisites, and the gate lives with the other gates
 
-
 The transition to in-progress SHALL be guarded by the task's dependencies where it starts work, and that guard SHALL be applied in the same place as the machine's existing guards — inside the transition service, before the history row is written.
 
 Placement is the requirement, not an implementation note. The existing gates are positioned there
@@ -1581,7 +1786,6 @@ that never ran.
 
 ### Requirement: A wait that ends without an answer returns the task to its work
 
-
 Where a bounded wait for an operator's answer ends without one and the asking run continues, the system SHALL return the waiting task to the in-progress status and SHALL record durably that the wait ended unanswered.
 
 A task is waiting because somebody is waiting. When the wait ends and the agent goes on to decide
@@ -1664,7 +1868,6 @@ Declining is a decision the operator made and handed back; silence is not.
 
 ### Requirement: Work that proceeded without an answer says so, for good
 
-
 Where a task's wait for an operator's answer ended without one, the system SHALL state that on the task, and SHALL continue to state it for every later status the task reaches.
 
 The measured failure this exists to end: an agent asked which comparison semantics to ship, waited
@@ -1724,3 +1927,392 @@ been somewhere else in its lifecycle at the time.
 - **GIVEN** a run bound to a task that cannot be moved into the waiting status
 - **WHEN** that run's wait for a blocking question ends unanswered
 - **THEN** that task states that the work proceeded without the operator's answer
+
+### Requirement: Work that no evidence governs is integrated from the task's own branch
+
+The system SHALL integrate an approved task whose loop declares that its work needs no evidence from that task's own branch, merging the single commit that branch's tip names, and SHALL NOT merge any branch belonging to an agent.
+
+A task's own branch carries that task's work and nothing else, which is the property per-task
+isolation exists to provide. An agent's branch carries every task that agent has ever touched, so
+merging one when a single task is approved places unapproved and unreviewed work in the product under
+the record of an approval that was never asked about it. The distinction is not a preference: merging
+an agent's branch is the defect this product has already recorded once, at its highest severity.
+
+What is merged SHALL be a commit rather than a branch, so that what reached the main branch is a
+fact stated in the integration record and not a name whose meaning changes as work continues. The
+commit SHALL be the one the task's branch names at the moment the merge is attempted, and the system
+SHALL report every other commit that reached the main branch alongside it, exactly as it does for a
+commit named by evidence.
+
+**Where the task has no branch of its own, nothing SHALL be merged and the reason SHALL say so.** A
+task whose turns ran in a shared per-agent checkout, a task worked only by an agent that may not
+write, and a task in a project that is not a repository all reach approval with no branch of their
+own. In each of them the work, if any, is on a branch that carries other tasks, and the system SHALL
+NOT substitute it. Approval SHALL still succeed.
+
+Where the commit the task's branch names is already reachable from the main branch, the system SHALL
+record that it was already there rather than recording a merge, on the same terms it does for a
+commit named by evidence.
+
+Before approval is granted, the system SHALL test the commit it would merge for conflicts with the
+main branch on the same terms it tests a commit named by evidence, and SHALL refuse approval where it
+would not merge cleanly. Work reaching the main branch by this route SHALL NOT be the one route that
+was never checked first.
+
+Where evidence governs a task, this requirement SHALL NOT apply to it, and evidence remains the only
+thing that names what is merged. Evidence governs a task whose loop declares that its work needs
+evidence, a task belonging to no loop at all, and — by the default stated in `agent-loops` — a task
+whose loop declares a specification document, and a task that is linked to a requirement, where
+neither has had a declaration made about it either way. **A task belonging to a flow SHALL NOT have
+its branch merged in place of the commit its accepted evidence names**, because a flow that made no
+declaration has not thereby asked to stop being governed by the requirements it decomposed. **Nor
+SHALL a task that is linked to a requirement**, for the same reason and one that is sharper: such a
+task's integration already merges what its accepted evidence names, including evidence another task
+recorded against a requirement they share, and no branch of this task's own can carry that commit.
+
+So this requirement applies to a task on a loop that declares no specification document, that is
+linked to no requirement, and about which no declaration was made — the task for which no evidence
+can ever name a commit — and to any task whose loop declared that its work needs no evidence.
+
+#### Scenario: A task linked to a requirement is unaffected by this requirement
+
+- **WHEN** a task on a loop that declares no specification document, and about which no declaration
+  was made, is linked to a requirement and is approved with accepted evidence naming a commit
+- **THEN** the commit that evidence names is what is merged
+- **AND** the tip of that task's own branch is not merged in its place
+
+#### Scenario: A flow's task is unaffected by this requirement
+
+- **WHEN** a task belonging to a loop that declares a specification document, and that has made no
+  declaration about evidence, is approved with accepted evidence naming a commit
+- **THEN** the commit that evidence names is what is merged
+- **AND** the tip of that task's own branch is not merged in its place
+
+#### Scenario: An approved task on an evidence-free loop merges its own branch
+
+- **WHEN** a task belonging to a loop that declares its work needs no evidence is approved, in a
+  project with a configured main branch
+- **THEN** the commit at the tip of that task's own branch is merged into the main branch
+- **AND** the integration record names that commit and that branch
+
+#### Scenario: An agent's branch is never the substitute
+
+- **WHEN** such a task is approved and has no branch of its own
+- **THEN** the approval succeeds
+- **AND** nothing is merged
+- **AND** the recorded reason states that the task has no branch of its own
+- **AND** no branch belonging to an agent is merged
+
+#### Scenario: A conflicting branch refuses approval on an evidence-free loop
+
+- **WHEN** approval is requested for such a task whose branch tip would not merge cleanly into the
+  main branch
+- **THEN** the transition is refused
+- **AND** the refusal names the conflicting paths
+- **AND** no merge is attempted
+
+#### Scenario: A task branch already in the main branch records that, not a merge
+
+- **WHEN** such a task is approved and its branch tip is already reachable from the main branch
+- **THEN** no merge is recorded
+- **AND** the record states that the commit was already there
+
+### Requirement: Approval is refused while the work is still being produced
+
+The system SHALL refuse the transition into `approved` while the task has a live turn, meaning a run bound to that task whose process is still alive.
+
+A task's work is not knowable while its turn is live. An agent records `completed` during its turn; the commit that holds its edits is made when the turn ends. Between those two moments the task's branch points at the commit it was cut from, and every question of the form *"which commit is this task's work?"* is answered with a commit that contains none of it. Approving there records that the work is good, merges nothing, and reports the nothing as a fact no retry can alter — so the task reads `approved` while its work sits unmerged and no surface offers a remedy.
+
+The refusal SHALL be carried in the same typed refusal that reports unverified requirements and unmergeable work, and SHALL name the agent whose turn is still running. An operator learning that approval was refused SHALL learn from the same response what it is waiting for.
+
+The refusal SHALL clear itself. It states a fact about a moment, not a defect in the work, so it SHALL require no operator action beyond waiting for the turn to end.
+
+Liveness SHALL be determined by testing the run's process, not by reading its recorded status alone. A run whose process died leaves its recorded status unchanged until the Hub next starts, so a refusal reading only that status would outlive the turn it describes and block approval indefinitely.
+
+**A turn SHALL NOT be blocked by itself.** The run performing the transition SHALL be excluded from the test. A reviewer approves the work it has read from inside its own turn, and that turn is bound to the task it is approving — so counting it would refuse every review the product staffs, and would do so with a refusal the refused party cannot clear: its only remedy is for the turn to end, and it *is* the turn. A refusal whose stated remedy is unavailable to the one being refused is not a governance rule but a dead end.
+
+The refusal SHALL apply wherever the work is resolved from, not only where it was first observed. Both routes by which a task's work is resolved — a commit named by accepted evidence, and the task's own branch tip — read a commit that predates the turn while the turn is live, so a refusal scoped to one of them would leave the same defect reachable through the other. Liveness remains a question about **the task**, on both routes alike: what is tested is whether a live run is bound to the task being approved, not who authored each piece of evidence. Evidence recorded by another task's run against a shared requirement is a merge target for this task and is therefore outside the test — a narrower residual of the same scoping that leaves an unbound run outside it, recorded here so it is a known limit rather than an oversight.
+
+This refusal SHALL be independent of the rigor of any document the task's requirements belong to, for the same reason the unmergeable refusal is: rigor is a claim about how well work must be proven, and this is a claim about whether the work yet exists to be put anywhere.
+
+It SHALL likewise be independent of whether the project's work could be integrated at all. The refusals that ask *what would merge* are silent wherever the system cannot answer that question — no configured main branch, an unresolvable workspace, a directory that is not a repository — because there each is a reason to not know rather than a reason to refuse. This one asks a different question. `approved` is a judgement that work is good, and judging work an agent has not finished producing is false whether or not anything is merged afterwards, so a project where integration cannot be attempted SHALL be refused on the same terms as one where it can.
+
+#### Scenario: A project where integration cannot be attempted is refused on the same terms
+
+- **WHEN** a task in a project with no configured main branch is moved to `approved` while its turn is live
+- **THEN** the transition is refused
+- **AND** once the turn has ended the same task approves, with the integration recorded as skipped exactly as it would have been before this requirement
+
+#### Scenario: An approval inside the turn is refused
+
+- **WHEN** a task is moved to `approved` while the agent that completed it still has a running turn bound to that task
+- **THEN** the transition is refused
+- **AND** the task's status is unchanged
+- **AND** no integration is attempted or recorded
+
+#### Scenario: The refusal names what it is waiting for
+
+- **WHEN** approval is refused because the turn is still live
+- **THEN** the refusal names the agent whose turn is running
+- **AND** it is carried in the same typed refusal that reports unverified requirements
+
+#### Scenario: The refusal clears when the turn ends
+
+- **WHEN** the same task is approved after its turn has ended
+- **THEN** the transition is permitted
+- **AND** the commit that holds the turn's work is what integration merges
+
+#### Scenario: A run whose process died does not block approval
+
+- **WHEN** a task's most recent run is still recorded as running but its process is no longer alive
+- **THEN** approval is not refused on account of that run
+
+#### Scenario: A reviewer approves from inside its own review turn
+
+- **WHEN** an agent moves a task to `approved` from within a run bound to that same task
+- **THEN** approval is not refused on account of that run
+- **AND** any *other* live run bound to the task still refuses it
+
+#### Scenario: An approval on the evidence route is refused inside the turn
+
+- **WHEN** a task whose work is named by accepted evidence is moved to `approved` while a live run is bound to that task
+- **THEN** the transition is refused
+- **AND** no commit is merged
+
+#### Scenario: A task with no run is unaffected
+
+- **WHEN** a task with no run bound to it is approved
+- **THEN** approval proceeds exactly as it did before this requirement
+
+#### Scenario: Rigor does not exempt the refusal
+
+- **WHEN** a task whose linked requirements belong to a `sketch`-rigor document is approved while its turn is live
+- **THEN** the transition is refused on the same terms as it would be for a `gate`-rigor document
+
+### Requirement: Approval is refused while evidence that would merge sits unaccepted
+
+The system SHALL refuse the transition into `approved` where the task has evidence awaiting review that names a commit and no accepted evidence naming a commit.
+
+Approval is what places work in the product. Where a commit has been produced and recorded but never
+judged, approving records that the work is good and merges nothing, and the account of what happened
+is a skip reading "no accepted evidence names a commit" — which is true of the merge and false about
+the world, because the commit exists and is waiting for a person. A terminal state that can mean
+either "shipped" or "sitting unread on a branch" cannot answer the question it exists to answer.
+
+**The refusal SHALL fire only where evidence exists and is unaccepted.** A task with no evidence at
+all SHALL remain approvable, unchanged. Research, documentation and decision work produces no commit
+and must not be blocked by machinery about merging; approval must never be blocked by the *absence*
+of an integration, only by one that would fail.
+
+**Evidence that names no commit SHALL NOT cause the refusal.** Accepting it could not change what
+integration merges, so refusing on it would state a remedy that does not work: the operator accepts
+it, approval is refused again for the same reason, and there is no further move.
+
+**Rejected evidence SHALL NOT cause the refusal.** It has been judged, the judgement was the other
+way, and the author's only legitimate next move is to record evidence that satisfies the wording. A
+refusal there would wedge the task behind a decision its holder cannot reverse.
+
+**The refusal SHALL NOT fire where integration could not be attempted in any case** — where the
+project has no configured main branch, where its working directory cannot be resolved, where it is
+not a repository, or where it has no branch by the configured name. Accepting the evidence would
+merge nothing in those projects, so the refusal would block every task in them behind a remedy that
+changes nothing. These are the same conditions under which work that will not merge is not refused
+either, and they SHALL be the same conditions rather than a second list that can drift from it.
+
+This refusal SHALL apply regardless of the rigor of any document the task's requirements belong to.
+It is not an assertion that the work is unproven; it is an assertion that approving now would place
+nothing in the product while something is waiting to be placed there. Were it conditional on rigor
+it would be absent from a default project, where every document begins at the rigor that enforces
+nothing.
+
+The refusal SHALL be carried in the same typed refusal that reports unverified requirements and work
+that will not merge, and SHALL name each piece of evidence that is waiting rather than only how many
+there are.
+
+**Each named piece SHALL say which task recorded it.** Evidence is reached through the requirements a
+task serves, and a requirement may be served by more than one task, so a task can be refused over
+evidence recorded by another one — and would be, since that evidence's commit is part of what this
+task's approval merges. Naming only the requirement and the commit would show the reader a fact with
+no route back to its cause. Where the recording task is not the task being approved, the refusal
+SHALL say so.
+
+**The refusal SHALL name both remedies: accepting the evidence, and granting an agent the capability
+to accept it.** Accepting evidence is the operator's unless an agent has been granted it, and no
+agent is granted it by default, so an agent that reads this refusal can take neither remedy itself
+and needs to know what to ask a person for. A refusal naming a remedy its reader cannot reach, and
+not saying so, spends the reader's time and then the operator's.
+
+The check SHALL live inside the single transition service, and SHALL NOT introduce a second
+enforcement point.
+
+#### Scenario: Evidence awaiting review refuses approval
+
+- **WHEN** approval is requested for a task whose only evidence names a commit and is awaiting review
+- **THEN** the transition is refused
+- **AND** the refusal names that evidence
+- **AND** the task's status is unchanged
+- **AND** nothing is merged
+
+#### Scenario: The refusal names both ways out
+
+- **WHEN** approval is refused for unaccepted evidence
+- **THEN** the refusal states that the evidence can be accepted
+- **AND** states that an agent can be granted the capability to accept it
+
+#### Scenario: A task with no evidence approves unchanged
+
+- **WHEN** a task with no recorded evidence is approved
+- **THEN** the approval succeeds
+
+#### Scenario: Evidence naming no commit does not refuse
+
+- **WHEN** approval is requested for a task whose only awaiting evidence records paths rather than a
+  commit
+- **THEN** the approval succeeds
+
+#### Scenario: Rejected evidence does not refuse
+
+- **WHEN** approval is requested for a task whose only evidence naming a commit was reviewed and
+  rejected
+- **THEN** the approval succeeds
+
+#### Scenario: The refusal says whose evidence it is
+
+- **WHEN** approval is refused over evidence recorded by a different task that serves the same
+  requirement
+- **THEN** the refusal names that task
+
+#### Scenario: Unaccepted evidence refuses approval even at sketch rigor
+
+- **WHEN** approval is requested for a task with awaiting evidence naming a commit, whose documents
+  are all `sketch`
+- **THEN** the transition is refused
+
+#### Scenario: A project with no main branch is not blocked
+
+- **WHEN** approval is requested for a task with awaiting evidence naming a commit, in a project with
+  no configured main branch
+- **THEN** the approval succeeds
+- **AND** the skipped integration is recorded with its reason
+
+#### Scenario: A project that is not a repository is not blocked either
+
+- **WHEN** approval is requested for a task with awaiting evidence naming a commit, in a project
+  whose directory is not a git repository
+- **THEN** the approval succeeds
+
+#### Scenario: Every waiting piece of evidence is named, not just one per branch
+
+- **WHEN** approval is refused for a task carrying two pieces of awaiting evidence that name
+  different commits on the same branch
+- **THEN** the refusal names both of them
+
+#### Scenario: Work that can already be merged is approved and reported
+
+- **WHEN** approval is requested for a task with accepted evidence naming a commit and further
+  evidence still awaiting review
+- **THEN** the approval succeeds
+- **AND** the accepted work is merged
+- **AND** the evidence still awaiting review is reported on the approval
+
+### Requirement: Accepting evidence attempts the integrations that wanted it
+
+The system SHALL attempt integration again, when evidence is accepted, for every approved task linked to that evidence's requirement whose commit is not already recorded as merged for that task.
+
+Refusing approval while evidence is unaccepted tells the reader to accept it. Discharging that
+instruction at the moment they follow it is what makes the sentence true; without it, an approved
+task whose evidence is accepted afterwards stays unmerged, and approving again cannot merge it,
+because restating a status is deliberately a no-op. The system would have asked for something and
+then ignored it being done.
+
+**The condition SHALL be a commit that is not in the product, and SHALL NOT be the reason the
+previous attempt gave.** Approval merges what is accepted at the moment it runs, so a task that had
+some accepted evidence and some awaiting has already recorded a *merge*, not a skip — and its
+awaiting commit is exactly the one that still needs to land. A rule expressed in terms of the last
+attempt's reason cannot reach it, and the newer commit would stay outside the product permanently
+while the task sat terminal at `approved`. That is the defect this capability exists to remove,
+arriving one commit smaller.
+
+The attempt SHALL be made only where the accepted evidence names a commit. Evidence recording paths
+produces nothing to merge, and an attempt that could only record a second identical skip adds noise
+to a record whose purpose is to distinguish a no-op from work reaching the product.
+
+An attempt SHALL be permitted to record a skip. Where the repository cannot take the commit — a
+checkout with uncommitted changes, a checkout parked elsewhere — the attempt SHALL record that
+reason rather than being suppressed. The operator accepted something and it did not land; saying so
+is the account they need, and silence there is how work goes missing quietly.
+
+The two "already there" cases are deliberately answered differently, and the difference is what each
+one tells the reader. Where **this task has already recorded a merge of this commit**, no attempt is
+made at all: repeating it could only append a row saying nothing happened, to a record that exists to
+distinguish a no-op from work reaching the product. Where the commit is in the main branch by some
+other route — merged by hand, or carried in by another task's integration — the attempt SHALL run and
+SHALL record that it was already integrated, because that is a fact about the repository the reader
+does not otherwise have. Whether a commit is present SHALL be settled by asking the repository rather
+than by reading the record of previous attempts.
+
+Rejecting evidence SHALL attempt nothing.
+
+This SHALL apply whichever surface accepted the evidence — the operator's, or an agent granted the
+capability. The remedy the refusal names is available to both, so the discharge of it must be too.
+
+Accepting SHALL succeed even where the attempt that follows it does not. The decision is a judgement
+about the evidence, and a repository failure SHALL NOT reverse it.
+
+#### Scenario: Accepting the evidence merges the work that was waiting for it
+
+- **WHEN** an approved task's integration was skipped because no accepted evidence named a commit
+- **AND** that evidence is then accepted
+- **THEN** the work is merged into the project's main branch
+- **AND** the task is not reopened to achieve it
+
+#### Scenario: An agent's acceptance merges it too
+
+- **WHEN** an agent granted the capability accepts a peer's evidence for an approved task whose
+  integration was skipped for want of it
+- **THEN** the work is merged
+
+#### Scenario: The work left over from a partial merge is merged when it is accepted
+
+- **WHEN** an approved task's approval merged its accepted evidence and left a second piece awaiting
+  review
+- **AND** that second piece is then accepted
+- **THEN** its commit is merged into the project's main branch
+- **AND** the task is not reopened to achieve it
+
+#### Scenario: A commit this task already merged is not attempted again
+
+- **WHEN** evidence is accepted for an approved task that already has a recorded merge of that same
+  commit
+- **THEN** no attempt is made
+- **AND** no further integration is recorded
+
+#### Scenario: A commit that reached the main branch some other way is recorded, not merged again
+
+- **WHEN** evidence is accepted for an approved task that has no recorded merge of that commit, and
+  the commit is nevertheless already reachable from the main branch
+- **THEN** nothing is merged
+- **AND** the attempt records that it was already integrated
+
+#### Scenario: An attempt that cannot proceed records why
+
+- **WHEN** evidence naming a commit is accepted for an approved task while the checkout has
+  uncommitted changes
+- **THEN** nothing is merged
+- **AND** the attempt is recorded with that reason
+
+#### Scenario: Rejecting attempts nothing
+
+- **WHEN** evidence for an approved task is rejected
+- **THEN** no integration is attempted
+
+#### Scenario: The decision is recorded even when the attempt fails
+
+- **WHEN** accepting evidence triggers an attempt that raises
+- **THEN** the evidence is still accepted
+
+#### Scenario: A task that is not approved is left alone
+
+- **WHEN** evidence is accepted for a task that has not been approved
+- **THEN** no integration is attempted for it
+

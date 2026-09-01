@@ -36,7 +36,15 @@ dependencies = ["agentweave-hub>=1.1.0"]
 [project.optional-dependencies]
 # The `python_version >= '3.10'` markers that used to guard fastmcp are gone with the 3.11 floor —
 # there is no longer an interpreter in range that cannot have it.
-mcp = ["fastmcp>=2.0", "pyyaml>=6.0"]
+# The upper bound on fastmcp is defensive and was taken unattended on 2026-09-01 — ratify or
+# widen it. FastMCP 4.0.0 reached PyPI at 2026-08-31T18:20:31Z; this pin was unbounded, CI
+# resolves fresh with no lockfile, and so the process that starts every agent turn crossed a
+# major version on a green board with no signal. The four APIs `hub/hub/mcp_server.py` uses do
+# survive 4.0.0 (measured), but v4 also drags in `pydantic>=2.12`, `FastAPI>=0.133.0` and
+# `httpx2`, none of which this suite has run against. `hub/tests/test_fastmcp_api_contract.py`
+# names each API the tool surface depends on, so raising this ceiling has a test to answer to
+# rather than a red CI run to explain.
+mcp = ["fastmcp>=2.0,<4", "pyyaml>=6.0"]
 jobs = ["croniter>=2.0"]
 dev = [
     "pytest>=7.0",
@@ -57,7 +65,10 @@ docs = ["mkdocs>=1.6", "mkdocs-material>=9.5"]
 # Genuinely optional: `_open_app_window_native` (cli.py) imports it inside a guarded try at its one
 # call site, never at module load, so `dependencies = []` above stays true without this extra.
 app = ["pywebview>=5.0"]
-all = ["fastmcp>=2.0", "croniter>=2.0", "pyyaml>=6.0"]
+# Same fastmcp ceiling as `mcp` above, and for the same reason. The three declarations of
+# this pin (here, `mcp`, and hub/pyproject.toml) are asserted identical by
+# `hub/tests/test_fastmcp_api_contract.py` — raise them together or not at all.
+all = ["fastmcp>=2.0,<4", "croniter>=2.0", "pyyaml>=6.0"]
 
 [project.urls]
 Homepage = "https://github.com/gutohuida/AgentWeave"

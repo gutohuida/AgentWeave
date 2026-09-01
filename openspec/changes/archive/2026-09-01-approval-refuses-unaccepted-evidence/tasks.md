@@ -222,7 +222,18 @@
 
 ## 8. Not in this change — recorded so it is not silently absorbed
 
-- [ ] 8.1 Break 7 (the "Try again" button that skips identically) is change D's.
-- [ ] 8.2 Splitting `NOTHING_TO_MERGE` into its three worlds is change D's.
-- [ ] 8.3 The `approval_report` advisory reaches no UI component (D3's named gap). Confirm during
+- [x] 8.1 Break 7 (the "Try again" button that skips identically) is change D's.
+- [x] 8.2 Splitting `NOTHING_TO_MERGE` into its three worlds is change D's.
+  8.1 and 8.2 are not work of this change and never were; they are records that two adjacent
+  repairs belong elsewhere. Checked 2026-09-01 as **carried, not done**: "change D" is F124, which
+  is open in `scripts/drive/FINDINGS.md:8703` at severity B and names both -- the retry the card
+  offers that cannot succeed, and `NOTHING_TO_MERGE` standing for three different worlds. The
+  ledger holds them independently of this file, so archiving absorbs nothing silently, which is
+  what section 8 exists to prevent.
+- [x] 8.3 The `approval_report` advisory reaches no UI component (D3's named gap). Confirm during
   `DRIVE-1` and file it; do not fix it here.
+  **Filed 2026-09-01 as F169 (C)** in `scripts/drive/FINDINGS.md`. `DRIVE-1` ran on 2026-08-31 and
+  did not confirm it, so it was confirmed by code reading instead and labelled as such in the
+  finding: `grep -rn "approval_report\|approvalReport" hub/ui/src` returns nothing, and
+  `_task_response`'s default means every non-approving response answers `[]`, so the advisory is
+  not merely invisible but unrecoverable after the one response that carried it.
