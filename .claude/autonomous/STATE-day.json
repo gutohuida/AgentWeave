@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "556bb37",
   "stop_at": "2026-09-01T17:00:00+01:00",
-  "iteration": 1,
+  "iteration": 2,
   "log_file": ".claude/autonomous/2026-09-01-day-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "D-1",
-  "next_action": "D-1, the drive. Continue the full-surface e2e sweep at ROW 9c of the coverage matrix in scripts/drive/SURVEY.md: SPEC FLOW, the final third -- EVIDENCE, DECISIONS, REVIEWS, DRIFT, REINDEX. Do 9c and ONLY 9c. Read STATE-night.json:sweep_state.row_9c_leads in full first -- it carries five specific questions rows 9a and 9b hand to 9c, and the harness to COPY rather than re-derive (scripts/drive/t_sweep_row9b_requirements.py: payload_for, set_phase which works around F204, make_document, phase_of, a bundle-grep that reads hub/hub/static/ui as BYTES, a live-OpenAPI reader, and a rigor walker; scripts/drive/setup_row7.py builds the project). Also read the 'Sweep, row 9a of 19' and 'Sweep, row 9b of 19' sections of scripts/drive/FINDINGS.md. SHARPEST LEAD: 9a measured reindex answering 200 with index.written: null on a corpus with no home recorded -- drive DRIFT against a corpus reindex has 'succeeded' on without writing. DISCIPLINE: run the harness TWICE, the second on the state the first left; create the condition under test through the real routes; read the reason for every GREEN, not just every red; measure outside the product where you can. Hub on 8011 started from hub/ with uvicorn FROM SOURCE, never `agentweave --port`; restart it from this branch's code and confirm no .py under hub/hub or src is newer than the process start before drawing any conclusion. Fresh fixture project -- NEVER proj-5e960453 or proj-18e5d4e0, never port 8000. Any real agent turn binds claude-haiku-4-5. CLEAN UP: delete every fixture project, confirm the project count returns to 23, sweep for enabled jobs and leave none. Append findings to scripts/drive/FINDINGS.md with a severity, a file:line and a reproduction -- a finding without a reproduction is a suspicion. This window does NOT implement: no edits under hub/hub/ or src/agentweave/; a fixture belongs in scripts/drive/.",
+  "current": "D-2",
+  "next_action": "D-2, spec loop ROUND 1: explore the code and write the proposal. TARGET IS F173 -- D-1 filed a new B (F215), not a new A, so the queue's override rule does not fire and the default stands. RECORD THE TARGET IN THE LOG so R2 and R3 have one that does not move. Read F173 in scripts/drive/FINDINGS.md before anything else: runner management is free-typed text that swallows its own refusal, while openspec/specs/runner-registry/spec.md:72-73 is a SHIPPED requirement saying it must offer the catalog's models. The design surface is larger than the model field: hub/ui/src/api/runners.ts:69-88 declare onSuccess and NO onError, hub/ui/src/main.tsx:8-15 configures no MutationCache onError and no toast, and RunnersPage.tsx renders exactly one error surface (deleteError) -- so a refused create or edit reaches nothing, and that absence is systemic rather than local to runners. Decide deliberately how wide the change is and SAY SO IN design.md. Consider whether F215 (the operator surface gap, now 17 routes across F206/F211/F215) belongs in the same proposal or is a separate, larger change -- if separate, say so and do not widen this one. Write proposal.md, design.md, tasks.md and the specs/<capability>/spec.md deltas into openspec/changes/<name>/. `openspec new change` refuses a name starting with a digit. SHALL must be on a requirement's FIRST physical line -- --strict reads only that line. `openspec validate --strict <name>` must pass before the round is done. Specs live in openspec, NEVER also in the Hub. This window does NOT implement.",
   "queue": [
     {
       "id": "compose",
@@ -23,9 +23,9 @@
     },
     {
       "id": "D-1",
-      "status": "open",
+      "status": "done",
       "title": "Drive: e2e sweep row 9c -- evidence, decisions, reviews, drift, reindex",
-      "detail": "See next_action for the full brief. Rows 1-8, 9a and 9b are DONE; 9c was not started by the night window and its four leads are preserved verbatim in STATE-night.json:sweep_state.row_9c_leads. NOT driving what the night built: it built one dependency bound (4ce24fc), which has no end-to-end surface and whose six contract tests are the right evidence. Today is Tuesday, so no Monday sweep is owed and the last sweep is hours old."
+      "detail": "DONE in iteration 2. Row 9 is CLOSED. Two harnesses kept: scripts/drive/t_sweep_row9c_evidence.py (operator plane, 91 passed / 3 failed, twice) and scripts/drive/t_sweep_row9c_agent_plane.py (agent plane, REAL claude-haiku-4-5 turns, 21 passed / 0 failed, twice). Four findings filed: F215 (B) every 9c route absent from the served bundle while SpecCoverageBar renders the instruction to use them; F216 (C) the drift candidate projects only database ids; F217 (C) an agent's accepted evidence is never drift-checked in practice while an operator's is; F218 (D) the create response omits the review it just wrote. 9a's sharpest lead ANSWERED: nothing new downstream assumes an index because reindex succeeded -- drift never reads the manifest, and the one route that refuses is F208, already filed. F204/F210's shape is ABSENT from 9c, measured. Four fixture projects deleted, count back to 23, zero enabled jobs."
     },
     {
       "id": "D-2",
@@ -95,7 +95,7 @@
     "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
     "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
   ],
-  "last_heartbeat": "2026-09-01T08:25:18+01:00",
+  "last_heartbeat": "2026-09-01T09:30:06+01:00",
   "status": "running",
   "branch_spans_days": 1,
   "branch_note": "Cut from master@556bb37, which is itself the merge of the 2026-09-01 overnight run. The previous cycle IS merged; `git branch --merged master` lists every earlier autonomous branch and `git branch -a | grep daily` finds only this name. The review page carries no unmerged-cycle warning. Measured 2026-09-01T09:01+01:00.",

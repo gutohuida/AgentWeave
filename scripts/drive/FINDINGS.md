@@ -15187,3 +15187,264 @@ the caller's.
   the same probe doing its other job: telling you which routes are fine.
 - **Ask both halves of a pair.** F209 exists because accept and reject were driven with the same
   body and compared. Neither call is wrong on its own reading.
+
+---
+
+# Sweep, row 9c of 19 — SPEC FLOW: evidence, decisions, reviews, drift, reindex
+
+Driven 2026-09-01, day window iteration 2, against the trial Hub on **8011** (beta profile, PID
+22908, started 01:48; no `.py` under `hub/hub` or `src` is newer than that, checked before anything
+was concluded). Row 9a (documents, phase, adopt/arrange/merge) and 9b (requirements, coverage,
+rigor, proposals) are the two sections above. **This closes row 9.**
+
+Two harnesses, both kept:
+
+- `scripts/drive/t_sweep_row9c_evidence.py` — the operator plane. **91 passed / 3 failed**, the
+  second run on the state the first left; the three reds are F216 and F218 below.
+- `scripts/drive/t_sweep_row9c_agent_plane.py` — the agent plane, driven with **real
+  `claude-haiku-4-5` turns**. **21 passed / 0 failed, twice.** 9b measured that two of the agent
+  plane's five spec routes are evidence, which makes this the one part of row 9 with a real agent
+  surface; there is no shortcut to it, because `get_agent_actor` resolves a run credential whose
+  plaintext exists only in the spawned process's memory. Six agent turns across the two runs, every
+  one `completed`.
+
+Four fixture projects, all deleted afterwards.
+
+## F215 (B) — the operator's screen tells them evidence is waiting for them and gives them nothing to press
+
+Every route in row 9c is absent from the operator's surface. Measured twice from outside the
+product, as F206 and F211 were: substring hits against **the bundle this Hub actually serves**
+(`hub/hub/static/ui`, 1,472,146 bytes of js/html/css read as bytes) and again against `hub/ui/src`.
+`spec/coverage` was carried as a control needle so that a zero is a fact about the product rather
+than about the grep — it reads 1 in both, as 9b measured.
+
+| route | served bundle | UI source | agent plane |
+|---|---|---|---|
+| `POST /spec/evidence`, `GET /spec/evidence` | **0** | **0** | yes |
+| `POST /spec/evidence/{id}/decision` | **0** | **0** | yes |
+| `GET /spec/evidence/{id}/reviews` | **0** | **0** | no |
+| `POST /spec/drift/detect` | **0** | **0** | no |
+| `GET /spec/drift`, `POST /spec/drift/{id}/resolve` | **0** | **0** | no |
+| `POST /spec/reindex` | **0** | **0** | no |
+| `PUT /spec/evidence-retention` | **0** | **0** | no |
+
+**What makes this the sharpest of the three, rather than F206's shape a third time.** The UI does
+not merely omit these routes — it renders the *instruction to use them*.
+`SpecCoverageBar.tsx:10-27` ships two coverage states with operator-facing prose, both present in
+the served bundle exactly once:
+
+- **Drifting** — *"The implementation changed after this was verified. **Someone needs to say which
+  one was wrong.**"*
+- **Awaiting review** — *"Evidence exists for the current wording and **nobody has decided about it
+  yet.**"*
+
+The bar is mounted on `SpecDocumentPanel.tsx:240`, so this is on the screen an operator opens a
+document to. Saying which one was wrong is `POST /spec/drift/{id}/resolve`. Deciding is
+`POST /spec/evidence/{id}/decision`. Neither string appears in the bundle. The product asks the
+operator for a judgement on a screen that cannot take it.
+
+Driven, end to end, on a fresh fixture: a real Haiku turn recorded evidence through the agent
+plane; it landed `awaiting` exactly as designed; the document's coverage bar then reads *"Awaiting
+review — nobody has decided about it yet"*; and the only way anything ever decides it is a direct
+HTTP client or another agent holding `can_accept_evidence`. **An operator using only the product
+cannot accept their own project's evidence.**
+
+Reproduction: any project with one agent-recorded piece of evidence. Open the document panel, read
+the coverage bar, then search the served bundle for `spec/evidence` — 0.
+
+The cost compounds. One commit changing one file in a fixture with 89 evidence rows raised **44
+drift candidates** in a single `POST /spec/drift/detect` — each an independent row the operator must
+resolve one at a time, through a route with no screen and no bulk form. `read_footprint`'s own
+docstring already knows why (*"`entries` is the whole tree… one unrelated commit on the compared ref
+drifts every requirement at once"*) and defers the fix deliberately; what is new here is the
+measured size of the queue that deferral creates and the fact that it lands on a surface that does
+not exist.
+
+Severity B, not A: nothing is lost or corrupted, and every route works — this drive called all nine
+and they held. It is B because it is the entire operator half of the evidence chain, and because
+`task_integration.integrate_what_was_waiting_for_this_evidence` (`spec.py:892`) makes accepted
+evidence the thing that merges approved work. Running with **F206** (5 routes) and **F211** (3
+routes), the spec flow now has **17 routes with no operator surface**, measured.
+
+## F216 (C) — the drift candidate names nothing its reader has ever seen
+
+`GET /spec/drift` (`hub/hub/api/v1/spec.py:951-982`) projects six fields, and the two that identify
+anything are database ids:
+
+```json
+{"id": "drift-e25c1acc7cd7",
+ "requirement_id": "spreq-5833eebd679b",
+ "evidence_id": "ev-bd7fda3a5ee4",
+ "state": "candidate",
+ "observed": {"README.md": {"was": "b4a988ba…", "now": "c7081476…"}},
+ "resolution": null}
+```
+
+No `FR-n`, no document path, no actor, no summary, no locator, no timestamp. The operator being
+asked *"say which one was wrong"* is handed `spreq-5833eebd679b`.
+
+It is resolvable, but only just: `GET /spec/requirements` does carry `id` alongside `identifier` and
+`document_id` (`spec.py:743-751`), so a client can pull the project-wide list and join. That route
+is **F211's** — 0 hits in the bundle and 0 in the source — so the only way to read a drift candidate
+is through a route no screen calls either.
+
+This is **F212's shape** — a list handing out identifiers a sibling refuses to resolve — one router
+over, and the product has already fixed it once in the other direction. The agent-plane evidence
+list adds `identifier` to every row with the reason stated in the code:
+*"`_evidence_view` carries `requirement_id`, which is a database id and names nothing an agent has
+ever seen"* (`agent_actions.py:1141-1143`). The same sentence is true of the drift list and nobody
+wrote it there.
+
+Reproduction: record operator evidence, commit a change to a footprinted path,
+`POST /spec/drift/detect`, `GET /spec/drift`. Measured twice, in two fixture projects.
+
+## F217 (C) — an agent's accepted evidence is never drift-checked in practice, and an operator's for the same requirement is
+
+Driven on one fixture, one commit, two pieces of accepted evidence against the same document over
+the same file:
+
+| | recorded by | footprint branch | `reachable_from_main` | candidates raised |
+|---|---|---|---|---|
+| `ev-…` FR-1 | a real Haiku turn, accepted by a granted agent | `agentweave/r7ar9cag2` | **true** | **0** |
+| `ev-…` FR-2 | the operator | `main` | true | **1** |
+
+`README.md` was changed and committed **on `main`**. `detect_drift` compares each footprint against
+`footprint.branch` (`requirement_evidence.py:1067-1077`), and an agent is always footprinted in its
+own worktree (`footprint_root`), so an agent's evidence is compared against
+`agentweave/<agent>` — a branch nothing commits to again once the work has merged. The operator's,
+taken on `main`, is compared against `main` and drifts correctly.
+
+`detect_drift`'s docstring documents the branch-basis choice and calls the consequence accepted:
+*"once the work merges, this keeps watching the agent's branch, so a later change to the same files
+on the main branch is not noticed."* What it documents is a **general** deferral. What is measured
+here is that the deferral is not general at all — it falls entirely on the agent plane, which is
+where the product intends most evidence to come from (`record`: *"An agent's lands `awaiting`
+regardless of how confidently it was described"*). An agent's footprint is *always* a worktree
+branch, so agent evidence is always the blind case, never sometimes.
+
+And the Hub knows: `reachable_from_main: true` is recorded on the very footprint it then declines to
+compare against main. The docstring gives the reason for not switching bases — it would make the
+basis depend on a column `refresh_reachability` mutates — which is a good reason and is why this is
+C, not B. Filed because the asymmetry between the two planes is nowhere stated, and a reader of the
+coverage bar's *"Drifting"* state has no way to know it can only ever describe operator-recorded
+evidence.
+
+Reproduction: `scripts/drive/t_sweep_row9c_agent_plane.py`, leg 3. Twice, same result.
+
+## F218 (D) — the create response omits the review it wrote one line earlier
+
+`POST /spec/evidence` returns `_evidence_view(evidence, prints.get(evidence.id))` (`spec.py:833`) —
+two arguments, so `latest_review` defaults to `None`. But `requirement_evidence.record` has just
+written an `EvidenceReview` for an operator's own observation, reason *"recorded by the operator"*.
+So the creating call answers:
+
+```
+201 {"review_state": "accepted", "latest_review": null}
+```
+
+and the very next `GET /spec/evidence?identifier=…` on the same row answers
+
+```
+{"review_state": "accepted",
+ "latest_review": {"decision": "accepted", "reason": "recorded by the operator", …}}
+```
+
+This is **F71's fix one field over, on the same call**. That fix added the footprint to this exact
+response, with the comment *"this is the one moment the operator is looking"*; the sibling
+`latest_review` argument was not passed. The decision route two handlers down does pass it
+(`spec.py:895`, `_evidence_view(evidence, latest_review=review)`), so the inconsistency is between
+two responses in the same file about the same row.
+
+D because `review_state` is correct and the review is one GET away. Filed because the field is
+declared on the response and reads `null` when it is not.
+
+## What held — and this is a well-built subsystem behind an absent surface
+
+91 assertions passed on the operator plane and 21 on the agent plane, twice each.
+
+**Recording.** An operator's own observation lands `accepted` with an auto-review naming them; an
+agent's lands `awaiting` with its `run_id`, and no prompt persuaded it otherwise. The footprint is
+present on both, carrying kind, branch, commit and `reachable_from_main`. **F71 holds in both
+directions**: a locator naming a commit the repository does not have is refused
+`409 locator_commit_unknown` rather than falling back to `HEAD`, and a locator naming a real *older*
+commit is footprinted at that commit rather than the checkout's. Every refusal on its documented
+status: unknown identifier 404, unknown document 404, a bare identifier declared twice
+`422 "name the document it belongs to"`, a retired requirement `409 requirement_retired` ending
+*"there is nothing left to demonstrate"*, and a genuine duplicate
+(same requirement + task + commit + actor) `409 duplicate_evidence` naming the row it would repeat
+and what to do instead.
+
+**Deciding, and the capability model.** An unknown decision is **422 `unknown_decision` naming both
+permitted values** — F8's fix holding, a validation error not an authorisation one. An unknown
+evidence id is 404. Decisions are append-only and reversible, and `review_state` follows the latest.
+Driven with real agent turns: an **ungranted** agent asked to decide its own evidence changed
+nothing; the operator granted `can_accept_evidence` through `PATCH /agents/{name}` and it read back;
+a **granted** agent then accepted a peer's evidence and the review names *the agent*, with its run
+id, not the operator. The grant is not decorative and the self-acceptance rule is real.
+
+**Reviews.** The trail is complete and ordered — three decisions on one row came back
+`accepted, rejected, accepted`, each with actor, reason and timestamp, the operator's reason
+verbatim, and the agent's decision carried in the same list as the operator's. 404 on an unknown id.
+
+**Drift, once you can reach it.** A clean scan raises nothing, twice. A commit that only **adds** a
+file raises nothing — `_changed` walks the baseline's paths, so a path the footprint never saw
+cannot differ from it, which is what the code says it does. A commit **changing** a footprinted path
+raises a candidate whose `observed` names **only** that path, with `was` and `now`. Rejected
+evidence never becomes a candidate. A resolution records the fingerprint it was given and the same
+change is **not** re-raised, while a *new* change to the same file **is** — so the resolution
+neither nags nor silences. `422 unknown_resolution` on a bad enum, 404 on an unknown id. A
+**reworded** requirement raises no new drift: that is staleness, and the module refuses to ask the
+operator the same question in two vocabularies.
+
+**Reindex, and 9a's sharpest lead answered.** 9a asked what downstream assumes an index exists
+because reindex answered 200 with `index.written: null`. Driven: **nothing new does.**
+`detect_drift` never reads the manifest at all — it reads footprints and git trees — and answered
+200 on the unindexed corpus; coverage answered 200. The one route that refuses is
+`POST /spec/documents/arrange`, and that refusal is **F208**, already filed and unchanged (*"no
+usable index to arrange (absent)"*, `diagnostics: []`, the word "reindex" absent). The lead
+resolves to a re-confirmation rather than a new finding. Naming a home wrote `spec/index.json`, a
+later bodyless reindex preserved it, and a home naming a path that is not a document did not
+silently become the home.
+
+**Retention.** `never` is accepted as a first-class policy; an unknown one is 422 listing all five.
+
+**The bodyless probe, and a clean negative.** F204/F210 are a model whose fields *all* default being
+refused anyway. **That shape is absent from 9c, measured rather than read off the signatures.**
+`POST /spec/reindex` — every field defaulting — answers **200** with no body at all. The four routes
+that refuse a bodyless call each have a genuinely required field, and each names it the moment the
+caller sends `{}`: `identifier`, `decision`, `resolution`, `policy`. `POST /spec/drift/detect` takes
+no body and answers 200. Nothing here needs F204's one-word fix.
+
+**The two planes stay separate, read off the live OpenAPI.** The agent plane carries exactly five
+spec routes and two are evidence; there is **no** agent-plane drift route, no reindex route and no
+reviews route. Drift is the operator's judgement and the running build enforces that by not offering
+it.
+
+## Considered and not filed
+
+- **`_changed` ignoring added files.** A commit that only adds a file raises nothing. That is what
+  the function says it computes (*"which of the footprinted paths no longer look the way they did"*)
+  and it cost this harness its first run. Recorded as a measured negative, not a defect.
+- **A bodyless call on an unknown evidence id answering 422 rather than 404.** The schema layer is
+  ordered ahead of the lookup, which is F201's ordering. Not filed: with a well-formed body the same
+  call is a clean 404, measured, so no correct caller ever meets it.
+- **44 candidates from one commit.** Folded into F215's cost paragraph rather than filed separately,
+  because `read_footprint`'s docstring already states the cause and defers the fix on stated
+  grounds. What was missing was the number, and the fact that the queue it creates has no surface.
+
+## Method notes
+
+- **The control needle is what makes a zero mean something.** Leg 8 greps for `spec/coverage`
+  first, gets 1, and only then reports six zeros. Without it, "0 hits" is indistinguishable from a
+  wrong needle — and it very nearly was: the first draft's six zeros looked identical to the ones a
+  broad `grep -il evidence` immediately contradicted with 21 files. The words are in the UI; the
+  *routes* are not, and only the narrow needle plus the control tells those apart.
+- **Read the reason for the green, and for the red.** The first run's drift leg was red because the
+  harness added a file rather than changing one. The product was right and the harness was wrong —
+  and chasing it is what produced the added-vs-changed negative above.
+- **Drive the plane you cannot fake.** The agent-plane leg costs three real Haiku turns per run and
+  found F217, which no operator-plane call could have surfaced: the finding *is* the difference
+  between the two planes, so it only exists when both have been driven.
+- **Ask the screen what it says, not only what it calls.** F215's teeth are not the six zeros —
+  F206 and F211 already established that shape. They are `SpecCoverageBar`'s two sentences, which
+  are in the served bundle and instruct the operator to do something the bundle cannot do.
