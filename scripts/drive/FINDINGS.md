@@ -16026,3 +16026,182 @@ card answers 409 with *"this request is still waiting on you; answer it rather t
 away"*, and leaves it pending.
 
 **Reproduction:** `scripts/drive/t_sweep_row12_permissions.py`, leg 3. The harness's single red.
+
+## F233 (D) — a checkpoint warning can be dismissed before it is shown, and that silences it for good
+
+`dismiss_checkpoint_warning` has exactly one guard, and it is for the `final` state:
+
+```python
+if conversation.checkpoint_warning == "final":
+    raise HTTPException(status_code=409, ...)
+conversation.checkpoint_warning = "dismissed"
+```
+
+Nothing checks that a warning is *showing*. A conversation sitting at `NULL` — never warned, never
+offered anything — is written straight to `dismissed`, which `checkpoint_trigger.consider` then
+reads as a settled decision:
+
+```python
+if not policy.automatic and conversation.checkpoint_warning in ("dismissed", "final"):
+    # "it has already crossed its threshold, already been offered a checkpoint, and already
+    #  declined"
+```
+
+None of those three things happened. From that point the ordinary threshold path is skipped for the
+rest of the conversation's life and only the 92% backstop can ever speak again.
+
+Driven identically in every run of the harness (`r13a` through `r13f`), on a conversation whose
+threshold was deliberately held out of reach so that it had never warned:
+
+```
+GET  .../conversations/conv-16685d0faf85   -> checkpoint_warning = null
+POST .../conv-16685d0faf85/dismiss-checkpoint-warning
+     -> 200 {"conversation_id": "conv-16685d0faf85", "checkpoint_warning": "dismissed"}
+   (threshold lowered to 2000 tokens; one real turn, reading 34k tokens)
+GET  .../conversations/conv-16685d0faf85   -> checkpoint_warning = "dismissed"   (never "due")
+```
+
+**Severity D, and the reason is worth stating.** The UI cannot do this: `Dismiss` is the secondary
+action on the `checkpoint-due` banner and that banner only renders when `checkpoint_warning ===
+'due'` (`AgentOutputPanel.tsx:524`). So today the pre-emptive dismissal is an API-only act. What
+makes it worth recording anyway is that the state it writes is **terminal and silent** — there is
+no screen anywhere that shows a conversation is `dismissed`, so a conversation opted out this way
+looks exactly like one that is simply below its threshold.
+
+**Reproduction:** `scripts/drive/t_sweep_row13_checkpoints.py`, leg 5.
+
+## F234 (D) — taking the checkpoint answers a `due` warning and a `final` one, but not a dismissal
+
+`take_checkpoint` clears the warning when the operator does the thing it asked about:
+
+```python
+# The warning has been answered by doing the thing it asked about. Leaving it `due` would
+# keep offering a decision the operator has already made — and leaving it `final` would keep
+# showing a warning that cannot be dismissed, about a checkpoint that now exists.
+if conversation.checkpoint_warning in ("due", "final"):
+    conversation.checkpoint_warning = None
+```
+
+`dismissed` is not in that tuple. A conversation that was dismissed once and is then checkpointed
+keeps the state, so `checkpoint_trigger` goes on treating it as "already offered and declined"
+about a checkpoint that now exists — the exact sentence the comment gives as the reason for
+clearing `final`.
+
+Driven twice, and the run **includes its own control** so the claim is a divergence rather than a
+reading of the source. Two conversations, same project, same threshold, same button:
+
+| | author (dismissed once) | control (never dismissed) |
+|---|---|---|
+| crosses threshold | `due` | `due` |
+| operator dismisses | `dismissed` | — |
+| operator takes a checkpoint | still `dismissed` | `null` |
+| one more turn, crosses again | still `dismissed` — **no offer** | `due` — offered again |
+
+**Severity D for the same reason as F233**, and it is the more interesting half of the reason. The
+UI's only take-a-checkpoint paths — the `Checkpoint` button in `ConversationControls` and
+`Checkpoint now` in the banner — both call `writeCheckpoint`, which takes the checkpoint **and cuts
+over** (`checkpointOperationStore.ts:70`). A cutover archives the conversation and opens a
+successor with no warning state, so the UI never leaves a live conversation holding a stale
+dismissal. Reaching this state requires calling `POST .../checkpoint` without the cutover that
+follows it in the app, which is an API-only sequence today.
+
+**This finding was nearly filed as a B on the opposite argument.** The first reading was that the
+cut-over banner filters on `trigger === 'context_pressure'` (`AgentOutputPanel.tsx:491`) while the
+operator's own button writes `trigger="operator"`, so an `offered`-mode checkpoint could never be
+cut over. That is wrong: `writeCheckpoint` cuts over directly and never consults that banner. The
+banner exists for `automatic` mode, where the Hub generated one unasked. Recorded because the wrong
+version was three lines from being written down.
+
+**Reproduction:** `scripts/drive/t_sweep_row13_checkpoints.py`, legs 4 and 12.
+
+## F235 (C) — "Still bounded by each checkpoint's own visibility" is a bound that cannot exist
+
+The operator's own control for the checkpoint grant says this, in the hint under the checkbox
+(`AgentSettingsControls.tsx:397`):
+
+> **Read other agents' checkpoints** — Summaries of where their conversations got to. *Still
+> bounded by each checkpoint's own visibility.*
+
+There is no such bound today. `may_read_checkpoint` computes capability ∩ visibility, and the
+visibility half is open for every checkpoint that has ever existed:
+
+* `Checkpoint.visibility` defaults to `"project"` (`models.py:1598`) and the check constraint
+  admits `private`, `project`, `granted`.
+* Exactly two call sites pass the argument, `checkpoints.create_checkpoint` and
+  `checkpoint_generation.generate_checkpoint`, and **both take it as a default** — grepped across
+  `hub/hub`, no caller anywhere supplies a value.
+* There is no route that sets it, and this was measured against the **live Hub's own
+  `/openapi.json`** rather than by grepping the source. Eight checkpoint routes are published; the
+  only schema in the whole document that declares a `visibility` property is `CheckpointSummary`,
+  which is a **response** model. No request body anywhere in the API carries the field, so there is
+  nothing an operator or an agent could send that would change it.
+* Measured on the drive Hub's database: `SELECT visibility, count(*) FROM checkpoints` returns a
+  single row, `('project', N)` — one value for every checkpoint that has ever existed there, at
+  every point it was checked during this drive.
+
+So `can_read_checkpoints` is **all-or-nothing across the project**. An agent granted it reads every
+checkpoint every other agent has ever produced there, including conversations it has nothing to do
+with, and the operator has no way to except a single one. Driven: `peer` was granted read only, and
+its `list_checkpoints()` returned `author`'s checkpoint from a conversation it had never
+participated in, `"yours":false`, followed by a successful `read_checkpoint` of the full render.
+
+This is the same shape as **F221**, where the model catalog declares `opus` as an alias and
+`ProviderDescriptor.model()` matches ids only, so the refusal sentence the operator reads is not
+true. Here the operator is told the grant is *narrower* than it is, which is the worse direction.
+
+**C rather than D** because it is an access-scope statement the operator acts on: the sentence is
+the only thing telling them how far the checkbox reaches, and it is wrong in the permissive
+direction. The repair is a choice, not a bug fix — either make visibility settable (a route, and
+somewhere to set it) or delete the clause and the two unreachable enum values with it.
+
+**Negative recorded on purpose:** everything else about this access model was driven and holds.
+Both grants are closed by default; an ungranted peer's list is empty and both `read_checkpoint` and
+`recall` answer 404 indistinguishably from a missing id; read-granted-but-not-recall is a real,
+separately enforced state — the peer read the whole checkpoint, saw `out-...` named in its
+*Recorded observations*, and was still refused `recall` on that exact id; granting recall then
+returned the author's text verbatim. `checkpoint_access`'s "summary access is not transcript
+access" is not a comment about an intention. It is enforced.
+
+**Reproduction:** `scripts/drive/t_sweep_row13_checkpoints.py`, legs 6-8.
+
+## F236 (D) — a stranded note is handed to a later checkpoint as though it were fresh
+
+`pending_notes` takes **the most recent unconsumed note** for the conversation, and
+`checkpoint_generation` marks only that one consumed:
+
+```python
+select(CheckpointNote)
+  .where(CheckpointNote.conversation_id == conversation_id,
+         CheckpointNote.consumed_by_checkpoint_id.is_(None))
+  .order_by(CheckpointNote.created_at.desc(), CheckpointNote.id.desc())
+```
+
+Nothing retires the notes it passed over. `CheckpointNote`'s own docstring gives the reason the
+column exists — *"`consumed_by_checkpoint_id` records which checkpoint took them, so a second
+checkpoint does not silently reuse notes written for the first"* — and the guard it describes holds
+for the *same* note while leaving the *older* ones to do exactly that.
+
+Driven twice. Three notes were submitted across three turns of one conversation, then two
+checkpoints were taken:
+
+```
+notes:  note-1aa34ce9bbfc UNGRANTED-r13b   note-a7993af72f74 READONLY-r13b   note-c63e7d75113b RECALL-r13b
+ckpt-c9ff421b7d73  consumed  note-c63e7d75113b  (RECALL   — the newest, correct)
+ckpt-fe2d1bb15103  consumed  note-a7993af72f74  (READONLY — written two turns before ckpt-c9ff…)
+```
+
+So the second checkpoint's *Agent notes* section is a paragraph the agent wrote about a moment the
+**previous** checkpoint already summarised, presented to the successor as what was in hand when
+this one was taken. The oldest note is still sitting there, waiting for a third.
+
+**D.** It needs an agent to call `submit_checkpoint_notes` more than once between checkpoints,
+which nothing forbids — the tool's own docstring says "for its next checkpoint" and neither the
+tool nor `POST /checkpoint-notes` refuses a second call — but the Hub itself only *requests* notes
+once per threshold crossing, so the ordinary path submits one. The consequence is a stale paragraph
+in a summary, not lost work.
+
+**The repair is a choice.** Either consume every unconsumed note for the conversation (concatenated,
+oldest first, which is closest to what the agent meant by writing several) or mark the passed-over
+ones consumed-and-discarded so they cannot resurface.
+
+**Reproduction:** `scripts/drive/t_sweep_row13_checkpoints.py`, leg 9.

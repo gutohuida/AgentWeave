@@ -307,6 +307,44 @@
   which the route keeps on purpose — is reachable from no screen in the product.
 </p>
 
+<p>
+  <strong>Row 13 &mdash; Checkpoints &mdash; was driven last</strong>, and it is the row where the
+  product mostly held. <code>t_sweep_row13_checkpoints.py</code>, 70&nbsp;passed / 5&nbsp;failed,
+  run twice with an identical failure set, on <strong>ten real <code>claude-haiku-4-5</code>
+  turns</strong> and four checkpoint generations per run. Four harnesses already own the
+  generate/render/cutover/continue spine (<code>t_row15_cutover</code>, <code>t_row15_chain</code>,
+  <code>t_continue_branches</code>, <code>t_f131_&hellip;</code>), so what was driven is what none
+  of them touches: the <strong>warning and its dismissal</strong>, which had never been called with
+  anything but a nonexistent id, and the <strong>agent plane</strong> &mdash;
+  <code>list_checkpoints</code>, <code>read_checkpoint</code>, <code>recall</code> and
+  <code>submit_checkpoint_notes</code> &mdash; which no harness anywhere had ever exercised.
+</p>
+
+<p>
+  <strong>The access model is the good news, and it is worth reading as such.</strong> Both reader
+  grants are closed by default; an ungranted peer's <code>list_checkpoints()</code> returns
+  <code>[]</code> and both <code>read_checkpoint</code> and <code>recall</code> answer 404,
+  indistinguishably from an id that does not exist. Granting read alone is a real, separately
+  enforced state: the peer read the author's whole checkpoint, saw <code>out-88b7539ed646</code>
+  named in its own <em>Recorded observations</em>, and was still refused <code>recall</code> on that
+  exact id. Granting recall then returned the author's text verbatim.
+  <code>checkpoint_access</code>'s <em>"summary access is not transcript access"</em> is not an
+  intention in a comment &mdash; it is enforced, measured through real agent turns, which is the
+  only way that plane can be reached at all.
+</p>
+
+<p>
+  Three of the four findings below are <strong>D</strong>, and deliberately so: the checkpoint
+  warning's two defects are reachable over the API and not from any screen, because the app's only
+  take-a-checkpoint path also cuts over. <strong>The one C is a sentence.</strong> The checkbox an
+  operator ticks to let one agent read another's checkpoints says <em>"Still bounded by each
+  checkpoint's own visibility"</em> &mdash; and there is no such bound. Nothing in the product ever
+  sets a checkpoint's visibility: the live Hub's <code>/openapi.json</code> carries the field in no
+  request body at all, and every checkpoint in the drive database is <code>project</code>. So the
+  grant is all-or-nothing across the project, and the operator is told the permission is narrower
+  than it is.
+</p>
+
 <table>
   <thead>
     <tr><th style="width:4.5rem">Sev</th><th style="width:4rem">ID</th><th>What is wrong</th><th style="width:23%">Where</th></tr>
@@ -415,6 +453,15 @@
       <td class="loc">hub/ui/src/api/loops.ts (56 lines)<br>LoopsIndexTab.tsx:152</td>
     </tr>
     <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F226</td>
+      <td>The job detail route's embedded history drops <code>error_summary</code> and
+        <code>tick_count</code>, which <code>GET /history</code> carries. No reader is harmed today,
+        but <code>JobCard</code> already prefers the embedded copy and renders
+        <code>error_summary</code> for failed runs.</td>
+      <td class="loc">hub/hub/api/v1/jobs.py:805-814<br>JobCard.tsx:359,205</td>
+    </tr>
+    <tr>
       <td colspan="4" class="small" style="text-align:center; opacity:.7">— row 11, questions —</td>
     </tr>
     <tr>
@@ -448,15 +495,6 @@
         call site is the in-run card in <code>AgentOutputPanel</code>. <code>QuestionsPanel.tsx</code>
         contains the string <code>declin</code> zero times.</td>
       <td class="loc">AgentOutputPanel.tsx:200<br>QuestionsPanel.tsx</td>
-    </tr>
-    <tr>
-      <td><span class="sev d">D</span></td>
-      <td class="fid">F226</td>
-      <td>The job detail route's embedded history drops <code>error_summary</code> and
-        <code>tick_count</code>, which <code>GET /history</code> carries. No reader is harmed today,
-        but <code>JobCard</code> already prefers the embedded copy and renders
-        <code>error_summary</code> for failed runs.</td>
-      <td class="loc">hub/hub/api/v1/jobs.py:805-814<br>JobCard.tsx:359,205</td>
     </tr>
     <tr>
       <td colspan="4" class="small" style="text-align:center; opacity:.7">— row 12, permissions —</td>
@@ -499,6 +537,62 @@
         (F231). The refusal that matters is correct: dismissing a <em>live</em> card is a 409.</td>
       <td class="loc">hub/hub/api/v1/permissions.py:131-176</td>
     </tr>
+    <tr>
+      <td colspan="4" class="small" style="text-align:center; opacity:.7">— row 13, checkpoints —</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F235</td>
+      <td>The operator's own control for the checkpoint grant says <em>"Still bounded by each
+        checkpoint's own visibility"</em>, and no such bound exists. Exactly two call sites take
+        <code>visibility</code> and <strong>both take it as a default</strong>, and the live Hub's
+        own <code>/openapi.json</code> publishes eight checkpoint routes of which
+        <strong>none carries the field in a request body</strong> &mdash; the only schema in the
+        document declaring <code>visibility</code> is <code>CheckpointSummary</code>, a response.
+        On the database, <code>SELECT visibility, count(*) FROM checkpoints</code> returns a single
+        row, <code>project</code>. So <code>can_read_checkpoints</code> is all-or-nothing
+        across the project &mdash; driven: a peer granted read alone listed and opened an
+        <code>author</code> checkpoint from a conversation it had never taken part in. The same
+        shape as F221, told in the permissive direction.</td>
+      <td class="loc">AgentSettingsControls.tsx:397<br>hub/hub/checkpoint_access.py:34-48<br>db/models.py:1598</td>
+    </tr>
+    <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F233</td>
+      <td>A checkpoint warning can be dismissed <em>before it is shown</em>, and that silences it for
+        good. The route's only guard is for the <code>final</code> state, so a conversation sitting
+        at <code>NULL</code> is written straight to <code>dismissed</code> &mdash; which
+        <code>checkpoint_trigger</code> then reads as <em>"already crossed its threshold, already
+        been offered a checkpoint, and already declined"</em>, none of which happened. Driven twice
+        on a conversation held below its threshold: dismissed at 200, threshold lowered, one real
+        turn at 34k tokens, and it never reached <code>due</code>. API-only today, and the state it
+        writes is terminal and appears on no screen.</td>
+      <td class="loc">hub/hub/api/v1/checkpoints.py:235-244<br>checkpoint_trigger.py:192</td>
+    </tr>
+    <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F234</td>
+      <td>Taking the checkpoint answers a <code>due</code> warning and a <code>final</code> one, but
+        not a dismissal &mdash; <code>dismissed</code> is missing from the tuple, so the conversation
+        goes on being treated as "already declined" about a checkpoint that now exists. The run
+        carries its <strong>own control</strong>: same project, same threshold, same button; the
+        conversation that dismissed once ends at <code>dismissed</code> and is never offered again,
+        the one that never dismissed ends at <code>null</code> and is offered a second time. D
+        because the app's take-path also cuts over, so only an API client reaches the state. Nearly
+        filed as a B on the opposite argument, which was wrong &mdash; see the finding.</td>
+      <td class="loc">hub/hub/api/v1/checkpoints.py:188-192<br>checkpointOperationStore.ts:70</td>
+    </tr>
+    <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F236</td>
+      <td>A stranded note is handed to a later checkpoint as though it were fresh.
+        <code>pending_notes</code> takes the most recent <em>unconsumed</em> note and marks only that
+        one; the ones it passed over are never retired. Driven: three notes, two checkpoints &mdash;
+        the first took the newest, the second took one written <em>two turns before it</em>, so its
+        <em>Agent notes</em> section describes a moment the previous checkpoint already summarised.
+        The guard's own docstring gives the reason it should not.</td>
+      <td class="loc">hub/hub/checkpoint_generation.py:406-421,497-499</td>
+    </tr>
   </tbody>
 </table>
 
@@ -511,8 +605,8 @@
 </p>
 
 <p class="small">
-  Running total: <strong>237 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10,
-  11 and 12 are now closed as well. Rows 13–17 of the sweep — Checkpoints, Accounting, Worktrees,
+  Running total: <strong>241 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10,
+  11, 12 and 13 are now closed as well. Rows 14–17 of the sweep — Accounting, Worktrees,
   Logs/Events/SSE, Messages — remain untouched.
 </p>
 
