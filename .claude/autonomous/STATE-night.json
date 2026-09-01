@@ -75,15 +75,16 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-01T23:53:11+01:00",
+    "last_heartbeat": "2026-09-02T00:07:46+01:00",
     "status": "running",
     "queue_source": "spec-queue/APPROVALS.md, 2026-09-01 section, ORDER: line. Verbatim, so the playbook's default backlog-first shape is not used tonight.",
-    "green_at_compose": "Measured 2026-09-01T23:05+01:00: hub/tests/test_bola.py + test_agents.py = 12 passed. Also measured statically: `git diff master...HEAD -- hub/hub src hub/ui` is EMPTY, so this branch's product code is identical to master, and master's only product commit since the 2026-08-31 green point is 4ce24fc (the fastmcp bound, whose chunk ran green last night). The full hub suite has still never run on this branch. N-1 touched no product code, so this still holds unchanged entering N-2.",
+    "green_at_compose": "Measured 2026-09-02T00:05+01:00, N-2: the FULL hub suite ran to completion on this branch for the first time -- `py -3.11 -m pytest tests/ -q -p no:randomly` from hub/, 25:34 wall clock, 1 failed / 3835 passed / 84 skipped / 1 xpassed. The one red is tests/test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work, which passes alone (1.39s) and with its whole file (7 passed) and is not reachable from N-2's diff: its bind_runner fixture POSTs a runner and PATCHes the AGENT, never PATCH /runners/{id}, and create_runner passes no `current` so the create path is behaviourally unchanged. NOT reproduced and NOT proven pre-existing -- that needs a second 25-minute run. Also green: CLI suite 440 passed / 3 skipped; ruff, black (536 files), mypy src/ (22 files) all clean.",
     "drive_port": 8011,
     "notes": [
         "F188 is NOT this window's work. DIRECTION.md's 2026-09-02 section already moved it to 2026-09-03, and this window does not write proposals. APPROVALS' closing suggestion to spec it is superseded by that.",
         "a-turn phases 1-7 are NOT tonight's work. APPROVALS' ORDER note: both changes touch hub/ui/src and hub/hub/static/ui is a committed build artefact, so exactly one UI change may be in flight tonight -- and that is runner-model. Phase 0 writes no UI, which is why the order is safe.",
         "Tomorrow's day window reads N-1's write-up as its D-0 and branches on it (spec-queue/DIRECTION.md). If N-1 never runs, the day window does phase 0 itself instead of its drive.",
-        "N-1 done 2026-09-01. a-turn phases 1-7 are blocked in tasks.md, not merely deprioritised -- do not let a later firing pick them up as 'the next section of an approved change'."
+        "N-1 done 2026-09-01. a-turn phases 1-7 are blocked in tasks.md, not merely deprioritised -- do not let a later firing pick them up as 'the next section of an approved change'.",
+        "OPEN QUESTION from N-2: the full hub suite reds on tests/test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work only in a full 25-minute run -- green alone and green in-file. Timing- or leakage-shaped, on a path N-2's diff cannot reach (argued in the log). A window with 25 spare minutes should re-run the full suite to decide whether it is pre-existing flake or a real ordering defect. Do not attribute it to runner-model without that second run."
     ]
 }
