@@ -16,7 +16,12 @@ dependencies = [
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "alembic>=1.13",
-    "fastmcp>=2.0",
+    # Bounded 2026-09-01, defensively, after FastMCP 4.0.0 reached PyPI the evening before and
+    # this unbounded pin let CI cross a major with nobody told. v4 requires pydantic>=2.12,
+    # FastAPI>=0.133.0 and httpx2 — a transitive set this suite has never run against — so the
+    # ceiling buys a conscious upgrade rather than a silent one, exactly as `starlette<2.0`
+    # below does. `hub/tests/test_fastmcp_api_contract.py` names the APIs that must survive it.
+    "fastmcp>=2.0,<4",
     "sse-starlette>=2.0",
     # starlette is transitive via fastapi, but pinned explicitly: an unbounded fastapi>=0.110
     # once let pip silently resolve starlette 1.6.0 in CI while dev ran 0.52.1, crossing a major
