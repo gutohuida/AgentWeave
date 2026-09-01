@@ -16666,3 +16666,260 @@ budget surfaces from the other direction: there the server broadcast an event th
 with the wrong invalidation; here there is no event to answer.
 
 **Reproduction:** `t_sweep_row15_worktrees.py`, leg 5.
+
+---
+
+## F251 (B) — the Hub broadcasts 17 event names the client discards before any listener, 9 of them into handling code written for them
+
+`useSSE.ts:335` is the whole of it:
+
+```ts
+if (SSE_EVENT_TYPES.includes(evt.type)) {   // useSSE.ts:335
+```
+
+`SSE_EVENT_TYPES` (`useSSE.ts:21`) is a hand-written array of 44 names. A frame whose name is not
+on it is read off the socket and dropped — not dispatched, not buffered into `eventBuffer`, not
+counted as stream activity by any consumer. **Measured against the bundle the Hub actually serves**
+(`hub/hub/static/ui/assets/index-Xrm9NpmM.js`, whose array matches the source member for member),
+against every literal name passed to `sse_manager.broadcast` under `hub/hub` (57):
+
+```
+broadcast by the Hub, absent from the served allowlist  (17)
+
+  agent_requested        checkpoint_due          checkpoint_ready
+  checkpoint_warning_dismissed                   conversation_cut_over
+  conversation_updated   job_archived            new_session_request
+  project_deleted        question_declined       queue_agent_paused
+  review_unstaffed       run_diverged            run_divergence_resolved
+  task_blocked           task_unblocked          worktree_released
+```
+
+Three were **driven, not inferred** — observed crossing the wire on a live instance stream and then
+checked against the served allowlist:
+
+```
+LEG 3  names on the instance wire: ['job_created', 'job_updated', 'job_archived', 'project_deleted']
+       job_created / job_updated  -> on the allowlist, reach a screen
+       job_archived               -> discarded          (jobs.py:1158)
+       project_deleted            -> discarded          (projects.py:628)
+LEG 7  renaming a conversation:   ['conversation_updated'] -> discarded   (agent_chat.py:395)
+```
+
+**Nine of the seventeen have UI code written to handle them**, which is what makes this a defect
+rather than an unused vocabulary:
+
+| name | the code that never runs |
+|---|---|
+| `checkpoint_ready`, `conversation_cut_over` | `api/checkpoints.ts:46` — `useCheckpoints`' subscription |
+| `conversation_updated` | `api/agentChat.ts:175` |
+| `task_blocked`, `task_unblocked`, `run_diverged`, `run_divergence_resolved`, `queue_agent_paused`, `review_unstaffed` | `lib/eventSummary.ts` — an operator-facing sentence for each |
+
+`useCheckpoints`' own docstring states the consequence in advance, as a thing that was fixed:
+
+> *Refreshed on `checkpoint_ready`, which is what the Hub broadcasts when the threshold fires.
+> Without that subscription the offer existed only in the database: the checkpoint was generated,
+> probed and stored, and the operator saw nothing until they happened to reload.*
+
+That is the current behaviour. The subscription is there; the dispatcher never calls it.
+
+**This has happened before and was patched name by name.** `useSSE.ts:530`:
+
+> *`loop_queue_exhausted` (design D6) is a loop event's first consumer here — none of the six were
+> reaching a listener before this task, because they were absent from `SSE_EVENT_TYPES` above and
+> silently dropped.*
+
+`__tests__/useSSE.test.tsx` has two tests of exactly that shape — one for the six loop events, one
+for `permission_denied` — each added after someone noticed a specific name missing. **No test
+compares the array against the Hub's broadcast vocabulary**, so the next name added on the server
+is dropped by default. The allowlist is a duplicate of a server-side fact with no mechanism keeping
+it true.
+
+**Reproduction:** `t_sweep_row16_logs_events_sse.py`, legs 2, 3 and 7.
+
+---
+
+## F252 (B) — the Logs screen renders the oldest 500 events a project ever recorded, and can never show a newer one
+
+`useLogs` (`hub/ui/src/api/logs.ts:34`) asks for `limit=500` and no offset. `list_logs`
+(`hub/hub/api/v1/logs.py:66`) answers:
+
+```python
+q = q.order_by(EventLog.timestamp.asc()).offset(offset).limit(limit)
+```
+
+Ascending. So the window is events 1–500 of the project's whole history, and every event after the
+five-hundredth is unreachable from `LogsView`, which passes no `since`, no `offset` and no `limit`
+(`LogsView.tsx:123`). "Live" mode makes it worse rather than better: it invalidates on every SSE
+event and refetches *the same 500 oldest rows*.
+
+Measured on the fixture (1,270 events):
+
+```
+GET /projects/{p}/logs?limit=500   ->  500 rows, first `agent_created`, last `row16-bulk-133431`
+                                       the newest event of the project: ABSENT
+GET /projects/{p}/events/history?limit=100  ->  carries it  (events.py:44 orders .desc())
+```
+
+**Not a synthetic condition.** `proj-18e5d4e0` — a real project on this instance, 2,101 events,
+which this drive did not create and only read:
+
+```
+its Logs screen's request ends at   2026-08-24 11:26:47
+the project's newest event is       2026-08-27 04:15:43
+```
+
+Three days of its own history the screen cannot reach, growing by every event since. The same
+table, through `/events/history`, returns the newest 100 correctly — so the two read routes over
+`event_logs` disagree about which end of the log an operator wants, and the one wired to the Logs
+page picked the wrong end. The volume strip on that page ("last 30m", `LogsView.tsx:73`) is drawn
+from whatever half-hour happens to sit inside the first 500 rows.
+
+**Reproduction:** `t_sweep_row16_logs_events_sse.py`, leg 4.
+
+---
+
+## F253 (B) — a subscriber that falls behind loses events silently: 1,426 of 3,000, twice, with no gap on the wire and no disconnect
+
+`SSEManager.broadcast` (`hub/hub/sse.py:93`, `:102`) drops on a full queue:
+
+```python
+try:  # noqa: SIM105
+    q.put_nowait(event)
+except asyncio.QueueFull:
+    pass
+```
+
+The queue is 256 deep (`sse.py:43`, `:63`). Driven: one instance-stream subscriber that stops
+reading (`SO_RCVBUF` 512, no `recv`), then 3,000 events pushed through `POST /logs`, then the
+socket drained.
+
+```
+burst of 3000 events pushed in 15.2s
+events of the burst the stalled subscriber eventually received:  1574/3000
+run again on the state the first left:                           1574/3000
+```
+
+1,426 lost, deterministically, and **nothing anywhere says so**. The wire carries no `id:` field
+(so `Last-Event-ID` cannot be used, and the server implements no replay), no sequence number and no
+gap marker; the connection is never closed, so the one catch-up mechanism the client has —
+`useSSE.ts:412`'s `onSseReconnect(() => queryClient.invalidateQueries())`, which fires on reconnect
+— **never runs**. A client that has lost half the stream is in exactly the state of a client
+watching an idle project.
+
+The comment at the drop site reasons about the right thing ("slow consumer — drop event rather than
+block") and the choice is defensible; what is missing is any signal that it happened. One counter
+on the subscriber and a `stream_gap` frame on the next successful put would let the client do what
+it already does on reconnect.
+
+Scale note: 3,000 events in 15s is not an operator typing. It is one verbose agent turn —
+`record_agent_output` writes and broadcasts per streamed chunk — reaching a browser tab that has
+been backgrounded, throttled, or is on a slow link.
+
+**Reproduction:** `t_sweep_row16_logs_events_sse.py`, leg 6.
+
+---
+
+## F254 (C) — an SSE ticket outlives the project it names, and opens a stream for a project that no longer exists
+
+`_verify_ticket` (`hub/hub/auth.py:66`) is an HMAC and an expiry check with no database in it, and
+`get_project_for_sse` (`auth.py:191`) tolerates the lookup coming back empty:
+
+```python
+project = proj_result.scalar_one_or_none()
+project_name = project.name if project else project_id
+return project_id, project_name
+```
+
+Measured, in one leg, against the same deleted project:
+
+```
+GET /projects/{gone}/events/ticket                 ->  404   (cannot mint one)
+GET /projects/{gone}/events?token=<minted before>  ->  200   stream opens, `connected` frame sent
+GET /projects/{gone}/events   Authorization: ...   ->  404   (the header path refuses)
+```
+
+The two authentication paths onto the same route disagree about whether the project exists, for up
+to the ticket's 300-second TTL (`config.py:34`). The stream is empty — nothing will ever broadcast
+on a deleted project's channel — which makes it worse to hand a client than a refusal:
+`SSEManager.subscribe` registers a queue under the dead id, and the client sits on a connection
+indistinguishable from a quiet one.
+
+Fourth instance of this shape in three days: F216 (drift candidates project only database ids),
+F239 (per-conversation usage answers for a conversation that does not exist), F247
+(`GET /worktrees/{agent}` invents a workspace). Here the entity was real and then deleted, which is
+the harder half of the same rule.
+
+**Reproduction:** `t_sweep_row16_logs_events_sse.py`, leg 9.
+
+---
+
+## F255 (C) — a malformed `since` is silently ignored, and the route answers as though no filter was asked for
+
+`list_logs` (`hub/hub/api/v1/logs.py:60`):
+
+```python
+try:
+    since_dt = datetime.fromisoformat(since)
+    q = q.where(EventLog.timestamp > since_dt)
+except ValueError:
+    pass
+```
+
+Measured:
+
+```
+GET /projects/{p}/logs?limit=500&since=not-a-timestamp     ->  200, 500 rows
+GET /projects/{p}/logs?limit=500&since=2099-01-01T00:00:00 ->  200, 0 rows   (a valid one works)
+```
+
+A caller polling for "what happened since I last looked" and getting the format wrong is handed the
+whole window instead of an error — the answer looks right and means something else.
+
+Recorded as C rather than B because no shipped caller passes `since` today: `useLogs` accepts the
+option and `LogsView` never sets it. That makes it a trap laid for the next caller rather than a
+live defect, which is exactly when it is cheap to fix. Two things were checked and are **not**
+wrong: an offset-aware and a naive spelling of the same instant return the same rows (500 vs 500),
+and a `since` in the future correctly returns none.
+
+**Reproduction:** `t_sweep_row16_logs_events_sse.py`, leg 5.
+
+---
+
+## F256 (D) — the Logs screen's agent filter offers names that are on no roster
+
+`POST /projects/{p}/logs` takes `agent` from the request body (`logs.py:71`, `LogEventCreate`) and
+writes it to `EventLog.agent` unchecked. `GET /logs/agents` (`logs.py:20`) then unions the roster
+with `SELECT DISTINCT agent FROM event_logs`, so any string that was ever logged becomes a filter
+option:
+
+```
+POST /projects/{p}/logs {"event_type":"row16-ghost-133431","agent":"ghost-133431"}  ->  201
+GET  /projects/{p}/logs/agents  ->  [..., "ghost-133431", ...]
+```
+
+The union is deliberate — an agent that has been deleted should still be selectable for its own
+history — and the credential is the operator's, so this is not an identity hole of the kind
+`agent_auth.py` guards. It is a naming one: the dropdown mixes "agents you have" with "strings
+someone once logged", with nothing on screen distinguishing them.
+
+**Reproduction:** `t_sweep_row16_logs_events_sse.py`, leg 8.
+
+---
+
+## F257 (D) — filtering by a severity that cannot exist answers 200 with an empty list
+
+`list_logs` (`logs.py:57`) and `event_history` (`events.py:42`) both do
+`if severity and severity != "all": q = q.where(EventLog.severity == severity)` with no membership
+check, while the write path normalises an unknown severity to `warn` (`utils.py:59`,
+`_KNOWN_SEVERITIES` — verified live: `severity=banana` on `POST /logs` stores `warn`).
+
+```
+GET /projects/{p}/logs?limit=10&severity=banana  ->  200  []
+```
+
+So a typo in a severity name reads as *"there are no events of that kind"* rather than *"there is
+no such kind"* — on a screen whose entire job is telling an operator whether something happened.
+The four legal values are already enumerated client-side (`LogsView.tsx:11`), and the server knows
+them one import away.
+
+**Reproduction:** `t_sweep_row16_logs_events_sse.py`, leg 8.

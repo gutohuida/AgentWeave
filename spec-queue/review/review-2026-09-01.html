@@ -446,6 +446,93 @@
   was still flipped.
 </p>
 
+
+<p>
+  <strong>Row 16 &mdash; Logs, Events and SSE &mdash; was driven last, and it is the row where what
+  the Hub says and what any screen can hear turn out to be two different vocabularies.</strong>
+  <code>t_sweep_row16_logs_events_sse.py</code>, 44&nbsp;passed / 15&nbsp;failed, run twice on the
+  state the first run left with an identical failure set, on one real <code>claude-haiku-4-5</code>
+  turn per run. It is the first harness in <code>scripts/drive</code> to open an SSE connection at
+  all &mdash; every earlier one polls the database or the REST surface &mdash; so every claim below
+  about the stream was read off the wire by a client that framed the bytes exactly the way
+  <code>useSSE.ts</code> does.
+</p>
+
+<p>
+  <strong>The Hub broadcasts 17 event names the shipped client throws away before any listener
+  runs.</strong> <code>useSSE.ts:335</code> gates dispatch on a hand-written 44-name array; a frame
+  whose name is not on it is read off the socket and dropped &mdash; not dispatched, not buffered,
+  not counted as activity. Measured against the bundle the Hub actually serves (whose array matches
+  the source member for member) and against every literal name passed to
+  <code>sse_manager.broadcast</code>: <code>agent_requested</code>, <code>checkpoint_due</code>,
+  <code>checkpoint_ready</code>, <code>checkpoint_warning_dismissed</code>,
+  <code>conversation_cut_over</code>, <code>conversation_updated</code>, <code>job_archived</code>,
+  <code>new_session_request</code>, <code>project_deleted</code>, <code>question_declined</code>,
+  <code>queue_agent_paused</code>, <code>review_unstaffed</code>, <code>run_diverged</code>,
+  <code>run_divergence_resolved</code>, <code>task_blocked</code>, <code>task_unblocked</code>,
+  <code>worktree_released</code>. Three of them were <strong>watched crossing the wire</strong>
+  rather than inferred: archiving a job and deleting a project both put their event on the stream
+  beside <code>job_created</code> and <code>job_updated</code>, which survive the filter; renaming a
+  conversation after a real turn put <code>conversation_updated</code> on it.
+</p>
+
+<p>
+  <strong>Nine of the seventeen have UI code written to handle them</strong>, which is what turns an
+  unused vocabulary into a defect. <code>useCheckpoints</code> subscribes to
+  <code>checkpoint_ready</code> and <code>conversation_cut_over</code>, and its own docstring says
+  what happens without that subscription: <em>"the checkpoint was generated, probed and stored, and
+  the operator saw nothing until they happened to reload."</em> That is the behaviour today &mdash;
+  the subscription exists and is never called. <code>eventSummary.ts</code> carries a written
+  operator-facing sentence for six more (<code>task_blocked</code>, <code>task_unblocked</code>,
+  <code>run_diverged</code>, <code>run_divergence_resolved</code>, <code>queue_agent_paused</code>,
+  <code>review_unstaffed</code>). And this has happened before: <code>useSSE.ts:530</code> records
+  six loop events that <em>"were absent from <code>SSE_EVENT_TYPES</code> above and silently
+  dropped"</em> until someone noticed, and the test suite has two tests of exactly that shape, one
+  per batch someone noticed. <strong>No test compares the array against the Hub's broadcast
+  vocabulary</strong>, so the next name added on the server is dropped by default.
+</p>
+
+<p>
+  <strong>The Logs screen renders the oldest 500 events a project ever recorded.</strong>
+  <code>useLogs</code> asks for <code>limit=500</code> with no offset and <code>list_logs</code>
+  orders <code>timestamp.asc()</code>, so the window is events 1&ndash;500 of the whole history and
+  nothing after the five-hundredth is reachable from that page &mdash; which passes no
+  <code>since</code>, no <code>offset</code> and no <code>limit</code>. Live mode makes it worse: it
+  invalidates on every SSE event and refetches the same oldest 500. This is not a synthetic
+  condition. On <code>proj-18e5d4e0</code>, a real project on this instance that the drive only read,
+  the screen's own request ends at <strong>2026-08-24 11:26</strong> while the project's newest event
+  is <strong>2026-08-27 04:15</strong> &mdash; three days it cannot reach, growing by every event
+  since. The same table through <code>/events/history</code> returns the newest correctly, so the two
+  read routes over <code>event_logs</code> disagree about which end of a log an operator wants, and
+  the one wired to the Logs page picked the wrong end.
+</p>
+
+<p>
+  <strong>A subscriber that falls behind loses events silently.</strong> One instance-stream client
+  that stops reading, then 3,000 events pushed through: <strong>1,574 of 3,000 arrived</strong>, the
+  same count on both runs. <code>SSEManager.broadcast</code> drops on <code>QueueFull</code> at 256
+  deep and says nothing to anyone &mdash; the wire carries no <code>id:</code> field, no sequence and
+  no gap marker, and the connection is never closed, so the client's one catch-up mechanism
+  (<code>onSseReconnect</code> &rarr; <code>invalidateQueries</code>, which fires on reconnect) never
+  runs. A client that lost half the stream looks exactly like a client watching an idle project. The
+  drop itself is a defensible choice; the silence is the finding. For scale, 3,000 events in 15
+  seconds is not an operator typing &mdash; it is one verbose turn, which broadcasts per streamed
+  chunk, reaching a backgrounded tab.
+</p>
+
+<p>
+  <strong>Negatives recorded on purpose.</strong> The transport is sound where it was checked: the
+  instance envelope is stamped with the project that produced the event and a <code>project_id</code>
+  forged inside the payload does not become it; the project stream and the instance stream both
+  deliver the same write; <code>/events/history</code> and <code>/logs</code> both persist and return
+  it. Ticket binding holds on five refusals &mdash; a project ticket is refused on another project's
+  stream and on the instance stream, a raw API key in <code>?token=</code> is refused, an operator
+  ticket is refused on a project stream and accepted on the instance one. Every event kind a real
+  turn produced (seven of them) is on the allowlist and reaches a screen. An unknown severity on the
+  write path is normalised to <code>warn</code> rather than stored. And deleting a project leaves no
+  orphaned <code>event_logs</code> row behind.
+</p>
+
 <table>
   <thead>
     <tr><th style="width:4.5rem">Sev</th><th style="width:4rem">ID</th><th>What is wrong</th><th style="width:23%">Where</th></tr>
@@ -866,6 +953,69 @@
         answer.</td>
       <td class="loc">hub/ui/src/api/workspace.ts:100<br>hub/ui/src/hooks/useSSE.ts</td>
     </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F251</td>
+      <td>The Hub broadcasts 17 event names the shipped client discards before any listener &mdash;
+        <code>useSSE.ts:335</code> gates dispatch on a hand-written allowlist. Nine of them have UI
+        code written for them, including <code>useCheckpoints</code>' subscription, whose own
+        docstring describes the failure it was added to fix. The same defect was patched name by name
+        once before; no test compares the array against the Hub's vocabulary.</td>
+      <td class="loc">hub/ui/src/hooks/useSSE.ts:21,335<br>hub/ui/src/api/checkpoints.ts:46</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F252</td>
+      <td>The Logs screen renders the oldest 500 events a project ever recorded and can never show a
+        newer one: <code>useLogs</code> asks <code>limit=500</code> with no offset,
+        <code>list_logs</code> orders ascending. Measured on a real project &mdash; its screen ends
+        2026-08-24, its newest event is 2026-08-27. <code>/events/history</code>, over the same
+        table, returns the newest correctly.</td>
+      <td class="loc">hub/hub/api/v1/logs.py:66<br>hub/ui/src/api/logs.ts:34</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F253</td>
+      <td>A subscriber that falls behind loses events silently: 1,426 of 3,000 dropped, the same
+        count on both runs, with no <code>id:</code> field, no sequence, no gap marker and no
+        disconnect &mdash; so the client's reconnect-driven catch-up never fires and the loss is
+        indistinguishable from an idle project.</td>
+      <td class="loc">hub/hub/sse.py:43,93,102</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F254</td>
+      <td>An SSE ticket outlives the project it names: after the project is deleted the ticket still
+        opens a 200 stream on it, while the header path answers 404 and a new ticket cannot be
+        minted. Fourth instance in three days of a route answering about an entity that does not
+        exist (F216, F239, F247).</td>
+      <td class="loc">hub/hub/auth.py:66,191</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F255</td>
+      <td>A malformed <code>since</code> is caught and ignored, so the route answers with the whole
+        window as though no filter had been asked for. No shipped caller passes <code>since</code>
+        today, which is what keeps it a C &mdash; a trap laid for the next one.</td>
+      <td class="loc">hub/hub/api/v1/logs.py:60</td>
+    </tr>
+    <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F256</td>
+      <td>The Logs screen's agent filter offers names that are on no roster: <code>POST /logs</code>
+        takes <code>agent</code> from the body unchecked and <code>/logs/agents</code> unions the
+        roster with every distinct string ever logged, with nothing on screen distinguishing the
+        two.</td>
+      <td class="loc">hub/hub/api/v1/logs.py:20,71</td>
+    </tr>
+    <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F257</td>
+      <td>Filtering by a severity that cannot exist answers 200 with an empty list, so a typo reads
+        as <em>"there are no events of that kind"</em> rather than <em>"there is no such kind"</em>
+        &mdash; on the one screen whose job is saying whether something happened.</td>
+      <td class="loc">hub/hub/api/v1/logs.py:57<br>hub/hub/api/v1/events.py:42</td>
+    </tr>
   </tbody>
 </table>
 
@@ -878,9 +1028,9 @@
 </p>
 
 <p class="small">
-  Running total: <strong>255 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10
-  through 15 are now closed as well. Rows 16–17 of the sweep — Logs/Events/SSE,
-  Messages — remain untouched.
+  Running total: <strong>262 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10
+  through 16 are now closed as well. Row 17 of the sweep — Messages — is the only
+  one left untouched.
 </p>
 
 <!-- ============================= 4 ============================= -->
