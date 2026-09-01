@@ -79,6 +79,22 @@ if ($Until)   { $w.Until   = $Until }
 
 function Say([string] $m) { Write-Output ("[arm-{0}] {1}" -f $Window, $m) }
 
+# git writes ordinary progress to stderr -- "Already on 'master'", "Switched to a new branch".
+# Windows PowerShell wraps every stderr line as a NativeCommandError, and with
+# ErrorActionPreference=Stop the FIRST one aborts this script. Measured 2026-09-01: arming died on
+# `git checkout master` when it was already on master, before creating anything. run-iteration.ps1
+# carries a comment about the same trap; this is the same lesson learned twice.
+# Exit code is the authority, never the presence of stderr output.
+function Invoke-Git {
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]] $GitArgs)
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    & git -C $Repo @GitArgs 2>&1 | ForEach-Object { Say "  git: $_" }
+    return $LASTEXITCODE
+  } finally { $ErrorActionPreference = $previous }
+}
+
 # --- preconditions --------------------------------------------------------------------------
 $playbookPath = Join-Path $Repo ($w.Playbook -replace '/', '\')
 if (-not (Test-Path $playbookPath)) { throw "Missing playbook $playbookPath. Refusing to arm a window with no instructions." }
@@ -129,13 +145,15 @@ if ($DryRun) {
 if ($currentBranch -ne $targetBranch) {
   $known = @(& git -C $Repo branch --list $targetBranch)
   if ($known.Count -gt 0) {
-    & git -C $Repo checkout $targetBranch 2>&1 | ForEach-Object { Say $_ }
+    if ((Invoke-Git checkout $targetBranch) -ne 0) { throw "Could not checkout existing $targetBranch." }
   } else {
-    & git -C $Repo checkout master 2>&1 | ForEach-Object { Say $_ }
-    if ($LASTEXITCODE -ne 0) { throw "Could not checkout master to cut the cycle branch from." }
-    & git -C $Repo checkout -b $targetBranch 2>&1 | ForEach-Object { Say $_ }
+    # Only if we are not already there -- `git checkout master` on master succeeds but prints to
+    # stderr, which used to be fatal here.
+    if ($currentBranch -ne "master") {
+      if ((Invoke-Git checkout master) -ne 0) { throw "Could not checkout master to cut the cycle branch from." }
+    }
+    if ((Invoke-Git checkout -b $targetBranch) -ne 0) { throw "Could not create $targetBranch." }
   }
-  if ($LASTEXITCODE -ne 0) { throw "Could not settle on $targetBranch." }
 }
 
 $parentSha = (& git -C $Repo rev-parse --short master).Trim()
@@ -194,8 +212,17 @@ if (-not (Test-Path $logPath)) {
   Say "opened $logName"
 }
 
-& git -C $Repo add -- $w.StateFile $logName 2>&1 | ForEach-Object { Say $_ }
-& git -C $Repo commit -q -m "arm($Window): $today cycle on $targetBranch" 2>&1 | ForEach-Object { Say $_ }
+if ((Invoke-Git add -- $w.StateFile $logName) -ne 0) { throw "Could not stage the state file and log." }
+if ((Invoke-Git commit -q -m "arm($Window): $today cycle on $targetBranch") -ne 0) {
+  Say "nothing to commit (state unchanged) -- continuing."
+}
+
+# Publish the branch with an upstream, so the window's own `git push` every iteration works without
+# it having to discover that there is no upstream yet. Non-fatal: an unpushed branch still works
+# locally, and a window that cannot push says so in its log.
+if ((Invoke-Git push -u origin $targetBranch) -ne 0) {
+  Say "WARNING: could not push $targetBranch. The window will still run, but its work is local only."
+}
 
 # --- register the driver --------------------------------------------------------------------
 & powershell -NoProfile -ExecutionPolicy Bypass -File $installer `
