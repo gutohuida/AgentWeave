@@ -281,6 +281,32 @@
   path did not.
 </p>
 
+<p>
+  <strong>Row 12 — Permissions — closes the window.</strong>
+  <code>t_sweep_row12_permissions.py</code>, 83&nbsp;passed / 1&nbsp;failed, run four times with an
+  identical result, on <strong>four real <code>claude-haiku-4-5</code> turns</strong> per run. Prior
+  coverage was read first and deliberately not re-ploughed: <code>t_row13_row14.py</code> presses
+  <em>Allow</em> once, and <code>t_row19_crash_card.py</code> kills the Hub with a card on screen.
+  Between them they cover allow and Hub-killed. What had never been driven at all is
+  <strong>Deny</strong>, <strong>expiry on the agent's own configured timeout</strong>, and
+  <strong>dismiss</strong> — the last shipped in migration <code>0062</code> and never exercised.
+  All three work. The operator refuses, the write does not land, and <em>exactly one</em>
+  <code>permission_denied</code> event is written rather than two, because
+  <code>_operator_already_refused</code> joins on the card — asserted by counting. An unanswered
+  card expires in <strong>~10s when the agent's setting is 10s</strong>, not the 120s default, and
+  the run's own refusal sentence quotes the number back: proof that
+  <code>Agent.permission_timeout_seconds</code> reaches the spawned process, which nothing had ever
+  checked.
+</p>
+
+<p>
+  The two findings worth the operator's attention are not reds — they are what the greens
+  <em>compare</em>. One path, two postures: under the default posture the Hub refuses a write with
+  <em>"…is outside your workspace"</em>; under <code>manual</code>, the same path is one click away
+  from landing, and the card carries no field that could say so. And the whole approval record —
+  which the route keeps on purpose — is reachable from no screen in the product.
+</p>
+
 <table>
   <thead>
     <tr><th style="width:4.5rem">Sev</th><th style="width:4rem">ID</th><th>What is wrong</th><th style="width:23%">Where</th></tr>
@@ -432,6 +458,47 @@
         <code>error_summary</code> for failed runs.</td>
       <td class="loc">hub/hub/api/v1/jobs.py:805-814<br>JobCard.tsx:359,205</td>
     </tr>
+    <tr>
+      <td colspan="4" class="small" style="text-align:center; opacity:.7">— row 12, permissions —</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F230</td>
+      <td>The operator's <em>Allow</em> crosses the workspace boundary the product enforces in every
+        other posture, and the card cannot say so. Driven on <strong>one path under both
+        postures</strong>: the default posture refuses it — <em>"'C:\…\row12-default.txt' is
+        outside your workspace"</em>, no card, no file — while <code>manual</code> skips
+        <code>_decide</code> entirely and one click puts the file on disk. The card schema, read
+        from the live <code>/openapi.json</code>, has eleven fields and not one of them is the
+        workspace, so <code>PermissionRequestCard</code> renders a bare absolute path and labels it
+        <em>File change</em>, exactly as it labels an in-worktree write. The Hub computed that
+        boundary itself and put it in the run's environment; it just never sends it with the card.</td>
+      <td class="loc">hub/hub/mcp_server.py:1052-1059,937-945<br>api/v1/permissions.py:31-43<br>PermissionRequestCard.tsx:22-44</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F231</td>
+      <td>An approval leaves no record any screen can retrieve. No event is written — only refusals
+        persist, measured across a whole fixture project's history — and of the two URLs the app
+        ever issues (the default, and <code>?include_expired=true</code>) neither returns a decided
+        card. The parameter that would, <code>pending_only=false</code>, appears <strong>0 times in
+        <code>hub/ui/src</code> and 0 times in the served bundle</strong>. A denial reaches the
+        timeline; an approval reaches nothing, while the database has held
+        <code>status='allowed'</code>, <code>decided_by='operator'</code> and <code>decided_at</code>
+        the whole time.</td>
+      <td class="loc">hub/hub/api/v1/permissions.py:48-77<br>agent_actions.py:834-887<br>hub/ui/src/api/permissions.ts:46-49</td>
+    </tr>
+    <tr>
+      <td><span class="sev d">D</span></td>
+      <td class="fid">F232</td>
+      <td><code>dismiss</code> accepts a card the operator answered, though its own docstring says
+        <em>"Only an expired request may be dismissed"</em>. The guard refuses
+        <code>pending</code> and nothing else, so a <code>denied</code> card answers 200 and gets a
+        <code>dismissed_at</code> — the field that is supposed to mean "I saw that my agent gave up
+        without me". Inert on screen, since no list the app fetches contains an answered card
+        (F231). The refusal that matters is correct: dismissing a <em>live</em> card is a 409.</td>
+      <td class="loc">hub/hub/api/v1/permissions.py:131-176</td>
+    </tr>
   </tbody>
 </table>
 
@@ -444,9 +511,9 @@
 </p>
 
 <p class="small">
-  Running total: <strong>234 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10
-  and 11 are now closed as well. Rows 12–17 of the sweep — Permissions, Checkpoints, Accounting,
-  Worktrees, Logs/Events/SSE, Messages — remain untouched.
+  Running total: <strong>237 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10,
+  11 and 12 are now closed as well. Rows 13–17 of the sweep — Checkpoints, Accounting, Worktrees,
+  Logs/Events/SSE, Messages — remain untouched.
 </p>
 
 <!-- ============================= 4 ============================= -->
@@ -715,6 +782,17 @@
   one respect — the operator is not stuck, they are quietly split across two screens that disagree,
   which is how F228 turns into F227 and costs a real turn. A repair aimed only at "is there a call
   site anywhere" would score this router green.
+</p>
+
+<p>
+  <strong>Row 12 supplies a third variant, and it is the subtlest of the three.</strong> The
+  permissions router is fully surfaced — every route in the served bundle, a card component, a
+  dismiss button, the whole thing wired. What is missing is a <em>query</em>: the app issues one URL
+  and the route understands two, so the decided history the route keeps on purpose is unreachable
+  from any screen (F231). Grepping for orphaned routes finds nothing here; grepping for orphaned
+  <em>parameters</em> would. If the operator wants one repair out of this, the cheapest by a wide
+  margin is a screen that answers "what have I allowed?" — the read side already exists and already
+  works over HTTP.
 </p>
 
 <h4>Seen and deliberately not proposed</h4>

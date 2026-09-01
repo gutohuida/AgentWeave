@@ -15908,3 +15908,121 @@ sees the question still listed as unanswered on the Questions page (F228), with 
 it was declined and no way to have declined it there in the first place.
 
 **Reproduction:** `scripts/drive/t_sweep_row11_questions.py`, leg 10.
+
+---
+
+## F230 (C) — Allow crosses the workspace boundary the product enforces everywhere else, and the card cannot say so
+
+The manual posture hands one tool call to the operator. What the operator is not told is that some
+of those calls are ones the Hub would have refused itself.
+
+Driven on **one path, under both postures**, in the same project and the same agent:
+
+```
+default posture:  Write C:\...\aw-drive-row12\row12-default-112238.txt
+  -> refused by mcp_server._decide, no card, no file
+  -> timeline: permission_denied  "'C:\...\row12-default-112238.txt' is outside your workspace"
+
+manual posture:   Write C:\...\aw-drive-row12\row12-allow-112238.txt
+  -> a card, one click of Allow, and the file is on disk in the project root
+```
+
+Both paths are outside `AW_WORKSPACE_DIR`, which for this agent is its own worktree
+`.agentweave/worktrees/asker` — the directory `agent_trigger.py:1018` sets and `_decide`
+(`mcp_server.py:937-945`) measures every candidate path against. Under `manual`,
+`approve_tool_call:1052-1059` routes to `_ask_operator` **instead of** `_decide`, so the boundary
+check is not consulted at all. That is the design, and it is defensible — the human is the
+approver.
+
+What is not defensible is that the operator cannot see which side of the line they are on. The card
+schema, read from the live `/openapi.json` rather than from source, is:
+
+```
+['agent','created_at','decided_at','decided_by','dismissed','id','run_id','status',
+ 'tool_input','tool_name','tool_use_id']
+```
+
+No workspace, no boundary, nothing derived. `PermissionRequestCard.describe()` renders
+`tool_input.file_path` as a bare `<code>` string, and `requestKind()` labels it *File change* —
+the same label an in-worktree write gets. So the operator, deciding in seconds under a run's
+timeout, is shown a long absolute path and asked to spot for themselves that it leaves the
+directory the product spent a whole subsystem isolating.
+
+The Hub is the one party that already knows: it computed `effective_work_dir`, put it in the run's
+environment, and told the agent about it in the turn context ("the boundary the agent is *told*
+about and the one that is *enforced* must come from one value"). It just never sends it with the
+card.
+
+Filed **C** rather than **B** because the path *is* shown and the posture is documented as
+operator-decides. The argument for B: this is the highest-stakes control in the product, and it
+withholds a fact the product itself computes.
+
+**Reproduction:** `scripts/drive/t_sweep_row12_permissions.py`, legs 5 and 6. Both green — the
+finding is the *contrast* between them, not a red.
+
+---
+
+## F231 (C) — an approval leaves no record any screen can retrieve
+
+`decide_permission_request` keeps the row on purpose. `dismiss_permission_request`'s own docstring
+says why: *"that the operator was asked, did not answer in time, and later acknowledged it is
+exactly what the record is for."* The record exists. Nothing in the product can show it.
+
+Measured after a real allowed turn:
+
+* **No event is written.** `open_permission_request` (`agent_actions.py:887`) only broadcasts SSE;
+  `decide_permission_request` persists an event **only** on `allow=False`; and
+  `record_permission_decision` states outright that "only refusals are persisted". The fixture
+  project's whole event history after three manual turns:
+  `agent_created, context_warning, permission_denied, queue_entry_delivered, queue_entry_queued,
+  run_completed, run_started, run_triggered` — no `permission_requested`, no allowed anything.
+* **No query the app issues returns the row.** The list route defaults `pending_only=True`, and
+  `PermissionRequestCard` filters again to `pending | expired`. `usePendingPermissionRequests`
+  issues exactly one URL, `?include_expired=true`. The widening parameter that *would* return it,
+  `pending_only=false`, appears **0 times** in `hub/ui/src` and **0 times** in the served bundle —
+  measured, both.
+
+So the asymmetry is total: a refusal reaches the timeline (`eventSummary.ts`, `useSSE.ts`,
+`agents.ts:363` all handle `permission_denied`), and an approval reaches nothing. An operator who
+allowed a `Bash` command yesterday has no way, inside AgentWeave, to find out what they allowed —
+while the database has held `status='allowed'`, `decided_by='operator'` and `decided_at` the whole
+time.
+
+This is one query parameter away from being answerable, which is why it is filed rather than
+argued: the read side already exists and is already reachable over HTTP.
+
+**Reproduction:** `scripts/drive/t_sweep_row12_permissions.py`, legs 5 and 7. Green assertions
+stating the absence.
+
+---
+
+## F232 (D) — `dismiss` accepts a card the operator answered, though its contract says only an expired one
+
+`dismiss_permission_request` is explicit: *"Only an expired request may be dismissed. A pending one
+is still being waited on... An answered one is not shown in the first place."* The guard implements
+the first clause and not the second:
+
+```python
+if row.status == "pending":
+    raise HTTPException(409, "this request is still waiting on you; ...")
+```
+
+`pending` is the only refusal, so `allowed` and `denied` fall straight through. Driven twice,
+identically:
+
+```
+POST /permission-requests/perm-231cd6ff92b4/decide   {"allow": false} -> 200  status=denied
+POST /permission-requests/perm-231cd6ff92b4/dismiss                   -> 200  dismissed=true
+```
+
+The consequence is confined to the record rather than the screen — `dismissed_at` now sits on a row
+the operator *did* answer, so the field the docstring describes as "I have seen this expired card"
+can be written onto a card that never expired. Nothing in the UI can reach it (the answered card is
+in no list the app fetches — F231), so this is a **D**: the contract and the code disagree, and
+today only an API client can act on the difference.
+
+The pending refusal, which is the one that matters, is correct and was driven: dismissing a live
+card answers 409 with *"this request is still waiting on you; answer it rather than clearing it
+away"*, and leaves it pending.
+
+**Reproduction:** `scripts/drive/t_sweep_row12_permissions.py`, leg 3. The harness's single red.
