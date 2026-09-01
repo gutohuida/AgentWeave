@@ -8,11 +8,11 @@
   "parent_branch": "master",
   "parent_sha": "556bb37",
   "stop_at": "2026-09-01T17:00:00+01:00",
-  "iteration": 8,
+  "iteration": 9,
   "log_file": ".claude/autonomous/2026-09-01-day-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "complete",
+  "current": "D-8 (row 12, permissions) in flight",
   "next_action": "NOTHING IS OUTSTANDING. The day window's required queue was complete at the end of iteration 6 (D-1 row 9c, D-2/D-3/D-4 the full three-round spec loop on F173, D-5 the review page and today's APPROVALS section), and iterations 7 and 8 took the two optional drives: D-6 closed row 10 (jobs and loops) and D-7 closed ROW 11 (questions). Stopping here leaves a complete cycle: the operator has a review page carrying every finding filed today (F215-F229, running total 234) and tonight's FIX window has spec-queue/APPROVALS.md with today's section awaiting a status token that only the operator writes. If a firing remains before stop_at 17:00 and the operator has NOT since queued anything, the next unit is ROW 12 of the sweep -- PERMISSIONS (the manual posture: approve, deny, and let one expire; the permission-request routes plus codex_appserver.decide_approval) -- and ONLY if a FULL iteration remains; an unfinished drive is worse than none now that the review page is published. Same drive discipline as D-1, D-6 and D-7: the :8011 Hub (never 8010, never 8000, never proj-5e960453 or proj-18e5d4e0), a FRESH fixture project WITH AT LEAST ONE GIT COMMIT IN IT (a repository with no commits cannot run a turn -- worktree add fails on HEAD and the trigger answers an honest 200 with run_id null; this cost a whole harness run in iteration 8), every harness run TWICE on the state the first left, every real agent turn bound to claude-haiku-4-5, the fixture deleted and the project count confirmed back at 23, and NO job left enabled. Confirm before drawing conclusions that no .py under hub/hub or src is newer than the Hub process start time. ROW 12 HAS PRIOR COVERAGE under the older numbering -- scripts/drive/t_row13_row14.py and t_row19_crash_card.py both exist; READ THEM FIRST and drive what they do not, exactly as iteration 8 did for row 11. Beware the two mistakes iteration 8 made and caught: do not put a route's NORMAL call into the bodyless-probe loop that runs before a 'nothing changed' assertion, and do not match a run marker that also appears in your own trigger prompt. Anything filed must ALSO be added to section 3 of spec-queue/review/review-2026-09-01.html, and the running total there (now 234) moved with it.",
   "queue": [
     {
@@ -101,7 +101,7 @@
     "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
     "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
   ],
-  "last_heartbeat": "2026-09-01T10:19:57+01:00",
+  "last_heartbeat": "2026-09-01T11:05:20+01:00",
   "status": "running",
   "branch_spans_days": 1,
   "branch_note": "Cut from master@556bb37, which is itself the merge of the 2026-09-01 overnight run. The previous cycle IS merged; `git branch --merged master` lists every earlier autonomous branch and `git branch -a | grep daily` finds only this name. The review page carries no unmerged-cycle warning. Measured 2026-09-01T09:01+01:00.",
