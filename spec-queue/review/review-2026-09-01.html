@@ -345,6 +345,49 @@
   than it is.
 </p>
 
+<p>
+  <strong>Row 14 &mdash; Accounting &mdash; was driven last, and it is the row that found where the
+  money goes.</strong> <code>t_sweep_row14_accounting.py</code>, 73&nbsp;passed / 4&nbsp;failed, run
+  twice with an identical failure set, on three real <code>claude-haiku-4-5</code> turns, one
+  checkpoint generation and one generated conversation title per run. Two harnesses already touched
+  the row and both stop short of the surface an operator reads:
+  <code>t_row18_budget_reason</code> owns the budget as a <em>waiting reason</em> and never calls
+  <code>GET /accounting</code>; <code>t_sweep_surface</code> probes it for a 200 and nothing else.
+</p>
+
+<p>
+  <strong>The per-turn accounting itself is sound, and that is the headline before the defects.</strong>
+  One measured row per turn carrying the runner, the model and a real token total; the project total
+  is exactly the sum of the measured rows; every ended run has exactly one accounting outcome and no
+  run has two &mdash; <strong>F92's invariant, re-driven eight days on</strong>. An empty project
+  reports <code>null</code> totals and <code>preferred_display: "unavailable"</code> rather than
+  <code>$0.00</code>; <code>remaining_tokens</code> clamps at zero instead of going negative; an
+  operator message really does still run with the budget exhausted, and its cost really is counted.
+  <code>preferred_display</code> surfaced genuine rate-limit telemetry &mdash; a five-hour window,
+  <code>overageStatus: rejected</code>, <code>out_of_credits</code> &mdash; rendered in operator
+  language rather than as raw JSON.
+</p>
+
+<p>
+  <strong>What the row found is a B that F92 left as a question and did not drive.</strong> With the
+  budget deliberately exhausted &mdash; <code>{"limit_tokens": 17070, "used_tokens": 34140,
+  "remaining_tokens": 0, "exhausted": true}</code>, and the product's own sentence
+  <em>"Autonomous turns are paused"</em> on screen &mdash; the operator took one checkpoint. Two real
+  model calls ran, <strong>42,157 <code>usd_micros</code>, about $0.042</strong>, and neither the
+  project total nor <code>budget.used_tokens</code> moved by a token. The conversation titler is the
+  same hole without even an audit row: it spawned a real call that produced the title
+  <em>"Agent outputs ROW14D as instructed"</em> and wrote nothing anywhere. A budget an operator sets
+  to cap spending does not bind the spending the Hub does on its own initiative, and the product will
+  not show them the difference.
+</p>
+
+<p>
+  The other two are the seam between one field and two controls. <strong>Both the Accounting panel
+  and the Environment panel let an operator type a token budget</strong>, into different routes; the
+  Settings one tells no accounting surface it changed &mdash; measured with a live SSE subscriber
+  held open across both writes &mdash; and writes nothing to the project's activity history either.
+</p>
+
 <table>
   <thead>
     <tr><th style="width:4.5rem">Sev</th><th style="width:4rem">ID</th><th>What is wrong</th><th style="width:23%">Where</th></tr>
@@ -593,6 +636,55 @@
         The guard's own docstring gives the reason it should not.</td>
       <td class="loc">hub/hub/checkpoint_generation.py:406-421,497-499</td>
     </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F240</td>
+      <td>With the budget exhausted and <em>"Autonomous turns are paused"</em> on screen, taking one
+        checkpoint spent two real <code>claude-haiku-4-5</code> calls &mdash;
+        <strong>42,157 <code>usd_micros</code>, ~$0.042 over 732 tokens</strong> &mdash; and neither
+        the project total nor <code>budget.used_tokens</code> moved.
+        <code>accounting_snapshot</code> reads <code>TurnUsage</code> and only that;
+        <code>worker_invocations</code> is joined to no aggregate and read by no budget. The
+        conversation titler is worse: a real model call that writes <em>no</em> cost record of any
+        kind. F92 recorded the first half as a question; this drives it, names the titler, and adds
+        the fact that makes it a defect &mdash; <strong>the gap is not bounded by the budget.</strong></td>
+      <td class="loc">hub/hub/usage_accounting.py:110-129<br>hub/hub/conversation_titles.py<br>BudgetExhaustionNotice.tsx:12</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td class="fid">F237</td>
+      <td>Two controls write <code>Project.token_budget</code> and only one of them updates the
+        display. The Environment panel's <em>"Token budget"</em> goes through
+        <code>PUT /settings</code>, which broadcasts <code>project_settings_updated</code>;
+        <code>useSSE</code> answers that by invalidating <code>['projects']</code> and never
+        <code>['project', id, 'accounting']</code>. So the Budgets panel, the Accounting panel's own
+        input and the always-mounted status bar keep the old number &mdash; while
+        <code>redrain_queued_agents</code> applies the new budget immediately. Driven with a live SSE
+        subscriber across both writes.</td>
+      <td class="loc">ProjectSettingsPanel.tsx:144<br>hub/hub/api/v1/projects.py:526-529<br>useSSE.ts:551</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F238</td>
+      <td>Half of all budget changes are missing from the project's own activity history. The
+        accounting route calls <code>persist_event</code>; the settings route broadcasts without it,
+        so nothing reaches <code>events</code> at all &mdash; not for the budget, and not for the
+        checkpoint mode, hop budget or main branch that route also writes. Measured by comparing
+        history rows with their timestamps either side of each write: one row after the PATCH, none
+        after the PUT.</td>
+      <td class="loc">hub/hub/api/v1/accounting.py:57<br>hub/hub/api/v1/projects.py:526-529</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td class="fid">F239</td>
+      <td>The per-conversation usage rollup answers <strong>200 with a zeroed summary</strong> for a
+        conversation that does not exist &mdash; and the identical body for a real conversation
+        belonging to another project. The isolation holds (the aggregate filters on
+        <code>project_id</code>); the refusal is what is missing, so a typo, a cross-project id and a
+        genuinely unmeasured conversation all render as the same honest-looking zero. Every sibling
+        conversation route answers 404. Same shape as F216.</td>
+      <td class="loc">hub/hub/api/v1/accounting.py:33-40<br>hub/hub/usage_accounting.py:186-196</td>
+    </tr>
   </tbody>
 </table>
 
@@ -605,9 +697,9 @@
 </p>
 
 <p class="small">
-  Running total: <strong>241 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10,
-  11, 12 and 13 are now closed as well. Rows 14–17 of the sweep — Accounting, Worktrees,
-  Logs/Events/SSE, Messages — remain untouched.
+  Running total: <strong>245 findings</strong> in <code>scripts/drive/FINDINGS.md</code>. Rows 10
+  through 14 are now closed as well. Rows 15–17 of the sweep — Worktrees, Logs/Events/SSE,
+  Messages — remain untouched.
 </p>
 
 <!-- ============================= 4 ============================= -->

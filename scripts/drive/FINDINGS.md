@@ -16205,3 +16205,166 @@ oldest first, which is closest to what the agent meant by writing several) or ma
 ones consumed-and-discarded so they cannot resurface.
 
 **Reproduction:** `scripts/drive/t_sweep_row13_checkpoints.py`, leg 9.
+
+---
+
+## F237 (B) — two controls set the project's token budget; the one in Settings leaves every surface that displays it stale
+
+`Project.token_budget` has two write paths and the operator has two places to type into:
+
+| control | route | what listeners are told |
+|---|---|---|
+| Accounting panel, *"Project token budget"* (`AccountingPanel.tsx:105`, `accounting.ts:86`) | `PATCH /projects/{id}/accounting/budget` | `accounting_budget_updated` |
+| Environment panel, *"Token budget"* (`ProjectSettingsPanel.tsx:144`) | `PUT /projects/{id}/settings` | `project_settings_updated` |
+
+`useSSE.ts:551` answers `project_settings_updated` with `invalidateQueries(['projects'])` and
+nothing else. Every accounting surface is keyed `['project', id, 'accounting']`
+(`accounting.ts:59`), so none of them is refetched: `OverviewBudgetSummary` keeps printing the old
+allowance line, `AccountingPanel`'s own input keeps the old number, and — the one that is always on
+screen — `StatusBar`'s `BudgetExhaustionNotice` (`StatusBar.tsx:121`) keeps its verdict.
+
+The server is not confused; only the display is. Driven with a real SSE subscriber holding the
+stream open across both writes:
+
+```
+PATCH /accounting/budget  ->  SSE ['accounting_budget_updated']
+PUT   /settings           ->  SSE ['project_settings_updated']
+```
+
+and `GET /accounting` immediately afterwards reports the settings route's number correctly. So an
+operator who sets a budget in Settings that the project has already blown past sees no "budget
+paused" notice, while autonomous turns are in fact already parked — `redrain_queued_agents`
+(`projects.py:525`) applies the new budget at once.
+
+**B.** Two supported controls for one field, one of which silently desynchronises the thing it
+changed, on the surface an operator watches to know whether spending is capped.
+
+**The repair is a choice.** Either broadcast `accounting_budget_updated` from the settings route
+when `token_budget` is among the submitted fields, or have `useSSE` invalidate the accounting key
+on `project_settings_updated`. The first is narrower; the second also covers the next
+accounting-relevant setting.
+
+**Reproduction:** `scripts/drive/t_sweep_row14_accounting.py`, leg 3.
+
+## F238 (C) — half of all budget changes are missing from the project's own activity history
+
+Same two routes, a different consequence. `accounting.py:57` records the change:
+
+```python
+await persist_event(session, project_id, "accounting_budget_updated", event_payload)
+await sse_manager.broadcast(project_id, "accounting_budget_updated", event_payload)
+```
+
+`projects.py:526-529` broadcasts without the first line, so nothing is written to `events` at all —
+not `project_settings_updated`, not anything. Measured by comparing the newest history **rows**
+(type *and* timestamp) either side of each write:
+
+```
+after PATCH /accounting/budget : [('accounting_budget_updated', '2026-09-01T11:49:54.887496+00:00')]
+after PUT   /settings          : []
+```
+
+An operator asking "when did this project's budget change, and to what?" is answered for the
+changes made in the Accounting panel and told nothing about the ones made in Settings. The same
+hole covers every other setting that route writes — the checkpoint mode, the hop budget, the main
+branch — each of which changes how the project behaves and none of which leaves a record.
+
+**C.** Nothing misbehaves; the audit trail is simply half of one, and the half that is missing is
+invisible rather than marked absent.
+
+**Note on how this was measured, because the first attempt got it wrong.** Checking that *"the
+newest history entry is an `accounting_budget_updated`"* passes on the **previous** write's row —
+every budget change persists the same event type — and reported a pass for a route that had
+persisted nothing. The timestamp is what makes the two distinguishable.
+
+**Reproduction:** `scripts/drive/t_sweep_row14_accounting.py`, leg 3.
+
+## F239 (C) — the per-conversation usage rollup answers "0 tokens" for a conversation that does not exist
+
+`GET /projects/{id}/accounting/conversations/{conversation_id}` (`accounting.py:33-40`) passes the
+id straight to `conversation_usage`, which is an aggregate over a join. An aggregate over no rows
+is a valid empty summary, so the route answers **200** with:
+
+```json
+{"input_tokens": null, "output_tokens": null, "total_tokens": null,
+ "measured_turns": 0, "unavailable_turns": 0, "api_equivalent_usd_micros": null}
+```
+
+for `conv-does-not-exist`, and — driven with a real conversation created in a second project —
+**the identical body** for a conversation that exists but belongs to somebody else.
+
+The isolation itself holds: `usage_accounting.py:186-196` filters on `TurnUsage.project_id`, so no
+figure leaks across the boundary. What is missing is the refusal. Three different situations —
+a typo, a cross-project id, and a real conversation whose turns have not been measured — are
+rendered by `useConversationAccounting` (`accounting.ts:66`) as the same honest-looking zero.
+
+The same shape as **F216**, and the same one the sibling routes already get right: every other
+conversation-scoped route in the Hub (`/checkpoints`, `/checkpoint`, `/continue`,
+`/dismiss-checkpoint-warning`) answers 404 for an unknown id.
+
+**C.** No wrong number reaches a decision, but "this conversation has cost nothing" and "there is
+no such conversation" are not the same claim and are indistinguishable here.
+
+**Reproduction:** `scripts/drive/t_sweep_row14_accounting.py`, leg 5.
+
+## F240 (B) — with the budget exhausted and "spending is paused" on screen, the Hub spent $0.042 that reaches no total and no budget
+
+`BudgetExhaustionNotice.tsx:12` is the product's own sentence for an exhausted budget:
+
+> Autonomous turns are paused; operator messages can still run.
+
+Driven, in that state — `token_budget` set to half of what the project had already spent, so
+`GET /accounting` reported `{"limit_tokens": 17070, "used_tokens": 34140, "remaining_tokens": 0,
+"exhausted": true}` — the operator took a checkpoint. Two real `claude-haiku-4-5` calls ran:
+
+```
+wrk-fb179e9d1a98  kind=checkpoint        outcome=ok  in=10  out=497  cost_usd_micros=21443
+wrk-4ee9f38092ac  kind=checkpoint_probe  outcome=ok  in=10  out=215  cost_usd_micros=20714
+```
+
+**42,157 usd_micros — about $0.042 — over 732 tokens.** Measured immediately afterwards:
+`GET /accounting`'s `project.total_tokens` unchanged, `budget.used_tokens` unchanged, and no
+`turn_usage` row written. `accounting_snapshot` reads `TurnUsage` and only `TurnUsage`
+(`usage_accounting.py:110-129`); `worker_invocations` is joined to no aggregate and read by no
+budget.
+
+**The conversation titler is the same hole without even the audit row.** With
+`conversation_title_mode: generate`, a completed turn triggers `maybe_generate_title`
+(`agent_trigger.py:2146`), which spawns a real model call — driven, and it produced the title
+*"Agent outputs ROW14D as instructed"*. `conversation_titles.py` predates `worker_invocations` and
+was never joined to it, so that call wrote **no `worker_invocations` row and no `turn_usage` row**.
+Its cost is recorded nowhere at all. The only evidence it happened is the `conversation_titled`
+event and the title itself.
+
+Neither spender consults `project_budget_state`. Grepped: its two callers are
+`turn_scheduler.py:136` and `inbound_queue.py:147`, both about agent turns.
+
+**F92 recorded the `worker_invocations` half of this as a question for the operator rather than
+driving it** — *"real model calls made on the operator's behalf [that] appear on no aggregate
+surface and in no budget"*. This drives it, adds the titler, which F92 did not name and which is
+worse because nothing records it, and adds the fact that makes it a defect rather than a design
+question: **the gap is not bounded by the budget.** An operator who sets a budget specifically to
+cap spending keeps spending, at a rate the product will not show them.
+
+**B.** Money leaves at a number the operator cannot see, in the state where they have explicitly
+asked for it to stop.
+
+**The repair is a decision, and it is the operator's** — whether worker spend joins the project
+total, sits beside it as its own line, or counts against `token_budget` is a question about what a
+budget means. What is not a decision: the titler must write an invocation row like every other
+worker, or its cost is unrecoverable.
+
+**Recorded as passing, because a sweep that only reports defects is not a measurement:** the
+per-turn accounting itself is sound and was driven end to end. One measured row per turn with the
+runner, the model and a real token total; the project total is exactly the sum of the measured
+rows; `measured_turns` counts them; every ended run has exactly one accounting outcome and no run
+has two (F92's invariant, re-driven); an empty project reports `null` totals and
+`preferred_display: {"kind": "unavailable"}` rather than `$0.00`; cross-project totals do not mix;
+`remaining_tokens` clamps at zero instead of going negative; an operator message really does still
+run with the budget exhausted, and its cost really is counted; both routes refuse an
+unauthenticated caller and an unknown project is a 404. `preferred_display` surfaced genuine
+rate-limit telemetry — `{"rateLimitType": "five_hour", "status": "allowed", "overageStatus":
+"rejected", "overageDisabledReason": "out_of_credits"}` — which `accountingDisplayLabel` renders in
+operator language rather than as raw JSON.
+
+**Reproduction:** `scripts/drive/t_sweep_row14_accounting.py`, legs 6-8.
