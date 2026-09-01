@@ -1,40 +1,94 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-01-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "ad60b7b",
-    "stop_at":  "2026-09-01T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-01-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+  "purpose": "ONE-OFF CATCH-UP RUN, armed by hand at ~01:35 on 2026-09-01. This is NOT the standard night window: there has been no day window yet, so spec-queue/APPROVALS.md is empty by construction and there is nothing approved to build. The operator's instruction, verbatim, was 'prepare a autonomou run to fix existing issues and run a e2e loop'. So tonight spans BOTH playbooks -- read .claude/loops/night-window.md for how to implement and drive, and .claude/loops/day-window.md sections D-1 and D-2/D-3/D-4 for how to run a drive and a spec loop. From 2026-09-01 09:00 the normal cycle takes over and this mixing stops.",
+  "playbook": ".claude/loops/night-window.md",
+  "runner": "claude",
+  "model": "opus",
+  "permission_mode": "unattended-full-access",
+  "branch": "autonomous/2026-09-01-daily",
+  "parent_branch": "master",
+  "parent_sha": "ad60b7b",
+  "stop_at": "2026-09-01T07:00:00+01:00",
+  "iteration": 0,
+  "log_file": ".claude/autonomous/2026-09-01-night-log.md",
+  "findings_file": "scripts/drive/FINDINGS.md",
+  "approvals_file": "spec-queue/APPROVALS.md",
+  "current": "N-0",
+  "next_action": "Read .claude/loops/night-window.md in full, then do queue item N-0 and only N-0: verify tonight's research claim that fastmcp is unbounded while FastMCP 4.0.0 is on PyPI, and if it holds, apply an upper bound in the three declared places plus a test that names the APIs the tool surface actually uses. Verify before acting -- the research is a lead, not a verdict. Then rewrite this file with the next item, commit and push.",
+  "queue": [
+    {
+      "id": "N-0",
+      "status": "open",
+      "title": "Bound the fastmcp dependency before CI resolves into FastMCP 4 and goes red",
+      "detail": "FOUND BY TONIGHT'S RESEARCH RUN, and it is the most urgent thing in this queue because it can turn CI red on the next push without anyone touching the code. Read spec-queue/research/2026-09-01.md section '### 1.' for the full evidence.\nFACTS IT MEASURED: FastMCP 4.0.0 published to PyPI 2026-08-31T18:20:31Z. This repo declares `fastmcp>=2.0` UNBOUNDED in pyproject.toml:39 and :60 and hub/pyproject.toml:19. CI resolves fresh with no lockfile (.github/workflows/ci.yml:35-36). It installed 4.0.0 in a scratch venv and probed the four APIs hub/hub/mcp_server.py actually uses: all four survive and Literal enums still render -- BUT `FastMCP.get_tools()` is GONE, and that is the introspection layer seven test files sit on. The operator's machine still has 3.4.5, so local green proves nothing about CI.\nVERIFY BEFORE ACTING -- the research is a lead, not a verdict. Confirm the pin strings at those exact lines, confirm which tests import or call get_tools(), and confirm 4.0.0 is what a fresh resolve picks today. If any of that does not hold, say so in the log and drop the item rather than 'fixing' something that is not broken.\nIF IT HOLDS: apply a defensive UPPER BOUND (e.g. `fastmcp>=2.0,<4`) in all three places. Do not downgrade anything, do not add a lockfile, and do not touch any OTHER unbounded dependency -- `fastapi>=0.110` is an open operator decision (it is in decisions_for_user) and is NOT yours tonight. Add a test that fails when the tool surface's actual APIs stop resolving, so the next major is caught by a named test rather than by CI going red. Run the tool-surface parity tests and `pytest hub/tests/` in the chunk that covers mcp_server.\nThen ADD to decisions_for_user: 'fastmcp was bounded to <4 on 2026-09-01 defensively; ratify or widen', with the measured evidence. A bound is reversible in one line, which is why taking it unattended is defensible where changing fastapi would not be."
+    },
+    {
+      "id": "N-1",
+      "status": "open",
+      "title": "Archive the completed openspec changes, in the order their own tasks demand",
+      "detail": "MEASURED with `npx openspec list` at 01:00 on 2026-09-01, so you do not have to guess:\n  a-loop-declares-whether-it-needs-evidence   COMPLETE  <- ARCHIVE THIS ONE FIRST\n  approval-waits-for-the-turn-to-end          COMPLETE\n  a-review-a-flow-cannot-staff-is-named       COMPLETE\n  a-flow-briefing-names-its-contract          COMPLETE\n  a-review-nobody-is-doing-is-named           26/27  (task 6.1; its blocker IS cleared)\n  a-conflict-refusal-names-what-clears-it     30/31  (the unchecked box is the 6.4a ordering constraint itself -- read it before acting)\n  approval-refuses-unaccepted-evidence        49/52  (check whether the 3 are human-only before deciding; if they are real work, DO NOT archive)\n  a-write-outside-the-workspace-is-recorded   0/54   <- NOT IMPLEMENTED. DO NOT ARCHIVE.\nREAD EACH ONE'S tasks.md FOR AN ARCHIVE-ORDERING CONSTRAINT BEFORE ARCHIVING ANYTHING: a-conflict-refusal-names-what-clears-it's task 6.4a states it must not be archived until a-loop-declares-whether-it-needs-evidence is archived first. That constraint is real and archiving out of order is not trivially reversible. a-review-nobody-is-doing-is-named's task 6.1 is its only unchecked box and its stated blocker -- 'do not archive before it has driven' -- IS CLEARED: it drove 18/18 on 2026-08-31 (scripts/drive/t_f154_wedged_review.py). Use the openspec-archive-change skill. Archive ONLY changes whose implementation is genuinely complete; never mark a task complete on the strength of a plan existing. Commit after each archive, not as one batch, so a death costs one archive. Run `npx openspec validate --strict` where it applies. If a change turns out NOT to be complete, leave it, say so in the log, and move on."
+    },
+    {
+      "id": "N-2",
+      "status": "open",
+      "title": "Full-surface e2e sweep against a fresh project on the 8011 Hub",
+      "detail": "This is the operator's 'run a e2e loop', and it is the highest-value item tonight. Invoke the e2e-loop skill. It has no mode flag -- the shape is set by how you answer its Step 1, 'Establish scope before looking at anything'. Set that scope to the FULL SURFACE, every feature area, not to a recent change. Then follow its steps 2-8 as written, including Step 8, Clean up. FIRST restart the drive Hub on 8011 from THIS branch's code and confirm no .py under hub/hub or src is newer than the process start time -- a stale build is the most expensive failure mode there is: cd hub && DATABASE_URL=\"sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db\" py -3.11 -m uvicorn hub.main:app --port 8011 --host 127.0.0.1   -- from hub/, from source, NEVER `agentweave --port` (its bundled migrations lag this checkout). 8011 is currently UP and healthy but was started from older code; restart it. Create a FRESH project. NEVER drive against proj-5e960453 (this repo) or proj-18e5d4e0. NEVER touch port 8000 -- that is the operator's real usage. 8010 is the other trial Hub; leave it alone. Every real agent turn binds claude-haiku-4-5 (standing operator directive, no budget gate). Never leave a job enabled. SPLIT THIS ACROSS ITERATIONS: one feature area per iteration, appending findings and committing as you go. One giant sweep that dies uncommitted loses the whole night. Every finding goes to scripts/drive/FINDINGS.md with a severity, a file:line, and a reproduction. A finding without a reproduction is a suspicion, and say so if that is all you have."
+    },
+    {
+      "id": "N-3",
+      "status": "open",
+      "title": "F156 spec loop, round 1: explore and propose",
+      "detail": "F156 (severity B) is the cheapest unproposed finding and handoff 0102 ranked it next. 'integration-preview says will_merge: true for a task approval refuses outright.' Read its two sections in scripts/drive/FINDINGS.md (search '## F156') -- the second records a deterministic reproduction and says the contrast lane is what turns it from a rough edge into a defect. hub/ui/src/components/tasks/TaskDetailDrawer.tsx:66-79 moves with it. Write openspec/changes/<name>/ with proposal.md, design.md, tasks.md and the spec deltas. `openspec new change` refuses a name starting with a digit. `npx openspec validate --strict <name>` must pass, and it reads only a requirement's FIRST PHYSICAL LINE for the modal, so SHALL goes on line 1. Commit as `spec(round 1)`."
+    },
+    {
+      "id": "N-4",
+      "status": "open",
+      "title": "F156 spec loop, round 2: independently re-derive against the code",
+      "detail": "Do NOT re-read round 1's reasoning and agree with it. Re-derive the argument from the actual code and fix the proposal where the code disagrees. This repository's dominant failure mode is a fix that passes its tests and cannot fire in production; the sharper variant is that an argument can be wrong while everything it argues about is right. State explicitly in the commit message what you changed, or that you changed nothing -- a round that finds nothing is a real outcome and hiding it makes the next one look cheaper than it is. Commit as `spec(round 2)`."
+    },
+    {
+      "id": "N-5",
+      "status": "open",
+      "title": "F156 spec loop, round 3: a second independent re-derivation",
+      "detail": "Same instruction as round 2, independently. On 2026-08-28 round 3 caught rounds 1 and 2 both breaching a requirement that had shipped four days earlier. Commit as `spec(round 3)`."
+    },
+    {
+      "id": "N-6",
+      "status": "open",
+      "title": "F156: implement, test, and DRIVE it",
+      "detail": "openspec-apply-change. Mutation-check anything you claim: delete the line the test exists for and watch a NAMED test fail; if nothing fails the test asserts over nothing. Then DRIVE it on 8011, restarted from the implementing code -- three rounds are not a substitute for driving it, and the first live drive has repeatedly found in one request what three rounds of reading missed. Reuse a harness in scripts/drive/ rather than writing a new one; scripts/drive/aw.py is what they all use. Record the result in FINDINGS.md, including anything the drive DISPROVES about the finding."
+    },
+    {
+      "id": "N-7",
+      "status": "open",
+      "title": "Correct the known-wrong line in the release roadmap",
+      "detail": "openspec/explorations/2026-08-30-release-roadmap.md:107 still offers 'keep the machinery and surface approved-but-unmerged loudly' as an option for F122. Handoff 0101 established that option is NOT available: it leaves openspec/specs/task-lifecycle-governance/spec.md:638 breached, and :720's list of permitted excuses is closed. Correct the line and say in the commit why the option is unavailable. Do NOT republish the artifact -- that needs an interactive session with an Artifact tool, which you do not have."
+    }
+  ],
+  "decisions_for_user": [
+    "F47/F120 -- openspec/specs/task-lifecycle-governance/spec.md:359 forbids a third actor kind categorically, with a scenario pinning the enumeration, so the obvious repair breaches a shipped requirement. Carried unanswered since handoff 0101.",
+    "F77 -- an agent has no way to address the operator. Filed, unfixed, unqueued.",
+    "F53's _adopt_document_tasks orphaning half, and F65's review-briefing retry -- open, never queued.",
+    "F130, F127, F111+F3, F113, F61 -- queued for a run on 2026-08-29 and deliberately dropped from the last three. Re-queue or close.",
+    "The hub suite is ~25 minutes run whole and the operator called it 'already too long'. Unscheduled.",
+    "fastapi>=0.110 is unbounded and has produced two CI-only failures via Starlette major bumps. Worth pinning; still undecided.",
+    "The feature freeze's parameters, still unsettled.",
+    "Whether the 8010 trial Hub should be restarted from current master -- it has served 2026-08-29 code for three days."
+  ],
+  "limits": [
+    "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+    "Every claim is measured or labelled unverified.",
+    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+    "Tests under py -3.11, never bare python. black needs --target-version py311.",
+    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+  ],
+  "green_at_arming": "NOT MEASURED TONIGHT. master was green at 9fa4c4b on 2026-08-31 (hub 3,825 passed / 84 skipped / 1 xpassed, CLI 440 passed / 3 skipped, UI 1,469 passed, all three linters plus mypy clean). Every commit since is documentation, .claude/ tooling, or spec-queue/ -- no product code under hub/hub or src has changed. Treat that as strong inference, NOT measurement: confirm the chunk you are about to touch before attributing a failure to yourself.",
+  "known_flakes": [
+    "F109: the hub suite shares one database connection per session and the retry chain can stall on it. If a test fails once and passes alone, suspect this before suspecting your change.",
+    "test_relocate_repairs_and_redrains_queued_work was flaky and was fixed (d916861). A recurrence is a real finding, not a flake."
+  ]
 }
