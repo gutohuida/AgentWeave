@@ -685,8 +685,7 @@ Integration SHALL occur regardless of the rigor of any document the task's requi
 
 ### Requirement: Approval is refused when the work cannot be merged cleanly
 
-Where the work to be integrated would conflict with the project's main branch, the system SHALL
-refuse the transition into `approved`.
+Where the work to be integrated would conflict with the project's main branch, the system SHALL refuse the transition into `approved`, and the refusal SHALL name a remedy that the party it refuses can actually take.
 
 The conflict SHALL be detected before the transition is recorded, by a test merge that modifies
 neither the working tree nor the index. A conflict discovered during the merge itself would leave a
@@ -695,6 +694,68 @@ task recorded as approved and a repository in a state the operator did not ask f
 The refusal SHALL be carried in the same typed refusal that reports unverified requirements, and
 SHALL name the conflicting paths. An operator learning that approval failed SHALL learn why in the
 same response, not by inspecting the repository.
+
+The refusal SHALL name the commit it judged. A conflict is a fact about one commit and the main
+branch, not about a branch as a whole. A reader told only that "this task's work" conflicts cannot
+check the claim, cannot tell which of a branch's commits was probed, and cannot tell whether a change
+they have since made to that branch was seen at all.
+
+**The remedy SHALL be determined by where the judged commit came from.** The system resolves what a
+task's approval would merge in one of two ways, and an instruction that clears the refusal under one
+of them does not clear it under the other:
+
+- Where the commit is named by **accepted evidence**, resolving the conflict on the branch SHALL NOT
+  be stated as the remedy. It does not clear the refusal: the resolution is a new commit that no
+  evidence names, the system goes on judging the commit the evidence still names, and the answer
+  cannot change however many times approval is retried. The remedy SHALL instead be to resolve the
+  conflict, record evidence naming the resolved commit, and have that evidence accepted — and SHALL
+  say that accepting is the operator's unless an agent has been granted it, in the same terms the
+  refusal for unjudged evidence already uses.
+- Where the commit is the task's **own branch tip**, resolving the conflict on the branch and
+  approving again SHALL be stated as the remedy, because there the commit judged is whatever the
+  branch then points at.
+
+The refusal SHALL name the branch the judged commit was recorded on, distinctly from the branch the
+work would merge into. Both are branches and the refusal speaks about both, so naming only one of
+them makes every later sentence ambiguous between them — and the ambiguity resolves the wrong way,
+because the branch a reader is being asked to act on is the one the refusal has not been naming.
+
+The remedy for the evidence route SHALL state the condition under which the fresh evidence replaces
+the one being judged, in terms of something the party it refuses can arrange. The system decides
+what to merge per branch, keeping the most recently recorded accepted evidence for each; the branch
+a piece of evidence belongs to is derived from the repository at the moment it is recorded and is
+not a value anybody supplies. So the refusal SHALL say that the resolved commit must be on the
+branch the judged commit was recorded on, and that the evidence must be recorded from a checkout of
+that same branch, and SHALL NOT instruct the reader to state a branch. A remedy expressed as a field
+the reader cannot set is a remedy that has not been stated.
+
+The remedy SHALL NOT state that recording from that branch happens of its own accord. Where the
+evidence is recorded is decided by the repository the recorder is in, and for an agent that is the
+directory its turn ran in only while that directory still exists; a released or never-recorded
+workspace falls back to a checkout on another branch, and evidence recorded there adds a second
+branch to what would merge rather than replacing what is being judged.
+
+The remedy SHALL NOT claim that the fresh evidence must demonstrate the same requirement as the
+evidence it replaces, because it need not: the system's choice is made per branch across all of the
+task's evidence. A remedy that overstates what is required blocks a reader who is not blocked.
+
+**Where the evidence naming the judged commit was recorded by a different task, the refusal SHALL
+say so.** Evidence is reached through the requirements a task serves and a requirement may be served
+by more than one task, so a task is refused over a commit another task recorded, on a branch that is
+not its own. That is already required of the refusal for evidence nobody has judged, for a reason
+given in terms of this one — that the commit is part of what this task's approval merges — and it
+binds harder here, because this remedy asks the reader to act on the branch rather than only to wait
+for someone to judge it. Under per-task isolation the reader has no checkout of another task's
+branch, so a remedy addressed to them as though they had one cannot be followed. The refusal SHALL
+name the recording task and SHALL NOT be worded as though the branch were the reader's; it SHALL NOT
+prescribe which of the other task's holder and the operator the reader should approach, because that
+is a judgement the refusal is not in a position to make.
+
+Where the judged commit is **no longer present on the branch the refusal names it on**, the refusal
+SHALL say so. That state is reached by rewriting the branch — the reasonable response to a remedy
+that appeared not to work — and it is the state in which a reader comparing the refusal against the
+repository finds the two disagree with no way to tell which is stale. Where the system cannot
+determine whether the commit is on that branch, it SHALL say nothing rather than guess.
 
 This refusal SHALL apply regardless of rigor. It is not an assertion about whether the work is
 verified; it is an assertion that the work cannot go where approval says it goes.
@@ -714,6 +775,66 @@ enforcement point.
 
 - **WHEN** approval is requested for a task with conflicting work whose documents are all `sketch`
 - **THEN** the transition is refused
+
+#### Scenario: The refusal names the commit it judged
+
+- **WHEN** approval is refused because the work would not merge cleanly
+- **THEN** the refusal names the commit that was tested against the main branch
+- **AND** it names it in the same sentence a reader is given, not only in the refusal's structured half
+
+#### Scenario: An evidence-named commit is not answered with "resolve it on the branch"
+
+- **WHEN** approval is refused for a task whose merge target came from accepted evidence
+- **THEN** the refusal does not instruct the reader to resolve the conflict on the branch and approve again
+- **AND** it instructs them to record evidence naming the resolved commit and have it accepted
+- **AND** it states that accepting the evidence is the operator's, or a capability an agent must be granted
+
+#### Scenario: Following the stated remedy clears the refusal
+
+- **WHEN** the conflict is resolved on the branch the refusal names, evidence is recorded from that branch and accepted, and approval is requested again
+- **THEN** the transition is permitted
+- **AND** the resolved commit is what integration merges
+- **AND** the evidence that was being judged before is no longer what integration merges
+
+#### Scenario: The remedy does not ask for a branch to be named
+
+- **WHEN** approval is refused for a task whose merge target came from accepted evidence
+- **THEN** the refusal names the branch the resolved commit must be on
+- **AND** it does not instruct the reader to supply or record a branch, which is not something the reader can set
+
+#### Scenario: The branch to act on is named apart from the branch to merge into
+
+- **WHEN** approval is refused because the work would not merge cleanly
+- **THEN** the refusal names the branch the judged commit was recorded on
+- **AND** it names the branch the work would merge into
+- **AND** the two are distinguishable to a reader, so that the branch the remedy asks them to act on is not the branch the work is being merged into
+
+#### Scenario: A commit another task recorded is attributed to it
+
+- **WHEN** approval is refused over a commit named by evidence that a different task recorded against a requirement the two tasks share
+- **THEN** the refusal names the task that recorded it
+- **AND** the remedy does not address the reader as though that branch were their own
+
+#### Scenario: A commit this task recorded is not attributed elsewhere
+
+- **WHEN** approval is refused over a commit named by evidence this same task recorded
+- **THEN** the refusal names no other task
+
+#### Scenario: A branch-tip commit is answered with the branch
+
+- **WHEN** approval is refused for a task whose merge target is its own branch tip
+- **THEN** the refusal instructs the reader to resolve the conflict on the branch and approve again
+- **AND** approving after the branch is resolved is permitted, because the commit judged is the branch's new tip
+
+#### Scenario: A judged commit that has left its branch is reported as such
+
+- **WHEN** approval is refused over a commit that is no longer reachable from the branch the refusal names
+- **THEN** the refusal says the commit is no longer on that branch
+
+#### Scenario: An undeterminable branch is not asserted about
+
+- **WHEN** the refusal cannot determine whether the judged commit is on the branch it names
+- **THEN** it makes no claim either way
 
 ### Requirement: An integration that cannot proceed does not block approval
 

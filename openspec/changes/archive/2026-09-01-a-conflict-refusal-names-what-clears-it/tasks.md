@@ -119,7 +119,7 @@ Round 1 wrote these. Rounds 2 and 3 may rewrite any of them; nothing here is imp
 - [x] 6.2 `ruff check src/ hub/ tests/`; `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`; `mypy src/`.
 - [x] 6.3 The Hub suite in chunks, and `cd hub/ui && npm run lint && npx vitest run` for the changed
   UI test.
-- [ ] 6.4a Do **not** sync or archive this change into `openspec/specs/` before
+- [x] 6.4a Do **not** sync or archive this change into `openspec/specs/` before
   `a-loop-declares-whether-it-needs-evidence` is archived (design D9). This requirement's
   discriminator names the branch-tip route, which that change ADDS and which no shipped requirement
   describes today; landed first, it would sit beside
