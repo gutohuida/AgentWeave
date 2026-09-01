@@ -4,7 +4,8 @@
 
 A runner's model SHALL be a model the catalog declares for that runner's provider, or unset, and runner management SHALL offer that choice as a selection over the declared models rather than as free-typed text.
 
-The Hub SHALL refuse a runner carrying a model its provider does not declare.
+The Hub SHALL refuse a request that sets a runner's model to one its provider does not
+declare.
 
 An unset model is a valid, spawnable state meaning the provider's own default, and runner management
 SHALL offer it as a named choice alongside the declared models. Where a runner's model is asked to be
@@ -14,7 +15,8 @@ these are different requests and the Hub SHALL distinguish them.
 
 Where a runner already records a model the catalog does not declare, that model SHALL remain among
 the offered choices, selected, and marked as unrecognised, so that opening the runner for editing
-cannot silently re-point it at a different model.
+cannot silently re-point it at a different model. Runner management SHALL also mark such a runner
+where runners are listed, so that which runners need attention is legible without opening each one.
 
 A model the catalog does not declare is refused where it is newly *set*, and only there. Where a
 request carries the model a runner already records, the Hub SHALL accept it, because that request
@@ -31,16 +33,19 @@ in every other respect as well.
 
 - **WHEN** the operator sets a runner that has a model back to the provider's default
 - **THEN** the runner records no model
+- **AND** the answer carries the model as it now stands rather than the one the runner had
 - **AND** runs it backs launch on the provider's own default model
 
-#### Scenario: A request that changes nothing is not reported as a change
+#### Scenario: A request carrying no model at all leaves the model alone
 
-- **WHEN** a request asks to change a runner's model and the Hub does not change it
-- **THEN** the Hub does not answer as though the change was made
+- **WHEN** a request updates a runner and carries no model field
+- **THEN** the runner's model is unchanged
+- **AND** the request is answered differently from one that asked for the provider's default
 
 #### Scenario: An undeclared model is refused
 
 - **WHEN** a runner is submitted with a model its provider does not declare
+- **AND** the runner does not already record that model
 - **THEN** the request is refused with a stated reason
 
 #### Scenario: Existing runners keep working
@@ -48,6 +53,7 @@ in every other respect as well.
 - **WHEN** a runner already records a model the catalog does not declare
 - **THEN** that runner remains readable and its agents remain listable
 - **AND** the operator is told the model is unrecognised when editing it
+- **AND** that runner is marked as unrecognised where runners are listed
 - **AND** that model is still offered and still selected, so saving the runner unchanged keeps it
 
 #### Scenario: A legacy runner can still be saved

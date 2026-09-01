@@ -195,6 +195,89 @@ runner above.
   configuration (`extra="forbid"`): an explicit `{"model": null}` yields `{'model'}`, an absent key
   yields `set()`, and `{"name": "x"}` yields `{'name'}`. Task 1.1 stands as written.
 
+## What round 3 changed: the carve-out falsified a scenario that was left standing
+
+Round 2 was right that a legacy runner must be saveable, and right about the clause that does it.
+What it did not do is carry the consequence back through the requirement it was editing. The delta
+was left holding two scenarios in the same requirement whose conditions overlap and whose outcomes
+are opposite:
+
+> **An undeclared model is refused** — WHEN a runner is submitted with a model its provider does not
+> declare, THEN the request is refused with a stated reason.
+
+> **A legacy runner can still be saved** — WHEN the operator ... saves it with that model still
+> selected, THEN the save is accepted.
+
+The second is an instance of the first's `WHEN`. An implementer who reads the requirement top to
+bottom implements the first and breaks the second; one who reads it bottom to top does the reverse.
+The normative paragraph four paragraphs down (*"refused where it is newly set, and only there"*)
+resolves it, but a scenario is what gets turned into a test, and this pair cannot both be turned
+into a passing one.
+
+Two edits, both narrowing rather than adding:
+
+- The requirement's bare absolute — *"The Hub SHALL refuse a runner carrying a model its provider
+  does not declare"* — now says **a request that sets** a runner's model. A runner that already
+  carries the model is not having it set. The sentence and the carve-out now agree at every reading
+  depth instead of only at the fourth paragraph.
+- The scenario gains `AND the runner does not already record that model`.
+
+This is the whole of the round's headline. The change's argument survives it; its spec text did not.
+
+## The second correction: a scenario with no test, and a test with no scenario
+
+`A request that changes nothing is not reported as a change` was written for F219, before task 1.3
+existed. Once task 1.3 lands, a `PATCH` carrying the runner's own stored model is *accepted*, `200`,
+and the model is unchanged — which is that scenario's `WHEN` read literally, with the outcome the
+change deliberately wants. So the scenario reads as forbidding what task 1.3 requires.
+
+Meanwhile the requirement's own normative text — *"A request that carries no model at all leaves the
+runner's model as it was; these are different requests and the Hub SHALL distinguish them"* — had no
+scenario at all, while task 1.4 already tests exactly that.
+
+So the scenario is replaced by the one the normative text asks for, and the guard it was carrying
+(the response must not report the old model as though nothing had been asked) moves into the
+clearing scenario as an `AND`, which is where it can actually be asserted. Net: the same behaviours
+are covered, each by a scenario that can fail.
+
+## The third: task 2.6 asked for something nothing required
+
+`The runner list row marks a runner whose model_unrecognised is true` appeared in `tasks.md` and in
+proposal.md's *What Changes*, and in no requirement — the shipped scenario says the operator is told
+*when editing it*, and round 2's delta text scoped the marking to the offered choices.
+
+Backed rather than dropped, and the reason is the requirement's own purpose. What makes a legacy
+runner safe is that it is legible; the list is where runners are seen and the edit dialog is where
+one already suspected is opened. The change is also already reading `model_unrecognised` in that
+file for the picker, so the datum is in hand. One clause and one scenario `AND` now carry it.
+
+## What round 3 checked and did not change
+
+- **Both providers gate `--model` on the model being set.** Design above cited only
+  `_build_claude_command` (`runner_commands.py:199-200`) for the claim that an unset model is a
+  spawnable state. `_build_codex_command` does the same at `313-314` (`if model: cmd += ["--model",
+  model]`). The claim holds for the whole catalog, not the half that was cited.
+- **Every reader of `runner.flags` treats `[]` and `None` alike.** The asymmetry argument for fixing
+  `model` and not `flags` rests on this, and round 1 cited one reader. There are exactly two:
+  `agent_trigger.py:976` (`list(runner_row.flags or [])`) and `codex_appserver.uses_app_server`
+  (`APP_SERVER_OPT_OUT_FLAG not in (flags or [])`, line 87), reached from `agents.py:226`. Both use
+  `or []`. So clearing to `[]` genuinely restores the shipped *"A runner whose flags are unset SHALL
+  receive the Hub's default transport"* state, and leaving `flags` alone breaches nothing.
+- **`RunnersPage` is the only writer of runners in the app.** `useCreateRunner` / `useUpdateRunner`
+  have one call site each (plus the test's mocks). So task 1.3's relaxation is reachable from the
+  picker or from a direct API caller, and from nowhere else that could be surprised by it.
+- **`useModelCatalog` is a `useQuery`**, so `isLoading` / `isError` are there for task 2.5 to read;
+  `runnersUi.test.tsx:66` already mocks it with `{ data, isLoading: false }`.
+- **The fixture measurements hold**: `modelCatalogFixture.ts` declares `models: []`, and `grep -rl`
+  finds exactly 9 importers, all test files.
+- **`t_r2_runner_update_semantics.py` re-run: 18 passed / 1 failed**, the same single red (the
+  legacy runner's unchanged save). Nothing moved underneath the proposal.
+- **`agent-conversation-workspace:1849` and `:2051` do not already govern this.** Both are scoped to
+  *"a submission to an agent"* — conversation input, not runner CRUD — so the ADDED requirement is a
+  sibling rather than a duplicate. `hub-interaction-feedback` is about pointer and focus states and
+  says nothing about refusals. `hub-api-request-contract` governs *undeclared fields*, not refused
+  values, and this change adds no field.
+
 ## Out of scope, and named: the refusal sentence is not strictly true
 
 The catalog declares `opus` — as an *alias* of `claude-opus-5` (`model_catalog.py:154`) — but

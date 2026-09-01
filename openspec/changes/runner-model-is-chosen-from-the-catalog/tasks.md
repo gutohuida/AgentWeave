@@ -14,7 +14,9 @@
       A *different* undeclared model, and any undeclared model on create, stay refused. Update the
       function's docstring, which already claims this behaviour and does not have it.
 - [ ] 1.4 `hub/tests/test_runners_api.py`: `PATCH {"model": null}` clears and the response body
-      carries `model: null`; `PATCH {"name": "x"}` alone leaves the model untouched;
+      carries `model: null` (scenario "The provider's default is a choice, and clearing is
+      honoured"); `PATCH {"name": "x"}` alone leaves the model untouched (scenario "A request
+      carrying no model at all leaves the model alone");
       `PATCH {"model": ""}` is still `400`. The first of these fails against today's code with
       `200` and the old model — check that it does before writing the fix.
 - [ ] 1.5 `hub/tests/test_runners_api.py`: a runner whose stored model the catalog does not declare
@@ -43,7 +45,9 @@
       (design.md says why). The CLI select is already disabled when editing.
 - [ ] 2.5 While the catalog is unavailable the model select is disabled and says so; Save stays
       enabled, because a runner with no model is valid.
-- [ ] 2.6 The runner list row marks a runner whose `model_unrecognised` is true.
+- [ ] 2.6 The runner list row marks a runner whose `model_unrecognised` is true, beside the
+      model it already renders (`RunnersPage.tsx:109-113`). Round 3 added the clause and the
+      scenario `AND` this implements; before that it was a task no requirement asked for.
 
 ## 3. A refusal reaches the operator
 
@@ -70,10 +74,13 @@
 - [ ] 4.1 `modelCatalogFixture.ts` declares a small model list per provider. Re-run the whole vitest
       suite: 9 files import this fixture. If any test depends on the empty list, give that test its
       own fixture rather than leaving the shared one in a state the Hub cannot produce.
-- [ ] 4.2 `runnersUi.test.tsx`: the two `getByPlaceholderText` assertions on the model input
-      (lines 84-85) go. Replace with — the select offers exactly `Provider default` plus the
-      fixture's models for the chosen CLI; choosing one submits that model id; there is no
-      free-text model field on screen.
+- [ ] 4.2 `runnersUi.test.tsx`: **one** `getByPlaceholderText` assertion goes — line 85,
+      `'e.g. claude-sonnet-5'`, the model input. Line 84's `'e.g. Claude Opus'` is the **Name**
+      field and must stay: `Save` is `disabled` on `!name.trim()` (`RunnersPage.tsx:246`), so
+      dropping it leaves the button disabled and the test's own `createMutate` assertion fails.
+      Replace line 85 with — the select offers exactly `Provider default` plus the fixture's
+      models for the chosen CLI; choosing one submits that model id; there is no free-text model
+      field on screen.
 - [ ] 4.3 A refused create renders the refusal's sentence and leaves the dialog open with its
       values. Drive it through a mocked `useCreateRunner` whose mutation reports an `ApiError`
       carrying `{"detail": "'opus' is not a model 'claude' declares"}`.

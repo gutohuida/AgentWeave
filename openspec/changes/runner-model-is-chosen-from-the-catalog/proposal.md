@@ -59,6 +59,15 @@ Round 1's design would have shipped a screen on which a legacy runner cannot be 
 breaches the shipped "Existing runners keep working" scenario the change otherwise strengthens. The
 free-text box hides this only because an untouched field is dropped by `JSON.stringify`.
 
+**Round 3 changed the spec text, not the argument.** Re-derived against the code and against the
+shipped corpus, round 2's clause is correct and its measurements hold. What it left behind is a
+requirement carrying two scenarios whose conditions overlap and whose outcomes are opposite:
+*"An undeclared model is refused"* was kept verbatim while *"A legacy runner can still be saved"*
+was added beside it, and the second is an instance of the first. Both are now narrowed to agree,
+along with the requirement's bare `SHALL`. Round 3 also replaced a scenario that no longer had a
+failing case with the one the requirement's normative text asks for and had none, and backed task
+2.6 — which no requirement had demanded — with a clause. See design.md, "What round 3 changed".
+
 **A runner's model cannot be cleared back to the provider's default, and the attempt is answered
 `200` with the runner's old model in the response body.** `update_runner`
 (`hub/hub/api/v1/runners.py:136-141`) gates every field on `is not None`, so an explicit `null` is
