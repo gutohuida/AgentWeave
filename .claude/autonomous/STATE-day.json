@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-02T17:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-09-02-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-2",
-    "next_action": "D-2 - Spec RA. Repair openspec/changes/a-turn-says-how-it-ended from the measured premise. Phase 0 task 0.3 is FALSIFIED (recorded in that change's own tasks.md SS0 and beside F190): the single-run working indicator DOES release cleanly, gated by signal 1, and isSuccessCompletionEntry DOES match -- so round 3b's premise is wrong and round 2 was right. Phases 1-7 are BLOCKED in tasks.md until a round re-argues D6 from the true premise. The surviving, narrower claim is that signal 1 has never worked FOR A RUN THAT DID NOT COMPLETE. Re-derive D6 against the actual code (not against round 3b's reasoning), then rewrite proposal.md, design.md, tasks.md and the specs/<capability>/spec.md deltas wherever the false premise leaked in, and either unblock the phases or narrow the change's scope to what survives. This window does NOT implement -- no edits under hub/hub/ or src/agentweave/. `openspec validate --strict a-turn-says-how-it-ended` must pass; SHALL on a requirement's first physical line. Do not mark any task complete on the strength of a plan existing.",
+    "current": "D-3",
+    "next_action": "D-3 - Spec RB. Independently re-derive round RA's repaired argument for openspec/changes/a-turn-says-how-it-ended against the actual code. NOT a re-read of RA's reasoning: open AgentTimeline.tsx, agentTimelineModel.ts, runner_parsing.py, runner_events.py, output_recording.py, agent_chat.py, run_reconciliation.py and both terminal paths in agent_trigger.py FIRST, form your own account of which runs get a persisted kind='status'/phase='completed' row and what lastRunSettled therefore does, and only then read design D6 and the 'Round RA, 2026-09-02' section and compare. The sharpest targets, because they are RA's own new claims and nobody has checked them: (a) that the finalize broadcast at agent_trigger.py:2132 really is outside the `if run is None` guard and reached for stopped/failed/completed/binding-conflict alike; (b) that `interrupted` genuinely cannot gain a status row, i.e. that no other writer covers it; (c) F269's mechanism -- verify by RUNNING it, not by reading, and if a throwaway vitest probe is used, delete it before commit; (d) whether task 4.5a's two proposed fixes (hoist durationLine out of the per-block fragment, or exclude success-completion entries from firstAgentBlockId) both actually work, since RA proposed them without trying either. An argument can be wrong while everything it argues about is right. If the round changes nothing, SAY SO EXPLICITLY -- that is a real outcome and hiding it makes the next round look cheaper than it is. This window does NOT implement -- no edits under hub/hub/ or src/agentweave/, and nothing committed under hub/ui/. `openspec validate --strict a-turn-says-how-it-ended` must pass; SHALL on a requirement's first physical line.",
     "queue": [
         {
             "id": "compose",
@@ -29,13 +29,13 @@
         },
         {
             "id": "D-2",
-            "status": "current",
+            "status": "done",
             "title": "Spec RA - repair a-turn-says-how-it-ended from the measured premise",
-            "detail": "Phase 0 task 0.3 falsified round 3b: the single-run working indicator DOES release cleanly, gated by signal 1, and isSuccessCompletionEntry does match. Phases 1-7 are BLOCKED in the change's own tasks.md until a round re-argues D6 from the true premise. The surviving, narrower claim is that signal 1 has never worked FOR A RUN THAT DID NOT COMPLETE. Re-derive D6 against the code, rewrite proposal.md/design.md/tasks.md and the spec deltas wherever the false premise leaked in, and either unblock the phases or narrow the change's scope to what survives. openspec validate --strict must pass; SHALL on line 1."
+            "detail": "Done at iteration 3. D6 re-derived against the code: signal 1 DOES fire, for the run that FINISHED, written by a second producer round 3b did not look for -- runner_parsing.py:346-356's status_event('completed') persisted via record_agent_output (agent_trigger.py:1925-1938). Round 3b traced only the finalize block's broadcast-only line at :2132. D6's purpose survives on a narrower argument (it extends signal 1 to runs that did NOT complete, plus a durable exit code) and loses two attributions: it does not repair the working indicator (phases 1+4 do, by fixing signal 2), and it cannot reach `interrupted` at all (reconcile_interrupted_runs writes an EventLog row and no AgentOutput). Scope NOT narrowed; phases 1-7 UNBLOCKED. Three new tasks (2.1a, 4.5a, 7.1a) plus rewrites of 2.1, 2.2, 2.4, 4.7, 7.1. New spec scenario + a stated coverage bound. NEW FINDING F269 (C), ledger 273 -> 274: a turn whose only agent output is a status row loses its 'Worked for Xs' line, because durationLine renders inside the block that returns null -- MEASURED with two throwaway vitest probes (4+2 assertions, all passing) against today's unmodified code, probes deleted before commit. openspec validate --strict: valid."
         },
         {
             "id": "D-3",
-            "status": "open",
+            "status": "current",
             "title": "Spec RB - re-derive D-2's repaired argument against the code, independently",
             "detail": "Not a re-read of D-2's reasoning: a fresh comparison against what the code does. An argument can be wrong while everything it argues about is right. If the round changes nothing, say so explicitly - that is a real outcome and hiding it makes the next round look cheaper than it is."
         },
@@ -80,7 +80,7 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-02T09:25:17+01:00",
+    "last_heartbeat": "2026-09-02T09:37:20+01:00",
     "branch_spans_days": [
         "2026-09-01",
         "2026-09-02"

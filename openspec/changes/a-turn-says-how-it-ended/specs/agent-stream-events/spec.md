@@ -28,6 +28,13 @@ forbidden by *The run facts cover every run the events name*.
 - **WHEN** a run's status is `running`
 - **THEN** no terminal label is presented for it
 
+#### Scenario: A turn that produced nothing still reports what it cost
+
+- **WHEN** a run ended without producing any visible agent output, so the only output row its turn
+  carries is a terminal status row the conversation does not draw
+- **THEN** the turn still presents its duration and token line, rather than losing it along with the
+  row it was attached to
+
 ### Requirement: The timeline carries each run's own facts
 The timeline response SHALL carry each run's recorded facts — status, exit code, start time and end time — read from the run's own row, and clients SHALL NOT reconstruct them from event names or event timestamps.
 
@@ -89,6 +96,11 @@ size of its result.
 
 ### Requirement: A run's terminal status line is persisted
 The Hub SHALL persist a run's terminal status line as durable output, not only broadcast it, so the exit code remains recoverable after the live stream is gone.
+
+This is bounded to the runs whose end the Hub observes — the two spawn paths' finalize blocks. A run
+reconciled as `interrupted` after a Hub restart has no terminal status line and is not required to
+gain one: there was no Hub process to write it. Such a run's outcome is carried by the run facts
+map, under *A run's terminal outcome is visible*.
 
 #### Scenario: The status line survives a reload
 

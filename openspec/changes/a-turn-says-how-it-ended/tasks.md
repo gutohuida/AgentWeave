@@ -60,12 +60,17 @@ built on them.
       change and returns it to a round.** Then delete the fixture project, confirm the project count
       returns to its prior value, and sweep for enabled jobs.
 
-**BLOCKED by phase 0's result, 2026-09-01.** Phase 0 falsified round 3b's premise for D6 (task
-0.3). Per task 0.7 — *"an observation that falsifies a claim stops the change and returns it to a
-round"* — nothing below is implemented until a round has re-argued D6 and the proposal's phase-2
-consequences from what was measured. Everything phase 0 confirmed (0.2, 0.4, 0.5, 0.6) is untouched
-by this and the round should not re-derive it; the one thing to re-argue is what `lastRunSettled`
-does and does not already do.
+**UNBLOCKED 2026-09-02 by round RA.** Phase 0 falsified round 3b's premise for D6 (task 0.3) and
+task 0.7 returned the change to a round. That round ran on 2026-09-02, re-derived D6 against
+`AgentTimeline.tsx`, `agentTimelineModel.ts`, `runner_parsing.py`, `runner_events.py`,
+`output_recording.py`, `agent_chat.py`, `run_reconciliation.py` and both terminal paths in
+`agent_trigger.py`, and rewrote D6 from what was measured: **signal 1 fires, for a run that
+finished, written by the stream parser at `runner_parsing.py:356`; D6 extends it to runs that did
+not.** The change is not narrowed — every phase below still follows — but three tasks change and
+three are added (2.1a, 4.5a, and the interrupted exclusion in 2.1). Read design D6 and the
+*Round RA* section before implementing phase 2 or phase 4.
+
+Phases 1 and 3 were not touched by the correction and need no re-reading beyond their own text.
 
 ## 1. The route carries the run's facts
 
@@ -124,7 +129,21 @@ does and does not already do.
 
 - [ ] 2.1 Write a Hub test asserting that after a run ends, `/agents/{name}/output` contains a
       `kind="status"` row carrying the exit code — asserted for **both** the process path and the
-      app-server path, per *A run's terminal status line is persisted*.
+      app-server path, per *A run's terminal status line is persisted*. Assert it for a **stopped**
+      and a **failed** run specifically, not only a completed one: a completed run already has such
+      a row from the stream parser (`runner_parsing.py:356`), so a completed-only test passes
+      without task 2.2 being implemented at all and proves nothing. **Do not assert it for an
+      `interrupted` run** — `reconcile_interrupted_runs` writes an `EventLog` row and no
+      `AgentOutput` (grep `record_agent_output` in `run_reconciliation.py`: no hits), and there was
+      no Hub process alive to write one. The spec now states that bound explicitly.
+- [ ] 2.1a Assert what a **completed** run now carries: two entries satisfying
+      `isSuccessCompletionEntry` — the parser's (`content="Completed"`, `payload` with `version`,
+      `phase`, `summary`) and the finalize block's (`content="Run … (exit N)."`, `payload` with
+      `phase` and `exit_code`) — and that the conversation still draws neither, because
+      `AgentTimeline.tsx:430` returns `null` for both. This test exists so a later reader does not
+      "de-duplicate" the pair: removing the parser's row deletes the only signal that works today,
+      and removing the finalize block's for a completed run makes the durable exit code
+      outcome-dependent. Design D6, *Two consequences of persisting an invisible row*.
 - [ ] 2.2 Replace the bare broadcast at `hub/hub/api/v1/agent_trigger.py:2129-2142` (process path)
       with `output_recording.record_agent_output` (`hub/hub/output_recording.py:22`), which persists
       **and** broadcasts one row. Round 2's correction to D6: "persist in addition to broadcasting"
@@ -143,6 +162,14 @@ does and does not already do.
         (`AgentTimeline.tsx:115`), and it reads the **persisted** row through
         `isSuccessCompletionEntry` — `kind='agent_output'`, `output_kind='status'`,
         `payload.phase='completed'` — not the broadcast payload. Preserve *that* shape.
+      - **What this task is worth, corrected by round RA, 2026-09-02.** Rounds 1-3 said 2.2 is
+        load-bearing for the working indicator. It is not: the indicator is repaired by phases 1
+        and 4, which make signal 2 correct. What 2.2 uniquely does is give a **stopped, failed or
+        binding-conflicted** run a signal-1 entry, which it has never had — a completed run already
+        gets one from `runner_parsing.py:356` — plus a durable exit code for every one of them.
+        Without 2.2 those runs' indicators still linger for one `useAgentTimeline` round trip after
+        phases 1 and 4 land. Implement it for that, and do not expect it to change anything about a
+        run that completed. Design D6.
       Also check `record_agent_output`'s own `await db.commit()` against what the call site has
       pending in its session at that point.
 - [ ] 2.3 Do the same at `:2723-2736` (app-server path).
@@ -156,7 +183,10 @@ does and does not already do.
       outcome is the terminal label from the `runs` map, and this row's job is `lastRunSettled` plus
       a durable exit code. Confirm that is the intent rather than shipping a row nobody can see by
       accident, and do **not** "fix" it by making `phase` outcome-dependent without checking every
-      other reader of `phase`.
+      other reader of `phase`. **Round RA adds the consequence 2.4 stopped short of:** an invisible
+      row is not inert. It is still a block, and `firstAgentBlockId` can select it and take the
+      turn's stat line down with it — see task 4.5a. "Nobody can see it" and "it changes nothing on
+      screen" are different claims, and only the first is true.
 
 ## 3. The client consumes the envelope
 
@@ -211,6 +241,26 @@ does and does not already do.
       spawn and reads longer than the event-derived figure. A run whose spawn failed (`:1798-1804`)
       also gains a duration it does not have today — confirm that renders acceptably rather than
       treating it as a regression.
+- [ ] 4.5a **The stat line must not vanish with the row it hangs on** — found by round RA,
+      2026-09-02, filed as **F269 (C)** in `scripts/drive/FINDINGS.md`, and it is where phase 2 and
+      phase 4 meet. `firstAgentBlockId`
+      (`AgentTimeline.tsx:384-389`) picks the first block that is a work block or carries an
+      `agent_output` entry; a `status` entry is its own `entry` block, because `RESULT_OUTPUT_KINDS`
+      holds `status` (`agentTimelineModel.ts:9`); `durationLine` is rendered **inside** that block's
+      fragment (`:406-418`); and that fragment is `return null` for a success-completion entry
+      (`:430`). So once task 2.2 persists the row, a turn whose only agent output is that row —
+      a run stopped before it produced anything, or a spawn that failed (`agent_trigger.py:1798`) —
+      renders no "Worked for Xs · N tokens" at all. Task 4.5 hands exactly those runs a duration for
+      the first time, so the gap opens at the same moment the value appears. Write the component
+      test first, from *A turn that produced nothing still reports what it cost*: a turn holding
+      one operator message and one persisted terminal status row must present its stat line.
+      Confirm it fails before the fix — round RA already did, with a throwaway vitest probe against
+      today's unmodified code: a turn holding a text row and the status row renders
+      `turn-worked-for` "Worked for 5s", and the same turn holding only the status row renders no
+      `turn-worked-for` at all. The defect is latent today and task 2.2 is what makes it reachable.
+      The fix is a placement change — hoist `durationLine` out of
+      the per-block fragment, or exclude success-completion entries from `firstAgentBlockId` —
+      not a change to what `:430` renders; do not make the row visible to solve this.
 - [ ] 4.6 Confirm `LIFECYCLE_EVENT_STATUS` has no remaining consumer; delete it if not, and keep it
       only if something still legitimately reads it.
 - [ ] 4.7 Verify the third consequence is repaired **in both states, not just on reload**
@@ -224,16 +274,19 @@ does and does not already do.
       - **Still-underway:** stop a turn and send a new message; assert the indicator *is* shown while
         run B has no entries yet. This is the 2026-08-20 fix, which currently passes only vacuously
         (the indicator shows because it always shows) and must still pass once it means something.
-      - **Single-run:** one run in the window. **Round 3's supplementary pass corrects rounds 1-3
-        here: this case is broken too, and "assert unchanged" was wrong.** `lastRunSettled`'s first
-        signal has never fired for anyone — the status entry it looks for is only ever broadcast,
-        never persisted, while `entries` come exclusively from a database refetch
-        (`useAgentChatHistory` invalidates and refetches, with no optimistic append), so
-        `isSuccessCompletionEntry` never matches an entry that exists. `lastRunSettled` is therefore
-        always false and `runVisiblyActive` collapses to `isRunning` for **every** agent, not only
-        those with two or more runs. Assert the single-run case *changes*: once task 2.2 persists
-        the row, the indicator must disappear when the status entry lands rather than when the
-        roster poll catches up.
+      - **Single-run, completed: assert it does NOT change.** Round 3's supplementary pass said
+        this case was broken too; phase 0 task 0.3 watched it work, and round RA re-derived why —
+        the parser's `status_event("completed", …)` (`runner_parsing.py:356`) is persisted, so
+        signal 1 already fires for a run that finished, and the indicator already releases on the
+        answer's own snapshot rather than on the roster poll. Assert the behaviour phase 0 measured
+        still holds after the change, including with the second `phase="completed"` row task 2.2
+        adds. This is a regression guard, not a repair.
+      - **Single-run, stopped or failed: assert it DOES change.** This is the case signal 1 has
+        never covered, because no `result` line is ever emitted, so no `phase="completed"` row is
+        written. Today `lastRunSettled` stays false for the life of that conversation and the
+        indicator lingers until the roster poll. After task 2.2 it must go out when the persisted
+        status row lands. Bind this assertion to a stopped run specifically — a completed-run
+        version of it passes today and proves nothing.
 
 ## 5. The testing rule is enforceable
 
@@ -270,10 +323,18 @@ does and does not already do.
 is the implementer checking its own work, which is necessary and is not this. This phase is a fresh
 sitting that did not write the code.
 
-- [ ] 7.1 Re-run the phase 0 observations against the implemented change and confirm each one now
-      behaves differently — the stopped turn names its stop, the single-run indicator releases on
-      the status entry rather than on the roster poll, the multi-run case likewise, and both survive
-      a reload. Phase 0's record is the baseline; this is the comparison.
+- [ ] 7.1 Re-run the phase 0 observations against the implemented change and confirm each one moved
+      the way it was supposed to — the stopped turn names its stop, the multi-run indicator releases
+      on the newest run's terminal signal rather than on the roster poll, a **stopped** single-run
+      conversation now releases on its persisted status row, and all of them survive a reload.
+      Phase 0's record is the baseline; this is the comparison. **One of them must be unchanged:**
+      a *completed* single-run conversation already released cleanly at 0.3, so if that case now
+      behaves differently, something regressed. Round RA, 2026-09-02.
+- [ ] 7.1a Confirm *A turn that produced nothing still reports what it cost* holds against the built
+      code, by stopping a run before it emits anything and reading the turn: it must carry both the
+      terminal label and the "Worked for Xs" line. Task 4.5a exists because persisting the status
+      row can take that line with it, and this is the check that the placement fix actually fired
+      rather than the test being written around it.
 - [ ] 7.2 Read the implemented route against *The run facts cover every run the events name*
       specifically: confirm the run lookup is keyed by the ids the returned events carry, carries
       the `project_id` predicate, and has no `ORDER BY` or `LIMIT` that could reintroduce the

@@ -17921,3 +17921,58 @@ on the Hub's own port, no Vite dev server anywhere.
 One presentation note, deliberately **not** filed as a finding: the `422`'s sentence is Pydantic's
 own `msg` and names no field (`String should have at most 256 characters`). With one text input on
 screen that is unambiguous today, and inventing a field name in the client would be worse.
+
+## F269 (C) — a turn whose only agent output is a `status` row loses its "Worked for Xs" line, because the line renders inside the block that returns `null`
+
+Found by round RA of `a-turn-says-how-it-ended` (2026-09-02) while re-deriving design D6, and
+**measured against today's unmodified code** with two throwaway vitest probes rather than left as a
+static read. The probes were deleted before commit — the day window does not implement.
+
+`AgentTimeline`'s stat line ("Worked for 5s · 1,204 tokens") is not rendered beside the turn. It is
+built per block and emitted only for one of them:
+
+```tsx
+const durationLine = statLine && blockId === firstAgentBlockId ? (<div data-testid="turn-worked-for">…</div>) : null
+```
+
+`firstAgentBlockId` (`hub/ui/src/components/agents/AgentTimeline.tsx:384-389`) is *the first block
+that is a work block or carries an `agent_output` entry*. A `status` entry qualifies: it is neither
+work nor a message — `RESULT_OUTPUT_KINDS` holds `status` (`agentTimelineModel.ts:9`) — so
+`reduceTurnBlocks` gives it its own `entry` block. The `durationLine` is then rendered **inside that
+block's fragment**, and the fragment for a success-completion entry is
+
+```tsx
+if (isSuccessCompletionEntry(entry)) return null   // :430
+```
+
+So when the status row is the turn's first (and only) agent output, the stat line is attached to a
+block that draws nothing and disappears with it.
+
+**Measured.** Rendering the real `AgentTimeline` with `run_started` and `run_stopped` five seconds
+apart:
+
+| turn's entries | `turn-worked-for` |
+|---|---|
+| text row, then the `status` row | present — "Worked for 5s" |
+| the `status` row alone | **absent** |
+
+A second probe against the shipped model functions confirmed the mechanism rather than inferring it:
+`entryCategory(status)` is `result`, `reduceTurnBlocks` yields one `entry` block whose id is the
+entry's, `firstAgentBlockId`'s own expression selects it — and a `thinking` row placed ahead of it
+takes the slot instead, which is why nothing has shown this. 6 assertions, all passing.
+
+**Severity C, and the reason is reachability, not harm.** Today the only turns shaped like this are
+runs that emitted a `result` line and no assistant text at all — real but uncommon. A stopped or
+failed run cannot hit it, because it has no `status` row in the first place (F190 phase 0: nine
+output rows for the agent, three `status`, none of them the stopped run's).
+
+**It stops being uncommon if `a-turn-says-how-it-ended` ships without task 4.5a.** That change's
+task 2.2 persists a terminal `status` row for *every* run the finalize block reaches, and its task
+4.5 gives a run whose spawn failed a duration for the first time — so exactly the turns that gain a
+duration are the turns whose only agent output is the new row. The two halves of that change meet on
+this case and no round through 3 named it. Task 4.5a is now written for it, with the fix stated as a
+placement change (hoist the line out of the per-block fragment, or exclude success-completion
+entries from `firstAgentBlockId`) and **not** as making the row visible.
+
+Not proposed as standalone work: the change that makes it matter is already in flight and now
+carries the task.

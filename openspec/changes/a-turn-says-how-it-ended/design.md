@@ -151,31 +151,121 @@ it is named here so it is recognised as intended rather than filed as a regressi
 `RunLifecycleStatus` is `{started, completed, failed, stopped, interrupted}`. One rename at the
 boundary. `skipped` and `in_progress` belong to `JobRun` and never appear here.
 
-### D6 — The status row is persisted at both call sites, and is a separate concern
+### D6 — The terminal status row is persisted at both call sites, and it is the low-latency signal for a run that did not finish
 
-`agent_trigger.py:2129-2142` (process path) and `:2723-2736` (app-server path) construct an
-`agent_output` payload with `id=f"status-{run_id}"` and `kind="status"` and only broadcast it.
-Persisting it restores the *first* of the two settled-signals in `AgentTimeline.tsx:88-113` and makes
-the exit code durable. The writer to use is `output_recording.record_agent_output`
-(`hub/hub/output_recording.py:22`), which persists **and** broadcasts one row — so the two call
-sites collapse to it rather than gaining a second, hand-rolled insert beside the existing
-`sse_manager.broadcast`.
+**Re-argued in round RA, 2026-09-02, after phase 0 falsified the premise round 3b gave this
+decision.** What follows is derived from the code, not from either earlier argument.
 
-This is independent of D1-D4: because lifecycle events are already persisted, reading `Run` alone
-restores the label. What D6 uniquely adds is a durable exit code and a working `lastRunSettled`.
+`AgentTimeline.tsx:88-111` names two settled-signals. Signal 1 is a persisted `AgentOutput` row with
+`kind="status"` and `payload.phase == "completed"` — `isSuccessCompletionEntry`
+(`agentTimelineModel.ts:24-28`). Signal 2 is the lifecycle event decoded by `runStatusByRunId`.
 
-**Two corrections from round 3's supplementary pass.** First, D6 does not *restore* the first
-settled-signal — it makes it work for the first time. `entries` reach `AgentTimeline` only through
-`useAgentChatHistory`, which invalidates and refetches with no optimistic append
-(`agentChat.ts:296-312`), and the chat route builds them from persisted `AgentOutput` rows. A row
-that is only broadcast never becomes an entry, so `isSuccessCompletionEntry` has never matched
-anything, in any state. See the round 3 corrections section for what that means for the gate.
+**Signal 1 fires today, and it fires for exactly one class of run.** The row that satisfies it is
+written by the stream parser, not by the finalize block: `runner_parsing.py:346-356` turns Claude's
+`result` message into `status_event("completed", summary="Completed")` when `is_error` is not true,
+and `status_event` (`runner_events.py:180-187`) builds `kind="status"`,
+`payload={"version": …, "phase": "completed", …}` — the predicate exactly. Every parsed event is
+persisted through `record_agent_output` (`agent_trigger.py:1925-1938`). So the predicate matches
+whenever, and only whenever, the runner itself announced a successful turn:
 
-Second, D6 does **not** add an "in-stream sentence". Both call sites hardcode
-`payload={"phase": "completed"}` whatever the outcome, on purpose (`agent_trigger.py:2125-2126`),
-and `AgentTimeline.tsx:430` returns `null` for every entry `isSuccessCompletionEntry` matches — so
-the persisted row is invisible for a stopped and failed run exactly as it is for a completed one.
-The visible outcome comes from the `runs` map's terminal label, not from this row.
+| how the run ended | a persisted `phase="completed"` row today? |
+|---|---|
+| completed — `result` with `is_error` false | **yes**, the parser's |
+| `result` with `is_error` true | no — `error_event`, `kind="error"` (`runner_parsing.py:346-350`) |
+| stopped mid-run | no — the process is killed before any `result` line |
+| failed on a non-zero exit | no |
+| interrupted by a Hub restart | no |
+
+Phase 0 measured both ends of that table. A completed run's conversation holds exactly one matching
+entry and the single-run indicator released on the same snapshot the answer text landed, 0.7 s
+before the roster poll (task 0.3). The stopped run had no `status` row at all — three of the agent's
+nine output rows were `status` and none of them was its (tasks 0.3, 0.5).
+
+**Round 3b's error was an identification, and it inverted this decision's scope.** It read the
+terminal status line at `agent_trigger.py:2132-2142`, saw correctly that it is only broadcast, and
+concluded that no row of that shape is ever persisted. A different producer writes the same shape.
+D6 therefore does not make signal 1 work *for the first time, for everyone*. It extends signal 1
+from **the run that finished** to **the run that did not**.
+
+**What D6 buys, argued from that premise.**
+
+1. *A durable exit code.* Unchanged and independently true. `agent_trigger.py:2132-2142` (process
+   path) and `:2721-2735` (app-server path) broadcast `{"phase": "completed", "exit_code": …}` and
+   persist nothing, so once the live stream is gone the exit code is unrecoverable. Measured at
+   task 0.5.
+2. *Signal 1 for every run the finalize block reaches.* That broadcast sits directly inside the
+   `async with async_session_factory() as db:` at `:2009` — not inside the `if run is None` guard —
+   so it is reached for `stopped`, `failed`, `completed` and the binding-conflict case alike
+   (`:2000-2006`). Persisting it makes `lastRunSettled` true for a stopped or failed run at the
+   instant the run ends, rather than never.
+
+**What D6 does not buy, and this is what rounds 1-3 attributed to it.** It does not repair the gate.
+
+```
+runVisiblyActive = isRunning && (!lastRunSettled || anotherRunIsUnderway)
+```
+
+collapses to `isRunning` through `anotherRunIsUnderway` whenever the event window holds two or more
+runs, because signal 2 reports `started` for every run — measured live at task 0.4, on an agent that
+released cleanly with one run in its window and lingered under a finished answer with two. Repairing
+that is D1-D5's work. Once the `runs` map lands, signal 2 is correct and `anotherRunIsUnderway` is
+correct with it.
+
+So D6 returns to being what `AgentTimeline.tsx:108-111` always said it was — the fast signal that
+closes the refetch tail, with the lifecycle event as "the backstop" — plus the correction that today
+it closes that tail only for runs that finished. Without D6, after D1-D5 a stopped run's indicator
+would still linger for one `useAgentTimeline` round trip: the 2026-08-18 complaint surviving in the
+narrower case. That is a smaller claim than "D6 repairs the working indicator" and it is the one the
+code supports.
+
+**One outcome D6 cannot reach: `interrupted`.** `reconcile_interrupted_runs`
+(`run_reconciliation.py:49-66`) sets the row's status and calls `persist_event`; it writes no
+`AgentOutput` — `record_agent_output` does not appear anywhere in that module. A run interrupted by
+a Hub death therefore has no status row before this change and none after it, and its turn settles
+on signal 2 alone. That is correct rather than a gap — the Hub was not running to write one — but it
+must not be asserted otherwise, which is why task 2.1 covers the two spawn paths and not this one.
+
+**Two consequences of persisting an invisible row, neither previously named.**
+
+- *A completed run gains a second matching entry.* The parser's row (`content="Completed"`,
+  `payload={"version": 1, "phase": "completed", "summary": "Completed"}`) and the finalize block's
+  (`content="Run completed (exit 0)."`, `payload={"phase": "completed", "exit_code": 0}`) both
+  satisfy `isSuccessCompletionEntry`, and `AgentTimeline.tsx:430` returns `null` for each, so
+  nothing is drawn twice. The exit code lives only on the second. This is a duplication to state,
+  not to remove: suppressing the parser's row would delete the signal that works today, and
+  suppressing the finalize block's for a completed run would make the durable exit code
+  outcome-dependent.
+- *The invisible row can swallow the turn's stat line.* `firstAgentBlockId`
+  (`AgentTimeline.tsx:384-389`) is the first block that is a work block or carries an `agent_output`
+  entry. A `status` entry is neither work nor a message — `RESULT_OUTPUT_KINDS` holds `status`
+  (`agentTimelineModel.ts:9`) — so it is its own `entry` block and qualifies. `durationLine` is
+  rendered *inside* that block's fragment (`:406-418`), and the fragment for a success-completion
+  entry is `return null` (`:430`). For a turn whose only agent output is this new row — a run
+  stopped before it produced anything, or a spawn that failed — "Worked for Xs · N tokens" is
+  attached to a block that renders nothing and disappears with it. This lands exactly where D4 does
+  the most work: task 4.5 gives precisely those runs a duration for the first time, by taking it
+  from `Run.started_at`/`ended_at`. Task 4.5a is added for it.
+
+  **This one was measured, not read.** Round RA rendered the real `AgentTimeline` under vitest with
+  two throwaway probes (run afterwards, deleted before commit — the day window does not implement).
+  Probe 1, against the shipped `agentTimelineModel`: a `status` entry has `entryCategory` `result`,
+  becomes its own `entry` block, and `firstAgentBlockId`'s own expression selects it when it is the
+  turn's only agent output — while a `thinking` row ahead of it takes the slot instead, which is why
+  nothing shows this today. Probe 2, rendering `AgentTimeline` with `run_started`/`run_stopped` five
+  seconds apart: a turn holding a text row **and** the status row renders `turn-worked-for` reading
+  "Worked for 5s"; the same turn holding **only** the status row renders no `turn-worked-for` at
+  all. 4 + 2 assertions, all passing, on today's `master`-side code with no part of this change
+  implemented. The defect is therefore already latent — `runDurationsByRunId` supplies the duration
+  from the lifecycle events — and task 2.2 is what makes it reachable, by creating turns whose only
+  agent output is that row. Filed as **F269 (C)**; the finding carries the probe results in full.
+
+D6 remains independent of D1-D5 in the sense that mattered originally: lifecycle events are already
+persisted, so reading `Run` alone restores the label without it. What is no longer true is the
+converse — D6 alone does not restore the indicator.
+
+The writer to use is still `output_recording.record_agent_output` (`hub/hub/output_recording.py:22`),
+which persists **and** broadcasts one row, so the two call sites collapse onto it rather than gaining
+a second hand-rolled insert beside the existing `sse_manager.broadcast`.
 
 ### D7 — Coverage is exact by construction, not derived from a bound
 
@@ -376,6 +466,14 @@ unread. Both findings above came out of the code that *was* read, which is exact
 distrusting, so this pass covered the rest. It found one thing that changes the proposal's central
 account and three that change tasks.
 
+**SUPERSEDED 2026-09-02 by phase 0 task 0.3 and by round RA — this finding is false and D6 is
+re-argued above.** It is kept unedited below because the shape of the mistake matters: the
+producer it traced (`agent_trigger.py`'s finalize broadcast) really is broadcast-only, and the
+conclusion drawn from that — that no row of the shape is ever persisted — did not check for a
+second producer. `runner_parsing.py:356` is the second producer. Everything the paragraph says
+about `useAgentChatHistory` and about `entries` coming only from persisted rows is correct; only
+the inference from it is wrong.
+
 **The first settled-signal has never fired, for anyone.** `AgentTimeline.tsx:88-113` documents two
 terminal signals — the streamed status entry, which "lands the instant the run ends", and the
 lifecycle event, which "arrives late". The first does not exist. The status row is broadcast over
@@ -436,8 +534,10 @@ fire. It does: `_output_to_timeline` (`agent_chat.py:213-223`) maps `AgentOutput
 with `kind="status"` and `payload={"phase": "completed", ...}` satisfies `isSuccessCompletionEntry`
 exactly. `TimelineEntry.delivery_state` defaults to `"delivered"` (`agent_chat.py:70`) and
 `_output_to_timeline` does not override it, so the row survives `groupIntoTurns`' delivered-only
-filter and joins its own run's turn. Task 2.2 therefore repairs the working indicator, not just the
-exit code.
+filter and joins its own run's turn. **Narrowed by round RA, 2026-09-02:** the mechanism trace above
+is correct and was re-verified against `agent_chat.py:213-223` and `:70`; its conclusion was not.
+Task 2.2 makes signal 1 fire for a run that did *not* complete, which is the case where it has never
+fired. For a run that completed it fires already, from `runner_parsing.py:356` — see D6 as re-argued.
 
 **`test_bola.py` is a sharper break than "the shape changed".** The timeline sits inside a loop
 asserting `isinstance(data, list)` across nine endpoints, and it is the route's only cross-project
@@ -485,3 +585,52 @@ is still absent on reload and the stopped run has no persisted `status` row (0.5
 to the outage and to nothing about the run — which is the decoupling D3's reversal rests on (0.6).
 The *miss* D3 protects against was not reproduced; it needs more runs than a drive can usefully
 spend, and only the decoupling and the unbounded sweep (`run_reconciliation.py:59`) were measured.
+
+## Round RA, 2026-09-02 — D6 re-argued from the measured premise, and the block lifted
+
+Phase 0 task 0.3 falsified round 3b's premise for D6 and `tasks.md` blocked phases 1-7 until a round
+re-argued it. This is that round. It read `AgentTimeline.tsx`, `agentTimelineModel.ts`,
+`runner_parsing.py`, `runner_events.py`, `output_recording.py`, `agent_chat.py`,
+`run_reconciliation.py` and both terminal paths in `agent_trigger.py` **before** reading round 3b's
+reasoning, then compared. It did not re-derive what phase 0 confirmed (0.2, 0.4, 0.5, 0.6), per the
+block's own instruction.
+
+**The re-argument is in D6 above.** In one line: signal 1 works, and it works for the run that
+finished, because a *second* producer — the stream parser at `runner_parsing.py:356` — writes a row
+of the same shape and that one is persisted. D6's purpose survives; its weight changes. It is not
+what repairs the gate (D1-D5 are), and it is not a first-time repair of signal 1 (it is an extension
+of signal 1 to runs that did not complete), and it cannot reach the `interrupted` outcome at all.
+
+**Three things this round found that no earlier round had, all consequences of the corrected
+premise rather than of re-reading the old one:**
+
+1. **`interrupted` is outside D6's reach.** `reconcile_interrupted_runs` writes an `EventLog` row
+   and no `AgentOutput`. Task 2.1 was ambiguous about which outcomes it asserts; it now names the
+   two spawn paths and explicitly excludes the reconciliation path. Without this, the phase-7 round
+   would have gone looking for a status row that correctly does not exist.
+2. **A completed run will carry two `phase="completed"` rows after task 2.2.** Both render `null`,
+   so it is invisible; the exit code lives on only one of them. Stated in D6 and asserted in a new
+   task 2.1a so a later reader does not "clean it up" and delete the signal that works today.
+3. **The invisible row can swallow the turn's stat line.** `firstAgentBlockId` selects the first
+   `agent_output`-carrying block, a `status` entry is its own block (`RESULT_OUTPUT_KINDS`), the
+   `durationLine` renders inside that block's fragment, and that fragment is `return null` for a
+   success-completion entry. So for a turn whose only agent output is the newly persisted row —
+   a run stopped before producing anything, or a failed spawn — "Worked for Xs" vanishes. Task 4.5
+   hands those exact runs a duration for the first time, so the two halves of this change meet
+   precisely on the case neither considered. New task 4.5a, and a new scenario in
+   *A run's terminal outcome is visible*.
+
+**What this round changed nothing about.** D1, D2, D3, D4, D5 and D7 were re-read against the code
+and stand unedited: the route still never reads `Run`; `runStatusByRunId` is still last-wins over a
+newest-first array; `run_reconciliation.py:59` still sweeps the whole database with no project scope
+and no time bound, so D3's reversal and D7's construction argument are untouched; `Run.status` is
+still `{running, completed, failed, stopped, interrupted}`. The proposal's headline — F190 — is
+unaffected in every particular. Saying so explicitly is part of the round: a round that reports only
+what it changed makes the next one look cheaper than it is.
+
+**Scope decision: the change is not narrowed.** The block asked for one or the other. Everything
+phase 1 through phase 7 proposes still follows from the corrected premise — the label, the envelope,
+the coverage property, the persisted exit code and the deleted reducers are all untouched by the
+identification error. What changed is the *reason* given for one decision and the *weight* carried
+by one task, and both are now stated from what was measured. Phases 1-7 are unblocked, with the
+three new tasks above added.

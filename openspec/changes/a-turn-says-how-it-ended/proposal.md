@@ -77,13 +77,43 @@ mechanism that cannot deliver it:
 Both are recorded in `design.md` under *Round 3 corrections, 2026-09-01*, along with what was
 re-derived and left standing and one alarm raised and killed.
 
-Its supplementary pass over phase 2 — which the first sitting had not read — then found that
-`lastRunSettled`'s *other* signal has never fired either, for anyone, which subsumes round 2's
-correction and makes task 2.2 load-bearing for the working indicator rather than only for a durable
-exit code. It also corrected three task-level claims: `record_agent_output` cannot reproduce the
+Its supplementary pass over phase 2 — which the first sitting had not read — then claimed that
+`lastRunSettled`'s *other* signal has never fired either, for anyone. **Phase 0 falsified that on
+2026-09-01 and round RA re-argued D6 from the measured premise on 2026-09-02** — see the corrected
+paragraph under *Third consequence* below, and design D6. The pass also corrected three task-level
+claims, and those three stand: `record_agent_output` cannot reproduce the
 `status-{run_id}` id, task 2.2's justification cites a Handoff consumer that was deleted, and the
 11-file fixture cost is concentrated in two files while the other nine would stay green un-updated.
 All are in `design.md` under *Supplementary pass, 2026-09-01*.
+
+### Phase 0 and round RA, 2026-09-01/02: the defect was watched, and one decision was re-argued
+
+The operator approved this change on the condition that the defect be observed live before a line is
+implemented. It was, on 2026-09-01 against a Hub on 8011 with a fresh fixture project
+(`scripts/drive/FINDINGS.md`, *F190 phase 0*). **The headline held**: a stopped run's turn presents
+no terminal label, the database says `stopped`, the route says `started`, and the label is still
+absent after a reload with no `kind="status"` row for that run. So did the multi-run lingering tail,
+and so did the restart-time skew between a run's lifecycle event and its `Run.started_at` that D3's
+reversal rests on.
+
+**One observation falsified a claim, which under task 0.7 stopped the change and returned it to a
+round.** Round 3's supplementary pass had said `lastRunSettled`'s first signal has never fired for
+anyone; the single-run indicator was watched releasing cleanly on the answer's own snapshot. Phases
+1-7 were blocked in `tasks.md` until a round re-derived D6 from the true premise.
+
+**Round RA, 2026-09-02, is that round, and it unblocked them.** Signal 1 fires — for a run that
+finished, written by a second producer round 3b did not look for (`runner_parsing.py:356`). D6's
+purpose survives on a narrower argument: it extends that signal to runs that did *not* complete, and
+it makes the exit code durable. Two attributions it loses: D6 does not repair the working indicator
+(D1-D5 do, by fixing signal 2), and it cannot reach the `interrupted` outcome at all, because
+`run_reconciliation` writes an `EventLog` row and no `AgentOutput`. The round also found two
+consequences of persisting an invisible row that no earlier round named — a completed run gains a
+second matching entry, and a turn whose only agent output is that row loses its "Worked for Xs"
+line, because `firstAgentBlockId` selects it and its fragment returns `null`. New tasks 2.1a and
+4.5a, and a new scenario in *A run's terminal outcome is visible*. Everything else in the change was
+re-read and left unedited; design's *Round RA* section says so explicitly rather than reporting only
+what moved.
+
 
 ## What Changes
 
@@ -177,16 +207,27 @@ So the defeat is unconditional for any agent with two or more runs in its window
 and the stop-then-send fix (operator, 2026-08-20) is satisfied only vacuously — the indicator shows
 because it always shows, not because a second run is underway.
 
-**And it is worse than that — corrected again in round 3's supplementary pass.** The last sentence
-here used to read "a single-run conversation is unaffected, which is why this survived every manual
-look." That is false. `lastRunSettled`'s other disjunct fails too, for every agent: the streamed
-status entry it looks for is broadcast over SSE and **never persisted**, while `entries` come only
-from `useAgentChatHistory`'s invalidate-and-refetch of persisted rows. `isSuccessCompletionEntry`
-has therefore never matched anything, `lastRunSettled` has always been `false`, and
-`runVisiblyActive` collapses to `isRunning` through the *left* branch whatever
-`anotherRunIsUnderway` says. Rounds 1 through 3 each read one disjunct and stopped. What actually
-survived every manual look is that `isRunning` is *usually right*, so the indicator is usually in
-the correct state for the wrong reason.
+**Round 3's supplementary pass then said it was worse than that, and it was wrong — measured, then
+re-argued.** It claimed `lastRunSettled`'s other disjunct fails too for every agent, on the grounds
+that the streamed status entry is broadcast over SSE and never persisted while `entries` come only
+from `useAgentChatHistory`'s invalidate-and-refetch of persisted rows. Phase 0 watched the opposite
+happen: on a single-run conversation the indicator went out **on the same snapshot the answer text
+landed**, 0.7 s before the roster poll — the atomic handover the gate was written to produce. The
+error was an identification, not an observation. The entry that satisfies
+`isSuccessCompletionEntry` is written by a second producer — the stream parser's
+`status_event("completed", …)` (`runner_parsing.py:356`), persisted through `record_agent_output`
+(`agent_trigger.py:1925-1938`) — not by the broadcast-only line at `agent_trigger.py:2132` that the
+pass traced.
+
+**What survives is narrower and still real.** Signal 1 fires for a run that *finished*, and only for
+that. A stopped run, a failed run and an interrupted run each produce no `phase="completed"` row at
+all, because the runner never emits the `result` line the parser turns into one. So for every run
+that did not complete, `lastRunSettled` is false for the whole life of that conversation and the
+gate collapses to `isRunning` through the left branch. Round 2's correction governs everyone else:
+with two or more runs in the window, `anotherRunIsUnderway` collapses the gate whatever signal 1
+says. Between them, the only case in which the indicator behaves correctly today is a single run
+that completed successfully — which is exactly what phase 0 measured, and which is why this survived
+every manual look. Round RA, 2026-09-02, re-derived this from the code; see design D6.
 
 ## Non-Goals
 
