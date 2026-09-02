@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-02T17:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-02-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-6",
-    "next_action": "D-6: write spec-queue/review/review-2026-09-02.html (self-contained, theme-aware, six sections in the playbook's order) and append today's section to spec-queue/APPROVALS.md, one row per specced change, NO status token. Section 1 must lead with the unmerged two-day branch. Section 2 must carry F271 as the day's headline finding and the first open severity A since 2026-08-28, with F267/F268/F269/F270 beneath it. Section 4 must say when a round changed nothing -- RB changed nothing about D1-D5/D7 and that belongs on the page. D-5's measurement belongs on the page too: it corrects a published finding's headline (F259) and one of DECISIONS.md's own evidence lines, and it hands R-1(b) an ordering (2 write-back sites out of 54) rather than a count. This window does NOT implement -- no edits under hub/hub/, hub/ui/ or src/agentweave/.",
+    "current": "D-6 (done) -- window complete",
+    "next_action": "WINDOW COMPLETE. D-1 through D-6 are all done and stop_at is 2026-09-02T17:00:00+01:00, so there is no queued unit left. A firing before 17:00 should verify the tree is clean and pushed, confirm the review page and today's APPROVALS.md section are present and unchanged, refresh last_heartbeat, and STAND DOWN -- do not invent work, and in particular do not implement (this window does not implement) and do not write a second proposal to fill time. The next real unit is the 23:00 FIX window reading spec-queue/APPROVALS.md. If the operator has by then written status tokens into today's section, that is the night window's input, not this one's.",
     "queue": [
         {
             "id": "compose",
@@ -55,9 +55,9 @@
         },
         {
             "id": "D-6",
-            "status": "open",
+            "status": "done",
             "title": "Write the review page and today's APPROVALS section",
-            "detail": "spec-queue/review/review-2026-09-02.html, self-contained, theme-aware, six sections in the playbook's order. Section 1 must lead with the unmerged two-day branch. Section 4 must say when a round changed nothing. Then append today's section to spec-queue/APPROVALS.md, one row per specced change, NO status token. Commit and push."
+            "detail": "Done at iteration 7. spec-queue/review/review-2026-09-02.html written (36,002 bytes), head/CSS extracted from the 2026-09-01 page by script rather than retyped so the theme cannot drift; only the <title> date changed. VERIFIED BY RENDERING, not reading: headless Chromium over file://, once per colour scheme -- light bg rgb(251,251,250)/ink rgb(28,28,26), dark bg rgb(22,22,26)/ink rgb(233,233,230), ZERO non-file: requests and ZERO console errors in both, full-page height 8,648px. Mechanically: http://, https://, <script, <link, @import all occur 0 times; stdlib HTMLParser closes the tag stack empty with no mismatches; <!DOCTYPE html> opens and </html> closes. Seven sections -- the playbook's six in order, plus 'What needs you' collecting five asks so none is buried. S1 leads with the unmerged two-day branch in a note above the fold AND in the kv list (93 commits, 8 files +382/-92 product diff, both measured). S2 splits the night four ways: product code / driven / tested-not-driven / read-not-driven, the last naming the blind spot D-5 closed. S3 carries F271 in its own card as the day's headline and the first open severity A since 2026-08-28, with F267/F268/F269/F270 beneath in a table with severity, one sentence and file:line, then D-5's before/after table and its three consequences (R-1(b) gets an ordering, 2 write-back sites of 54; R-1(a) gets a fourth category; F259's headline and one DECISIONS.md R-1 evidence line corrected) plus the not-driven no-F-number candidate. S4 says no new change was proposed and why, gives RA and RB a subsection each, and gives 'What RB changed nothing about' its own heading (D1-D5, D7, D6's purpose/writer/exit-code, F190's headline, phases 1 and 3). S5 walks the default queue source by source. S6 is the three ranked candidates, each ending in what it means for AgentWeave. APPROVALS.md: today's section inserted ABOVE 2026-09-01, TWO rows both with a blank token -- a-turn (repaired, phases 1-7 unblocked) and a-write (unchanged, undecided) -- and it states that only the newest section is read, so omitting a-write's row would have silently withdrawn last night's approval too. Three page items named as not-work-and-no-row. Nothing under hub/hub, hub/ui or src touched; no Hub started, no project created, no agent turn, no job."
         }
     ],
     "decisions_for_user": [
@@ -80,7 +80,7 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-02T09:42:57+01:00",
+    "last_heartbeat": "2026-09-02T10:33:35+01:00",
     "branch_spans_days": [
         "2026-09-01",
         "2026-09-02"

@@ -16,6 +16,60 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-02
+
+Review page: `review/review-2026-09-02.html`. **No new change was proposed today.** The spec-loop
+slot went to repairing an already-approved one, because last night's phase-0 gate falsified the
+premise of its design D6 (task 0.3) and `DIRECTION.md`'s governing sentence is that a broken
+approved design outranks a new proposal. Two rounds ran; the row below is what came out.
+
+Write the status token between the `-` and the change name. **No real token is written here:** the
+day window did this work and must not appear to have approved it, so each line below is a blank to
+fill, not a row. Leaving a row out entirely is undecided, not rejection — but note that only the
+newest section is read, so an omitted row here means the FIX window sees no approval for it
+tonight, whatever last night's section says.
+
+- ________  a-turn-says-how-it-ended   repaired by rounds RA and RB, 2026-09-02; phases 1-7 unblocked
+- ________  a-write-outside-the-workspace-is-recorded   unchanged today; R3-complete, 0/54, never approved
+
+`a-turn-says-how-it-ended` -- F190 (A). You approved this on 2026-09-01 **conditionally**: observed
+first. Phase 0 ran last night against a live Hub and the gate did its job -- **task 0.3 falsified
+round 3b's premise**, and task 0.7 returned the change to a round rather than letting it proceed.
+Phases 1-7 were blocked in the tasks file itself. Two rounds ran today:
+
+- **Round RA** re-derived design D6 against nine files and found that signal 1 *does* fire, for the
+  run that finished, written by a producer round 3b never looked for (`runner_parsing.py:346-356`,
+  persisted at `agent_trigger.py:1925-1938`). D6's purpose survives on a narrower argument -- it
+  extends signal 1 to runs that did **not** complete, plus a durable exit code -- and loses two
+  attributions. **Scope not narrowed; phases 1-7 unblocked.** Three tasks added, five rewritten.
+- **Round RB** re-derived RA's argument independently, confirmed every fact by a stronger route, and
+  corrected its **scope**: `status_event("completed")` occurs exactly once in the whole Hub, inside
+  the Claude-only parser, so signal 1 has never fired for a Codex run of either transport. RA's
+  headline retraction is right for Claude and wrong for Codex. Four tasks corrected, one added, and
+  **one task withdrawn** -- 4.5a offered two fixes as equivalents and RB ran both; one fails in
+  exactly F269's case. RB changed **nothing** about designs D1-D5, D7, D6's purpose/writer/exit-code
+  argument, or F190's headline, and that is stated on the review page rather than left implicit.
+
+Cost if approved: **41 open tasks** across phases 1-7, including phase 7's separate verifying round.
+Both rounds implemented and ran code to test their own claims and reverted all of it; nothing under
+`hub/hub/`, `hub/ui/` or `src/` is committed from today. `openspec validate --strict`: valid.
+
+`a-write-outside-the-workspace-is-recorded` -- carried forward unchanged and still undecided rather
+than rejected. It collides with `a-turn` on three files, so approving both for one night means
+ordering them. Its task 4.2 migration number was corrected to `0101` and must be re-derived if
+another migration lands first.
+
+**If you approve nothing**, the FIX window falls to the default queue: source 1 (implemented changes
+needing only archiving) is **empty**, source 2 lands on **F271 (A)** -- today's drive finding, whose
+repair is half a plain fix and half a product decision the window may not make -- and source 3 is
+`a-turn`, approved last night and unblocked today. `ORDER:` and `NOTHING TONIGHT` are both available.
+
+Three things on the review page are **not** work and want no row here: whether the two-day branch
+should merge, F271's blank-a-non-empty-PUT question, and whether the FIX window may write a proposal
+when its queue empties five hours early -- which is what happened last night.
+
+---
+
 ## 2026-09-01
 
 Review page: `review/review-2026-09-01.html`. One change proposed, taken through all three rounds.
