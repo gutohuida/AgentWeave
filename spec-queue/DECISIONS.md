@@ -203,6 +203,91 @@ need an answer, and its real question is not the one D-4 asked: it is whether an
 error is a defect *at all* in every case, since a background poll's failure may be correctly
 invisible. (133 is an order-of-magnitude grep, not a defect count.)
 
+**F197 sized, 2026-09-02 (night window, N-11).** The row above is now superseded by a count.
+Harness: `scripts/drive/n11_query_error_surface.py`, one command, no product code touched. The
+write-up with the quotes is in `scripts/drive/FINDINGS.md` under *"F197 sized, 2026-09-02"*.
+
+**133 was the wrong unit and does not reconstruct.** There are **57** `useQuery` declarations in
+`hub/ui/src/api/`, in 56 exported hooks. `useQuery` appears on 138 lines and 114 outside imports;
+no natural grep of this tree lands on 133. The `62 of 97` half does reconstruct — 97 `.tsx` files
+under `components/`, 61 with no `error` in them today — but a file is not a defect count either: a
+hook called by three components is three chances to render an error, and a file that never says
+`error` is one missing chance, not one per query it runs.
+
+**The unit that is a defect is a call site.** There are **107** outside `api/`, in 48 files. **6**
+bind the query's `error`/`isError` and render it. **101** do not — and 3 of those could not have,
+because two hooks (`useAgentOutput`, `useLogs`) destructure `useQuery` internally and return a
+narrower object with no error field, so no component fix reaches them.
+
+| What the 101 render when the fetch fails | |
+|---|---|
+| **MISREPORT** — a false statement reaches the screen | **60** |
+| — on a surface an operator can reach | **57** (3 sit in `MessagesFeed`, F260's dead component) |
+| — of those 57, an empty picker rather than a sentence | 13 |
+| — a sentence, a number, or a terminal skeleton | **44** |
+| **SUPPRESSED** — an alert or affordance silently does not render | 16 |
+| **BLANK** — a decoration or lookup is missing; nothing is claimed | 24 |
+| **NAMED** — says the data is unavailable without binding `error` | 1 |
+
+The rule was written before it was applied and is at the top of the script; every one of the 101
+is classified individually in `CLASSIFIED`, each naming the line it was read off. The mechanical
+part is the 107/6/101 split and the poll flags — which of the four labels a site earns is a
+reading, and disputable per row rather than in aggregate.
+
+**The rule gained two labels while it was applied, which the brief asked it not to.** `SUPPRESSED` was split out of `BLANK` (a blocked run's approval card not rendering is not a missing avatar colour) and `NAMED` did not exist at all until `RunnersPage.tsx:198` turned up. Both narrow `MISREPORT` rather than widen it, so neither inflates the headline; both are recorded in the script's docstring.
+
+**The question this row existed to answer — how many are background polls whose errors are
+correctly invisible — has a hard answer: at most four, and none of them misreports.** Exactly two
+of the 56 hooks poll (`usePendingPermissionRequests` and `useQuestions`, 3s), reaching 4 of the 101
+sites; three are `SUPPRESSED` and one `BLANK`. The Hub pushes SSE rather than polling (8 of 22 api
+files invalidate on an event), and an SSE-invalidated query that fails its **first** load does not
+retry until the next event arrives. Even the four are pardoned only after a first success — a poll
+that fails cold renders the same false empty as any other query. So the "much of this is correctly
+invisible" reading of the 133 does not survive: on this tree it accounts for 4 sites, not a
+fraction of the whole.
+
+**What is on the screen, from the 44.** *"No agents connected. Run `agentweave start` to connect
+agents"* (`OverviewPage.tsx:79` — it also instructs the operator to do the wrong thing);
+*"Everything here is archived"* (`SpecPage.tsx:35`); *"No quality governance configured"* and
+*"All reviewed tasks clear"* (`QualityHealthPanel.tsx:25-26`); *"This agent is no longer in the
+roster"* (`AgentSettingsPage.tsx:42`); four `?? 0` counts in the status bar. The sharpest is not a
+display defect at all: `InstructionsPage.tsx:9` seeds its editor from `if (data) setContent(...)`,
+so a failed load leaves an **empty textarea with Save enabled**, and a save writes `''` over the
+stored instructions. Static read, not driven.
+
+**Two facts that bear directly on (b), stated as evidence and not as an answer.** First, the repo
+already contains the worked pattern *and* its rationale: `QuestionsPanel.tsx:86` renders its error
+only `if (isError && unanswered === undefined)` — *"A failed fetch used to fall through to 'No
+pending questions' — an error rendered as reassurance, on the one screen where 'nothing is waiting
+on you' is the most expensive thing to say wrongly"* — and deliberately does **not** replace a
+screen of real questions when its 3s poll blips. Second, a check phrased as *"the site binds
+`error`"* would misfire in both directions: it would call `RunnersPage.tsx:198` a defect, which
+renders *"The model catalog is unavailable — this runner will use the provider's default"* from
+`!!catalog` and binds nothing, and it would pass any site that binds `error` and drops it.
+`JobCard.tsx:146` shows the near-miss the other way: a comment that reasons the claim must not be
+made before the answer arrives, guarded on `isLoading`, which is false after an error.
+
+**Falsified rather than asserted: none of the 60 has an error branch elsewhere in its file.** Every
+`MISREPORT` site's file was re-read for any `error`/`isError` token outside the call site. 34 of the
+60 have one — and all 34 are a *mutation's* error, a local `useState` error, a severity enum, a
+`console.error`, or a **different** query's (`TasksBoard.tsx:57` handles `useTasks` and not
+`useAllowedTransitions` one line below). Not one is a branch that would cover the query in question.
+`ProjectSettingsPanel.tsx:84` is the original F197 sentence restated by the pass: `const error =
+update.error ?? relocate.error` — two mutations, never the query.
+
+**Which is the asymmetry worth carrying into (b).** The UI renders mutation failures routinely — 18
+`readableApiError(...)` call sites across 13 component files, every one of them fed by a mutation or
+a handler's `err` — and query failures 6 times in 107. It is not that this codebase does not handle
+errors. It handles the ones it caused and not the ones it merely observed.
+
+**Blind spot, N-10's again.** Sites are found by symbol, one level deep, so a site in a component
+nothing imports counts as live; 3 of the 60 are exactly that, and were caught only because F260
+had already named `MessagesFeed`. 57 and 101 are therefore upper bounds on what an operator can
+reach.
+
+**Still evidence only.** Nothing here answers (a) or (b), nothing is marked `DECIDED`, and no
+recommendation is offered.
+
 **The decision has two halves, unchanged from D-3 and still the right two:**
 
 **(a)** Are the eleven operator-only routes en route to a screen, deliberately API-only, or dead? A
