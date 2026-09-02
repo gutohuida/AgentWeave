@@ -158,19 +158,46 @@ covered. vitest is **142 files / 1476 tests** green (1473 before), `npm run lint
 
 ## 5. Drive it, then ship the bundle
 
-- [ ] 5.1 Against the `:8011` Hub in a fresh project (never `proj-5e960453` or `proj-18e5d4e0`),
+- [x] 5.1 Against the `:8011` Hub in a fresh project (never `proj-5e960453` or `proj-18e5d4e0`),
       reproduce F173's exact sequence — New Runner, Claude, model `opus`, Save — and confirm the
       operator now reads `'opus' is not a model 'claude' declares`. The model field must no longer
       accept the typed value at all, so the reproduction becomes: the refusal is unreachable from
       the screen, and the *edit* of a legacy runner is where the refusal surface is proved.
-- [ ] 5.2 Clear a runner's model back to Provider default in the UI, then confirm through
+- [x] 5.2 Clear a runner's model back to Provider default in the UI, then confirm through
       `GET /runners/{id}` that it is `null` — the API half, proved through the screen.
-- [ ] 5.3 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
+- [x] 5.3 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
       hub/tests/ tests/`, `mypy src/`, `cd hub/ui && npm run lint`.
-- [ ] 5.4 `pytest hub/tests/ -v` under `py -3.11`, and `cd hub/ui && npm test`.
-- [ ] 5.5 `cd hub/ui && npm run build`, then `python scripts/refresh_ui_bundle.py`. Commit
+- [x] 5.4 `pytest hub/tests/ -v` under `py -3.11`, and `cd hub/ui && npm test`.
+- [x] 5.5 `cd hub/ui && npm run build`, then `python scripts/refresh_ui_bundle.py`. Commit
       `hub/ui/src` and `hub/hub/static/ui` together.
-- [ ] 5.6 Re-run `py -3.11 scripts/drive/t_r2_runner_update_semantics.py` and confirm **19 passed
+- [x] 5.6 Re-run `py -3.11 scripts/drive/t_r2_runner_update_semantics.py` and confirm **19 passed
       / 0 failed** — Q5's legacy runner now saves unchanged, and Q1–Q4's negatives still hold.
-- [ ] 5.7 Mark F173, F219 and F220 retired in `scripts/drive/FINDINGS.md` only after 5.1, 5.2 and
+- [x] 5.7 Mark F173, F219 and F220 retired in `scripts/drive/FINDINGS.md` only after 5.1, 5.2 and
       5.6 pass. **F221 stays open** — the alias refusal is named out of scope in design.md.
+
+### Section 5 evidence — measured 2026-09-02 (night window, N-6)
+
+Everything below ran against the **built bundle** on the Hub's own port. No Vite dev server was in
+the loop; that distinction is the whole reason sections 2 and 3 could not close their findings when
+they were written.
+
+- **5.5 first**, because the rest is a claim about what an operator loads. `npm run build` then
+  `py -3.11 scripts/refresh_ui_bundle.py`; `/health` on `:8011` stopped reporting `ui_stale` and
+  the served `index.html` moved to `index-x3nWU-L2.js`.
+- **5.1 / 5.2** — both UI harnesses re-pointed with `AW_UI=http://127.0.0.1:8011`:
+  `t_n4_runner_refusal_reaches_the_operator.py` **24 passed / 0 failed**,
+  `t_n3_runner_model_picker_ui.py` **25 passed / 0 failed**. Fixture projects `proj-eaa0931b7d8c`
+  and `proj-731ca8ecdaa8`, both deleted, project count back to `0` each time. No agent turn was
+  needed, so nothing bound a model.
+- **5.6** — `t_r2_runner_update_semantics.py` **19 passed / 0 failed**. Q5 was silently
+  unmeasurable on the first attempt: the harness's `CANDIDATE_DBS` did not list the temp-directory
+  database the `:8011` Hub is actually served from, so it reported "database not found" rather than
+  a wrong answer. Fixed in the harness (the candidate is still confirmed by finding *this run's own
+  runner row* in it, so a wrong guess is skipped rather than written to).
+- **5.3** — `ruff` clean, `black --check --target-version py311` clean over 536 files, `mypy src/`
+  clean over 22 files, `npm run lint` and `tsc --noEmit` clean.
+- **5.4** — vitest **142 files / 1476 tests passed**; CLI suite **440 passed / 3 skipped**; full
+  hub suite **1 failed / 3835 passed / 84 skipped / 1 xpassed** in 23:15. The one red is
+  **not this change** — it is `test_relocate_repairs_and_redrains_queued_work`, reproduced
+  identically before this change's UI work and bisected here. Written up as **F266** in
+  `scripts/drive/FINDINGS.md`; it needs a proposal of its own.

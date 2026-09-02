@@ -120,11 +120,19 @@
   *observed, nothing left*. Do not backfill — migration `0096`'s own precedent for `workspace_dir`
   and `0043`'s for `snapshot_commit_sha`. A backfilled `[]` would claim every historical run was
   watched and found clean.
-- [ ] 4.2 **One** migration `0100` for both this column and task 5.2's, guarded for a missing table
-  the way `0033`/`0034`/`0075`/`0095`/`0096` are — design D10. Head today is `0099`
-  (`0099_question_wait_window.py`). Bump `hub/tests/test_migrations.py:39`
-  (`HEAD_REVISION = "0099"`) **and** `hub/tests/test_project_persistence.py:227`
-  (`assert version == "0099"`).
+- [ ] 4.2 **One** migration `0101` for both this column and task 5.2's, guarded for a missing table
+  the way `0033`/`0034`/`0075`/`0095`/`0096` are — design D10. Head today is `0100`
+  (`0100_loop_work_needs_evidence.py`), so `down_revision = "0100"`. Bump
+  `hub/tests/test_migrations.py`'s `HEAD_REVISION = "0100"` **and**
+  `hub/tests/test_project_persistence.py:227` (`assert version == "0100"`) to `0101`.
+
+  *Corrected 2026-09-02 (night N-7), verified against the tree rather than assumed.* This task was
+  written when `0099` was head and named `0100` for itself;
+  `a-loop-declares-whether-it-needs-evidence` has since landed `0100_loop_work_needs_evidence.py`
+  (`revision = "0100"`, `down_revision = "0099"`), and both head assertions already read `0100`.
+  Writing this change's migration as `0100` would collide on the revision identifier and give
+  `0099` two children. If a further migration lands before this change is implemented, re-derive
+  the number the same way instead of trusting this line.
 - [ ] 4.3 **Pass the project root down first.** Round 3 measured it: `repo_root` occurs nowhere in
   `_execute_run` (lines 1720-2274) or `_execute_codex_appserver_run` (2389-2752). `work_dir`,
   `run_id`, `project_id` and `agent` are all in scope; the project root, which D4 needs to compute
@@ -181,7 +189,7 @@
   that value is built from git alone and this fact is database state on `Run`, so `Footprint` cannot
   derive it and `restamp_run_footprints` (`:845`, `_apply_footprint` at `:921`) would have to
   fabricate it — design D11. Both call sites (`:423`, `:921`) pass what they read from the run. The
-  column rides migration `0100` from task 4.2; there is no second migration and no second head bump.
+  column rides migration `0101` from task 4.2; there is no second migration and no second head bump.
 - [ ] 5.3 Do **not** change which directory the footprint is taken from, and do **not** refuse the
   evidence. Design D7 rules both out; add a test that asserts the footprint root is unchanged for a
   run that wrote outside, so a later reader cannot "fix" this by moving it.

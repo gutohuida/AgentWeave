@@ -43,7 +43,12 @@ if HUB.endswith(":8000"):
     print("REFUSING TO RUN: 8000 is the operator's real usage.")
     sys.exit(1)
 
+# Each candidate is confirmed by looking for *this run's own runner row* in it, so a wrong guess
+# is skipped rather than written to. The temp-dir database is the one the :8011 drive Hub has
+# actually been served from since 2026-09-01; it is first because leaving it out is what made Q5
+# silently unmeasurable on 2026-09-02 until AW_DB was passed by hand.
 CANDIDATE_DBS = [p for p in [os.environ.get("AW_DB")] if p] + [
+    os.path.join(tempfile.gettempdir(), "aw0901n", "aw0901n.db"),
     os.path.expanduser("~/.agentweave/hub/profiles/beta/agentweave.db"),
     os.path.join("hub", "data", "agentweave.db"),
     os.path.expanduser("~/.agentweave/hub/profiles/trial/agentweave.db"),
@@ -86,7 +91,9 @@ print(f"fixture project {PID} at {wd}\n")
 
 try:
     status, catalog = call("GET", "/model-catalog")
-    claude_models = [m["id"] for p in catalog["providers"] if p["provider"] == "claude" for m in p["models"]]
+    claude_models = [
+        m["id"] for p in catalog["providers"] if p["provider"] == "claude" for m in p["models"]
+    ]
     print(f"catalog declares {len(claude_models)} claude models: {claude_models}\n")
     good = claude_models[0]
     other = claude_models[1] if len(claude_models) > 1 else claude_models[0]
@@ -114,7 +121,9 @@ try:
 
     # Field order matters: name is assigned first, so the reverse order proves nothing new,
     # but a partial commit would show up here too if the session were flushed early.
-    status, _ = call("PATCH", f"/projects/{PID}/runners/{RID}", {"name": "R2 second try", "model": "gpt-nope"})
+    status, _ = call(
+        "PATCH", f"/projects/{PID}/runners/{RID}", {"name": "R2 second try", "model": "gpt-nope"}
+    )
     status2, after2 = call("GET", f"/projects/{PID}/runners/{RID}")
     check(after2["name"] == "R2 original", "a second refused PATCH also left the name alone")
 
@@ -127,7 +136,9 @@ try:
     )
     check(status == 400, f"POST with an undeclared model is refused ({status})")
     status, after_list = call("GET", f"/projects/{PID}/runners")
-    check(len(after_list) == n_before, f"no runner row was created ({n_before} -> {len(after_list)})")
+    check(
+        len(after_list) == n_before, f"no runner row was created ({n_before} -> {len(after_list)})"
+    )
 
     # ---------------------------------------------------------------- Q3
     print("\nQ3 — is `flags` actually clearable via [] ? (round 1 read this off the source)")
@@ -195,7 +206,9 @@ try:
             f"the Hub marks it unrecognised ({legacy.get('model_unrecognised')!r})",
         )
 
-        status, body = call("PATCH", f"/projects/{PID}/runners/{RID}", {"name": "R2 legacy renamed"})
+        status, body = call(
+            "PATCH", f"/projects/{PID}/runners/{RID}", {"name": "R2 legacy renamed"}
+        )
         check(status == 200, f"renaming a legacy runner without touching model works ({status})")
         status, still = call("GET", f"/projects/{PID}/runners/{RID}")
         check(still["model"] == "claude-3-legacy-9", "...and the legacy model survives")
@@ -220,7 +233,9 @@ finally:
     call("DELETE", f"/projects/{PID}")
     shutil.rmtree(wd, ignore_errors=True)
     status, projects = call("GET", "/projects")
-    print(f"\nfixture deleted; project count now {len(projects) if isinstance(projects, list) else projects}")
+    print(
+        f"\nfixture deleted; project count now {len(projects) if isinstance(projects, list) else projects}"
+    )
 
 print(f"\n{len(PASS)} passed / {len(FAIL)} failed")
 for f in FAIL:

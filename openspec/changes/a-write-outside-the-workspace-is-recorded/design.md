@@ -420,14 +420,20 @@ requirement.
 
 ## D10 — Two columns, one migration, and the numbers
 
-Head is `0099` (`hub/hub/migrations/versions/0099_question_wait_window.py`). The head assertions to
-bump are `hub/tests/test_migrations.py:39` (`HEAD_REVISION = "0099"`) and
-`hub/tests/test_project_persistence.py:227` (`assert version == "0099"`).
+Head is `0100` (`hub/hub/migrations/versions/0100_loop_work_needs_evidence.py`). The head assertions
+to bump are `hub/tests/test_migrations.py`'s `HEAD_REVISION = "0100"` and
+`hub/tests/test_project_persistence.py:227` (`assert version == "0100"`).
 
-Round 1's tasks asked for a migration at 4.2 and another at 5.2, which would be `0100` and `0101`
-and two head bumps in sequence for one change. Both columns are added by this change, neither is
+Round 1's tasks asked for a migration at 4.2 and another at 5.2, which would be two migrations and
+two head bumps in sequence for one change. Both columns are added by this change, neither is
 readable without the other, and a half-applied pair means an annotated footprint with nothing to
-annotate from. One migration, `0100`, adds both.
+annotate from. One migration, `0101`, adds both.
+
+*Corrected 2026-09-02 (night N-7).* This section was written when `0099` was head and claimed
+`0100` for this change. `a-loop-declares-whether-it-needs-evidence` has since landed
+`0100_loop_work_needs_evidence.py`, so `0100` is taken and both head assertions already read it.
+The number here is derived from the tree, not carried forward — re-derive it again if another
+migration lands before this change is implemented.
 
 ## D11 — `_apply_footprint` maps a `Footprint`, which is git state
 
@@ -506,7 +512,7 @@ Recorded rather than silently applied, in the order they were found.
    disagrees with both (`MultiEdit`). See D3.
 4. **D8's open question is answered**, from F107's live-derived reader rather than the summariser:
    `{"path": ..., "diff": ...}`. See D8.
-5. **One migration, not two**, and the head is `0099` with two assertions to bump. See D10.
+5. **One migration, not two**, and the head is `0100` with two assertions to bump. See D10.
 6. **`_apply_footprint` cannot carry the fact on `Footprint`.** See D11.
 7. **Line-number corrections.** `_flush_line` is at `agent_trigger.py:1880`, not `1877` (cited three
    times); `_apply_footprint` is at `requirement_evidence.py:362`, not `365`; the Codex `fileChange`

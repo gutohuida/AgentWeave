@@ -12936,7 +12936,26 @@ but never spawned, per the standing operator decision that Codex is undrivable.
 
 ---
 
-## F173 (A) — runner management is free-typed text that swallows its own refusal, and the spec says otherwise
+## F173 (A) — RETIRED 2026-09-02 — runner management is free-typed text that swallows its own refusal, and the spec says otherwise
+
+> **RETIRED 2026-09-02 (night window, N-6), against the built bundle.** `hub/hub/static/ui` was
+> rebuilt from source (`npm run build` + `scripts/refresh_ui_bundle.py`), `/health` on `:8011`
+> stopped reporting `ui_stale`, and the served `index.html` moved to `index-x3nWU-L2.js`. Both UI
+> harnesses were then re-pointed at the Hub's **own** port — no Vite dev server anywhere in the
+> loop — and passed unchanged:
+> `AW_UI=http://127.0.0.1:8011 t_n4_runner_refusal_reaches_the_operator.py` **24 passed / 0
+> failed**, `AW_UI=http://127.0.0.1:8011 t_n3_runner_model_picker_ui.py` **25 passed / 0 failed**.
+> That is the drive retirement was waiting on, and it is now true of what an operator loads.
+>
+> What an operator sees today: no free-text model field exists (the select offers `Provider
+> default` plus the catalog's declared models for the chosen CLI, checked exhaustively), and a
+> refusal is rendered in a `role="alert"` inside the dialog through `readableApiError` — including
+> `'opus' is not a model 'claude' declares`, the sentence this finding is named for. Three refusal
+> *shapes* were read on screen against the bundle: a Pydantic `422` array body, the `400` model
+> refusal, and the `409` naming the agents holding a runner.
+>
+> Shipped by `openspec/changes/runner-model-is-chosen-from-the-catalog`, sections 2, 3 and 5.
+> **F221 is not covered by this and stays open** — design.md names the alias refusal out of scope.
 
 `openspec/specs/runner-registry/spec.md:72-73` is a **shipped** requirement, not a proposal:
 
@@ -15473,7 +15492,17 @@ it.
 
 ---
 
-## F219 (C) — a runner's model cannot be cleared, and the attempt is answered `200`
+## F219 (C) — RETIRED 2026-09-02 — a runner's model cannot be cleared, and the attempt is answered `200`
+
+> **RETIRED 2026-09-02 (night window, N-6), against the built bundle.** Proved end to end on the
+> Hub's own port, not a dev server: in the browser, a runner carrying `Opus 5` was moved back to
+> `Provider default` and saved; the request on the wire was `{'name': 'N3 Declared', 'model':
+> None}` — an **explicit null, not an omitted key**, which is the whole of this finding — and
+> `GET /runners/{id}` afterwards reported `model=null`. The list row stopped showing a model for
+> it. `t_n3_runner_model_picker_ui.py` **25 passed / 0 failed** with `AW_UI=http://127.0.0.1:8011`.
+> At the API level `t_r2_runner_update_semantics.py` is **19 passed / 0 failed** (task 5.6's
+> target), with Q4 asserting the requirement rather than the defect and `PATCH model:""` still
+> refused `400`. Shipped by `runner-model-is-chosen-from-the-catalog`, sections 1, 2 and 5.
 
 **API side repaired 2026-09-01 (night window, N-2), still open.** `update_runner` now gates
 `model` on `"model" in body.model_fields_set`, so an explicit `null` clears and an absent key
@@ -15538,7 +15567,18 @@ the two reds are this finding. It makes and deletes its own fixture project, so 
 
 ---
 
-## F220 (C) — a runner whose model the catalog does not declare cannot be saved at all
+## F220 (C) — RETIRED 2026-09-02 — a runner whose model the catalog does not declare cannot be saved at all
+
+> **RETIRED 2026-09-02 (night window, N-6), against the built bundle.** The legacy case was driven
+> on the Hub's own port with an unrecognised model written straight into a fixture runner's row:
+> the edit dialog **offers** it, has it **selected**, and labels it `claude-3-legacy-9 —
+> unrecognised`; Save sent exactly one `PATCH` re-submitting the stored model, and the Hub answered
+> `200` with the model intact. The list row carries an amber `Unrecognised` chip, so the shipped
+> `runner-registry` promise — told the model is unrecognised *and* still able to save — is kept on
+> both halves. `t_n3_runner_model_picker_ui.py` **25 passed / 0 failed**
+> (`AW_UI=http://127.0.0.1:8011`); `t_r2_runner_update_semantics.py` Q5 **19 passed / 0 failed**,
+> its previously-red check ("saving a legacy runner UNCHANGED is accepted") now green.
+> Shipped by `runner-model-is-chosen-from-the-catalog`, sections 1, 2 and 5.
 
 **API side repaired 2026-09-01 (night window, N-2), still open.** `_reject_undeclared_model`
 now takes the runner's `current` model and returns early when the submitted model equals it, so
@@ -17504,3 +17544,75 @@ model 'claude' declares"* — the catalog declares only the dated `claude-haiku-
 (`model_catalog.py:164`). Noted here because the rest of tonight's queue is
 `runner-model-is-chosen-from-the-catalog`, and a picker fed from the catalog will therefore offer
 dated ids only.
+
+---
+
+## F266 (B) — a post-commit `db.refresh` can fail a run that already succeeded, and the queue then runs the agent's turn a second time
+
+**This is N-2's open question, settled**, and it is not a flake. `hub/tests/` reds on exactly one
+test, `test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work`, and
+only in a **full** run — reproduced twice with identical counts (`1 failed, 3835 passed, 84
+skipped, 1 xpassed`, 2026-09-01 N-2 and 2026-09-02 N-6, 23:15 wall clock). No `.py` under
+`hub/hub` or `src` changed between the two runs, so it is not attributable to
+`runner-model-is-chosen-from-the-catalog`.
+
+**The proximate cause is measured, not guessed.** The traceback is in the product, not the test:
+
+```
+ERROR [hub.api.v1.agent_trigger] Unhandled error in run run-a3151507034b for 'claude'
+  agent_trigger.py:1959  in _execute_run   -> await _flush_line(raw_line)
+  agent_trigger.py:1928  in _flush_line    -> await record_agent_output(...)
+  output_recording.py:94 in record_agent_output -> await db.refresh(row)
+sqlalchemy.exc.InvalidRequestError: Could not refresh instance '<AgentOutput at 0x...>'
+```
+
+`record_agent_output` does `db.add(row)` → `await db.commit()` → `await db.refresh(row)`
+(`hub/hub/output_recording.py:92-94`). **The write has already committed** when the refresh raises.
+`_execute_run` catches it as an unhandled error and fails the run; the failure path calls
+`return_run_entries`, which puts the queue entry back; a second run picks it up and settles. The
+test asserts `len(runs) == 1` and sees `2 == 1`.
+
+So the assertion failure is a *symptom*. The behaviour underneath it is: **a run whose output was
+successfully written can still be marked failed and its turn re-run**, because of a refresh that
+exists only to read `row.timestamp` for the SSE broadcast six lines later
+(`output_recording.py:107`). Nothing about that recovery is wrong in itself — re-queueing a failed
+run is correct — but the input to it is a false failure.
+
+**What is measured, and what is not.** Measured: the traceback above, the doubling it causes, and
+that it reproduces twice at full-suite scale. **Not** measured: that this fires in production. It
+has only ever been seen under a 242-file test process, and no live drive has provoked it.
+
+**Bisected 2026-09-02 (N-6), and the result is the interesting part** — all with `-p no:randomly`,
+from `hub/`:
+
+| Selection | Result |
+|---|---|
+| the file alone | **7 passed**, 3.86s |
+| `test_conversation_contract.py` + this file — *the reproduction the test's own comment names* | **15 passed**, 6.89s |
+| files 106–141 (the 35 immediately preceding it) | **749 passed**, 3:39 |
+| files 1–141 (**every** file that precedes it in collection order) | **2253 passed**, 13:31 |
+| files 141–242 (it, plus every file collected after it) | **1590 passed**, 8:49 |
+| all 242 files | **RED**, 23:15 |
+
+Both halves are green and the whole is red. Since `-p no:randomly` runs files in collection order,
+files 142–242 cannot execute before it — and the 1–141 prefix contains everything that can. So the
+cause is **not any one preceding file**; it is accumulated process state or load at full-suite
+scale. That also fits the shape: the same 141 files take 13:31 as a prefix and considerably longer
+inside the full run, so by the time it is reached the process is slower, which is what a race
+loses to.
+
+**The test's inline comment is now misleading and should be corrected by whoever fixes this.**
+`test_project_workspace_unavailable.py:455-470` attributes this failure to F40's patch-scoping race
+(the fake `PtySession.spawn` going out of scope before the background task spawns) and names
+`test_conversation_contract.py` + this file as a deterministic reproduction. That race was fixed —
+the fake spawn *worked* here, the run got as far as flushing a result line — and the pair it names
+measures **green**. A future reader debugging this will otherwise re-derive an answer that is no
+longer the answer.
+
+**Reproduction:** `cd hub && py -3.11 -m pytest tests/ -q -p no:randomly`. Expensive — 23 minutes,
+and nothing cheaper has been found. Narrowing it further is worth a session of its own; the six
+selections above are the ones already spent, so start after them.
+
+**Not proposed.** Needs the day window: the fix is a design question (drop the refresh and stamp
+`timestamp` client-side, refresh defensively, or stop treating a post-commit recording error as a
+run failure) and this window does not write proposals.
