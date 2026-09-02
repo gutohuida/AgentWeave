@@ -285,6 +285,50 @@ nothing imports counts as live; 3 of the 60 are exactly that, and were caught on
 had already named `MessagesFeed`. 57 and 101 are therefore upper bounds on what an operator can
 reach.
 
+**Blind spot closed, 2026-09-02 (day window, D-5).** Harness:
+`scripts/drive/d5_reachability_walk.py`, which imports the two night scripts rather than
+reimplementing them, so its numbers differ from theirs by the module filter and by nothing else.
+The write-up is in `scripts/drive/FINDINGS.md` under *"What D-5 measured, 2026-09-02"*.
+
+Of 170 source files under `hub/ui/src`, **157 are reachable from `main.tsx` and 13 are not** —
+and 12 of the 13 have every literal that occurs nowhere else in `src/` absent from the shipped
+bundle, with a dozen reachable files probed as controls and every one of their literals present.
+The thirteenth, `badgeVariants.ts`, is reached only by an `import type`, which the compiler erases.
+The choice of entry point does not matter: `App.tsx` alone reaches 155, the two extra being
+`main.tsx` and `ErrorBoundary.tsx`.
+
+| Figure | Depth-1 | Reachable only | What moved |
+|---|---|---|---|
+| routes reached from the UI | 110 | **106** | 4 pairs are reached only from dead code |
+| operator routes with no live client | 45 | **49** | 35 no client + 10 CLI-only + these 4 |
+| query call sites outside `api/` | 107 | **99** | 8 in dead code, of which N-11 knew 3 |
+| unhandled sites | 101 | **93** | |
+| MISREPORT | 60 | **54** | N-11's "57 an operator can reach" is **54** |
+| SUPPRESSED | 16 | **14** | |
+
+**The four routes are a category (a) did not have.** `GET /messages`,
+`PATCH /messages/{id}/read`, `POST …/compact` and `POST …/new-session` are not *"no client was ever
+written"* — a client exists, in `api/context.ts` and `api/messages.ts`, and its screens were
+removed. When (a) asks whether the operator-only routes are en route to a screen, deliberately
+API-only, or dead, this is a fourth answer: **the screen was there and went away**, leaving the
+route and its client behind. Whatever standing rule (a) settles on has to say what happens to these.
+
+**One line of the evidence above is wrong and is corrected here.** *"What is on the screen, from
+the 44"* lists *"four `?? 0` counts in the status bar"* (`StatusBar.tsx:15`). `StatusBar.tsx` is
+imported by nothing and is not in the bundle, so those four counts are on no screen —
+`Sidebar.tsx:112` says as much in passing. F259, whose headline is built on the same chip, is
+amended in `FINDINGS.md` for the same reason; its substance (nothing marks a message read; the
+scheduler depends on the flag) is untouched.
+
+**And the count was never the interesting number.** F271 — filed the same day, severity A — is one
+of these unhandled sites, and dozens of the others are cosmetic. What separates them is whether a
+failed load can be **written back**: does the query's data seed component state, does the file
+write, and is there an early return that stops the write rendering while the fetch is failing. Of
+the 54 MISREPORT sites, **2** seed state and write it back with no guard (`InstructionsPage.tsx:9`,
+which is F271, and `AgentOutputPanel.tsx:207`), 2 do so behind a guard, 23 write without seeding,
+and 27 do not write at all. If (b) becomes a repo check, that ordering — not the total — is what it
+should be built on: a check that fires on all 54 equally will be turned off.
+
 **Still evidence only.** Nothing here answers (a) or (b), nothing is marked `DECIDED`, and no
 recommendation is offered.
 

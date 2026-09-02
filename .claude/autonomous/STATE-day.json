@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-02T17:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-02-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-5",
-    "next_action": "D-5 (OPTIONAL - drop after 15:30 and go straight to D-6). Measure: a reachability walk from hub/ui/src/App.tsx. This is the one R-1 evidence gap the night window named and did not attempt. N-10 and N-11 are depth-1 static reads, so their 110 reached routes is an UPPER bound, their 35 and 6 are FLOORS, and 101 unhandled query sites is an UPPER bound -- F260 (useMessages imported only by MessagesFeed, which nothing imports and which is not in the bundle) is the case that defeats depth-1. Walk the import graph transitively from App.tsx and turn those bounds into totals. Note F271, filed at iteration 5, is itself an unhandled-query-site instance that reached the operator destructively -- if the walk can rank the surviving sites by whether a failed query leaves a WRITE control enabled, that ranking is the useful output, not the count. This SHARPENS R-1's OPEN row in spec-queue/DECISIONS.md and may NEVER answer it. Then D-6: write spec-queue/review/review-2026-09-02.html (self-contained, theme-aware, six sections in the playbook's order; section 1 leads with the unmerged two-day branch; section 2 must carry F271 as the day's headline finding and the first open severity A since 2026-08-28; section 4 must say when a round changed nothing -- RB changed nothing about D1-D5/D7 and that belongs on the page) and append today's section to spec-queue/APPROVALS.md, one row per specced change, NO status token. This window does NOT implement -- no edits under hub/hub/, hub/ui/ or src/agentweave/.",
+    "current": "D-6",
+    "next_action": "D-6: write spec-queue/review/review-2026-09-02.html (self-contained, theme-aware, six sections in the playbook's order) and append today's section to spec-queue/APPROVALS.md, one row per specced change, NO status token. Section 1 must lead with the unmerged two-day branch. Section 2 must carry F271 as the day's headline finding and the first open severity A since 2026-08-28, with F267/F268/F269/F270 beneath it. Section 4 must say when a round changed nothing -- RB changed nothing about D1-D5/D7 and that belongs on the page. D-5's measurement belongs on the page too: it corrects a published finding's headline (F259) and one of DECISIONS.md's own evidence lines, and it hands R-1(b) an ordering (2 write-back sites out of 54) rather than a count. This window does NOT implement -- no edits under hub/hub/, hub/ui/ or src/agentweave/.",
     "queue": [
         {
             "id": "compose",
@@ -48,10 +48,10 @@
         },
         {
             "id": "D-5",
-            "status": "current",
+            "status": "done",
             "optional": true,
             "title": "Measure: reachability walk from App.tsx",
-            "detail": "The one R-1 evidence gap the night window named and did not attempt. N-10 and N-11 are depth-1 static reads, so 110 reached routes is an UPPER bound, 35 and 6 are FLOORS, and 101 unhandled query sites is an UPPER bound - F260 (useMessages imported only by MessagesFeed, which nothing imports and which is not in the bundle) is the case that defeats depth-1. Walk the import graph from App.tsx to turn those bounds into totals. This SHARPENS R-1's OPEN row in spec-queue/DECISIONS.md and may NEVER answer it. DROP THIS ITEM after 15:30 and go to D-6."
+            "detail": "Done at iteration 6. scripts/drive/d5_reachability_walk.py imports the two night scripts rather than reimplementing them, so every delta is attributable to the module filter alone (both re-run first on today's tree and reproduce 110/35/107/101/60 exactly). 170 source files under hub/ui/src; 157 reachable from main.tsx, 13 NOT. Root choice is immaterial (App.tsx alone reaches 155; the extra two are main.tsx and ErrorBoundary.tsx); type-only edges add one file; no specifier failed to resolve. 12 of the 13 have EVERY literal unique to them absent from the served bundle, with 12 reachable files probed as controls and all their literals present; the 13th (badgeVariants.ts) is settled by the compiler -- its only importer is an `import type`. FIVE dead files nothing had named: AgentActivityTab, AgentCard, StatusBar, SidebarItem, plus stream/SharedStreamRenderer, stream/streamModel, lib/agentStatus. TOTALS, replacing the bounds: routes reached 110 -> 106; operator routes with no live client 45 -> 49; call sites 107 -> 99; unhandled 101 -> 93; MISREPORT 60 -> 54; SUPPRESSED 16 -> 14. The 4 newly-unreached routes (GET /messages, PATCH .../read, POST .../compact, POST .../new-session) are a FOURTH category for R-1(a): a client exists and its screen was removed. RANKING (the useful output): of the 54 MISREPORT, 2 seed state and write it back with NO guard (InstructionsPage:9 = F271, and AgentOutputPanel:207), 2 do so behind a guard (F197's terminal skeleton), 23 write without seeding, 27 do not write. Rank 1G exists because the first pass put all four in rank 1 and a hand read moved two out. ONE CANDIDATE, explicitly NOT DRIVEN and given NO F-number on N-11's own precedent: after a failed conversations load, Composer.tsx:333/336 spread an empty local override map and agent_trigger.py:1364 assigns runtime_overrides wholesale, so touching one pill would replace a stored {model,effort} with {effort} -- the settling drive is written down in FINDINGS.md. CORRECTIONS FORCED: F259 amended (its headline puts the unread count on the StatusBar chip, which is in no bundle; substance and F264 consequence untouched), and DECISIONS.md R-1 strikes its own 'four ?? 0 counts in the status bar' line. R-1's (a) and (b) still OPEN and nothing marked DECIDED. ruff and black clean; nothing under hub/hub, hub/ui or src committed."
         },
         {
             "id": "D-6",
@@ -80,7 +80,7 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-02T10:05:18+01:00",
+    "last_heartbeat": "2026-09-02T10:22:37+01:00",
     "branch_spans_days": [
         "2026-09-01",
         "2026-09-02"

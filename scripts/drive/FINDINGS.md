@@ -17196,6 +17196,12 @@ message"* — and that table is also stale on the route shape, which is project-
 
 ## F259 (B) — nothing in the product ever marks a message read, so the StatusBar's `N msgs` chip only ever counts up
 
+**Amended 2026-09-02 (D-5): the title's consequence is wrong, the finding is not.** `StatusBar.tsx`
+is imported by nothing and is absent from the shipped bundle, measured by the reachability walk at
+the end of this file, so the chip below is on no operator's screen. Everything measured here still
+holds — nothing marks a message read, 82 are unread across ten days — and the consequence that
+survives is `GET /status`'s `message_counts.pending` and `scheduler.py:420`, which is F264.
+
 `msg.read = True` occurs exactly once in the entire Hub:
 
 ```python
@@ -18122,3 +18128,130 @@ consults `isLoading`: render the failure instead of an empty editor, and gate Sa
 the page should also refuse a PUT that would replace non-empty stored content with `""` without a
 confirmation is a **product decision for the operator**, not a bug fix — the empty string is a
 legitimate value the route accepts on purpose.
+
+---
+
+## What D-5 measured, 2026-09-02 — the reachability walk N-10 and N-11 both said they had not done
+
+Both night scripts end on the same admission: their passes are **depth-1**, so they ask *"does any
+file name this symbol"* and cannot see a subtree that is imported only by other dead code. F260 is
+exactly that shape. This walks the import graph from the entry module instead.
+
+Harness: `scripts/drive/d5_reachability_walk.py`, one command, no product code touched, no Hub
+started, no database read. It **imports** `n10_route_reachability.py` and `n11_query_error_surface.py`
+rather than reimplementing them, so every number below differs from theirs by the module filter and
+by nothing else. Both were re-run first on today's tree and reproduce their published figures
+exactly (110 / 35 / 107 / 101 / 60).
+
+**The graph.** 170 source files under `hub/ui/src` (tests excluded). **157** are reachable from
+`main.tsx` by runtime imports; **13 are not**. The choice of root does not matter — `App.tsx` alone
+reaches 155, the two extra being `main.tsx` and `ErrorBoundary.tsx` — and neither do type-only
+edges, which add exactly one file. No specifier failed to resolve, which matters: a silent
+resolution failure would have manufactured unreachable files.
+
+**Checked against the shipped bundle rather than asserted.** Each unreachable file donated the
+literals that occur nowhere else under `src/`, probed in `hub/hub/static/ui/assets/index-x3nWU-L2.js`.
+12 of 13 have **every** such literal absent. Twelve reachable files were probed the same way as
+controls and every one of their literals is present, so the probe fails loudly rather than inventing
+a result — it did fail, twice, and both rules it gained came from that: uniqueness measured by
+*substring* (`'whitespace-pre-wrap'` is written once in `src/` and ships inside another module's
+class chain, which made `SharedStreamRenderer` read as present), and comments, imports and `type`
+declarations stripped first (`accounting.ts` declares `label: 'Rate-limit allowance'` inside a type
+union — a string that can never reach the output).
+
+The thirteenth is `components/common/badgeVariants.ts`, and it is settled by the compiler rather
+than by the probe: its only importer is `Badge.tsx:3`'s `import type { BadgeVariant }`, which is
+erased, so `statusVariant` and `priorityVariant` are called by nothing anywhere. Its literals are
+status words shared with half the tree, so no probe could have decided it.
+
+The 13, with what each is:
+
+| Dead file | What it is |
+|---|---|
+| `api/context.ts` | `requestCompact`, `requestNewSession` — F260's two routes, now derived rather than probed |
+| `api/messages.ts` | the messages client — F260 |
+| `components/messages/{MessagesFeed,ConversationGroup,MessageCard}.tsx` | F260's components |
+| `components/agents/AgentActivityTab.tsx` | imported by nothing — **new** |
+| `components/agents/AgentCard.tsx` | imported by nothing — **new** |
+| `components/layout/StatusBar.tsx` | imported by nothing — **new**, and see the F259 amendment below |
+| `components/layout/SidebarItem.tsx` | imported by nothing — **new** |
+| `components/stream/{SharedStreamRenderer.tsx,streamModel.ts}` | reached only from `AgentActivityTab` — **new** |
+| `lib/agentStatus.tsx` | reached only from `AgentCard` — **new** |
+| `components/common/badgeVariants.ts` | reached only by a type-only import — **new** |
+
+**N-10's 110 becomes 106.** Four route+method pairs are reached only from dead code:
+`GET /projects/{id}/messages`, `PATCH /projects/{id}/messages/{id}/read`,
+`POST /projects/{id}/agents/{name}/compact` and `POST …/new-session`. So of 155 operator
+route+method pairs, **49** are not reached by any code the app loads: 35 with no client anywhere,
+10 called by the CLI transport, and these 4. The last group is a category R-1's question (a) did not
+have: not *"no client was ever written"* but *"a client was written and its screen was removed"*.
+N-10's own bundle probes already showed `/compact` and `/new-session` absent; the walk now says why.
+
+**N-11's 101 becomes 93.** Of 107 call sites outside `api/`, **8** are in dead code — N-11 knew
+about 3 (`MessagesFeed`) and flagged them `DEAD`; the other 5 are `AgentActivityTab.tsx:23-24` and
+`StatusBar.tsx:15,16,19`. By class: MISREPORT **60 → 54**, SUPPRESSED **16 → 14**, BLANK 24
+unchanged, NAMED 1 unchanged. N-11's "57 on a surface an operator can reach" is therefore **54**.
+
+**The ranking, which is the useful output.** Counting unhandled sites was never the interesting
+question — F271 is one of these sites and it is severity A, while dozens of others are cosmetic.
+What separates them is whether a failed load can be *written back*. Three tests: does the query's
+data seed component state; does the file write; and is there an early return naming that data,
+which means the write never renders while the fetch is failing.
+
+| Rank | | |
+|---|---|---|
+| **1** — seeds state, writes it back, **no guard** | **2** | `InstructionsPage.tsx:9` (= F271, driven) · `AgentOutputPanel.tsx:207` (below) |
+| **1G** — same, but an early return hides the write | 2 | `AccountingPanel.tsx:22` (guard `:34`) · `ProjectSettingsPanel.tsx:53` (guard `:75`) — F197's terminal skeleton, not a destructive write |
+| **2** — the file writes, but nothing seeds state from this query | 23 | an empty picker or an empty list, not an overwrite |
+| **3** — no write in the file at all | 27 | read-only misreport |
+
+Rank 1G exists because the first mechanical pass put all four in rank 1 and a hand read moved two
+out. That is the pass working as intended: it proposes, and reading decides.
+
+### The one candidate this raises, and it is NOT driven
+
+`AgentOutputPanel.tsx:207` — `const { data: conversations = [] } = useAgentConversations(...)` — is
+in rank 1, though for the wrong reason: the writes the script matched are the question mutations,
+while the write that actually carries the seeded state is `postTrigger` at `:886`, which is not a
+`useMutation` hook and so is invisible to it. Read by hand, four static facts:
+
+1. `:236-243` seeds `pendingOverrides` from the open conversation's `runtime_overrides`. A failed
+   conversations load leaves `conversations = []`, so `current` is undefined and `seeded` is `{}`.
+2. Nothing guards the composer on that query, so the operator sees pills reading as *no override*.
+3. `Composer.tsx:333` and `:336` change a pill by **spreading the local map** —
+   `onPendingOverridesChange({ ...pendingOverrides, model: modelId })` — so after a failed load the
+   spread starts from `{}`.
+4. `agent_trigger.py:1364` assigns `conversation.runtime_overrides = accepted` wholesale, under
+   `if body.overrides:` at `:1344`.
+
+Together those say: sending with nothing touched is **harmless** (an empty map becomes `undefined`
+via `emptyToUndefined`, and `if body.overrides:` leaves the stored value alone — the turn still runs
+under the stored override, resolved at `:639`), but *changing one pill* after a failed load sends
+`{effort: X}` alone and **replaces** a stored `{model: …, effort: …}`, silently dropping the model
+override the operator set earlier.
+
+**That is a static read of three files and it is not a finding.** It has no F-number for the same
+reason N-11 gave none to the `InstructionsPage` suspicion: a static read cannot say what a page
+renders. The drive that settles it: a conversation with a persisted `runtime_overrides` on `:8011`,
+block `GET …/conversations`, confirm the composer still renders, change the effort pill, send a
+Haiku turn, then read `conversation.runtime_overrides` back over the API. F271 came out of exactly
+that suspicion-then-drive sequence, and it was worse than the static read predicted.
+
+### F259 amendment, 2026-09-02 (D-5) — its headline names a surface that does not ship
+
+F259's substance is untouched and was measured on the live instance: `msg.read = True` occurs once
+in the Hub, nothing in the product calls it, and 82 messages across ten days are unread. Its
+**consequence** is misattributed. The finding's title and its middle section put the count on
+*"the StatusBar's `N msgs` chip"*, quoting `StatusBar.tsx:25` — and `StatusBar.tsx` is imported by
+nothing and absent from the bundle (measured above; `Sidebar.tsx:112` even says in passing that it
+"is no longer rendered"). So no operator sees that chip, and the unread count reaches no screen at
+all today.
+
+What survives, and is the reason the finding still matters: `GET /status` still computes
+`message_counts.pending` from the flag, and `scheduler.py:420` still depends on it — which is F264,
+and is where the consequence actually lands. Read F259 as *"nothing ever marks a message read, and
+a scheduler decision depends on the flag"*; strike the chip.
+
+The same correction applies to one line of `spec-queue/DECISIONS.md`'s R-1 evidence, which lists
+*"four `?? 0` counts in the status bar"* among the 44 sentences said to be on screen
+(`StatusBar.tsx:15`). They are not on screen. That block is amended there too.
