@@ -73,6 +73,12 @@ produced one new finding — **F108 (B)**, a permanently refused request answeri
 `200 {"success": true}` — fixed for review dispatch and open as a class. An empty A list measures
 this corpus of driving, not the product; the next sweep is what lengthens it again.
 
+**Revised 2026-09-02: the open severity-A list is one — F271.** Filed by the day window's D-4
+drive. It is not a regression against anything above; it is a page nobody had ever driven with its
+load failing. Its fix shape is *not* a decision waiting on the operator the way F76's was — the
+render-the-error half is a plain repair. Only the second half (should a PUT that blanks non-empty
+stored content ask first?) is the operator's call.
+
 **And one observation that outranks any single row of that table.** F88, F89 and F90 were found in
 one iteration, in three unrelated subsystems, and every one of them was a mechanism this repository
 tests *thoroughly* — against a state the product never produces. F88's access tests pass a
@@ -18041,3 +18047,78 @@ timeline refetch rather than a wrong outcome, and it self-corrects.
 Not proposed as standalone work: `a-turn-says-how-it-ended` task 2.2 fixes it as a side effect by
 persisting the row for every run the finalize block reaches, on both runners. Tasks 2.1b and 4.7's
 Codex bullet now assert it, so it cannot ship claiming a Claude-only result covers both.
+
+---
+
+## F271 (A) — a failed instructions load renders an empty editor with Save enabled, and one click destroys the project's instructions
+
+Found by driving, 2026-09-02 (day window, D-4). N-11 read this statically last night and
+**deliberately filed no finding number**, on the correct ground that a static read cannot say what
+the page renders. It reproduces, and it is worse than the static read claimed: the destruction takes
+**one click on an unmodified page**, and nothing on screen says a load failed.
+
+Driven by `scripts/drive/t_d4_instructions_failed_load.py` against the **served bundle** on `:8011`
+— measured as this repo's committed bundle (`assets/index-x3nWU-L2.js`, stamp
+`built_at 2026-09-01T23:40:44Z` from `5f47dd5`) with **no diff under `hub/ui/src` since that
+commit**, so the source read below is the code that ran. 19 assertions, all passing. Two throwaway
+fixture projects, both deleted.
+
+**What an operator does.** Open a project's Instructions page while the Hub is restarting, or behind
+any transport failure. React Query is configured `retry: 1` (`hub/ui/src/main.tsx:12`), so the GET
+is attempted twice, ~6 s, and then the query settles into `error`.
+
+**What the page then shows** — the same for a dropped connection and for a 500, measured
+separately:
+
+| | baseline (load succeeds) | GET aborted | GET answers 500 |
+|---|---|---|---|
+| skeleton | absent | absent | absent |
+| textarea | present, **holds the stored text** | present, **empty** | present, **empty** |
+| Save | enabled | **enabled** | **enabled** |
+| `role="alert"` | none | **none** | **none** |
+
+Nothing anywhere in the page's text says *error*, *failed*, *could not*, *unable* or *retry* — the
+page is indistinguishable from a project that has no instructions set.
+
+**The one click, measured end to end.** With the Hub reachable again and **nothing typed**:
+
+```
+stored before Save: 'ALPHA PROJECT RULES\n\n- Never force-push.\n- Every PR needs a test.\n'
+stored after  Save: ''
+```
+
+`InstructionsPage.tsx:14-18` seeds the editor with `useEffect(() => { if (data) setContent(data.content) }, [data])`,
+so a failed load never leaves `useState('')`. `isLoading` is false in the error state, so the
+skeleton branch is not taken. `disabled` on Save is `saveMutation.isPending` alone — the query's
+error state is not consulted. The PUT then sends `{"content": ""}`, and
+`hub/hub/api/v1/instructions.py` accepts the empty string **deliberately**: its `InstructionsUpdate`
+docstring records that the field was named precisely so no body could blank the row by accident. The
+server-side guard exists and is intact; the client walks straight past it with a well-formed body.
+There is no history, no undo and no confirmation — `put_instructions` overwrites `row.content` in
+place.
+
+**Why severity A and not B.** The empty editor is a misleading surface, but the operator *acts* on
+it, and the act is irreversible. Project instructions are not decoration: they are prepended to
+every agent's canonical turn context (`agents.py:1486-1490`, `## Project Instructions`) and to every
+charter served by `get_charter_content` (`agents.py:2072-2078`). Blanking them silently removes the
+operator's project-wide rules from every subsequent turn, with no error at the moment of loss and no
+signal afterwards — the agents simply stop following rules the operator can still see themselves
+having written.
+
+**Not a family.** `if (data)` seeding an editor occurs at exactly one site in
+`hub/ui/src/components` — this one. `ChartersPage` seeds its editor from an already-loaded list
+(`charters = []` on failure), so a failed load leaves nothing editable rather than something
+destructive.
+
+**Not driven: the cross-project variant.** The sharper shape — component stays mounted, selected
+project changes, the *new* project's load fails, and `content` still holds the previous project's
+text, so Save writes A's instructions into B — could not be reached from this page: the
+environment tab renders no `ProjectHeader`, so there are **zero** "Switch project" controls on
+screen (measured). It is unfalsified in either direction and is recorded, not asserted.
+
+**Fix shape, for whoever specs it** — not implemented here; the day window does not implement. The
+cheapest correct change is to consult the query's error state in both places the component already
+consults `isLoading`: render the failure instead of an empty editor, and gate Save on it. Whether
+the page should also refuse a PUT that would replace non-empty stored content with `""` without a
+confirmation is a **product decision for the operator**, not a bug fix — the empty string is a
+legitimate value the route accepts on purpose.

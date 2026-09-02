@@ -12,8 +12,8 @@
     "log_file": ".claude/autonomous/2026-09-02-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-4",
-    "next_action": "D-4 (OPTIONAL - drop after 15:30 and go straight to D-6). Drive the InstructionsPage:9 suspicion on the trial Hub at :8011. N-11 found it statically and deliberately filed NO finding number: hub/ui/src/.../InstructionsPage.tsx:9 seeds its editor from `if (data) setContent(...)`, so a FAILED load leaves an empty textarea with Save ENABLED, and a save writes '' over stored instructions. It has never been driven. Drive it as an operator would: create a fixture project, store real instructions, then make the load fail (offline the route or point at a project id that 404s) and see what the page actually renders and whether Save is enabled and destructive. It earns a finding number ONLY if reproduced -- if it does not reproduce, say so explicitly and record why the static read was wrong. Bind claude-haiku-4-5 for any real agent turn; never drive proj-5e960453 or proj-18e5d4e0; never touch port 8000; delete the fixture project and sweep for enabled jobs afterwards. This window does NOT implement -- no edits under hub/hub/, hub/ui/ or src/agentweave/. Then D-6: write spec-queue/review/review-2026-09-02.html (self-contained, theme-aware, six sections in the playbook's order; section 1 leads with the unmerged two-day branch; section 4 must say when a round changed nothing -- RB changed nothing about D1-D5/D7 and that belongs on the page) and append today's section to spec-queue/APPROVALS.md, one row per specced change, NO status token.",
+    "current": "D-5",
+    "next_action": "D-5 (OPTIONAL - drop after 15:30 and go straight to D-6). Measure: a reachability walk from hub/ui/src/App.tsx. This is the one R-1 evidence gap the night window named and did not attempt. N-10 and N-11 are depth-1 static reads, so their 110 reached routes is an UPPER bound, their 35 and 6 are FLOORS, and 101 unhandled query sites is an UPPER bound -- F260 (useMessages imported only by MessagesFeed, which nothing imports and which is not in the bundle) is the case that defeats depth-1. Walk the import graph transitively from App.tsx and turn those bounds into totals. Note F271, filed at iteration 5, is itself an unhandled-query-site instance that reached the operator destructively -- if the walk can rank the surviving sites by whether a failed query leaves a WRITE control enabled, that ranking is the useful output, not the count. This SHARPENS R-1's OPEN row in spec-queue/DECISIONS.md and may NEVER answer it. Then D-6: write spec-queue/review/review-2026-09-02.html (self-contained, theme-aware, six sections in the playbook's order; section 1 leads with the unmerged two-day branch; section 2 must carry F271 as the day's headline finding and the first open severity A since 2026-08-28; section 4 must say when a round changed nothing -- RB changed nothing about D1-D5/D7 and that belongs on the page) and append today's section to spec-queue/APPROVALS.md, one row per specced change, NO status token. This window does NOT implement -- no edits under hub/hub/, hub/ui/ or src/agentweave/.",
     "queue": [
         {
             "id": "compose",
@@ -41,14 +41,14 @@
         },
         {
             "id": "D-4",
-            "status": "current",
+            "status": "done",
             "optional": true,
             "title": "Drive the InstructionsPage:9 suspicion",
-            "detail": "N-11 found statically and deliberately filed no finding number: InstructionsPage.tsx:9 seeds its editor from `if (data) setContent(...)`, so a failed load leaves an empty textarea with Save ENABLED, and a save writes '' over stored instructions. Never driven. Drive it on 8011; it earns a finding number only if reproduced. DROP THIS ITEM after 15:30 and go to D-6."
+            "detail": "Done at iteration 5. REPRODUCED, and worse than N-11's static read: F271 (A), ledger 275 -> 276, the first open severity A since the list went empty on 2026-08-28. scripts/drive/t_d4_instructions_failed_load.py, 19 assertions all passing, against the SERVED BUNDLE on :8011 -- measured as this repo's committed bundle first (assets/index-x3nWU-L2.js is what :8011 serves; stamp built_at 2026-09-01T23:40:44Z from 5f47dd5; git diff 5f47dd5 HEAD -- hub/ui/src is EMPTY). A failed instructions GET (aborted connection AND a 500, measured separately, identical) leaves NO skeleton, an EMPTY textarea, Save ENABLED, no role=alert and no failure word anywhere in the page text. With the Hub reachable again and NOTHING typed, one click on Save wrote '' over the stored instructions -- measured before/after via the API. retry: 1 (main.tsx:12) means it settles in ~6s, so the operator arrives after the failure, not during it. Severity A because the operator ACTS on the misleading empty editor and the act is irreversible: instructions are prepended to every agent's canonical turn context (agents.py:1486-1490) and to every charter get_charter_content serves (:2072-2078), with no history and no undo. NOT a family -- `if (data)` seeds an editor at exactly one site under hub/ui/src/components; ChartersPage seeds from an already-loaded list. NOT DRIVEN and recorded as such: the cross-project variant (A's text left in B's editor after B's load fails), because the environment tab renders no ProjectHeader and there are ZERO 'Switch project' controls on that page (measured). Fix NOT implemented -- the day window does not implement, and half of it is a product decision. Both fixture projects deleted (204/204, projects []); directories ~/Documents/drive-0902-d4a and -d4b KEPT. Nothing under hub/hub, hub/ui or src committed."
         },
         {
             "id": "D-5",
-            "status": "open",
+            "status": "current",
             "optional": true,
             "title": "Measure: reachability walk from App.tsx",
             "detail": "The one R-1 evidence gap the night window named and did not attempt. N-10 and N-11 are depth-1 static reads, so 110 reached routes is an UPPER bound, 35 and 6 are FLOORS, and 101 unhandled query sites is an UPPER bound - F260 (useMessages imported only by MessagesFeed, which nothing imports and which is not in the bundle) is the case that defeats depth-1. Walk the import graph from App.tsx to turn those bounds into totals. This SHARPENS R-1's OPEN row in spec-queue/DECISIONS.md and may NEVER answer it. DROP THIS ITEM after 15:30 and go to D-6."
@@ -80,7 +80,7 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-02T09:55:18+01:00",
+    "last_heartbeat": "2026-09-02T10:00:32+01:00",
     "branch_spans_days": [
         "2026-09-01",
         "2026-09-02"
