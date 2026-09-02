@@ -17976,3 +17976,68 @@ entries from `firstAgentBlockId`) and **not** as making the row visible.
 
 Not proposed as standalone work: the change that makes it matter is already in flight and now
 carries the task.
+
+**Verified and narrowed by round RB, 2026-09-02.** RB reproduced the defect independently, adding
+two cases RA did not run: the `status` row with **no operator message at all** (still no stat line),
+and a `thinking` row placed ahead of it (stat line present — the negative control). 4 assertions,
+all passing, on unmodified code.
+
+**One of the two fixes offered above does not work, and RB found that by running them.** Excluding
+success-completion entries from `firstAgentBlockId` leaves it `undefined` in exactly this case — the
+`status` row is the turn's *only* `agent_output` block, so there is no later block to inherit the
+slot — and `blockId === firstAgentBlockId` is then false for every block, leaving the stat line
+absent. Measured: 2 of 6 assertions fail under it, and they are the two this fix exists to make
+pass. The placement fix does work: have the success-completion branch return
+`<Fragment key={entry.id}>{durationLine}</Fragment>` instead of `null`. Measured: 6 of 6 pass, the
+status row itself stays unrendered, exactly one stat line is emitted when a text row precedes it,
+and the 86 existing assertions in `workingIndicator`, `agentTimeline`, `agentTimelineModel` and
+`agentHandoff` stay green. Task 4.5a now names that fix and withdraws the other.
+
+---
+
+## F270 (C) — signal 1 has never fired for a Codex run, so a *cleanly completed* Codex turn still shows the 2026-08-18 lingering counter
+
+Found by round RB of `a-turn-says-how-it-ended` (2026-09-02) while re-deriving round RA's argument
+against the code. RA identified the producer of `lastRunSettled`'s first signal correctly and then
+generalised it to the product; it is Claude-only.
+
+**The producer half, read.** `status_event("completed")` occurs **exactly once in the whole Hub**,
+at `hub/hub/runner_parsing.py:356`, inside `parse_claude_line`. That parser is selected only for
+`runner in ("claude", "claude_proxy", "native")` (`hub/hub/api/v1/agent_trigger.py:1867`); everything
+else falls through to `parse_codex_line`, whose only `status_event` is `"plan"`
+(`runner_parsing.py:574`). The Codex app-server transport is no different — its only `status_event`
+is `"plan"` too (`hub/hub/codex_appserver.py:544`). `SUPPORTED_RUNNERS` is
+`("claude", "claude_proxy", "native", "codex")` (`runner_commands.py:52`), so this is one of the two
+wired runners, not a hypothetical. The finalize block's terminal status line is broadcast and never
+persisted, for both runners alike. **So no Codex run of either transport has ever had a persisted
+`kind="status"`/`phase="completed"` row — not a stopped one, and not one that finished cleanly.**
+
+**The consequence half, measured.** `lastRunSettled` (`AgentTimeline.tsx:114-117`) is
+`lastTurn.entries.some(isSuccessCompletionEntry) || TERMINAL_STATUSES.has(statusByRun[lastRunId])`.
+Signal 2 costs a `useAgentTimeline` round trip; signal 1 is what closes that tail. Rendering the real
+`AgentTimeline` with a completed turn and only `run_started` in `timelineEvents` — the pre-refetch
+window:
+
+| turn's entries (runner) | `timeline-working-indicator` |
+|---|---|
+| answer + the Claude parser's `phase="completed"` row | absent — settled at once |
+| answer alone (**every Codex turn**) | **present** — counter running under a finished answer |
+| answer + codex's own `phase="plan"` status row | **present** — the predicate is not satisfied |
+
+3 assertions, all passing, on unmodified code. Probe deleted before commit — the day window does not
+implement.
+
+So the operator's 2026-08-18 complaint ("It still linger a little bit") was fixed for Claude and is
+**still live for Codex on every turn, including a clean one**. Phase 0 of
+`a-turn-says-how-it-ended` measured the single-run completed case releasing cleanly (task 0.3) — on
+a Claude runner. There is no Codex baseline, and the design's *Round RA* section stated the Claude
+result as if there were.
+
+**Severity C, and the reason is exposure, not mechanism.** The mechanism is certain and the UI half
+is measured; what is not driven is a live Codex turn, because Codex driving was cancelled on
+2026-08-29 as undrivable on this machine. The visible symptom is a counter that lingers for one
+timeline refetch rather than a wrong outcome, and it self-corrects.
+
+Not proposed as standalone work: `a-turn-says-how-it-ended` task 2.2 fixes it as a side effect by
+persisting the row for every run the finalize block reaches, on both runners. Tasks 2.1b and 4.7's
+Codex bullet now assert it, so it cannot ship claiming a Claude-only result covers both.

@@ -67,10 +67,20 @@ task 0.7 returned the change to a round. That round ran on 2026-09-02, re-derive
 `agent_trigger.py`, and rewrote D6 from what was measured: **signal 1 fires, for a run that
 finished, written by the stream parser at `runner_parsing.py:356`; D6 extends it to runs that did
 not.** The change is not narrowed — every phase below still follows — but three tasks change and
-three are added (2.1a, 4.5a, and the interrupted exclusion in 2.1). Read design D6 and the
-*Round RA* section before implementing phase 2 or phase 4.
+three are added (2.1a, 4.5a, and the interrupted exclusion in 2.1).
 
-Phases 1 and 3 were not touched by the correction and need no re-reading beyond their own text.
+**Verified and corrected 2026-09-02 by round RB.** RB re-derived RA's argument against the code
+independently. Every fact RA stated is right; the **scope** it drew around one of them is not.
+`parse_claude_line` runs only for the three Claude-family runner values (`agent_trigger.py:1867`)
+and `status_event("completed")` occurs exactly once in the whole Hub, so signal 1 has **never**
+fired for a Codex run of either transport — for any outcome, including a clean completion. RA
+generalised a Claude-only producer to the product. Four tasks are corrected for it (2.1's stated
+reason, 2.1a, 4.7's completed-run guard, 7.1's baseline) and one is added (2.1b). Separately,
+**task 4.5a offered two fixes as equivalents and one of them does not work** — RB implemented and
+ran both; 4.5a now names the one that passes and says why the other fails. Read design D6 and the
+*Round RA* and *Round RB* sections before implementing phase 2 or phase 4.
+
+Phases 1 and 3 were not touched by either correction and need no re-reading beyond their own text.
 
 ## 1. The route carries the run's facts
 
@@ -130,20 +140,38 @@ Phases 1 and 3 were not touched by the correction and need no re-reading beyond 
 - [ ] 2.1 Write a Hub test asserting that after a run ends, `/agents/{name}/output` contains a
       `kind="status"` row carrying the exit code — asserted for **both** the process path and the
       app-server path, per *A run's terminal status line is persisted*. Assert it for a **stopped**
-      and a **failed** run specifically, not only a completed one: a completed run already has such
-      a row from the stream parser (`runner_parsing.py:356`), so a completed-only test passes
-      without task 2.2 being implemented at all and proves nothing. **Do not assert it for an
+      and a **failed** run specifically, not only a completed one: on a **Claude** runner a completed
+      run already has such a row from the stream parser (`runner_parsing.py:356`), so a
+      completed-only test on that runner passes without task 2.2 being implemented at all and proves
+      nothing. Round RB's correction to the reason, not to the instruction: this is **runner-scoped**
+      — a completed *Codex* run has no such row today, so a completed-only test there would fail
+      honestly. Assert stopped and failed anyway; they are the cases no runner covers. **Do not
+      assert it for an
       `interrupted` run** — `reconcile_interrupted_runs` writes an `EventLog` row and no
       `AgentOutput` (grep `record_agent_output` in `run_reconciliation.py`: no hits), and there was
       no Hub process alive to write one. The spec now states that bound explicitly.
-- [ ] 2.1a Assert what a **completed** run now carries: two entries satisfying
+- [ ] 2.1a Assert what a **completed run on a Claude runner** now carries: two entries satisfying
       `isSuccessCompletionEntry` — the parser's (`content="Completed"`, `payload` with `version`,
       `phase`, `summary`) and the finalize block's (`content="Run … (exit N)."`, `payload` with
       `phase` and `exit_code`) — and that the conversation still draws neither, because
       `AgentTimeline.tsx:430` returns `null` for both. This test exists so a later reader does not
       "de-duplicate" the pair: removing the parser's row deletes the only signal that works today,
       and removing the finalize block's for a completed run makes the durable exit code
-      outcome-dependent. Design D6, *Two consequences of persisting an invisible row*.
+      outcome-dependent. Design D6, *Two consequences of persisting an invisible row*. **Bind the
+      fixture to a Claude runner explicitly** (round RB): the pair exists only where
+      `parse_claude_line` runs, so a fixture that happens to be built on a `codex` runner would fail
+      this assertion for a correct reason and send the next reader hunting a defect that is not
+      there.
+- [ ] 2.1b **Assert the Codex case, which is the one 2.2 changes most and which no round before RB
+      named.** `parse_claude_line` is selected only for `runner in ("claude", "claude_proxy",
+      "native")` (`agent_trigger.py:1867`); `parse_codex_line`'s only `status_event` is `"plan"`
+      (`runner_parsing.py:574`) and the app-server transport's only `status_event` is `"plan"`
+      (`codex_appserver.py:544`). `status_event("completed")` occurs exactly once in the whole Hub.
+      So a Codex run has **never** had a persisted `phase="completed"` row for any outcome,
+      including a clean completion, and after 2.2 it gains its first — not a second. Assert exactly
+      one such entry for a completed Codex run, and assert that codex's own `phase="plan"` status
+      row does **not** satisfy `isSuccessCompletionEntry` (RB measured that it does not). Design D6's
+      runner column, and F270.
 - [ ] 2.2 Replace the bare broadcast at `hub/hub/api/v1/agent_trigger.py:2129-2142` (process path)
       with `output_recording.record_agent_output` (`hub/hub/output_recording.py:22`), which persists
       **and** broadcasts one row. Round 2's correction to D6: "persist in addition to broadcasting"
@@ -258,9 +286,18 @@ Phases 1 and 3 were not touched by the correction and need no re-reading beyond 
       today's unmodified code: a turn holding a text row and the status row renders
       `turn-worked-for` "Worked for 5s", and the same turn holding only the status row renders no
       `turn-worked-for` at all. The defect is latent today and task 2.2 is what makes it reachable.
-      The fix is a placement change — hoist `durationLine` out of
-      the per-block fragment, or exclude success-completion entries from `firstAgentBlockId` —
-      not a change to what `:430` renders; do not make the row visible to solve this.
+      The fix is a placement change, not a change to what `:430` renders; do not make the row
+      visible to solve this. **Round RB implemented both fixes RA offered and ran them, and they are
+      not equivalent — one does not work.** Use this one: have the success-completion branch return
+      `<Fragment key={entry.id}>{durationLine}</Fragment>` instead of `null`, so the stat line
+      survives the card it hung on. Measured: 6 of 6 assertions pass, the status row itself stays
+      unrendered, exactly one stat line is emitted when a text row precedes it, and the 86 existing
+      assertions in `workingIndicator`, `agentTimeline`, `agentTimelineModel` and `agentHandoff`
+      stay green. **Do not use the other one.** Excluding success-completion entries from
+      `firstAgentBlockId` leaves it `undefined` in exactly the case F269 describes — the status row
+      is the turn's *only* `agent_output` block, so there is no later block to inherit the slot —
+      and `blockId === firstAgentBlockId` is then false for every block. Measured: 2 of 6 fail, both
+      of them the ones this task exists to make pass.
 - [ ] 4.6 Confirm `LIFECYCLE_EVENT_STATUS` has no remaining consumer; delete it if not, and keep it
       only if something still legitimately reads it.
 - [ ] 4.7 Verify the third consequence is repaired **in both states, not just on reload**
@@ -274,13 +311,22 @@ Phases 1 and 3 were not touched by the correction and need no re-reading beyond 
       - **Still-underway:** stop a turn and send a new message; assert the indicator *is* shown while
         run B has no entries yet. This is the 2026-08-20 fix, which currently passes only vacuously
         (the indicator shows because it always shows) and must still pass once it means something.
-      - **Single-run, completed: assert it does NOT change.** Round 3's supplementary pass said
+      - **Single-run, completed on a Claude runner: assert it does NOT change.** Round 3's supplementary pass said
         this case was broken too; phase 0 task 0.3 watched it work, and round RA re-derived why —
         the parser's `status_event("completed", …)` (`runner_parsing.py:356`) is persisted, so
         signal 1 already fires for a run that finished, and the indicator already releases on the
         answer's own snapshot rather than on the roster poll. Assert the behaviour phase 0 measured
         still holds after the change, including with the second `phase="completed"` row task 2.2
         adds. This is a regression guard, not a repair.
+      - **Single-run, completed on a Codex runner: assert it DOES change** (round RB). The guard
+        above is Claude-scoped and asserting it against a Codex fixture would assert the wrong
+        thing. Codex has no completion sentinel of its own, so signal 1 has never fired for it and a
+        cleanly completed Codex turn's indicator lingers for one `useAgentTimeline` round trip
+        today — the 2026-08-18 tail complaint, fixed for Claude and still live here (F270). RB
+        measured the UI half on unmodified code: with only `run_started` in `timelineEvents`, the
+        indicator is absent when the Claude parser's status row is present among the entries and
+        present when it is not. Assert that after task 2.2 the Codex case behaves like the Claude
+        one.
       - **Single-run, stopped or failed: assert it DOES change.** This is the case signal 1 has
         never covered, because no `result` line is ever emitted, so no `phase="completed"` row is
         written. Today `lastRunSettled` stays false for the life of that conversation and the
@@ -329,7 +375,10 @@ sitting that did not write the code.
       conversation now releases on its persisted status row, and all of them survive a reload.
       Phase 0's record is the baseline; this is the comparison. **One of them must be unchanged:**
       a *completed* single-run conversation already released cleanly at 0.3, so if that case now
-      behaves differently, something regressed. Round RA, 2026-09-02.
+      behaves differently, something regressed. Round RA, 2026-09-02. **That baseline was taken on a
+      Claude runner and only binds there** (round RB): the same case on a Codex runner has no
+      signal-1 row today, so it is expected to *change*. Phase 0 has no Codex baseline, so do not
+      read one into it — say so rather than inferring.
 - [ ] 7.1a Confirm *A turn that produced nothing still reports what it cost* holds against the built
       code, by stopping a run before it emits anything and reading the turn: it must carry both the
       terminal label and the "Worked for Xs" line. Task 4.5a exists because persisting the status

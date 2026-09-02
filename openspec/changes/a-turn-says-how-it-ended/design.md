@@ -160,21 +160,31 @@ decision.** What follows is derived from the code, not from either earlier argum
 `kind="status"` and `payload.phase == "completed"` — `isSuccessCompletionEntry`
 (`agentTimelineModel.ts:24-28`). Signal 2 is the lifecycle event decoded by `runStatusByRunId`.
 
-**Signal 1 fires today, and it fires for exactly one class of run.** The row that satisfies it is
-written by the stream parser, not by the finalize block: `runner_parsing.py:346-356` turns Claude's
-`result` message into `status_event("completed", summary="Completed")` when `is_error` is not true,
-and `status_event` (`runner_events.py:180-187`) builds `kind="status"`,
+**Signal 1 fires today, and it fires for exactly one class of run *on one of the two wired
+runners*.** The row that satisfies it is written by the stream parser, not by the finalize block:
+`runner_parsing.py:346-356` turns Claude's `result` message into
+`status_event("completed", summary="Completed")` when `is_error` is not true, and `status_event`
+(`runner_events.py:180-187`) builds `kind="status"`,
 `payload={"version": …, "phase": "completed", …}` — the predicate exactly. Every parsed event is
 persisted through `record_agent_output` (`agent_trigger.py:1925-1938`). So the predicate matches
-whenever, and only whenever, the runner itself announced a successful turn:
+whenever, and only whenever, **the Claude CLI** announced a successful turn:
 
-| how the run ended | a persisted `phase="completed"` row today? |
-|---|---|
-| completed — `result` with `is_error` false | **yes**, the parser's |
-| `result` with `is_error` true | no — `error_event`, `kind="error"` (`runner_parsing.py:346-350`) |
-| stopped mid-run | no — the process is killed before any `result` line |
-| failed on a non-zero exit | no |
-| interrupted by a Hub restart | no |
+| runner | how the run ended | a persisted `phase="completed"` row today? |
+|---|---|---|
+| claude / claude_proxy / native | completed — `result` with `is_error` false | **yes**, the parser's |
+| claude / claude_proxy / native | `result` with `is_error` true | no — `error_event`, `kind="error"` (`runner_parsing.py:346-350`) |
+| claude / claude_proxy / native | stopped mid-run | no — the process is killed before any `result` line |
+| claude / claude_proxy / native | failed on a non-zero exit | no |
+| **codex** (exec **or** app-server) | **any outcome, including a clean completion** | **no — never** |
+| any | interrupted by a Hub restart | no |
+
+**The runner column is round RB's correction and it is not a detail.** `parse_claude_line` is
+selected only for `runner in ("claude", "claude_proxy", "native")` (`agent_trigger.py:1867`);
+everything else falls through to `parse_codex_line`, whose only `status_event` is `"plan"`
+(`runner_parsing.py:574`), and the app-server transport's only `status_event` is `"plan"` as well
+(`codex_appserver.py:544`). `status_event("completed")` occurs **exactly once in the whole Hub**, in
+the Claude parser. So no Codex run of either transport has ever had a persisted `phase="completed"`
+row — not a stopped one, and not one that finished cleanly.
 
 Phase 0 measured both ends of that table. A completed run's conversation holds exactly one matching
 entry and the single-run indicator released on the same snapshot the answer text landed, 0.7 s
@@ -182,10 +192,21 @@ before the roster poll (task 0.3). The stopped run had no `status` row at all �
 nine output rows were `status` and none of them was its (tasks 0.3, 0.5).
 
 **Round 3b's error was an identification, and it inverted this decision's scope.** It read the
-terminal status line at `agent_trigger.py:2132-2142`, saw correctly that it is only broadcast, and
+terminal status line at `agent_trigger.py:2131-2153`, saw correctly that it is only broadcast, and
 concluded that no row of that shape is ever persisted. A different producer writes the same shape.
-D6 therefore does not make signal 1 work *for the first time, for everyone*. It extends signal 1
-from **the run that finished** to **the run that did not**.
+D6 therefore does not make signal 1 work *for the first time, for everyone* — **on a Claude
+runner** it extends signal 1 from **the run that finished** to **the run that did not**.
+
+**On a Codex runner it is the first-time repair, for every outcome including success**, which is
+what rounds 1-3 claimed for all runners and round RA retracted for all runners. Round RA identified
+the second producer correctly and then generalised a Claude-only producer to the whole product; the
+correct statement is per-runner, and both halves of it are load-bearing. Round RB measured the UI
+consequence: rendering `AgentTimeline` with a completed turn and only `run_started` in
+`timelineEvents` — the pre-refetch window — the working indicator is **absent** when the Claude
+parser's status row is among the entries and **present** when it is not, and codex's own
+`phase="plan"` status row does not satisfy the predicate either (3 assertions, all passing, on
+unmodified code). So the 2026-08-18 lingering-tail complaint is fixed for Claude and **still live
+for Codex today**, on every turn including a clean one. Filed as **F270 (C)**.
 
 **What D6 buys, argued from that premise.**
 
@@ -227,7 +248,8 @@ must not be asserted otherwise, which is why task 2.1 covers the two spawn paths
 
 **Two consequences of persisting an invisible row, neither previously named.**
 
-- *A completed run gains a second matching entry.* The parser's row (`content="Completed"`,
+- *A completed run on a Claude runner gains a second matching entry; a completed Codex run gains
+  its first.* The parser's row (`content="Completed"`,
   `payload={"version": 1, "phase": "completed", "summary": "Completed"}`) and the finalize block's
   (`content="Run completed (exit 0)."`, `payload={"phase": "completed", "exit_code": 0}`) both
   satisfy `isSuccessCompletionEntry`, and `AgentTimeline.tsx:430` returns `null` for each, so
@@ -258,6 +280,20 @@ must not be asserted otherwise, which is why task 2.1 covers the two spawn paths
   implemented. The defect is therefore already latent — `runDurationsByRunId` supplies the duration
   from the lifecycle events — and task 2.2 is what makes it reachable, by creating turns whose only
   agent output is that row. Filed as **F269 (C)**; the finding carries the probe results in full.
+
+  **Round RB reproduced this independently and then tried the two fixes RA proposed without
+  trying.** Reproduction: 4 assertions on unmodified code, adding two cases RA did not run — the
+  status row with *no* operator message at all (still no stat line), and a `thinking` row ahead of
+  it (stat line present, the negative control). **One of the two proposed fixes does not work.**
+  Excluding success-completion entries from `firstAgentBlockId` leaves it `undefined` in exactly
+  F269's case, because the status row is the turn's *only* `agent_output` block and there is no
+  later block to inherit the slot; `blockId === firstAgentBlockId` is then false for every block and
+  the stat line is still absent. Measured: 2 of 6 assertions fail under it. The placement fix — have
+  the success-completion branch return `<Fragment key={entry.id}>{durationLine}</Fragment>` instead
+  of `null`, so the line survives the card it hung on — passes all 6, keeps the status row itself
+  unrendered, still emits exactly one stat line when a text row precedes it, and leaves the 86
+  existing assertions in `workingIndicator`, `agentTimeline`, `agentTimelineModel` and
+  `agentHandoff` green. Task 4.5a now names that fix and drops the other.
 
 D6 remains independent of D1-D5 in the sense that mattered originally: lifecycle events are already
 persisted, so reading `Run` alone restores the label without it. What is no longer true is the
@@ -634,3 +670,54 @@ the coverage property, the persisted exit code and the deleted reducers are all 
 identification error. What changed is the *reason* given for one decision and the *weight* carried
 by one task, and both are now stated from what was measured. Phases 1-7 are unblocked, with the
 three new tasks above added.
+
+## Round RB, 2026-09-02 — RA's facts hold; its scope does not, and one proposed fix does not work
+
+An independent re-derivation of round RA's repaired argument, not a re-read of it. It opened
+`AgentTimeline.tsx`, `agentTimelineModel.ts`, `runner_parsing.py`, `runner_events.py`,
+`output_recording.py`, `agent_chat.py`, `run_reconciliation.py`, `runner_commands.py`,
+`codex_appserver.py` and both terminal paths in `agent_trigger.py` **first**, formed its own account
+of which runs get a persisted `kind="status"`/`phase="completed"` row, and only then read D6 and the
+*Round RA* section.
+
+**What RB confirmed, by a stronger route than RA used in each case.**
+
+- *The finalize broadcast is reached for every outcome the finalize block sees.* It sits inside the
+  `async with async_session_factory() as db:` at `agent_trigger.py:2009`; the `if run:` guard closes
+  at `record_turn_usage`, well above it. Reached for `stopped`, `failed`, `completed` and the
+  binding-conflict case (`:2000-2007`). Confirmed. The app-server path has the identical broadcast
+  at `:2718-2733`, which RA cited but did not check the guard structure of; it is likewise
+  unguarded.
+- *`interrupted` cannot gain a status row.* RA argued this from one module. RB checked every writer
+  of the literal instead: `Run.status = "interrupted"` is assigned in exactly one place in the Hub
+  (`run_reconciliation.py:65`), and `codex_appserver`'s own `interrupted` turn outcome is mapped to
+  `stopped`, not to it (`agent_trigger.py:2628`, `:2673`). `record_agent_output` appears nowhere in
+  `run_reconciliation.py`. Confirmed, and now confirmed exhaustively rather than locally.
+- *F269's mechanism.* Reproduced by running, not by reading — see the measurement recorded under D6.
+
+**What RB changed. RA's facts are all correct; the scope it drew around them is not.**
+
+RA found the second producer and then generalised it to the product. `parse_claude_line` is selected
+only for the three Claude-family runner values (`agent_trigger.py:1867`); `SUPPORTED_RUNNERS` is
+`("claude", "claude_proxy", "native", "codex")` (`runner_commands.py:52`); and neither Codex
+transport emits a completion sentinel. `status_event("completed")` occurs exactly once in the Hub.
+So D6's table is Claude-only and did not say so, and RA's headline retraction — "not a first-time
+repair of signal 1" — is true for Claude and **false for Codex, for every outcome including a clean
+completion**. This is the shape the round discipline exists to catch: an argument wrong about
+something every one of whose individual claims is right.
+
+Four downstream corrections follow, all in `tasks.md`: 2.1's stated *reason*, 2.1a's duplication
+assertion, 4.7's "single-run, completed: assert it does NOT change" regression guard, and a new
+task 2.1b for the runner the corrected table exposes. The spec gains one scenario, *It does not
+depend on the runner announcing its own completion*.
+
+**And one proposed remedy is withdrawn.** Task 4.5a offered two fixes for F269 as equivalents. RB
+implemented each against the real component and ran them: the `firstAgentBlockId` exclusion does not
+fix the case it was written for. Recorded under D6 with the measurement.
+
+**What RB changed nothing about, said out loud.** D1, D2, D3, D4, D5 and D7 stand unedited — RB
+re-read each against the code and had nothing to add to RA's own statement that they were untouched.
+D6's *purpose*, its choice of writer (`record_agent_output`), its exit-code argument, and its
+"D6 does not repair the gate" conclusion all survive unchanged; so does every part of the F269
+analysis except the fix menu. Phases 1-7 stay unblocked. The scope decision — not narrowed — stands,
+and RB did not revisit it.

@@ -113,6 +113,12 @@ map, under *A run's terminal outcome is visible*.
 - **WHEN** a run ends on either the process path or the app-server path
 - **THEN** the terminal status row is persisted in both cases
 
+#### Scenario: It does not depend on the runner announcing its own completion
+
+- **WHEN** a run ends on a runner whose output stream carries no completion sentinel of its own
+- **THEN** the terminal status row is persisted for that run exactly as it is for a runner whose
+  stream does carry one
+
 ### Requirement: Payload-shaped model functions are tested against real route ordering
 A model function that consumes an API payload SHALL be tested against a fixture whose ordering is the ordering that route actually produces, and the test SHALL fail if the route's ordering is reversed.
 

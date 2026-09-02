@@ -113,6 +113,20 @@ line, because `firstAgentBlockId` selects it and its fragment returns `null`. Ne
 4.5a, and a new scenario in *A run's terminal outcome is visible*. Everything else in the change was
 re-read and left unedited; design's *Round RA* section says so explicitly rather than reporting only
 what moved.
+**Round RB, 2026-09-02, verified that round and corrected its scope.** Independently re-derived
+against the code, every fact RA stated holds — RB confirmed the finalize broadcast's guard structure,
+confirmed by checking *every* writer of the literal that `interrupted` cannot gain a status row, and
+reproduced the "Worked for Xs" defect by running it. What does not hold is the scope RA drew around
+its own discovery. `parse_claude_line` is selected only for the three Claude-family runner values,
+and `status_event("completed")` occurs exactly once in the whole Hub, so **signal 1 has never fired
+for a Codex run of either transport — for any outcome, including a clean completion.** RA
+generalised a Claude-only producer to the product, which makes its headline retraction right for
+Claude and wrong for Codex, where D6 is the first-time repair rounds 1-3 described. Filed as
+**F270 (C)**: the 2026-08-18 lingering-tail complaint is fixed for Claude and still live for Codex
+today. Four tasks corrected, task 2.1b added, one spec scenario added. RB also implemented and ran
+both fixes task 4.5a offered as equivalents: **one of them does not work**, and 4.5a now names the
+one that passes. This is the round discipline's own failure mode caught in the act — an argument
+wrong about something every one of whose individual claims is right.
 
 
 ## What Changes

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-02T17:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-02-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-3",
-    "next_action": "D-3 - Spec RB. Independently re-derive round RA's repaired argument for openspec/changes/a-turn-says-how-it-ended against the actual code. NOT a re-read of RA's reasoning: open AgentTimeline.tsx, agentTimelineModel.ts, runner_parsing.py, runner_events.py, output_recording.py, agent_chat.py, run_reconciliation.py and both terminal paths in agent_trigger.py FIRST, form your own account of which runs get a persisted kind='status'/phase='completed' row and what lastRunSettled therefore does, and only then read design D6 and the 'Round RA, 2026-09-02' section and compare. The sharpest targets, because they are RA's own new claims and nobody has checked them: (a) that the finalize broadcast at agent_trigger.py:2132 really is outside the `if run is None` guard and reached for stopped/failed/completed/binding-conflict alike; (b) that `interrupted` genuinely cannot gain a status row, i.e. that no other writer covers it; (c) F269's mechanism -- verify by RUNNING it, not by reading, and if a throwaway vitest probe is used, delete it before commit; (d) whether task 4.5a's two proposed fixes (hoist durationLine out of the per-block fragment, or exclude success-completion entries from firstAgentBlockId) both actually work, since RA proposed them without trying either. An argument can be wrong while everything it argues about is right. If the round changes nothing, SAY SO EXPLICITLY -- that is a real outcome and hiding it makes the next round look cheaper than it is. This window does NOT implement -- no edits under hub/hub/ or src/agentweave/, and nothing committed under hub/ui/. `openspec validate --strict a-turn-says-how-it-ended` must pass; SHALL on a requirement's first physical line.",
+    "current": "D-4",
+    "next_action": "D-4 (OPTIONAL - drop after 15:30 and go straight to D-6). Drive the InstructionsPage:9 suspicion on the trial Hub at :8011. N-11 found it statically and deliberately filed NO finding number: hub/ui/src/.../InstructionsPage.tsx:9 seeds its editor from `if (data) setContent(...)`, so a FAILED load leaves an empty textarea with Save ENABLED, and a save writes '' over stored instructions. It has never been driven. Drive it as an operator would: create a fixture project, store real instructions, then make the load fail (offline the route or point at a project id that 404s) and see what the page actually renders and whether Save is enabled and destructive. It earns a finding number ONLY if reproduced -- if it does not reproduce, say so explicitly and record why the static read was wrong. Bind claude-haiku-4-5 for any real agent turn; never drive proj-5e960453 or proj-18e5d4e0; never touch port 8000; delete the fixture project and sweep for enabled jobs afterwards. This window does NOT implement -- no edits under hub/hub/, hub/ui/ or src/agentweave/. Then D-6: write spec-queue/review/review-2026-09-02.html (self-contained, theme-aware, six sections in the playbook's order; section 1 leads with the unmerged two-day branch; section 4 must say when a round changed nothing -- RB changed nothing about D1-D5/D7 and that belongs on the page) and append today's section to spec-queue/APPROVALS.md, one row per specced change, NO status token.",
     "queue": [
         {
             "id": "compose",
@@ -35,13 +35,13 @@
         },
         {
             "id": "D-3",
-            "status": "current",
+            "status": "done",
             "title": "Spec RB - re-derive D-2's repaired argument against the code, independently",
-            "detail": "Not a re-read of D-2's reasoning: a fresh comparison against what the code does. An argument can be wrong while everything it argues about is right. If the round changes nothing, say so explicitly - that is a real outcome and hiding it makes the next round look cheaper than it is."
+            "detail": "Done at iteration 4. Round RB re-derived RA's argument against the code independently (9 files read before opening D6). CONFIRMED, each by a stronger route than RA used: (a) the finalize broadcast is inside `async with` at agent_trigger.py:2009 and outside the `if run:` guard, reached for stopped/failed/completed/binding-conflict -- and its app-server twin at :2718-2733 is likewise unguarded, which RA cited without checking; (b) `interrupted` cannot gain a status row, verified against EVERY writer of the literal (Run.status='interrupted' assigned in exactly one place, run_reconciliation.py:65; codex_appserver's `interrupted` outcome maps to `stopped` at agent_trigger.py:2628/:2673); (c) F269 reproduced by RUNNING it, 4 assertions, adding two cases RA did not run (status row with no operator message; thinking row ahead of it as negative control). CHANGED: RA generalised a Claude-only producer to the product. `parse_claude_line` is selected only for claude/claude_proxy/native (agent_trigger.py:1867); parse_codex_line's only status_event is 'plan' (:574); the app-server transport's only status_event is 'plan' (codex_appserver.py:544); status_event('completed') occurs EXACTLY ONCE in the whole Hub. So no Codex run of either transport has ever had a persisted phase='completed' row, including a clean completion -- RA's headline retraction is right for Claude and WRONG for Codex, where D6 is the first-time repair rounds 1-3 described. UI half MEASURED (3 assertions): pre-refetch, the working indicator is absent with the Claude parser's row present and PRESENT without it, and codex's own phase='plan' row does not satisfy the predicate. NEW FINDING F270 (C), ledger 274 -> 275, labelled UI-half-measured / producer-half-read / live Codex turn NOT driven (Codex undrivable since 2026-08-29). WITHDRAWN: task 4.5a offered two fixes as equivalents and one does not work -- excluding success-completion entries from firstAgentBlockId leaves it undefined in exactly F269's case (2 of 6 fail); the placement fix passes 6/6 plus 86 existing assertions. Both patches reverted, all three probes deleted, nothing under hub/ui, hub/hub or src committed. D1-D5, D7, D6's purpose/writer/exit-code argument and F190's headline explicitly unchanged. Phases 1-7 stay unblocked. openspec validate --strict: valid."
         },
         {
             "id": "D-4",
-            "status": "open",
+            "status": "current",
             "optional": true,
             "title": "Drive the InstructionsPage:9 suspicion",
             "detail": "N-11 found statically and deliberately filed no finding number: InstructionsPage.tsx:9 seeds its editor from `if (data) setContent(...)`, so a failed load leaves an empty textarea with Save ENABLED, and a save writes '' over stored instructions. Never driven. Drive it on 8011; it earns a finding number only if reproduced. DROP THIS ITEM after 15:30 and go to D-6."
@@ -80,7 +80,7 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-02T09:40:16+01:00",
+    "last_heartbeat": "2026-09-02T09:50:32+01:00",
     "branch_spans_days": [
         "2026-09-01",
         "2026-09-02"
