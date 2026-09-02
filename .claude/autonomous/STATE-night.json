@@ -86,7 +86,7 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-02T01:49:39+01:00",
+    "last_heartbeat": "2026-09-02T01:10:22+01:00",
     "status": "running",
     "queue_source": "spec-queue/APPROVALS.md, 2026-09-01 section, ORDER: line. Verbatim, so the playbook's default backlog-first shape is not used tonight.",
     "green_at_compose": "Measured 2026-09-02T01:50+01:00, N-6, everything re-run this iteration. vitest 142 files / 1476 tests passed. CLI suite 440 passed / 3 skipped. Full hub suite 1 failed / 3835 passed / 84 skipped / 1 xpassed in 23:15 -- identical counts to N-2, same single red, and that red is now filed as F266 rather than left as an open question. ruff / black --target-version py311 / mypy src / npm run lint / tsc --noEmit all clean. Drives against the BUILT bundle on 8011: t_n3 25/0, t_n4 24/0, t_r2 19/0.",
