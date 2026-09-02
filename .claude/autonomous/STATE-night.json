@@ -115,7 +115,7 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-02T02:40:49+01:00",
+    "last_heartbeat": "2026-09-02T02:01:07+01:00",
     "status": "running",
     "queue_source": "spec-queue/APPROVALS.md, 2026-09-01 section, ORDER: line. Verbatim, so the playbook's default backlog-first shape is not used tonight.",
     "green_at_compose": "Not re-run in full this iteration -- N-11 touched no product code and no test: one new harness under scripts/drive/, two documentation files (scripts/drive/FINDINGS.md, spec-queue/DECISIONS.md). Measured here: ruff and black --target-version py311 clean on the new harness; identical output on three consecutive runs (107 sites / 6 handled / 60-16-24-1). Last full baseline is still N-6's, 2026-09-02T01:50: vitest 142 files/1476 tests, CLI 440 passed / 3 skipped, hub suite 1 failed (F266) / 3835 passed / 84 skipped / 1 xpassed.",
