@@ -8,18 +8,67 @@
     "parent_branch":  "master",
     "parent_sha":  "556bb37",
     "stop_at":  "2026-09-03T07:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
+    "last_heartbeat":  "2026-09-02T23:06:42+01:00",
     "log_file":  ".claude/autonomous/2026-09-02-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "current":  "p1-route",
+    "next_action":  "Do queue item p1-route: phase 1 of openspec/changes/a-turn-says-how-it-ended (tasks 1.1-1.6). Read the phase 0 write-up header and designs D3/D5 in design.md first -- D3 was rewritten in round 3 and task 1.4a records the alternative that must NOT be restored. Write the Hub tests (1.1, 1.2, 1.4b) BEFORE the route change, confirm 1.4b fails against a started_at-ordered limited query, then add the envelope schema and the runs map. Fix what the shape change breaks (1.6). Commit.",
     "queue":  [
                   {
                       "id":  "compose",
+                      "status":  "done",
+                      "title":  "Compose this window's queue from the playbook",
+                      "detail":  "Done iteration 1. APPROVALS.md 2026-09-02 carries ORDER: a-turn-says-how-it-ended -- one item, verbatim, so the default queue is ignored. Backlog source 1 (implemented changes needing only archiving) is empty. Tree confirmed green first: hub/tests/test_agents.py + test_bola.py 12 passed; vitest agentTimeline{,Events,Model} 63 passed."
+                  },
+                  {
+                      "id":  "p1-route",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "a-turn phase 1 -- the route carries the run's facts (1.1-1.6)",
+                      "detail":  "hub/hub/schemas/agents.py envelope + hub/hub/api/v1/agents.py:729 agent_timeline runs map. Tests first. Keep the project_id predicate (1.4). Do not restore an ordered/limited run query (1.4a). 1.6: only hub/tests/test_bola.py is claimed to break on the shape change -- confirm that, do not assume it."
+                  },
+                  {
+                      "id":  "p2-status",
+                      "status":  "open",
+                      "title":  "a-turn phase 2 -- the terminal status line is persisted (2.1-2.4)",
+                      "detail":  "Read design D6 and BOTH the Round RA and Round RB sections before starting -- RA rewrote D6 from measurement and RB corrected RA's scope: status_event('completed') occurs exactly once in the Hub, inside the Claude-only parser (agent_trigger.py:1867), so signal 1 has never fired for Codex. 2.1b is RB's added Codex assertion. Replaces the bare broadcasts at agent_trigger.py:2129-2142 (process path) and :2723-2736 (app-server path). 2.4 re-decides a premise rounds 1 and 2 stated; if it turns out to be a product decision, it goes to decisions_for_user rather than being guessed."
+                  },
+                  {
+                      "id":  "p3-client",
+                      "status":  "open",
+                      "title":  "a-turn phase 3 -- the client consumes the envelope (3.1-3.3a)",
+                      "detail":  "3.1 moves 11 UI test fixtures to the envelope shape in ONE commit before any component is touched. 3.3a: AgentOutputPanel is NOT symmetric with AgentActivityTab -- round 2's correction to the design's risk section. UI source only; no bundle rebuild yet, phase 6.4 owns that."
+                  },
+                  {
+                      "id":  "p4a-reducers",
+                      "status":  "open",
+                      "title":  "a-turn phase 4a -- delete the reducers, point the consumers at the map (4.1-4.5)",
+                      "detail":  "Component tests 4.1/4.2 first, rendering from the map rather than from a reducer. Then AgentTimeline.tsx's three consumers (terminal label at :220, duration, and the third), deleting runDurationsByRunId. 4.5 asserts duration in the COMPONENT test, not only in the model test."
+                  },
+                  {
+                      "id":  "p4b-statline",
+                      "status":  "open",
+                      "title":  "a-turn phase 4b -- the stat line, LIFECYCLE_EVENT_STATUS, and the third consequence (4.5a-4.7)",
+                      "detail":  "4.5a was CORRECTED by round RB: it offered two fixes as equivalents, RB implemented and ran both, and one fails in exactly F269's case -- implement the one 4.5a now names and no other. 4.7's completed-run guard carries RB's Claude-only scope correction. Verify 4.7 in BOTH states, not only on reload."
+                  },
+                  {
+                      "id":  "p5-testing-rule",
+                      "status":  "open",
+                      "title":  "a-turn phase 5 -- the testing rule is enforceable (5.1-5.3)",
+                      "detail":  "5.1 replaces agentTimelineModel.test.ts:223-235, the fixture that fed ascending events to a reducer the route never feeds ascending. 5.2 must FAIL if the route's ordering is reversed -- mutation-check it, do not assume. 5.3 records the rule where a reviewer meets it and notes it in spec-queue/DECISIONS.md (D-4)."
+                  },
+                  {
+                      "id":  "p6-drive",
+                      "status":  "open",
+                      "title":  "a-turn phase 6 -- drive it against a running Hub (6.1-6.7)",
+                      "detail":  "Trial Hub on 8011 from hub/ with uvicorn from source, fresh fixture project, every agent turn bound to claude-haiku-4-5. Never 8000, never 8010, never proj-5e960453 or proj-18e5d4e0. Confirm no .py under hub/hub or src is newer than the process start time. Stopped, failed AND interrupted runs (6.3). 6.4 rebuilds and stamps the bundle: npm run build then py -3.11 scripts/refresh_ui_bundle.py. 6.5 deletes the fixture, confirms the project count returns, and sweeps for enabled jobs. 6.6 is the full CI lint set. 6.7: do NOT retire F190 here."
+                  },
+                  {
+                      "id":  "p7-round",
+                      "status":  "open",
+                      "title":  "a-turn phase 7 -- verified by a round that did not build it (7.1-7.4)",
+                      "detail":  "The operator's approval condition, encoded as structure: a sitting that did not write the code re-runs phase 0's six observations against the built product. 7.1's baseline carries RB's Codex correction. This phase closes F190; phase 6 explicitly does not."
                   }
               ],
     "decisions_for_user":  [
@@ -29,12 +78,12 @@
                    "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
                    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
                ]
 }
