@@ -1,6 +1,6 @@
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentSummary, AgentTimelineEvent } from '@/api/agents'
+import type { AgentRunFacts, AgentSummary, AgentTimelineEvent } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import { AgentTimeline } from '@/components/agents/AgentTimeline'
 import { formatElapsedSeconds } from '@/hooks/useElapsedSeconds'
@@ -55,14 +55,16 @@ function renderTimeline(overrides: {
   isRunning?: boolean
   entries?: TimelineEntry[]
   timelineEvents?: AgentTimelineEvent[]
+  runs?: Record<string, AgentRunFacts>
 } = {}) {
-  const { isRunning = false, entries = [], timelineEvents = [] } = overrides
+  const { isRunning = false, entries = [], timelineEvents = [], runs = {} } = overrides
   return render(
     <AgentTimeline
       agent={agent}
       entries={entries.length ? entries : [entry({ id: 'seed', run_id: 'run-seed' })]}
       roster={[]}
       timelineEvents={timelineEvents}
+      runs={runs}
       isRunning={isRunning}
     />,
   )

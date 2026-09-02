@@ -114,6 +114,39 @@ export interface AgentTimelineEvent {
   data: Record<string, unknown>
 }
 
+/** Every lifecycle status a run can be in; `started` is the only one that is not terminal.
+ *
+ *  It lives here, beside the response that carries it, rather than in `lib/agentTimelineModel`
+ *  where it used to: the timeline route now *states* a run's status (renaming `Run.status`'s
+ *  `running` to `started` at the boundary, design D5), so this is a wire value rather than
+ *  something the client reduces its way to. */
+export type RunLifecycleStatus =
+  | 'started'
+  | 'completed'
+  | 'failed'
+  | 'stopped'
+  | 'interrupted'
+
+/** What a run's own row records about how it went — the server's `RunFacts`.
+ *
+ *  Read from `Run`, never from which lifecycle events happen to have landed in the window, so
+ *  a run whose terminal event is outside the window still reports its outcome. */
+export interface AgentRunFacts {
+  status: RunLifecycleStatus
+  exit_code?: number | null
+  started_at: string
+  ended_at?: string | null
+}
+
+/** The timeline response: the events, and the facts of the runs those events name.
+ *
+ *  `runs` is keyed by `run_id` and holds a row for exactly the runs the returned events name.
+ *  A lookup miss therefore means "no run row for this id", never "this run has not ended". */
+export interface AgentTimelineResponse {
+  events: AgentTimelineEvent[]
+  runs: Record<string, AgentRunFacts>
+}
+
 export interface AgentOutputLine {
   id: string
   agent: string
@@ -384,9 +417,10 @@ export function useAgentTimeline(name: string | null) {
     }
   })
 
-  return useQuery<AgentTimelineEvent[]>({
+  return useQuery<AgentTimelineResponse>({
     queryKey: ['project', projectId, 'agents', name, 'timeline'],
-    queryFn: () => getJson<AgentTimelineEvent[]>(`/api/v1/projects/${projectId}/agents/${name}/timeline`),
+    queryFn: () =>
+      getJson<AgentTimelineResponse>(`/api/v1/projects/${projectId}/agents/${name}/timeline`),
     enabled: isConfigured && !!projectId && !!name,
   })
 }

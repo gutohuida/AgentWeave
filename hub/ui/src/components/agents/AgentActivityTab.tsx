@@ -21,7 +21,9 @@ interface ActivityItem {
 
 export function AgentActivityTab({ agent }: AgentActivityTabProps) {
   const { lines: outputLines } = useAgentOutput(agent.name)
-  const { data: timelineEvents = [] } = useAgentTimeline(agent.name)
+  // Unwrap only. This tab lists what happened; the envelope's `runs` map answers how a run
+  // ended, which nothing here asks.
+  const { data: timeline } = useAgentTimeline(agent.name)
   const [isPaused, setIsPaused] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const shouldAutoScroll = useRef(true)
@@ -36,7 +38,9 @@ export function AgentActivityTab({ agent }: AgentActivityTabProps) {
         eventType: line.kind,
       }))
 
-    const eventItems: ActivityItem[] = timelineEvents.map(event => ({
+    // Unwrapped inside the memo rather than above it: `timeline?.events ?? []` is a logical
+    // expression, and as a dependency it would re-run this on every render.
+    const eventItems: ActivityItem[] = (timeline?.events ?? []).map(event => ({
       id: event.id,
       timestamp: event.timestamp,
       type: 'event',
@@ -48,7 +52,7 @@ export function AgentActivityTab({ agent }: AgentActivityTabProps) {
     const combined = [...logItems, ...eventItems]
     combined.sort((a, b) => hubDate(a.timestamp).getTime() - hubDate(b.timestamp).getTime())
     return combined
-  }, [outputLines, timelineEvents])
+  }, [outputLines, timeline])
 
   useEffect(() => {
     if (shouldAutoScroll.current && scrollRef.current && !isPaused) {

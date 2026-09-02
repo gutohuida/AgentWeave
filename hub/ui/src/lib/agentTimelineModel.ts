@@ -1,3 +1,4 @@
+import type { RunLifecycleStatus } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import type { TurnUsage } from '@/api/accounting'
 
@@ -101,13 +102,6 @@ export function reduceTurnBlocks(entries: TimelineEntry[]): TurnBlock[] {
   }
   return blocks
 }
-
-export type RunLifecycleStatus =
-  | 'started'
-  | 'completed'
-  | 'failed'
-  | 'stopped'
-  | 'interrupted'
 
 const LIFECYCLE_EVENT_STATUS: Record<string, RunLifecycleStatus> = {
   run_started: 'started',

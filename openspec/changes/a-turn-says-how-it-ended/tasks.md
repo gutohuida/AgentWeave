@@ -218,7 +218,21 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
 
 ## 3. The client consumes the envelope
 
-- [ ] 3.1 Move the 11 UI test fixtures to the envelope shape in one commit, before touching any
+- [x] 3.1 **DONE, and the count was 10 files, not 11 — plus a twelfth this task did not
+      anticipate.** Landed alone as instructed; that commit is red on its own (69 failed / 69
+      across the nine, every one of them `runStatusByRunId` iterating the envelope object where
+      `AgentTimeline.tsx:84` expected an array) and green at the next. Three corrections for later
+      phases: (a) **`agentTimelineModel.test.ts` needed nothing here** — it exercises model
+      functions over plain arrays and never touches the hook, so its only stake in this change is
+      task 5.1; the substantive file at 3.1 was `workingIndicator` alone. (b) **A twelfth file,
+      `agentTimeline.test.tsx`, had to move**, because `runs` was made a **required** prop of
+      `AgentTimeline` rather than an optional one defaulting to `{}` — an optional map reads as
+      "no run ended" at every consumer, which is the exact failure this change deletes, so the
+      compiler is made to ask. That is 45 render sites, mechanically. (c) **`workingIndicator`'s
+      `runDurationsByRunId` describe block was KEPT**, against this task's wording: the function
+      still ships until task 4.4 deletes it, and that block holds the negative-duration guard 4.4
+      is required to carry across. Delete it there, with the function, not here.
+      Move the 11 UI test fixtures to the envelope shape in one commit, before touching any
       component. Landing these first makes any later failure attributable to the change rather than
       to a fixture. **Round 3's supplementary pass measured the shape of this work, and it is not
       what rounds 1 and 2 assumed:**
@@ -237,12 +251,32 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
         `timelineEvents` as a prop (`:57-65`), imports `runDurationsByRunId` directly (`:7`) and has
         its own describe block for it (`:84`ff), so it needs the new `runs` prop and loses that
         block. Budget the effort there, not across eleven files.
-- [ ] 3.2 Update `useAgentTimeline` (`hub/ui/src/api/agents.ts:387-392`) and the
+- [x] 3.2 **DONE.** `AgentTimelineResponse` and `AgentRunFacts` added beside `AgentTimelineEvent`;
+      the hook is typed and fetched as the envelope. **`RunLifecycleStatus` moved** from
+      `lib/agentTimelineModel.ts` to `api/agents.ts`: the route now *states* a run's status (D5's
+      one rename at the boundary), so it is a wire value rather than something the client reduces
+      its way to, and `AgentRunFacts.status` can be typed without duplicating the union or making
+      `api/` depend on `lib/` — the reverse of this codebase's existing direction. Two importers
+      updated. **SSE predicate checked and unchanged:** the invalidation at `:416` and the query at
+      `:421` name the identical key literal, and `getJson` for this route has exactly one call
+      site.
+      Update `useAgentTimeline` (`hub/ui/src/api/agents.ts:387-392`) and the
       `AgentTimelineEvent` types to the envelope, and check the SSE invalidation predicate at
       `:354-383` still names the right query key.
-- [ ] 3.3 Update `AgentActivityTab.tsx` for the unwrap only — it maps events into activity items
+- [x] 3.3 **DONE**, with one shape note: the unwrap had to move *inside* the `useMemo` rather than
+      sit above it, because `timeline?.events ?? []` as a dependency is a logical expression and
+      `react-hooks/exhaustive-deps` is an error here (`--max-warnings 0`). The memo depends on
+      `timeline` now.
+      Update `AgentActivityTab.tsx` for the unwrap only — it maps events into activity items
       (`:24`, `:39`) and needs no run facts.
-- [ ] 3.3a **`AgentOutputPanel` is not symmetric with it** (round 2's correction to the design's risk
+- [x] 3.3a **DONE.** New file `timelineEnvelopeUnwrap.test.tsx` is the guard the nine fixtures
+      structurally cannot be — the only test in the suite that puts a **non-empty** envelope through
+      the hook. Two assertions, both mutation-checked: `AgentActivityTab` lists an event out of
+      `data.events` (fails when the unwrap is replaced with `[]`), and `AgentOutputPanel` hands
+      `AgentTimeline` both `timelineEvents` and `runs` from the envelope (both fail when the panel
+      passes empties). The second stubs `AgentTimeline` and reads the props, since at phase 3
+      nothing reads `runs` and the carry is therefore not observable in the DOM.
+      **`AgentOutputPanel` is not symmetric with it** (round 2's correction to the design's risk
       list). It holds the hook (`:330`) and its only other use of the value is passing it to
       `AgentTimeline` (`:1033`), where all three consumers live — and `AgentTimeline` takes
       `timelineEvents` as a prop (`AgentTimeline.tsx:31`) rather than calling the hook. So
@@ -259,7 +293,11 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
 - [ ] 4.3 Point `AgentTimeline.tsx`'s three consumers at the map: the terminal label (`:220`),
       `lastRunSettled` (`:114`) and `anotherRunIsUnderway` (`:131`). Delete `runStatusByRunId`
       (`agentTimelineModel.ts:187-199`).
-- [ ] 4.4 Point the duration display at `started_at`/`ended_at` and delete `runDurationsByRunId`
+- [ ] 4.4 **Its tests are still where task 3.1 said they would not be:** the
+      `runDurationsByRunId` describe block in `workingIndicator.test.tsx` was deliberately kept at
+      phase 3 so the function did not ship untested. Delete it here, and read its
+      negative-duration case before you do — it is the guard this task must carry across.
+      Point the duration display at `started_at`/`ended_at` and delete `runDurationsByRunId`
       (`:138-168`). **Carry its negative-duration guard across** — a clock that went backwards must
       still not render "Worked for -3s" (design D4).
 - [ ] 4.5 Assert duration rendering in the component test, not only in a model test, since the model

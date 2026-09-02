@@ -327,7 +327,11 @@ export function AgentOutputPanel({
   const agentDefaultControls = targetAgentRow?.default_permission_mode
     ? { [PERMISSION_MODE_CONTROL]: targetAgentRow.default_permission_mode }
     : EMPTY_CONTROLS
-  const { data: timelineEvents = [] } = useAgentTimeline(agent.name)
+  // This panel reads neither half; it is the only thing that can carry them. The hook lives
+  // here and `AgentTimeline` takes both as props, so `runs` is threaded through unread.
+  const { data: timeline } = useAgentTimeline(agent.name)
+  const timelineEvents = timeline?.events ?? []
+  const runFacts = timeline?.runs ?? {}
   const { data: accounting } = useAccounting()
   const { data: conversationUsage } = useConversationAccounting(currentConversationId ?? null)
   const { data: queueStatus } = useQueueStatus(agent.name)
@@ -1031,6 +1035,7 @@ export function AgentOutputPanel({
             entries={timelineEntries}
             roster={roster}
             timelineEvents={timelineEvents}
+            runs={runFacts}
             queueStatus={queueStatus}
             isRunning={isRunning}
             onDeliverNow={handleDeliverNow}

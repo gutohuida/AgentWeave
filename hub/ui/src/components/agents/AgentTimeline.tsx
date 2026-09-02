@@ -5,7 +5,7 @@ import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
 import { ToolEditDiff } from '@/components/agents/ToolEditDiff'
 import { editDiffStat } from '@/lib/editDiff'
 import { formatElapsedSeconds, useElapsedSeconds } from '@/hooks/useElapsedSeconds'
-import type { AgentSummary, AgentTimelineEvent } from '@/api/agents'
+import type { AgentRunFacts, AgentSummary, AgentTimelineEvent, RunLifecycleStatus } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import type { QueueStatus } from '@/api/queue'
 import type { TurnUsage } from '@/api/accounting'
@@ -20,7 +20,6 @@ import {
   runDurationsByRunId,
   runStatusByRunId,
   tokensByRunId,
-  type RunLifecycleStatus,
   type TimelineTurn,
 } from '@/lib/agentTimelineModel'
 
@@ -29,6 +28,11 @@ interface AgentTimelineProps {
   entries: TimelineEntry[]
   roster: AgentSummary[]
   timelineEvents: AgentTimelineEvent[]
+  /** The facts of the runs `timelineEvents` names, keyed by `run_id`, straight from the
+   *  timeline route. Required rather than optional and defaulted: a silently-empty map reads
+   *  as "no run ended" everywhere it is consulted, which is the exact failure this change
+   *  exists to delete. A caller with nothing to say must say `{}` on purpose. */
+  runs: Record<string, AgentRunFacts>
   queueStatus?: QueueStatus
   isRunning: boolean
   onDeliverNow?: () => void
