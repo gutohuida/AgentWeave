@@ -118,3 +118,25 @@ Two things they cost time to learn. A loop's queue drains at `approved`/`rejecte
 `completed` — `TERMINAL_FOR_BINDING` is those two — so a loop only ends once somebody reviews its
 work, and until then it stalls with a reason rather than stopping. And approving a loop's task
 merges nothing, ever, for the structural reason in F124.
+
+## The 2026-09-02 fixture — D-1, the model catalog
+
+`drive-0902-d1` at `C:\Users\huida\Documents\drive-0902-d1` — a one-file git repo, deliberately
+trivial, because nothing in this harness needs an agent to do work. The **project** is created and
+deleted by the harness on every run, so only the directory persists; keep it, or
+`t_d1_catalog_is_the_only_door.py` cannot open a project at all.
+
+- `t_d1_catalog_is_the_only_door.py` — the day window's independent re-drive of
+  `runner-model-is-chosen-from-the-catalog`, against the **served bundle** on `:8011` (no Vite dev
+  server). It derives what to assert from `openspec/specs/runner-registry/spec.md` and from
+  `GET /model-catalog`, never from the component's source, which is the point of it existing beside
+  `t_n3_*` and `t_n4_*` rather than replacing them: those two were written by the change's own
+  author in the same sitting as the code.
+
+  **33 passed / 3 failed**, and the three reds are the findings, not breakage — F267 (the Codex
+  catalog declares two models the CLI's own `models_cache.json` no longer lists, one of them the
+  declared default) and F268 (the runner-binding select renders `name (cli)`, so two runners
+  differing only by model are one string). Expect it to stay red until those are fixed.
+
+  Costs no tokens: it triggers no agent turn, and the one `POST /agent/trigger` it makes carries a
+  deliberately invalid model override that `validate_overrides` refuses before anything spawns.

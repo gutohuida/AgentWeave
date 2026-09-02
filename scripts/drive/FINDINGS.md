@@ -17745,3 +17745,179 @@ selections above are the ones already spent, so start after them.
 **Not proposed.** Needs the day window: the fix is a design question (drop the refresh and stamp
 `timestamp` client-side, refresh defensively, or stop treating a post-commit recording error as a
 run failure) and this window does not write proposals.
+
+## F267 (B) — the model catalog is a compile-time literal behind a closed door, and it is already 28 days stale
+
+Found by the 2026-09-02 day window's D-1 drive
+(`scripts/drive/t_d1_catalog_is_the_only_door.py`, **33 passed / 3 failed**), driving the served
+bundle on `:8011` against fixture project `proj-30e5779191b6`. This is research candidate 1 of
+`spec-queue/research/2026-09-02.md`, re-measured here independently rather than taken on the
+research file's word.
+
+**Two facts, each measured, that are only a problem together.**
+
+*One — every operator-reachable route that sets a model is closed against anything the catalog does
+not declare.* Four doors, all tried live, all refused:
+
+```
+POST   /projects/<p>/runners       {"cli":"claude","model":"claude-fable-5-1"}     -> 400
+PATCH  /projects/<p>/runners/<r>   {"model":"claude-fable-5-1"}                    -> 400
+POST   /projects/<p>/agents        {"provider":"claude","model":"claude-fable-5-1"} -> 400
+POST   /projects/<p>/agent/trigger {"overrides":{"model":"claude-fable-5-1"}}      -> 400
+      {"detail": "'claude-fable-5-1' is not a model 'claude' declares"}
+```
+
+and the screen offers no way to express one either — `RunnerForm`'s model field is now a `<select>`
+carrying exactly `Provider default` + the catalog's models (measured for both providers), the
+Add-agent dialog's Model select carries exactly the catalog's models, and the dialog holds **one**
+text input, the Name field (`placeholder="e.g. Claude Opus"`). That is the shipped requirement
+working: `runner-registry` — "no free-typed model field is presented". It is not a defect.
+
+*Two — the catalog is a Python literal in `hub/hub/model_catalog.py`, last edited for Codex on
+**2026-08-05** (`git log -S 'gpt-5.6-sol'` → `e7ed91e`), and Codex's own server-synced catalog has
+moved since.* Read from the CLI's own cache, which is where `model_catalog.py`'s docstring says the
+list came from:
+
+```
+~/.codex/models_cache.json   fetched_at 2026-08-29T10:33:58Z, client_version 0.146.0
+  slugs: gpt-5.6-terra(list) gpt-5.6-luna(list) gpt-reserve(hide) gpt-5.5(list)
+         gpt-5.4-mini(list) codex-auto-review(hide)
+CATALOG["codex"]:
+  gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna gpt-5.5 gpt-5.4 gpt-5.4-mini
+```
+
+**`gpt-5.6-sol` and `gpt-5.4` are absent from the cache entirely** — not `visibility: "hide"`,
+absent. And `gpt-5.6-sol` is the entry the catalog marks `default=True`
+(`hub/hub/model_catalog.py:212`).
+
+**What that costs the operator, measured on screen.** `AgentCreateDialog.tsx:178` seeds the model
+from `entry?.models.find((m) => m.default)?.id`, and `canSubmit` requires a model, so the operator
+is *handed* the declared default. Driven:
+
+```
+preselected model per provider: {'claude': 'claude-sonnet-5', 'codex': 'gpt-5.6-sol'}
+```
+
+So an operator who opens Add agent, picks Codex and creates gets a runner bound to
+`gpt-5.6-sol` — a model the Codex CLI installed on this machine does not list — and the only
+models they can move it to are the other five the same stale literal declares.
+
+**What is NOT measured, and is not claimed.** That a run on `gpt-5.6-sol` fails. Codex is not
+driven here (operator directive, 2026-08-29 — Claude runners only), so the spawn's behaviour with
+an unlisted model is **unverified**. The finding is the drift and the closed door, not a failed run.
+It is severity B rather than A for exactly that reason; if the spawn does fail, it is A.
+
+**One defect or a design gap?** A design gap. The catalog module's own docstring already names the
+mechanism ("read directly from `~/.codex/models_cache.json`, the CLI's own server-synced catalog")
+and then hard-codes the answer, so the file the docstring points at is authoritative and unread at
+runtime. Nothing in the product refreshes it, no route exposes it, and the release that fixes a
+drift is a Python edit. **Before the picker shipped this was a soft edge** — free text meant an
+operator could type a newly released model and the Hub's `_reject_undeclared_model` was the only
+obstacle. It is now the only obstacle *and* the only door. Closing the door was right; leaving the
+list a literal is what makes it bite.
+
+**Adjacent, already recorded, and now more consequential:** **F221** (open) — the Hub refuses a
+model *alias* its own catalog declares. `claude --help` on this machine documents `--model` as
+taking "an alias for the latest model (e.g. 'fable', 'opus', or 'sonnet') or a model's full name",
+so an alias is precisely the mechanism that would track a provider's latest model **without** a
+catalog edit, and it is the one thing this catalog serves to clients and then refuses. The Claude
+half of the drift is **not locally measurable** — `claude --help` enumerates no model list — so the
+research file's claim that `claude-fable-5-1` shipped 2026-09-01 stays labelled as its claim, not
+as a measurement of mine.
+
+**Reproduction:**
+
+```bash
+py -3.11 scripts/drive/t_d1_catalog_is_the_only_door.py     # 33 passed / 3 failed
+```
+
+The three reds are this finding (two) and F268 (one). The harness needs a Hub on `:8011` and the
+fixture directory `~/Documents/drive-0902-d1`; it opens its own project and deletes it.
+
+**Not proposed.** The day window's spec slot is held by the `a-turn-says-how-it-ended` repair. The
+shape of a fix is a real design question — read the provider's cache at runtime, ship a catalog
+refresh route, honour aliases (F221), or accept the literal and add a staleness check — and picking
+between those is what a spec loop is for.
+
+## F268 (B) — the runner-binding select renders `name (cli)`, so the spec's own "second runner with a different model" is unpickable
+
+Fell out of F267's drive rather than being looked for. `RunnerCreate` puts no uniqueness on `name`
+and `runners.__table_args__` carries `Index("ix_runners_project_name", ...)` — a plain index, not a
+unique one (`hub/hub/db/models.py:328-331`) — so two runners of one provider may share a name. That
+is not an accident: `openspec/specs/runner-registry/spec.md` blesses the shape outright.
+
+> #### Scenario: Operator creates a custom runner variant
+> - **WHEN** an operator creates a second `claude` runner with a different default model
+> - **THEN** both runners are available for binding to any agent independently
+
+They are available. They are not distinguishable. `RunnerPicker`
+(`hub/ui/src/components/agents/AgentSettingsControls.tsx:242-246`) renders each option as
+`{runner.name} ({runner.cli})` — **the model, the thing the second runner exists for, is not in the
+option text and neither is the id.** Driven on screen, agent `d1binder`'s runner select:
+
+```
+['No runner',
+ 'Claude (default) (claude)', 'Codex (default) (codex)',
+ 'D1 Seed (claude)', 'D1 Seed (claude)',
+ 'Claude Code (claude)',            <- model claude-opus-5
+ 'Claude Code (claude)',            <- model claude-haiku-4-5-20251001
+ 'Claude Code — Sonnet 5 (claude)']
+```
+
+Both `Claude Code` rows were created through `POST /runners` with the same name and different
+models, both accepted `201`. An operator binding one of them is choosing between two identical
+strings, and the choice silently decides which model every subsequent turn runs on.
+
+The last row is the tell: `Claude Code — Sonnet 5` is the runner the Hub *itself* provisions from
+the Add-agent dialog's find-or-create path, which names it
+`f"{provider_entry.label} — {model_entry.label}"` (`hub/hub/api/v1/agents.py:647`). **The Hub already
+knows a runner's name should carry its model** — it just applies that only to the ones it names for
+itself, and the operator-facing form neither suggests it nor renders it afterwards.
+
+Severity B, not C: the refusal-legibility rule does not apply (nothing refuses), but the operator is
+shown two options that differ in the only respect that matters and is given no way to tell them
+apart. Also note the duplicate names are accepted with no warning at all — the create dialog says
+nothing about a name already in use.
+
+Whether the fix is a unique constraint, a model suffix in the option text, or both, is a design
+question and is **not proposed** here.
+
+**Reproduction:** section D of `scripts/drive/t_d1_catalog_is_the_only_door.py`, or by hand —
+create two `claude` runners named the same with different models, then open any agent's
+Settings → runner select.
+
+## What held, D-1, 2026-09-02 — the independent re-drive of `runner-model-is-chosen-from-the-catalog`
+
+Recorded because a drive that reports only defects describes a different product, and because the
+night window's three retirements were **its own author's drive of its own change**. These are the
+same claims re-derived from `openspec/specs/runner-registry/spec.md` and from
+`GET /model-catalog` — never from the component's source — and driven against the **served bundle**
+on the Hub's own port, no Vite dev server anywhere.
+
+- **The picker offers the catalog's models, and only those.** For `claude` and for `codex`, the
+  `<select>`'s option values were `[""] + <exactly the ids GET /model-catalog declares>`, in catalog
+  order, and every declared model was present by its declared *label* too. Changing the CLI reset
+  the selection to the empty `Provider default` value — unset, not that provider's default model.
+- **No free-typed model field.** The dialog carries one text input, `placeholder="e.g. Claude Opus"`
+  — the Name field, which task 4.2 was explicitly careful to keep.
+- **The Add-agent dialog offers exactly the catalog's models** for both providers (no
+  `Provider default` entry there, correctly — an agent must have one).
+- **F173's error surface holds for a refusal an operator can actually cause from the screen.** The
+  night window could only reach it by rewriting the request on the wire, because the model refusal
+  is unreachable by construction now. This drive found one that is not: the Name field imposes no
+  length cap of its own (300 typed, 300 accepted), so `RunnerCreate.name`'s `max_length=256` answers
+  `422` with a **Pydantic list** `detail` — the exact body shape task 3.1's `readableApiError` swap
+  exists for. On screen: the dialog stayed open, the 300 characters were still in the field, and the
+  `role="alert"` read `String should have at most 256 characters` — prose, not a rendered object.
+- **All four model doors refuse, and say what is wrong.** `'claude-fable-5-1' is not a model
+  'claude' declares` — including from the composer's per-run override, which is validated before
+  anything spawns, so the refusal costs no tokens.
+- **A runner with no model is accepted** (`201`), which is the "unset is a valid, spawnable state"
+  half of the requirement.
+- **Cleanup measured, not assumed.** `DELETE /projects/proj-30e5779191b6` → `204`, and
+  `GET /projects` → `[]` afterwards. No job was created; no agent turn was triggered, so nothing
+  bound a model and the drive spent no tokens.
+
+One presentation note, deliberately **not** filed as a finding: the `422`'s sentence is Pydantic's
+own `msg` and names no field (`String should have at most 256 characters`). With one text input on
+screen that is unambiguous today, and inventing a field name in the client would be worse.

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-02T17:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-09-02-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-1",
-    "next_action": "D-1 - the drive. Use the e2e-loop skill, scoped to what the night window shipped: runner-model-is-chosen-from-the-catalog. Drive Hub on 8011 from hub/ with uvicorn from source (never `agentweave --port`), fresh fixture project (never proj-5e960453 or proj-18e5d4e0), every real agent turn bound to claude-haiku-4-5, never leave a job enabled. Confirm three things by hand, not by re-running last night's harnesses: (a) the model picker offers the catalog's models (runner-registry/spec.md:72-73); (b) a refused model's message reaches the screen rather than being swallowed (F173, retired last night on its own author's drive - re-drive it independently); (c) whether the <Select> turns a stale catalog into a hard wall, per research candidate 1 (spec-queue/research/2026-09-02.md) which measured gpt-5.6-sol absent from ~/.codex/models_cache.json and claude-fable-5-1 unsettable. New findings append to scripts/drive/FINDINGS.md with severity, file:line and a reproduction; a finding without a reproduction is a suspicion. Delete the fixture project and record the cleanup measured, not assumed.",
+    "current": "D-2",
+    "next_action": "D-2 - Spec RA. Repair openspec/changes/a-turn-says-how-it-ended from the measured premise. Phase 0 task 0.3 is FALSIFIED (recorded in that change's own tasks.md SS0 and beside F190): the single-run working indicator DOES release cleanly, gated by signal 1, and isSuccessCompletionEntry DOES match -- so round 3b's premise is wrong and round 2 was right. Phases 1-7 are BLOCKED in tasks.md until a round re-argues D6 from the true premise. The surviving, narrower claim is that signal 1 has never worked FOR A RUN THAT DID NOT COMPLETE. Re-derive D6 against the actual code (not against round 3b's reasoning), then rewrite proposal.md, design.md, tasks.md and the specs/<capability>/spec.md deltas wherever the false premise leaked in, and either unblock the phases or narrow the change's scope to what survives. This window does NOT implement -- no edits under hub/hub/ or src/agentweave/. `openspec validate --strict a-turn-says-how-it-ended` must pass; SHALL on a requirement's first physical line. Do not mark any task complete on the strength of a plan existing.",
     "queue": [
         {
             "id": "compose",
@@ -23,13 +23,13 @@
         },
         {
             "id": "D-1",
-            "status": "open",
+            "status": "done",
             "title": "Drive runner-model-is-chosen-from-the-catalog end to end",
-            "detail": "See next_action. Independent of last night's harnesses, which were the change author's own transcription of its own predicates."
+            "detail": "Done at iteration 2. scripts/drive/t_d1_catalog_is_the_only_door.py, 33 passed / 3 failed, against the SERVED BUNDLE on :8011 (no Vite dev server; measured that no .py under hub/hub or src was newer than the running process, and that :8011 serves Temp/aw0901n/aw0901n.db, by watching which candidate's mtime moved). (a) CONFIRMED independently: both providers' selects offer exactly Provider default + the catalog's declared ids and labels, CLI change resets to UNSET, one text input on screen (Name). (b) CONFIRMED by a stronger route than the night window's wire injection: a 300-char runner name is a refusal an operator can CAUSE from the dialog, 422 with a Pydantic LIST detail, rendered as prose in a role=alert with the dialog open and the values intact. (c) CONFIRMED, and worse than stated: all four model-setting doors refuse (POST/PATCH runners, POST agents, POST agent/trigger overrides), and CATALOG['codex'] -- unedited since 2026-08-05 -- declares gpt-5.6-sol and gpt-5.4, both ABSENT from ~/.codex/models_cache.json (fetched 2026-08-29, client 0.146.0); gpt-5.6-sol is the declared default and AgentCreateDialog hands it to the operator. Findings F267 and F268 filed, both severity B, ledger 271 -> 273. Fixture project deleted (204, projects []); directory ~/Documents/drive-0902-d1 KEPT because the harness reopens it."
         },
         {
             "id": "D-2",
-            "status": "open",
+            "status": "current",
             "title": "Spec RA - repair a-turn-says-how-it-ended from the measured premise",
             "detail": "Phase 0 task 0.3 falsified round 3b: the single-run working indicator DOES release cleanly, gated by signal 1, and isSuccessCompletionEntry does match. Phases 1-7 are BLOCKED in the change's own tasks.md until a round re-argues D6 from the true premise. The surviving, narrower claim is that signal 1 has never worked FOR A RUN THAT DID NOT COMPLETE. Re-derive D6 against the code, rewrite proposal.md/design.md/tasks.md and the spec deltas wherever the false premise leaked in, and either unblock the phases or narrow the change's scope to what survives. openspec validate --strict must pass; SHALL on line 1."
         },
@@ -80,7 +80,7 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-02T09:05:18+01:00",
+    "last_heartbeat": "2026-09-02T09:19:37+01:00",
     "branch_spans_days": [
         "2026-09-01",
         "2026-09-02"
