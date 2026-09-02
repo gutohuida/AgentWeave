@@ -17,7 +17,7 @@ vi.mock('@/api/agents', async (importOriginal) => {
     useAgentOutput: () => ({ lines: outputLines, isLoading: false }),
     useAgents: () => ({ data: [] }),
     useAgentLaunchability: () => ({ data: { agents: {} } }),
-    useAgentTimeline: () => ({ data: [] }),
+    useAgentTimeline: () => ({ data: { events: [], runs: {} } }),
   }
 })
 
