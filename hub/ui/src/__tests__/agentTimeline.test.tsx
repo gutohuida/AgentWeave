@@ -324,8 +324,8 @@ describe('AgentTimeline', () => {
         agent={agent}
         entries={[entry({ id: 'a-tok', kind: 'agent_output', output_kind: 'text', run_id: 'run-done' })]}
         roster={[agent]}
-        runs={{}}
-        timelineEvents={[{ id: 'ev1', event_type: 'run_completed', timestamp: '2026-08-02T00:00:10Z', summary: '', data: { run_id: 'run-done' } }]}
+        runs={{ 'run-done': { status: 'completed', started_at: '2026-08-02T00:00:00Z', ended_at: '2026-08-02T00:00:10Z' } }}
+        timelineEvents={[]}
         isRunning={false}
         recentTurns={[{
           id: 'tu-1',
@@ -355,11 +355,8 @@ describe('AgentTimeline', () => {
         agent={agent}
         entries={[entry({ id: 'a-notok', kind: 'agent_output', output_kind: 'text', run_id: 'run-done2' })]}
         roster={[agent]}
-        runs={{}}
-        timelineEvents={[
-          { id: 'ev0', event_type: 'run_started', timestamp: '2026-08-02T00:00:00Z', summary: '', data: { run_id: 'run-done2' } },
-          { id: 'ev1', event_type: 'run_completed', timestamp: '2026-08-02T00:00:10Z', summary: '', data: { run_id: 'run-done2' } },
-        ]}
+        runs={{ 'run-done2': { status: 'completed', started_at: '2026-08-02T00:00:00Z', ended_at: '2026-08-02T00:00:10Z' } }}
+        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -374,8 +371,8 @@ describe('AgentTimeline', () => {
         agent={agent}
         entries={[entry({ id: 'a2', kind: 'agent_output', output_kind: 'text', run_id: 'run-done' })]}
         roster={[agent]}
-        runs={{}}
-        timelineEvents={[{ id: 'ev1', event_type: 'run_stopped', timestamp: '2026-08-02T00:00:00Z', summary: '', data: { run_id: 'run-done' } }]}
+        runs={{ 'run-done': { status: 'stopped', started_at: '2026-08-02T00:00:00Z', ended_at: '2026-08-02T00:00:03Z' } }}
+        timelineEvents={[]}
         isRunning={false}
       />,
     )

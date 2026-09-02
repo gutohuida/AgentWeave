@@ -17,8 +17,6 @@ import {
   groupIntoTurns,
   isSuccessCompletionEntry,
   reduceTurnBlocks,
-  runDurationsByRunId,
-  runStatusByRunId,
   tokensByRunId,
   type TimelineTurn,
 } from '@/lib/agentTimelineModel'
@@ -27,6 +25,10 @@ interface AgentTimelineProps {
   agent: AgentSummary
   entries: TimelineEntry[]
   roster: AgentSummary[]
+  /** The agent's run-lifecycle events. Nothing in this component reads them any more — phase 4
+   *  pointed all three former readers at `runs` — and the prop survives only because deleting it
+   *  touches ~45 render sites, so task 4.6a decides it rather than this commit. Do not add a
+   *  reader back: an event list the route truncates is exactly what F190 was. */
   timelineEvents: AgentTimelineEvent[]
   /** The facts of the runs `timelineEvents` names, keyed by `run_id`, straight from the
    *  timeline route. Required rather than optional and defaulted: a silently-empty map reads
@@ -63,13 +65,40 @@ const TERMINAL_LABEL: Partial<Record<RunLifecycleStatus, string>> = {
   interrupted: 'Turn interrupted',
 }
 
+/**
+ * How long a finished run took, in whole seconds — from the run row's own timestamps.
+ *
+ * Deliberately not the live `useElapsedSeconds` counter: that measures how long *this browser
+ * tab* watched a run, so it is null for every turn that finished before the page loaded and
+ * wrong for one that began before it. "Worked for 12s" has to read the same after a refresh as
+ * it did when the turn landed.
+ *
+ * This figure is RE-BASELINED rather than reconciled against the event-derived one it replaces
+ * (design D4). `Run.started_at` is stamped when the row is constructed and the `run_started`
+ * event only once the pty exists, so every duration now includes the spawn and reads a little
+ * longer — and a run whose spawn failed outright has a duration for the first time, which is
+ * the honest number rather than a regression.
+ *
+ * A run with no `ended_at` (still going, or the process died without one) is `undefined` rather
+ * than 0 — the live indicator covers the first case and nothing should be claimed about the
+ * second. So is a run whose clock went backwards between the two writes: "Worked for -3s" reads
+ * as a bug in the product rather than in the clock.
+ */
+function runDurationSeconds(facts: AgentRunFacts | undefined): number | undefined {
+  if (!facts?.ended_at) return undefined
+  const start = Date.parse(facts.started_at)
+  const end = Date.parse(facts.ended_at)
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return undefined
+  return Math.round((end - start) / 1000)
+}
+
 type ColorLookup = Map<string, number | null | undefined>
 
 export function AgentTimeline({
   agent,
   entries,
   roster,
-  timelineEvents,
+  runs,
   queueStatus,
   isRunning,
   onDeliverNow,
@@ -85,8 +114,6 @@ export function AgentTimeline({
   }, [roster])
 
   const { turns, pending } = useMemo(() => groupIntoTurns(entries), [entries])
-  const statusByRun = useMemo(() => runStatusByRunId(timelineEvents), [timelineEvents])
-  const durationByRun = useMemo(() => runDurationsByRunId(timelineEvents), [timelineEvents])
   const tokensByRun = useMemo(() => tokensByRunId(recentTurns ?? []), [recentTurns])
 
   // `isRunning` is `agent.status === 'running'` — a POLLED roster field, so it stays true for a
@@ -96,32 +123,38 @@ export function AgentTimeline({
   // later (operator, 2026-08-18: "the working indicator then moves to under the message stays
   // active for a couple more seconds then disappears and collapse at the worked for one").
   //
-  // So the indicator is gated on the lifecycle events instead — the same source `durationByRun`
-  // reads — which makes the handoff atomic: the instant the terminal event lands, the live
-  // counter goes and the settled line appears. `isRunning` is still required, so the indicator
-  // cannot appear for an idle agent whose last run simply has no terminal event recorded.
+  // So the indicator is gated on how the run itself says it went — the same source the settled
+  // "Worked for Xs" line reads — which makes the handoff atomic: the instant the run's outcome
+  // lands, the live counter goes and the settled line appears. `isRunning` is still required, so
+  // the indicator cannot appear for an idle agent whose last run has no outcome recorded.
   // Two terminal signals, deliberately, because they arrive at very different speeds:
   //
   //   1. The run's own status line, which STREAMS in with the entries (`kind="status"`,
   //      `payload.phase="completed"` — the row `isSuccessCompletionEntry` hides from view). It
   //      lands the instant the run ends.
-  //   2. The run-lifecycle timeline event, which is authoritative but arrives late: the SSE event
-  //      only INVALIDATES the timeline query (`useAgentTimeline`), so the value costs a further
-  //      HTTP round trip.
+  //   2. `runs[runId].status` — the run row's own outcome, authoritative but arriving late: the
+  //      SSE event only INVALIDATES the timeline query (`useAgentTimeline`), so the value costs
+  //      a further HTTP round trip.
   //
   // Gating on (2) alone still left a visible tail — the counter kept running under a finished
   // answer for as long as the refetch took (operator, 2026-08-18: "It still linger a little
   // bit"). (1) closes that gap; (2) stays as the backstop for a run whose status line never
   // arrived, and for history loaded fresh where the entry is long since persisted.
+  //
+  // Signal 2 used to be reduced out of the lifecycle EVENTS instead, which is the defect this
+  // change deletes: the route truncates its event list, so a run whose terminal event fell off
+  // the end read as "still going" forever (F190). The run row cannot fall off — the route
+  // returns a row for every run the events it returns name.
   const lastTurn = turns.length > 0 ? turns[turns.length - 1] : undefined
   const lastRunId = lastTurn?.runId ?? null
   const lastRunSettled =
     (lastTurn?.entries.some(isSuccessCompletionEntry) ?? false) ||
-    (lastRunId !== null && TERMINAL_STATUSES.has(statusByRun[lastRunId]))
+    (lastRunId !== null && TERMINAL_STATUSES.has(runs[lastRunId]?.status))
 
-  // A run other than the newest loaded turn's, started and not yet ended. `run_started` reaches
-  // `timelineEvents` before that run's first entry has been grouped into a turn, so this is the
-  // only signal available in the window between the two.
+  // A run other than the newest loaded turn's, started and not yet ended. A new run's row is in
+  // `runs` before that run's first entry has been grouped into a turn — the route returns a row
+  // for every run its events name, and `run_started` is one of them — so this is the only signal
+  // available in the window between the two.
   //
   // It is what makes stop-then-send work. Stopping settles run A; sending starts run B; and until
   // B's own entries arrive, the newest turn on screen is still the stopped A. Gating on the last
@@ -134,18 +167,18 @@ export function AgentTimeline({
   // signal in the first place.
   const anotherRunIsUnderway = useMemo(
     () =>
-      Object.entries(statusByRun).some(
-        ([runId, status]) => runId !== lastRunId && !TERMINAL_STATUSES.has(status)
+      Object.entries(runs).some(
+        ([runId, facts]) => runId !== lastRunId && !TERMINAL_STATUSES.has(facts.status)
       ),
-    [statusByRun, lastRunId]
+    [runs, lastRunId]
   )
 
   const runVisiblyActive = isRunning && (!lastRunSettled || anotherRunIsUnderway)
 
   // Timed from the run's own first entry rather than from when this pane mounted, so leaving
   // the conversation and returning does not restart the count. Only ever shown live; once the
-  // run ends, `durationByRun` (from persisted event timestamps) takes over, so a refresh does
-  // not change what a finished turn says it took.
+  // run ends, `runDurationSeconds` (from the run row's own timestamps) takes over, so a refresh
+  // does not change what a finished turn says it took.
   const activeRunStartedAt =
     runVisiblyActive && lastTurn?.entries.length ? lastTurn.entries[0].timestamp : null
   const liveElapsed = useElapsedSeconds(runVisiblyActive, activeRunStartedAt)
@@ -203,7 +236,7 @@ export function AgentTimeline({
     <div className="max-w-[960px] mx-auto flex flex-col gap-[21px] px-[30px]">
       {turns.map((turn, turnIndex) => {
         const key = turn.runId ?? `turn-${turnIndex}`
-        const runStatus = turn.runId ? statusByRun[turn.runId] : undefined
+        const runStatus = turn.runId ? runs[turn.runId]?.status : undefined
         // Foldedness is the operator's choice, never a function of position. The default used
         // to be `!isLastTurn` — derived from the turn's index — so appending a turn silently
         // collapsed whatever the operator was reading the moment they sent a message. Now every
@@ -246,7 +279,7 @@ export function AgentTimeline({
               turnKey={key}
               agentName={agent.name}
               colorByName={colorByName}
-              durationSeconds={turn.runId ? durationByRun[turn.runId] : undefined}
+              durationSeconds={turn.runId ? runDurationSeconds(runs[turn.runId]) : undefined}
               tokenCount={turn.runId ? tokensByRun[turn.runId] : undefined}
             />
             {terminalLabel && (

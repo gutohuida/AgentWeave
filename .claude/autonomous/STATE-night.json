@@ -8,13 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-03T07:00:00+01:00",
-    "iteration": 4,
-    "last_heartbeat": "2026-09-03T00:02:06+01:00",
+    "iteration": 5,
+    "last_heartbeat": "2026-09-03T00:55:25+01:00",
     "log_file": ".claude/autonomous/2026-09-02-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "p4a-reducers",
-    "next_action": "Do queue item p4a-reducers: phase 4a of openspec/changes/a-turn-says-how-it-ended (tasks 4.1-4.5). Tests FIRST and confirmed red before the fix: 4.1 asserts the terminal label renders for a STOPPED run from persisted state alone with no live stream, 4.2 asserts a `running` run presents no terminal label and that a `failed` run and a silent `completed` run present different terminal states. Both render AgentTimeline directly, from the `runs` map -- which is already a required prop as of iteration 4, so supply it explicitly; agentTimeline.test.tsx and workingIndicator.test.tsx already pass `runs={{}}` at every site. Then 4.3 points AgentTimeline.tsx's three consumers at the map -- terminal label at :220, lastRunSettled at :114, anotherRunIsUnderway at :131 -- and deletes runStatusByRunId (agentTimelineModel.ts:187-198; the type RunLifecycleStatus now lives in api/agents.ts and must NOT be deleted with it). 4.4 points the duration display at started_at/ended_at and deletes runDurationsByRunId, CARRYING ACROSS its negative-duration guard (design D4) -- and deletes the describe block for it in workingIndicator.test.tsx, which iteration 4 deliberately kept alive; read its negative-duration case before deleting. 4.5 asserts duration in the COMPONENT test, not only a model test, and RE-BASELINES the figure rather than reconciling it: Run.started_at is stamped at row construction and run_started only once the pty exists, so every duration now includes the spawn and reads longer. Leave 4.5a-4.7 to p4b-statline. UI source only; do NOT rebuild the bundle, 6.4 owns that.",
+    "current": "p4b-statline",
+    "next_action": "Do queue item p4b-statline: phase 4b of openspec/changes/a-turn-says-how-it-ended -- tasks 4.5a, 4.6a and 4.7 (4.6 is already done, do not redo it). Component test FIRST and confirmed red. 4.5a: the turn that must gain a stat line is one holding an operator message and a status row whose payload.phase is COMPLETED -- iteration 5 measured that a phase=failed row already renders 'Worked for 1s' via its ResultCard, so a test written around a failed spawn passes vacuously and proves nothing. The fix is the one RB measured and named: in AgentTimeline.tsx around :430, the success-completion branch returns <Fragment key={entry.id}>{durationLine}</Fragment> instead of null, so the stat line survives the card it hung on. Do NOT excluding success-completion entries from firstAgentBlockId -- RB ran that one and 2 of 6 assertions fail, both of them the ones the task exists to make pass. Assert the status row itself stays unrendered and that exactly one stat line is emitted when a text row precedes it. 4.6a: decide AgentTimeline's timelineEvents prop, which iteration 5 left with no reader at all -- either delete it and fix AgentOutputPanel plus ~45 render sites, or record why it stays; the operator's standing preference is the cleanest design over the least work. AgentActivityTab still reads the events, so the route's envelope is not in question. 4.7: verify the third consequence in BOTH states, not only on reload, carrying RB's Claude-only scope correction. UI source only; do NOT rebuild the bundle, 6.4 owns that.",
     "queue": [
         {
             "id": "compose",
@@ -42,21 +42,21 @@
         },
         {
             "id": "p4a-reducers",
-            "status": "open",
+            "status": "done",
             "title": "a-turn phase 4a -- delete the reducers, point the consumers at the map (4.1-4.5)",
-            "detail": "Component tests 4.1/4.2 first, rendering from the map rather than from a reducer. Then AgentTimeline.tsx's three consumers (terminal label at :220, duration, and the third), deleting runDurationsByRunId. 4.5 asserts duration in the COMPONENT test, not only in the model test. The `runs` prop landed at 3.3a and is REQUIRED, so a phase-4 test that forgets to supply run facts fails to compile rather than passing vacuously. Note 4.4: workingIndicator still holds the runDurationsByRunId describe block -- delete it with the function, and read its negative-duration case first, it is the guard 4.4 must carry across."
+            "detail": "DONE iteration 5, plus 4.6 which the compiler forced. New file timelineRunFacts.test.tsx, 8 tests, every one passing timelineEvents={[]} -- red first at 5 failed / 3 passed, the 3 being negative assertions that were vacuous then and are mutation-checked now: all 8 are killed by at least one of six mutations. 4.2's wording corrected -- a `running` run reaches the client as `started` (D5 renames at the boundary), so the test asserts the wire value. 4.4 read its four cases before deleting and carried all four across; the duration reads runDurationSeconds(runs[runId]), a module-LOCAL helper, not a new model export, because 4.5 wants the assertion in the component test. 4.5's spawn-failure half MEASURED: a phase=failed status row renders 'Worked for 1s', so a failed spawn is NOT an instance of F269 -- F269 needs a phase=COMPLETED status row. 4.6 forced by TS6133 the moment the reducers went. agentTimelineModel.test.ts's runStatusByRunId describe (task 5.1's line range) had to go in the same commit or the tree does not compile. UI 1483 passed / 144 files (1480 +8 -5), tsc + lint clean. Bundle NOT rebuilt."
         },
         {
             "id": "p4b-statline",
             "status": "open",
             "title": "a-turn phase 4b -- the stat line, LIFECYCLE_EVENT_STATUS, and the third consequence (4.5a-4.7)",
-            "detail": "4.5a was CORRECTED by round RB: it offered two fixes as equivalents, RB implemented and ran both, and one fails in exactly F269's case -- implement the one 4.5a now names and no other. 4.7's completed-run guard carries RB's Claude-only scope correction. Verify 4.7 in BOTH states, not only on reload."
+            "detail": "4.5a was CORRECTED by round RB: it offered two fixes as equivalents, RB implemented and ran both, and one fails in exactly F269's case -- implement the one 4.5a now names (<Fragment key={entry.id}>{durationLine}</Fragment> from the success-completion branch) and no other. Do NOT use the firstAgentBlockId exclusion. Iteration 5 NARROWED F269's scope by measurement: a spawn-failed run (phase=failed) DOES render its stat line, so the case 4.5a must make pass is a status row whose phase is COMPLETED -- a run that ended successfully having produced nothing else. Write the component test from that shape or it will pass vacuously. 4.6 is ALREADY DONE (iteration 5, compiler-forced). NEW: 4.6a -- AgentTimeline's timelineEvents prop now has no reader at all; decide whether to delete it (touches AgentOutputPanel and ~45 render sites) or state why it stays. AgentActivityTab does still read the events, so the route keeps returning them either way. 4.7's completed-run guard carries RB's Claude-only scope correction. Verify 4.7 in BOTH states, not only on reload."
         },
         {
             "id": "p5-testing-rule",
             "status": "open",
             "title": "a-turn phase 5 -- the testing rule is enforceable (5.1-5.3)",
-            "detail": "5.1 replaces agentTimelineModel.test.ts:223-235, the fixture that fed ascending events to a reducer the route never feeds ascending. 5.2 must FAIL if the route's ordering is reversed -- mutation-check it, do not assume. 5.3 records the rule where a reviewer meets it and notes it in spec-queue/DECISIONS.md (D-4)."
+            "detail": "5.1's DELETION half is already done -- iteration 5 removed agentTimelineModel.test.ts's runStatusByRunId describe because deleting the reducer left the tree uncompilable. What remains is 5.1's real obligation: the replacement guarantee. 5.2 must FAIL if the route's ordering is reversed -- mutation-check it, do not assume. 5.3 records the rule where a reviewer meets it and notes it in spec-queue/DECISIONS.md (D-4)."
         },
         {
             "id": "p6-drive",

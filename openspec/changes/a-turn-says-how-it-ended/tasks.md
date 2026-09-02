@@ -285,21 +285,33 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
 
 ## 4. The reducers are deleted
 
-- [ ] 4.1 Write a component test asserting the terminal label renders for a stopped run **from
-      persisted state alone**, with no live stream — the reload scenario from *A run's terminal
-      outcome is visible*. This must fail before 4.3 and pass after.
-- [ ] 4.2 Write a component test asserting a `running` run presents no terminal label, and that a
-      `failed` run and a silent `completed` run present different terminal states.
-- [ ] 4.3 Point `AgentTimeline.tsx`'s three consumers at the map: the terminal label (`:220`),
-      `lastRunSettled` (`:114`) and `anotherRunIsUnderway` (`:131`). Delete `runStatusByRunId`
-      (`agentTimelineModel.ts:187-199`).
+- [x] 4.1 **DONE.** New file `src/__tests__/timelineRunFacts.test.tsx` — every test in it passes
+      `timelineEvents={[]}`, which *is* the reload. Red before 4.3 and green after, measured:
+      **5 failed / 3 passed** on unmodified code, the 3 being the negative assertions, which were
+      vacuously true then and are mutation-checked now.
+- [x] 4.2 **DONE**, with one wording correction: a run whose `Run.status` is `running` reaches the
+      client as **`started`** — the route renames it at the boundary (D5) — so the test asserts the
+      wire value, which is the only one the component can ever see. Both negative assertions were
+      strengthened from *"none of these three labels"* to `queryByText(/Turn /)`: an assertion that
+      only rules out the labels it names passes against a fourth one leaking in, which is precisely
+      what mutation M3/M4 below add.
+- [x] 4.3 **DONE.** All three point at `runs`; `runStatusByRunId` deleted, and with it
+      `agentTimelineModel.test.ts`'s `runStatusByRunId` describe block — **which is task 5.1's
+      line range**. Deleting the reducer forces its only test to go in the same commit or the tree
+      does not compile, so 5.1 keeps its obligation (a replacement guarantee that the route's
+      ordering is what the client depends on) but has lost its deletion half, already done here.
 - [ ] 4.4 **Its tests are still where task 3.1 said they would not be:** the
       `runDurationsByRunId` describe block in `workingIndicator.test.tsx` was deliberately kept at
       phase 3 so the function did not ship untested. Delete it here, and read its
       negative-duration case before you do — it is the guard this task must carry across.
-      Point the duration display at `started_at`/`ended_at` and delete `runDurationsByRunId`
-      (`:138-168`). **Carry its negative-duration guard across** — a clock that went backwards must
-      still not render "Worked for -3s" (design D4).
+      **DONE.** Read first, as instructed: its four cases were *a measured run*, *a failed run —
+      duration is not a success signal*, *an unended run is absent rather than 0*, and *a backwards
+      clock is absent rather than negative*. All four are carried into
+      `timelineRunFacts.test.tsx`, now against the run row rather than the events. The display
+      points at `runDurationSeconds(runs[runId])`, a module-local helper in `AgentTimeline.tsx`
+      rather than a new export in `agentTimelineModel.ts` — 4.5 requires the assertion to live in
+      the component test, and a second exported reducer would invite exactly the model-level test
+      this phase exists to stop writing.
 - [ ] 4.5 Assert duration rendering in the component test, not only in a model test, since the model
       function it used to live in is gone. **Re-baseline it rather than reconciling it** (design D4,
       round 3): `Run.started_at` is stamped at row construction (`agent_trigger.py:1073`) and the
@@ -307,6 +319,14 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
       spawn and reads longer than the event-derived figure. A run whose spawn failed (`:1798-1804`)
       also gains a duration it does not have today — confirm that renders acceptably rather than
       treating it as a regression.
+      **DONE, and the spawn-failure half was measured rather than reasoned about.** A throwaway
+      probe rendered a turn holding one operator message and one `phase="failed"` status row
+      against a run row of `started_at` 00:00:00 / `ended_at` 00:00:01: it renders
+      **"Worked for 1s"**, on the status row's own `ResultCard`. So a failed spawn is *not* an
+      instance of F269 — `isSuccessCompletionEntry` is what returns `null` at `:430`, and a
+      `failed` phase does not satisfy it. **F269 is narrower than task 4.5a's prose suggests**: it
+      needs a status row whose phase is `completed`, i.e. a run that ended *successfully* having
+      produced nothing else. 4.5a's fix is unchanged; its scope note is.
 - [ ] 4.5a **The stat line must not vanish with the row it hangs on** — found by round RA,
       2026-09-02, filed as **F269 (C)** in `scripts/drive/FINDINGS.md`, and it is where phase 2 and
       phase 4 meet. `firstAgentBlockId`
@@ -336,8 +356,21 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
       is the turn's *only* `agent_output` block, so there is no later block to inherit the slot —
       and `blockId === firstAgentBlockId` is then false for every block. Measured: 2 of 6 fail, both
       of them the ones this task exists to make pass.
-- [ ] 4.6 Confirm `LIFECYCLE_EVENT_STATUS` has no remaining consumer; delete it if not, and keep it
-      only if something still legitimately reads it.
+- [x] 4.6 **DONE, and done here rather than in phase 4b, because the compiler forced it.** Its
+      only two consumers were the two reducers 4.3 and 4.4 delete, so the moment they went
+      `tsc --noEmit` failed with `TS6133: 'LIFECYCLE_EVENT_STATUS' is declared but its value is
+      never read` — not a judgement call, a build break. Deleted, and with it
+      `agentTimelineModel.ts`'s now-unused `RunLifecycleStatus` import, exactly as iteration 4
+      predicted when it moved that type to `api/agents.ts`.
+- [ ] 4.6a **`AgentTimeline`'s `timelineEvents` prop now has no reader at all** — discovered at
+      4.3, not predicted by any round. All three former readers were the reducers; the only other
+      mentions in the file are comments. It is left in place for now, still required, with a
+      comment on the prop saying so, because deleting it touches `AgentOutputPanel` and ~45 render
+      sites across the UI suite and would have made this iteration's diff unattributable. Decide
+      it here: either delete the prop and thread `runs` alone, or state why the component should
+      keep receiving events it does not read. Note that `AgentActivityTab` genuinely does read the
+      events, so the *route* keeps returning them either way — this is about one prop, not the
+      envelope.
 - [ ] 4.7 Verify the third consequence is repaired **in both states, not just on reload**
       (`AgentTimeline.tsx:117-137`). Round 2's correction: `anotherRunIsUnderway` is OR'd into
       `runVisiblyActive`, so it defeats the live path too, and a reload-only check would pass while

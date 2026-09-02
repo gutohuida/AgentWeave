@@ -7,7 +7,6 @@ import {
   groupIntoTurns,
   isSuccessCompletionEntry,
   reduceTurnBlocks,
-  runStatusByRunId,
   tokensByRunId,
 } from '@/lib/agentTimelineModel'
 
@@ -217,20 +216,5 @@ describe('tokensByRunId', () => {
       turnUsage({ id: 'tu-2', run_id: 'run-2', total_tokens: 250 }),
     ])
     expect(result).toEqual({ 'run-1': 100, 'run-2': 250 })
-  })
-})
-
-describe('runStatusByRunId', () => {
-  it('maps run lifecycle events to their run_id, keeping only recognized types', () => {
-    const events = [
-      { event_type: 'run_started', data: { run_id: 'run-1' } },
-      { event_type: 'run_completed', data: { run_id: 'run-1' } },
-      { event_type: 'run_stopped', data: { run_id: 'run-2' } },
-      { event_type: 'message', data: { run_id: 'run-3' } },
-    ]
-    const result = runStatusByRunId(events)
-    expect(result['run-1']).toBe('completed')
-    expect(result['run-2']).toBe('stopped')
-    expect(result['run-3']).toBeUndefined()
   })
 })

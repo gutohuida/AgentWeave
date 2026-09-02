@@ -1,10 +1,9 @@
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentRunFacts, AgentSummary, AgentTimelineEvent } from '@/api/agents'
+import type { AgentRunFacts, AgentSummary, AgentTimelineEvent, RunLifecycleStatus } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import { AgentTimeline } from '@/components/agents/AgentTimeline'
 import { formatElapsedSeconds } from '@/hooks/useElapsedSeconds'
-import { runDurationsByRunId } from '@/lib/agentTimelineModel'
 
 /**
  * The indicator lives in the timeline, not the composer.
@@ -16,8 +15,10 @@ import { runDurationsByRunId } from '@/lib/agentTimelineModel'
  *
  * So there are two distinct things here and they are deliberately sourced differently:
  *   - the LIVE indicator, timed by `useElapsedSeconds` from when this pane saw the run start;
- *   - the SETTLED "Worked for Xs" line, computed from the persisted lifecycle-event timestamps
- *     so a refresh cannot change what a finished turn claims it took.
+ *   - the SETTLED "Worked for Xs" line, computed from the RUN ROW's own `started_at`/`ended_at`
+ *     so a refresh cannot change what a finished turn claims it took. Its four cases — a
+ *     measured run, an unended one, a backwards clock, a run that did not succeed — moved to
+ *     `timelineRunFacts.test.tsx` with the reducer they used to exercise (task 4.4).
  */
 
 vi.mock('@/components/common/Icon', () => ({
@@ -43,12 +44,10 @@ function entry(overrides: Partial<TimelineEntry>): TimelineEntry {
   }
 }
 
-function lifecycle(
-  eventType: string,
-  runId: string,
-  timestamp: string,
-): AgentTimelineEvent {
-  return { id: `${eventType}-${runId}`, event_type: eventType, timestamp, summary: '', data: { run_id: runId } }
+/** A run row as the timeline route states one. `started_at` is fixed at the fixture epoch and
+ *  `endedAt` is what distinguishes a finished run from one still going. */
+function run(status: RunLifecycleStatus, endedAt?: string): AgentRunFacts {
+  return { status, started_at: '2026-08-02T00:00:00Z', ended_at: endedAt ?? null }
 }
 
 function renderTimeline(overrides: {
@@ -80,37 +79,6 @@ describe('formatElapsedSeconds', () => {
     expect(formatElapsedSeconds(60)).toBe('1:00')
     expect(formatElapsedSeconds(63)).toBe('1:03')
     expect(formatElapsedSeconds(600)).toBe('10:00')
-  })
-})
-
-describe('runDurationsByRunId', () => {
-  it('measures a run from its own start and terminal event', () => {
-    const durations = runDurationsByRunId([
-      lifecycle('run_started', 'run-1', '2026-08-02T00:00:00Z'),
-      lifecycle('run_completed', 'run-1', '2026-08-02T00:00:12Z'),
-    ])
-    expect(durations['run-1']).toBe(12)
-  })
-
-  it('measures a failed run too — duration is not a success signal', () => {
-    const durations = runDurationsByRunId([
-      lifecycle('run_started', 'run-2', '2026-08-02T00:00:00Z'),
-      lifecycle('run_failed', 'run-2', '2026-08-02T00:00:05Z'),
-    ])
-    expect(durations['run-2']).toBe(5)
-  })
-
-  it('omits a run that has not ended, rather than reporting 0', () => {
-    const durations = runDurationsByRunId([lifecycle('run_started', 'run-3', '2026-08-02T00:00:00Z')])
-    expect(durations['run-3']).toBeUndefined()
-  })
-
-  it('omits a run whose clock went backwards rather than showing a negative duration', () => {
-    const durations = runDurationsByRunId([
-      lifecycle('run_started', 'run-4', '2026-08-02T00:00:10Z'),
-      lifecycle('run_completed', 'run-4', '2026-08-02T00:00:03Z'),
-    ])
-    expect(durations['run-4']).toBeUndefined()
   })
 })
 
@@ -147,7 +115,7 @@ describe('the live working indicator', () => {
     renderTimeline({
       isRunning: true,
       entries: [entry({ id: 'a1', run_id: 'run-1', timestamp: '2026-08-01T23:59:20Z' })],
-      timelineEvents: [lifecycle('run_started', 'run-1', '2026-08-01T23:59:20Z')],
+      runs: { 'run-1': { status: 'started', started_at: '2026-08-01T23:59:20Z', ended_at: null } },
     })
     expect(screen.getByTestId('timeline-working-indicator')).toHaveTextContent('Working · 40s')
   })
@@ -175,10 +143,7 @@ describe('the live working indicator', () => {
     renderTimeline({
       isRunning: true,
       entries: [entry({ id: 'a1', run_id: 'run-1', content: 'the answer' })],
-      timelineEvents: [
-        lifecycle('run_started', 'run-1', '2026-08-02T00:00:00Z'),
-        lifecycle('run_completed', 'run-1', '2026-08-02T00:00:09Z'),
-      ],
+      runs: { 'run-1': run('completed', '2026-08-02T00:00:09Z') },
     })
     expect(screen.queryByTestId('timeline-working-indicator')).not.toBeInTheDocument()
     // ...and the settled line has taken over in the same render, not seconds later.
@@ -189,7 +154,7 @@ describe('the live working indicator', () => {
     renderTimeline({
       isRunning: true,
       entries: [entry({ id: 'a1', run_id: 'run-1', content: 'thinking out loud' })],
-      timelineEvents: [lifecycle('run_started', 'run-1', '2026-08-02T00:00:00Z')],
+      runs: { 'run-1': run('started') },
     })
     expect(screen.getByTestId('timeline-working-indicator')).toBeInTheDocument()
     expect(screen.queryByTestId('turn-worked-for')).not.toBeInTheDocument()
@@ -208,12 +173,11 @@ describe('the live working indicator', () => {
     renderTimeline({
       isRunning: true,
       entries: [entry({ id: 'a1', run_id: 'run-1', content: 'half an answer' })],
-      timelineEvents: [
-        lifecycle('run_started', 'run-1', '2026-08-02T00:00:00Z'),
-        lifecycle('run_stopped', 'run-1', '2026-08-02T00:00:04Z'),
+      runs: {
+        'run-1': run('stopped', '2026-08-02T00:00:04Z'),
         // The new run has begun; none of its entries have arrived yet.
-        lifecycle('run_started', 'run-2', '2026-08-02T00:00:06Z'),
-      ],
+        'run-2': run('started'),
+      },
     })
     expect(screen.getByTestId('timeline-working-indicator')).toBeInTheDocument()
   })
@@ -224,10 +188,7 @@ describe('the live working indicator', () => {
     renderTimeline({
       isRunning: true,
       entries: [entry({ id: 'a1', run_id: 'run-1', content: 'half an answer' })],
-      timelineEvents: [
-        lifecycle('run_started', 'run-1', '2026-08-02T00:00:00Z'),
-        lifecycle('run_stopped', 'run-1', '2026-08-02T00:00:04Z'),
-      ],
+      runs: { 'run-1': run('stopped', '2026-08-02T00:00:04Z') },
     })
     expect(screen.queryByTestId('timeline-working-indicator')).not.toBeInTheDocument()
   })
@@ -237,10 +198,7 @@ describe('the settled "Worked for Xs" line', () => {
   it('renders above the response once the run has finished', () => {
     renderTimeline({
       entries: [entry({ id: 'a1', run_id: 'run-1', content: 'the answer' })],
-      timelineEvents: [
-        lifecycle('run_started', 'run-1', '2026-08-02T00:00:00Z'),
-        lifecycle('run_completed', 'run-1', '2026-08-02T00:00:12Z'),
-      ],
+      runs: { 'run-1': run('completed', '2026-08-02T00:00:12Z') },
     })
     expect(screen.getByTestId('turn-worked-for')).toHaveTextContent('Worked for 12s')
   })
@@ -248,7 +206,7 @@ describe('the settled "Worked for Xs" line', () => {
   it('is absent for a turn whose run never reported an end', () => {
     renderTimeline({
       entries: [entry({ id: 'a1', run_id: 'run-1' })],
-      timelineEvents: [lifecycle('run_started', 'run-1', '2026-08-02T00:00:00Z')],
+      runs: { 'run-1': run('started') },
     })
     expect(screen.queryByTestId('turn-worked-for')).not.toBeInTheDocument()
   })
@@ -259,10 +217,7 @@ describe('the settled "Worked for Xs" line', () => {
         entry({ id: 'w1', run_id: 'run-1', output_kind: 'thinking', content: 'hmm' }),
         entry({ id: 'a1', run_id: 'run-1', content: 'the answer' }),
       ],
-      timelineEvents: [
-        lifecycle('run_started', 'run-1', '2026-08-02T00:00:00Z'),
-        lifecycle('run_completed', 'run-1', '2026-08-02T00:00:07Z'),
-      ],
+      runs: { 'run-1': run('completed', '2026-08-02T00:00:07Z') },
     })
     expect(screen.getAllByTestId('turn-worked-for')).toHaveLength(1)
   })
