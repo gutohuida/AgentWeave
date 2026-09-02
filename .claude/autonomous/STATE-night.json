@@ -113,7 +113,7 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-02T02:05:00+01:00",
+    "last_heartbeat": "2026-09-02T01:24:21+01:00",
     "status": "running",
     "queue_source": "spec-queue/APPROVALS.md, 2026-09-01 section, ORDER: line. Verbatim, so the playbook's default backlog-first shape is not used tonight.",
     "green_at_compose": "Not re-run in full this iteration -- N-8/N-9 touched one test file's comments, one spec, one findings ledger and one directory rename, no product code. Measured here: openspec validate --all --strict 45/0; test_conversation_contract.py + test_project_workspace_unavailable.py 15 passed; test_project_workspace_unavailable.py alone 7 passed; black --target-version py311 and ruff clean on the touched file. The last full baseline is N-6's, 2026-09-02T01:50: vitest 142/1476, CLI 440 passed / 3 skipped, hub suite 1 failed (F266) / 3835 passed / 84 skipped / 1 xpassed.",
