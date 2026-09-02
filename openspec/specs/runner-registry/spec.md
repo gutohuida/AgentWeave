@@ -66,20 +66,50 @@ agent to a runner from the agent's detail view.
 
 ### Requirement: A runner's model is drawn from the catalog
 
-A runner's model SHALL be a model the catalog declares for that runner's provider. The Hub SHALL
-refuse a runner carrying a model its provider does not declare.
+A runner's model SHALL be a model the catalog declares for that runner's provider, or unset, and runner management SHALL offer that choice as a selection over the declared models rather than as free-typed text.
 
-Runner management SHALL offer the catalog's models for the chosen provider rather than accepting
-free-typed text.
+The Hub SHALL refuse a request that sets a runner's model to one its provider does not
+declare.
+
+An unset model is a valid, spawnable state meaning the provider's own default, and runner management
+SHALL offer it as a named choice alongside the declared models. Where a runner's model is asked to be
+cleared, the Hub SHALL clear it, and SHALL NOT answer a request that left the model unchanged as
+though it had changed it. A request that carries no model at all leaves the runner's model as it was;
+these are different requests and the Hub SHALL distinguish them.
+
+Where a runner already records a model the catalog does not declare, that model SHALL remain among
+the offered choices, selected, and marked as unrecognised, so that opening the runner for editing
+cannot silently re-point it at a different model. Runner management SHALL also mark such a runner
+where runners are listed, so that which runners need attention is legible without opening each one.
+
+A model the catalog does not declare is refused where it is newly *set*, and only there. Where a
+request carries the model a runner already records, the Hub SHALL accept it, because that request
+changes nothing about the runner's model and refusing it would make an existing runner uneditable
+in every other respect as well.
 
 #### Scenario: Runner management offers declared models
 
 - **WHEN** the operator creates or edits a runner and selects its provider
 - **THEN** the models offered are those the catalog declares for that provider
+- **AND** no free-typed model field is presented
+
+#### Scenario: The provider's default is a choice, and clearing is honoured
+
+- **WHEN** the operator sets a runner that has a model back to the provider's default
+- **THEN** the runner records no model
+- **AND** the answer carries the model as it now stands rather than the one the runner had
+- **AND** runs it backs launch on the provider's own default model
+
+#### Scenario: A request carrying no model at all leaves the model alone
+
+- **WHEN** a request updates a runner and carries no model field
+- **THEN** the runner's model is unchanged
+- **AND** the request is answered differently from one that asked for the provider's default
 
 #### Scenario: An undeclared model is refused
 
 - **WHEN** a runner is submitted with a model its provider does not declare
+- **AND** the runner does not already record that model
 - **THEN** the request is refused with a stated reason
 
 #### Scenario: Existing runners keep working
@@ -87,6 +117,45 @@ free-typed text.
 - **WHEN** a runner already records a model the catalog does not declare
 - **THEN** that runner remains readable and its agents remain listable
 - **AND** the operator is told the model is unrecognised when editing it
+- **AND** that runner is marked as unrecognised where runners are listed
+- **AND** that model is still offered and still selected, so saving the runner unchanged keeps it
+
+#### Scenario: A legacy runner can still be saved
+
+- **WHEN** the operator opens a runner whose model the catalog does not declare, changes its name,
+  and saves it with that model still selected
+- **THEN** the save is accepted and the runner keeps its unrecognised model
+- **AND** moving that runner to a *different* model the catalog does not declare is still refused
+
+---
+
+### Requirement: Runner management presents the refusal it received
+
+Where the Hub refuses a runner create or edit, runner management SHALL present the refusal's own sentence to the operator, beside the control that was refused.
+
+The operator's ability to read the stated reason is the outcome this exists to produce. A refusal
+that reaches no surface is indistinguishable from a control that does nothing: the dialog stays
+open, the button returns to rest, nothing is created, and pressing it again does the same thing
+forever.
+
+The dialog SHALL remain open with the operator's input intact when a submission is refused, so the
+refusal can be acted on rather than retyped.
+
+#### Scenario: A refused create shows its reason
+
+- **WHEN** the operator submits a new runner and the Hub refuses it
+- **THEN** the operator is shown the refusal's own sentence
+- **AND** the dialog remains open with the entered values intact
+
+#### Scenario: A refused edit shows its reason
+
+- **WHEN** the operator saves an edited runner and the Hub refuses it
+- **THEN** the operator is shown the refusal's own sentence
+
+#### Scenario: A refused delete shows its reason
+
+- **WHEN** the operator deletes a runner that is bound to an agent
+- **THEN** the operator is shown the refusal's own sentence naming the agents to unbind
 
 ---
 

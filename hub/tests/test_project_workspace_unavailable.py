@@ -466,10 +466,17 @@ async def test_relocate_repairs_and_redrains_queued_work(
         # should: `return_run_entries` puts the entry back and a second run picks it up. The test
         # then saw two failed runs where it asserted one completed one.
         #
-        # Reproduced deterministically by running this file after `test_conversation_contract.py`,
-        # which is slow enough to lose the race every time: two runs, both `failed`, both on the
-        # same conversation. In isolation the spawn usually won, which is why this read as
-        # "flaky at 1 in 5" rather than as a scoping bug.
+        # That is the history. **The two-file reproduction this comment used to name is stale, and
+        # following it will send you somewhere the answer is not.** It said running this file after
+        # `test_conversation_contract.py` loses the race every time; measured 2026-09-02, that pair
+        # is green (15 passed). What is red today is the *full* suite only -- all 242 files, twice,
+        # with identical counts -- and its proximate cause is a different one: `record_agent_output`
+        # commits, then `await db.refresh(row)` (`output_recording.py:94`) raises
+        # `InvalidRequestError`, `_execute_run` treats that post-commit error as a failed run,
+        # `return_run_entries` re-queues the entry, and a second run settles. So the assertion below
+        # sees 2 for a reason that has nothing to do with the patch scope. Filed as **F266 (B)** in
+        # `scripts/drive/FINDINGS.md`, with the bisect that narrowed it to full-suite-only; start
+        # after those six selections rather than repeating them.
         runs = await _settled_redrain_runs(agent_trigger)
 
     assert len(runs) == 1

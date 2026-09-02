@@ -12954,7 +12954,7 @@ but never spawned, per the standing operator decision that Codex is undrivable.
 > *shapes* were read on screen against the bundle: a Pydantic `422` array body, the `400` model
 > refusal, and the `409` naming the agents holding a runner.
 >
-> Shipped by `openspec/changes/runner-model-is-chosen-from-the-catalog`, sections 2, 3 and 5.
+> Shipped by `openspec/changes/archive/2026-09-02-runner-model-is-chosen-from-the-catalog`, sections 2, 3 and 5.
 > **F221 is not covered by this and stays open** — design.md names the alias refusal out of scope.
 
 `openspec/specs/runner-registry/spec.md:72-73` is a **shipped** requirement, not a proposal:
@@ -15563,7 +15563,7 @@ no-op.
 the two reds are this finding. It makes and deletes its own fixture project, so it never needs
 `AW_PROJECT` and cannot touch a real one.
 
-**Proposed:** `openspec/changes/runner-model-is-chosen-from-the-catalog`, task 1.1.
+**Proposed:** `openspec/changes/archive/2026-09-02-runner-model-is-chosen-from-the-catalog`, task 1.1.
 
 ---
 
@@ -15639,7 +15639,7 @@ PATCH leaves nothing half-applied, a refused create leaves no row, and `PATCH {"
 no-op with `model`'s exact shape (`flags` escapes F219 only because `[]` is a reachable spelling
 that means the same thing at spawn).
 
-**Proposed:** `openspec/changes/runner-model-is-chosen-from-the-catalog`, task 1.3. It is in that
+**Proposed:** `openspec/changes/archive/2026-09-02-runner-model-is-chosen-from-the-catalog`, task 1.3. It is in that
 change rather than deferred because the picker it proposes submits the displayed model on every
 save, so shipping the picker without this repair would turn an invisible wart into a screen where a
 legacy runner cannot be saved.
@@ -15663,7 +15663,7 @@ POST /projects/<p>/runners {"cli":"claude","model":"opus"}
 about a string the catalog **does** declare and `claude --model opus` accepts. The sentence the
 operator reads is not true.
 
-Low severity and deliberately left open: `openspec/changes/runner-model-is-chosen-from-the-catalog`
+Low severity and deliberately left open: `openspec/changes/archive/2026-09-02-runner-model-is-chosen-from-the-catalog`
 replaces the free-text field with a picker that submits ids, after which this is unreachable from
 the screen and API-only. Named in that change's design.md as out of scope, with the reason.
 
@@ -17601,7 +17601,13 @@ scale. That also fits the shape: the same 141 files take 13:31 as a prefix and c
 inside the full run, so by the time it is reached the process is slower, which is what a race
 loses to.
 
-**The test's inline comment is now misleading and should be corrected by whoever fixes this.**
+**The test's inline comment was misleading — CORRECTED 2026-09-02 (N-9), so this paragraph is now
+history rather than an outstanding task.** The stale second paragraph was replaced in place with
+the measurement below and a pointer to this finding; the first paragraph, which explains why the
+`await` sits *inside* the patch, was kept because it is still true and still load-bearing. The pair
+was re-measured before editing rather than taken from the previous entry's word: `pytest
+tests/test_conversation_contract.py tests/test_project_workspace_unavailable.py -q -p no:randomly`
+→ **15 passed in 6.99s**. What the comment used to say:
 `test_project_workspace_unavailable.py:455-470` attributes this failure to F40's patch-scoping race
 (the fake `PtySession.spawn` going out of scope before the background task spawns) and names
 `test_conversation_contract.py` + this file as a deterministic reproduction. That race was fixed —
