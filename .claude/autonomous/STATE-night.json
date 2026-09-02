@@ -8,13 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-03T07:00:00+01:00",
-    "iteration": 3,
-    "last_heartbeat": "2026-09-02T23:49:04+01:00",
+    "iteration": 4,
+    "last_heartbeat": "2026-09-03T00:41:02+01:00",
     "log_file": ".claude/autonomous/2026-09-02-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "p3-client",
-    "next_action": "Do queue item p3-client: phase 3 of openspec/changes/a-turn-says-how-it-ended (tasks 3.1-3.3a). 3.1 FIRST and alone: move the 11 UI test fixtures to the envelope shape in one commit before any component is touched, so a later failure is attributable to the change and not to a fixture. Nine of them carry the identical one-liner `useAgentTimeline: () => ({ data: [] })` -- agentHandoff, agentRunningComposer, batchedQuestionComposer, composerPermissionDefault, continueStartsWhatItNames, conversationControls, conversationDestination, handoffPlacement, specChatSurface -- and they will KEEP PASSING if you forget them, because AgentOutputPanel destructures with `= []` and the new code reads `data?.events ?? []`. Update all nine anyway. The substantive two are workingIndicator.test.tsx (renders AgentTimeline with timelineEvents as a prop, imports runDurationsByRunId directly and has its own describe block for it -- needs the new `runs` prop and loses that block) and agentTimelineModel.test.ts. Then 3.2 (useAgentTimeline at hub/ui/src/api/agents.ts:387-392 plus the SSE invalidation predicate at :354-383), 3.3 (AgentActivityTab, unwrap only), and 3.3a -- AgentOutputPanel is NOT symmetric with it: it holds the hook at :330, passes the value to AgentTimeline at :1033, and must gain the runs map and thread it through as a new prop even though it never reads it. UI source only. Do NOT rebuild the committed bundle; phase 6.4 owns that.",
+    "current": "p4a-reducers",
+    "next_action": "Do queue item p4a-reducers: phase 4a of openspec/changes/a-turn-says-how-it-ended (tasks 4.1-4.5). Tests FIRST and confirmed red before the fix: 4.1 asserts the terminal label renders for a STOPPED run from persisted state alone with no live stream, 4.2 asserts a `running` run presents no terminal label and that a `failed` run and a silent `completed` run present different terminal states. Both render AgentTimeline directly, from the `runs` map -- which is already a required prop as of iteration 4, so supply it explicitly; agentTimeline.test.tsx and workingIndicator.test.tsx already pass `runs={{}}` at every site. Then 4.3 points AgentTimeline.tsx's three consumers at the map -- terminal label at :220, lastRunSettled at :114, anotherRunIsUnderway at :131 -- and deletes runStatusByRunId (agentTimelineModel.ts:187-198; the type RunLifecycleStatus now lives in api/agents.ts and must NOT be deleted with it). 4.4 points the duration display at started_at/ended_at and deletes runDurationsByRunId, CARRYING ACROSS its negative-duration guard (design D4) -- and deletes the describe block for it in workingIndicator.test.tsx, which iteration 4 deliberately kept alive; read its negative-duration case before deleting. 4.5 asserts duration in the COMPONENT test, not only a model test, and RE-BASELINES the figure rather than reconciling it: Run.started_at is stamped at row construction and run_started only once the pty exists, so every duration now includes the spawn and reads longer. Leave 4.5a-4.7 to p4b-statline. UI source only; do NOT rebuild the bundle, 6.4 owns that.",
     "queue": [
         {
             "id": "compose",
@@ -36,15 +36,15 @@
         },
         {
             "id": "p3-client",
-            "status": "open",
+            "status": "done",
             "title": "a-turn phase 3 -- the client consumes the envelope (3.1-3.3a)",
-            "detail": "3.1 moves 11 UI test fixtures to the envelope shape in ONE commit before any component is touched. 3.3a: AgentOutputPanel is NOT symmetric with AgentActivityTab -- round 2's correction to the design's risk section. UI source only; no bundle rebuild yet, phase 6.4 owns that."
+            "detail": "DONE iteration 4, in two commits as 3.1 requires. The fixture commit is red on its own (69 failed / 69, all one cause: runStatusByRunId iterating the envelope object) and green at the next; CI fires only on master so nothing gated on it. Three corrections written back into tasks.md: it was 10 files not 11 (agentTimelineModel.test.ts needed nothing here, its stake is 5.1); a twelfth, agentTimeline.test.tsx, 45 render sites, because `runs` was made a REQUIRED prop rather than optional-defaulting-to-{} -- an empty map reads as 'no run ended' at every phase-4 consumer; and workingIndicator's runDurationsByRunId block was KEPT because 4.4 must carry its negative-duration guard across. RunLifecycleStatus moved lib -> api/agents.ts. AgentActivityTab's unwrap had to go INSIDE the useMemo (exhaustive-deps at --max-warnings 0). New timelineEnvelopeUnwrap.test.tsx is the only test putting a non-empty envelope through the hook; both assertions mutation-checked. UI 1480 passed / 143 files, tsc + lint clean. Bundle NOT rebuilt."
         },
         {
             "id": "p4a-reducers",
             "status": "open",
             "title": "a-turn phase 4a -- delete the reducers, point the consumers at the map (4.1-4.5)",
-            "detail": "Component tests 4.1/4.2 first, rendering from the map rather than from a reducer. Then AgentTimeline.tsx's three consumers (terminal label at :220, duration, and the third), deleting runDurationsByRunId. 4.5 asserts duration in the COMPONENT test, not only in the model test."
+            "detail": "Component tests 4.1/4.2 first, rendering from the map rather than from a reducer. Then AgentTimeline.tsx's three consumers (terminal label at :220, duration, and the third), deleting runDurationsByRunId. 4.5 asserts duration in the COMPONENT test, not only in the model test. The `runs` prop landed at 3.3a and is REQUIRED, so a phase-4 test that forgets to supply run facts fails to compile rather than passing vacuously. Note 4.4: workingIndicator still holds the runDurationsByRunId describe block -- delete it with the function, and read its negative-duration case first, it is the guard 4.4 must carry across."
         },
         {
             "id": "p4b-statline",
