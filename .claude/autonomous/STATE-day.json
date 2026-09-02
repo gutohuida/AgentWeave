@@ -1,40 +1,88 @@
 {
-    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook":  ".claude/loops/day-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-01-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "556bb37",
-    "stop_at":  "2026-09-02T17:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-02-day-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+    "playbook": ".claude/loops/day-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-01-daily",
+    "parent_branch": "master",
+    "parent_sha": "556bb37",
+    "stop_at": "2026-09-02T17:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-09-02-day-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "D-1",
+    "next_action": "D-1 - the drive. Use the e2e-loop skill, scoped to what the night window shipped: runner-model-is-chosen-from-the-catalog. Drive Hub on 8011 from hub/ with uvicorn from source (never `agentweave --port`), fresh fixture project (never proj-5e960453 or proj-18e5d4e0), every real agent turn bound to claude-haiku-4-5, never leave a job enabled. Confirm three things by hand, not by re-running last night's harnesses: (a) the model picker offers the catalog's models (runner-registry/spec.md:72-73); (b) a refused model's message reaches the screen rather than being swallowed (F173, retired last night on its own author's drive - re-drive it independently); (c) whether the <Select> turns a stale catalog into a hard wall, per research candidate 1 (spec-queue/research/2026-09-02.md) which measured gpt-5.6-sol absent from ~/.codex/models_cache.json and claude-fable-5-1 unsettable. New findings append to scripts/drive/FINDINGS.md with severity, file:line and a reproduction; a finding without a reproduction is a suspicion. Delete the fixture project and record the cleanup measured, not assumed.",
+    "queue": [
+        {
+            "id": "compose",
+            "status": "done",
+            "title": "Compose this window's queue from the playbook",
+            "detail": "Done at iteration 1. Branch settled (autonomous/2026-09-01-daily, unmerged, 76 commits, spans 2 days). Research delivered to spec-queue/research/2026-09-02.md. DIRECTION.md's 2026-09-02 section read and its D-0 branch fired: phase 0 exists and task 0.3 is FALSIFIED, so the spec-loop slot goes to repairing a-turn-says-how-it-ended and a-refusal-reaches-the-operator does not start today."
+        },
+        {
+            "id": "D-1",
+            "status": "open",
+            "title": "Drive runner-model-is-chosen-from-the-catalog end to end",
+            "detail": "See next_action. Independent of last night's harnesses, which were the change author's own transcription of its own predicates."
+        },
+        {
+            "id": "D-2",
+            "status": "open",
+            "title": "Spec RA - repair a-turn-says-how-it-ended from the measured premise",
+            "detail": "Phase 0 task 0.3 falsified round 3b: the single-run working indicator DOES release cleanly, gated by signal 1, and isSuccessCompletionEntry does match. Phases 1-7 are BLOCKED in the change's own tasks.md until a round re-argues D6 from the true premise. The surviving, narrower claim is that signal 1 has never worked FOR A RUN THAT DID NOT COMPLETE. Re-derive D6 against the code, rewrite proposal.md/design.md/tasks.md and the spec deltas wherever the false premise leaked in, and either unblock the phases or narrow the change's scope to what survives. openspec validate --strict must pass; SHALL on line 1."
+        },
+        {
+            "id": "D-3",
+            "status": "open",
+            "title": "Spec RB - re-derive D-2's repaired argument against the code, independently",
+            "detail": "Not a re-read of D-2's reasoning: a fresh comparison against what the code does. An argument can be wrong while everything it argues about is right. If the round changes nothing, say so explicitly - that is a real outcome and hiding it makes the next round look cheaper than it is."
+        },
+        {
+            "id": "D-4",
+            "status": "open",
+            "optional": true,
+            "title": "Drive the InstructionsPage:9 suspicion",
+            "detail": "N-11 found statically and deliberately filed no finding number: InstructionsPage.tsx:9 seeds its editor from `if (data) setContent(...)`, so a failed load leaves an empty textarea with Save ENABLED, and a save writes '' over stored instructions. Never driven. Drive it on 8011; it earns a finding number only if reproduced. DROP THIS ITEM after 15:30 and go to D-6."
+        },
+        {
+            "id": "D-5",
+            "status": "open",
+            "optional": true,
+            "title": "Measure: reachability walk from App.tsx",
+            "detail": "The one R-1 evidence gap the night window named and did not attempt. N-10 and N-11 are depth-1 static reads, so 110 reached routes is an UPPER bound, 35 and 6 are FLOORS, and 101 unhandled query sites is an UPPER bound - F260 (useMessages imported only by MessagesFeed, which nothing imports and which is not in the bundle) is the case that defeats depth-1. Walk the import graph from App.tsx to turn those bounds into totals. This SHARPENS R-1's OPEN row in spec-queue/DECISIONS.md and may NEVER answer it. DROP THIS ITEM after 15:30 and go to D-6."
+        },
+        {
+            "id": "D-6",
+            "status": "open",
+            "title": "Write the review page and today's APPROVALS section",
+            "detail": "spec-queue/review/review-2026-09-02.html, self-contained, theme-aware, six sections in the playbook's order. Section 1 must lead with the unmerged two-day branch. Section 4 must say when a round changed nothing. Then append today's section to spec-queue/APPROVALS.md, one row per specced change, NO status token. Commit and push."
+        }
+    ],
+    "decisions_for_user": [
+        {
+            "id": "DAY-1",
+            "title": "DIRECTION.md's phase-0 branch names the wrong displaced item; I applied the rule, not the name.",
+            "detail": "The 2026-09-02 section says task 0.3 falsifying the design means 'the spec-loop slot below belongs to repairing a-turn, not to F188'. But that same file moves F188 to 2026-09-03 two paragraphs later, and the item actually holding today's D-2 slot is a-refusal-reaches-the-operator. I applied the governing sentence - 'A broken approved design outranks a new proposal' - to the item actually in the slot. Consequence: a-refusal-reaches-the-operator does not start today. Correct me in tomorrow's DIRECTION.md section if the intent was otherwise.",
+            "status": "informational - no work blocked"
+        }
+    ],
+    "limits": [
+        "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ],
+    "last_heartbeat": "2026-09-02T09:02:41+01:00",
+    "branch_spans_days": [
+        "2026-09-01",
+        "2026-09-02"
+    ]
 }
