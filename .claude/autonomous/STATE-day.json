@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-02T17:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-09-02-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "Window complete. Iteration 9 fired at 11:05, found the heartbeat 29 minutes old and the queue empty, and stood down in four reads without re-running the artefact checks.",
-    "next_action": "STAND DOWN, cheaply. The window is complete -- D-1 through D-6 are done, stop_at is 2026-09-02T17:00:00+01:00, and this window does not implement. There is NO unit waiting and none is to be invented: do NOT implement, do NOT write a proposal to fill time, and do NOT re-run the review-page or APPROVALS.md checks -- iteration 8 measured them and the files have not changed since (HEAD 0fa4439 == origin, tree clean). A firing before 17:00 should check exactly four things -- the clock, last_heartbeat, git status, HEAD vs origin -- then append a short log entry, refresh last_heartbeat to now, commit and push, and stop. Iteration 9 did this in four reads; iteration 8 spent a full verification pass reaching the same conclusion. HEARTBEAT: keep it FRESH, do not release it. Releasing is right only when a unit is waiting; with an empty queue it just guarantees the next context is spent rediscovering the emptiness. Note that freshness does not prevent the firing -- the scheduled task launches unconditionally and the stand-down judgement is made by the process after reading this file. Nothing is blocked: the next real actor is the OPERATOR, via the daily-review session, writing status tokens into spec-queue/APPROVALS.md's 2026-09-02 section (two rows, both blank today). The next real unit is the 23:00 FIX window, which reads STATE-night.json and that file, and by then this heartbeat is over eleven hours stale.",
+    "current": "Window complete. Iteration 10 fired at 11:35, 30 minutes after iteration 9, found the heartbeat 29 minutes old and nothing changed (clean tree, HEAD == origin == 194e82a, so APPROVALS.md's two blank tokens are still blank), and stood down in four reads.",
+    "next_action": "STAND DOWN, cheaply -- this is the fourth firing running with nothing to do and the cost is now known to be four reads. The window is complete: D-1 through D-6 are done, stop_at is 2026-09-02T17:00:00+01:00, and this window does not implement. There is NO unit waiting and none is to be invented: do NOT implement, do NOT write a proposal to fill time, and do NOT re-open the review page or APPROVALS.md. Check exactly four things -- the clock, last_heartbeat, git status, HEAD vs origin -- then append a SHORT log entry, refresh last_heartbeat to now, commit and push, and stop. A clean tree PLUS HEAD == origin is itself the proof that APPROVALS.md has not changed, so no read of that file is needed to establish it. HEARTBEAT: keep it FRESH, do not release it. Releasing is right only when a unit is waiting; with an empty queue it just guarantees the next context is spent rediscovering the emptiness. Freshness does not prevent the firing -- measured now, not assumed: the scheduled task fires every 30 minutes regardless (11:05, 11:35), and the stand-down judgement is made by the process after reading this file. Nothing is blocked: the next real actor is the OPERATOR, via the daily-review session, writing status tokens into spec-queue/APPROVALS.md's 2026-09-02 section (two rows, both blank today). The next real unit is the 23:00 FIX window, which reads STATE-night.json and that file, and by then this heartbeat is over eleven hours stale.",
     "queue": [
         {
             "id": "compose",
@@ -86,7 +86,7 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-02T11:05:52+01:00",
+    "last_heartbeat": "2026-09-02T11:35:14+01:00",
     "branch_spans_days": [
         "2026-09-01",
         "2026-09-02"
