@@ -53,8 +53,10 @@ from ...schemas.agents import (
     AgentOutputCreate,
     AgentOutputResponse,
     AgentSummary,
+    AgentTimeline,
     AgentTimelineEvent,
     ContextUsageCreate,
+    RunFacts,
 )
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
@@ -726,7 +728,7 @@ def _run_lifecycle_summary(event_type: str, data: Optional[dict]) -> Optional[st
     return None
 
 
-@router.get("/{name}/timeline", response_model=List[AgentTimelineEvent])
+@router.get("/{name}/timeline", response_model=AgentTimeline)
 async def agent_timeline(
     name: str,
     project: Tuple[str, str] = Depends(get_project),
@@ -798,7 +800,42 @@ async def agent_timeline(
         )
 
     events.sort(key=lambda e: e.timestamp, reverse=True)
-    return events[:50]
+    events = events[:50]
+
+    # Design D3: the run facts are looked up by the ids the *returned* events name, after the
+    # merge and after the truncation — so the map describes exactly the runs the response talks
+    # about. A primary-key lookup, deliberately with no ORDER BY and no LIMIT: the id set is the
+    # bound. Do not turn this back into a fourth concurrent query ranked by `started_at` and
+    # capped (rounds 1 and 2 specified one; round 3 reversed it). A limit governs how many rows
+    # return, not which, and `run_reconciliation.reconcile_interrupted_runs` writes an old run's
+    # terminal event at Hub-restart time — so an agent's newest events routinely name its oldest
+    # runs, which is precisely what a start-time ranking drops.
+    #
+    # The `project_id` predicate is enforcement, not inference. The ids do come from rows this
+    # route already filtered, so the query would be safe without it — but the map is a new
+    # cross-project leak surface, `test_bola.py` covers this route because that matters, and
+    # `ix_runs_project_agent` makes the predicate free.
+    run_ids = set()
+    for event in events:
+        run_id = (event.data or {}).get("run_id")
+        if isinstance(run_id, str) and run_id:
+            run_ids.add(run_id)
+
+    runs: Dict[str, RunFacts] = {}
+    if run_ids:
+        run_res = await session.execute(
+            select(Run).where(Run.project_id == project_id, Run.id.in_(run_ids))
+        )
+        for run in run_res.scalars():
+            runs[run.id] = RunFacts(
+                # D5: one rename at the boundary; every other value is the row's own.
+                status="started" if run.status == "running" else run.status,
+                exit_code=run.exit_code,
+                started_at=run.started_at,
+                ended_at=run.ended_at,
+            )
+
+    return AgentTimeline(events=events, runs=runs)
 
 
 def _runner_summary(agent_meta: dict) -> str:

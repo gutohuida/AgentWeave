@@ -4,7 +4,7 @@ import contextlib
 import json
 import time
 from datetime import datetime
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -131,6 +131,36 @@ class AgentTimelineEvent(BaseModel):
     data: Dict[str, Any]
 
     model_config = {"from_attributes": True}
+
+
+class RunFacts(BaseModel):
+    """What a run's own row records about how it went.
+
+    Read from `Run`, never derived from the names or timestamps of the lifecycle events that
+    happen to be in the window. `status` is the run's status renamed at the boundary — `Run.status`
+    is `{running, completed, failed, stopped, interrupted}` and the client's `RunLifecycleStatus`
+    is the same set with `running` spelled `started` (design D5).
+    """
+
+    status: str = Field(max_length=32)
+    exit_code: Optional[int] = None
+    started_at: datetime
+    ended_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class AgentTimeline(BaseModel):
+    """The timeline response: the events, and the facts of the runs those events name.
+
+    Keyed by `run_id` rather than listed because every consumer is a lookup or an unordered scan;
+    a list would make the client build the index, which is the client-side reduction over run
+    state that `a-turn-says-how-it-ended` exists to delete. Precedent: `jobs.py`'s
+    `queue: Dict[str, int]`.
+    """
+
+    events: List[AgentTimelineEvent]
+    runs: Dict[str, RunFacts] = Field(default_factory=dict)
 
 
 class AgentHeartbeatCreate(RequestModel):

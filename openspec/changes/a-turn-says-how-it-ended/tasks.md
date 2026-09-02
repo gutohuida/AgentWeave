@@ -84,19 +84,19 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
 
 ## 1. The route carries the run's facts
 
-- [ ] 1.1 Write a Hub test asserting the timeline response is an envelope carrying `events` and a
+- [x] 1.1 Write a Hub test asserting the timeline response is an envelope carrying `events` and a
       `runs` map keyed by `run_id`, with `status`, `exit_code`, `started_at` and `ended_at` — and
       that a run whose status was corrected after its events were written reports the **corrected**
       status. Both scenarios come from *The timeline carries each run's own facts*.
-- [ ] 1.2 Write a Hub test asserting an event naming a `run_id` with no row leaves that key absent
+- [x] 1.2 Write a Hub test asserting an event naming a `run_id` with no row leaves that key absent
       rather than erroring, and a test asserting the map contains **no** entries for runs the
       returned events do not name — *The map is scoped to the events*. Round 2 asked for the
       opposite assertion here; round 3's D3 narrowed the query, so the over-coverage it blessed no
       longer occurs.
-- [ ] 1.3 Add the envelope schema beside `AgentTimelineEvent` in `hub/hub/schemas/agents.py`, with
+- [x] 1.3 Add the envelope schema beside `AgentTimelineEvent` in `hub/hub/schemas/agents.py`, with
       `runs: Dict[str, RunFacts]`. Follow the `queue: Dict[str, int]` precedent in
       `hub/hub/schemas/jobs.py:125`.
-- [ ] 1.4 In `agent_timeline` (`hub/hub/api/v1/agents.py:729`), after the existing `asyncio.gather`
+- [x] 1.4 In `agent_timeline` (`hub/hub/api/v1/agents.py:729`), after the existing `asyncio.gather`
       and after the `events[:50]` truncation, collect the
       distinct `data["run_id"]` values the returned events carry, then read those rows with
       `select(Run).where(Run.project_id == project_id, Run.id.in_(run_ids))` (design D3, rewritten
@@ -106,22 +106,22 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
       the `runs` map is a new cross-project leak surface and `ix_runs_project_agent` makes the
       predicate free. Skip the query entirely when the id set is empty. Leave the three existing
       queries in the `gather` untouched.
-- [ ] 1.4a **Do not restore a concurrent, ordered, limited run query** — round 2 specified one
+- [x] 1.4a **Do not restore a concurrent, ordered, limited run query** — round 2 specified one
       ordered by `started_at` desc and round 3 reversed it, because a limit governs how many rows
       return and not which. `run_reconciliation.reconcile_interrupted_runs`
       (`run_reconciliation.py:59-66`) sweeps every still-`running` row in the database at Hub start
       and writes its `run_interrupted` event *then*, so an agent's newest events routinely name its
       oldest runs and a start-time ranking misses exactly those. If the round trip ever has to come
       back, read D3's rejected alternatives first.
-- [ ] 1.4b Write the test from *An old run named by a recent event keeps its outcome*: give an agent
+- [x] 1.4b Write the test from *An old run named by a recent event keeps its outcome*: give an agent
       a run that started well before its most recent ones, write that run's terminal `EventLog` row
       with a **current** timestamp (the shape reconciliation produces), fill the window with newer
       runs, and assert the old run is present in the map and renders its terminal outcome. Confirm
       it fails against a `Run` query ordered by `started_at` desc and limited, rather than assuming
       it does — that is the implementation this test exists to reject.
-- [ ] 1.5 Map `Run.status` `running` → `started` at the boundary (design D5) and change the route's
+- [x] 1.5 Map `Run.status` `running` → `started` at the boundary (design D5) and change the route's
       `response_model`. Leave the `reverse=True` / `[:50]` event sort untouched.
-- [ ] 1.6 Fix what the shape change breaks in the Hub suite. Only `hub/tests/test_bola.py` actually
+- [x] 1.6 Fix what the shape change breaks in the Hub suite. Only `hub/tests/test_bola.py` actually
       requests `/agents/{name}/timeline`; `test_agent_actions_coordination`, `test_agent_chat`,
       `test_codex_appserver_run_turn`, `test_failure_reporting`, `test_permission_approver` and
       `test_title_generation` match a grep for "timeline" but exercise the *chat* timeline, a

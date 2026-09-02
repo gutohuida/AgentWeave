@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 
 from hub.db.engine import async_session_factory
-from hub.db.models import Project
+from hub.db.models import EventLog, Project, Run
 
 
 @pytest_asyncio.fixture
@@ -157,6 +157,32 @@ async def project_a_resources(app, project_a):
     )
     assert instr_resp.status_code == 200
 
+    # A run, and the lifecycle event naming it. The timeline route's `runs` map
+    # (`a-turn-says-how-it-ended`) is keyed by the run ids its returned events carry, so without
+    # a run row here the isolation assertion below would have nothing to exclude and would pass
+    # against a route with no `project_id` predicate at all.
+    run_id = "run-bola-a"
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id=run_id,
+                project_id=project_a["project_id"],
+                agent="alice",
+                status="stopped",
+                exit_code=143,
+            )
+        )
+        session.add(
+            EventLog(
+                id="evt-bola-a-run",
+                project_id=project_a["project_id"],
+                event_type="run_stopped",
+                agent="alice",
+                data={"run_id": run_id},
+            )
+        )
+        await session.commit()
+
     return {
         "agent": "alice",
         "session_id": "sess-a",
@@ -164,6 +190,7 @@ async def project_a_resources(app, project_a):
         "task_id": task_id,
         "question_id": question_id,
         "job_id": job_id,
+        "run_id": run_id,
     }
 
 
@@ -205,7 +232,6 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
         f"{base}/events/history",
         f"{base}/logs",
         f"{base}/agents",
-        f"{base}/agents/alice/timeline",
         f"{base}/agents/alice/output",
     ]
 
@@ -218,6 +244,19 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
         assert not any(
             item.get("id") in a_ids for item in data if isinstance(item, dict)
         ), f"{path} leaked Project A resources"
+
+    # The agent timeline returns a dict wrapper too (`a-turn-says-how-it-ended` task 1.5), and it
+    # has two halves to isolate rather than one: the events, and the `runs` map keyed by the run
+    # ids those events name. The map is a newer leak surface than the events, so it is asserted
+    # explicitly — both that it is empty and that Project A's run is not a key of it.
+    timeline_resp = await app.get(f"{base}/agents/alice/timeline", headers=b)
+    assert timeline_resp.status_code == 200
+    timeline = timeline_resp.json()
+    assert not any(
+        event.get("id") in a_ids for event in timeline["events"]
+    ), "the timeline leaked Project A events"
+    assert timeline["runs"] == {}, "the timeline's run facts leaked across projects"
+    assert project_a_resources["run_id"] not in timeline["runs"]
 
     # Agent sessions returns a dict wrapper; ensure the inner list is empty.
     sessions_resp = await app.get(f"{base}/agent/sessions/alice", headers=b)
