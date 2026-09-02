@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-02T07:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-09-01-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": null,
-    "next_action": "N-12: close the window. Write the closing entry the playbook's 'Ending the window' section describes (.claude/loops/night-window.md) into .claude/autonomous/2026-09-01-night-log.md, covering the whole re-armed window N-1 through N-11: what changed, marking PRODUCT CODE (runner-model sections 1-5, shipped and driven) apart from DOCUMENTATION (N-10 and N-11's measurements, the archived changes, the corrected comments); what was proven with evidence against what was inferred; what is open (F266 needs a proposal, a-turn-says-how-it-ended is blocked by its own gate after task 0.3 falsified it, R-1 is sharpened but undecided); the two entries already in decisions_for_user, both of which need the operator; and what to distrust (every count in N-10 and N-11 is depth-1 and therefore a bound, not a total). Then set next_action to null and status to 'closed' so the driver unregisters itself. No new work, no proposals, no product code.",
+    "next_action": null,
     "queue": [
         {
             "id": "N-1",
@@ -94,7 +94,7 @@
         },
         {
             "id": "N-12",
-            "status": "open",
+            "status": "done",
             "title": "Close the window",
             "detail": "At stop_at 07:00, or when N-10 and N-11 are done, write the closing entry the playbook's 'Ending the window' section describes -- what changed (marking product code vs documentation), what was proven with evidence vs inferred, what is open, decisions waiting, what to distrust -- then set next_action to null so the driver unregisters itself. If it is past 06:30 when a firing lands, do this INSTEAD of starting N-10 or N-11."
         }
@@ -115,8 +115,8 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-02T02:01:07+01:00",
-    "status": "running",
+    "last_heartbeat": "2026-09-02T02:49:21+01:00",
+    "status": "closed",
     "queue_source": "spec-queue/APPROVALS.md, 2026-09-01 section, ORDER: line. Verbatim, so the playbook's default backlog-first shape is not used tonight.",
     "green_at_compose": "Not re-run in full this iteration -- N-11 touched no product code and no test: one new harness under scripts/drive/, two documentation files (scripts/drive/FINDINGS.md, spec-queue/DECISIONS.md). Measured here: ruff and black --target-version py311 clean on the new harness; identical output on three consecutive runs (107 sites / 6 handled / 60-16-24-1). Last full baseline is still N-6's, 2026-09-02T01:50: vitest 142 files/1476 tests, CLI 440 passed / 3 skipped, hub suite 1 failed (F266) / 3835 passed / 84 skipped / 1 xpassed.",
     "drive_port": 8011,
@@ -132,6 +132,11 @@
         "openspec/specs/runner-registry/spec.md now carries runner-model's synced requirements. Anything quoting 'runner-registry/spec.md:72-73' as the shipped-but-unbuilt requirement (DECISIONS.md R-1 does) is quoting line numbers that have MOVED -- that requirement now starts at line 67, and it is no longer unbuilt.",
         "N-10's enumeration is a STATIC measurement and its limits are written into DECISIONS.md rather than left implied. The one that changes how the numbers read: the unrendered-hook pass is depth-1, so a hook imported by a component that nothing imports counts as consumed. F260 is exactly that case, so GET .../messages and PATCH .../messages/{id}/read sit inside the '110 reached' figure and are unreachable in the shipped app. 110 is an upper bound; 35 and 6 are floors. Sizing that class needs a reachability walk from App.tsx, which nobody has done.",
         "R-1's fourth evidence bullet was corrected in place on 2026-09-02: runner-registry/spec.md:72-73 is now line 67, and that requirement is no longer unbuilt (the picker shipped in N-3/N-6 and was driven against the served bundle). The bullet was kept because the RULE question it raises -- may a task tick on backend evidence alone? -- is untouched by the instance being closed.",
-        "N-11 measured a fact the next reader should not have to re-derive: the UI's error handling is asymmetric by construction, not by neglect -- 18 readableApiError sites over 13 files render MUTATION failures, 6 of 107 sites render a QUERY failure. Anything proposed for F197 should be aimed at the observed-failure half. QuestionsPanel.tsx:86 is the worked example and its comment carries the rationale; RunnersPage.tsx:198 is the counter-example that a check phrased as 'the site binds error' would fail."
-    ]
+        "N-11 measured a fact the next reader should not have to re-derive: the UI's error handling is asymmetric by construction, not by neglect -- 18 readableApiError sites over 13 files render MUTATION failures, 6 of 107 sites render a QUERY failure. Anything proposed for F197 should be aimed at the observed-failure half. QuestionsPanel.tsx:86 is the worked example and its comment carries the rationale; RunnersPage.tsx:198 is the counter-example that a check phrased as 'the site binds error' would fail.",
+        "WINDOW CLOSED 2026-09-02 at 02:45+01:00, four hours before stop_at. Not out of clock -- out of permitted work at 02:00 (N-8), and the two R-1 measurements queued after that are spent. next_action is null so the driver unregisters.",
+        "PRODUCT CODE this window is exactly runner-model-is-chosen-from-the-catalog: 08b13d7, f9b1591, 3dc3fde, 4dff496. 8 files, +382/-92. Everything else is documentation, harnesses, or heartbeat commits.",
+        "Drive Hub on :8011 left running (pid 19780, started 23:39:15), current with this branch, serving the bundle this window built. Its database has 0 projects, 0 loops, 0 jobs of any kind. :8000 never touched."
+    ],
+    "closed_at": "2026-09-02T02:49:21+01:00",
+    "closing_entry": ".claude/autonomous/2026-09-01-night-log.md, Iteration 10 -- N-12, WINDOW CLOSE"
 }
