@@ -8,13 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-03T07:00:00+01:00",
-    "iteration": 2,
-    "last_heartbeat": "2026-09-02T22:39:18+01:00",
+    "iteration": 3,
+    "last_heartbeat": "2026-09-03T00:31:00+01:00",
     "log_file": ".claude/autonomous/2026-09-02-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "p2-status",
-    "next_action": "Do queue item p2-status: phase 2 of openspec/changes/a-turn-says-how-it-ended (tasks 2.1-2.4). BEFORE writing anything, read design D6 and BOTH the 'Round RA' and 'Round RB' sections of design.md -- RB corrected RA's scope and the tasks file carries the correction in 2.1's stated reason, 2.1a, and the added 2.1b. The fact that governs the phase: status_event('completed') occurs exactly once in the Hub, inside the Claude-only parser reached at agent_trigger.py:1867, so signal 1 has never fired for a Codex run of either transport. Write the tests first (2.1, 2.1a, 2.1b), assert stopped and failed and NOT interrupted, then replace the bare broadcasts at agent_trigger.py:2129-2142 (process path) and :2723-2736 (app-server path) with a persist-then-broadcast. 2.4 re-decides a premise rounds 1 and 2 stated -- if it turns out to be a product decision, it goes to decisions_for_user rather than being guessed. Note the UI is currently broken against the new timeline shape until phase 3; that is expected and is not a regression to chase.",
+    "current": "p3-client",
+    "next_action": "Do queue item p3-client: phase 3 of openspec/changes/a-turn-says-how-it-ended (tasks 3.1-3.3a). 3.1 FIRST and alone: move the 11 UI test fixtures to the envelope shape in one commit before any component is touched, so a later failure is attributable to the change and not to a fixture. Nine of them carry the identical one-liner `useAgentTimeline: () => ({ data: [] })` -- agentHandoff, agentRunningComposer, batchedQuestionComposer, composerPermissionDefault, continueStartsWhatItNames, conversationControls, conversationDestination, handoffPlacement, specChatSurface -- and they will KEEP PASSING if you forget them, because AgentOutputPanel destructures with `= []` and the new code reads `data?.events ?? []`. Update all nine anyway. The substantive two are workingIndicator.test.tsx (renders AgentTimeline with timelineEvents as a prop, imports runDurationsByRunId directly and has its own describe block for it -- needs the new `runs` prop and loses that block) and agentTimelineModel.test.ts. Then 3.2 (useAgentTimeline at hub/ui/src/api/agents.ts:387-392 plus the SSE invalidation predicate at :354-383), 3.3 (AgentActivityTab, unwrap only), and 3.3a -- AgentOutputPanel is NOT symmetric with it: it holds the hook at :330, passes the value to AgentTimeline at :1033, and must gain the runs map and thread it through as a new prop even though it never reads it. UI source only. Do NOT rebuild the committed bundle; phase 6.4 owns that.",
     "queue": [
         {
             "id": "compose",
@@ -30,9 +30,9 @@
         },
         {
             "id": "p2-status",
-            "status": "open",
+            "status": "done",
             "title": "a-turn phase 2 -- the terminal status line is persisted (2.1-2.4)",
-            "detail": "Read design D6 and BOTH the Round RA and Round RB sections before starting -- RA rewrote D6 from measurement and RB corrected RA's scope: status_event('completed') occurs exactly once in the Hub, inside the Claude-only parser (agent_trigger.py:1867), so signal 1 has never fired for Codex. 2.1b is RB's added Codex assertion. Replaces the bare broadcasts at agent_trigger.py:2129-2142 (process path) and :2723-2736 (app-server path). 2.4 re-decides a premise rounds 1 and 2 stated; if it turns out to be a product decision, it goes to decisions_for_user rather than being guessed."
+            "detail": "DONE iteration 3. Six tests appended to hub/tests/test_a_turn_says_how_it_ended.py, red first against unmodified code -- and the two that matter measured D6's table rather than assuming it: completed-on-Claude failed 1 == 2 (the parser's row is there, the finalize block's is not) and completed-on-Codex failed 0 == 1 (a Codex run has never had a settled signal for ANY outcome). Both bare broadcasts replaced with record_agent_output. 2.2's transaction check answered: nothing is pending at either call site, because every writer between the block's own commit and this line goes through persist_event, which commits by default. 2.4 confirmed by measurement, not escalated: two mutation-checked assertions in agentTimeline.test.tsx show the row draws nothing for any outcome, and payload.phase has exactly ONE reader in the product (isSuccessCompletionEntry). New side effect recorded in design.md: record_agent_output fires agent_session_changed when its row is the session's first, so a run that wrote nothing now emits one extra SSE frame. Whole Hub suite 3848 passed, whole UI suite 1478 passed, ruff/black/tsc/eslint green."
         },
         {
             "id": "p3-client",
@@ -62,7 +62,7 @@
             "id": "p6-drive",
             "status": "open",
             "title": "a-turn phase 6 -- drive it against a running Hub (6.1-6.7)",
-            "detail": "Trial Hub on 8011 from hub/ with uvicorn from source, fresh fixture project, every agent turn bound to claude-haiku-4-5. Never 8000, never 8010, never proj-5e960453 or proj-18e5d4e0. Confirm no .py under hub/hub or src is newer than the process start time. Stopped, failed AND interrupted runs (6.3). 6.4 rebuilds and stamps the bundle: npm run build then py -3.11 scripts/refresh_ui_bundle.py. 6.5 deletes the fixture, confirms the project count returns, and sweeps for enabled jobs. 6.6 is the full CI lint set. 6.7: do NOT retire F190 here."
+            "detail": "Trial Hub on 8011 from hub/ with uvicorn from source, fresh fixture project, every agent turn bound to claude-haiku-4-5. Never 8000, never 8010, never proj-5e960453 or proj-18e5d4e0. Confirm no .py under hub/hub or src is newer than the process start time. Stopped, failed AND interrupted runs (6.3). 6.4 rebuilds and stamps the bundle: npm run build then py -3.11 scripts/refresh_ui_bundle.py. 6.5 deletes the fixture, confirms the project count returns, and sweeps for enabled jobs. 6.6 is the full CI lint set. 6.7: do NOT retire F190 here. WATCH FOR: test_agent_trigger.py::test_codex_app_server_stop_signals_should_interrupt failed once on iteration 3's first full-suite run and did not reproduce in four attempts, including a second identical whole-suite run (3848 passed). Traceback lost. Unattributed -- its _wait_for_active_app_server_run deadline is 2.0s at run START, while phase 2 writes at run END. Not proven flaky; if it recurs, capture the traceback."
         },
         {
             "id": "p7-round",

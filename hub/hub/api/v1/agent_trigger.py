@@ -2118,27 +2118,42 @@ async def _execute_run(
                 payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
                 await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
                 await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
-            # Kept alongside the typed lifecycle event above rather than replaced by it:
-            # the "Handoff" flow in AgentOutputPanel.tsx detects run completion by scanning
-            # for this exact kind="status"/phase="completed" line in the output stream
-            # (useAgentOutput's `lines`), not via a separate SSE listener. Removing this
-            # would silently break that feature. `phase` stays "completed" even for a
-            # stopped/failed run — it means "the run has ended", not "it succeeded".
-            await sse_manager.broadcast(
+            # Persisted *and* broadcast, through the one writer that does both. This was a bare
+            # `sse_manager.broadcast`, so the line existed only for as long as the live stream did.
+            #
+            # Design D6, re-argued from measurement 2026-09-02. The row that satisfies the
+            # client's `isSuccessCompletionEntry` today is written by a different producer — the
+            # stream parser at `runner_parsing.py:356` — and only for a Claude-family runner that
+            # announced a clean turn (`parse_claude_line` is selected at `:1867`;
+            # `status_event("completed")` occurs exactly once in the Hub). So this line is the
+            # only settled signal a **stopped, failed or binding-conflicted** run has ever had on
+            # either runner, and the only one a **Codex** run has ever had for any outcome at all.
+            # It also carries the exit code, which was otherwise unrecoverable the moment the
+            # stream ended.
+            #
+            # The justification that used to sit here — that AgentOutputPanel's "Handoff" flow
+            # scans the output stream for this line — is stale: that effect was deleted
+            # (`AgentOutputPanel.tsx:148-151`). The consumer that matters is `lastRunSettled`
+            # (`AgentTimeline.tsx:115`), and it reads the *persisted* row, so the shape below is
+            # what has to be preserved. The key set is unchanged; only the id differs, because
+            # `record_agent_output` mints `out-{short_id()}` and takes no override. Nothing in
+            # `hub/ui/src` keys on the old deterministic `status-{run_id}`.
+            #
+            # `phase` stays "completed" even for a stopped/failed run — it means "the run has
+            # ended", not "it succeeded" — and `AgentTimeline.tsx:430` returns null for it either
+            # way. The row is durable rather than visible; the visible outcome is the terminal
+            # label the timeline route's `runs` map carries.
+            await record_agent_output(
+                db,
                 project_id,
-                "agent_output",
-                {
-                    "id": f"status-{run_id}",
-                    "agent": agent,
-                    "conversation_id": conversation_id,
-                    "session_id": session_id,
-                    "content": f"Run {final_status} (exit {exit_code}).",
-                    "kind": "status",
-                    "payload": {"phase": "completed", "exit_code": exit_code},
-                    "run_id": run_id,
-                    "sequence": sequence + 1,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                },
+                agent,
+                content=f"Run {final_status} (exit {exit_code}).",
+                session_id=session_id,
+                conversation_id=conversation_id,
+                kind="status",
+                payload={"phase": "completed", "exit_code": exit_code},
+                run_id=run_id,
+                sequence=sequence + 1,
             )
 
         # After the response has landed, so the titler sees the exchange rather than the
@@ -2715,24 +2730,23 @@ async def _execute_codex_appserver_run(
                 payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
                 await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
                 await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
-            # Kept for the same reason as `_execute_run`'s identical broadcast: the
-            # "Handoff" flow in AgentOutputPanel.tsx detects run completion by scanning for
-            # this exact kind="status"/phase="completed" line, not via a separate listener.
-            await sse_manager.broadcast(
+            # Persisted and broadcast through the same one writer as `_execute_run`'s identical
+            # line, for the reason given there in full. This transport is where it matters most:
+            # neither Codex transport emits a completion sentinel of its own
+            # (`parse_codex_line`'s only `status_event` is "plan", `runner_parsing.py:574`; the
+            # app-server's only one is "plan", `codex_appserver.py:544`), so before this a Codex
+            # run had no settled signal for *any* outcome, a clean completion included.
+            await record_agent_output(
+                db,
                 project_id,
-                "agent_output",
-                {
-                    "id": f"status-{run_id}",
-                    "agent": agent,
-                    "conversation_id": conversation_id,
-                    "session_id": session_id,
-                    "content": f"Run {final_status} (exit {exit_code}).",
-                    "kind": "status",
-                    "payload": {"phase": "completed", "exit_code": exit_code},
-                    "run_id": run_id,
-                    "sequence": sequence + 1,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                },
+                agent,
+                content=f"Run {final_status} (exit {exit_code}).",
+                session_id=session_id,
+                conversation_id=conversation_id,
+                kind="status",
+                payload={"phase": "completed", "exit_code": exit_code},
+                run_id=run_id,
+                sequence=sequence + 1,
             )
 
         await maybe_generate_title(project_id=project_id, conversation_id=conversation_id)

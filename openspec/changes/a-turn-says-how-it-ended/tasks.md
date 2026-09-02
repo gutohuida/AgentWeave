@@ -137,7 +137,7 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
 
 ## 2. The terminal status line is persisted
 
-- [ ] 2.1 Write a Hub test asserting that after a run ends, `/agents/{name}/output` contains a
+- [x] 2.1 Write a Hub test asserting that after a run ends, `/agents/{name}/output` contains a
       `kind="status"` row carrying the exit code — asserted for **both** the process path and the
       app-server path, per *A run's terminal status line is persisted*. Assert it for a **stopped**
       and a **failed** run specifically, not only a completed one: on a **Claude** runner a completed
@@ -150,7 +150,7 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
       `interrupted` run** — `reconcile_interrupted_runs` writes an `EventLog` row and no
       `AgentOutput` (grep `record_agent_output` in `run_reconciliation.py`: no hits), and there was
       no Hub process alive to write one. The spec now states that bound explicitly.
-- [ ] 2.1a Assert what a **completed run on a Claude runner** now carries: two entries satisfying
+- [x] 2.1a Assert what a **completed run on a Claude runner** now carries: two entries satisfying
       `isSuccessCompletionEntry` — the parser's (`content="Completed"`, `payload` with `version`,
       `phase`, `summary`) and the finalize block's (`content="Run … (exit N)."`, `payload` with
       `phase` and `exit_code`) — and that the conversation still draws neither, because
@@ -162,7 +162,7 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
       `parse_claude_line` runs, so a fixture that happens to be built on a `codex` runner would fail
       this assertion for a correct reason and send the next reader hunting a defect that is not
       there.
-- [ ] 2.1b **Assert the Codex case, which is the one 2.2 changes most and which no round before RB
+- [x] 2.1b **Assert the Codex case, which is the one 2.2 changes most and which no round before RB
       named.** `parse_claude_line` is selected only for `runner in ("claude", "claude_proxy",
       "native")` (`agent_trigger.py:1867`); `parse_codex_line`'s only `status_event` is `"plan"`
       (`runner_parsing.py:574`) and the app-server transport's only `status_event` is `"plan"`
@@ -172,7 +172,7 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
       one such entry for a completed Codex run, and assert that codex's own `phase="plan"` status
       row does **not** satisfy `isSuccessCompletionEntry` (RB measured that it does not). Design D6's
       runner column, and F270.
-- [ ] 2.2 Replace the bare broadcast at `hub/hub/api/v1/agent_trigger.py:2129-2142` (process path)
+- [x] 2.2 Replace the bare broadcast at `hub/hub/api/v1/agent_trigger.py:2129-2142` (process path)
       with `output_recording.record_agent_output` (`hub/hub/output_recording.py:22`), which persists
       **and** broadcasts one row. Round 2's correction to D6: "persist in addition to broadcasting"
       invites a second insert beside the existing `sse_manager.broadcast` call and two sources of
@@ -200,8 +200,8 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
         run that completed. Design D6.
       Also check `record_agent_output`'s own `await db.commit()` against what the call site has
       pending in its session at that point.
-- [ ] 2.3 Do the same at `:2723-2736` (app-server path).
-- [ ] 2.4 **Decide whether this row should be visible at all — the premise stated here in rounds 1
+- [x] 2.3 Do the same at `:2723-2736` (app-server path).
+- [x] 2.4 **Decide whether this row should be visible at all — the premise stated here in rounds 1
       and 2 was false.** It said a completed run gains no visible line "while a stopped or failed
       run does". It does not: both spawn paths hardcode `payload={"phase": "completed"}` regardless
       of outcome, deliberately (`agent_trigger.py:2125-2126`, "`phase` stays 'completed' even for a

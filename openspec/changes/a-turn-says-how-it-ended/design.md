@@ -721,3 +721,44 @@ D6's *purpose*, its choice of writer (`record_agent_output`), its exit-code argu
 "D6 does not repair the gate" conclusion all survive unchanged; so does every part of the F269
 analysis except the fix menu. Phases 1-7 stay unblocked. The scope decision — not narrowed — stands,
 and RB did not revisit it.
+
+## Phase 2 as built, 2026-09-02 — task 2.4 answered by measurement, and the premise re-checked
+
+Task 2.4 asked whether an invisible row is what this change means to ship, rather than something
+arrived at by accident. It is, and the check that says so is now recorded rather than reasoned.
+
+**The row is invisible for every outcome, measured on the component.** Two assertions were added to
+`agentTimeline.test.tsx`: the pair a completed Claude run now ends with (the parser's `Completed`
+and the finalize block's `Run completed (exit 0).`) draws neither line, and a stopped run's
+`Run stopped (exit 15).` draws none either. Both were mutation-checked — with
+`AgentTimeline.tsx:430`'s `return null` removed, both fail and the pre-existing successful-run
+assertion fails with them (3 of 41 in that file). So the branch that hides it is the reason they
+pass, not an accident of the fixture.
+
+**`phase` has exactly one reader in the product, and 2.4's warning is therefore cheap to honour.**
+2.4 says not to make `phase` outcome-dependent without checking every other reader. There are none:
+`payload.phase` on an agent-output row is read only by `isSuccessCompletionEntry`
+(`agentTimelineModel.ts:27`), reached from `AgentTimeline.tsx:115` and `:430`; a grep of `hub/hub`
+for `["phase"]`, `get("phase")` and `phase ==` returns spec-lifecycle hits and nothing else. The
+consequence is not that changing it would be safe — it is that the single reader is
+`lastRunSettled`, and making `phase` outcome-dependent would take the settled signal away from
+exactly the stopped and failed runs this phase exists to give it to.
+
+**The stale justification in the code is now gone, and it was stale.** Both call sites claimed
+removing the broadcast "would silently break" AgentOutputPanel's Handoff flow. That effect is
+deleted, in terms, at `AgentOutputPanel.tsx:148-151` and `:248-259`. The comments now name
+`lastRunSettled` as the consumer whose shape must be preserved.
+
+**One behaviour change beyond the row itself, stated rather than discovered later.**
+`record_agent_output` broadcasts `agent_session_changed` when the row it writes is the first output
+of its session (`output_recording.py:112-115`). A run that ended without producing any output — a
+stop before the first line, a spawn that ran and wrote nothing — now trips that on its terminal
+status row. The frontend answers by refetching the agent's session list, which is correct for a
+session that genuinely has its first row; it is one extra SSE frame in a case that previously
+produced none.
+
+**What the commit's own measurement showed about D6's table.** The six new Hub tests were run
+against unmodified code first. The completed-Claude test failed `1 == 2` — the parser's row is
+there and the finalize block's is not — and the completed-Codex test failed `0 == 1`. That is the
+Claude row and the Codex row of D6's table, observed rather than read, and it is the first time
+either has been asserted in the suite.

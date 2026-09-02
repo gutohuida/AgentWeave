@@ -481,6 +481,76 @@ describe('AgentTimeline', () => {
     expect(screen.queryByTestId(/result-card-/)).not.toBeInTheDocument()
   })
 
+  it('draws neither row of the pair a completed Claude run now ends with', () => {
+    // `a-turn-says-how-it-ended` task 2.1a. After the Hub's finalize block persists its terminal
+    // status line, a completed run on a Claude runner carries TWO entries satisfying
+    // `isSuccessCompletionEntry`: the stream parser's ("Completed") and the finalize block's
+    // ("Run completed (exit 0)."). The Hub-side assertion that both exist, and that only the
+    // second carries the exit code, is in `test_a_turn_says_how_it_ended.py`. This is the other
+    // half of the claim: neither is drawn, so the duplication costs the operator nothing and must
+    // not be "cleaned up" — removing the parser's row deletes the signal that works today, and
+    // removing the finalize block's makes the durable exit code outcome-dependent.
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({ id: 'text-2', kind: 'agent_output', output_kind: 'text', content: 'the answer', run_id: 'run-pair' }),
+          entry({
+            id: 'status-parser',
+            kind: 'agent_output',
+            output_kind: 'status',
+            content: 'Completed',
+            payload: { version: 1, phase: 'completed', summary: 'Completed' },
+            run_id: 'run-pair',
+            timestamp: '2026-08-02T00:00:01Z',
+          }),
+          entry({
+            id: 'status-finalize',
+            kind: 'agent_output',
+            output_kind: 'status',
+            content: 'Run completed (exit 0).',
+            payload: { phase: 'completed', exit_code: 0 },
+            run_id: 'run-pair',
+            timestamp: '2026-08-02T00:00:02Z',
+          }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText('the answer')).toBeInTheDocument()
+    expect(screen.queryByText('Completed')).not.toBeInTheDocument()
+    expect(screen.queryByText('Run completed (exit 0).')).not.toBeInTheDocument()
+    expect(screen.queryByTestId(/result-card-/)).not.toBeInTheDocument()
+  })
+
+  it('draws no line for a stopped run\'s terminal status row either', () => {
+    // The same row for the outcome it was added for. `phase` is "completed" for a stopped run too
+    // — it means "the run has ended", not "it succeeded" — so this is hidden by the same branch,
+    // and the visible outcome is the terminal label the `runs` map carries.
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'status-stopped',
+            kind: 'agent_output',
+            output_kind: 'status',
+            content: 'Run stopped (exit 15).',
+            payload: { phase: 'completed', exit_code: 15 },
+            run_id: 'run-stopped',
+            timestamp: '2026-08-02T00:00:01Z',
+          }),
+        ]}
+        roster={[agent]}
+        timelineEvents={[]}
+        isRunning={false}
+      />,
+    )
+    expect(screen.queryByText('Run stopped (exit 15).')).not.toBeInTheDocument()
+  })
+
   it('still surfaces a failed run\'s error text — only the successful-completion sentinel is hidden', () => {
     render(
       <AgentTimeline

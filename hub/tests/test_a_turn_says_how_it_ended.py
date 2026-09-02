@@ -11,11 +11,23 @@ rather than by any query whose coverage depends on an ordering or a limit.
 """
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from hub.db.engine import async_session_factory
 from hub.db.models import EventLog, Run
+
+# Phase 2 drives real runs through both spawn paths, and the fakes that make that possible already
+# exist. Imported rather than re-declared, as `test_agent_default_permission_mode.py` does.
+from tests.test_agent_trigger import (
+    _await_background_run,
+    _bind_codex_app_server_runner,
+    _fake_pty,
+    _fake_run_turn,
+    _stoppable_pty,
+    _wait_for_active_pty,
+)
 
 PROJECT = "proj-test"
 BASE = f"/api/v1/projects/{PROJECT}"
@@ -267,3 +279,297 @@ async def test_an_old_run_named_by_a_recent_event_keeps_its_outcome(app, auth_he
     # And coverage is total, not merely inclusive of the awkward case.
     named = {e["data"]["run_id"] for e in body["events"] if "run_id" in (e["data"] or {})}
     assert named <= set(body["runs"])
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — the terminal status line is persisted
+#
+# Design D6, re-argued in round RA and scoped by round RB. Both spawn paths broadcast
+# `{"phase": "completed", "exit_code": N}` when a run ends and persist nothing, so once the live
+# SSE stream is gone the exit code is unrecoverable and `lastRunSettled` has no fast signal for a
+# run that did not finish.
+#
+# The row that satisfies `isSuccessCompletionEntry` today is written by a *different* producer —
+# `runner_parsing.py:356`, reached only for `runner in ("claude", "claude_proxy", "native")`
+# (`agent_trigger.py:1867`). `status_event("completed")` occurs exactly once in the whole Hub. So
+# these tests are runner-scoped on purpose: a completed run on a Claude runner already has such a
+# row and proves nothing, a completed Codex run has never had one, and a stopped or failed run has
+# never had one on either runner. `interrupted` is deliberately absent — `reconcile_interrupted_runs`
+# writes an `EventLog` row and no `AgentOutput`, because no Hub process was alive to write one.
+# ---------------------------------------------------------------------------
+
+
+async def _output_rows(app, auth_headers, agent: str, run_id: str) -> list:
+    """Every `AgentOutput` row the run produced, read back through the route the client uses."""
+    response = await app.get(f"{BASE}/agents/{agent}/output?limit=1000", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    return [row for row in response.json() if row["run_id"] == run_id]
+
+
+def _completion_rows(rows: list) -> list:
+    """The Python mirror of `isSuccessCompletionEntry` (`agentTimelineModel.ts:24-28`).
+
+    Restated rather than imported because it lives in TypeScript; the client-side half of the
+    predicate is asserted in `agentTimelineModel.test.ts`, including that codex's own
+    `phase="plan"` status row does **not** match it.
+    """
+    return [
+        row
+        for row in rows
+        if row["kind"] == "status" and (row["payload"] or {}).get("phase") == "completed"
+    ]
+
+
+async def _run_row(run_id: str) -> Run:
+    async with async_session_factory() as db:
+        return await db.get(Run, run_id)
+
+
+@pytest.mark.asyncio
+async def test_a_stopped_run_persists_its_terminal_status_line(app, auth_headers, bind_runner):
+    """*A run's terminal status line is persisted* — the process path, stopped.
+
+    The case no runner covers today: the process is killed before Claude emits its `result`
+    line, so nothing writes a `phase="completed"` row and the exit code exists only in the
+    broadcast.
+    """
+    agent = "phase2-stopped"
+    await app.post(
+        f"{BASE}/session/sync",
+        json={"data": {"agents": {agent: {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    await bind_runner(agent, cli="claude")
+
+    fake_session = _stoppable_pty()
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(return_value=fake_session)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            trigger = await app.post(
+                f"{BASE}/agent/trigger",
+                json={"agent": agent, "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            run_id = trigger.json()["run_id"]
+            await _wait_for_active_pty(run_id)
+            stop = await app.post(f"{BASE}/agent/{agent}/stop", headers=auth_headers)
+            assert stop.status_code == 200
+            await _await_background_run()
+
+    assert (await _run_row(run_id)).status == "stopped"
+    settled = _completion_rows(await _output_rows(app, auth_headers, agent, run_id))
+    assert len(settled) == 1, "a stopped run's terminal status line is persisted exactly once"
+    assert settled[0]["content"] == "Run stopped (exit 15)."
+    assert settled[0]["payload"]["exit_code"] == 15, "the exit code outlives the live stream"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_run_persists_its_terminal_status_line(app, auth_headers, bind_runner):
+    """*A run's terminal status line is persisted* — the process path, failed.
+
+    A non-zero exit takes Claude's `result` line down the `is_error` branch
+    (`runner_parsing.py:346-350`), which is an `error_event` with `kind="error"` — never a
+    `status` row. So this run, too, has never had a settled signal.
+    """
+    agent = "phase2-failed"
+    await app.post(
+        f"{BASE}/session/sync",
+        json={"data": {"agents": {agent: {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    await bind_runner(agent, cli="claude")
+
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"error","is_error":true,"session_id":"sess-p2-fail"}\n'],
+        exit_code=1,
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            trigger = await app.post(
+                f"{BASE}/agent/trigger",
+                json={"agent": agent, "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            run_id = trigger.json()["run_id"]
+            # A failed run hands its input back and retries to the cap; every attempt is a
+            # separate run, and the assertions below name this one.
+            await _await_background_run()
+
+    assert (await _run_row(run_id)).status == "failed"
+    rows = await _output_rows(app, auth_headers, agent, run_id)
+    assert [r for r in rows if r["kind"] == "error"], "the error line is still its own row"
+    settled = _completion_rows(rows)
+    assert len(settled) == 1, "a failed run's terminal status line is persisted exactly once"
+    assert settled[0]["content"] == "Run failed (exit 1)."
+    assert settled[0]["payload"]["exit_code"] == 1
+
+
+@pytest.mark.asyncio
+async def test_an_app_server_run_that_was_stopped_persists_its_terminal_status_line(
+    app, auth_headers
+):
+    """*A run's terminal status line is persisted* — the app-server path, stopped.
+
+    `TurnOutcome.status == "interrupted"` is this transport's deliberate stop and maps to
+    `stopped` (`agent_trigger.py:2628`). It is not the `interrupted` **run status**, which only
+    `run_reconciliation.py:65` ever assigns and which this change cannot reach.
+    """
+    agent = "phase2-appserver-stopped"
+    await app.post(
+        f"{BASE}/session/sync",
+        json={"data": {"agents": {agent: {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    await _bind_codex_app_server_runner(app, auth_headers)(agent)
+
+    fake_run_turn = _fake_run_turn(thread_id="thread-p2-stop", status="interrupted")
+    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            trigger = await app.post(
+                f"{BASE}/agent/trigger",
+                json={"agent": agent, "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            run_id = trigger.json()["run_id"]
+            await _await_background_run()
+
+    assert (await _run_row(run_id)).status == "stopped"
+    settled = _completion_rows(await _output_rows(app, auth_headers, agent, run_id))
+    assert len(settled) == 1
+    assert settled[0]["content"] == "Run stopped (exit 1)."
+    assert settled[0]["payload"]["exit_code"] == 1
+
+
+@pytest.mark.asyncio
+async def test_an_app_server_run_that_failed_persists_its_terminal_status_line(app, auth_headers):
+    """*A run's terminal status line is persisted* — the app-server path, failed."""
+    agent = "phase2-appserver-failed"
+    await app.post(
+        f"{BASE}/session/sync",
+        json={"data": {"agents": {agent: {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    await _bind_codex_app_server_runner(app, auth_headers)(agent)
+
+    fake_run_turn = _fake_run_turn(
+        thread_id="thread-p2-fail", status="failed", error="the runtime went away"
+    )
+    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            trigger = await app.post(
+                f"{BASE}/agent/trigger",
+                json={"agent": agent, "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            run_id = trigger.json()["run_id"]
+            await _await_background_run()
+
+    assert (await _run_row(run_id)).status == "failed"
+    settled = _completion_rows(await _output_rows(app, auth_headers, agent, run_id))
+    assert len(settled) == 1
+    assert settled[0]["content"] == "Run failed (exit 1)."
+    assert settled[0]["payload"]["exit_code"] == 1
+
+
+@pytest.mark.asyncio
+async def test_a_completed_claude_run_carries_the_pair_and_only_one_holds_the_exit_code(
+    app, auth_headers, bind_runner
+):
+    """*A run's terminal status line is persisted* — the duplication, stated so it is not removed.
+
+    A completed run on a **Claude** runner ends with two entries satisfying
+    `isSuccessCompletionEntry`: the stream parser's (`content="Completed"`, payload carrying
+    `version`/`phase`/`summary`) and the finalize block's (`content="Run completed (exit 0)."`,
+    payload carrying `phase`/`exit_code`). `AgentTimeline.tsx:430` returns `null` for each, so
+    nothing is drawn twice — asserted on the client in `agentTimeline.test.tsx`.
+
+    Do not "de-duplicate" this pair. Removing the parser's row deletes the only signal that works
+    today; removing the finalize block's for a completed run makes the durable exit code
+    outcome-dependent. The runner binding is explicit because the pair exists only where
+    `parse_claude_line` runs (round RB).
+    """
+    agent = "phase2-completed-claude"
+    await app.post(
+        f"{BASE}/session/sync",
+        json={"data": {"agents": {agent: {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    await bind_runner(agent, cli="claude")
+
+    fake_spawn = _fake_pty(
+        [
+            '{"type":"system","subtype":"init","session_id":"sess-p2-ok"}\n',
+            '{"type":"assistant","message":{"content":[{"type":"text","text":"done"}]},'
+            '"session_id":"sess-p2-ok"}\n',
+            '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-p2-ok"}\n',
+        ]
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            trigger = await app.post(
+                f"{BASE}/agent/trigger",
+                json={"agent": agent, "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            run_id = trigger.json()["run_id"]
+            await _await_background_run()
+
+    assert (await _run_row(run_id)).status == "completed"
+    settled = _completion_rows(await _output_rows(app, auth_headers, agent, run_id))
+    assert len(settled) == 2, "the parser's row and the finalize block's, both matching"
+
+    parser_row = next(r for r in settled if r["content"] == "Completed")
+    assert parser_row["payload"]["summary"] == "Completed"
+    assert "exit_code" not in parser_row["payload"], "the parser knows no exit code"
+
+    finalize_row = next(r for r in settled if r["content"] == "Run completed (exit 0).")
+    assert finalize_row["payload"]["exit_code"] == 0, "the exit code lives on this one alone"
+
+
+@pytest.mark.asyncio
+async def test_a_completed_codex_run_gains_its_first_settled_signal(app, auth_headers):
+    """*It does not depend on the runner announcing its own completion* — the Codex case.
+
+    `parse_claude_line` is selected only for the three Claude-family runner values, and neither
+    Codex transport emits a completion sentinel: `parse_codex_line`'s only `status_event` is
+    `"plan"` (`runner_parsing.py:574`) and the app-server's only one is `"plan"`
+    (`codex_appserver.py:544`). So a Codex run has never had a persisted `phase="completed"` row
+    for **any** outcome, a clean completion included, and this change gives it its first — not a
+    second. F270.
+    """
+    from hub.runner_events import status_event
+
+    agent = "phase2-completed-codex"
+    await app.post(
+        f"{BASE}/session/sync",
+        json={"data": {"agents": {agent: {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    await _bind_codex_app_server_runner(app, auth_headers)(agent)
+
+    plan = status_event("plan", summary="read the file; change it")
+    fake_run_turn = _fake_run_turn(thread_id="thread-p2-codex", status="completed", events=(plan,))
+    with patch("hub.api.v1.agent_trigger.codex_run_turn", fake_run_turn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            trigger = await app.post(
+                f"{BASE}/agent/trigger",
+                json={"agent": agent, "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            run_id = trigger.json()["run_id"]
+            await _await_background_run()
+
+    assert (await _run_row(run_id)).status == "completed"
+    rows = await _output_rows(app, auth_headers, agent, run_id)
+
+    # The turn's own status row is the plan, and it is not a completion — the client-side half of
+    # this claim is `agentTimelineModel.test.ts`'s "leaves a non-terminal status phase alone".
+    plan_rows = [r for r in rows if r["kind"] == "status" and r["payload"]["phase"] == "plan"]
+    assert len(plan_rows) == 1
+    assert plan_rows[0] not in _completion_rows(rows)
+
+    settled = _completion_rows(rows)
+    assert len(settled) == 1, "exactly one, and it is the finalize block's — codex writes no other"
+    assert settled[0]["content"] == "Run completed (exit 0)."
+    assert settled[0]["payload"]["exit_code"] == 0
