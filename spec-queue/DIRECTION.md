@@ -25,6 +25,73 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ---
 
+## 2026-09-03
+
+Written by the operator in a DECIDE session, 2026-09-02 20:40. It settles the ambiguity the
+2026-09-02 window flagged as DAY-1 and needs no other reading.
+
+### The queue
+
+```
+D-1  drive     what the night built -- a-turn-says-how-it-ended
+D-2  spec R1   F188
+D-3  spec R2   re-derive R1's argument against the code, independently
+D-4  spec R3   re-derive again, independently
+D-5  review    the review page
+```
+
+### D-1 -- drive what the night built, and do not confuse it with phase 7
+
+Last night was ordered to build `a-turn-says-how-it-ended`, pinned by `ORDER:`. Drive it.
+
+**The drive is not phase 7.** Phase 7 is a verifying round written into the change itself, run by a
+sitting that did not write the code, and it is what closes the change and retires F190. D-1 is the
+window's ordinary e2e slot: exercise the built product at the seams and file what breaks. If the
+night did not finish -- 41 tasks is a full window and it may not have -- drive whatever phases
+landed and say plainly in the log which did not, rather than treating a partial build as a failure.
+
+If the night was interrupted and built nothing, D-1 becomes the sweep row the coverage matrix is
+paused at, and the spec loop below still runs.
+
+### D-2 through D-4 -- the spec loop takes F188
+
+**F188 (A)**, `scripts/drive/FINDINGS.md:13741` -- a repairable workspace fault destroys the
+operator's message after three schedules, while the identical fault one line away holds it forever.
+It has been the scheduled next slot since the 2026-09-02 section was written, it lost that slot to a
+falsified design rather than to a judgement, and it is the last severity A with no proposal.
+
+**This resolves DAY-1.** The 2026-09-02 window correctly observed that the section it was reading
+named F188 as the displaced item while the slot was actually held by
+`a-refusal-reaches-the-operator`, and applied the governing rule to the item in the slot. That was
+right. The consequence -- that `a-refusal` did not start -- is accepted, not corrected:
+**`a-refusal-reaches-the-operator` moves to 2026-09-04.** Its seed,
+`openspec/explorations/2026-09-01-a-refusal-reaches-the-operator.md`, keeps until then.
+
+Read F188's ledger section before anything else, and note that the finding's whole force is the
+*asymmetry* -- two adjacent call sites treating the same fault oppositely. A proposal that repairs
+one site without saying why the other is right has not understood it.
+
+### Do not resume the coverage sweep -- but the trigger fires tomorrow
+
+Unchanged in substance from the 2026-09-02 section, and now one day from expiring. Rows 9c and
+10-17 are genuinely untouched -- Jobs+Loops, Questions, Permissions, Checkpoints, Accounting,
+Worktrees, Logs/Events/SSE, Messages -- and the sweep is more than half unrun.
+
+**The trigger is: once F188 has a proposal, all severity-A findings are addressed and the argument
+for pausing expires.** D-2 through D-4 are that proposal. So if this window completes them, the
+sweep resumes **2026-09-04 at row 9c**, and that is the default rather than a decision anyone needs
+to take. If the spec loop does not complete, the pause holds another day.
+
+### If the window finishes early
+
+**F271 (A)** is today's other open severity A and it is deliberately not in the queue above, because
+half its repair is a product decision. Sharpen it rather than specify it: establish how many other
+sites share its shape -- the ledger already names `AgentOutputPanel.tsx:207` as a second instance of
+"seeds state, writes it back, no guard" -- so the eventual proposal knows whether it is repairing a
+page or a pattern. Do **not** answer the blank-a-non-empty-PUT question; that is the operator's.
+
+---
+
 ## 2026-09-02
 
 ### Before composing the queue: read last night's phase 0

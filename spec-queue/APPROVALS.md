@@ -23,14 +23,26 @@ slot went to repairing an already-approved one, because last night's phase-0 gat
 premise of its design D6 (task 0.3) and `DIRECTION.md`'s governing sentence is that a broken
 approved design outranks a new proposal. Two rounds ran; the row below is what came out.
 
-Write the status token between the `-` and the change name. **No real token is written here:** the
-day window did this work and must not appear to have approved it, so each line below is a blank to
-fill, not a row. Leaving a row out entirely is undecided, not rejection — but note that only the
-newest section is read, so an omitted row here means the FIX window sees no approval for it
-tonight, whatever last night's section says.
+The day window wrote this section with **blanks** rather than tokens, because it did the work and
+must not appear to have approved it. **The operator filled them in on 2026-09-02 at 20:40, in a
+DECIDE session.** The row below is a real row. Leaving a change out entirely is undecided, not
+rejection — but note that only the newest section is read, so an omitted row here means the FIX
+window sees no approval for it tonight, whatever last night's section says.
 
-- ________  a-turn-says-how-it-ended   repaired by rounds RA and RB, 2026-09-02; phases 1-7 unblocked
-- ________  a-write-outside-the-workspace-is-recorded   unchanged today; R3-complete, 0/54, never approved
+- APPROVED  a-turn-says-how-it-ended   operator, 2026-09-02 20:40, in session -- the phase 0 condition is satisfied; rounds RA and RB repaired D6; phases 1-7 unblocked
+
+ORDER: a-turn-says-how-it-ended
+
+`a-write-outside-the-workspace-is-recorded` has **no row**, which is undecided rather than
+rejected. It is deliberate: it collides with `a-turn` on three files, one of them the committed
+UI bundle, so approving both for one night means ordering them and eating a bundle conflict every
+iteration. It reappears on tomorrow's review page unchanged.
+
+The `ORDER:` line is load-bearing, not decoration. Without it the default queue applies, and its
+source 2 -- open findings, A before B before C -- reaches **F271** before it ever reaches this
+approved row. F271's repair is half a plain fix and half a product decision the window may not
+make, so the night would spend itself on the half it is not allowed to finish. `ORDER:` sends it
+straight to the 41 open tasks of the change that has been through eight rounds of review.
 
 `a-turn-says-how-it-ended` -- F190 (A). You approved this on 2026-09-01 **conditionally**: observed
 first. Phase 0 ran last night against a live Hub and the gate did its job -- **task 0.3 falsified
