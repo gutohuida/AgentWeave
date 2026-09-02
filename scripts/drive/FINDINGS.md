@@ -17160,6 +17160,22 @@ three separate route-level defects have sat undisturbed.
 
 **Reproduction:** `t_sweep_row17_messages.py`, leg 3.
 
+**2026-09-02, night window — six more instances of this shape, and a warning about how they were
+counted.** A repo-wide sweep for R-1 (`scripts/drive/n10_route_reachability.py`, written up in
+`spec-queue/DECISIONS.md` under R-1) found six further routes whose only client is a hook no
+component outside its own file imports, all six tree-shaken out of the served bundle exactly as
+this row's three were: `requestCompact` (`POST …/agents/{name}/compact`), `requestNewSession`
+(`…/new-session`), `useJob` (`GET …/jobs/{job_id}`), `useRunnerLaunchability`
+(`GET …/runners/launchability`), `useAgentLaunchability` (`GET …/agents/launchability`) and
+`useDivergences` (`GET …/tasks/divergences/recent`). `useAgentLaunchability` is named by nine test
+files, so unit tests do not notice.
+
+**That sweep cannot have found this row, and would not find another like it.** It is depth-1: it
+asks whether any file outside a hook's own names it, and this row's three hooks *are* named — by
+`MessagesFeed`, which nothing imports. A whole unreachable subtree is invisible to a symbol grep,
+so six is a floor. Sizing the class properly needs a reachability walk from `App.tsx`; nobody has
+done one, and this note exists so the next person does not read six as the answer.
+
 ---
 
 ## F261 (C) — the recipient is checked against the roster and the sender is not, so a name nobody registered becomes a listed agent

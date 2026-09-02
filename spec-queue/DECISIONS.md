@@ -91,6 +91,101 @@ been filed **six times across two nights**.
 - `runner-registry/spec.md:72-73` is a shipped requirement whose UI half was never built — ticked on
   backend evidence alone and archived. The approved `runner-model-is-chosen-from-the-catalog`
   repairs that instance; whether a task may tick on backend evidence alone is the rule question.
+  *(Pointer corrected 2026-09-02, night window: that requirement now starts at
+  `openspec/specs/runner-registry/spec.md:67`, because the change's delta was synced into it on
+  2026-09-02, and it is **no longer unbuilt** — the picker shipped and was driven against the
+  served bundle. The instance is closed; the rule question the bullet raises is not, which is why
+  the bullet stays.)*
+
+**The "ten more", enumerated — measured 2026-09-02 by the night window.**
+
+The second bullet above has asserted *"ten more operator-only routes are 0-hit in both the source
+and the served bundle"* since 2026-08-31 without the list ever being written down. Here it is, and
+**the figure is not eleven — it is 35.**
+
+Reproduce with `py -3.11 scripts/drive/n10_route_reachability.py`. Routes are read from
+`hub.main:app`'s own route table rather than from decorators, so an include-time prefix cannot be
+mis-transcribed; UI call sites are the `/api/v1…` literals `client.ts`'s helpers require, with the
+HTTP verb taken from which helper carries each one.
+
+| | |
+|---|---|
+| declared `/api/v1` route+method pairs | **187** |
+| under `/api/v1/agent-actions` (the agent API, operator-invisible by construction) | 32 |
+| everything else | **155** |
+| reached from `hub/ui/src` with a matching verb | 110 |
+| not reached from the UI | **45** |
+| — of those, called by the CLI's `HttpTransport` instead | 10 |
+| — **of those, called by no client anywhere in this repo** | **35** (33 distinct paths) |
+
+**Verb matters and path-only sweeps get this wrong.** `GET /projects/{id}/charters/{charter_id}`,
+`DELETE /projects/{id}/jobs/{job_id}` and `POST /projects/{id}/agents/{name}/output` all sit on
+paths the UI *does* call — with a different verb. A sweep that compares paths reports 40 unreached
+and calls those three reached; comparing (verb, path) reports 45 and is right.
+
+**The CLI is a second client, and its ten are not operator gaps.** `HttpTransport._request` takes a
+path *relative* to one of three prefixes (`transport/http.py:145-149`), so its calls never contain
+the string `/api/v1` and any repo-wide grep for the literal misses every one: `POST …/agents/{name}/
+heartbeat`, `/output`, `/context-usage`, `POST …/logs`, `POST …/messages`, `POST …/questions`,
+`GET …/questions/{id}`, `POST …/session/sync`, `POST …/tasks`, `DELETE …/jobs/{job_id}`.
+
+**The 35 with no client at all**, grouped by the file that declares them:
+
+| Area | Routes |
+|---|---|
+| `spec.py` — 17 | `GET …/project/documents/{path}/rigor-history` · `PUT …/project/documents/{path}/content` · `POST …/project/documents/{path}/merge` · `POST …/project/documents/adopt` · `POST …/project/spec/adopt` · `POST …/project/spec/documents/arrange` · `POST …/project/spec/reindex` · `GET …/project/spec/requirements` · `GET …/project/spec/requirements/{identifier}` · `GET …/project/spec/drift` · `POST …/project/spec/drift/detect` · `POST …/project/spec/drift/{drift_id}/resolve` · `GET …/project/spec/evidence` · `POST …/project/spec/evidence` · `POST …/project/spec/evidence/{evidence_id}/decision` · `GET …/project/spec/evidence/{evidence_id}/reviews` · `PUT …/project/spec/evidence-retention` |
+| `agents.py` — 5 | `GET …/agents/agent-context` · `GET …/agents/configured` · `GET …/agents/context` · `POST …/agents/register` · `POST …/agents/request` |
+| `events.py` — 3 | `GET /api/v1/events/ticket` · `GET …/events` · `GET …/events/ticket` |
+| `tasks.py` — 2 | `POST …/tasks/{task_id}/dependencies` · `DELETE …/tasks/{task_id}/dependencies/{depends_on}` |
+| `inbound_queue.py` — 2 | `GET …/queue/settings` · `PATCH …/queue/settings` |
+| `loops.py` — 2 | `POST …/loops/{loop_id}/archive` · `POST …/loops/{loop_id}/control` |
+| four singletons | `GET …/projects/{project_id}` · `GET …/charters/{charter_id}` · `GET …/checkpoints/{checkpoint_id}/rendered` · `GET …/worktrees/conflicts` |
+
+Each is 0 in the served bundle too, probed by string literal rather than by symbol name — Vite
+renames every local, so an absent hook name proves nothing, while template literals survive intact
+(``/api/v1/projects/${n}/loops/${e}`` is in `index-x3nWU-L2.js` verbatim). Five fragments that
+*must* be present are probed alongside as controls; all five are.
+
+**The second class the bullet did not separate: a client exists, and nothing renders it.** Six more
+routes have a working hook in `hub/ui/src/api/` that no component outside its own file imports —
+`requestCompact` (`POST …/agents/{name}/compact`), `requestNewSession` (`…/new-session`), `useJob`
+(`GET …/jobs/{job_id}`), `useRunnerLaunchability` (`GET …/runners/launchability`),
+`useAgentLaunchability` (`GET …/agents/launchability`) and `useDivergences`
+(`GET …/tasks/divergences/recent`). This is F260's shape, and it is worse than it reads: **the
+bundler tree-shakes them, so all six paths are 0 in the shipped bundle** — measured with the
+terminating backtick, because `runners/launchability` *is* in there as the prefix of
+`runners/launchability-by-provider`, which is the variant that ships. The client code exists,
+passes its unit tests (`useAgentLaunchability` is named by nine test files) and is not in the
+product. `useUpdateJob` is orphaned the same way but its route is not, because `usePauseJob` and
+`useResumeJob` `PATCH` the same path.
+
+**What the eleven was probably counting: unknown, and no subset of the measurement lands on it.**
+The nearest natural groupings are both 17 — the `spec.py` routes, and the `GET`s among the 35. The
+figure looks like an estimate that was never enumerated, which is the whole reason this item
+existed.
+
+**110 is an upper bound, not a count of what an operator can reach.** The unrendered-hook pass is
+depth-1: it asks whether any *file* outside the hook's own names it, so a hook imported by a
+component that is itself imported by nothing reads as consumed. F260 is exactly that — `useMessages`,
+`useMessageHistory` and `useMarkRead` are all imported, by `MessagesFeed`, which nothing imports and
+which is absent from the bundle. So `GET …/messages` and `PATCH …/messages/{id}/read` are counted
+in the 110 here and are unreachable in the shipped app. Sizing that class properly needs a reachability
+walk from `App.tsx`, not a symbol grep; this measurement does not attempt one, and the 35 and the 6
+are both floors.
+
+**Limits, stated rather than left implied.** A static sweep can show that no caller *in this repo*
+names a route; it cannot show the route is dead, and an external client is out of scope. The bundle
+probe is path-level, so a bundle hit does not distinguish verbs — it is used here only to confirm
+absences. Nine matches were ambiguous because the UI computes a segment (``/projects/${action}``
+could be `create`, `open` or `{project_id}`); each was resolved by reading the line and is recorded
+with its line number in the script's `HAND_RESOLVED`. Two more are composed by
+`agentChat.ts:213`'s `conversationPath()` helper rather than written at the call site, which the
+literal scan cannot see; both are in fact called. The unrendered-hook pass names exported symbols,
+which would miscount a hook re-exported through a barrel — `hub/ui/src/api/` has no barrel and no
+`export *`, checked.
+
+**This block adds evidence only.** R-1's two halves, (a) and (b) below, are untouched and remain
+the operator's to answer.
 
 **What the old D-4 got wrong, measured.** It presented four findings as symmetric, each naming "a
 grep that would say how big it is". The greps were never run. They are:
