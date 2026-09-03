@@ -249,6 +249,25 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
     # has two halves to isolate rather than one: the events, and the `runs` map keyed by the run
     # ids those events name. The map is a newer leak surface than the events, so it is asserted
     # explicitly — both that it is empty and that Project A's run is not a key of it.
+    #
+    # The bait below is what gives that assertion any power, and phase 7 added it after measuring
+    # that it had none. Deleting the route's `project_id` predicate left this test green: Project
+    # B owned no event naming Project A's run, so `run_ids` was empty and `runs` was `{}` for
+    # reasons that had nothing to do with the predicate. A cross-project leak needs an event *in
+    # Project B* that names a run *in Project A* — write one, and the unfiltered query returns
+    # Project A's run facts to Project B's key.
+    async with async_session_factory() as session:
+        session.add(
+            EventLog(
+                id="evt-bola-b-names-a-run",
+                project_id=other_project["project_id"],
+                event_type="run_stopped",
+                agent="alice",
+                data={"run_id": project_a_resources["run_id"]},
+            )
+        )
+        await session.commit()
+
     timeline_resp = await app.get(f"{base}/agents/alice/timeline", headers=b)
     assert timeline_resp.status_code == 200
     timeline = timeline_resp.json()
