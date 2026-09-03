@@ -1,122 +1,40 @@
 {
-    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-01-daily",
-    "parent_branch": "master",
-    "parent_sha": "556bb37",
-    "stop_at": "2026-09-03T07:00:00+01:00",
-    "iteration": 14,
-    "last_heartbeat": "2026-09-03T04:45:19+01:00",
-    "log_file": ".claude/autonomous/2026-09-02-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "compose",
-            "status": "done",
-            "title": "Compose this window's queue from the playbook",
-            "detail": "Done iteration 1. APPROVALS.md 2026-09-02 carries ORDER: a-turn-says-how-it-ended -- one item, verbatim, so the default queue is ignored. Backlog source 1 (implemented changes needing only archiving) is empty. Tree confirmed green first: hub/tests/test_agents.py + test_bola.py 12 passed; vitest agentTimeline{,Events,Model} 63 passed."
-        },
-        {
-            "id": "p1-route",
-            "status": "done",
-            "title": "a-turn phase 1 -- the route carries the run's facts (1.1-1.6)",
-            "detail": "DONE iteration 2. New file hub/tests/test_a_turn_says_how_it_ended.py (6 tests), RunFacts + AgentTimeline in hub/hub/schemas/agents.py, ids-in run query in agent_timeline after the [:50] truncation with the project_id predicate kept. 1.4b mutation-checked live: against an ordered/limited query it is the ONLY test that fails -- the 1.2 scope test passes under that mutation, so 1.4b is not redundant with it. 1.6 broke exactly test_bola.py and the fixture was given a Run row so runs == {} is not vacuous. 18 passed on the chunk, 159 passed on the six chat-timeline files, ruff + black green. UI left disagreeing with the route on purpose -- phase 3 moves it, bundle NOT rebuilt (6.4 owns that)."
-        },
-        {
-            "id": "p2-status",
-            "status": "done",
-            "title": "a-turn phase 2 -- the terminal status line is persisted (2.1-2.4)",
-            "detail": "DONE iteration 3. Six tests appended to hub/tests/test_a_turn_says_how_it_ended.py, red first against unmodified code -- and the two that matter measured D6's table rather than assuming it: completed-on-Claude failed 1 == 2 (the parser's row is there, the finalize block's is not) and completed-on-Codex failed 0 == 1 (a Codex run has never had a settled signal for ANY outcome). Both bare broadcasts replaced with record_agent_output. 2.2's transaction check answered: nothing is pending at either call site, because every writer between the block's own commit and this line goes through persist_event, which commits by default. 2.4 confirmed by measurement, not escalated: two mutation-checked assertions in agentTimeline.test.tsx show the row draws nothing for any outcome, and payload.phase has exactly ONE reader in the product (isSuccessCompletionEntry). New side effect recorded in design.md: record_agent_output fires agent_session_changed when its row is the session's first, so a run that wrote nothing now emits one extra SSE frame. Whole Hub suite 3848 passed, whole UI suite 1478 passed, ruff/black/tsc/eslint green."
-        },
-        {
-            "id": "p3-client",
-            "status": "done",
-            "title": "a-turn phase 3 -- the client consumes the envelope (3.1-3.3a)",
-            "detail": "DONE iteration 4, in two commits as 3.1 requires. The fixture commit is red on its own (69 failed / 69, all one cause: runStatusByRunId iterating the envelope object) and green at the next; CI fires only on master so nothing gated on it. Three corrections written back into tasks.md: it was 10 files not 11 (agentTimelineModel.test.ts needed nothing here, its stake is 5.1); a twelfth, agentTimeline.test.tsx, 45 render sites, because `runs` was made a REQUIRED prop rather than optional-defaulting-to-{} -- an empty map reads as 'no run ended' at every phase-4 consumer; and workingIndicator's runDurationsByRunId block was KEPT because 4.4 must carry its negative-duration guard across. RunLifecycleStatus moved lib -> api/agents.ts. AgentActivityTab's unwrap had to go INSIDE the useMemo (exhaustive-deps at --max-warnings 0). New timelineEnvelopeUnwrap.test.tsx is the only test putting a non-empty envelope through the hook; both assertions mutation-checked. UI 1480 passed / 143 files, tsc + lint clean. Bundle NOT rebuilt."
-        },
-        {
-            "id": "p4a-reducers",
-            "status": "done",
-            "title": "a-turn phase 4a -- delete the reducers, point the consumers at the map (4.1-4.5)",
-            "detail": "DONE iteration 5, plus 4.6 which the compiler forced. New file timelineRunFacts.test.tsx, 8 tests, every one passing timelineEvents={[]} -- red first at 5 failed / 3 passed, the 3 being negative assertions that were vacuous then and are mutation-checked now: all 8 are killed by at least one of six mutations. 4.2's wording corrected -- a `running` run reaches the client as `started` (D5 renames at the boundary), so the test asserts the wire value. 4.4 read its four cases before deleting and carried all four across; the duration reads runDurationSeconds(runs[runId]), a module-LOCAL helper, not a new model export, because 4.5 wants the assertion in the component test. 4.5's spawn-failure half MEASURED: a phase=failed status row renders 'Worked for 1s', so a failed spawn is NOT an instance of F269 -- F269 needs a phase=COMPLETED status row. 4.6 forced by TS6133 the moment the reducers went. agentTimelineModel.test.ts's runStatusByRunId describe (task 5.1's line range) had to go in the same commit or the tree does not compile. UI 1483 passed / 144 files (1480 +8 -5), tsc + lint clean. Bundle NOT rebuilt."
-        },
-        {
-            "id": "p4b-statline",
-            "status": "done",
-            "title": "a-turn phase 4b -- the stat line, LIFECYCLE_EVENT_STATUS, and the third consequence (4.5a-4.7)",
-            "detail": "DONE iteration 6, all three tasks. 4.5a: component test FIRST and red (1 failed / 10 passed), written from the phase=COMPLETED shape iteration 5 measured, not the failed-spawn shape the prose described. The named fix only -- the success-completion branch returns <Fragment key={entry.id}>{durationLine}</Fragment>. All 3 assertions mutation-checked. RB's rejection of the firstAgentBlockId exclusion RE-MEASURED against this different test set and CONFIRMED: 1 of 3 fails and it is the one the task exists to make pass. 4.6a DECIDED -- the prop is DELETED, from AgentTimeline, AgentOutputPanel and all ~45 render sites; the argument is not tidiness but that the reader anyone would add back is exactly F190. Asserted, not merely done: timelineEnvelopeUnwrap now checks not.toHaveProperty('timelineEvents'). AgentActivityTab untouched, route envelope unchanged. 4.7: six tests, verification not repair so mutation-checking IS the proof -- 3 mutations, every one of the six killed by at least one, and the live/reloaded split is real (RELOADED survives the signal-1 mutation, LIVE does not). UI 1492 passed / 144 files (1483 +3 +6), tsc + lint clean. No Python touched. Bundle NOT rebuilt. F269 marked fixed-in-code and left OPEN in FINDINGS.md until phase 6 drives it. CAUTION recorded: a regex sweep over src/__tests__/*.tsx rewrote 5 unrelated files with LF endings (core.autocrlf=true) -- empty git diff but shown modified; restored with git checkout."
-        },
-        {
-            "id": "p5-testing-rule",
-            "status": "done",
-            "title": "a-turn phase 5 -- the testing rule is enforceable (5.1-5.3)",
-            "detail": "DONE iteration 7, all three tasks. 5.1: the shape had MOVED and tasks.md now records that instead of forcing the old wording -- there is no model function left to feed events to, so the shuffled-input scenario lands on the COMPONENT'S read of `runs`. Three tests at the end of timelineRunFacts.test.tsx: identical render under reversed map-key order, plus two that assert each turn gets ITS OWN run's outcome in each order, because order-independence alone is satisfied by a read that is uniformly wrong. Both mutations (first-wins Object.values(runs)[0], last-wins = the deleted reducer's own shape) kill all three. STATED: no mutation was found that separates test 1 from tests 2-3; they are redundant for detection and differ only in what they say. 5.2: MEASURED FIRST and the presentational coupling does not exist -- AgentActivityTab RE-SORTS ascending (AgentActivityTab.tsx:52), so reversing the route reorders nothing on screen. What it changes is WHICH events come back: merge-then-cut-to-50 means descending is what makes those 50 the newest 50, and `runs` is looked up from the returned ids, so the newest runs' outcomes go with them -- F190 by another route. Two tests; mutation-checked by actually setting reverse=False at agents.py:802, both fail, reproducibly. Task 1.4b dies under it too but only incidentally (it neither names nor asserts an ordering). 5.3: the rule is a line in CLAUDE.md's Critical Rules, naming the requirement by title+capability so archiving will not stale it. D-4 NO LONGER EXISTS -- dissolved into R-1 by the 2026-09-01 evening re-triage -- so the note went into R-1, written on the COST side of R-1's open question rather than as an answer to it. Hub 3849 passed / 1 failed (that failure is F272, filed), UI 1495 passed / 144 files (1492 +3), ruff/black/mypy/tsc/eslint green. Bundle NOT rebuilt."
-        },
-        {
-            "id": "f272-persist",
-            "status": "done",
-            "title": "F272 -- settled: the lost terminal status row is the harness, not the product",
-            "detail": "DONE iteration 8. The named experiment (file-backed URL) ran and by itself proved nothing: the in-memory baseline RE-MEASURED at 0 failures/20 against the previous night's 2/20, and 36 alternating whole-file runs came back 18/18 green on BOTH arms -- the race is load-dependent, so an idle machine has no power. Two fixes. (a) LOAD AMPLIFICATION: four concurrent pytest processes, 6 rounds x 4 x 2 arms -- in-memory 5/24, file-backed 0/24, all five the identical output_recording.py:94 db.refresh -> InvalidRequestError traceback (p ~ 0.004). (b) DETERMINISTIC 2x2 over storage and pool, no product code: two sessions, A INSERTs, B close()s, A COMMITs. file + FORCED StaticPool loses the row; file + default QueuePool keeps it -- SAME STORAGE, opposite outcome, so the variable is the pool. engine.py:34-38 passes no poolclass and the dialect picks StaticPool (one connection per process) for :memory: and only for it; no shipped configuration has that. CORRECTION worth more than the verdict: both F272 and F266 said the write had 'already committed' -- it had not, the COMMIT commits an empty transaction because the INSERT was rolled back under it, so deleting db.refresh would HIDE a lost write. F266 settled by the same measurement (B->C, its bisection's unexplained 'load at full-suite scale' is exactly this, and now reproduces in 22s instead of 23min). F273 filed (B) for the one product-side residue: _execute_run's catch-all turns a failed terminal-status write into a log line. Repair candidates MEASURED: file-backed temp DB works but needs assert_engine_is_disposable rewritten; shared-cache + AsyncAdaptedQueuePool is right at the mechanism level and REFUTED at suite scale (8/8, sqlite_master locked, the app fixture's drop_all collides); file + forced StaticPool is 259s vs 4s. Both temporary patches reverted; only FINDINGS.md changed. No product code touched, bundle NOT rebuilt."
-        },
-        {
-            "id": "p6-drive",
-            "status": "done",
-            "title": "a-turn phase 6 -- drive it against a running Hub (6.1-6.7)",
-            "detail": "DONE -- driven in iteration 9, committed and measured in iteration 12. All seven tasks. 6.1-6.3: Hub on 8011 started 02:56:24 from this branch's source with staleness MEASURED (newest .py 02:49:37, older than the process); fixture proj-9e6825cdd64c, deleted at the end; every turn on claude-haiku-4-5. Stopped run 8 checks, failed run 6, interrupted run 6 -- labels, statuses, exit codes and durations all survive a re-read from all three routes. Three things the drive found that no test had said: a stopped run's persisted status row says phase='completed' (deliberate, agent_trigger.py:2141-2145 -- phase means ENDED, the outcome is runs[runId].status); a failed spawn is RETRIED TWICE and anotherRunIsUnderway correctly holds the indicator up across the retries, a path nobody wrote it for; and an interrupted run is almost never the newest turn, because reconciliation reschedules the agent in the same startup -- 6.3b's first read failed three checks and the HARNESS was wrong, not the product. 6.4 bundle rebuilt and stamped, re-verified in iteration 12 on the artefacts: deleted LIFECYCLE_EVENT_STATUS literal 1->0, ended_at 0->2, and refresh_ui_bundle.py --check confirms the stamp matches current hub/ui/src. 6.5 project count 24->23, no enabled job or loop in any of the 23. 6.6 all eight CI checks first-hand: ruff pass, black 537 unchanged, mypy 22 files, tsc clean, eslint clean, HUB SUITE 3850 passed / 84 skipped / 1 xpassed / 0 FAILED (22:56), CLI 440 passed / 3 skipped, UI 1495 passed / 144 files. F272 did NOT reproduce on a byte-identical Python tree (iteration 7 was 3849/1) and the codex watch-item PASSED -- both consistent with the StaticPool artefact, neither a product change. 6.7 honoured: F190 and F269 both still open. Iterations 10 and 11 were cut short at 7% and 5% of this suite with the tree still dirty; iteration 12 committed the artefacts BEFORE measuring, on the argument that git diff 6a97652..HEAD returns three files and none is Python."
-        },
-        {
-            "id": "p7-round",
-            "status": "done",
-            "title": "a-turn phase 7 -- verified by a round that did not build it (7.1-7.4)",
-            "detail": "DONE iteration 13, all five tasks (7.1, 7.1a, 7.2, 7.3, 7.4). F190 and F269 both RETIRED. The comparison was made on ONE capture per assertion point -- t_aturn_p7.py feeds the same bytes to f190_model.evaluate (phase 0 UI) and aturn_model.evaluate (built UI); the envelope's events half is byte-identical to the bare list the route used to return, so the phase-0 model computes what the old UI would have computed from TODAY's data. f190_model.py not edited. Hub 8011 from source, own profile DB, newest .py 02:49:37 vs process start 04:57 (NOT stale, checked first), fresh fixtures deleted after, every turn claude-haiku-4-5. 29 checks 0 failed: stop 9/9, two 9/9, stopfast 11/11. 0.2/0.4/0.5 all MOVED, 0.3 UNCHANGED as required. Claude runners only -- RB's Codex correction honoured, no baseline inferred. TWO FINDINGS the previous phases had only argued: (a) 7.3's isolation test was VACUOUS -- deleting the route's project_id predicate left test_bola.py green at 4 passed, because Project B owns no event naming Project A's run; a cross-project bait was added and the unfiltered query then leaks {'run-bola-a': ...'stopped'}. (b) F269's shape is now the ORDINARY shape of every stopped turn -- three stop delays, two entries every time, no thinking row -- so its Severity C reachability argument is overturned; and 7.1a as written does NOT discriminate, because aturn_model.py does not transcribe firstAgentBlockId. The discriminating evidence is a new component test on the measured shape (label AND stat line together), mutation-killed by reverting 4.5a's fragment. Measured: UI 1496 passed / 144 files, Hub chunk 26 passed, ruff/black/mypy/tsc/eslint clean, bundle stamp matches (tests are excluded from the fingerprint). One transient F272-shaped failure under concurrent UI-suite load, did not reproduce in 5 further runs, no traceback captured, recorded not diagnosed."
-        },
-        {
-            "id": "f272-harness-repair",
-            "status": "open",
-            "title": "Give the Hub suite per-session database connections without weakening the drop_all guard",
-            "detail": "AFTER p7-round, and NOT before the operator has seen decisions_for_user. The Hub suite runs sqlite+aiosqlite:///:memory:, which SQLAlchemy gives a StaticPool -- ONE DBAPI connection shared by every session in the process -- so any session's close() can ROLLBACK another session's uncommitted INSERT out from under its COMMIT. Measured under 4-way load at 5/24 on one test file; it is the cause of both F272 and F266 and is a live risk to any concurrent write in all 3849 tests, not just these. ONLY ONE CANDIDATE STANDS: a file-backed temp database (measured 0/24 under the same load). It requires re-expressing assert_engine_is_disposable (conftest.py:47-64), whose current rule is 'refuse to drop_all anything whose URL lacks :memory:' and which exists because a real operator database was destroyed -- that is the safety-critical part and the reason this is queued rather than done. RULED OUT, each by measurement, do not re-derive: shared-cache in-memory URL + explicit AsyncAdaptedQueuePool (right at the mechanism level, 8/8 failures at suite scale with OperationalError: database table is locked: sqlite_master, because the app fixture's drop_all/create_all collides with the other pooled connections holding the cache open); file + forced StaticPool (259s vs 4s for one 14-test file); shared-cache URL with no explicit pool (SQLAlchemy still picks StaticPool). Reproduction harness for any candidate: 4 concurrent pytest processes of hub/tests/test_a_turn_says_how_it_ended.py, 6 rounds, -p no:randomly, each run captured to its own file with --tb=long. An idle single-process loop measures 0/20 and is useless."
-        },
-        {
-            "id": "archive-a-turn",
-            "status": "done",
-            "title": "Archive a-turn-says-how-it-ended",
-            "detail": "DONE iteration 14. Archived to openspec/changes/archive/2026-09-03-a-turn-says-how-it-ended/. Two boxes (4.4, 4.5) were unticked with **DONE.** in their bodies -- VERIFIED against the tree before ticking: workingIndicator.test.tsx holds no runDurationsByRunId block (the one grep hit is a comment in timelineRunFacts.test.tsx) and all four of its cases are present and named. Delta was ADDED-only -- asserted, not eyeballed -- five requirements, no title collision with the 19 already in agent-stream-events; appended byte-identically modulo line endings (delta CRLF, main spec LF) and confirmed the main spec ENDS WITH the delta body. 19 -> 24 requirements. openspec validate --specs --strict 43/43, --changes --strict 1/1, and the change is gone from openspec list. Hub chunk 18 passed. NO product code moved, so no rebuild and no drive. Ordering constraint READ not assumed: it binds a-conflict-refusal and a-loop-declares-evidence, both archived 2026-09-01, and does not bind this change. APPROVALS.md deliberately untouched -- spec-queue/README.md says it is the DECIDE session's file, not either window's."
-        },
-        {
-            "id": "ledger-a-list-corrected",
-            "status": "done",
-            "title": "The open severity-A list was one; it is two, and four more are unverified",
-            "detail": "DONE iteration 14, after the queue emptied. Rebuilt the open-A list from FINDINGS.md's 243 sections instead of reading the index paragraph, which claimed 'the open severity-A list is one -- F271'. F188 (A) is OPEN AT HEAD and had no **Status:** line at all -- confirmed by reading the code it names, agent_trigger.py:878-883 still raises the worktree refusal with no agent_wide=True while :573, :594 and :624 pass it. Statically re-confirmed, NOT re-driven, and labelled that way. F140/F142/F154/F155 each have an IMPLEMENTED AND ARCHIVED change naming them (a-flow-briefing-names-its-contract, a-review-a-flow-cannot-staff-is-named, a-review-nobody-is-doing-is-named, a-conflict-refusal-names-what-clears-it) while their sections still read open -- annotated **unverified, not retired**, DELIBERATELY: an archived change is a plan marked done, which this repo's own rule says closes nothing, and retiring them needs a drive like the one F190 got. F188 was NOT fixed even though the repair looks like one flag, because the night playbook's rule is that a finding with no proposal needs the day window first; deciding at 05:30 that a finding is small enough to skip the spec loop is the call this arrangement exists to prevent."
-        }
-    ],
-    "decisions_for_user": [
-        {
-            "id": "f272-harness-guard",
-            "raised": "2026-09-03T02:52:23+01:00",
-            "question": "The Hub test suite's :memory: database gives every session ONE shared connection (SQLAlchemy StaticPool), which silently discards committed writes under concurrency -- measured 5 failures in 24 runs under load, and it is the cause of both F272 and F266. The only repair still standing is to run the suite on a file-backed temp database. That means rewriting assert_engine_is_disposable (hub/tests/conftest.py:47-64), whose current rule is 'refuse to drop_all any URL without :memory: in it' and which CLAUDE.md records as having been written after a real operator database was destroyed. The replacement rule would be 'refuse unless this suite created the file itself, under a temp directory'. Same purpose, different mechanism -- but the cost of getting it wrong is the same destroyed database. Confirm the guard may be re-expressed this way, or name the rule you want instead. Queued as f272-harness-repair; nothing will touch conftest.py until you answer. Everything else about F272 is settled and needs nothing from you."
-        },
-        {
-            "id": "findings-ledger-retirement",
-            "raised": "2026-09-03T05:24:55+01:00",
-            "question": "Nothing in the cycle retires a FINDINGS.md row when the change that fixes it is archived. Measured tonight: F140, F142, F154 and F155 each have an implemented, archived change naming them and each section still reads 'open, filed not fixed'; the index paragraph was then revised from the newest finding rather than recomputed, so it read 'the open severity-A list is one -- F271' while F188 (A, open at HEAD, no Status line at all) sat invisible behind it for a week. Tonight's a-turn change is the first to close the loop by hand, and only because task 6.7 said to. Two candidate rules: (a) the archiving step must retire every finding its change names, or mark it unverified-pending-drive; or (b) the day window recomputes the open-A list from the sections at the start of each FILL. (a) is cheaper and catches it at the moment the knowledge exists; (b) catches findings no change ever named, which is how F188 was lost. They are not exclusive. No work is blocked on this -- the four rows are annotated unverified and F188 is handed to the day window either way."
-        }
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-03-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "2912736",
+    "stop_at":  "2026-09-04T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-03-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
