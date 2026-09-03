@@ -79,6 +79,39 @@ load failing. Its fix shape is *not* a decision waiting on the operator the way 
 render-the-error half is a plain repair. Only the second half (should a PUT that blanks non-empty
 stored content ask first?) is the operator's call.
 
+**Revised 2026-09-03 (night window, iteration 14): the line above is wrong, and it is wrong in the
+direction that hides work.** The queue emptied tonight, so the open severity-A list was rebuilt from
+the sections themselves rather than read off this paragraph. **It is two, not one — F271 and
+F188** — and four more entries are in a third state this index has no word for.
+
+| Finding | What the section says | What is actually true, measured 2026-09-03 |
+|---|---|---|
+| **F271** | open | **open**, and unchanged. No proposal, no change directory. |
+| **F188** | filed, no `**Status:**` line at all | **open at HEAD, confirmed by reading the code it names.** `agent_trigger.py:878-883` still raises the worktree refusal with no `agent_wide=True`, while three sibling sites (`:573`, `:594`, `:624`) pass it. Nothing anywhere proposes it. |
+| **F140** | *"open, filed not fixed"* | has an **implemented and archived** change — `2026-09-01-a-flow-briefing-names-its-contract` |
+| **F142** | *"open, filed not fixed"* | has an **implemented and archived** change — `2026-09-01-a-review-a-flow-cannot-staff-is-named` |
+| **F154** | no resolution prose | has an **implemented and archived** change — `2026-09-01-a-review-nobody-is-doing-is-named` |
+| **F155** | no resolution prose | has an **implemented and archived** change — `2026-09-01-a-conflict-refusal-names-what-clears-it` |
+
+**The four in the third state are recorded as `unverified`, not as retired, and that distinction is
+the whole point.** What was measured is that a change naming each of them was archived on
+2026-09-01; that is a *plan having existed and been marked done*, which this repository's own rule
+says is not evidence a defect is gone. Retiring them needs what F190 got tonight — a drive of the
+built product. Do not mark them fixed on the strength of the archive path.
+
+**How the miscount happened is worth more than the count.** Each of the four was retired *as a
+change* and nobody walked back to the ledger row that started it; the index was then revised from
+the newest finding rather than recomputed, so four stale `open` rows and one missing `**Status:**`
+line summed to *"the list is one"*. The same arithmetic will happen again on the next archive —
+tonight's own `a-turn-says-how-it-ended` is the first change to close the loop by hand (F190 and
+F269 carry `RETIRED 2026-09-03` markers in their own sections), and it only did so because a task
+said to.
+
+**F188 is the row this window is handing to the day window.** It is severity A, it is open at HEAD,
+and it has no proposal — so by the night window's own rule (`.claude/loops/night-window.md`: *a
+finding with no proposal needs the day window first*) it is not this window's to fix, however small
+the repair looks. It was invisible for a week because the index said the A list was one.
+
 **And one observation that outranks any single row of that table.** F88, F89 and F90 were found in
 one iteration, in three unrelated subsystems, and every one of them was a mechanism this repository
 tests *thoroughly* — against a state the product never produces. F88's access tests pass a
@@ -10141,6 +10174,8 @@ first and withdraws the entry that queues behind the running turn.
 
 ## F140 (A) — a flow's briefing tells the agent to "finish the task and stop", and never tells it, or the Hub, what finishing means
 
+**Unverified, not retired — added 2026-09-03 (night window, iteration 14).** `openspec/changes/archive/2026-09-01-a-flow-briefing-names-its-contract/` is an implemented and archived change that names this finding. That is a plan marked done, not a drive of the built product, so this entry stays open until somebody re-drives it. Any 'open, filed not fixed' wording below predates the change and should be read against this line.
+
 **Status:** open, filed not fixed. Two defensible repairs exist and choosing between them is a
 design decision (decision D5's stated line for filing). Found driving **row 12, flows** — the first
 time that row has been reached by any sweep.
@@ -10414,6 +10449,8 @@ says which of these held rather than printing four thousand lines of JSON.
 ---
 
 ## F142 (A) — a task the operator marks finished can never be reviewed by its flow, and the stall blames the queue instead
+
+**Unverified, not retired — added 2026-09-03 (night window, iteration 14).** `openspec/changes/archive/2026-09-01-a-review-a-flow-cannot-staff-is-named/` is an implemented and archived change that names this finding. That is a plan marked done, not a drive of the built product, so this entry stays open until somebody re-drives it. Any 'open, filed not fixed' wording below predates the change and should be read against this line.
 
 **Status:** open, filed not fixed. It changes which of F140's repairs is worth building, which is
 why it was worth establishing before the operator chooses. Found by
@@ -11431,6 +11468,8 @@ work. That contrast is the most useful thing this drive produced.
 
 ## F154 (A) — a review that ends without a verdict wedges the task forever, and the flow answers "nothing is wrong"
 
+**Unverified, not retired — added 2026-09-03 (night window, iteration 14).** `openspec/changes/archive/2026-09-01-a-review-nobody-is-doing-is-named/` is an implemented and archived change that names this finding. That is a plan marked done, not a drive of the built product, so this entry stays open until somebody re-drives it. Any 'open, filed not fixed' wording below predates the change and should be read against this line.
+
 **Reproduced live, twice, on `task-5ae53e9b339c`.** The clean lane's reviewer (`alpha`) inspected the
 work, concluded in its own transcript that it was correct — *"The implementation is working
 correctly"* — and its turn ended **without `update_task` ever being called**. The task stayed
@@ -11503,6 +11542,8 @@ owns is what happens afterwards, and afterwards is F154.**
 ---
 
 ## F155 (A) — "Resolve the conflict on the branch, then approve" cannot be followed, by anybody
+
+**Unverified, not retired — added 2026-09-03 (night window, iteration 14).** `openspec/changes/archive/2026-09-01-a-conflict-refusal-names-what-clears-it/` is an implemented and archived change that names this finding. That is a plan marked done, not a drive of the built product, so this entry stays open until somebody re-drives it. Any 'open, filed not fixed' wording below predates the change and should be read against this line.
 
 **The refusal names a remedy that provably does not clear it.** `_merge_detail`
 (`hub/hub/requirement_gate.py:151-164`) says:
@@ -13739,6 +13780,12 @@ reporter: whether a stopped process is actually **dead**, and whether the path t
 second did not.
 
 ## F188 (A) — a repairable workspace fault destroys the operator's message after three schedules, and the identical fault one line away holds it forever
+
+**Status:** **open**, re-confirmed by reading the code at HEAD on 2026-09-03 (night window,
+iteration 14) — `agent_trigger.py:878-883` still raises with no `agent_wide=True` while `:573`,
+`:594` and `:624` pass it. Statically re-confirmed, **not re-driven**; the reproduction below is
+still the only live evidence. No proposal and no change directory names this finding. Handed to the
+day window as the open severity-A row the index had lost.
 
 `hub/hub/api/v1/agent_trigger.py:879-883` raises the worktree refusal:
 
