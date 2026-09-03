@@ -163,20 +163,20 @@ only ones in this phase whose mutation check could not be run here.
 
 ## 5. Reconcile what already exists
 
-- [ ] 5.1 `hub/tests/test_a_delivery_attempt_means_a_delivery.py` defines `BAD_CHECKOUT` as
+- [x] 5.1 `hub/tests/test_a_delivery_attempt_means_a_delivery.py` defines `BAD_CHECKOUT` as
   *"Could not prepare isolated worktree for builder: object not found"* — F188's exact sentence,
   used there as the *entry-specific* example. Repoint it at a real task-checkout refusal so the file
   still tests what its docstring says it tests. Its assertion (still counts, still gives up) is
   correct and must not change.
-- [ ] 5.2 Grep for other readers of the old sentence — `api/v1/inbound_queue.py`'s status
+- [x] 5.2 Grep for other readers of the old sentence — `api/v1/inbound_queue.py`'s status
   derivation, any UI string, any test — and confirm none of them matches on its text. Record what
   the grep found in the change, including "nothing", because the next round should not have to
   re-run it to know.
-- [ ] 5.3 Re-read `TriggerAgentError`'s `agent_wide` docstring (`agent_trigger.py:304-318`), which
+- [x] 5.3 Re-read `TriggerAgentError`'s `agent_wide` docstring (`agent_trigger.py:304-318`), which
   cites `:756` as the entry-specific worktree example. Update the citation and the sentence to the
   split this change makes, so the flag's documented invariant ("only refusals that are certainly
   agent-wide are marked") stays true of the code beneath it.
-- [ ] 5.4 **The same job one module over, and it is inside the branch being edited.**
+- [x] 5.4 **The same job one module over, and it is inside the branch being edited.**
   `turn_scheduler.py:225-233`, the comment closing the counting branch, states flatly: *"a task's
   checkout that could not be prepared is the **task's** workspace, not the agent's, so other input
   really could run and the head entry really is in the way (design D3a)."* That is the claim this
@@ -185,6 +185,73 @@ only ones in this phase whose mutation check could not be run here.
   repoint the citation: `D3a` there means
   `2026-08-28-a-delivery-attempt-means-a-delivery`, and this change's own predicate decision is D8
   precisely so the two do not collide in this file.
+
+**5.2's grep, recorded so no later round re-runs it.**
+`grep -rn 'Could not prepare isolated worktree' --include=*.py --include=*.ts --include=*.tsx .`
+(excluding `.agentweave/worktrees/*`, which are stale checkouts of this repo inside old agent
+workspaces and are not readers), re-run 2026-09-04 **after** phase 4 changed the sentences:
+
+| hit | what it is | done |
+|---|---|---|
+| **no product line at all** | | the "nothing" the task asked to be recorded |
+| **no UI string** (`.ts`/`.tsx`) | | nothing in the dashboard matches on this text |
+| `test_a_delivery_attempt_means_a_delivery.py:37` | `BAD_CHECKOUT` | repointed at the task arm (5.1) |
+| `test_a_blocked_agent_workspace_holds_its_input.py:9` | the module docstring quoting F188 as *history* | left: it is explicitly historical |
+| `test_checkpoint_cutover.py:1069,1072` | a `ScheduleResult` stub, **not named by 5.1** | repointed, and why is below |
+
+`api/v1/inbound_queue.py`'s status derivation was checked **separately**, because the grep cannot
+clear it: it never matches on the refusal's text at all. `queue_status` asks its read-only
+questions in order and, if none of them answered, passes the stored sentence through verbatim
+(`reason = next((entry.waiting_reason for entry in entries if entry.waiting_reason), None)`). So
+phase 4's remedy clause reaches the operator's queue status *because* nothing parses it - which is
+what leg 6.2 is going to read off the screen.
+
+**Decision recorded for `test_checkpoint_cutover.py` (the file 5.2 found and 5.1 does not name).**
+Repointed at the task arm, same as 5.1. The sentence there is opaque payload: the branch under test
+decides by comparing the refusal's `entry_ids` against the successor's entries and never reads the
+text, so nothing measurable changes - confirmed by the file passing identically before and after.
+That is the argument *for* doing it rather than against: a test that quotes a sentence the product
+no longer raises reads as evidence about the product and is not, which is the same defect 5.1
+exists to repair one file over.
+
+**5.1's own note.** `BAD_CHECKOUT` is now `agent_trigger`'s **task** arm wrapping
+`ensure_task_worktree`'s wrong-ref refusal, truncated after the diagnosis. The task arm is the
+right choice, not merely a valid one: it is the arm that stays flagless, so it is the arm whose
+entry is still in the way of everything queued behind it, which is exactly what
+`test_an_entry_specific_refusal_still_counts_and_still_gives_up` protects. Its assertion is
+untouched.
+
+**The three stubs that quote the sentence in truncated form** (this file's phase-1 stub, and both
+constants in `test_a_blocked_workspace_counts_where_input_could_run.py`) were checked rather than
+extended. Their comments claimed to hold what the product raises "today", and after phase 4 that is
+no longer literally true - the raised sentence now carries a remedy clause. Each comment now says
+it stops after the diagnosis and points at
+`test_a_blocked_workspace_refusal_states_its_remedy.py`, where each remedy is asserted against the
+obstruction it was written for. Restating the remedies in stubs that assert only flags and queue
+state would put the same sentence in five places and give phase 4's wording five chances to drift.
+
+**5.3 found the paragraph wrong about the code, not merely stale, and it is now F276 in the
+ledger.** The `agent_wide` docstring cited `:479` (*no such agent*) as a site that is "request-level
+*and* agent-wide", offered as the proof that the two axes cross. That raise passes
+`request_level=True` and nothing else, and never passed `agent_wide`: F114 (`8450831`) marked three
+sites and this was not one of them, and `grep -n 'agent_wide=True' hub/hub/` still returns exactly
+those three. **No site in the Hub raises with both flags set.** The paragraph now names the task arm
+of the workspace `except` as the real environment-level-but-entry-specific example - a site that
+exists - and records the measurement inline. Whether the missing mark is itself a defect (an agent
+that does not exist cannot run at all, which is this flag's own definition, and its queued input is
+counted down and withdrawn) is a behaviour question outside this change's requirement; F276 carries
+it with what was measured, unproposed.
+
+**5.4, and what made it worth a task of its own.** The comment closing the counting branch asserted
+flatly that *"a task's checkout that could not be prepared is the **task's** workspace, not the
+agent's, so other input really could run and the head entry really is in the way"* - true of one arm
+and, after this change, false of the other, sitting four lines below the condition that now
+distinguishes them. It is rewritten as two bullets, one per arm, saying which arm carries which flag
+and why the agent arm asks the helper before believing the head is in anybody's way. Citations
+separated: D3a is `2026-08-28-a-delivery-attempt-means-a-delivery`'s (the rule this branch applies),
+D8 is this change's (the predicate the helper reaches for), D1 is the split at the raise site. No
+grep for a sentence could have reached this comment, because it quotes none - which is the reason
+5.2 and 5.4 are separate tasks.
 
 ## 6. Verify it against the product, not only the suite
 

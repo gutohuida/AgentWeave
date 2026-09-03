@@ -41,6 +41,12 @@ def _blocked_agent_workspace(agent: str) -> TriggerAgentError:
 
     Built per agent rather than shared, because the sentence names the agent and a reader comparing
     two tests should be able to see that the *only* difference between them is the queue.
+
+    The sentence stops after the diagnosis. The real one is longer — phase 4 appended a remedy
+    clause naming the directory to remove — and that is deliberate here rather than stale (checked
+    by task 5.1): no assertion in this file reads the text, and each remedy is asserted against the
+    obstruction it was written for in `test_a_blocked_workspace_refusal_states_its_remedy.py`. What
+    the scheduler reads is the flag.
     """
     return TriggerAgentError(
         409,
@@ -53,6 +59,7 @@ def _blocked_agent_workspace(agent: str) -> TriggerAgentError:
 #: The **task** arm of the same `except`, which carries no flags at all — phase 2 split them for
 #: exactly this reason. A task's checkout is not the agent's, so other input really can run and the
 #: head really is in the way (design D3a). Held as the control for the third test below.
+#: Truncated after the diagnosis for the same reason as the agent arm above.
 BLOCKED_TASK_CHECKOUT = TriggerAgentError(
     409,
     "Could not prepare the checkout for task task-aabb01: refusing existing path "

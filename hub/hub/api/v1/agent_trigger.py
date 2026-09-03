@@ -311,12 +311,27 @@ class TriggerAgentError(Exception):
         #: agent with no runner bound destroyed the first, and two clicks of the Continue button
         #: destroyed it faster, because each one counted an attempt for a delivery nobody made.
         #:
-        #: **Marked conservatively, and the two axes really do cross.** `:479` (no such agent) is
-        #: request-level *and* agent-wide; `:756` (the isolated worktree could not be prepared) is
-        #: environment-level *and* entry-specific, because the workspace it failed to prepare is
-        #: the **task's** rather than the agent's. Only refusals that are certainly agent-wide are
-        #: marked, so an unmarked site keeps counting exactly as it does today and no starvation
-        #: can be reintroduced by getting this wrong.
+        #: **Marked conservatively, and the axes are independent by design.** The clearest
+        #: environment-level-but-entry-specific site is the **task** arm of the workspace `except`
+        #: below (`Could not prepare the checkout for task ...`): nothing about the agent is wrong,
+        #: and the workspace it failed to prepare is the **task's**, so the entry really is in the
+        #: way of everything queued behind it and it goes on counting with no flag at all. The arm
+        #: beside it — the agent's *own* workspace — is the case this paragraph used to fold into
+        #: that one, and it now carries `agent_workspace_unavailable` instead; see that flag.
+        #:
+        #: Only refusals that are *certainly* agent-wide are marked, so an unmarked site keeps
+        #: counting exactly as it did before the flag existed and no starvation can be
+        #: reintroduced by getting this wrong.
+        #:
+        #: **Measured 2026-09-04, task 5.3 of `a-blocked-agent-workspace-holds-its-input`, and
+        #: recorded because it is not what this paragraph claimed.** It cited `:479` — the *no such
+        #: agent* refusal — as a site that is "request-level *and* agent-wide". It is not: that
+        #: raise passes `request_level=True` and nothing else, and never passed `agent_wide` (F114
+        #: marked three sites, `8450831`, and that was not one of them). **No** site in the Hub
+        #: raises with both flags set. Whether the missing mark is an oversight — an agent that
+        #: does not exist cannot run at all, which is this flag's own definition of agent-wide, and
+        #: its queued input is being counted down and withdrawn — is a behaviour question this
+        #: change does not touch and F276 in the ledger now carries.
         self.agent_wide = agent_wide
         #: Is this refusal that **the agent's own workspace** could not be prepared?
         #:

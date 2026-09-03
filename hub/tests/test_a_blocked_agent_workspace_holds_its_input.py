@@ -49,6 +49,14 @@ TRIGGER = "hub.api.v1.agent_trigger.trigger_agent_directly"
 #: replaced that raise with two, so the stub is repointed here at the real agent-arm refusal --
 #: otherwise this file would go on reproducing a refusal the product no longer emits, and the flip
 #: below would be a flip of nothing.
+#:
+#: **Truncated after the diagnosis, and task 5.1 checked that this is still honest.** Phase 4 gave
+#: the `worktrees` refusal a remedy clause ("Move or delete that directory (`rm -r ...`) ...", and
+#: a different one per obstruction), so the sentence the product raises is longer than the one
+#: below. Nothing here reads the text except the `waiting_reason` assertion, which compares it
+#: against this same constant, and the remedies are asserted where they are written, in
+#: `test_a_blocked_workspace_refusal_states_its_remedy.py`. What this file is about is the
+#: **flags** and the queue.
 BLOCKED_AGENT_WORKSPACE = TriggerAgentError(
     409,
     "Could not prepare f188-blocked's own workspace: refusing existing path "

@@ -427,11 +427,36 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                 # faster. Every schedule counted an attempt, so the operator's own attempts to
                 # find out why nothing was happening were what consumed the allowance.
                 #
-                # Only refusals that are *certainly* agent-wide carry the flag. A refusal that
-                # blocks one entry keeps counting, including the one that looks environmental and
-                # is not: a task's checkout that could not be prepared is the **task's** workspace,
-                # not the agent's, so other input really could run and the head entry really is in
-                # the way (design D3a).
+                # Only refusals that are *certainly* agent-wide carry the flag, and a refusal
+                # that blocks one entry keeps counting (design D3a of
+                # `2026-08-28-a-delivery-attempt-means-a-delivery`).
+                #
+                # **This comment used to say the workspace refusal was one of those, flatly, and
+                # for one of its two arms that was wrong** — which is F188, and which
+                # `a-blocked-agent-workspace-holds-its-input` is the change that split them. The
+                # two arms are now different sites raising different sentences, and the `or` above
+                # is where the difference lands:
+                #
+                #   * a **task's** checkout that could not be prepared is the *task's* workspace,
+                #     not the agent's. The agent is fine, its other input can run, and the head
+                #     entry really is in the way — so that arm carries no flag at all and reaches
+                #     this branch exactly as it did before either flag existed.
+                #   * the agent's **own** workspace is the case that argument does not survive.
+                #     Nothing of this agent's runs in a directory the Hub cannot provision, so
+                #     there is usually nothing behind the head that dropping it would release, and
+                #     dropping it costs the operator the message F96 promised to hold. That arm
+                #     carries `agent_workspace_unavailable`, and the condition above asks
+                #     `other_input_would_have_run_elsewhere` before believing the head is in
+                #     anybody's way — because "usually" is not "always", and a task-bound entry
+                #     waiting in another conversation would have run in the task's checkout, which
+                #     this failure never touched.
+                #
+                # Two citations, kept apart on purpose. The rule *this* branch applies is D3a of
+                # the change named above. The predicate the helper reaches for — whether some other
+                # entry's task would have taken a checkout of its own — is design **D8** of
+                # `a-blocked-agent-workspace-holds-its-input`, numbered away from D3a precisely so
+                # that a reference in this file names exactly one of them; the split at the raise
+                # site itself is that change's D1.
                 abandoned: list[InboundQueueEntry] = []
                 for entry in selected:
                     entry.delivery_attempts = (entry.delivery_attempts or 0) + 1

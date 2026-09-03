@@ -33,8 +33,27 @@ NO_RUNNER = TriggerAgentError(
     409, "No runner is bound to this agent. Bind one in the Hub UI.", agent_wide=True
 )
 #: A refusal that blocks this entry only — the task's checkout could not be prepared.
+#:
+#: Repointed by task 5.1 of `a-blocked-agent-workspace-holds-its-input`. This used to read
+#: *"Could not prepare isolated worktree for builder: object not found"* — F188's exact sentence,
+#: from the days when one `except` in `agent_trigger` covered both workspaces and raised one
+#: wording for both. That change split the `except` in two, and the arm this file needs is the
+#: **task** one: it is the arm that stays flagless, so it is the arm whose entry is still in the
+#: way of everything queued behind it. The old sentence is now raised nowhere, and an entry-specific
+#: example that the product cannot produce is not an example of anything.
+#:
+#: The wording below is the real thing: `agent_trigger`'s task arm wrapping the
+#: `IsolationUnavailableError` `worktrees.ensure_task_worktree` raises for a directory that is not
+#: the registered checkout. Truncated after the diagnosis — the remedy the sentence now carries is
+#: asserted where it is written, in `test_a_blocked_workspace_refusal_states_its_remedy.py`, and
+#: nothing here reads the text. What this file reads is the **flags**, which is the point: no
+#: `agent_wide`, no `agent_workspace_unavailable`, so the counter treats it exactly as it did
+#: before either flag existed.
 BAD_CHECKOUT = TriggerAgentError(
-    409, "Could not prepare isolated worktree for builder: object not found"
+    409,
+    "Could not prepare the checkout for task task-f114bad: refusing existing path "
+    "/repo/.agentweave/tasks/task-f114bad: it is not the registered git worktree "
+    "for refs/heads/agentweave/task/task-f114bad",
 )
 
 

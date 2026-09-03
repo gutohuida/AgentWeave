@@ -1064,12 +1064,24 @@ async def test_a_reason_belonging_to_other_input_is_not_read_as_the_successors(a
         predecessor = await _conversation(db)
         checkpoint = await _ready_checkpoint(db, predecessor)
 
+        # The sentence is opaque payload here: the branch under test decides by comparing
+        # `entry_ids` against the successor's entries and never reads the text. It was
+        # *"Could not prepare isolated worktree for claude-1"* until task 5.2 of
+        # `a-blocked-agent-workspace-holds-its-input` grepped for that string; the product stopped
+        # raising it when phase 2 split the workspace `except` in two, so it is repointed at the
+        # arm this scenario is about — a refusal that belongs to one entry rather than the agent.
+        # Nothing measurable changes, and that is the whole reason to do it: a test that quotes a
+        # sentence nothing raises reads as evidence about the product and is not.
         async def _refused_elsewhere(project_id, agent):
+            refusal = (
+                "Could not prepare the checkout for task task-c0ffee: refusing existing path "
+                "/repo/.agentweave/tasks/task-c0ffee: it is not the registered git worktree"
+            )
             return ScheduleResult(
-                waiting_reason="Could not prepare isolated worktree for claude-1",
+                waiting_reason=refusal,
                 refusal=TurnRefusal(
                     status_code=409,
-                    detail="Could not prepare isolated worktree for claude-1",
+                    detail=refusal,
                     entry_ids=("entry-somebody-else",),
                 ),
             )

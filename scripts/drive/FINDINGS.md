@@ -18992,3 +18992,55 @@ abandonment reaching the operator at all.
 loop was created in this project at any point - nothing is enabled. `p6driver0903d1` is left bound
 to the bad-flag runner, which is how F274's reproduction ends; rebind it to `haiku-0903d1` before
 reusing the fixture for anything that needs a real turn.
+
+# Filed outside a drive
+
+## F276 (C) - `agent_wide`'s documented example was never marked `agent_wide`, and no site sets both flags
+
+**Status:** open. Filed 2026-09-04 (night window, phase 5 of
+`a-blocked-agent-workspace-holds-its-input`). **The documentation half is fixed in the same commit
+that filed this; the behaviour question below is what stays open.**
+
+`TriggerAgentError.agent_wide`'s docstring (`hub/hub/api/v1/agent_trigger.py`) claimed, as its
+illustration that the flags are independent axes:
+
+> **Marked conservatively, and the two axes really do cross.** `:479` (no such agent) is
+> request-level *and* agent-wide; ...
+
+Measured by reading the raise sites rather than the prose:
+
+| site | flags actually passed |
+|---|---|
+| `agent_row is None` - *"is not an agent in this project"* | `request_level=True` **only** |
+| `runner_id is None` | `agent_wide=True` only |
+| `lifecycle == "archived"` | `request_level=True` only |
+| unsupported runner (501) | `request_level=True` only |
+| `not probe["runnable"]` | `agent_wide=True` only |
+| `runner_row is None` | `agent_wide=True` only |
+
+`grep -n 'agent_wide=True' hub/hub/` returns **three** lines, and the no-such-agent raise is not
+one of them. It never was: F114 (`8450831`) added the flag to exactly those three sites, and
+`git log -S` shows the no-such-agent sentence has been edited once since (`96b54cd`, F33) without
+gaining it. **No site in the Hub raises with both flags set**, so the sentence "the two axes really
+do cross" had no instance behind it in the code it was documenting.
+
+**Why this is a finding and not a typo.** The flag's own definition is *"does this refusal stop the
+agent running at all, rather than blocking this input in particular"*, and an agent that does not
+exist in the project cannot run at all - so by that definition the unmarked site qualifies. What
+the missing mark costs: queued input for an agent whose row is absent (a name deleted after the
+input was queued, or a job naming a mistyped agent) has a delivery attempt counted on every
+schedule and is **withdrawn at the third**, with `abandoned_reason` claiming a delivery failed
+three times. That is F114's exact scenario with a different repair - *create the agent, or correct
+the name* instead of *bind a runner* - and F114's fix does not reach it.
+
+Not fixed here, deliberately: `a-blocked-agent-workspace-holds-its-input` scopes itself to the
+*workspace* refusal, its phase 5 is a reconcile-the-prose phase, and marking a fourth site
+`agent_wide` is a behaviour change with its own scenario ("does the product hold input addressed to
+a name that does not exist, or give up on it?") that deserves the round discipline rather than a
+drive-by. It is also genuinely arguable in the other direction: `request_level=True` already tells
+the caller *no*, and holding a message addressed to a name nobody ever registered may be worth less
+than the queue slot.
+
+What was fixed: the paragraph now states what the code does, points at the task arm of the
+workspace `except` as the real environment-level-but-entry-specific example, and records this
+measurement inline so the next reader does not re-derive it.
