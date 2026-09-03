@@ -1,17 +1,17 @@
 ## 1. Reproduce it first
 
-- [ ] 1.1 Add `hub/tests/test_a_blocked_agent_workspace_holds_its_input.py`. Seed one agent, one
+- [x] 1.1 Add `hub/tests/test_a_blocked_agent_workspace_holds_its_input.py`. Seed one agent, one
   conversation, one unbound operator entry, and patch `trigger_agent_directly` to raise today's
   refusal verbatim — `TriggerAgentError(409, "Could not prepare isolated worktree for <agent>: ...")`
   with no flags. Schedule the agent `DELIVERY_ATTEMPT_LIMIT` times and assert the entry ends
   `withdrawn` with `abandoned_reason` claiming it "failed 3 times". **Run it against unmodified code
   and confirm it passes.** A reproduction that does not pass first is not a reproduction, and this
   change's behaviour claim at HEAD is inference from the code, not a fresh drive.
-- [ ] 1.2 Assert the asymmetry in the same file: the identical loop with `NO_RUNNER`
+- [x] 1.2 Assert the asymmetry in the same file: the identical loop with `NO_RUNNER`
   (`agent_wide=True`) leaves the entry `queued` at 0 attempts. Two refusals, same four schedules,
   opposite outcomes — that contrast is the finding, and it belongs in the suite rather than only in
   the proposal.
-- [ ] 1.3 Reproduce the two arms at the `worktrees` layer, without the Hub: in a temporary git repo,
+- [x] 1.3 Reproduce the two arms at the `worktrees` layer, without the Hub: in a temporary git repo,
   put a plain directory at `.agentweave/worktrees/<agent>` and assert `ensure_worktree` raises
   `IsolationUnavailableError`; then assert the message contains no remedy today. This is the case
   the ledger drove, pinned where it can be asserted cheaply.

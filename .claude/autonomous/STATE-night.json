@@ -8,18 +8,18 @@
   "parent_branch": "master",
   "parent_sha": "2912736",
   "stop_at": "2026-09-04T07:00:00+01:00",
-  "iteration": 1,
+  "iteration": 2,
   "log_file": ".claude/autonomous/2026-09-03-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "a-blocked-p1",
-  "next_action": "openspec/changes/a-blocked-agent-workspace-holds-its-input, phase 1 only (tasks 1.1, 1.2, 1.3). Write hub/tests/test_a_blocked_agent_workspace_holds_its_input.py and run it AGAINST UNMODIFIED CODE -- it must pass before any product line is touched. If it does not reproduce, stop, do not implement, and record why in decisions_for_user: the change's behaviour claim at HEAD is inference from the code, not a fresh drive. Tick 1.1-1.3 in tasks.md, commit, push. Touch no other phase.",
+  "current": "a-blocked-p2",
+  "next_action": "openspec/changes/a-blocked-agent-workspace-holds-its-input, phase 2 only (tasks 2.1-2.4) in hub/hub/api/v1/agent_trigger.py. 2.1: add agent_workspace_unavailable: bool = False to TriggerAgentError.__init__ and store it, with a docstring paragraph in the style of its three neighbours -- what it means, why it is not agent_wide (design D2), and that it does NOT imply transient unlike workspace_unavailable. 2.2: split the except at :879-883 on worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id) -- design D1, never on the exception type or its message. 2.3: the agent arm raises with the flag and names the agent's own workspace; the task arm keeps today's flags EXACTLY and names the TASK. 2.4: a test asserting the dispatch on FLAGS, not wording, with resolve_turn_workspace stubbed to raise -- a turn bound to no task carries the flag, one bound to a task does not. Phase 1's test file must stay green: at the end of phase 2 the flag exists but turn_scheduler does not read it yet, so 1.1 still asserts withdrawal and must still pass. Touch no other phase; do not edit turn_scheduler.py.",
   "queue": [
     {
       "id": "a-blocked-p1",
-      "status": "open",
+      "status": "done",
       "title": "a-blocked phase 1 -- reproduce F188 first",
-      "detail": "Tasks 1.1-1.3. New file hub/tests/test_a_blocked_agent_workspace_holds_its_input.py: (1.1) one agent, one conversation, one unbound operator entry, trigger_agent_directly patched to raise TriggerAgentError(409, 'Could not prepare isolated worktree for <agent>: ...') with NO flags; schedule DELIVERY_ATTEMPT_LIMIT times; assert withdrawn plus abandoned_reason claiming it failed 3 times. (1.2) the same loop with NO_RUNNER (agent_wide=True) leaves the entry queued at 0 attempts -- the asymmetry IS the finding. (1.3) at the worktrees layer without the Hub: a plain directory at .agentweave/worktrees/<agent> in a temp git repo makes ensure_worktree raise IsolationUnavailableError, and assert the message carries no remedy today. GATE: it must pass unmodified. A reproduction that does not pass first is not a reproduction."
+      "detail": "Tasks 1.1-1.3. New file hub/tests/test_a_blocked_agent_workspace_holds_its_input.py: (1.1) one agent, one conversation, one unbound operator entry, trigger_agent_directly patched to raise TriggerAgentError(409, 'Could not prepare isolated worktree for <agent>: ...') with NO flags; schedule DELIVERY_ATTEMPT_LIMIT times; assert withdrawn plus abandoned_reason claiming it failed 3 times. (1.2) the same loop with NO_RUNNER (agent_wide=True) leaves the entry queued at 0 attempts -- the asymmetry IS the finding. (1.3) at the worktrees layer without the Hub: a plain directory at .agentweave/worktrees/<agent> in a temp git repo makes ensure_worktree raise IsolationUnavailableError, and assert the message carries no remedy today. GATE: it must pass unmodified. A reproduction that does not pass first is not a reproduction. DONE iteration 2: 3 passed against unmodified code (git status showed only the untracked test file), and 1.1 mutation-checked -- adding agent_wide=True to BLOCKED_AGENT_WORKSPACE turns it red by name. 1.1 and 1.3 are written to FLIP in phases 3 and 4; 1.2 must keep passing untouched."
     },
     {
       "id": "a-blocked-p2",
