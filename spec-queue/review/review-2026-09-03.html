@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave daily review — 2026-09-03</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --panel-2: #f4f4f2;
+    --ink: #1c1c1a;
+    --ink-dim: #5c5c56;
+    --ink-faint: #85857d;
+    --rule: #e0e0da;
+    --rule-strong: #c9c9c1;
+    --accent: #6b4fbb;
+    --sev-a: #b3261e;
+    --sev-a-bg: #fbe9e7;
+    --sev-b: #a8590a;
+    --sev-b-bg: #fdf0e0;
+    --sev-c: #4d6a1f;
+    --sev-c-bg: #eef4e2;
+    --sev-d: #4a5568;
+    --sev-d-bg: #eceef2;
+    --ok: #2f6b3a;
+    --ok-bg: #e8f3ea;
+    --warn-bg: #fdf6e0;
+    --warn-rule: #d9b84a;
+    --code-bg: #f2f2ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --panel: #1e1e23;
+      --panel-2: #26262c;
+      --ink: #e9e9e6;
+      --ink-dim: #b0b0a8;
+      --ink-faint: #86867e;
+      --rule: #33333a;
+      --rule-strong: #4a4a52;
+      --accent: #b09aec;
+      --sev-a: #ff9c92;
+      --sev-a-bg: #3a1f1d;
+      --sev-b: #f0b878;
+      --sev-b-bg: #392a17;
+      --sev-c: #b3d67a;
+      --sev-c-bg: #26301a;
+      --sev-d: #b4c0d4;
+      --sev-d-bg: #24282f;
+      --ok: #8fd39c;
+      --ok-bg: #1c2c20;
+      --warn-bg: #322a14;
+      --warn-rule: #8a7527;
+      --code-bg: #24242a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    padding: 2.2rem 1.25rem 5rem;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  header.page { border-bottom: 2px solid var(--rule-strong); padding-bottom: 1.1rem; margin-bottom: 1.6rem; }
+  header.page h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -0.015em; }
+  header.page .sub { color: var(--ink-dim); font-size: .95rem; }
+  h2 {
+    font-size: 1.22rem; letter-spacing: -0.01em;
+    margin: 2.6rem 0 .5rem; padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: .5rem; }
+  h3 { font-size: 1.02rem; margin: 1.5rem 0 .4rem; }
+  h4 { font-size: .93rem; margin: 1.1rem 0 .3rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .8rem; padding-left: 1.35rem; }
+  li { margin: .3rem 0; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .875em;
+  }
+  code { background: var(--code-bg); padding: .1em .34em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule);
+    border-radius: 6px; padding: .75rem .9rem; overflow-x: auto; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0 1rem; font-size: .93rem; }
+  th, td { text-align: left; padding: .48rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); border-bottom: 1px solid var(--rule-strong); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0; }
+  .note { border-left: 3px solid var(--warn-rule); background: var(--warn-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .note strong:first-child { display: block; margin-bottom: .2rem; }
+  .sev { display: inline-block; min-width: 1.35rem; text-align: center; font-weight: 700; font-size: .78rem; padding: .1rem .38rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+  .sev.a { color: var(--sev-a); background: var(--sev-a-bg); }
+  .sev.b { color: var(--sev-b); background: var(--sev-b-bg); }
+  .sev.c { color: var(--sev-c); background: var(--sev-c-bg); }
+  .sev.d { color: var(--sev-d); background: var(--sev-d-bg); }
+  .pill { display: inline-block; font-size: .76rem; font-weight: 600; letter-spacing: .03em; padding: .12rem .5rem; border-radius: 999px; border: 1px solid var(--rule-strong); color: var(--ink-dim); }
+  .pill.ok, .pill.driven { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .pill.tested { color: var(--sev-b); background: var(--sev-b-bg); border-color: transparent; }
+  .fid { font-family: ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
+  .loc { font-family: ui-monospace, monospace; font-size: .82em; color: var(--ink-faint); white-space: nowrap; }
+  .lede { font-size: 1.02rem; color: var(--ink-dim); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .28rem 1rem; font-size: .93rem; margin: .6rem 0; }
+  .kv dt { color: var(--ink-faint); }
+  .kv dd { margin: 0; }
+  .ask { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1.1rem; margin: 1rem 0; background: var(--panel); }
+  .ask h4 { color: var(--accent); margin-top: 0; }
+  footer.page { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .85rem; }
+  .small { font-size: .88rem; color: var(--ink-dim); }
+  .measured { color: var(--ink-faint); font-size: .82rem; font-style: italic; }
+  @media (max-width: 34rem) {
+    body { padding: 1.4rem .8rem 3rem; font-size: 15px; }
+    table { font-size: .86rem; }
+    .kv { grid-template-columns: 1fr; gap: .1rem .5rem; }
+    .kv dd { margin-bottom: .45rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>AgentWeave daily review — Thursday 2026-09-03</h1>
+  <div class="sub">
+    Written by the FILL window (09:00–17:00) on <code>autonomous/2026-09-01-daily</code>.
+    You decide; the FIX window (23:00–07:00) builds what you approved.
+    Approvals go in <code>spec-queue/APPROVALS.md</code>.
+  </div>
+</header>
+
+<p class="lede">
+  Today drove the <strong>served bundle</strong> of the change the night shipped, and found
+  <strong>F190's own symptom still on screen</strong> — reached by a route none of that change's
+  four rounds asked about. One new proposal went through all three rounds, and
+  <strong>rounds 2 and 3 each broke the round before them</strong>; round 3's defect was measured,
+  not argued. Open severity-A is now <strong>three</strong>.
+</p>
+
+<div class="note">
+  <strong>Read section 1 first.</strong>
+  Nothing this loop has produced since 2026-09-01 is on <code>master</code>. The cycle branch is now
+  <strong>three days old and unmerged</strong>, and neither window may merge it — that is yours.
+</div>
+
+
+<h2><span class="num">1</span>The branch</h2>
+
+<div class="note">
+  <strong>The previous cycle is unmerged, and this is the third day riding on it.</strong>
+  <code>autonomous/2026-09-01-daily</code> is <strong>167 commits ahead of <code>master</code> and
+  merged into nothing</strong>. <code>git branch --merged master</code> did not name it this morning
+  either, so today's window continued on it rather than cutting a fresh one. Two nights of shipped
+  product code, three days of findings, and every proposal below live only on that branch. It has
+  grown by 74 commits since yesterday's page said the same thing about two days.
+</div>
+
+<dl class="kv">
+  <dt>Branch</dt><dd><code>autonomous/2026-09-01-daily</code></dd>
+  <dt>Spans</dt><dd>2026-09-01, 2026-09-02, 2026-09-03 — <strong>three days</strong></dd>
+  <dt>Ahead of <code>master</code></dt><dd>167 commits (93 yesterday)</dd>
+  <dt>Merged</dt><dd><strong>No.</strong> <code>git branch --merged master</code> does not list it.</dd>
+  <dt>Product code</dt><dd>
+    <code>git diff --shortstat master..HEAD -- hub/hub hub/ui/src src</code> →
+    <strong>30 files, +1499 / −481</strong>. Two archived changes:
+    <code>runner-model-is-chosen-from-the-catalog</code> (night of 09-01) and
+    <code>a-turn-says-how-it-ended</code> (night of 09-02).
+    <span class="small">3 of those 30 files are the committed bundle
+    <code>hub/hub/static/ui</code> (+147 / −147) — a subset of the same count, not extra.</span>
+  </dd>
+  <dt>Whole branch</dt><dd>112 files, +33551 / −1077 — the rest is proposals under
+    <code>openspec/changes/</code>, <code>scripts/drive/FINDINGS.md</code>, drive harnesses,
+    <code>spec-queue/</code>, and the loop's own logs and state.</dd>
+</dl>
+
+<p>
+  Whether to merge is <strong>not work</strong> and wants no approval row. It is the one thing in this
+  cycle neither window is permitted to do, and it has now been carried three days.
+</p>
+
+
+<h2><span class="num">2</span>What the night built, and which of it was driven</h2>
+
+<h3><code>a-turn-says-how-it-ended</code> — built, driven twice, archived</h3>
+
+<p>
+  The night ran the single-item <code>ORDER:</code> line you wrote yesterday and took the change
+  through <strong>all seven phases</strong>, closing all 49 tasks and archiving it
+  (<code>49bfd2b</code>, <code>openspec/changes/archive/2026-09-03-a-turn-says-how-it-ended</code>),
+  with five requirements synced into <code>agent-stream-events</code>.
+</p>
+
+<ul>
+  <li><span class="pill driven">driven</span> <strong>Phase 6</strong> — the implementing window's own drive.</li>
+  <li><span class="pill driven">driven</span> <strong>Phase 7</strong> — the separate verifying round your
+    2026-09-01 approval condition required. It re-ran phase 0's observations against the built product and
+    <strong>retired F190 and F269 in the ledger by hand</strong>, which is the first time this cycle has
+    closed a finding row rather than only a change.</li>
+</ul>
+
+<div class="note">
+  <strong>A correction to yesterday's carry-forward, measured this morning.</strong>
+  This window's own state file opened today asserting that
+  <code>runner-model-is-chosen-from-the-catalog</code> "was NOT started". <strong>That is wrong.</strong>
+  It was built and archived on <strong>2026-09-02</strong> by the night window (<code>7df21ea</code>,
+  <code>archive/2026-09-02-runner-model-is-chosen-from-the-catalog</code>, 29 of 29 tasks closed), and
+  nothing by that name remains in <code>openspec/changes/</code>. Both items you approved on 2026-09-01
+  are done. Section 5 is written against the measurement, not against the state file.
+</div>
+
+<h3>What the night corrected in the ledger, and what it deliberately did not</h3>
+
+<ul>
+  <li><strong>The open severity-A count was wrong by a week.</strong> The index said one; the night
+    recomputed it as <strong>two</strong> — F271 and <strong>F188</strong>, the row that had been lost.
+    Four changes had been archived without walking back to the ledger rows that started them, and the
+    index was then revised from the newest finding rather than recomputed.</li>
+  <li><strong>F140, F142, F154 and F155 were marked <code>unverified</code>, not retired.</strong> What
+    is measured is that a change <em>naming</em> each was archived — a plan marked done. This repo's own
+    rule is that a plan existing closes nothing, and the reason that rule exists is F190.</li>
+  <li><strong>F188 was re-confirmed by reading the code at HEAD, not by driving it.</strong> The night
+    says so in terms. Today's proposal inherits that and makes reproduction its task 1.</li>
+  <li><strong>F188 was not repaired on the spot</strong>, though it looks like a one-line fix. The night
+    window does not write proposals, and deciding at 05:30 that a finding is small enough to skip the
+    spec loop is exactly the call this arrangement exists to prevent. It was handed to today.</li>
+</ul>
+
+<p class="small">
+  Night's <code>decisions_for_user</code>: <strong><code>f272-harness-guard</code></strong> (unchanged,
+  and still the only one blocking work) and a new <strong><code>findings-ledger-retirement</code></strong>
+  — nothing in the cycle retires a ledger row when the change that fixes it is archived, which is how a
+  severity-A finding stayed invisible for a week. Neither is work; neither wants a row.
+</p>
+
+
+<h2><span class="num">3</span>What today's drive found</h2>
+
+<p>
+  The drive ran against Hub <strong>8011</strong> from source on a fresh database, fixture
+  <code>aturn-p6-0903d1</code> (<code>proj-f0b9dc9732d3</code>), both agents on
+  <code>claude-haiku-4-5</code>. <strong>The distinct angle:</strong> phases 6 and 7 evaluated
+  <code>scripts/drive/aturn_model.py</code>, a Python transcription of the built component. This slot
+  drove the <strong>served bundle in a real browser</strong>, for the first time. The model and the
+  component agree — and the screen still loses the outcome.
+</p>
+
+<table>
+  <thead><tr><th>ID</th><th>Sev</th><th>What it is</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="fid">F274</td>
+      <td><span class="sev a">A</span></td>
+      <td>A turn's terminal label <strong>and</strong> its "Worked for <em>N</em>s" line vanish once the
+        agent-scoped 50-event timeline window moves past that run — which four ordinary triggers in the
+        agent's <em>other</em> conversations achieve. The conversation reloads as 1 turn boundary,
+        0 labels, 0 stat lines.</td>
+      <td class="loc">FINDINGS.md:18733<br>AgentTimeline.tsx:237,:280<br>agents.py:802-803</td>
+    </tr>
+    <tr>
+      <td class="fid">F275</td>
+      <td><span class="sev c">C</span></td>
+      <td>An abandoned operator message renders <em>after</em> the failures it caused, because
+        <code>_queued_entries_for</code> is appended after the timestamp sort. The operator reads three
+        <code>Turn failed</code> turns before they said anything.</td>
+      <td class="loc">FINDINGS.md:18836<br>agent_chat.py:701-703, :634</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="card">
+  <h4>F274 is F190's symptom, live, against the change that closed F190</h4>
+  <p>
+    Both halves of last night's deliverable disappear at once — the label and the duration — which is
+    exactly the sentence that change's proposal opens with: <em>"A turn killed mid-sentence is
+    indistinguishable from a turn that simply had nothing to say."</em> It also happens
+    <strong>inside a single conversation</strong> once that conversation holds enough turns: twelve turns
+    on screen, ten outcomes; the two oldest read as turns that ended with nothing to say.
+  </p>
+  <p>
+    <strong>The route is not in breach.</strong> <code>openspec/specs/agent-stream-events/spec.md:363-366</code>
+    blesses it in as many words: <em>"WHEN the agent has runs whose events fall entirely outside the returned
+    event window THEN the map contains no entries for them."</em> The route does exactly that, and
+    <em>The run facts cover every run the events name</em> is satisfied. <strong>What no requirement says is
+    that the events must cover the turns the client renders</strong> — and the two are drawn by different
+    queries with different scopes: fifty events across <em>all</em> of an agent's conversations on one side,
+    one conversation's history on the other.
+  </p>
+  <p>
+    Rounds 1, 2 and 3 all argued about the run query, and every step of that argument is right. It was
+    simply bounded by the event window it inherited, and nobody asked what the client renders
+    <em>outside</em> it. That is the 2026-08-28 lesson in an unfamiliar shape: <strong>not an argument
+    that is wrong about the right things, but an argument that is right and short.</strong>
+    <strong>F274 has no proposal.</strong> Tomorrow's spec loop is the natural home for it.
+  </p>
+</div>
+
+<p>
+  <strong>Open severity-A is now three: F271, F188, F274.</strong> F188 is the only one of them with a
+  proposal, and that proposal is section 4.
+</p>
+
+<h4>What held under the drive</h4>
+<ul>
+  <li>Inside the window, the served bundle renders it correctly: <code>Worked for 6s</code> /
+    <code>Turn stopped · 09:08</code>, and ten <code>Turn failed</code> labels with ten stat lines for
+    ten in-window turns. Every value came from <code>Run</code> — <code>stopped</code>/exit 2,
+    <code>failed</code>/exit 1 — not from an event name. First time any of it has been read off the real
+    dashboard.</li>
+  <li>Durations are the row's, not the tab's — <code>Worked for 6s</code> on a run that ended before any
+    of those browser sessions existed.</li>
+  <li>The failing-runner path reports its cause on screen, in the turn, under the terminal label.</li>
+  <li>The extra SSE frame the night predicted was visible as nothing at all: no duplicate turn, no
+    flicker, no console error in five browser sessions.</li>
+  <li><code>GET /health</code> clean and the bundle stamp <code>--check</code> confirmed the served
+    bundle matches <code>hub/ui/src</code> — so no UI finding here is from a stale build.</li>
+</ul>
+
+
+<h2><span class="num">4</span>What was specced — <code>a-blocked-agent-workspace-holds-its-input</code></h2>
+
+<p class="small">For <strong>F188 (A)</strong>. Three rounds ran. <code>openspec validate --strict</code>
+passes. Nothing under <code>hub/hub/</code>, <code>hub/ui/</code> or <code>src/</code> is committed from
+today.</p>
+
+<h3>The problem</h3>
+<p>
+  Two refusals stop an agent from running. One holds the operator's message until they perform the
+  repair; the other <strong>destroys it on the third schedule</strong>. They are eleven lines apart in
+  the same function and the difference is a keyword argument. <code>agent_trigger.py:879-883</code>
+  raises the worktree refusal with no <code>agent_wide=True</code>; the three sibling refusals at
+  <code>:573</code>, <code>:594</code> and <code>:624</code> all pass it, and
+  <code>turn_scheduler.py:204</code> reads that flag to decide whether a delivery attempt is counted.
+  Both conditions are ones only the operator can clear; both stop the agent starting; one of them eats
+  the message. Worse, the control the conversation view offers for exactly this situation — the Continue
+  button — <em>is itself a schedule</em>, so the operator's attempts to find out why nothing is happening
+  are what consume the allowance. <strong>F114 reproduced verbatim at a site the F114 fix did not
+  reach.</strong>
+</p>
+
+<h3>The argument</h3>
+<p>
+  The obvious repair — flag the site — <strong>breaches a requirement that shipped on 2026-08-28</strong>,
+  in order to fix a finding from the same sweep. One <code>except</code> covers <em>two</em> workspaces:
+  <code>resolve_turn_workspace</code> dispatches on <code>takes_task_workspace</code>, so a task-bound
+  writing turn fails on <code>.agentweave/tasks/&lt;id&gt;</code> — where other queued input really could
+  have run, and counting the attempt is <em>right</em> — while everything else fails on
+  <code>.agentweave/worktrees/&lt;agent&gt;</code>, which blocks the agent's whole ordinary population.
+  <code>TriggerAgentError</code>'s docstring justifies leaving the site unflagged on the strength of the
+  task arm alone. So the repair is not to flag the site: it is to make the site say <strong>which of the
+  two workspaces it could not prepare</strong>, and let the rule that already exists apply to each — the
+  scheduler then answers the starvation question, because it is the only party holding the rest of the
+  queue. The refusal also gains the sentence saying what would clear it, which today it never states.
+  Read this way the change <strong>completes</strong> a decision the 2026-08-28 change deferred (its task
+  1.2a examined this exact <code>raise</code> and left it counting because <em>"no static per-site flag
+  can express it"</em>) rather than reversing one — splitting the <code>except</code> is what dissolves
+  that objection.
+</p>
+
+<h3>What round 2 changed about round 1's version</h3>
+<div class="card">
+  <p>
+    <strong>R2 changed the proposal; it did not confirm it.</strong> R1's design D3 rested on
+    <code>takes_task_workspace</code> reducing to <em>"the entry names a task"</em>.
+    <code>agent_trigger</code> never passes an entry's <code>task_id</code> — it passes
+    <code>turn_workspace.task_id</code>, and <strong>naming a task is not taking a task's
+    checkout</strong>: <code>resolve_turn_workspace_inputs</code> returns unbound for a
+    <strong>grandfathered</strong> task (<code>Task.workspace_scheme == 'agent'</code>, written only by
+    migration <code>0095</code>) and for an id <code>validate_task_id</code> refuses;
+    <code>resolve_bound_task</code> drops the binding for a deleted or decided task (F79). Measured under
+    <code>py -3.11</code> at HEAD: grandfathered and bad-id both return
+    <code>TurnWorkspace(task_id=None)</code>. R1's helper would have counted the attempt and destroyed the
+    head having released nothing — <strong>F188 surviving its own fix on every project old enough to have
+    grandfathered tasks.</strong>
+  </p>
+  <p class="small">
+    Four smaller corrections: R1 applied no eligibility filter (a hop-budget-exhausted or
+    closed-conversation entry would have counted); the two errors are not symmetric — a false yes destroys,
+    a false no only holds — and that is now a SHALL; R1's reason for excluding entries already inside
+    <code>selected</code> was an enumeration of two routes out of four; and D2 gained
+    <code>terminal_failure</code>. New design D3a put the predicate in
+    <code>task_workspace.takes_own_checkout</code> so the resolver and the scheduler cannot drift.
+    Tasks 24 → 28.
+  </p>
+</div>
+
+<h3>What round 3 changed about round 2's version</h3>
+<div class="card">
+  <p>
+    <strong>R3 also changed the proposal, and its headline defect is measured rather than argued.</strong>
+    R2's task 3.0 claimed the extraction leaves <code>test_task_workspace_scheme.py</code> passing
+    unchanged. <strong>It does not, for either natural spelling.</strong> That test lowercases every
+    <code>.py</code> under <code>hub</code> and <code>src/</code> and looks for four <em>substrings</em>,
+    two of which are contained in an equality comparison — <code>.workspace_scheme =</code> is a prefix of
+    <code>.workspace_scheme ==</code>. Today's resolver survives the scan only because it happens to be
+    written <code>!=</code>. Baseline measured at HEAD: 10 passed, migration <code>0095</code> the only
+    match. Extract the predicate the obvious way and the suite goes red on a test whose failure message
+    talks about <em>writes</em>, in a change that only ever added a <em>read</em>. Task 3.0 now mandates
+    the negative form; new task 3.0a re-measures the scan and puts the reason in that test's docstring.
+  </p>
+  <ol class="small">
+    <li><strong>A deleted or decided task does not always run in the agent's worktree.</strong>
+      <code>resolve_bound_task</code> does not end the resolution when it drops the named task — it falls
+      through to <code>binding_for_conversation</code> (<code>run_task_binding.py:391/:399 → :412-416</code>),
+      so two of R2's four routes are conditional. The task 3.1 helper is an <code>or</code> over the entry's
+      task and its conversation's, so <strong>the code was already right and only the argument was
+      wrong</strong> — the 2026-08-28 lesson again. New test 3.8a fails if an implementer trusts R2's
+      sentence and writes an <code>and</code>.</li>
+    <li><strong>The exclusion of entries inside <code>selected</code> still had the wrong kind of
+      reason.</strong> Not an enumeration of routes — which R3 shows is unsound anyway — but one fact:
+      reaching this refusal proves the <em>whole</em> resolution already produced unbound.</li>
+    <li><strong>A review entry is a false yes unless the review could have run</strong> (new design D3b).
+      <code>prepare_review_turn</code> gates on evidence naming a commit (<code>review_turn.py:197-199</code>)
+      before provisioning anything; without one it refuses, and that refusal takes the counting branch itself
+      and is abandoned after three schedules having released nothing. Two new scenarios, task 3.8b.</li>
+    <li><strong><code>D3a</code> collided with a shipped <code>D3a</code></strong> already cited by both
+      files this change edits (<code>turn_scheduler.py:232</code>, <code>agent_trigger.py:304</code>).
+      Renamed <strong>D8</strong>.</li>
+  </ol>
+  <p>
+    <strong>And the thing no round had looked at:</strong> <code>turn_scheduler.py:225-233</code> — the
+    comment closing the counting branch, <em>inside the code being changed</em> — asserts flatly the exact
+    claim this change falsifies, and cites <code>D3a</code>. Task 5.2's grep for the refusal's
+    <em>sentence</em> cannot reach it, because the comment quotes no sentence. New task <strong>5.4</strong>
+    is the twin of the task that does this job for <code>TriggerAgentError</code>'s docstring. Without it
+    the change ships a comment contradicting the line beneath it.
+  </p>
+</div>
+
+<p class="small">
+  Claims R2 and R3 each re-derived and left standing, so a fourth round need not: no fourth unbound
+  return; inheritance is reached the way D3 claims; two queries and no N+1 (with the order forced — the
+  conversation query must run first); and no contradiction with the shipped paragraph, which already
+  states its test in queue terms.
+</p>
+
+<h4>Cost if approved</h4>
+<dl class="kv">
+  <dt>Tasks</dt><dd><strong>32</strong> across 6 phases — phase 1 is a reproduction gate (a round that
+    cannot reproduce it should stop rather than build), phase 6 is three drive legs.</dd>
+  <dt>Code</dt><dd><code>hub/hub/api/v1/agent_trigger.py</code>, <code>hub/hub/turn_scheduler.py</code>,
+    <code>hub/hub/worktrees.py</code>, <code>hub/hub/task_workspace.py</code> (a read-only predicate,
+    extracted — D8). <strong>No UI.</strong></dd>
+  <dt>Migration</dt><dd><strong>None.</strong> No API shape change either — <code>TriggerAgentError</code>
+    is internal, and a caller still sees a 409 with a longer sentence.</dd>
+  <dt>Specs</dt><dd><code>agent-conversation-workspace</code> (MODIFIED),
+    <code>workspace-isolation</code> (ADDED, MODIFIED)</dd>
+  <dt>Operator-visible</dt><dd>A message queued for an agent whose own worktree is blocked is
+    <strong>held</strong> rather than dropped after three schedules, and the queue status keeps reporting
+    the refusal's own sentence for as long as it is held.</dd>
+</dl>
+
+
+<h2><span class="num">5</span>If you approve nothing tonight</h2>
+
+<div class="note">
+  <strong>Tonight is different from the last two: approving nothing leaves the FIX window with nothing
+  it is allowed to build.</strong> All three default sources are measured empty or blocked, so the
+  window would spend itself on notes. This is the first night of the cycle where that is true, and it
+  is the reason to write a row rather than skip the page.
+</div>
+
+<table>
+  <thead><tr><th>Default source</th><th>State tonight</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>1.</strong> Implemented changes needing only archiving</td>
+      <td><strong>Empty.</strong> Both changes in <code>openspec/changes/</code> are at zero completed
+        tasks — <code>a-blocked-agent-workspace-holds-its-input</code> 0/32,
+        <code>a-write-outside-the-workspace-is-recorded</code> 0/54.</td>
+    </tr>
+    <tr>
+      <td><strong>2.</strong> Open findings, A before B before C</td>
+      <td>Lands on <strong>F271</strong>, then <strong>F188</strong>, then <strong>F274</strong>. But the
+        playbook's own rule is that <em>a finding with no proposal needs the day window first — queue it
+        as a note to tomorrow, not as work.</em> F271 and F274 have no proposal. F188 has one and it is
+        <strong>not approved</strong>, which source 3 does not reach.</td>
+    </tr>
+    <tr>
+      <td><strong>3.</strong> <code>APPROVED</code> rows</td>
+      <td><strong>Empty unless you write one.</strong> Both 2026-09-01 approvals are built and archived
+        (section 2); the 2026-09-02 section's single <code>ORDER:</code> item shipped last night.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <code>ORDER:</code> and <code>NOTHING TONIGHT</code> are both available, and
+  <code>NOTHING TONIGHT</code> is an honest answer if you would rather the branch stopped growing
+  before it is merged.
+</p>
+
+<h3>Carried forward, corrected</h3>
+<ul>
+  <li><strong><code>runner-model-is-chosen-from-the-catalog</code> is <em>done</em>, not pending.</strong>
+    Yesterday's carry-forward and this window's own state file both said otherwise; the archive and the
+    commit say it shipped 2026-09-02. Do not re-approve it.</li>
+  <li><strong><code>a-write-outside-the-workspace-is-recorded</code> is still undecided, not rejected.</strong>
+    R3-complete, 54 tasks, still with <strong>no row</strong> in <code>APPROVALS.md</code>. Only the newest
+    section is read, so it needs a row tonight if you want it built. It touches
+    <code>agent_trigger.py</code> and <code>worktrees.py</code> — <strong>both of which
+    <code>a-blocked</code> also touches</strong> — plus <code>AgentTimeline.tsx</code>, so approving both
+    means ordering them and eating a committed-bundle conflict.</li>
+  <li><strong>Its task 4.2 migration number is already correct.</strong> It was fixed to <code>0101</code>
+    on 2026-09-02, and it is <em>still</em> right: head is <code>0100_loop_work_needs_evidence.py</code>
+    and nothing has landed since. Re-derive only if another migration lands first.</li>
+</ul>
+
+
+<h2><span class="num">6</span>Research — three candidates, briefly</h2>
+
+<p class="small">
+  Full evidence: <code>spec-queue/research/2026-09-03.md</code>. None of these competes with tonight's
+  slot; they are inputs to a future day window. One correction the research itself makes to yesterday:
+  the Codex catalog drift it presented as new is <strong>F174 (B)</strong>, already filed and already
+  re-measured by every sweep — close it as F174 rather than re-specifying it.
+</p>
+
+<ol>
+  <li>
+    <strong>Map the Codex app-server surface AgentWeave already answers</strong> — <span class="small">S/M</span><br>
+    Codex <code>0.153.0</code> (published 2026-09-03T01:37:38Z, seven hours before the run) puts structured
+    operator questions on <code>agentMessage.questions</code> — a field of an item AgentWeave maps and
+    discards. F104 swept that item's <em>variants</em> and found none occur; a new field on a
+    <em>handled</em> variant is invisible to that method.<br>
+    <em>What it would mean:</em> the runner's CLI version is the protocol version on an
+    <code>[experimental]</code> transport, and it appears on no run record, in no diagnostic, beside no
+    evidence. Installed here: <code>codex</code> 0.146.0 vs 0.153.0, <code>claude</code> 2.1.238 vs 2.1.259.
+    <strong>Recording the version is the piece that survives being wrong about everything else</strong> —
+    it makes the next version shift a lookup instead of an investigation. Reading the field itself is worth
+    doing only <em>after</em> a drive sees one arrive, which is F104's lesson pointed the other way.
+  </li>
+  <li>
+    <strong>Read relative paths at the workspace boundary</strong> — <span class="small">S</span><br>
+    <code>_decide</code> (<code>mcp_server.py:935</code>) finds absolute paths only, justified in a comment
+    by <em>"relative paths resolve against the run's cwd, which is the workspace"</em> — which a
+    <code>cd</code> in the same command falsifies. Claude Code 2.1.259 shipped a fix for this exact class in
+    its own deny matcher, including <code>cd DIR &amp;&amp; cat FILE</code> compounds.<br>
+    <em>What it would mean:</em> this is the sharpest input yet for <strong>F115</strong>, whose severity is
+    explicitly waiting on you. F115's reproduction used an absolute path, where the boundary refuses and the
+    agent knows. The relative-plus-<code>cd</code> route reaches the same place with the check nominally
+    engaged — <strong>the boundary approves, and records the approval as containment.</strong> The honest
+    scope is the <code>cd</code> case with its limit named, not shell semantics in general; the durable
+    answer is the sandbox, not a better regex. Either way the comment is load-bearing prose that is not
+    true.
+  </li>
+  <li>
+    <strong><code>--permission-prompts none</code> for the run with no approver</strong> — <span class="small">S</span><br>
+    <code>runner_commands.py:73</code> falls back to <code>acceptEdits</code> as "the posture that needs no
+    answering", while the same module's docstring records that <code>acceptEdits</code> still prompts for
+    <code>Bash</code>. 2.1.259 added the flag that denies instead of prompting on a headless host.<br>
+    <em>What it would mean:</em> ranked third and honestly so — the claim rests on reading the module, not
+    on a run, nothing in the corpus reports the fallback biting anyone, and the flag does not exist on the
+    CLI this machine runs, so shipping it unconditionally breaks every 2.1.238 spawn. That dependency is
+    itself the point: it is <strong>the cleanest available argument for why recording the runner version is
+    not bookkeeping.</strong> Treat it as a one-line change to make when the CLI is next bumped.
+  </li>
+</ol>
+
+
+<h2><span class="num">7</span>Not work — no approval row wanted</h2>
+
+<div class="ask">
+  <h4>Four things on this page are yours, and none of them is a change</h4>
+  <ol>
+    <li><strong>Whether the three-day branch merges.</strong> 167 commits, two shipped changes, unmerged.
+      Neither window may do it. Third day of asking.</li>
+    <li><strong>F271's blank-a-non-empty-PUT question.</strong> Half plain repair, half product decision;
+      the day window was told to sharpen the evidence, not to answer it.</li>
+    <li><strong><code>f272-harness-guard</code></strong> — raised by the night window, unchanged, and still
+      the only open decision that <em>blocks</em> work.</li>
+    <li><strong><code>findings-ledger-retirement</code></strong> — new. Nothing in the cycle retires a
+      ledger row when the change that fixes it is archived. That is how the open severity-A count read
+      "one" for a week while F188 sat in it. Last night closed two rows by hand only because a task said
+      to; small process question, nothing blocked on it.</li>
+  </ol>
+</div>
+
+<footer class="page">
+  Written 2026-09-03 by the FILL window, iteration 6, on <code>autonomous/2026-09-01-daily</code>.
+  Sources: <code>scripts/drive/FINDINGS.md</code>,
+  <code>openspec/changes/a-blocked-agent-workspace-holds-its-input/</code>,
+  <code>spec-queue/research/2026-09-03.md</code>,
+  <code>.claude/autonomous/2026-09-03-day-log.md</code>.
+  Every number on this page was measured at <code>HEAD</code> this morning.
+</footer>
+
+</div>
+</body>
+</html>

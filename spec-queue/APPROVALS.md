@@ -16,6 +16,91 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-03
+
+Review page: `review/review-2026-09-03.html`. **One change proposed, taken through all three rounds.**
+Rounds 2 and 3 each broke the round before them, and round 3's defect was measured rather than argued.
+
+**No real token is written below.** The day window proposed this change and must not appear to have
+approved its own work, so the line is a blank to fill, not a row. Write the token between the `-` and
+the change name, in a DECIDE session:
+
+- __________  a-blocked-agent-workspace-holds-its-input
+- __________  a-write-outside-the-workspace-is-recorded   (carried forward, still undecided — see below)
+
+`a-blocked-agent-workspace-holds-its-input` — **F188 (A)**. Two refusals stop an agent from running.
+One holds the operator's message until they perform the repair; the other destroys it on the third
+schedule. They are eleven lines apart in the same function and the difference is a keyword argument —
+and the Continue button the conversation view offers for exactly this situation *is itself a schedule*,
+so the operator's attempts to find out why nothing is happening are what consume the allowance. **F114
+reproduced verbatim at a site the F114 fix did not reach.**
+
+The obvious repair — flag the site — **breaches a requirement that shipped 2026-08-28**, because one
+`except` covers two workspaces: the task checkout (where other input really could have run, and
+counting is right) and the agent's own worktree (which blocks the agent's whole ordinary population).
+So the site states *which* workspace it could not prepare and the scheduler answers the starvation
+question, being the only party holding the queue. Read against the archived change's own task 1.2a,
+this **completes** a decision deferred six days ago rather than reversing one.
+
+- **Round 2** found R1's design D3 rested on `takes_task_workspace` reducing to "the entry names a
+  task". It does not — **naming a task is not taking a task's checkout**. Grandfathered tasks, refused
+  ids, and deleted or decided tasks all run in the blocked directory while naming a task, so R1's
+  helper would have counted the attempt and destroyed the head having released nothing: **F188
+  surviving its own fix on every project old enough to have grandfathered tasks.** Measured under
+  `py -3.11` at HEAD. Four smaller corrections; tasks 24 → 28.
+- **Round 3** measured R2's task 3.0 and it is false: extracting the predicate the obvious way turns
+  `test_task_workspace_scheme.py` red, because its source scan looks for the substring
+  `.workspace_scheme =`, which is a prefix of `.workspace_scheme ==`. Today's resolver survives only
+  because it happens to be written `!=`. Four more corrections — a decided task can still inherit its
+  thread's live binding (so the code was right and only the argument was wrong), the `selected`
+  exclusion needed a fact rather than an enumeration, a review with no commit is a false yes (new D3b),
+  and `D3a` collided with a shipped `D3a` cited by both files this change edits (renamed D8). Plus the
+  thing no round had looked at: `turn_scheduler.py:225-233`, a shipped comment **inside the branch being
+  edited**, asserts the exact claim this change falsifies, and task 5.2's grep could never reach it.
+  Tasks 28 → 32.
+
+Cost if approved: **32 tasks** across 6 phases — phase 1 is a reproduction gate, phase 6 is three drive
+legs. Four files, all Python: `agent_trigger.py`, `turn_scheduler.py`, `worktrees.py`,
+`task_workspace.py`. **No migration, no API shape change, no UI.** `openspec validate --strict` passes.
+Nothing under `hub/hub/`, `hub/ui/` or `src/` is committed from today.
+
+`a-write-outside-the-workspace-is-recorded` — carried forward unchanged, still **undecided rather than
+rejected**, still with no row until you write one. It is R3-complete at 54 tasks. It collides with
+`a-blocked` on `agent_trigger.py` and `worktrees.py`, and touches `AgentTimeline.tsx` on top, so
+approving both means ordering them and eating a committed-bundle conflict. Its task 4.2 migration
+number **is already correct** — fixed to `0101` on 2026-09-02 and still right, since head is still
+`0100_loop_work_needs_evidence.py`.
+
+**A correction to the 2026-09-02 carry-forward, measured this morning.**
+`runner-model-is-chosen-from-the-catalog` is **done, not pending**. It was built and archived on
+2026-09-02 by the night window (`7df21ea`, 29 of 29 tasks closed), and nothing by that name remains in
+`openspec/changes/`. Both items approved on 2026-09-01 have now shipped. Do not re-approve it.
+
+**If you approve nothing, the FIX window has nothing it is allowed to build** — and that is new
+tonight. Source 1 (implemented changes needing only archiving) is **empty**: both open changes sit at
+zero completed tasks. Source 2 lands on **F271**, then **F188**, then **F274**, but the playbook's own
+rule is that a finding with no proposal is a note to tomorrow rather than work — F271 and F274 have no
+proposal, and F188's is not approved, which source 3 does not reach. Source 3 is empty unless you write
+a row. `ORDER:` and `NOTHING TONIGHT` are both available, and `NOTHING TONIGHT` is an honest answer if
+you would rather the branch stopped growing before it is merged.
+
+Today's drive filed **F274 (A)** — a turn's terminal label and its "Worked for Ns" line vanish once the
+agent-scoped 50-event timeline window moves past that run, which four ordinary triggers in the agent's
+*other* conversations achieve. That is **F190's own symptom, live, against the change that closed
+F190**, found by driving the served bundle rather than the Python transcription phases 6 and 7 used.
+The route is **not in breach** — `agent-stream-events/spec.md:363-366` blesses it — the gap is that no
+requirement says the events must cover the turns the client renders. It has no proposal and wants no
+row here; it is tomorrow's spec loop. Also **F275 (C)**: an abandoned operator message renders after the
+failures it caused.
+
+Four things on the review page are **not** work and want no row: whether the three-day, 167-commit
+branch merges; F271's blank-a-non-empty-PUT question; `f272-harness-guard`, still the only open decision
+that blocks work; and `findings-ledger-retirement`, new — nothing in the cycle retires a ledger row when
+the change that fixes it is archived, which is how the open severity-A count read "one" for a week while
+F188 sat in it.
+
+---
+
 ## 2026-09-02
 
 Review page: `review/review-2026-09-02.html`. **No new change was proposed today.** The spec-loop
