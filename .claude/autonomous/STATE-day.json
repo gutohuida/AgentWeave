@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "556bb37",
     "stop_at": "2026-09-03T17:00:00+01:00",
-    "iteration": 5,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-03-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-6",
-    "next_action": "D-6 (OPTIONAL, the window's last item) -- sharpen F271's evidence; do NOT specify it. DIRECTION 2026-09-03 is explicit: establish how many sites share F271's 'seeds state from a load, writes it back, no guard on the load having failed' shape, so the eventual proposal knows whether it is repairing a page or a pattern. The ledger already names AgentOutputPanel.tsx:207 as a second instance -- start there and sweep hub/ui/src for the same shape (useState/useEffect seeded from a query result, then PUT/PATCHed back). Record the count and the site list in scripts/drive/FINDINGS.md under F271, as evidence, NOT as a proposal and NOT as a new finding number. DO NOT answer the blank-a-non-empty-PUT question -- that is the operator's and is already on today's review page as a decision. Do not touch product code. If the window has no time for a real sweep, say so and stop rather than half-measuring: D-5 is done and the day's deliverable is complete without this. Note stop_at is 2026-09-03T17:00:00+01:00. Drive Hub 8011 is still up with proj-f0b9dc9732d3 from D-1; nothing needs it for D-6.",
+    "current": "done",
+    "next_action": "THE DAY WINDOW IS COMPLETE. compose, D-1..D-6 all done; the day's deliverable (the review page at spec-queue/review/review-2026-09-03.html and the 2026-09-03 section of spec-queue/APPROVALS.md) shipped in iteration 6 and D-6's optional evidence shipped in iteration 7. DO NOT start new work on this branch from the day window: stop_at is 2026-09-03T17:00:00+01:00 and the playbook's queue is exhausted. If a firing lands before 17:00, verify the tree is clean and the branch pushed, then stand down without committing -- do NOT invent a D-7, and in particular do NOT specify F271 or F274 (the day window does not implement, and a finding with no approved proposal is a note to tomorrow). Two things are waiting on the operator, not on this window: the two blank rows in today's APPROVALS section, and the blank-a-non-empty-PUT product decision on the review page. Carry into the next cycle: D-6 measured that F197 and F271 are one mechanism seen from two sides -- repairing F197 site-by-site converts each repaired site into an F271 unless the write is gated in the same change -- so whichever is proposed first must take the other into scope. Drive Hub 8011 (proj-f0b9dc9732d3, from D-1) is still up and was left untouched by D-6; nothing needs it.",
     "queue": [
         {
             "id": "compose",
@@ -53,9 +53,9 @@
         },
         {
             "id": "D-6",
-            "status": "open",
+            "status": "done",
             "title": "Only if the window finishes early -- sharpen F271's evidence",
-            "detail": "DIRECTION 2026-09-03: sharpen, do not specify. Establish how many sites share F271's 'seeds state, writes it back, no guard' shape -- the ledger already names AgentOutputPanel.tsx:207 as a second instance -- so the eventual proposal knows whether it is repairing a page or a pattern. Do NOT answer the blank-a-non-empty-PUT question; that is the operator's. Do not start this before D-5 is done."
+            "detail": "DONE iteration 7. ANSWER: F271 is a PAGE, not a pattern. scripts/drive/d6_seed_writeback_sweep.py (new, ruff+black clean, exit 0, 4/4 controls pass, 5/5 candidates hand-read); evidence recorded under F271 in FINDINGS.md -- NOT a proposal, NOT a new F-number, and the blank-a-non-empty-PUT question left untouched. Of 163 query call sites (153 reachable from main.tsx): S holds at 7, W-LINK at 5 across 4 files, UNGUARDED at 2 -- InstructionsPage:9 (F271, driven) and AgentOutputPanel:207 (SUSPECT, static read only, undriven). D-5's `rank 1 = 2` came from a weaker test and four measured gaps: MISREPORT bucket only (50 of 153 tested, 103 never); writer set required useMutation + `^export function use*` (38 vs the 58 api/ exports that actually reach a write); api/-only; and its rank-1 conjunction was file-level, never joining seed to write. TWO OF FOUR CONTROLS FAILED on the first run, both defects in D-6's own method: a write need not go through the api/ client (postTrigger builds a raw fetch; useDeleteProject bypasses deleteJson per api/projects.ts:168) and the seeded state reaches the write through an alias (value = Number(budgetInput)). Third defect: next-declaration body slicing made read-only useProjects read as a POST writer. THE RESULT THAT WAS NOT THE QUESTION: every guarded site is guarded by an early return N-11 already filed as F197 (AccountingPanel:34, ProjectSettingsPanel:75 = n11 CLASSIFIED lines 101 and 139). No third arrangement exists in the tree -- a site that can write a failed load back is either F271 (no guard) or F197 (terminal skeleton), so repairing F197 site-by-site CONVERTS each repaired site into an F271 unless the write is gated in the same change. Whoever specs either needs the other in scope. Separating fact is the seeded state's INITIAL VALUE: ProjectSettingsPanel's form starts null (a testable sentinel); content/budgetInput/pendingOverrides start ''/''/{} . Also corrected mid-iteration: my own TaskDetailDrawer paragraph was right in verdict and wrong in argument (:432 IS a payload; what makes it benign is that :162 is a RESET, not a seed) -- seeds_state cannot tell a reset from a seed, now written into script and ledger. Nothing driven; no Hub started; 8011 left untouched."
         }
     ],
     "decisions_for_user": [],
@@ -71,5 +71,5 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-03T10:15:13+01:00"
+    "last_heartbeat": "2026-09-03T10:26:07+01:00"
 }

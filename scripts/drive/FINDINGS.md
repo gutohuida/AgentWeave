@@ -18225,6 +18225,108 @@ the page should also refuse a PUT that would replace non-empty stored content wi
 confirmation is a **product decision for the operator**, not a bug fix — the empty string is a
 legitimate value the route accepts on purpose.
 
+### Evidence added 2026-09-03 (D-6) — page or pattern? Five sites, and the answer is *page*
+
+This is **evidence under F271, not a proposal and not a new finding.** The direction for the day
+window was to establish how many sites share F271's shape, so that whoever specs it knows whether
+they are repairing a page or a family. Harness: `scripts/drive/d6_seed_writeback_sweep.py`, one
+command, no product code touched, no Hub started, no database read. It imports
+`d5_reachability_walk.py` and `n11_query_error_surface.py` rather than restating them.
+
+**The shape, written as three linked facts rather than as a page.** `S` a query's data seeds
+component state; `W` that state is sent back to the server by a write; `G` nothing stops the write
+while the load is failing.
+
+**The count.** Of 163 query call sites, 153 in files reachable from `main.tsx`:
+
+| | |
+|---|---|
+| sites where **S** holds | 7 |
+| of those, **W-LINK** holds (the seeded state is what the write sends) | **5**, across 4 files |
+| of those, **unguarded** — F271's shape | **2** |
+| guarded | 3 |
+
+The two unguarded are `InstructionsPage.tsx:9` (F271 itself, driven) and
+`AgentOutputPanel.tsx:207` (the candidate this ledger already recorded above, still a static read
+and still undriven — the drive that would settle it is unchanged). **So F271 is a page, not a
+pattern**, and the "Not a family" paragraph above survives with a number behind it.
+
+**Why the count is not simply D-5's rank table re-printed.** D-5 published `rank 1 = 2` from a
+weaker test, and the four gaps were measured rather than assumed:
+
+1. **It ranked one bucket.** `rank_sites` was called on `MISREPORT` alone. Of the 153 live sites,
+   only **50** were ever tested for the shape; **103** were not.
+2. **Its writer set required `useMutation` and a `use`-prefixed `export function`.** That set has
+   38 members; the set of `api/` exports that actually reach a write has **58**. The 20 it cannot
+   see include every `export async function`, `takeCheckpoint`, `cutOver`, `requestCompact`,
+   `releaseConversationTask`, and all seven spec-document writers.
+3. **Its writer set was `api/`-only**, so a component-local helper was invisible.
+4. **Its rank-1 conjunction was file-level** — "this file seeds from that query" AND "this file
+   names any writer" — never joined. D-5 said so itself about `AgentOutputPanel.tsx:207` ("in rank
+   1 for the wrong reason"); the `W-LINK` test is that sentence turned into code.
+
+**Four controls, and two of them failed on the first run.** The script asserts that it re-finds
+`InstructionsPage` as S+W+G, `AgentOutputPanel.tsx:207` as S+W, and `AccountingPanel` and
+`ProjectSettingsPanel` as guarded. It failed the middle two, and both failures were defects in this
+script's method rather than in the tree:
+
+- **A write does not have to go through the `api/` client.** `AgentOutputPanel.tsx:657`'s
+  `postTrigger` builds a raw `fetch` with `method: 'POST'`, so no helper-name test could see it —
+  and `api/projects.ts:168` says in a comment that `useDeleteProject` "bypasses `deleteJson`" for
+  the same reason. Three such sites exist outside `api/`. This is a **fifth** gap in D-5's method,
+  not on the list above, because D-6 inherited it before the control caught it.
+- **The seeded state can reach the write through an alias.** `AccountingPanel` seeds `budgetInput`
+  and writes `updateBudget.mutate(value)`, where `value` is `Number(budgetInput)` one line up. A
+  literal-name test says the seeded state is never written back, which is false.
+
+A third defect surfaced the same way: slicing a declaration's body to the next declaration
+attributed `api/projects.ts`'s non-exported `useProjectPathMutation` (`:47`, `postJson` at `:51`)
+to the read-only `useProjects` (`:32`), so a query hook read as a POST writer. Bodies are
+brace-balanced now.
+
+**The blind spot, counted rather than described.** 55 live sites bind no name the seed test can
+follow — **54 of them are inside `api/`**, one hook calling another rather than a component site,
+and the 55th is `AgentOutputPanel.tsx:152`, which binds `isLoading` alone and so has nothing to
+seed from. The within-file scope has one real hole: a parent that fetches and hands `data` to a
+child that seeds and saves is the same shape with a component boundary through it, and no query
+site in the child to find it by. Running the same S and W-LINK tests over destructured **props**
+returns 3 hits, and all three are hand-read as noise. Two are `AgentOutputPanel`, already a genuine
+site by the query test. The third is `TaskDetailDrawer.tsx:137`, and the first draft of this
+paragraph got its *reason* wrong while getting its verdict right — worth recording, because that is
+this repository's named failure mode. The draft said the hit was an `onError` callback rather than
+a payload; at `:432` it really is a payload (`blocked_reason: reason`, where `reason` is
+`blockingReason.trim()` one line up). What makes it benign is something else: the effect at `:162`
+is a **reset**, not a seed — it calls `setRefusal(null)` and `setBlockingReason(null)` on
+`task?.id` — and `blockingReason` is filled by the operator typing into the block prompt, never
+from server content. So no failed load can put stale stored content into that write. **The `S` test
+cannot tell a reset from a seed**, which is a real limitation of the sweep and not of the tree. (The
+`refusal` hit at `:301` is thinner still: the word appears in a *comment* inside the call's argument
+span, because the argument text is taken verbatim.)
+
+### The result that was not the question: F271 and F197 are one mechanism seen from two sides
+
+**Every guarded site is guarded by an early return that N-11 had already classified as F197** —
+`AccountingPanel.tsx:34` and `ProjectSettingsPanel.tsx:75`, which are `n11_query_error_surface.py`'s
+lines 101 and 139 verbatim ("the skeleton is terminal — F197's shape exactly", "this site *is*
+F197"). There is no third arrangement anywhere in the tree: a site that can write a failed load
+back is either **F271** (no guard) or **F197** (a terminal skeleton).
+
+So repairing F197 site by site — rendering the form instead of the terminal skeleton — **converts
+each repaired site into an F271** unless the write is gated in the same change. Whoever specs
+either finding needs the other in scope. That is a claim about two open findings and it is stated
+here rather than acted on; the day window does not implement.
+
+**The separating fact is the seeded state's initial value, not the guard.**
+`ProjectSettingsPanel`'s `form` is `useState<ProjectSettings | null>(null)` — a sentinel a render
+can test, which is why that file is defended twice over. `InstructionsPage`'s `content` starts
+`''`, `AccountingPanel`'s `budgetInput` starts `''`, and `AgentOutputPanel`'s `pendingOverrides`
+starts `{}`: all three indistinguishable from a legitimately empty stored value, and all three
+therefore dependent on a guard alone.
+
+**Not answered here, deliberately.** Whether the page should refuse a PUT that would blank non-empty
+stored content is the operator's decision and is on the 2026-09-03 review page. Nothing in this
+evidence bears on it either way.
+
 ---
 
 ## What D-5 measured, 2026-09-02 — the reachability walk N-10 and N-11 both said they had not done
