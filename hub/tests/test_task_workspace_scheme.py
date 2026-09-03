@@ -363,6 +363,13 @@ def test_nothing_outside_the_migration_writes_the_column() -> None:
     What this still cannot see: `setattr(task, "workspace_scheme", ...)` and any write assembled
     from a variable. Recorded rather than chased — both are visible in review in a way an ordinary
     assignment is not, and a scan that tried to catch them would match this docstring.
+
+    **The price of that bluntness is that a *read* of this column is written one way.** An equality
+    comparison contains two of the four forms above — `x.workspace_scheme == Y` contains
+    `.workspace_scheme =`, and the no-space spelling is `workspace_scheme=` exactly — so
+    `task_workspace.takes_own_checkout` and the resolver beneath it ask the question as a `!=` with
+    an early return. That is deliberate rather than a workaround, and the scan is not to be relaxed
+    to accommodate the other spelling (`a-blocked-agent-workspace-holds-its-input`, design D8).
     """
     forms = (
         ".workspace_scheme =",

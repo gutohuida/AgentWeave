@@ -35,7 +35,7 @@
 
 ## 3. The scheduler decides whether anything was starving behind it
 
-- [ ] 3.0 `hub/hub/task_workspace.py`: extract `takes_own_checkout(task) -> bool` — a task row exists,
+- [x] 3.0 `hub/hub/task_workspace.py`: extract `takes_own_checkout(task) -> bool` — a task row exists,
   its `workspace_scheme` is `TASK_SCHEME`, and `worktrees.validate_task_id` accepts its id — and
   refactor `resolve_turn_workspace_inputs` to call it, keeping its `logger.warning` on the invalid-id
   branch (design D8). This is the predicate the scheduler asks, so that "does this task get its own
@@ -46,12 +46,12 @@
   first while `task.workspace_scheme==TASK_SCHEME` is the second — measured, both make this file an
   offender and fail that test. Today's resolver passes only because it is already written `!=`. Do
   not relax the scan to accommodate a spelling; its bluntness is the mechanism (design D8).
-- [ ] 3.0a Re-run `hub/tests/test_task_workspace_scheme.py` immediately after 3.0 and confirm it is
+- [x] 3.0a Re-run `hub/tests/test_task_workspace_scheme.py` immediately after 3.0 and confirm it is
   still 10 passed with migration `0095` the only file the scan matches — the baseline R3 measured at
   HEAD. Add one line to that test file's `test_nothing_outside_the_migration_writes_the_column`
   docstring recording that a *read* of the column is constrained to the negative form for this
   reason, so the next person to write `==` here meets an explanation rather than a mystery.
-- [ ] 3.1 `hub/hub/turn_scheduler.py`: add a helper that answers *would other queued input for this
+- [x] 3.1 `hub/hub/turn_scheduler.py`: add a helper that answers *would other queued input for this
   agent have run in a different workspace?* Inputs are the `entries`, `selected` and `hop_budget` the
   function already holds. True for an entry outside `selected` that is **eligible** — `hop_depth <=
   hop_budget`, conversation `lifecycle == "open"` — **and** either names a review that could actually
@@ -65,7 +65,7 @@
   one query per entry, and not the task query first — its `IN` list is not known until the
   conversation query has run. Entries in the *controlling* conversation need no inheritance lookup at
   all (design D3).
-- [ ] 3.2 Write the argument down in the helper's docstring, and write down the part R1 got wrong:
+- [x] 3.2 Write the argument down in the helper's docstring, and write down the part R1 got wrong:
   reaching this refusal proves the agent writes and the project is a repository, so those two drop
   out of the comparison — but it does **not** reduce to `entry.task_id is not None`, because a
   grandfathered task and an unmintable task id name a task and still run in the agent's own worktree

@@ -55,6 +55,71 @@ class TurnWorkspace(NamedTuple):
 UNBOUND = TurnWorkspace(None, None, ())
 
 
+def takes_own_checkout(task: Optional[Task]) -> bool:
+    """Does *task* get a checkout of its own, rather than the agent's shared one (design D8)?
+
+    One implementation of the question, because two parties ask it. `resolve_turn_workspace_inputs`
+    below asks it about the task a turn is bound to; `turn_scheduler` asks it about the tasks other
+    queued entries name, to decide whether anything was actually starving behind a refused turn.
+    A second copy in the scheduler is how the scheduler's idea of the workspace and the resolver's
+    drift apart, which is the failure design D1 rejects one module over.
+
+    Three refusals, and the caller has no decision left to make between them — see the resolver's
+    docstring for what each one is. `None` is a refusal too: *no task* and *a task that does not
+    take its own checkout* are the same answer to this question, and the scheduler reaches the first
+    of them through an id that no longer resolves to a row.
+
+    **The scheme check is spelled `!=` with an early `return False`, and it must stay that way.**
+    `test_task_workspace_scheme.py` enforces "only migration 0095 writes this column" with a
+    substring scan over lowercased source, and two of the four forms it looks for are contained in
+    an equality comparison against this column while neither is contained in an inequality. That
+    bluntness is the mechanism rather than a defect in it — the test's own docstring says a scan
+    that tried to be cleverer would match its own prose — so the price is that reads of this column
+    are written one way, and this is the way.
+    """
+    if task is None:
+        return False
+    if task.workspace_scheme != TASK_SCHEME:
+        return False
+    return _id_complaint(task) is None
+
+
+def _id_complaint(task: Task) -> Optional[str]:
+    """`validate_task_id`'s objection to *task*'s id, or `None` because it has none."""
+    try:
+        worktrees.validate_task_id(task.id)
+    except ValueError as exc:
+        return str(exc)
+    return None
+
+
+def _warn_when_the_id_is_why(task: Task) -> None:
+    """Say out loud the one refusal a bool cannot carry out to its caller (design D8).
+
+    `takes_own_checkout` returns three answers as one, and that is right for both callers — but one
+    of the three deserves a line in the log and the other two do not. An unbound turn and a
+    grandfathered task are shapes this product expects; an id `validate_task_id` refuses is a row
+    that arrived some other way. So the resolver re-asks the single question whose answer is a
+    sentence rather than a fact.
+
+    Silent for a grandfathered task, whose scheme decided the answer before the id was looked at at
+    all — exactly as the one combined branch this replaced was. The scheduler does not call this:
+    it is inspecting a queue rather than running a turn, and "its turns run in the per-agent
+    checkout" is a statement about a turn that is starting.
+    """
+    if task.workspace_scheme != TASK_SCHEME:
+        return
+    complaint = _id_complaint(task)
+    if complaint is None:
+        return
+    logger.warning(
+        "task %s cannot be given its own workspace (%s); its turns run in the per-agent "
+        "checkout, as they did before per-task isolation",
+        task.id,
+        complaint,
+    )
+
+
 async def resolve_turn_workspace_inputs(
     session: AsyncSession,
     *,
@@ -81,17 +146,8 @@ async def resolve_turn_workspace_inputs(
     """
     if task is None:
         return UNBOUND
-    if task.workspace_scheme != TASK_SCHEME:
-        return UNBOUND
-    try:
-        worktrees.validate_task_id(task.id)
-    except ValueError as exc:
-        logger.warning(
-            "task %s cannot be given its own workspace (%s); its turns run in the per-agent "
-            "checkout, as they did before per-task isolation",
-            task.id,
-            exc,
-        )
+    if not takes_own_checkout(task):
+        _warn_when_the_id_is_why(task)
         return UNBOUND
 
     return TurnWorkspace(

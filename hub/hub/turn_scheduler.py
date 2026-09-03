@@ -5,13 +5,15 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from . import requirement_evidence
 from .conversations import get_conversation_by_id
 from .db.engine import async_session_factory
-from .db.models import InboundQueueEntry, Run
+from .db.models import Conversation, InboundQueueEntry, Run, Task
 from .inbound_queue import (
     DELIVERY_ATTEMPT_LIMIT,
     can_start,
@@ -19,7 +21,9 @@ from .inbound_queue import (
     project_limits,
     queued_entries,
 )
+from .run_task_binding import decided_task_refusal
 from .sse import sse_manager
+from .task_workspace import takes_own_checkout
 from .usage_accounting import project_budget_state
 from .utils import persist_event
 
@@ -73,6 +77,176 @@ def _entry_kind(entry: InboundQueueEntry) -> Optional[str]:
     if entry.task_id is not None:
         return "work"
     return None
+
+
+async def other_input_would_have_run_elsewhere(
+    db: AsyncSession,
+    *,
+    project_id: str,
+    agent: str,
+    entries: Sequence[InboundQueueEntry],
+    selected: Sequence[InboundQueueEntry],
+    controlling_conversation_id: str,
+    hop_budget: int,
+) -> bool:
+    """Would any queued input for *agent* outside *selected* have run in a different workspace?
+
+    Asked only when a turn was refused because the agent's **own** worktree could not be prepared
+    (`agent_workspace_unavailable`). `agent-conversation-workspace` says such a refusal counts a
+    delivery attempt only *"where other queued input could have run"*, and this is that test.
+    `schedule_agent` is the only party that can answer it: `trigger_agent_directly` sees one turn,
+    while this function already holds every queued entry for the agent, across conversations.
+
+    **The test, stated against what actually decides the workspace.** An entry outside `selected`
+    would have run elsewhere when it is *eligible* -- within the hop budget, in an open conversation
+    belonging to this agent and project -- **and** either names a review that could itself have
+    started (its checkout is `.agentweave/reviews/<reviewer>`, a different directory entirely), or
+    is about a task that takes its own checkout: a row that exists here, is not decided, and
+    `task_workspace.takes_own_checkout` accepts.
+
+    **R1 reduced this to `entry.task_id is not None`, and that reduction is wrong.** Reaching this
+    refusal does prove `is_writing_agent` and `is_git_repo`, and both are properties of the agent
+    and the project rather than of an entry, so they drop out of the comparison. It does not follow
+    that naming a task means taking a task workspace: `agent_trigger` hands `resolve_turn_workspace`
+    the id `task_workspace` resolved, not the entry's, and that comes back `UNBOUND` for a
+    **grandfathered** task (the stamp migration `0095` left on every task that had already been
+    worked) and for a task id `validate_task_id` refuses. Either one is a turn *about a task* that
+    runs in the blocked directory. Under R1's rule it counts as evidence that something else could
+    have run, the attempt is counted, and the operator's message is destroyed at the limit having
+    released nothing -- on precisely the projects that predate per-task isolation, which is every
+    project that had work on it when isolation shipped and none of the fresh ones a test or a drive
+    creates.
+
+    **R2 extended that list to deleted and decided tasks, and R3 measured that those two are
+    conditional.** `run_task_binding.resolve_bound_task` does not stop when it drops the named task;
+    it falls through to `binding_for_conversation`, so an entry naming a deleted or decided task, in
+    a thread that is itself about a live task, binds to the thread's task and takes that task's
+    checkout. It really could have run. Grandfathering and an unmintable id are unconditional
+    because they are decided one layer lower, *after* the binding has been chosen. That is why the
+    test below is an **or** over the entry's own task and its conversation's, and why collapsing it
+    to either half alone would be wrong -- the argument for the `or` is R3's, not R2's, even though
+    both arrive at the same code.
+
+    **Which way each approximation errs, because the two errors are not symmetric.** A false *no*
+    holds input the requirement would have counted, and the operator's queue waits -- recoverable,
+    and the next repair delivers it. A false *yes* counts an attempt and destroys the operator's
+    message at the third schedule (F188). So every approximation here leans toward *no*: an entry
+    with no conversation, one whose conversation is closed or over the hop budget, a review with no
+    commit to check out, a task id that no longer resolves to a row -- none of them count, because
+    none of them could have run either.
+
+    **Entries inside `selected` are excluded, and the reason is not an enumeration of routes.**
+    Reaching this refusal proves the *whole* resolution for this batch -- every entry's named task,
+    the conversation's inherited task, the scheme, the id -- already produced `UNBOUND`. Nothing
+    about the next schedule changes any of those inputs, so an entry inside `selected` reaches this
+    same arm again. For the same reason no entry in the **controlling** conversation is given an
+    inheritance lookup: that conversation's own binding is already known not to have taken a
+    checkout of its own, so such an entry counts only by naming a task or a review itself.
+
+    **Two queries, in this order, and the order is forced.** First the conversations the remaining
+    entries belong to, for their lifecycle and the task each one carries; then one query over the
+    union of the task ids the entries name and the task ids those conversations carry -- whose `IN`
+    list does not exist until the first query has run. Never one query per entry. The exception is
+    `commit_for_task_review`, one call per review entry considered (design D3b), and the ordinary
+    count of review entries outside `selected` is zero.
+    """
+    chosen = {entry.id for entry in selected}
+    remaining = [
+        entry
+        for entry in entries
+        if entry.id not in chosen
+        and entry.hop_depth <= hop_budget
+        and entry.conversation_id is not None
+    ]
+    if not remaining:
+        return False
+
+    # Eligibility is expressed as `WHERE`, not as a filter over what came back: a conversation that
+    # is closed, or belongs to another agent or project, simply does not appear and its entries
+    # fall out with it. `schedule_agent` refuses on those same three above, so an entry riding on
+    # one could not have run either.
+    conversations: Dict[str, Conversation] = {
+        conversation.id: conversation
+        for conversation in (
+            await db.execute(
+                select(Conversation).where(
+                    Conversation.project_id == project_id,
+                    Conversation.agent == agent,
+                    Conversation.lifecycle == "open",
+                    Conversation.id.in_({entry.conversation_id for entry in remaining}),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    }
+    eligible = [entry for entry in remaining if entry.conversation_id in conversations]
+    if not eligible:
+        return False
+
+    named: Set[str] = set()
+    for entry in eligible:
+        named.update(_tasks_this_entry_is_about(entry, conversations, controlling_conversation_id))
+    if not named:
+        return False
+
+    tasks: Dict[str, Task] = {
+        task.id: task
+        for task in (
+            await db.execute(select(Task).where(Task.project_id == project_id, Task.id.in_(named)))
+        )
+        .scalars()
+        .all()
+    }
+
+    for entry in eligible:
+        if _entry_kind(entry) == "review":
+            review_task_id = entry.review_task_id
+            if review_task_id is None or review_task_id not in tasks:
+                continue
+            # Design D3b: a review whose task carries no evidence naming a commit is refused by
+            # `prepare_review_turn` before it reaches a checkout, so counting on its behalf would
+            # destroy the head of the queue for a turn that was never going to happen.
+            target = await requirement_evidence.commit_for_task_review(db, review_task_id)
+            if target.resolved:
+                return True
+            continue
+        for task_id in _tasks_this_entry_is_about(
+            entry, conversations, controlling_conversation_id
+        ):
+            task = tasks.get(task_id)
+            if task is None:
+                continue
+            if takes_own_checkout(task) and decided_task_refusal(task) is None:
+                return True
+    return False
+
+
+def _tasks_this_entry_is_about(
+    entry: InboundQueueEntry,
+    conversations: Dict[str, Conversation],
+    controlling_conversation_id: str,
+) -> List[str]:
+    """The task ids `other_input_would_have_run_elsewhere` has to resolve for *entry*.
+
+    A review entry is about exactly one task and reaches it by a different route, so it names only
+    that one -- `_entry_kind` already encodes that `review_task_id` wins where an entry carries
+    both, because the divergence response that restaffs a failed review sets both to the same task
+    and needs the review checkout. Everything else names its own task *and* the one its thread
+    inherits, except in the controlling conversation, whose binding is already known not to have
+    taken a checkout of its own.
+    """
+    if _entry_kind(entry) == "review":
+        return [entry.review_task_id] if entry.review_task_id is not None else []
+    named: List[str] = []
+    if entry.task_id is not None:
+        named.append(entry.task_id)
+    if entry.conversation_id != controlling_conversation_id:
+        conversation = conversations.get(entry.conversation_id or "")
+        inherited = getattr(conversation, "task_id", None)
+        if inherited is not None and inherited not in named:
+            named.append(inherited)
+    return named
 
 
 async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
