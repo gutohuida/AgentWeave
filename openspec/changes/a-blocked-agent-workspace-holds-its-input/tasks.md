@@ -88,28 +88,28 @@
   count as "could have run elsewhere" (design D3) — reaching this refusal proves the whole resolution
   for that batch, thread binding included, already came back unbound, and nothing about the next
   schedule changes its inputs.
-- [ ] 3.7 **The grandfathered test, and it is the one this round exists for.** Another conversation's
+- [x] 3.7 **The grandfathered test, and it is the one this round exists for.** Another conversation's
   entry names a task whose `workspace_scheme` is `'agent'`. It must **not** count: that turn would run
   in the same blocked worktree, so dropping the head releases nothing. Set the column directly in the
   fixture — no runtime path writes it — and say in the test's docstring that a scope test built on
   `entry.task_id` alone passes every other test in this file and fails this one.
-- [ ] 3.8 The same test one row over, for the three siblings that reach the agent worktree by another
+- [x] 3.8 The same test one row over, for the three siblings that reach the agent worktree by another
   route: a task id `validate_task_id` refuses, a task row that has been deleted, and a task in
   `TERMINAL_FOR_BINDING`. None of them counts. **Bind the other conversation to nothing in those last
   two fixtures, and say in the docstring that this is load-bearing rather than tidy**: a deleted or
   decided task drops the binding and the resolution then inherits the thread's, so with a live
   conversation binding the entry really would take a checkout of its own and counting it would be
   correct (design D3).
-- [ ] 3.8a The inverse of 3.8, and the case R3 added: another conversation's entry names a **decided**
+- [x] 3.8a The inverse of 3.8, and the case R3 added: another conversation's entry names a **decided**
   task, and that conversation is bound to a live task-scheme task. It **must** count — the turn would
   have run in the inherited task's checkout. Without this test, an implementer reading R2's "four
   routes" sentence would write the helper as an `and` over the entry's own task and pass every other
   test in the file.
-- [ ] 3.8b A review entry whose task has no evidence naming a commit must **not** count (design D3b):
+- [x] 3.8b A review entry whose task has no evidence naming a commit must **not** count (design D3b):
   `prepare_review_turn` would refuse it, and a refused review on a scheduler tick releases nothing
   while the head is destroyed on its behalf. The sibling assertion is that a review entry whose task
   *does* name a commit **does** count.
-- [ ] 3.9 Eligibility: an entry outside `selected` that names a task with its own checkout but is
+- [x] 3.9 Eligibility: an entry outside `selected` that names a task with its own checkout but is
   **over the hop budget**, and one whose **conversation is closed**, each must not count. Neither can
   run, and counting on their behalf destroys the head.
 

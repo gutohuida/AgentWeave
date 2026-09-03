@@ -28,7 +28,10 @@ from hub.api.v1.agent_trigger import TriggerAgentError
 from hub.db.engine import async_session_factory
 from hub.db.models import Conversation, InboundQueueEntry, Project, Task
 from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT, new_entry
-from hub.turn_scheduler import schedule_agent
+from hub.task_workspace import AGENT_SCHEME, TASK_SCHEME
+from hub.turn_scheduler import other_input_would_have_run_elsewhere, schedule_agent
+
+from .review_evidence import record_review_evidence
 
 TRIGGER = "hub.api.v1.agent_trigger.trigger_agent_directly"
 
@@ -71,32 +74,51 @@ async def _seed(agent, *, conversations, entries, tasks=()):
     *conversations* is `(id, task_id)` — the second is the thread's own binding, the half of "about
     a task" that an entry does not carry. *entries* is `(conversation_id, task_id)` in the order
     they should be scheduled; the first is the head. *tasks* is `(id, status)`.
+
+    Each of the three takes one **optional** trailing element, and all three exist only for the
+    helper-level half below: a conversation's `lifecycle`, a task's `workspace_scheme`, and a dict
+    of further `new_entry` keywords for an entry (`review_task_id`, `hop_depth`). They default to
+    the shapes a scheduler tick produces, so every scheduler-level test above reads unchanged.
     """
     async with async_session_factory() as db:
         project = await db.get(Project, "proj-test")
         project.hop_budget = 6
-        for task_id, status in tasks:
-            db.add(Task(id=task_id, project_id="proj-test", title=task_id, status=status))
-        for conversation_id, task_id in conversations:
+        for task in tasks:
+            task_id, status = task[0], task[1]
+            scheme = task[2] if len(task) > 2 else TASK_SCHEME
+            db.add(
+                Task(
+                    id=task_id,
+                    project_id="proj-test",
+                    title=task_id,
+                    status=status,
+                    workspace_scheme=scheme,
+                )
+            )
+        for conversation in conversations:
+            conversation_id, task_id = conversation[0], conversation[1]
             db.add(
                 Conversation(
                     id=conversation_id,
                     project_id="proj-test",
                     agent=agent,
-                    lifecycle="open",
+                    lifecycle=conversation[2] if len(conversation) > 2 else "open",
                     task_id=task_id,
                 )
             )
-        for index, (conversation_id, task_id) in enumerate(entries):
+        for index, entry in enumerate(entries):
+            conversation_id, task_id = entry[0], entry[1]
+            extra = dict(entry[2]) if len(entry) > 2 else {}
             db.add(
                 new_entry(
                     project_id="proj-test",
                     agent=agent,
                     origin_type="operator",
                     content=f"message {index}",
-                    hop_depth=0,
+                    hop_depth=extra.pop("hop_depth", 0),
                     conversation_id=conversation_id,
                     task_id=task_id,
+                    **extra,
                 )
             )
         await db.commit()
@@ -251,3 +273,340 @@ async def test_an_entry_in_the_refused_batch_naming_a_vanished_task_does_not_cou
     await _schedule_to_the_limit(agent, _blocked_agent_workspace(agent))
 
     assert await _rows(agent) == [("queued", 0), ("queued", 0)]
+
+
+# ---------------------------------------------------------------------------------------------
+# The helper, asked directly.
+#
+# Everything above goes through `schedule_agent`, because it is about the *condition*: which
+# refusals reach the counter, and what the operator's queue looks like after three schedules.
+# Everything below calls `other_input_would_have_run_elsewhere` itself, because it is about the
+# *scope rule*, and the shapes that rule turns on cannot be produced by a scheduler tick:
+#
+#   - a **grandfathered** task carries `workspace_scheme` `agent`, which migration `0095` stamped
+#     once and no runtime path writes, so a drive against a fresh project cannot make one;
+#   - a task id `validate_task_id` refuses cannot be minted by the product that would have to
+#     create the row;
+#   - an entry left out of its own conversation's batch needs `cap` or a kind split to arrange,
+#     which is a fact about batching rather than about this rule.
+#
+# Building a whole tick around each of those would be testing the fixture. The helper is public
+# (design D8) precisely so these can be one call and one `assert`.
+# ---------------------------------------------------------------------------------------------
+
+
+async def _would_have_run_elsewhere(agent, *, hop_budget=6):
+    """Ask the helper about *agent*'s whole queue, with the head as the refused batch.
+
+    `selected` is the head alone, which is the smallest honest stand-in for "the turn that was just
+    refused": every other entry is therefore outside the batch and is the thing under test. The
+    controlling conversation is the head's own, as it is in `schedule_agent`.
+    """
+    async with async_session_factory() as db:
+        result = await db.execute(
+            select(InboundQueueEntry)
+            .where(InboundQueueEntry.agent == agent)
+            .order_by(InboundQueueEntry.sequence)
+        )
+        entries = list(result.scalars())
+        head = entries[0]
+        return await other_input_would_have_run_elsewhere(
+            db,
+            project_id="proj-test",
+            agent=agent,
+            entries=entries,
+            selected=[head],
+            controlling_conversation_id=head.conversation_id,
+            hop_budget=hop_budget,
+        )
+
+
+@pytest.mark.asyncio
+async def test_another_conversations_live_task_scheme_task_counts(app, auth_headers):
+    """The positive control every negative below is a one-column edit away from.
+
+    Another conversation, an entry naming a task that exists, is not decided, and takes its own
+    checkout. That turn would have run in `.agentweave/tasks/<task>` while the agent's own
+    directory stayed obstructed, so the head is genuinely in its way and the attempt counts.
+
+    Without this, a helper that returned `False` unconditionally would pass every negative in this
+    half — which is exactly what the `return False` mutation in iteration 5 measured at the
+    scheduler level, and this is its helper-level twin.
+    """
+    agent = "f188-h-live"
+    await _register(app, auth_headers, agent)
+    await _seed(
+        agent,
+        conversations=[("conv-f188-hl-a", None), ("conv-f188-hl-b", None)],
+        entries=[("conv-f188-hl-a", None), ("conv-f188-hl-b", "task-aabb10")],
+        tasks=[("task-aabb10", "in_progress")],
+    )
+
+    assert await _would_have_run_elsewhere(agent) is True
+
+
+@pytest.mark.asyncio
+async def test_a_grandfathered_task_does_not_count(app, auth_headers):
+    """3.7: a grandfathered task runs in the blocked directory, so nothing was starving.
+
+    One column apart from the control above: the task's scheme is `AGENT_SCHEME`, set directly in
+    the fixture because migration `0095` is the only writer and no runtime path would produce one.
+    Such a task's turns take the shared per-agent checkout — the very directory the refusal is
+    about — so counting on its behalf destroys the operator's message at the third schedule and
+    releases a turn that will be refused identically (F188).
+
+    **This test and `test_a_binding_inherited_from_the_thread_spends_the_heads_attempts` pin the
+    rule from opposite sides, and neither one alone holds it.** The inherited-binding test rejects
+    a rule too narrow (`entry.task_id` only, missing the thread's binding); this one rejects a rule
+    too wide (any entry that names a task, R1's reduction, which counts here and is wrong). A rule
+    that resolves the row but skips the scheme is wrong here alone: iteration 4 measured that
+    deleting the scheme line from `task_workspace.takes_own_checkout` fails this test and nothing
+    else in the suite.
+
+    The grandfathered set is also not a corner: it is every task that had work on it when per-task
+    isolation shipped, which is every project except the fresh ones a test or a drive creates.
+    """
+    agent = "f188-h-grand"
+    await _register(app, auth_headers, agent)
+    await _seed(
+        agent,
+        conversations=[("conv-f188-hg-a", None), ("conv-f188-hg-b", None)],
+        entries=[("conv-f188-hg-a", None), ("conv-f188-hg-b", "task-aabb11")],
+        tasks=[("task-aabb11", "in_progress", AGENT_SCHEME)],
+    )
+
+    assert await _would_have_run_elsewhere(agent) is False
+
+
+@pytest.mark.asyncio
+async def test_a_task_id_this_product_could_not_have_minted_does_not_count(app, auth_headers):
+    """3.8, first shape: `validate_task_id` refuses the id, so `resolve_turn_workspace` would too.
+
+    A row whose id is `../escape` arrived some other way, and `worktrees` will not provision a
+    checkout for it — `task_workspace` returns `UNBOUND` and the turn runs in the per-agent
+    directory. Same disposition as a grandfathered task, reached one layer further down: the entry
+    is about a task, and is still about a turn that would have wanted the blocked workspace.
+
+    The other conversation is bound to nothing, and that is load-bearing rather than tidy: give it
+    a live task and the entry counts by inheritance no matter what its own id says, which is what
+    `test_a_decided_task_in_a_thread_that_carries_a_live_one_counts` asserts on purpose.
+    """
+    agent = "f188-h-badid"
+    await _register(app, auth_headers, agent)
+    await _seed(
+        agent,
+        conversations=[("conv-f188-hb-a", None), ("conv-f188-hb-b", None)],
+        entries=[("conv-f188-hb-a", None), ("conv-f188-hb-b", "../escape")],
+        tasks=[("../escape", "in_progress")],
+    )
+
+    assert await _would_have_run_elsewhere(agent) is False
+
+
+@pytest.mark.asyncio
+async def test_a_task_id_with_no_row_does_not_count(app, auth_headers):
+    """3.8, second shape: the named task has been deleted, so the binding drops.
+
+    `run_task_binding.resolve_bound_task` cannot bind to a row that is not there. With nothing for
+    the thread to fall through to, the entry's turn is unbound and runs in the blocked per-agent
+    checkout, so it was never waiting on a workspace of its own.
+
+    **Binding the other conversation to nothing is the whole point of this fixture**, not
+    housekeeping: the fall-through is real, and an identical fixture whose conversation carries a
+    live task counts (`test_a_decided_task_in_a_thread_that_carries_a_live_one_counts`). Filling
+    that binding in would make this test pass for the wrong reason and stop distinguishing the two.
+    """
+    agent = "f188-h-norow"
+    await _register(app, auth_headers, agent)
+    await _seed(
+        agent,
+        conversations=[("conv-f188-hn-a", None), ("conv-f188-hn-b", None)],
+        entries=[("conv-f188-hn-a", None), ("conv-f188-hn-b", "task-ffff98")],
+    )
+
+    assert await _would_have_run_elsewhere(agent) is False
+
+
+@pytest.mark.asyncio
+async def test_a_decided_task_does_not_count(app, auth_headers):
+    """3.8, third shape: the task is in `TERMINAL_FOR_BINDING`, so it takes no new work.
+
+    `decided_task_refusal` is the same band `release_bindings_to` releases at (design D7): work the
+    operator has approved or rejected is finished being worked on, and `resolve_bound_task` drops
+    the binding rather than attributing another turn to it. A dropped binding is an unbound turn,
+    and an unbound turn wants the directory that is blocked.
+
+    The other conversation is again bound to nothing, for the reason the previous docstring gives —
+    and here the contrast is not hypothetical, because the next test is this fixture with the
+    thread's binding filled in and the opposite expectation.
+    """
+    agent = "f188-h-decided"
+    await _register(app, auth_headers, agent)
+    await _seed(
+        agent,
+        conversations=[("conv-f188-hd-a", None), ("conv-f188-hd-b", None)],
+        entries=[("conv-f188-hd-a", None), ("conv-f188-hd-b", "task-aabb12")],
+        tasks=[("task-aabb12", "approved")],
+    )
+
+    assert await _would_have_run_elsewhere(agent) is False
+
+
+@pytest.mark.asyncio
+async def test_a_decided_task_in_a_thread_that_carries_a_live_one_counts(app, auth_headers):
+    """3.8a: the inverse, and the reason the rule is an `or` rather than a list of exclusions.
+
+    The entry names an approved task, exactly as the test above does. The difference is one column:
+    its conversation is itself bound to a live task-scheme task. `resolve_bound_task` does not stop
+    when it drops the named task — it falls through to `binding_for_conversation` — so this turn
+    binds to the thread's task and takes that task's checkout. It really could have run.
+
+    **This is R3's correction, stated as a measurement.** R2 listed deleted and decided tasks
+    alongside grandfathering as unconditional non-counters; they are not. Grandfathering and an
+    unmintable id are decided *after* the binding has been chosen and no fall-through can rescue
+    them; a deleted or decided task is only a dropped binding, and the thread may supply another.
+    A helper that excluded decided tasks outright would pass every other test in this half and fail
+    here.
+    """
+    agent = "f188-h-inherit"
+    await _register(app, auth_headers, agent)
+    await _seed(
+        agent,
+        conversations=[("conv-f188-hi-a", None), ("conv-f188-hi-b", "task-aabb14")],
+        entries=[("conv-f188-hi-a", None), ("conv-f188-hi-b", "task-aabb13")],
+        tasks=[("task-aabb13", "approved"), ("task-aabb14", "in_progress")],
+    )
+
+    assert await _would_have_run_elsewhere(agent) is True
+
+
+@pytest.mark.asyncio
+async def test_a_review_whose_task_has_no_commit_does_not_count(app, auth_headers):
+    """3.8b: design D3b — a review with nothing to check out was never going to start.
+
+    A review turn's checkout is `.agentweave/reviews/<reviewer>`, a different directory from the
+    one this refusal is about, so on scope alone it would count. But `prepare_review_turn` refuses
+    a review whose task carries no evidence naming a commit, before any checkout is reached
+    (`test_a_review_needs_something_to_review.py` is that refusal). Counting on its behalf would
+    destroy the head of the queue to release a turn that is itself about to be refused — the same
+    trade F188 is about, one feature over.
+
+    The task exists and is `completed`; only the evidence is missing, which is precisely the state
+    `commit_for_task_review` reports as unresolved.
+    """
+    agent = "f188-h-norev"
+    await _register(app, auth_headers, agent)
+    await _seed(
+        agent,
+        conversations=[("conv-f188-hr-a", None), ("conv-f188-hr-b", None)],
+        entries=[
+            ("conv-f188-hr-a", None),
+            ("conv-f188-hr-b", None, {"review_task_id": "task-aabb15"}),
+        ],
+        tasks=[("task-aabb15", "completed")],
+    )
+
+    assert await _would_have_run_elsewhere(agent) is False
+
+
+@pytest.mark.asyncio
+async def test_a_review_whose_task_names_a_commit_counts(app, auth_headers):
+    """3.8b's sibling: the same entry, with something to review, counts.
+
+    One evidence row with a footprint naming a commit is the whole difference. Now
+    `prepare_review_turn` would provision `.agentweave/reviews/<reviewer>` and the turn would have
+    run, untouched by the obstruction on the agent's own worktree — so the head is in its way and
+    the attempt counts, as it did before this change.
+
+    The pair is what keeps the D3b check honest: without this one, a helper that never counted a
+    review entry at all would pass its partner and hold input the requirement says to count.
+    """
+    agent = "f188-h-rev"
+    await _register(app, auth_headers, agent)
+    await _seed(
+        agent,
+        conversations=[("conv-f188-hv-a", None), ("conv-f188-hv-b", None)],
+        entries=[
+            ("conv-f188-hv-a", None),
+            ("conv-f188-hv-b", None, {"review_task_id": "task-aabb16"}),
+        ],
+        tasks=[("task-aabb16", "completed")],
+    )
+    async with async_session_factory() as db:
+        await record_review_evidence(db, "task-aabb16", suffix="f188")
+
+    assert await _would_have_run_elsewhere(agent) is True
+
+
+@pytest.mark.asyncio
+async def test_an_entry_over_the_hop_budget_does_not_count(app, auth_headers):
+    """3.9, first shape: an entry the scheduler would not admit is not evidence of starvation.
+
+    `can_start` and `selected` both refuse an entry deeper than the project's hop budget (design
+    D1, F5), so this one is not waiting on the head — it is waiting on a budget change that giving
+    up on the head does not provide. Its task is live and task-scheme, so the scope rule alone
+    would count it; the eligibility filter is what does not.
+    """
+    agent = "f188-h-deep"
+    await _register(app, auth_headers, agent)
+    await _seed(
+        agent,
+        conversations=[("conv-f188-hp-a", None), ("conv-f188-hp-b", None)],
+        entries=[
+            ("conv-f188-hp-a", None),
+            ("conv-f188-hp-b", "task-aabb17", {"hop_depth": 7}),
+        ],
+        tasks=[("task-aabb17", "in_progress")],
+    )
+
+    assert await _would_have_run_elsewhere(agent, hop_budget=6) is False
+
+
+@pytest.mark.asyncio
+async def test_an_entry_in_a_conversation_that_is_not_open_does_not_count(app, auth_headers):
+    """3.9, second shape: an archived thread's entry could not have run either.
+
+    `schedule_agent` refuses a turn whose conversation is not `open`, so this entry is not blocked
+    by the head; it is blocked by its own thread. The helper expresses that as a `WHERE` rather
+    than as a filter over what came back, so the conversation simply does not appear and its entry
+    falls out with it — which is also why the task below never needs to be looked at.
+    """
+    agent = "f188-h-closed"
+    await _register(app, auth_headers, agent)
+    await _seed(
+        agent,
+        conversations=[("conv-f188-hc-a", None), ("conv-f188-hc-b", None, "archived")],
+        entries=[("conv-f188-hc-a", None), ("conv-f188-hc-b", "task-aabb18")],
+        tasks=[("task-aabb18", "in_progress")],
+    )
+
+    assert await _would_have_run_elsewhere(agent) is False
+
+
+@pytest.mark.asyncio
+async def test_an_inherited_binding_in_the_controlling_conversation_is_not_consulted(
+    app, auth_headers
+):
+    """The controlling conversation's own binding is already known not to have taken a checkout.
+
+    Both entries are in the conversation that was just refused, and that conversation carries a
+    live task-scheme task. Reaching an agent-workspace refusal proves the whole resolution for this
+    batch came back unbound — including that inherited binding — so consulting it again for a
+    sibling entry would count on the strength of a fact the refusal has already disproved, and
+    destroy the head to release a turn in the same blocked directory.
+
+    A scheduler tick reaches this shape only when the batch is truncated by `cap` or split by kind,
+    which is why it is constructed here directly rather than driven. Iteration 4 measured that
+    replacing the guard in `_tasks_this_entry_is_about` with `if True` fails this test and nothing
+    else in the suite.
+    """
+    agent = "f188-h-ctrl"
+    await _register(app, auth_headers, agent)
+    await _seed(
+        agent,
+        conversations=[("conv-f188-hx-a", "task-aabb19")],
+        entries=[("conv-f188-hx-a", None), ("conv-f188-hx-a", None)],
+        tasks=[("task-aabb19", "in_progress")],
+    )
+
+    assert await _would_have_run_elsewhere(agent) is False
