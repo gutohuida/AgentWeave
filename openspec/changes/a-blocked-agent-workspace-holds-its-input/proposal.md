@@ -70,6 +70,34 @@ One `except` clause catches both, so the agent-level case inherits the rule writ
 task-level one. The repair is not to flag the site — it is to make the site say **which of the two
 workspaces it could not prepare**, and let the rule that already exists apply to each.
 
+### This completes a decision that change deferred; it does not overturn one
+
+R3 went back to `2026-08-28-a-delivery-attempt-means-a-delivery` rather than to the docstring it left
+behind, and the site was not overlooked there. Its task 1.2a examined this exact `raise` and left it
+counting, for a stated reason:
+
+> `:756` "Could not prepare isolated worktree" — the workspace comes from
+> `task_workspace.resolve_turn_workspace_inputs(…, task=binding.task)` and is the **task's** checkout
+> whenever the turn names a task. So the same raise site is entry-specific or agent-wide depending on
+> the entry, **which no static per-site flag can express.**
+
+Its design says the other half in as many words: *"the agent's own workspace is only what an unbound
+turn gets."* F188's case **is** the unbound turn. So that change had already established the fact this
+one acts on, and declined to act because one raise site cannot carry two classifications.
+
+That objection is what this change removes. Splitting the `except` into two raise sites makes the flag
+static per site again, and the residual — that even the agent-workspace arm is not *certainly*
+agent-wide, because a task-bound entry may be waiting behind it — is what design D3 answers in the
+scheduler, where the queue actually is. Read that way this is the next step of a change that shipped
+six days earlier, not a reversal of it, and the two arguments do not have to be reconciled by a
+future reader.
+
+**Two shipped comments state the half that is now false, and this change owns both.**
+`TriggerAgentError`'s `agent_wide` docstring (`agent_trigger.py:304-318`, task 5.3) and the counting
+branch's own comment (`turn_scheduler.py:225-233`, task 5.4) each assert that a worktree that could
+not be prepared is the task's rather than the agent's — the second one flatly, inside the branch this
+change edits. Leaving either would ship code whose comment contradicts the line beneath it.
+
 ### The literal wording of the shipped requirement, which a blanket flag would breach
 
 `agent-conversation-workspace`, *A delivery attempt is counted only where a delivery was attempted*:
@@ -97,11 +125,13 @@ waiting.
 `task_workspace.resolve_turn_workspace_inputs` returns `None` there for a **grandfathered** task
 (`Task.workspace_scheme == 'agent'`, stamped once by migration `0095`), for a task id
 `validate_task_id` refuses, and — one layer up, in `resolve_bound_task` — for a task that has been
-deleted or already decided (F79). All four run in `.agentweave/worktrees/<agent>`, the directory that
-is blocked. So the scheduler's question is *does this entry's task take its own checkout*, asked of
-the task row, and not *does this entry name a task*. Getting that wrong would leave F188 alive on
-every project old enough to have grandfathered tasks; design D3 is written against the task row for
-that reason.
+deleted or already decided (F79). The first two run in `.agentweave/worktrees/<agent>`
+unconditionally, the directory that is blocked; the other two do so only when the thread carries no
+live binding of its own, because dropping the named task falls through to `binding_for_conversation`
+rather than ending the resolution. So the scheduler's question is *would this entry have taken a
+checkout of its own*, asked of the task rows the entry **and its thread** name, and not *does this
+entry name a task*. Getting that wrong would leave F188 alive on every project old enough to have
+grandfathered tasks; design D3 is written against the task row for that reason.
 
 ### And the refusal still does not say what would clear it
 
@@ -133,7 +163,7 @@ of the branches it took.
 
 - Affected specs: `agent-conversation-workspace` (MODIFIED), `workspace-isolation` (ADDED, MODIFIED)
 - Affected code: `hub/hub/api/v1/agent_trigger.py`, `hub/hub/turn_scheduler.py`,
-  `hub/hub/worktrees.py`, `hub/hub/task_workspace.py` (a read-only predicate, extracted — design D3a)
+  `hub/hub/worktrees.py`, `hub/hub/task_workspace.py` (a read-only predicate, extracted — design D8)
 - No migration. No API shape change: `TriggerAgentError` is internal, the HTTP status and the
   operator-visible sentence are the only things a caller sees, and both stay a 409 with a longer
   sentence.

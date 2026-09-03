@@ -38,23 +38,42 @@
 - [ ] 3.0 `hub/hub/task_workspace.py`: extract `takes_own_checkout(task) -> bool` — a task row exists,
   its `workspace_scheme` is `TASK_SCHEME`, and `worktrees.validate_task_id` accepts its id — and
   refactor `resolve_turn_workspace_inputs` to call it, keeping its `logger.warning` on the invalid-id
-  branch. Read only; `test_task_workspace_scheme.py` must still pass unchanged (design D3a). This is
-  the predicate the scheduler asks, so that "does this task get its own checkout" has one
-  implementation rather than a second copy in `turn_scheduler`.
+  branch (design D8). This is the predicate the scheduler asks, so that "does this task get its own
+  checkout" has one implementation rather than a second copy in `turn_scheduler`.
+  **Spell the scheme check `!=` with an early `return False`, not `==`.**
+  `test_task_workspace_scheme.py`'s source scan substring-matches `.workspace_scheme =` and
+  `workspace_scheme=` over lowercased source, and `task.workspace_scheme == TASK_SCHEME` contains the
+  first while `task.workspace_scheme==TASK_SCHEME` is the second — measured, both make this file an
+  offender and fail that test. Today's resolver passes only because it is already written `!=`. Do
+  not relax the scan to accommodate a spelling; its bluntness is the mechanism (design D8).
+- [ ] 3.0a Re-run `hub/tests/test_task_workspace_scheme.py` immediately after 3.0 and confirm it is
+  still 10 passed with migration `0095` the only file the scan matches — the baseline R3 measured at
+  HEAD. Add one line to that test file's `test_nothing_outside_the_migration_writes_the_column`
+  docstring recording that a *read* of the column is constrained to the negative form for this
+  reason, so the next person to write `==` here meets an explanation rather than a mystery.
 - [ ] 3.1 `hub/hub/turn_scheduler.py`: add a helper that answers *would other queued input for this
   agent have run in a different workspace?* Inputs are the `entries`, `selected` and `hop_budget` the
   function already holds. True for an entry outside `selected` that is **eligible** — `hop_depth <=
-  hop_budget`, conversation `lifecycle == "open"` — **and** either names a review (`review_task_id`)
-  or is about a task for which `task_workspace.takes_own_checkout` is true and
+  hop_budget`, conversation `lifecycle == "open"` — **and** either names a review that could actually
+  have run (`review_task_id`, and `requirement_evidence.commit_for_task_review(...).resolved`, design
+  D3b) or is about a task for which `task_workspace.takes_own_checkout` is true and
   `run_task_binding.decided_task_refusal` is `None`. *About a task* means the entry's own `task_id`
-  or its conversation's `Conversation.task_id`. One query over the task ids, one over the distinct
-  conversation ids — not one per entry.
+  **or** its conversation's `Conversation.task_id` — keep the `or`; design D3 says why collapsing it
+  is wrong even though R2's argument implied it could be. Two queries **in this order**: the
+  conversations the remaining entries belong to (for `lifecycle` and the inherited `task_id`), then
+  one over the union of the task ids the entries name and the task ids those conversations carry. Not
+  one query per entry, and not the task query first — its `IN` list is not known until the
+  conversation query has run. Entries in the *controlling* conversation need no inheritance lookup at
+  all (design D3).
 - [ ] 3.2 Write the argument down in the helper's docstring, and write down the part R1 got wrong:
   reaching this refusal proves the agent writes and the project is a repository, so those two drop
   out of the comparison — but it does **not** reduce to `entry.task_id is not None`, because a
-  grandfathered task, an unmintable task id, a deleted task and a decided task all name a task and
-  all run in the agent's own worktree (design D3). Say which direction the approximations err in and
-  why: a false *yes* destroys the operator's message, a false *no* only holds it.
+  grandfathered task and an unmintable task id name a task and still run in the agent's own worktree
+  (design D3). State R3's correction in the same breath: a deleted or decided task does **not** always
+  do so, because `resolve_bound_task` falls through to `binding_for_conversation` rather than ending
+  the resolution, which is exactly why the test is an `or` over the entry's task and its thread's and
+  must stay one. Say which direction the approximations err in and why: a false *yes* destroys the
+  operator's message, a false *no* only holds it.
 - [ ] 3.3 Extend the condition at `:204` so an `agent_workspace_unavailable` refusal skips the
   counter unless 3.1 says something else could have run. Keep the existing `transient` and
   `agent_wide` terms untouched and readable; do not collapse the three questions into one boolean.
@@ -66,8 +85,9 @@
   conversation does. It must count. This is the half a scope test built only on `entry.task_id`
   would get wrong, and nothing else in the suite would notice.
 - [ ] 3.6 A test that an entry inside `selected` naming a task that no longer resolves does **not**
-  count as "could have run elsewhere" (design D3) — it will fail here identically on the next
-  schedule.
+  count as "could have run elsewhere" (design D3) — reaching this refusal proves the whole resolution
+  for that batch, thread binding included, already came back unbound, and nothing about the next
+  schedule changes its inputs.
 - [ ] 3.7 **The grandfathered test, and it is the one this round exists for.** Another conversation's
   entry names a task whose `workspace_scheme` is `'agent'`. It must **not** count: that turn would run
   in the same blocked worktree, so dropping the head releases nothing. Set the column directly in the
@@ -75,7 +95,20 @@
   `entry.task_id` alone passes every other test in this file and fails this one.
 - [ ] 3.8 The same test one row over, for the three siblings that reach the agent worktree by another
   route: a task id `validate_task_id` refuses, a task row that has been deleted, and a task in
-  `TERMINAL_FOR_BINDING`. None of them counts.
+  `TERMINAL_FOR_BINDING`. None of them counts. **Bind the other conversation to nothing in those last
+  two fixtures, and say in the docstring that this is load-bearing rather than tidy**: a deleted or
+  decided task drops the binding and the resolution then inherits the thread's, so with a live
+  conversation binding the entry really would take a checkout of its own and counting it would be
+  correct (design D3).
+- [ ] 3.8a The inverse of 3.8, and the case R3 added: another conversation's entry names a **decided**
+  task, and that conversation is bound to a live task-scheme task. It **must** count — the turn would
+  have run in the inherited task's checkout. Without this test, an implementer reading R2's "four
+  routes" sentence would write the helper as an `and` over the entry's own task and pass every other
+  test in the file.
+- [ ] 3.8b A review entry whose task has no evidence naming a commit must **not** count (design D3b):
+  `prepare_review_turn` would refuse it, and a refused review on a scheduler tick releases nothing
+  while the head is destroyed on its behalf. The sibling assertion is that a review entry whose task
+  *does* name a commit **does** count.
 - [ ] 3.9 Eligibility: an entry outside `selected` that names a task with its own checkout but is
   **over the hop budget**, and one whose **conversation is closed**, each must not count. Neither can
   run, and counting on their behalf destroys the head.
@@ -103,10 +136,19 @@
   derivation, any UI string, any test — and confirm none of them matches on its text. Record what
   the grep found in the change, including "nothing", because the next round should not have to
   re-run it to know.
-- [ ] 5.3 Re-read `TriggerAgentError`'s `agent_wide` docstring, which cites `:756` as the
-  entry-specific worktree example. Update the citation and the sentence to the split this change
-  makes, so the flag's documented invariant ("only refusals that are certainly agent-wide are
-  marked") stays true of the code beneath it.
+- [ ] 5.3 Re-read `TriggerAgentError`'s `agent_wide` docstring (`agent_trigger.py:304-318`), which
+  cites `:756` as the entry-specific worktree example. Update the citation and the sentence to the
+  split this change makes, so the flag's documented invariant ("only refusals that are certainly
+  agent-wide are marked") stays true of the code beneath it.
+- [ ] 5.4 **The same job one module over, and it is inside the branch being edited.**
+  `turn_scheduler.py:225-233`, the comment closing the counting branch, states flatly: *"a task's
+  checkout that could not be prepared is the **task's** workspace, not the agent's, so other input
+  really could run and the head entry really is in the way (design D3a)."* That is the claim this
+  change falsifies for one of the two arms, and 5.2's grep for the refusal's *sentence* does not
+  reach it — this comment quotes no sentence. Rewrite it to say which arm each half is about, and
+  repoint the citation: `D3a` there means
+  `2026-08-28-a-delivery-attempt-means-a-delivery`, and this change's own predicate decision is D8
+  precisely so the two do not collide in this file.
 
 ## 6. Verify it against the product, not only the suite
 

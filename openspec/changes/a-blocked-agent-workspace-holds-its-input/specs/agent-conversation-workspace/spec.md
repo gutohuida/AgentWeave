@@ -26,11 +26,13 @@ the queue is in the way and SHALL keep counting; where it has none, nothing is s
 input and it SHALL be held for the repair.
 
 Whether other queued input would have run somewhere else SHALL be decided by where that input would
-actually have executed, and SHALL NOT be inferred from the input naming a task. Not every turn about
-a task gets a checkout of its own: work on a task the system never gave one to runs in the agent's
-own workspace, as does work naming a task that no longer takes new work. Input like that is blocked
-by the same obstruction, so giving up on the head of the queue releases nothing and SHALL NOT be
-treated as evidence that something else could have run. Where the answer is uncertain, the system
+actually have executed, and SHALL NOT be inferred from the input naming a task or a review. Not every
+turn about a task gets a checkout of its own: work on a task the system never gave one to runs in the
+agent's own workspace, and input naming work the operator has already decided about is carried by
+whatever the thread it arrived in is about, which may be nothing at all. Input like that is blocked by
+the same obstruction, so giving up on the head of the queue releases nothing and SHALL NOT be treated
+as evidence that something else could have run. Input the system would have refused to start for its
+own reasons SHALL NOT be treated as such evidence either. Where the answer is uncertain, the system
 SHALL hold the input rather than count against it: holding a message the queue could have released
 delays it, and counting one it could not destroys it.
 
@@ -115,10 +117,33 @@ that input. Input that was never carried anywhere has not failed to be delivered
 
 - **WHEN** an agent's own workspace cannot be prepared
 - **AND** the only other input queued for that agent is input the system would not have started —
-  because it names work that takes no new work, or because it is beyond the limits that decide what
-  may start
+  because it is beyond the limits that decide what may start, or because the thread it arrived in is
+  no longer open
 - **THEN** no delivery attempt is counted against the input at the head of the queue
 - **AND** it is still queued after repeated attempts to start the agent
+
+#### Scenario: A review with nothing to review is not something else that could have run
+
+- **WHEN** an agent's own workspace cannot be prepared
+- **AND** the only other input queued for that agent asks it to review work for which nothing has
+  been recorded to review
+- **THEN** no delivery attempt is counted against the input at the head of the queue
+- **AND** it is still queued after repeated attempts to start the agent
+
+#### Scenario: A review that could have run does count
+
+- **WHEN** an agent's own workspace cannot be prepared
+- **AND** other input queued for that agent asks it to review work the system can put in front of it
+- **THEN** a delivery attempt is counted against the input at the head of the queue
+- **AND** the existing limit still applies to it
+
+#### Scenario: Input about decided work still counts when its thread is about live work
+
+- **WHEN** an agent's own workspace cannot be prepared
+- **AND** other input queued for that agent names work the operator has already decided about
+- **AND** the thread that input arrived in is about work that does have a checkout of its own
+- **THEN** a delivery attempt is counted against the input at the head of the queue
+- **AND** the existing limit still applies to it
 
 #### Scenario: A blocked task checkout keeps counting
 

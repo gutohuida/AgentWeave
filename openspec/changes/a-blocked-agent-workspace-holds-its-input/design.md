@@ -108,9 +108,10 @@ reduction is wrong:**
   for a **grandfathered** task (`Task.workspace_scheme == 'agent'`, stamped once by migration `0095`
   and never written again) and for a task id `worktrees.validate_task_id` refuses. Upstream of it,
   `run_task_binding.resolve_bound_task` drops the binding entirely for a task that has been deleted,
-  and for one `decided_task_refusal` reports as approved or abandoned (F79). Each of those four is a
-  turn *about a task* that executes in `.agentweave/worktrees/<agent>` — the directory that is
-  blocked.
+  and for one `decided_task_refusal` reports as approved or abandoned (F79). Each of those four can be
+  a turn *about a task* that executes in `.agentweave/worktrees/<agent>` — the directory that is
+  blocked. The first two always are; the last two are only where the thread carries no live binding of
+  its own, which R3 corrects below.
 - So an entry naming a grandfathered task, queued behind the refused head, would **not** have run.
   Under R1's reduction it counts as "could have run elsewhere", the attempt is counted, and the head
   is destroyed at the limit having released nothing. That is F188 surviving its own fix, on precisely
@@ -120,16 +121,40 @@ reduction is wrong:**
 The test, stated against what actually decides the workspace:
 
 > An entry outside `selected` would have run in a different workspace when it is **eligible** — within
-> the hop budget, in an open conversation — **and** either names a review (`review_task_id`, which
-> takes the review checkout under `.agentweave/reviews/<reviewer>`; that is resolved before this
-> branch is reached and does not consult any scheme), or is about a task that **takes its own
+> the hop budget, in an open conversation — **and** either names a review that could itself have
+> started (`review_task_id`, which takes the review checkout under `.agentweave/reviews/<reviewer>`;
+> that is resolved before this branch is reached and does not consult any scheme — but see D3b, a
+> review with no commit to check out would not have run either), or is about a task that **takes its own
 > checkout**: a task row that exists in this project, is not in `TERMINAL_FOR_BINDING`, carries
 > `workspace_scheme == 'task'`, and whose id `validate_task_id` accepts. *About a task* covers both
 > the entry's own `task_id` and the `Conversation.task_id` its thread inherits
 > (`binding_for_conversation`), because a plain follow-up in a thread about a task binds to that task.
 
-Two queries answer the whole thing: one over the task ids the remaining entries name, one over their
-distinct conversation ids.
+**Two of those four routes are conditional, and R3 measured the condition.** R2 wrote that a deleted
+or decided task, like a grandfathered one, is a turn *about a task* that runs in the agent's own
+worktree. That holds only when nothing else binds the turn. `resolve_bound_task` does not stop when
+it drops the named task: it sets `bound_task = None` (`run_task_binding.py:391`, `:399`) and falls
+through to `binding_for_conversation` (`:412-416`), so an entry naming a deleted or decided task, in a
+thread that is *itself* about a live task, binds to the thread's task and takes that task's checkout.
+It really could have run. Grandfathering and an unmintable id are unconditional — they are decided one
+layer lower, inside `resolve_turn_workspace_inputs`, *after* the binding has already been chosen — but
+the other two are not.
+
+The test above is an **or** over the entry's own task and its conversation's, so it gets this case
+right already. The *argument* for it did not. That is this repository's recurring failure — an
+argument can be wrong while everything it argues about is right — and it is written down here so the
+implementer of task 3.1 does not collapse the or on the strength of R2's sentence.
+
+Two queries answer the whole thing, **in this order**: first the conversations the remaining entries
+belong to, for `lifecycle` and the `task_id` each one inherits; then one query over the union of the
+task ids the entries name and the task ids those conversations carry. The order is forced — the second
+query's `IN` list is not known until the first has run — where R2's "one over the task ids, one over
+the distinct conversation ids" reads as though either could come first.
+
+The inherited half is also narrower than R2 wrote it. Reaching this arm proves the *controlling*
+conversation's own binding did not take a checkout of its own, so no entry in that conversation can
+count by inheritance — only by naming a task or a review itself. The conversation query is over the
+other conversations.
 
 **Every approximation in that test must err toward holding.** The two errors are not symmetric: a
 false *no* holds input the requirement says to keep counting, and the operator's queue waits; a false
@@ -139,16 +164,48 @@ of which can run — counted as evidence that something could have. Both are fre
 `hop_budget` is already in scope at the refusal, and the conversation query the inherited-binding half
 needs already reads the rows that carry `lifecycle`.
 
-**Entries inside `selected` are still excluded**, and the exclusion is right — but not for the reason
-R1 gave. R1 said a task-named entry surviving inside `selected` on this arm is one whose task was
-deleted or decided. It is one whose task was deleted, decided, grandfathered, or carrying an id the
-product could not have minted: four routes to the same place, and the two R1 missed are the two that
-persist. All four fail here identically on the next schedule, so counting them as "could have run
-elsewhere" would be counting an entry that cannot run either.
+**Entries inside `selected` are still excluded**, and the exclusion is right — but neither R1's reason
+nor R2's is the reason. R1 said such an entry's task was deleted or decided; R2 said it was deleted,
+decided, grandfathered or unmintable, four routes to one place. Enumerating routes is not what
+justifies the exclusion, and R3's correction above shows the enumeration is not even sound — two of
+the four are conditional on the thread's own binding. The reason is one fact: reaching this refusal
+proves the **whole** resolution for this batch — every entry's named task, the conversation's
+inherited task, the scheme, the id — already produced `UNBOUND`. Nothing about the next schedule
+changes any of those inputs, so an entry inside `selected` will reach this same arm again.
 
 The whole test runs only on the refusal path, and only for this one classification.
 
-### D3a — The predicate lives in `task_workspace`, not in a fourth copy of the rule
+### D3b — A review entry counts only if the review could actually have run
+
+R2 verified that a review entry takes `.agentweave/reviews/<reviewer>` rather than the blocked
+directory, and treated a queued review as evidence that something else could have run. It is evidence
+only if the review would have **started**, and `prepare_review_turn` has a gate before the checkout:
+evidence naming a commit (`review_turn.py:197-199`). Without one it raises `ReviewTurnRefused`, which
+`agent_trigger` turns into a `request_level` 409 — and on a scheduler tick that refusal takes the
+counting branch itself and abandons the review after three schedules, having released nothing.
+Counting on its behalf destroys the head for a turn that was never going to happen: exactly the false
+*yes* the paragraph above SHALLs against.
+
+Its other refusals need no asking. A missing or foreign task row is the existence check the helper
+already performs; `is_git_repo` is proven by having reached this arm at all; and a review checkout
+that is itself blocked is a different directory whose state cannot be predicted from here — the same
+residual any scope test carries.
+
+So the helper asks `requirement_evidence.commit_for_task_review(session, task_id).resolved` for the
+review entries it is considering, which is the same call the review path makes, per D1's rule about
+not restating a decision one module over. One query per review entry, and the ordinary count of
+review entries outside `selected` is zero.
+
+Rejected: dropping review entries from the test entirely. It errs in the safe direction, but a review
+that does name a commit really is other input that could have run, and holding the head for it would
+hold more than the requirement asks.
+
+### D8 — The predicate lives in `task_workspace`, not in a fourth copy of the rule
+
+*(R2 called this D3a. Renamed by R3, and the rename is not cosmetic: `turn_scheduler.py:232` and
+`agent_trigger.py:304` — the two lines this change edits — already cite "design D3a", meaning the one
+in `2026-08-28-a-delivery-attempt-means-a-delivery`. Shipping a second D3a into those exact comments
+would leave the code with two live meanings for one label.)*
 
 The corrected test asks *does this task take its own checkout?* — which is exactly the question
 `resolve_turn_workspace_inputs` already answers, and answers by falling through to `UNBOUND` in three
@@ -160,6 +217,33 @@ So `task_workspace` gains a read-only `takes_own_checkout(task) -> bool`, and
 invalid-id branch, which is the one thing the predicate cannot carry. `task_workspace` reads and never
 writes `workspace_scheme` (its own module docstring, and `test_task_workspace_scheme.py` enforces it),
 and this adds a read.
+
+**And the enforcement constrains how the read may be spelled. R2 asserted the extraction leaves
+`test_task_workspace_scheme.py` passing; measured, it does not.** That test's
+`test_nothing_outside_the_migration_writes_the_column` lowercases each `.py` file under the `hub`
+package and `src/` and looks for four **substrings**, two of which a comparison contains:
+
+```
+'task.workspace_scheme != TASK_SCHEME'  -> []                        # today's resolver
+'task.workspace_scheme == TASK_SCHEME'  -> ['.workspace_scheme =']   # offender
+'task.workspace_scheme==TASK_SCHEME'    -> ['workspace_scheme=']     # offender
+```
+
+`.workspace_scheme =` is a prefix of `.workspace_scheme ==`, and `workspace_scheme=` is exactly the
+no-space comparison. Today's code survives the scan only because it happens to be written `!=` — and
+at HEAD migration `0095` is the sole file the scan matches (measured; the suite is 10 passed). So the
+predicate keeps the negative form:
+
+```python
+if task.workspace_scheme != TASK_SCHEME:
+    return False
+```
+
+Not a workaround, and not a reason to loosen the scan. The scan is a **substring** scan on purpose —
+its own docstring says a scan that tried to be cleverer would match its own prose — and the price of
+that bluntness is that reads of this column are written one way. Task 3.0 states the spelling and task
+3.0a re-asserts the scan's result, so a later refactor to `==` fails a test that says why rather than
+one that looks arbitrary.
 
 The F79 half stays where it lives: `run_task_binding.decided_task_refusal`, asked by the scheduler's
 helper about the task rows it loaded. A deleted task is the absence of a row.
