@@ -81,7 +81,10 @@ agent's own workspace could not be prepared.*
   project directory can come back on its own (a disconnected drive, a directory being restored). A
   blocked agent worktree does not — somebody has to remove the directory. Holding it as `transient`
   would be a second way to reach the same held-forever behaviour with the wrong reason on record,
-  and `GET /queue/{agent}/status` would then report a wait that nothing is waiting for.
+  and `GET /queue/{agent}/status` would then report a wait that nothing is waiting for. It also
+  reaches further than the counter: `schedule_agent` returns `terminal_failure=not transient`, which
+  `scheduler.py:2919` and `:3058` read when deciding whether a job or a flow step failed, so
+  `transient` here would quietly reclassify those outcomes too.
 
 ### D3 — The scheduler answers the starvation question, because it is the only party holding the queue
 
@@ -92,30 +95,74 @@ conversations) and `selected` (the batch it just tried). So:
 > An `agent_workspace_unavailable` refusal does not count a delivery attempt **unless** some queued
 > entry for that agent outside the refused batch would have run in a different workspace.
 
-Computing "would have run in a different workspace", precisely and cheaply:
+Computing "would have run in a different workspace". **R1 reduced this to one column, and that
+reduction is wrong:**
 
 - Reaching the agent-workspace arm at all means `is_writing_agent(config)` and `is_git_repo(repo_root)`
   both held — otherwise `resolve_agent_workspace` returns `repo_root` and provisions nothing, so no
-  refusal exists. Both are properties of the agent and the project, not of an entry, so they hold
-  identically for every other entry in this agent's queue. `takes_task_workspace` therefore reduces
-  to **`task_id is not None`** for the whole comparison.
-- An entry that names a task (`entry.task_id`) takes that task's checkout. An entry that names a
-  review (`entry.review_task_id`) takes the review checkout, which is resolved before this branch is
-  ever reached and never touches the agent worktree. Either one counts.
-- An entry naming neither still takes a task checkout when **its conversation** is already bound to
-  one — `resolve_bound_task` falls through to `binding_for_conversation`, which reads
-  `Conversation.task_id`. So a plain follow-up in a thread about a task runs in that task's checkout.
-  Omitting this half would hold input that could have run: less harmful than destroying it, but still
-  a breach of the requirement's second paragraph. One query over the distinct conversation ids of the
-  remaining entries answers it.
-- **Entries inside `selected` are excluded**, and not merely for tidiness. If any of them named a
-  live task, `binding_from_entries` would have bound the turn to it and `resolve_turn_workspace`
-  would have taken the task arm — so a task-named entry surviving inside `selected` is one whose task
-  was deleted or decided (`resolve_bound_task` drops the binding, F79), which resolves to no task on
-  the next schedule too. Counting it as "could have run elsewhere" would be counting an entry that
-  will fail here identically.
+  refusal exists. That part is true, and both are properties of the agent and the project rather than
+  of an entry, so they hold identically for every other entry in this agent's queue.
+- **It does not follow that `takes_task_workspace` reduces to `entry.task_id is not None`.**
+  `agent_trigger` never hands `resolve_turn_workspace` an entry's `task_id`; it hands it
+  `turn_workspace.task_id`, and `task_workspace.resolve_turn_workspace_inputs` returns that as `None`
+  for a **grandfathered** task (`Task.workspace_scheme == 'agent'`, stamped once by migration `0095`
+  and never written again) and for a task id `worktrees.validate_task_id` refuses. Upstream of it,
+  `run_task_binding.resolve_bound_task` drops the binding entirely for a task that has been deleted,
+  and for one `decided_task_refusal` reports as approved or abandoned (F79). Each of those four is a
+  turn *about a task* that executes in `.agentweave/worktrees/<agent>` — the directory that is
+  blocked.
+- So an entry naming a grandfathered task, queued behind the refused head, would **not** have run.
+  Under R1's reduction it counts as "could have run elsewhere", the attempt is counted, and the head
+  is destroyed at the limit having released nothing. That is F188 surviving its own fix, on precisely
+  the projects that predate per-task isolation — which is every project that had work on it when
+  `work-is-isolated-per-task` shipped, and none of the fresh ones a test or a drive tends to create.
+
+The test, stated against what actually decides the workspace:
+
+> An entry outside `selected` would have run in a different workspace when it is **eligible** — within
+> the hop budget, in an open conversation — **and** either names a review (`review_task_id`, which
+> takes the review checkout under `.agentweave/reviews/<reviewer>`; that is resolved before this
+> branch is reached and does not consult any scheme), or is about a task that **takes its own
+> checkout**: a task row that exists in this project, is not in `TERMINAL_FOR_BINDING`, carries
+> `workspace_scheme == 'task'`, and whose id `validate_task_id` accepts. *About a task* covers both
+> the entry's own `task_id` and the `Conversation.task_id` its thread inherits
+> (`binding_for_conversation`), because a plain follow-up in a thread about a task binds to that task.
+
+Two queries answer the whole thing: one over the task ids the remaining entries name, one over their
+distinct conversation ids.
+
+**Every approximation in that test must err toward holding.** The two errors are not symmetric: a
+false *no* holds input the requirement says to keep counting, and the operator's queue waits; a false
+*yes* counts an attempt and destroys the operator's message at the third schedule. R1's version had
+no eligibility filter at all, so an entry over the hop budget or in a closed conversation — neither
+of which can run — counted as evidence that something could have. Both are free to exclude:
+`hop_budget` is already in scope at the refusal, and the conversation query the inherited-binding half
+needs already reads the rows that carry `lifecycle`.
+
+**Entries inside `selected` are still excluded**, and the exclusion is right — but not for the reason
+R1 gave. R1 said a task-named entry surviving inside `selected` on this arm is one whose task was
+deleted or decided. It is one whose task was deleted, decided, grandfathered, or carrying an id the
+product could not have minted: four routes to the same place, and the two R1 missed are the two that
+persist. All four fail here identically on the next schedule, so counting them as "could have run
+elsewhere" would be counting an entry that cannot run either.
 
 The whole test runs only on the refusal path, and only for this one classification.
+
+### D3a — The predicate lives in `task_workspace`, not in a fourth copy of the rule
+
+The corrected test asks *does this task take its own checkout?* — which is exactly the question
+`resolve_turn_workspace_inputs` already answers, and answers by falling through to `UNBOUND` in three
+places. Restating those three conditions inside `turn_scheduler` is how the scheduler's idea of the
+workspace and the resolver's drift apart, which is the failure D1 rejects one module over.
+
+So `task_workspace` gains a read-only `takes_own_checkout(task) -> bool`, and
+`resolve_turn_workspace_inputs` is refactored to call it — keeping its `logger.warning` on the
+invalid-id branch, which is the one thing the predicate cannot carry. `task_workspace` reads and never
+writes `workspace_scheme` (its own module docstring, and `test_task_workspace_scheme.py` enforces it),
+and this adds a read.
+
+The F79 half stays where it lives: `run_task_binding.decided_task_refusal`, asked by the scheduler's
+helper about the task rows it loaded. A deleted task is the absence of a row.
 
 ### D4 — Rejected: pass `agent_wide=True` at the site and stop
 
@@ -164,8 +211,14 @@ the repair in it — which is what makes holding acceptable rather than a silent
 - **A held queue behind a repair the operator does not notice.** Mitigated by D7 and bounded by D3:
   anything that could have run still gets the head dropped on schedule. The residual is an agent all
   of whose queued input is unbound, which is precisely the population the requirement says to hold.
-- **Two conversation reads on a refusal path.** Only on this classification, only when other entries
-  exist, and one query for all of them.
+- **Two extra reads on a refusal path.** One query over the task ids the remaining entries name, one
+  over their distinct conversation ids. Only on this classification, and only when entries outside
+  the refused batch exist.
+- **The grandfathered population is invisible to anything that starts clean.** `workspace_scheme` is
+  `'task'` by default and is written only by migration `0095`, so a fresh project, a new fixture and
+  a live drive all produce task-scheme tasks — the shape that makes the scope test *right*. The case
+  that makes it wrong has to be constructed on purpose, which is why it is a named task rather than
+  a line inside an existing one, and why it cannot be left to the drive to catch.
 - **The behaviour is inferred, not driven, at HEAD.** Task 1 reproduces it before anything changes,
   and says to stop if it does not reproduce.
 

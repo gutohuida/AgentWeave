@@ -35,16 +35,26 @@
 
 ## 3. The scheduler decides whether anything was starving behind it
 
+- [ ] 3.0 `hub/hub/task_workspace.py`: extract `takes_own_checkout(task) -> bool` — a task row exists,
+  its `workspace_scheme` is `TASK_SCHEME`, and `worktrees.validate_task_id` accepts its id — and
+  refactor `resolve_turn_workspace_inputs` to call it, keeping its `logger.warning` on the invalid-id
+  branch. Read only; `test_task_workspace_scheme.py` must still pass unchanged (design D3a). This is
+  the predicate the scheduler asks, so that "does this task get its own checkout" has one
+  implementation rather than a second copy in `turn_scheduler`.
 - [ ] 3.1 `hub/hub/turn_scheduler.py`: add a helper that answers *would other queued input for this
-  agent have run in a different workspace?* Inputs are the `entries` and `selected` the function
-  already holds. True when an entry outside `selected` names a task or a review, or when its
-  conversation carries a task binding (`Conversation.task_id`); one query for the distinct
-  conversation ids of the remaining entries, not one per entry.
-- [ ] 3.2 Write the reduction down in the helper's docstring rather than leaving it implicit:
-  reaching this refusal means the agent writes and the project is a repository, so
-  `takes_task_workspace` reduces to `task_id is not None` for every other entry in that queue
-  (design D3). Without that sentence the next reader cannot tell why the config and repo_root are
-  absent from a workspace question.
+  agent have run in a different workspace?* Inputs are the `entries`, `selected` and `hop_budget` the
+  function already holds. True for an entry outside `selected` that is **eligible** — `hop_depth <=
+  hop_budget`, conversation `lifecycle == "open"` — **and** either names a review (`review_task_id`)
+  or is about a task for which `task_workspace.takes_own_checkout` is true and
+  `run_task_binding.decided_task_refusal` is `None`. *About a task* means the entry's own `task_id`
+  or its conversation's `Conversation.task_id`. One query over the task ids, one over the distinct
+  conversation ids — not one per entry.
+- [ ] 3.2 Write the argument down in the helper's docstring, and write down the part R1 got wrong:
+  reaching this refusal proves the agent writes and the project is a repository, so those two drop
+  out of the comparison — but it does **not** reduce to `entry.task_id is not None`, because a
+  grandfathered task, an unmintable task id, a deleted task and a decided task all name a task and
+  all run in the agent's own worktree (design D3). Say which direction the approximations err in and
+  why: a false *yes* destroys the operator's message, a false *no* only holds it.
 - [ ] 3.3 Extend the condition at `:204` so an `agent_workspace_unavailable` refusal skips the
   counter unless 3.1 says something else could have run. Keep the existing `transient` and
   `agent_wide` terms untouched and readable; do not collapse the three questions into one boolean.
@@ -56,8 +66,19 @@
   conversation does. It must count. This is the half a scope test built only on `entry.task_id`
   would get wrong, and nothing else in the suite would notice.
 - [ ] 3.6 A test that an entry inside `selected` naming a task that no longer resolves does **not**
-  count as "could have run elsewhere" (design D3, last bullet) — it will fail here identically on
-  the next schedule.
+  count as "could have run elsewhere" (design D3) — it will fail here identically on the next
+  schedule.
+- [ ] 3.7 **The grandfathered test, and it is the one this round exists for.** Another conversation's
+  entry names a task whose `workspace_scheme` is `'agent'`. It must **not** count: that turn would run
+  in the same blocked worktree, so dropping the head releases nothing. Set the column directly in the
+  fixture — no runtime path writes it — and say in the test's docstring that a scope test built on
+  `entry.task_id` alone passes every other test in this file and fails this one.
+- [ ] 3.8 The same test one row over, for the three siblings that reach the agent worktree by another
+  route: a task id `validate_task_id` refuses, a task row that has been deleted, and a task in
+  `TERMINAL_FOR_BINDING`. None of them counts.
+- [ ] 3.9 Eligibility: an entry outside `selected` that names a task with its own checkout but is
+  **over the hop budget**, and one whose **conversation is closed**, each must not count. Neither can
+  run, and counting on their behalf destroys the head.
 
 ## 4. The refusal says what would clear it
 
@@ -98,7 +119,9 @@
   reproduction used.
 - [ ] 6.3 Second leg, same project: queue a task-bound message for the same agent in another
   conversation behind the blocked one, and confirm the head is still given up on at the limit and
-  the task turn then runs. Holding everything would look like success to leg 6.2 alone.
+  the task turn then runs. Holding everything would look like success to leg 6.2 alone. The task must
+  be an ordinary one — a drive cannot produce a grandfathered task, which is exactly why 3.7 exists
+  and why this leg cannot stand in for it.
 - [ ] 6.4 Third leg: remove the directory, `git worktree prune`, trigger once, and confirm the held
   message from 6.2 is delivered. F96's promise is the whole point of holding it, and it is unproven
   until the repair delivers it.

@@ -18,13 +18,21 @@ queued input could have run, the input at the head of the queue is in the way, a
 go on counting its attempts and SHALL still give up on it at the limit.
 
 A refusal to prepare **the agent's own workspace** SHALL be answered by that same question rather
-than assumed either way. The agent's workspace is where every turn of that agent runs that is not
-about a task, so a workspace that cannot be prepared blocks that entire population and is a
+than assumed either way. The agent's workspace carries every turn of that agent that does not have a
+workspace of its own, so a workspace that cannot be prepared blocks that entire population and is a
 condition only the operator can clear — the same shape as an agent with no runner bound, which is
-held. It does not block a turn about a task, which runs in that task's own checkout. So where the
-agent has other queued input that would have run somewhere else, the head of the queue is in the way
-and SHALL keep counting; where it has none, nothing is starving behind that input and it SHALL be
-held for the repair.
+held. So where the agent has other queued input that would have run **somewhere else**, the head of
+the queue is in the way and SHALL keep counting; where it has none, nothing is starving behind that
+input and it SHALL be held for the repair.
+
+Whether other queued input would have run somewhere else SHALL be decided by where that input would
+actually have executed, and SHALL NOT be inferred from the input naming a task. Not every turn about
+a task gets a checkout of its own: work on a task the system never gave one to runs in the agent's
+own workspace, as does work naming a task that no longer takes new work. Input like that is blocked
+by the same obstruction, so giving up on the head of the queue releases nothing and SHALL NOT be
+treated as evidence that something else could have run. Where the answer is uncertain, the system
+SHALL hold the input rather than count against it: holding a message the queue could have released
+delays it, and counting one it could not destroys it.
 
 A refusal to prepare **a task's own checkout** SHALL keep counting. That workspace belongs to one
 task, other input for the agent runs elsewhere, and the refused input really is in the way.
@@ -90,9 +98,27 @@ that input. Input that was never carried anywhere has not failed to be delivered
 #### Scenario: A blocked agent workspace does not hold input that something else was waiting behind
 
 - **WHEN** an agent's own workspace cannot be prepared
-- **AND** other input queued for that agent is about a task, so it would run in that task's checkout
+- **AND** other input queued for that agent is about a task that has a checkout of its own, so it
+  would run there
 - **THEN** a delivery attempt is counted against the input at the head of the queue
 - **AND** the existing limit still applies to it, so it cannot hold the other input indefinitely
+
+#### Scenario: Input about a task that has no checkout of its own is not something else that could have run
+
+- **WHEN** an agent's own workspace cannot be prepared
+- **AND** the only other input queued for that agent is about a task whose work executes in the
+  agent's own workspace rather than in a checkout of its own
+- **THEN** no delivery attempt is counted against the input at the head of the queue
+- **AND** it is still queued after repeated attempts to start the agent
+
+#### Scenario: Input that could not have run for its own reasons does not count either
+
+- **WHEN** an agent's own workspace cannot be prepared
+- **AND** the only other input queued for that agent is input the system would not have started —
+  because it names work that takes no new work, or because it is beyond the limits that decide what
+  may start
+- **THEN** no delivery attempt is counted against the input at the head of the queue
+- **AND** it is still queued after repeated attempts to start the agent
 
 #### Scenario: A blocked task checkout keeps counting
 

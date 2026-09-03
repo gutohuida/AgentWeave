@@ -92,6 +92,17 @@ can answer it, because it is the only one holding the rest of the queue. The rai
 scope of what it could not prepare; the scheduler asks whether anything outside that scope was
 waiting.
 
+**Naming a task is not the same as taking a task's checkout.** `agent_trigger` never hands
+`resolve_turn_workspace` an entry's `task_id` — it hands it `turn_workspace.task_id`, and
+`task_workspace.resolve_turn_workspace_inputs` returns `None` there for a **grandfathered** task
+(`Task.workspace_scheme == 'agent'`, stamped once by migration `0095`), for a task id
+`validate_task_id` refuses, and — one layer up, in `resolve_bound_task` — for a task that has been
+deleted or already decided (F79). All four run in `.agentweave/worktrees/<agent>`, the directory that
+is blocked. So the scheduler's question is *does this entry's task take its own checkout*, asked of
+the task row, and not *does this entry name a task*. Getting that wrong would leave F188 alive on
+every project old enough to have grandfathered tasks; design D3 is written against the task row for
+that reason.
+
 ### And the refusal still does not say what would clear it
 
 `ensure_worktree`'s message names the path and the branch precisely —
@@ -122,7 +133,7 @@ of the branches it took.
 
 - Affected specs: `agent-conversation-workspace` (MODIFIED), `workspace-isolation` (ADDED, MODIFIED)
 - Affected code: `hub/hub/api/v1/agent_trigger.py`, `hub/hub/turn_scheduler.py`,
-  `hub/hub/worktrees.py`
+  `hub/hub/worktrees.py`, `hub/hub/task_workspace.py` (a read-only predicate, extracted — design D3a)
 - No migration. No API shape change: `TriggerAgentError` is internal, the HTTP status and the
   operator-visible sentence are the only things a caller sees, and both stay a 409 with a longer
   sentence.
