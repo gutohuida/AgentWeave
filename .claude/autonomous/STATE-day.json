@@ -1,94 +1,40 @@
 {
-    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook": ".claude/loops/day-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-01-daily",
-    "parent_branch": "master",
-    "parent_sha": "556bb37",
-    "stop_at": "2026-09-02T17:00:00+01:00",
-    "iteration": 20,
-    "log_file": ".claude/autonomous/2026-09-02-day-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "Window complete. Iteration 20 fired at 16:35, 30 minutes after iteration 19 -- twelfth consecutive 30-minute interval -- found the heartbeat 30 minutes old and nothing changed (clean tree, HEAD == origin == 4a0ed39, so APPROVALS.md's two tokens are still blank), and stood down in four reads. Thirteenth consecutive empty firing. On this cadence the next firing lands at ~17:05, at or past stop_at at 17:00.",
-    "next_action": "STAND DOWN and WRITE NOTHING -- on the measured 30-minute cadence the next firing lands at ~17:05, at or past stop_at (2026-09-02T17:00:00+01:00). Check the clock FIRST: if it is at or past 17:00, the window is over -- do NOT append a log entry, do NOT rewrite this file, do NOT commit, do NOT push. Just stop. The tree is clean and pushed (HEAD == origin == the iteration-20 commit); leaving it untouched is the correct final state. Only if the clock is somehow still before 17:00 should you repeat the cheap stand-down: check exactly four things -- the clock, last_heartbeat, git status, HEAD vs origin -- append a SHORT log entry (four-row table plus one sentence), refresh last_heartbeat to now, commit and push, and stop. In neither case is there a unit of work: D-1 through D-7 are done, this window does not implement, and no proposal is to be invented to fill time. Do NOT re-open the review page or APPROVALS.md; a clean tree PLUS HEAD == origin is itself the proof neither changed. HEARTBEAT: keep it FRESH, do not release it -- this overrides the driver prompt's generic step-6 release, on measurement: across twelve intervals the schedule has fired every 30 minutes regardless of heartbeat age, so releasing cannot pull a firing forward and holding cannot suppress one. Nothing is blocked: the next real actor is the OPERATOR, via the daily-review session, writing status tokens into spec-queue/APPROVALS.md's 2026-09-02 section (two rows, both blank today). The next real unit is the 23:00 FIX window, which reads STATE-night.json and that file, and by then this heartbeat is stale by hours.",
-    "queue": [
-        {
-            "id": "compose",
-            "status": "done",
-            "title": "Compose this window's queue from the playbook",
-            "detail": "Done at iteration 1. Branch settled (autonomous/2026-09-01-daily, unmerged, 76 commits, spans 2 days). Research delivered to spec-queue/research/2026-09-02.md. DIRECTION.md's 2026-09-02 section read and its D-0 branch fired: phase 0 exists and task 0.3 is FALSIFIED, so the spec-loop slot goes to repairing a-turn-says-how-it-ended and a-refusal-reaches-the-operator does not start today."
-        },
-        {
-            "id": "D-1",
-            "status": "done",
-            "title": "Drive runner-model-is-chosen-from-the-catalog end to end",
-            "detail": "Done at iteration 2. scripts/drive/t_d1_catalog_is_the_only_door.py, 33 passed / 3 failed, against the SERVED BUNDLE on :8011 (no Vite dev server; measured that no .py under hub/hub or src was newer than the running process, and that :8011 serves Temp/aw0901n/aw0901n.db, by watching which candidate's mtime moved). (a) CONFIRMED independently: both providers' selects offer exactly Provider default + the catalog's declared ids and labels, CLI change resets to UNSET, one text input on screen (Name). (b) CONFIRMED by a stronger route than the night window's wire injection: a 300-char runner name is a refusal an operator can CAUSE from the dialog, 422 with a Pydantic LIST detail, rendered as prose in a role=alert with the dialog open and the values intact. (c) CONFIRMED, and worse than stated: all four model-setting doors refuse (POST/PATCH runners, POST agents, POST agent/trigger overrides), and CATALOG['codex'] -- unedited since 2026-08-05 -- declares gpt-5.6-sol and gpt-5.4, both ABSENT from ~/.codex/models_cache.json (fetched 2026-08-29, client 0.146.0); gpt-5.6-sol is the declared default and AgentCreateDialog hands it to the operator. Findings F267 and F268 filed, both severity B, ledger 271 -> 273. Fixture project deleted (204, projects []); directory ~/Documents/drive-0902-d1 KEPT because the harness reopens it."
-        },
-        {
-            "id": "D-2",
-            "status": "done",
-            "title": "Spec RA - repair a-turn-says-how-it-ended from the measured premise",
-            "detail": "Done at iteration 3. D6 re-derived against the code: signal 1 DOES fire, for the run that FINISHED, written by a second producer round 3b did not look for -- runner_parsing.py:346-356's status_event('completed') persisted via record_agent_output (agent_trigger.py:1925-1938). Round 3b traced only the finalize block's broadcast-only line at :2132. D6's purpose survives on a narrower argument (it extends signal 1 to runs that did NOT complete, plus a durable exit code) and loses two attributions: it does not repair the working indicator (phases 1+4 do, by fixing signal 2), and it cannot reach `interrupted` at all (reconcile_interrupted_runs writes an EventLog row and no AgentOutput). Scope NOT narrowed; phases 1-7 UNBLOCKED. Three new tasks (2.1a, 4.5a, 7.1a) plus rewrites of 2.1, 2.2, 2.4, 4.7, 7.1. New spec scenario + a stated coverage bound. NEW FINDING F269 (C), ledger 273 -> 274: a turn whose only agent output is a status row loses its 'Worked for Xs' line, because durationLine renders inside the block that returns null -- MEASURED with two throwaway vitest probes (4+2 assertions, all passing) against today's unmodified code, probes deleted before commit. openspec validate --strict: valid."
-        },
-        {
-            "id": "D-3",
-            "status": "done",
-            "title": "Spec RB - re-derive D-2's repaired argument against the code, independently",
-            "detail": "Done at iteration 4. Round RB re-derived RA's argument against the code independently (9 files read before opening D6). CONFIRMED, each by a stronger route than RA used: (a) the finalize broadcast is inside `async with` at agent_trigger.py:2009 and outside the `if run:` guard, reached for stopped/failed/completed/binding-conflict -- and its app-server twin at :2718-2733 is likewise unguarded, which RA cited without checking; (b) `interrupted` cannot gain a status row, verified against EVERY writer of the literal (Run.status='interrupted' assigned in exactly one place, run_reconciliation.py:65; codex_appserver's `interrupted` outcome maps to `stopped` at agent_trigger.py:2628/:2673); (c) F269 reproduced by RUNNING it, 4 assertions, adding two cases RA did not run (status row with no operator message; thinking row ahead of it as negative control). CHANGED: RA generalised a Claude-only producer to the product. `parse_claude_line` is selected only for claude/claude_proxy/native (agent_trigger.py:1867); parse_codex_line's only status_event is 'plan' (:574); the app-server transport's only status_event is 'plan' (codex_appserver.py:544); status_event('completed') occurs EXACTLY ONCE in the whole Hub. So no Codex run of either transport has ever had a persisted phase='completed' row, including a clean completion -- RA's headline retraction is right for Claude and WRONG for Codex, where D6 is the first-time repair rounds 1-3 described. UI half MEASURED (3 assertions): pre-refetch, the working indicator is absent with the Claude parser's row present and PRESENT without it, and codex's own phase='plan' row does not satisfy the predicate. NEW FINDING F270 (C), ledger 274 -> 275, labelled UI-half-measured / producer-half-read / live Codex turn NOT driven (Codex undrivable since 2026-08-29). WITHDRAWN: task 4.5a offered two fixes as equivalents and one does not work -- excluding success-completion entries from firstAgentBlockId leaves it undefined in exactly F269's case (2 of 6 fail); the placement fix passes 6/6 plus 86 existing assertions. Both patches reverted, all three probes deleted, nothing under hub/ui, hub/hub or src committed. D1-D5, D7, D6's purpose/writer/exit-code argument and F190's headline explicitly unchanged. Phases 1-7 stay unblocked. openspec validate --strict: valid."
-        },
-        {
-            "id": "D-4",
-            "status": "done",
-            "optional": true,
-            "title": "Drive the InstructionsPage:9 suspicion",
-            "detail": "Done at iteration 5. REPRODUCED, and worse than N-11's static read: F271 (A), ledger 275 -> 276, the first open severity A since the list went empty on 2026-08-28. scripts/drive/t_d4_instructions_failed_load.py, 19 assertions all passing, against the SERVED BUNDLE on :8011 -- measured as this repo's committed bundle first (assets/index-x3nWU-L2.js is what :8011 serves; stamp built_at 2026-09-01T23:40:44Z from 5f47dd5; git diff 5f47dd5 HEAD -- hub/ui/src is EMPTY). A failed instructions GET (aborted connection AND a 500, measured separately, identical) leaves NO skeleton, an EMPTY textarea, Save ENABLED, no role=alert and no failure word anywhere in the page text. With the Hub reachable again and NOTHING typed, one click on Save wrote '' over the stored instructions -- measured before/after via the API. retry: 1 (main.tsx:12) means it settles in ~6s, so the operator arrives after the failure, not during it. Severity A because the operator ACTS on the misleading empty editor and the act is irreversible: instructions are prepended to every agent's canonical turn context (agents.py:1486-1490) and to every charter get_charter_content serves (:2072-2078), with no history and no undo. NOT a family -- `if (data)` seeds an editor at exactly one site under hub/ui/src/components; ChartersPage seeds from an already-loaded list. NOT DRIVEN and recorded as such: the cross-project variant (A's text left in B's editor after B's load fails), because the environment tab renders no ProjectHeader and there are ZERO 'Switch project' controls on that page (measured). Fix NOT implemented -- the day window does not implement, and half of it is a product decision. Both fixture projects deleted (204/204, projects []); directories ~/Documents/drive-0902-d4a and -d4b KEPT. Nothing under hub/hub, hub/ui or src committed."
-        },
-        {
-            "id": "D-5",
-            "status": "done",
-            "optional": true,
-            "title": "Measure: reachability walk from App.tsx",
-            "detail": "Done at iteration 6. scripts/drive/d5_reachability_walk.py imports the two night scripts rather than reimplementing them, so every delta is attributable to the module filter alone (both re-run first on today's tree and reproduce 110/35/107/101/60 exactly). 170 source files under hub/ui/src; 157 reachable from main.tsx, 13 NOT. Root choice is immaterial (App.tsx alone reaches 155; the extra two are main.tsx and ErrorBoundary.tsx); type-only edges add one file; no specifier failed to resolve. 12 of the 13 have EVERY literal unique to them absent from the served bundle, with 12 reachable files probed as controls and all their literals present; the 13th (badgeVariants.ts) is settled by the compiler -- its only importer is an `import type`. FIVE dead files nothing had named: AgentActivityTab, AgentCard, StatusBar, SidebarItem, plus stream/SharedStreamRenderer, stream/streamModel, lib/agentStatus. TOTALS, replacing the bounds: routes reached 110 -> 106; operator routes with no live client 45 -> 49; call sites 107 -> 99; unhandled 101 -> 93; MISREPORT 60 -> 54; SUPPRESSED 16 -> 14. The 4 newly-unreached routes (GET /messages, PATCH .../read, POST .../compact, POST .../new-session) are a FOURTH category for R-1(a): a client exists and its screen was removed. RANKING (the useful output): of the 54 MISREPORT, 2 seed state and write it back with NO guard (InstructionsPage:9 = F271, and AgentOutputPanel:207), 2 do so behind a guard (F197's terminal skeleton), 23 write without seeding, 27 do not write. Rank 1G exists because the first pass put all four in rank 1 and a hand read moved two out. ONE CANDIDATE, explicitly NOT DRIVEN and given NO F-number on N-11's own precedent: after a failed conversations load, Composer.tsx:333/336 spread an empty local override map and agent_trigger.py:1364 assigns runtime_overrides wholesale, so touching one pill would replace a stored {model,effort} with {effort} -- the settling drive is written down in FINDINGS.md. CORRECTIONS FORCED: F259 amended (its headline puts the unread count on the StatusBar chip, which is in no bundle; substance and F264 consequence untouched), and DECISIONS.md R-1 strikes its own 'four ?? 0 counts in the status bar' line. R-1's (a) and (b) still OPEN and nothing marked DECIDED. ruff and black clean; nothing under hub/hub, hub/ui or src committed."
-        },
-        {
-            "id": "D-6",
-            "status": "done",
-            "title": "Write the review page and today's APPROVALS section",
-            "detail": "Done at iteration 7. spec-queue/review/review-2026-09-02.html written (36,002 bytes), head/CSS extracted from the 2026-09-01 page by script rather than retyped so the theme cannot drift; only the <title> date changed. VERIFIED BY RENDERING, not reading: headless Chromium over file://, once per colour scheme -- light bg rgb(251,251,250)/ink rgb(28,28,26), dark bg rgb(22,22,26)/ink rgb(233,233,230), ZERO non-file: requests and ZERO console errors in both, full-page height 8,648px. Mechanically: http://, https://, <script, <link, @import all occur 0 times; stdlib HTMLParser closes the tag stack empty with no mismatches; <!DOCTYPE html> opens and </html> closes. Seven sections -- the playbook's six in order, plus 'What needs you' collecting five asks so none is buried. S1 leads with the unmerged two-day branch in a note above the fold AND in the kv list (93 commits, 8 files +382/-92 product diff, both measured). S2 splits the night four ways: product code / driven / tested-not-driven / read-not-driven, the last naming the blind spot D-5 closed. S3 carries F271 in its own card as the day's headline and the first open severity A since 2026-08-28, with F267/F268/F269/F270 beneath in a table with severity, one sentence and file:line, then D-5's before/after table and its three consequences (R-1(b) gets an ordering, 2 write-back sites of 54; R-1(a) gets a fourth category; F259's headline and one DECISIONS.md R-1 evidence line corrected) plus the not-driven no-F-number candidate. S4 says no new change was proposed and why, gives RA and RB a subsection each, and gives 'What RB changed nothing about' its own heading (D1-D5, D7, D6's purpose/writer/exit-code, F190's headline, phases 1 and 3). S5 walks the default queue source by source. S6 is the three ranked candidates, each ending in what it means for AgentWeave. APPROVALS.md: today's section inserted ABOVE 2026-09-01, TWO rows both with a blank token -- a-turn (repaired, phases 1-7 unblocked) and a-write (unchanged, undecided) -- and it states that only the newest section is read, so omitting a-write's row would have silently withdrawn last night's approval too. Three page items named as not-work-and-no-row. Nothing under hub/hub, hub/ui or src touched; no Hub started, no project created, no agent turn, no job."
-        },
-        {
-            "id": "D-7",
-            "status": "done",
-            "title": "Stand down -- verify the window's output is intact and pushed",
-            "detail": "Done at iteration 8. Not a work unit; the stand-down that next_action named. Re-measured rather than re-read: git status empty and HEAD == origin == 99a7451, the only delta from the D-6 commit being the one-line heartbeat release; the review page's committed blob and worktree file are both 36,186 bytes (git cat-file -s vs wc -c, not a clean git status); HTMLParser closes the tag stack empty with zero mismatches; http:// https:// <script <link @import each occur 0 times; DOCTYPE opens and </html> closes; 7 h2 sections. APPROVALS.md: 2026-09-02 indexes before 2026-09-01 and its section carries exactly two rows, both blank-token. The page was NOT re-rendered in a browser and that is stated as a bound -- it is byte-identical to what iteration 7 rendered in both colour schemes. ONE CORRECTION: iteration 7 logged the page as 36,002 bytes; it is 36,186, a mis-transcription and not drift, since worktree and blob agree. No product code, no Hub, no project, no agent turn, no job. Heartbeat left fresh, not released -- see next_action. Re-entered as a pure stand-down at iterations 9-20 (empty firings 2-13); each verified the same four things and changed nothing. Cadence 30 minutes, measured twelve times."
-        }
-    ],
-    "decisions_for_user": [
-        {
-            "id": "DAY-1",
-            "title": "DIRECTION.md's phase-0 branch names the wrong displaced item; I applied the rule, not the name.",
-            "detail": "The 2026-09-02 section says task 0.3 falsifying the design means 'the spec-loop slot below belongs to repairing a-turn, not to F188'. But that same file moves F188 to 2026-09-03 two paragraphs later, and the item actually holding today's D-2 slot is a-refusal-reaches-the-operator. I applied the governing sentence - 'A broken approved design outranks a new proposal' - to the item actually in the slot. Consequence: a-refusal-reaches-the-operator does not start today. Correct me in tomorrow's DIRECTION.md section if the intent was otherwise.",
-            "status": "informational - no work blocked"
-        }
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ],
-    "last_heartbeat": "2026-09-02T16:35:13+01:00",
-    "branch_spans_days": [
-        "2026-09-01",
-        "2026-09-02"
-    ]
+    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+    "playbook":  ".claude/loops/day-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-01-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "556bb37",
+    "stop_at":  "2026-09-03T17:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-03-day-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
