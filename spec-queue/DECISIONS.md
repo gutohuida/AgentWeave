@@ -203,6 +203,29 @@ need an answer, and its real question is not the one D-4 asked: it is whether an
 error is a defect *at all* in every case, since a background poll's failure may be correctly
 invisible. (133 is an order-of-magnitude grep, not a defect count.)
 
+**One of R-1's instances has now answered "enforce", and the answer is half-done on purpose
+(2026-09-02 night window, task 5.3 of `a-turn-says-how-it-ended`).** The rule F190 taught —
+*a test for code that consumes an API payload uses the ordering that route actually returns, and
+some test fails if the route's order is reversed* — is now **written down in two places a reviewer
+meets**: as a requirement, *Payload-shaped model functions are tested against real route ordering*
+(`agent-stream-events`), and as a line in `CLAUDE.md`'s Critical Rules.
+
+**Stating it is not enforcing it, and this row should not be read as if it were.** What exists is
+the rule plus a check on the single instance it was learned from: `test_a_turn_says_how_it_ended.py`
+asserts the timeline route returns newest-first and that its truncation keeps the newest fifty —
+both mutation-checked by actually reversing `agents.py`'s sort — and `timelineRunFacts.test.tsx`
+asserts the client's read of the run-facts map survives a shuffled input. **No sweep has been run
+over the repo's other payload-shaped consumers, and no automated check prevents the next one.**
+
+So R-1's question is untouched: this is one convention written by hand, in the middle of the change
+that needed it, with the general case still open. It is offered as evidence of what "enforce" costs
+when taken seriously — a spec requirement, a `CLAUDE.md` line, two mutation-checked test sites — not
+as a decision the operator has been spared.
+
+**Pointer note.** Task 5.3 names this file's *D-4*. D-4 was dissolved by the 2026-09-01 evening
+re-triage; its F190 sweep row is the table above and its queue entry is under *Not decisions* below.
+This block is where the note belongs now, and `tasks.md` records the correction.
+
 **F197 sized, 2026-09-02 (night window, N-11).** The row above is now superseded by a count.
 Harness: `scripts/drive/n11_query_error_surface.py`, one command, no product code touched. The
 write-up with the quotes is in `scripts/drive/FINDINGS.md` under *"F197 sized, 2026-09-02"*.

@@ -441,13 +441,49 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
 
 ## 5. The testing rule is enforceable
 
-- [ ] 5.1 Replace `agentTimelineModel.test.ts:223-235` — the fixture that feeds ascending events to
+- [x] 5.1 Replace `agentTimelineModel.test.ts:223-235` — the fixture that feeds ascending events to
       a route that returns descending — with whatever survives step 4, and assert the *shuffled
       input* scenario from *Payload-shaped model functions are tested against real route ordering*.
-- [ ] 5.2 Add a test that fails if the timeline route's ordering is reversed, so the coupling between
+      **DONE — and the shape moved, which this line now records rather than forces.** The deletion
+      half happened in iteration 5, because removing `runStatusByRunId` left the describe
+      uncompilable. The replacement is three tests at the end of `timelineRunFacts.test.tsx`.
+      **There is no model function left to feed events to**, so the guarantee could not be restated
+      about one: what replaced the reducer is a keyed map the route builds by id lookup, read as
+      `runs[turn.runId]`. The shuffled-input scenario therefore lands on *the component's read of
+      `runs`* — render twice with the map's keys in opposite orders and the rendered text is
+      identical. Two further tests assert each turn gets **its own** run's outcome in each order,
+      because order-independence alone is satisfied by a read that is uniformly wrong. Both
+      mutations — first-wins `Object.values(runs)[0]` and last-wins (the deleted reducer's own
+      shape) — kill all three. No mutation was found that separates test 1 from tests 2-3, so they
+      are redundant for *detection* and differ only in what they state; recorded rather than
+      trimmed, since the requirement's scenario is the thing test 1 exists to satisfy.
+- [x] 5.2 Add a test that fails if the timeline route's ordering is reversed, so the coupling between
       route order and client expectation is asserted somewhere rather than assumed.
-- [ ] 5.3 Record the rule where a reviewer will meet it, and note in `spec-queue/DECISIONS.md` (D-4)
+      **DONE — two tests, and the coupling turned out not to be the presentational one.** MEASURED:
+      the only surviving reader of `timeline.events` is `AgentActivityTab`, and it **re-sorts**
+      ascending after merging the output lines (`AgentActivityTab.tsx:52`). Reversing the route's
+      sort would reorder nothing on screen. What it changes is *which events come back at all* —
+      the three per-source queries are merged and only then cut to 50, so descending is what makes
+      those 50 the newest 50, and because `runs` is looked up from the ids the returned events name,
+      the newest runs' outcomes drop out of the facts map with them. That is F190 again by a
+      different route, and it is why the second test asserts the map and not only the list.
+      `test_the_route_returns_its_events_newest_first` states the contract; forty events plus twenty
+      older heartbeats make `test_the_truncation_keeps_the_newest_events_and_the_runs_they_name`
+      sensitive to it. **Mutation-checked, not assumed**: `reverse=True` → `reverse=False` at
+      `agents.py:802` fails both, twice, reproducibly. Task 1.4b also dies under that mutation —
+      incidentally, since it neither names nor asserts an ordering, and would pass against a route
+      that returned every event unordered.
+- [x] 5.3 Record the rule where a reviewer will meet it, and note in `spec-queue/DECISIONS.md` (D-4)
       that the rule is now stated and only its sweep remains open.
+      **DONE, with a pointer correction.** The rule is a line in `CLAUDE.md`'s Critical Rules —
+      the place this repo puts standing rules and the one a reviewer meets without going looking —
+      naming the requirement rather than a path, so archiving the change does not stale it. It
+      states in its own text that only the instance it was learned from is checked.
+      **`D-4` no longer exists**: the 2026-09-01 evening re-triage dissolved it into `R-1`, and its
+      F190 sweep row is now the measured table inside R-1. The note was written there instead, and
+      it is deliberately an entry on the *cost* side of R-1's open question — a spec requirement, a
+      `CLAUDE.md` line and two mutation-checked test sites is what one convention cost, with no
+      sweep and no automated check, so R-1 is not answered by it.
 
 ## 6. Verified by the implementer against a running Hub
 

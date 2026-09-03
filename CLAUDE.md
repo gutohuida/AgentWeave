@@ -454,6 +454,14 @@ pending → assigned → in_progress → completed → under_review → approved
   is tracked. An `agentweave.yml` at the root is still wrong — nothing in the current product writes
   one, so treat it as a leftover and ask before keeping it.
 - NEVER commit `kimichanges.md`, `kimiwork.md`
+- A test for code that consumes an API payload uses **the ordering that route actually returns**,
+  and some test fails if the route's order is reversed. A fixture in an order the route never emits
+  is not evidence — `runStatusByRunId`'s fed ascending lifecycle events to a route that returns
+  newest-first, and stayed green from 2026-08-02 to 2026-09-03 while the behaviour it covered
+  could not fire (F190).
+  Stated in full as *Payload-shaped model functions are tested against real route ordering*
+  (`agent-stream-events`). **Only the instance it was learned from is checked so far** — no sweep
+  has been run over the other payload-shaped consumers.
 - Hub API key format: `aw_live_{random32}`; run credentials are minted per run (`agent_auth.py`) and
   identity is never accepted from a request body or header
 - HttpTransport uses stdlib `urllib.request` only

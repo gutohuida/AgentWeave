@@ -198,3 +198,69 @@ describe('a turn that produced nothing still reports what it cost', () => {
     expect(screen.getByTestId('turn-worked-for')).toHaveTextContent('Worked for 5s')
   })
 })
+
+/**
+ * Task 5.1 — the replacement for `agentTimelineModel.test.ts:223-235`, and the client half of
+ * *Payload-shaped model functions are tested against real route ordering*.
+ *
+ * THE SHAPE HAS MOVED, and forcing the old wording would misdescribe it. The fixture being
+ * replaced fed ASCENDING lifecycle events to `runStatusByRunId`, a last-write-wins reducer, and
+ * asserted `run-1` ended `completed` — green, against a route that returns events NEWEST FIRST,
+ * where the same reducer keeps `run_started` and reports a finished run as still going. That is
+ * F190. Phase 4 deleted the reducer, so there is no longer a model function to feed events to.
+ *
+ * What replaced it is a keyed map the route builds by looking run ids up, read here as
+ * `runs[turn.runId]`. Its ordering guarantee is therefore about the COMPONENT'S READ, and it is
+ * exactly the requirement's *shuffled input* scenario: a consumer intended to be independent of
+ * its input's ordering proves it by returning the same result for a shuffled input.
+ *
+ * The route's own half — that it still returns newest-first, and that the truncation is what makes
+ * that load-bearing — is task 5.2, in `hub/tests/test_a_turn_says_how_it_ended.py`.
+ *
+ * Order-independence ALONE would be satisfied by a read that is uniformly wrong, so the second and
+ * third tests assert the answers are right in each order rather than only that they agree.
+ */
+describe("the read of a run's facts does not depend on the map's ordering", () => {
+  const OLD = facts('failed', { ended_at: '2026-08-02T00:00:06Z', exit_code: 1 })
+  const NEW = facts('stopped', { ended_at: '2026-08-02T00:00:14Z', exit_code: null })
+
+  /** Two turns in arrival order — the older run first, as `groupIntoTurns` receives them. */
+  const twoTurns = [
+    entry({ id: 'a1', run_id: 'run-old', content: 'the first answer' }),
+    entry({ id: 'a2', run_id: 'run-new', content: 'the second answer' }),
+  ]
+
+  function renderBoth(runs: Record<string, AgentRunFacts>) {
+    return render(
+      <AgentTimeline agent={agent} entries={twoTurns} roster={[]} runs={runs} isRunning={false} />,
+    )
+  }
+
+  it('renders identically when the map is shuffled — the same result for a shuffled input', () => {
+    const newestFirst = renderBoth({ 'run-new': NEW, 'run-old': OLD })
+    const a = newestFirst.container.textContent
+    newestFirst.unmount()
+
+    const newestLast = renderBoth({ 'run-old': OLD, 'run-new': NEW })
+    expect(newestLast.container.textContent).toBe(a)
+  })
+
+  it("gives each turn its own run's outcome when the newest turn's row is FIRST in the map", () => {
+    renderBoth({ 'run-new': NEW, 'run-old': OLD })
+    expect(screen.getAllByText(/Turn stopped/)).toHaveLength(1)
+    expect(screen.getAllByText(/Turn failed/)).toHaveLength(1)
+    expect(screen.getByText('Worked for 14s')).toBeInTheDocument()
+    expect(screen.getByText('Worked for 6s')).toBeInTheDocument()
+  })
+
+  it("gives each turn its own run's outcome when the newest turn's row is LAST in the map", () => {
+    // This is the deleted reducer's own failure mode, restated against the shape that replaced
+    // it: last-write-wins over an ordered input. It cannot happen to a keyed lookup, and that is
+    // the claim being pinned down rather than assumed.
+    renderBoth({ 'run-old': OLD, 'run-new': NEW })
+    expect(screen.getAllByText(/Turn stopped/)).toHaveLength(1)
+    expect(screen.getAllByText(/Turn failed/)).toHaveLength(1)
+    expect(screen.getByText('Worked for 14s')).toBeInTheDocument()
+    expect(screen.getByText('Worked for 6s')).toBeInTheDocument()
+  })
+})

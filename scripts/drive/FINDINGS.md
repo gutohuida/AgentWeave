@@ -18268,3 +18268,37 @@ a scheduler decision depends on the flag"*; strike the chip.
 The same correction applies to one line of `spec-queue/DECISIONS.md`'s R-1 evidence, which lists
 *"four `?? 0` counts in the status bar"* among the 44 sentences said to be on screen
 (`StatusBar.tsx:15`). They are not on screen. That block is amended there too.
+
+
+## F272 (B) — the terminal status row phase 2 exists to persist is silently lost ~10% of the time, because `record_agent_output` cannot re-read the row it just committed
+
+Found not by driving but by **this change's own test failing** — `test_a_turn_says_how_it_ended.py::test_a_stopped_run_persists_its_terminal_status_line`, in the whole-Hub-suite run of 2026-09-03 (night window, iteration 7). Filed now rather than dismissed as a flake because **the traceback was finally captured**, and it lands inside product code.
+
+**Reproduction rate, measured.** 2 failures in **20** consecutive runs of that test **on its own** (`-k a_stopped_run_persists`), and 1 in 6 runs of the whole file. It is not cross-test interference: it fails alone. Two earlier sightings tonight were lost because the run was piped to `tail`, which is how it went three iterations unattributed.
+
+**What happens.** `output_recording.py:92-94` is `db.add(row)` → `await db.commit()` → `await db.refresh(row)`. The refresh issues a primary-key SELECT and finds **no row**, so SQLAlchemy raises:
+
+```
+sqlalchemy.exc.InvalidRequestError: Could not refresh instance '<AgentOutput at 0x...>'
+  hub/hub/api/v1/agent_trigger.py:2146 in _execute_run  -> await record_agent_output(...)
+  hub/hub/output_recording.py:94       in record_agent_output -> await db.refresh(row)
+```
+
+The exception escapes into `_execute_run`'s catch-all (`agent_trigger.py:2215`), which logs *"Unhandled error in run ... for 'phase2-stopped'"* and moves on. The run ends. **The row is not there** — the test reads the output route back and gets `[]`.
+
+**Why it matters more than a flake.** That row *is* design D6: it is the only settled signal a stopped, failed or binding-conflicted run has ever had on either runner, the only one a Codex run has for any outcome, and the only carrier of the exit code once the SSE stream is gone. When this fires, the run is exactly the F190 shape again — a turn that ended with nothing saying so — and **nothing surfaces it to the operator**, because the failure is a log line inside a background task.
+
+**Introduced by phase 2** of `a-turn-says-how-it-ended` (iteration 3, commit `3b1b8f0`): before it, the finalize block was a bare `sse_manager.broadcast` with no DB write and no such failure path. Iteration 3's whole-suite run reported 3848 passed — it got lucky.
+
+**Mechanism: NOT established. Stated as hypothesis, deliberately.**
+
+- The Hub suite runs `sqlite+aiosqlite:///:memory:` (`conftest.py:19`) with **no explicit `poolclass`** (`db/engine.py:34-38`), so the aiosqlite dialect uses a single shared connection for an in-memory URL. Several concurrent sessions — the stop request's, the background run's, the reader loop's — therefore interleave BEGIN/COMMIT/ROLLBACK on **one** DBAPI connection, which is a known way for one session's committed insert to be discarded by another's rollback. If that is the whole story, this is **test-harness-only** and production (a file or Postgres URL, one connection per session) is unaffected.
+- Against that: it is *specifically* the stopped-run path that fails, and the stop path is the one that runs a request handler's session concurrently with the run's own. A real ordering defect there would be visible in production too.
+
+**What the next window should do**, in this order, because the second is cheap and settles it:
+
+1. Do **not** "fix" it by deleting the `db.refresh(row)`. The refresh is the messenger — the row is genuinely absent, and removing the read would convert a logged failure into a silent one. Only `row.timestamp` needs it, for the broadcast payload.
+2. Re-run the same test against a **file-backed** SQLite URL with a normal pool. If it stops failing, the mechanism is the shared in-memory connection and the fix is the harness; if it still fails, it is a product race on the stop path and belongs in phase 2.
+3. Either way, `_execute_run`'s catch-all swallowing a failed *terminal-status write* is its own weakness: the one write whose whole purpose is to survive the process should not be the one whose failure is invisible.
+
+**Severity B, not A**, on one ground only: it has been observed **exclusively under the in-memory test harness**, never in a drive. If step 2 shows it reproduces on a real database, it is an A — it defeats the guarantee this entire change was approved to deliver.

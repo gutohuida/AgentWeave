@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from hub.db.engine import async_session_factory
-from hub.db.models import EventLog, Run
+from hub.db.models import AgentHeartbeat, EventLog, Run
 
 # Phase 2 drives real runs through both spawn paths, and the fakes that make that possible already
 # exist. Imported rather than re-declared, as `test_agent_default_permission_mode.py` does.
@@ -573,3 +573,118 @@ async def test_a_completed_codex_run_gains_its_first_settled_signal(app, auth_he
     assert len(settled) == 1, "exactly one, and it is the finalize block's — codex writes no other"
     assert settled[0]["content"] == "Run completed (exit 0)."
     assert settled[0]["payload"]["exit_code"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — the route's ordering is asserted, not assumed (task 5.2)
+#
+# The rule this change writes down (*Payload-shaped model functions are tested against real route
+# ordering*) exists because a green test fed ascending events to a route that returns descending.
+# The reducer that consumed them is now deleted, so the client-side half of the coupling moved —
+# see `timelineRunFacts.test.tsx` for where it went. What did **not** move is the route's own
+# ordering, and these two tests are the assertion that it is what the client is entitled to expect.
+#
+# What the ordering still buys, measured rather than assumed: the only surviving reader of
+# `timeline.events` is `AgentActivityTab`, and it **re-sorts** — ascending, merged with the output
+# lines (`AgentActivityTab.tsx:52`). So reversing the sort would not visibly reorder anything.
+# It would change *which* events come back at all: the merge of three per-source queries is
+# truncated to 50 **after** the sort, so descending is what makes those 50 the newest 50. And
+# because `runs` is looked up from the ids the returned events name, the newest runs would drop
+# out of the facts map with them — F190 again, by a different route. That is the coupling worth
+# a test, and it is why the second test asserts the map and not only the list.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_route_returns_its_events_newest_first(app, auth_headers):
+    """The route's ordering contract, stated once so a client may rely on it.
+
+    Rows are inserted oldest-last on purpose: insertion order must not be what produces the
+    answer. Fails if `agents.py`'s merge sort is reversed.
+    """
+    await _sync_agent(app, auth_headers)
+    now = _now()
+    await _add(
+        _event(
+            "evt-middle",
+            event_type="run_started",
+            timestamp=now - timedelta(minutes=5),
+            data={"run_id": "run-b"},
+        ),
+        _event(
+            "evt-newest",
+            event_type="run_completed",
+            timestamp=now - timedelta(minutes=1),
+            data={"run_id": "run-c"},
+        ),
+        _event(
+            "evt-oldest",
+            event_type="run_stopped",
+            timestamp=now - timedelta(minutes=9),
+            data={"run_id": "run-a"},
+        ),
+    )
+
+    body = await _timeline(app, auth_headers)
+
+    assert [e["id"] for e in body["events"]] == ["evt-newest", "evt-middle", "evt-oldest"]
+    stamps = [datetime.fromisoformat(e["timestamp"]) for e in body["events"]]
+    assert stamps == sorted(stamps, reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_the_truncation_keeps_the_newest_events_and_the_runs_they_name(app, auth_headers):
+    """Reversing the sort silently returns the *oldest* fifty, and takes their run facts with it.
+
+    Three sources are merged and only then cut to 50, so the sort direction chooses the survivors.
+    Forty lifecycle events (recent) and twenty heartbeats (old) merge to sixty: descending keeps
+    all forty events plus the ten newest heartbeats, ascending keeps all twenty heartbeats plus
+    the *oldest* thirty events — so the ten newest runs vanish from `events` and, because the map
+    is looked up from the ids the returned events name, from `runs` as well.
+    """
+    await _sync_agent(app, auth_headers)
+    now = _now()
+    rows = []
+    for index in range(40):
+        # index 39 is the newest.
+        moment = now - timedelta(minutes=40 - index)
+        rows.append(
+            _run(f"run-{index:02d}", status="completed", started_at=moment, ended_at=moment)
+        )
+        rows.append(
+            _event(
+                f"evt-{index:02d}",
+                event_type="run_completed",
+                timestamp=moment,
+                data={"run_id": f"run-{index:02d}"},
+            )
+        )
+    for index in range(20):
+        rows.append(
+            AgentHeartbeat(
+                id=f"hb-{index:02d}",
+                project_id=PROJECT,
+                agent=AGENT,
+                status="active",
+                message="alive",
+                timestamp=now - timedelta(hours=4, minutes=20 - index),
+            )
+        )
+    await _add(*rows)
+
+    body = await _timeline(app, auth_headers)
+
+    assert (
+        len(body["events"]) == 50
+    ), "the merge is truncated, which is what makes order load-bearing"
+    returned = {e["id"] for e in body["events"]}
+    assert "evt-39" in returned, "the newest event survives the cut"
+    assert "hb-00" not in returned, "the oldest heartbeat does not"
+    assert {
+        f"evt-{index:02d}" for index in range(40)
+    } <= returned, "every event outranks every heartbeat"
+
+    # The half that matters to this change: the facts map is built from the ids the *returned*
+    # events name, so an ordering that drops the newest events drops the newest runs' outcomes.
+    assert "run-39" in body["runs"]
+    assert body["runs"]["run-39"]["status"] == "completed"
