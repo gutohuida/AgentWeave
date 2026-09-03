@@ -17682,7 +17682,9 @@ dated ids only.
 
 ---
 
-## F266 (B) — a post-commit `db.refresh` can fail a run that already succeeded, and the queue then runs the agent's turn a second time
+## F266 (C, was B) — a post-commit `db.refresh` can fail a run that already succeeded, and the queue then runs the agent's turn a second time
+
+> **Settled 2026-09-03 (night window, iteration 8), by the experiments recorded under F272 — and the heading above is wrong in one word.** The run had *not* already succeeded: its output row was never committed. This is the in-memory test harness's single shared DBAPI connection, not a product defect, and no configuration the Hub ships in can produce it. See the addendum at the end of this entry.
 
 **This is N-2's open question, settled**, and it is not a flake. `hub/tests/` reds on exactly one
 test, `test_project_workspace_unavailable.py::test_relocate_repairs_and_redrains_queued_work`, and
@@ -17757,6 +17759,18 @@ selections above are the ones already spent, so start after them.
 **Not proposed.** Needs the day window: the fix is a design question (drop the refresh and stamp
 `timestamp` client-side, refresh defensively, or stop treating a post-commit recording error as a
 run failure) and this window does not write proposals.
+
+### SETTLED 2026-09-03 (night window, iteration 8) — the harness, and "already committed" was the wrong reading
+
+**F272 is this finding again**, reached from a different test (`test_a_stopped_run_persists_its_terminal_status_line`, added by `a-turn-says-how-it-ended` phase 2) and settled there. The full measurement — a 2x2 over storage and pool, plus a matched-load flake comparison — is written up under **F272**; only what it changes about *this* entry is repeated here.
+
+**The cause.** `conftest.py:19` runs the suite on `sqlite+aiosqlite:///:memory:` and `db/engine.py:34-38` passes no `poolclass`, so SQLAlchemy hands that URL a **`StaticPool`**: exactly one DBAPI connection, shared by every session in the process. When any other session `close()`s between this session's `INSERT` and its `COMMIT`, the `ROLLBACK` that close emits lands on the same connection and discards the insert. Forcing `StaticPool` onto a *file* URL reproduces it; the default file pool (`AsyncAdaptedQueuePool`) does not. It is the pool, not the storage, and the product never runs on that pool.
+
+**The correction that matters for anyone reading this entry.** It says *"The write has already committed when the refresh raises"*. **It has not.** The `COMMIT` runs and commits an empty transaction, because what it was going to commit had already been rolled back. So `db.refresh(row)` is not an over-strict re-read of a row that is fine — it is the only thing in the process that notices the write was lost. That inverts the first of the three fixes this entry proposed: **dropping the refresh and stamping `timestamp` client-side would hide a lost write, not tolerate a harmless one.**
+
+**What this explains about the bisection above.** "Not any one preceding file; accumulated process state or load at full-suite scale" is exactly what a shared-connection interleave looks like — the window is wider the slower the process is. It is also directly confirmed: running four pytest processes of one file concurrently took the rate from **0 in 20** on an idle machine to **5 in 24**, and the 23-minute full-suite reproduction is no longer needed to see it.
+
+**Consequences.** Severity drops **B → C** — it costs suite time and credibility, not operator behaviour. The "Not proposed / needs the day window / the fix is a design question" note is superseded: the design question is a *harness* question (how to give the Hub suite per-session connections without weakening `assert_engine_is_disposable`), and the candidates measured so far are under F272. The one piece of genuinely product-side content that survives from either entry is filed as **F273**.
 
 ## F267 (B) — the model catalog is a compile-time literal behind a closed door, and it is already 28 days stale
 
@@ -18270,7 +18284,9 @@ The same correction applies to one line of `spec-queue/DECISIONS.md`'s R-1 evide
 (`StatusBar.tsx:15`). They are not on screen. That block is amended there too.
 
 
-## F272 (B) — the terminal status row phase 2 exists to persist is silently lost ~10% of the time, because `record_agent_output` cannot re-read the row it just committed
+## F272 (C, was B) — the terminal status row phase 2 exists to persist is silently lost ~10% of the time, because `record_agent_output` cannot re-read the row it just committed
+
+> **Settled 2026-09-03 (night window, iteration 8): this is the test harness, not the product.** The heading above is the shape as it was first seen and is kept for searchability; read the **SETTLED** section at the end of this entry before acting on anything above it. Severity dropped **B → C** on the measurement recorded there.
 
 Found not by driving but by **this change's own test failing** — `test_a_turn_says_how_it_ended.py::test_a_stopped_run_persists_its_terminal_status_line`, in the whole-Hub-suite run of 2026-09-03 (night window, iteration 7). Filed now rather than dismissed as a flake because **the traceback was finally captured**, and it lands inside product code.
 
@@ -18302,3 +18318,116 @@ The exception escapes into `_execute_run`'s catch-all (`agent_trigger.py:2215`),
 3. Either way, `_execute_run`'s catch-all swallowing a failed *terminal-status write* is its own weakness: the one write whose whole purpose is to survive the process should not be the one whose failure is invisible.
 
 **Severity B, not A**, on one ground only: it has been observed **exclusively under the in-memory test harness**, never in a drive. If step 2 shows it reproduces on a real database, it is an A — it defeats the guarantee this entire change was approved to deliver.
+
+### SETTLED 2026-09-03 (night window, iteration 8) — the harness, not the product
+
+Step 2 of the list above was run, and then three more experiments that the list did not anticipate.
+**The conclusion is that no production configuration can produce this**, so F272 drops to **C** and
+the repair belongs in `hub/tests/`, not in `hub/hub/`. What follows is the measurement, in
+increasing order of decisiveness; the last one also settles **F266**, which is the same defect seen
+through a different test.
+
+**1. The two configurations do not get the same connection pool.** `db/engine.py:34-38` passes no
+`poolclass`, so SQLAlchemy's aiosqlite dialect picks one from the URL. Measured by constructing the
+engine and reading `engine.pool.__class__.__name__`:
+
+| URL | pool SQLAlchemy picks |
+|---|---|
+| `sqlite+aiosqlite:///:memory:` — what `conftest.py:19` sets | **`StaticPool`** — **one** DBAPI connection, shared by every session in the process, for the life of the engine |
+| `sqlite+aiosqlite:///<file>` — what a native-mode Hub runs | `AsyncAdaptedQueuePool` — a connection per checked-out session |
+| `sqlite+aiosqlite:///file:x?mode=memory&cache=shared&uri=true` | **`StaticPool`** — the dialect detects `mode=memory` too |
+
+**2. The mechanism reproduces deterministically, and its signature is F272's, character for
+character.** Two `AsyncSession`s on one engine, no product code involved: A `INSERT`s, B `close()`s
+(which emits `ROLLBACK` on whatever connection B holds), A `COMMIT`s. If A and B share a connection,
+B's `ROLLBACK` discards A's uncommitted `INSERT` and A's `COMMIT` commits nothing — so the row is
+absent and the primary-key re-read raises. **A 2×2 over storage and pool isolates the pool as the
+variable:**
+
+| cell | pool | A and B share one DBAPI connection | row survives A's commit | A's `refresh(row)` |
+|---|---|---|---|---|
+| memory / default | `StaticPool` | **yes** | **no** | **`InvalidRequestError`** |
+| memory shared-cache / default | `StaticPool` | **yes** | **no** | **`InvalidRequestError`** |
+| **file / FORCED `StaticPool`** | `StaticPool` | **yes** | **no** | **`InvalidRequestError`** |
+| file / default | `AsyncAdaptedQueuePool` | no | yes | ok |
+| memory shared-cache / forced `AsyncAdaptedQueuePool` | `AsyncAdaptedQueuePool` | no | yes | ok |
+
+Read the third row against the fourth: **same storage, opposite outcome.** It is not "in-memory
+SQLite is weird"; it is *one shared connection*, which is a property of the pool alone. And there is
+no configuration the product ships in that has it — a native-mode Hub is a file URL, Docker/Postgres
+is `AsyncAdaptedQueuePool`, and only `conftest.py` asks for `:memory:`.
+
+**3. The flake rate, matched-load, in-memory versus file-backed.** The single-run rate quoted in the
+original entry is real but too low to compare against anything: re-measured at the start of this
+iteration it was **0 failures in 20** consecutive single-test runs, against the **2 in 20** measured
+the night before — the race is load-dependent, so an unloaded machine has almost no power to see it.
+Running **four pytest processes of the whole file concurrently** raises it into a usable range. Six
+alternating rounds, four processes each, `-p no:randomly`, every run captured to its own file with
+`--tb=long`:
+
+| arm | URL | failures |
+|---|---|---|
+| in-memory (today's harness) | `sqlite+aiosqlite:///:memory:` | **5 / 24** |
+| file-backed | `sqlite+aiosqlite:///<temp>.db` | **0 / 24** |
+
+Every one of the five is the identical traceback — `output_recording.py:94` → `db.refresh(row)` →
+`InvalidRequestError: Could not refresh instance '<AgentOutput ...>'`, and the test then reads `[]`
+back off the route. At the observed in-memory rate, seeing zero in 24 file-backed runs has
+probability ≈ **0.004**, so the arms are separated at better than 1-in-200 by the statistics alone —
+and experiment 2 is not statistical at all.
+
+**A correction to what the original entry says, which also corrects F266.** Both entries describe
+the write as having *already committed* when the refresh raises. **It has not.** The `COMMIT`
+executes and commits an empty transaction, because the `INSERT` it was going to commit was already
+rolled back on the shared connection. That is why the route reads back `[]`. `db.refresh(row)` is
+therefore not an over-strict re-read of a row that is fine — it is the **only** thing in the process
+that notices the write was lost, which is the standing reason not to delete it.
+
+**What this does not excuse.** Item 3 of the original list stands unchanged and is now the only
+*product* content in this finding: `_execute_run`'s catch-all (`agent_trigger.py:2215`) turns a
+failed **terminal-status write** into a log line inside a background task. The `already_terminal`
+branch is right about not relabelling the run — but the consequence is that the one write whose
+entire purpose is to outlive the process is also the one whose failure nothing surfaces. Filed
+separately as **F273** so it is not lost when this entry is read as "harness, closed".
+
+**The repair, and why it is not applied here.** Two candidates, both measured:
+
+- **File-backed temp database.** Works (0/24 above), but `assert_engine_is_disposable`
+  (`conftest.py:47-64`) exists to refuse to `drop_all` anything that is not `:memory:`, and it was
+  written after a real destroyed database. Re-expressing that guard as "a temp file this suite
+  created" is a safety-critical edit, not a one-liner.
+- **In-memory shared-cache URL with an explicit `poolclass=AsyncAdaptedQueuePool`** —
+  `sqlite+aiosqlite:///file:<name>?mode=memory&cache=shared&uri=true`. Row 5 of the 2×2 shows it
+  gives per-session connections while staying in memory, so it keeps the suite's speed *and* the
+  `mode=memory` substring the guard can key on. **Refuted at suite scale, and this is why the
+  mechanism probe is not sufficient on its own:** under the same 4-way load it failed **8 / 8**,
+  every run with `OperationalError: database table is locked: sqlite_master` — the `app` fixture's
+  `drop_all`/`create_all` collides with the other pooled connections that are now holding the shared
+  cache open. The pool was the right fix for the *interleave*; it is the wrong fix for the *suite*,
+  which drops every table before every test.
+
+So the only candidate still standing is the file-backed one, and taking it means re-expressing a
+guard whose stated purpose is to prevent destroying operator data. Queued as its own item rather
+than decided inside this one. Two further options are dead ends and were measured rather than
+argued: forcing `StaticPool` onto a file URL made the 14-test file take **259s** against 4s (one
+connection to a file database serialises every transaction behind an fsync), and the shared-cache
+URL *without* an explicit pool is not a change at all — SQLAlchemy still picks `StaticPool` for it
+(row 2 of the 2x2).
+
+
+## F273 (B) — the one write whose purpose is to outlive the process is the one whose failure nothing surfaces
+
+Split out of **F272** on 2026-09-03 (night window, iteration 8), because F272 itself turned out to be a test-harness artefact and this part of it is not. Nothing here has been observed in a drive; it is read from the code, and this entry says so rather than claiming a sighting.
+
+`_execute_run` writes the run's terminal status line at `agent_trigger.py:2145-2156` — design **D6**, the only settled signal a stopped, failed or binding-conflicted run has on either runner, the only one a Codex run has for any outcome, and the only carrier of the exit code once the SSE stream has ended. If that `record_agent_output` call raises for any reason at all, the exception unwinds into the catch-all at `agent_trigger.py:2215`, which:
+
+1. logs `"Unhandled error in run %s for %r"`, and
+2. re-reads the `Run` row, finds it is **already terminal** (a stopped run was marked `stopped` before this line), sets `already_terminal = True`, and deliberately does **not** relabel it.
+
+Step 2 is correct and its inline comment argues for it well — relabelling a run that already ended cleanly because some downstream bookkeeping failed is the worse bug. But the two together mean the outcome is: **the run ends, the operator sees a run that ended, and the row that was supposed to say *how* it ended is silently absent.** The only trace is a log line inside a background task, which is precisely the surface F190 was filed about.
+
+**Why it is not merely theoretical.** The harness proved the failure path is reachable — under `StaticPool` it fired on 5 of 24 runs and produced exactly this outcome (`InvalidRequestError` out of `db.refresh`, run ends, output route returns `[]`). The *cause* there is harness-only, but the *handling* is product code and would behave identically for any real cause: a disk-full sqlite, a Postgres connection dropped between the commit and the refresh, a migration holding a lock.
+
+**Severity B, not A.** It is a wrong/misleading surface that requires an independent failure to reach; it is not something an operator will act on today.
+
+**Not proposed** — the fix shape is a design question (does a failed terminal-status write get retried, get its own error row, get surfaced as a run error, or get an operator-visible warning?), and this window does not write proposals. Related: **F272** (settled, harness), **F266** (settled, harness), **F190** (the general shape).
