@@ -9,12 +9,12 @@
     "parent_sha": "556bb37",
     "stop_at": "2026-09-03T07:00:00+01:00",
     "iteration": 14,
-    "last_heartbeat": "2026-09-03T05:15:20+01:00",
+    "last_heartbeat": "2026-09-03T05:24:55+01:00",
     "log_file": ".claude/autonomous/2026-09-02-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "archive-a-turn",
-    "next_action": "Do queue item archive-a-turn: archive openspec/changes/a-turn-says-how-it-ended, whose seven phases are all implemented, driven and verified. Use the openspec-archive-change skill; sync the agent-stream-events delta into openspec/specs/ first. Do NOT start f272-harness-repair -- it is blocked on the operator's answer in decisions_for_user about re-expressing assert_engine_is_disposable, and nothing may touch hub/tests/conftest.py until that is answered. If archiving completes with time left, the next item is open findings from scripts/drive/FINDINGS.md by severity (F273, severity B, is the one this window filed and has no proposal -- a finding with no proposal is a note to the DAY window, not work for this one). Do not re-run the 23-minute Hub suite: git diff against the last full run first, and the only Python that has moved since is hub/tests/test_bola.py.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -84,9 +84,15 @@
         },
         {
             "id": "archive-a-turn",
-            "status": "open",
+            "status": "done",
             "title": "Archive a-turn-says-how-it-ended",
-            "detail": "All seven phases are implemented, driven and verified by a round that did not build it; F190 and F269 are retired in FINDINGS.md. Use the openspec-archive-change skill. Check the ordering constraint recorded in the night-window playbook before archiving anything: a-conflict-refusal-names-what-clears-it task 6.4a must not be archived before a-loop-declares-whether-it-needs-evidence -- that constraint is about THOSE two and does not bind this change, but read it rather than assuming. Sync the delta in specs/agent-stream-events/spec.md into openspec/specs/agent-stream-events/spec.md; note CLAUDE.md's Critical Rules already cite the requirement by title+capability precisely so archiving does not stale it."
+            "detail": "DONE iteration 14. Archived to openspec/changes/archive/2026-09-03-a-turn-says-how-it-ended/. Two boxes (4.4, 4.5) were unticked with **DONE.** in their bodies -- VERIFIED against the tree before ticking: workingIndicator.test.tsx holds no runDurationsByRunId block (the one grep hit is a comment in timelineRunFacts.test.tsx) and all four of its cases are present and named. Delta was ADDED-only -- asserted, not eyeballed -- five requirements, no title collision with the 19 already in agent-stream-events; appended byte-identically modulo line endings (delta CRLF, main spec LF) and confirmed the main spec ENDS WITH the delta body. 19 -> 24 requirements. openspec validate --specs --strict 43/43, --changes --strict 1/1, and the change is gone from openspec list. Hub chunk 18 passed. NO product code moved, so no rebuild and no drive. Ordering constraint READ not assumed: it binds a-conflict-refusal and a-loop-declares-evidence, both archived 2026-09-01, and does not bind this change. APPROVALS.md deliberately untouched -- spec-queue/README.md says it is the DECIDE session's file, not either window's."
+        },
+        {
+            "id": "ledger-a-list-corrected",
+            "status": "done",
+            "title": "The open severity-A list was one; it is two, and four more are unverified",
+            "detail": "DONE iteration 14, after the queue emptied. Rebuilt the open-A list from FINDINGS.md's 243 sections instead of reading the index paragraph, which claimed 'the open severity-A list is one -- F271'. F188 (A) is OPEN AT HEAD and had no **Status:** line at all -- confirmed by reading the code it names, agent_trigger.py:878-883 still raises the worktree refusal with no agent_wide=True while :573, :594 and :624 pass it. Statically re-confirmed, NOT re-driven, and labelled that way. F140/F142/F154/F155 each have an IMPLEMENTED AND ARCHIVED change naming them (a-flow-briefing-names-its-contract, a-review-a-flow-cannot-staff-is-named, a-review-nobody-is-doing-is-named, a-conflict-refusal-names-what-clears-it) while their sections still read open -- annotated **unverified, not retired**, DELIBERATELY: an archived change is a plan marked done, which this repo's own rule says closes nothing, and retiring them needs a drive like the one F190 got. F188 was NOT fixed even though the repair looks like one flag, because the night playbook's rule is that a finding with no proposal needs the day window first; deciding at 05:30 that a finding is small enough to skip the spec loop is the call this arrangement exists to prevent."
         }
     ],
     "decisions_for_user": [
@@ -94,6 +100,11 @@
             "id": "f272-harness-guard",
             "raised": "2026-09-03T02:52:23+01:00",
             "question": "The Hub test suite's :memory: database gives every session ONE shared connection (SQLAlchemy StaticPool), which silently discards committed writes under concurrency -- measured 5 failures in 24 runs under load, and it is the cause of both F272 and F266. The only repair still standing is to run the suite on a file-backed temp database. That means rewriting assert_engine_is_disposable (hub/tests/conftest.py:47-64), whose current rule is 'refuse to drop_all any URL without :memory: in it' and which CLAUDE.md records as having been written after a real operator database was destroyed. The replacement rule would be 'refuse unless this suite created the file itself, under a temp directory'. Same purpose, different mechanism -- but the cost of getting it wrong is the same destroyed database. Confirm the guard may be re-expressed this way, or name the rule you want instead. Queued as f272-harness-repair; nothing will touch conftest.py until you answer. Everything else about F272 is settled and needs nothing from you."
+        },
+        {
+            "id": "findings-ledger-retirement",
+            "raised": "2026-09-03T05:24:55+01:00",
+            "question": "Nothing in the cycle retires a FINDINGS.md row when the change that fixes it is archived. Measured tonight: F140, F142, F154 and F155 each have an implemented, archived change naming them and each section still reads 'open, filed not fixed'; the index paragraph was then revised from the newest finding rather than recomputed, so it read 'the open severity-A list is one -- F271' while F188 (A, open at HEAD, no Status line at all) sat invisible behind it for a week. Tonight's a-turn change is the first to close the loop by hand, and only because task 6.7 said to. Two candidate rules: (a) the archiving step must retire every finding its change names, or mark it unverified-pending-drive; or (b) the day window recomputes the open-A list from the sections at the start of each FILL. (a) is cheaper and catches it at the moment the knowledge exists; (b) catches findings no change ever named, which is how F188 was lost. They are not exclusive. No work is blocked on this -- the four rows are annotated unverified and F188 is handed to the day window either way."
         }
     ],
     "limits": [
