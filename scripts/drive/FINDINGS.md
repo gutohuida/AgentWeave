@@ -18431,3 +18431,83 @@ Step 2 is correct and its inline comment argues for it well — relabelling a ru
 **Severity B, not A.** It is a wrong/misleading surface that requires an independent failure to reach; it is not something an operator will act on today.
 
 **Not proposed** — the fix shape is a design question (does a failed terminal-status write get retried, get its own error row, get surfaced as a run error, or get an operator-visible warning?), and this window does not write proposals. Related: **F272** (settled, harness), **F266** (settled, harness), **F190** (the general shape).
+
+---
+
+# `a-turn-says-how-it-ended` phase 6 — the built change, driven 2026-09-03
+
+Tasks 6.1–6.5, against a Hub on **8011** started **02:56:24** from this branch's source
+(`py -3.11 -m uvicorn hub.main:app` from `hub/`, beta profile database). Staleness was **measured,
+not assumed**: the newest `.py` under `hub/hub` or `src` was `hub/hub/db/engine.py` at 02:49:37,
+older than the process. Fixture project `proj-9e6825cdd64c` (`aturn-p6-0903`), created for this
+drive and deleted at the end. Every turn bound `claude-haiku-4-5-20251001`.
+
+**Harnesses added** — `scripts/drive/aturn_model.py`, `scripts/drive/setup_aturn_p6.py`,
+`scripts/drive/t_aturn_p6.py`. `aturn_model.py` is the successor to `f190_model.py` and both are
+kept: `f190_model.py` transcribes the UI as it stood at phase 0, and a transcription edited to match
+the new code can no longer speak for the old one — phase 7 needs both baselines.
+
+## What was driven, and what it said
+
+| task | leg | result |
+|---|---|---|
+| 6.1 | a turn stopped 5s in | **8 checks passed** — `runs[run].status == 'stopped'`, label `'Turn stopped'`, indicator gone |
+| 6.2 | the same conversation re-read from all three routes | label, `exit_code=2` and "Worked for 5s" all still there |
+| 6.3a | a run whose CLI cannot spawn | **6 checks passed** — status `failed`, label `'Turn failed'`, `exit_code=1`, survives the re-read |
+| 6.3b | the Hub's process tree killed mid-run, then restarted | **6 checks passed** — status `interrupted`, label `'Turn interrupted'`, "Worked for 21s" |
+| 6.4 | the served bytes | the deleted reducer is **gone from the bundle**; the new read is **in** it (below) |
+| 6.5 | teardown | project count back to **23**, **no enabled job or loop in any of the 23** |
+
+The evaluation is `aturn_model.py`, a line-for-line transcription of the built `AgentTimeline.tsx`,
+so each row above is what the operator's screen would say — not what the database contains.
+
+## Three things the drive established that the tests did not
+
+**A stopped run's persisted status row says `phase: "completed"`.** Measured:
+`{"phase": "completed", "exit_code": 2}` on a run that was stopped. This is deliberate and
+documented at `agent_trigger.py:2141-2145` — `phase` means "the run has ended", not "it succeeded",
+and it has exactly one reader. Recorded here because it is the kind of thing a later reader will
+mistake for the outcome; the outcome is `runs[runId].status`.
+
+**A failed spawn is retried twice, and the indicator stays up across the retries.** The 6.3a turn
+produced **three** runs (`run-dd190aa1c9e8`, `run-c20a22f163b6`, `run-4e6adc1ae6db`), each `failed`
+with `exit_code=1`. At t=4.7s the newest *turn*'s run had already failed while a *new* run was
+`started`, and the indicator correctly stayed up — that is `anotherRunIsUnderway` (the stop-then-send
+path) firing on a path nobody wrote it for. Unplanned confirmation, worth more than the planned one.
+
+**An interrupted run is almost never the newest turn.** `run_reconciliation` reschedules the agent
+as part of the same startup ("Draining 1 deferred post-reconciliation schedule(s)"), so a fresh run
+appears under the interrupted one within ~3 seconds. The first read of 6.3b failed three checks for
+this reason and **the harness was wrong, not the product**: it asserted about the newest turn. The
+per-turn render was added to `aturn_model.py` and all six then passed, including
+`Turn interrupted` + `Worked for 21s` on the interrupted turn while a completed turn sat below it.
+This matters for phase 7: an assertion about an interrupted run that reads the *last* turn is
+measuring the wrong row.
+
+## 6.4 — the bundle, checked against the served bytes
+
+`npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`. `GET /health` went from
+`ui_stale: true` to no staleness field at all. Then `curl` of the served
+`/assets/index-42oEFtKt.js` (1,106,788 bytes):
+
+| marker | old bundle (`index-x3nWU-L2.js`) | served now |
+|---|---|---|
+| `run_started:"started",run_completed:"completed",…` — the **deleted** `LIFECYCLE_EVENT_STATUS` reducer | **1** | **0** |
+| `ended_at` — `runDurationSeconds` reading the run row's own timestamps | **0** | **2** |
+| `Turn interrupted` | 1 | 1 |
+
+Both directions, on the bytes the browser receives. A string-literal grep alone would have proved
+nothing here — the change added no new user-visible string — so the marker is the minifier-stable
+object literal the change *removed*.
+
+## Not done here, on purpose
+
+**F190 is not retired.** Task 6.7: the operator's condition of approval is that a round which did
+not build the change verifies it, and that is phase 7. F269 likewise stays open — 7.1a is the check
+that its fix fires, and this phase did not produce a turn whose only output is a status row.
+
+## Teardown
+
+Fixture project deleted (`204`), 24 → **23** projects, the count that predates this drive. Jobs and
+loops swept across all 23 **before and after**: none enabled. The fixture working directory
+`C:\Users\huida\Documents\drive-aturn-p6-0903` is left on disk (outside this repo, ~1 file).
