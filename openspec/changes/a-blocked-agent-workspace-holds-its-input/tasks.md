@@ -74,17 +74,17 @@
   the resolution, which is exactly why the test is an `or` over the entry's task and its thread's and
   must stay one. Say which direction the approximations err in and why: a false *yes* destroys the
   operator's message, a false *no* only holds it.
-- [ ] 3.3 Extend the condition at `:204` so an `agent_workspace_unavailable` refusal skips the
+- [x] 3.3 Extend the condition at `:204` so an `agent_workspace_unavailable` refusal skips the
   counter unless 3.1 says something else could have run. Keep the existing `transient` and
   `agent_wide` terms untouched and readable; do not collapse the three questions into one boolean.
-- [ ] 3.4 Tests, from `agent-conversation-workspace`'s three new scenarios: held when every other
+- [x] 3.4 Tests, from `agent-conversation-workspace`'s three new scenarios: held when every other
   entry is unbound; counted-and-withdrawn when a task-bound entry waits in another conversation;
   counted when the refusal is the task-checkout one. The middle test is the one that keeps this
   change from breaching *"where other queued input could have run"* — say so in its docstring.
-- [ ] 3.5 A test for the inherited binding: the other conversation's entry names no task but its
+- [x] 3.5 A test for the inherited binding: the other conversation's entry names no task but its
   conversation does. It must count. This is the half a scope test built only on `entry.task_id`
   would get wrong, and nothing else in the suite would notice.
-- [ ] 3.6 A test that an entry inside `selected` naming a task that no longer resolves does **not**
+- [x] 3.6 A test that an entry inside `selected` naming a task that no longer resolves does **not**
   count as "could have run elsewhere" (design D3) — reaching this refusal proves the whole resolution
   for that batch, thread binding included, already came back unbound, and nothing about the next
   schedule changes its inputs.

@@ -375,7 +375,35 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                         "directory_state": exc.directory_state,
                     },
                 )
-            elif not transient and not getattr(exc, "agent_wide", False):
+            elif (
+                not transient
+                and not getattr(exc, "agent_wide", False)
+                # The third question, and it is asked **last** because it is the only one of the
+                # three that costs queries: `not transient` and `not agent_wide` are attribute
+                # reads, so a refusal that is either never reaches the helper at all.
+                #
+                # A refusal about the agent's **own** worktree is not `agent_wide` and by design
+                # must not become it (design D2 of `a-blocked-agent-workspace-holds-its-input`):
+                # the agent has a runner, its CLI is installed, and it would have run. But nothing
+                # queued behind the head can run either while that one directory is obstructed
+                # — unless some other queued entry would have taken a *different* workspace, in
+                # which case the head really is in the way and F56's argument applies unchanged.
+                # `agent-conversation-workspace` counts such a refusal exactly *"where other
+                # queued input could have run"*, and this is where that is measured. Every other
+                # refusal reaches this branch with the condition it already had (F188).
+                and (
+                    not getattr(exc, "agent_workspace_unavailable", False)
+                    or await other_input_would_have_run_elsewhere(
+                        db,
+                        project_id=project_id,
+                        agent=agent,
+                        entries=entries,
+                        selected=selected,
+                        controlling_conversation_id=conversation.id,
+                        hop_budget=hop_budget,
+                    )
+                )
+            ):
                 # No `Run` was ever created for this attempt, so `selected` never became
                 # `delivered` and `return_run_entries`'s own abandonment bookkeeping never runs
                 # for it (F56) — a refusal raised here (a review target with no evidence naming a

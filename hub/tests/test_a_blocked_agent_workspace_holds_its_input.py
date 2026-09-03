@@ -6,19 +6,21 @@ product promised to hold that input until the operator performs the repair (F96)
 blocks *one entry* must go on counting, because the head entry is in the way of everybody else
 (F56).
 
-`Could not prepare isolated worktree for <agent>` is on the wrong side of that line. It is raised
+`Could not prepare isolated worktree for <agent>` was on the wrong side of that line. It was raised
 for both workspaces -- the agent's own checkout under `.agentweave/worktrees/<agent>`, and the
-separate checkout a task-scheme task takes -- and it carries no flag either way, so it always
-counts. When the obstruction is the *agent's* workspace, no turn for that agent can run in any
-conversation, nothing is starving behind the entry, and three schedules withdraw the operator's
+separate checkout a task-scheme task takes -- and it carried no flag either way, so it always
+counted. When the obstruction is the *agent's* workspace, no turn for that agent can run in any
+conversation, nothing is starving behind the entry, and three schedules withdrew the operator's
 message with `abandoned_reason` claiming a delivery failed three times that was never attempted
 once.
 
-**This file is the reproduction, and it is a gate.** Every test here passes against unmodified
-code; that is what makes the change's behaviour claim a measurement rather than an inference from
-reading the source. Phases 2-4 change what the first and third tests assert. The second one --
-the `NO_RUNNER` contrast -- must keep passing unchanged, because the asymmetry it pins *is* the
-finding: two refusals, the same four schedules, opposite outcomes.
+**This file was the reproduction, and it is now the gate on the fix.** Every test here passed
+against unmodified code first -- that is what makes the change's behaviour claim a measurement
+rather than an inference from reading the source -- and phases 2-3 then flipped the first one from
+`withdrawn` to `queued`, exactly as they were written to. Phase 4 flips the third. The second --
+the `NO_RUNNER` contrast -- must keep passing unchanged through every phase, because the asymmetry
+it pinned *is* the finding: two refusals, the same four schedules, and outcomes that are now the
+same rather than opposite.
 """
 
 import subprocess
@@ -37,15 +39,22 @@ from hub.turn_scheduler import schedule_agent
 
 TRIGGER = "hub.api.v1.agent_trigger.trigger_agent_directly"
 
-#: What `agent_trigger.py:879-883` raises today when `resolve_turn_workspace` cannot provision the
-#: agent's own checkout -- the sentence built at that `except`, with the `IsolationUnavailableError`
-#: interpolated, and **no flags at all**. Not `agent_wide`, not `transient`, not
-#: `workspace_unavailable`. The absence is the defect.
+#: What `agent_trigger.py`'s **agent arm** raises when `resolve_turn_workspace` cannot provision the
+#: agent's own checkout: the sentence built below `takes_task_workspace(...)` returns false, with
+#: the `IsolationUnavailableError` interpolated, carrying `agent_workspace_unavailable` and nothing
+#: else -- not `agent_wide`, not `transient`, not `workspace_unavailable` (phase 2).
+#:
+#: Phase 1 wrote this stub as the flagless sentence the single `except` raised before the split,
+#: which is what made the F188 reproduction below a measurement of shipped behaviour. Phase 2
+#: replaced that raise with two, so the stub is repointed here at the real agent-arm refusal --
+#: otherwise this file would go on reproducing a refusal the product no longer emits, and the flip
+#: below would be a flip of nothing.
 BLOCKED_AGENT_WORKSPACE = TriggerAgentError(
     409,
-    "Could not prepare isolated worktree for f188-blocked: refusing existing path "
+    "Could not prepare f188-blocked's own workspace: refusing existing path "
     "/repo/.agentweave/worktrees/f188-blocked: it is not the registered git worktree "
     "for refs/heads/agentweave/f188-blocked",
+    agent_workspace_unavailable=True,
 )
 
 #: The refusal an agent with no runner bound raises, marked agent-wide by F114. Held here as the
@@ -96,13 +105,31 @@ async def _rows(agent):
         ]
 
 
+async def _waiting_reasons(agent):
+    async with async_session_factory() as db:
+        result = await db.execute(
+            select(InboundQueueEntry)
+            .where(InboundQueueEntry.agent == agent)
+            .order_by(InboundQueueEntry.sequence)
+        )
+        return [row.waiting_reason for row in result.scalars()]
+
+
 @pytest.mark.asyncio
-async def test_a_blocked_agent_workspace_destroys_the_operators_message(app, auth_headers):
-    """1.1 -- the F188 reproduction, at the scheduler.
+async def test_a_blocked_agent_workspace_holds_the_operators_message(app, auth_headers):
+    """1.1, flipped by phase 3 -- what F188 asked for, at the scheduler.
 
     One message, one agent whose own checkout cannot be provisioned, `DELIVERY_ATTEMPT_LIMIT`
     schedules -- which is what a trigger, a `Continue` press and an end-of-turn re-drain each cost.
-    The message is gone, and the reason it carries is a claim about deliveries that never happened.
+
+    Phase 1 measured this same loop against unmodified code and got `withdrawn` at three attempts,
+    with an `abandoned_reason` claiming three deliveries that were never attempted once. Phase 3
+    made the scheduler ask whether anything was starving behind the head before counting; nothing
+    is, because this agent has exactly one queued entry and no other conversation, so the message
+    waits for the repair (F96) exactly as `NO_RUNNER`'s does below.
+
+    The refusal is still recorded -- `waiting_reason` carries the agent-arm sentence, so the queue
+    can say *why* it is waiting. Holding input silently would be its own defect.
     """
     agent = "f188-blocked"
     await _register(app, auth_headers, agent)
@@ -113,13 +140,13 @@ async def test_a_blocked_agent_workspace_destroys_the_operators_message(app, aut
             await schedule_agent("proj-test", agent)
 
     state, attempts, reason = (await _rows(agent))[0]
-    assert (state, attempts) == ("withdrawn", DELIVERY_ATTEMPT_LIMIT)
-    assert reason is not None
-    assert f"delivery failed {DELIVERY_ATTEMPT_LIMIT} times" in reason
-    assert "the Hub stopped retrying" in reason
-    # And the sentence the operator is left with names the agent, so it reads as a fact about the
-    # agent -- while the bookkeeping it accompanies is the bookkeeping for an entry-specific fault.
-    assert "Could not prepare isolated worktree for f188-blocked" in reason
+    assert (state, attempts) == ("queued", 0)
+    assert reason is None
+    assert await _waiting_reasons(agent) == [
+        "Could not prepare f188-blocked's own workspace: refusing existing path "
+        "/repo/.agentweave/worktrees/f188-blocked: it is not the registered git worktree "
+        "for refs/heads/agentweave/f188-blocked"
+    ]
 
 
 @pytest.mark.asyncio
@@ -128,12 +155,13 @@ async def test_no_runner_holds_the_same_message_under_the_same_schedules(app, au
 
     Identical seeding, identical loop, one more schedule than the limit. The only difference is
     which refusal the trigger raises. `NO_RUNNER` is flagged `agent_wide`, so F114's term in
-    `turn_scheduler.py:204` skips the counter and the input waits for the repair (F96); the
-    blocked agent workspace above is flagged nothing, so it does not.
+    `schedule_agent`'s counting condition skips the counter and the input waits for the repair
+    (F96); the blocked agent workspace above was flagged nothing, so it did not.
 
-    Both refusals mean *no turn for this agent can run in any conversation*. Only one of them is
-    treated that way. **This test must keep passing unchanged through every later phase** -- the
-    change is finished when the test above joins it, not when this one moves.
+    Both refusals mean *no turn for this agent can run in any conversation*, and until phase 3 only
+    one of them was treated that way. **This test must keep passing unchanged through every later
+    phase** -- the change is finished when the test above joins it, not when this one moves. It has
+    not moved: the assertion below is byte-identical to the one phase 1 committed.
     """
     agent = "f188-control"
     await _register(app, auth_headers, agent)
