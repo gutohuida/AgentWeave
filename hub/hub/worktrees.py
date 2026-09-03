@@ -308,14 +308,32 @@ def ensure_worktree(repo_root: Path, agent: str) -> Path:
     `release_worktree` and is now being reprovisioned) is reused rather than
     recreated from HEAD, so a previously-removed agent resumes its own history
     instead of silently starting over.
+
+    The two ways an existing path can be wrong are refused **separately** (task 4.1), for the
+    reason `_merge_prerequisites` already refuses its two failures separately: this module is
+    where the operator-facing sentence is written, and the repairs differ. A link is cleared by
+    removing the link — and only the link, since whatever it points at is somebody's real
+    directory. A directory that is not this ref's registered worktree is cleared by getting the
+    *directory* out of the way. One sentence covering both would send the operator to the wrong
+    one of those, which matters here more than elsewhere because the agent's input is held
+    (not discarded) until they act.
     """
     path = worktree_path(repo_root, agent)
     if path.exists():
         expected_ref = f"refs/heads/{branch_name(agent)}"
-        if path.is_symlink() or _registered_worktree_branch(repo_root, path) != expected_ref:
+        if path.is_symlink():
+            raise IsolationUnavailableError(
+                f"refusing existing path {path}: it is a symlink, and {agent}'s workspace has to "
+                f"be the real directory git registered as the worktree for {expected_ref}. Remove "
+                f"the link itself (`rm {path}`), which leaves whatever it points at untouched, "
+                "and the next turn will provision the checkout."
+            )
+        if _registered_worktree_branch(repo_root, path) != expected_ref:
             raise IsolationUnavailableError(
                 f"refusing existing path {path}: it is not the registered git worktree "
-                f"for {expected_ref}"
+                f"for {expected_ref}. Move or delete that directory (`rm -r {path}`) once you "
+                "have salvaged anything in it; the next turn runs `git worktree prune` and "
+                "provisions the checkout itself."
             )
         return path
 
@@ -456,10 +474,23 @@ def ensure_task_worktree(
     expected_ref = f"refs/heads/{branch}"
 
     if path.exists():
-        if path.is_symlink() or _registered_worktree_branch(repo_root, path) != expected_ref:
+        # Split for the same reason as `ensure_worktree`'s, and the three branches below are
+        # what the requirement's "a different obstruction at the same path states a different
+        # remedy" is about: at this one path, a link is removed, a foreign directory is removed,
+        # and a mid-merge checkout must **not** be — it is the right directory in a bad state.
+        if path.is_symlink():
+            raise IsolationUnavailableError(
+                f"refusing existing path {path}: it is a symlink, and the checkout for {task_id} "
+                f"has to be the real directory git registered as the worktree for {expected_ref}. "
+                f"Remove the link itself (`rm {path}`), which leaves whatever it points at "
+                "untouched, and the next turn will provision the checkout."
+            )
+        if _registered_worktree_branch(repo_root, path) != expected_ref:
             raise IsolationUnavailableError(
                 f"refusing existing path {path}: it is not the registered git worktree "
-                f"for {expected_ref}"
+                f"for {expected_ref}. Move or delete that directory (`rm -r {path}`) once you "
+                "have salvaged anything in it; the next turn runs `git worktree prune` and "
+                f"provisions the checkout for {task_id} itself."
             )
         if _is_mid_merge(path):
             # The one state a process killed between `worktree add` and the unwind can leave.
@@ -468,7 +499,9 @@ def ensure_task_worktree(
             # from a tree full of conflict markers.
             raise IsolationUnavailableError(
                 f"refusing the checkout for {task_id} at {path}: it was left in an unfinished "
-                "merge. Resolve or abort that merge before this task runs again."
+                f"merge. Finish it or abandon it in that checkout (`git -C {path} merge --abort`) "
+                "before this task runs again. Do not remove the directory: it is the registered "
+                "checkout for this task and carries its work."
             )
         return path
 

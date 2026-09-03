@@ -198,15 +198,15 @@ def repo(tmp_path) -> Path:
     return path
 
 
-def test_a_plain_directory_in_the_way_refuses_with_no_remedy(repo):
-    """1.3 -- the ledger's own case, pinned at the layer where it is cheap to assert.
+def test_a_plain_directory_in_the_way_says_what_to_remove(repo):
+    """1.3, flipped by phase 4 -- the ledger's own case, at the layer where it is cheap to assert.
 
-    F188 was driven by putting an ordinary directory where the agent's worktree belongs. That is
-    what `ensure_worktree`'s "not the registered git worktree" branch is for, and the operator who
-    hits it is told what is wrong and **not what to do about it** -- no directory to remove, no
-    `git worktree prune` to follow it. Phase 4 gives this branch its own remedy, at which point the
-    negative half of this assertion flips to a positive one; it is written here so that the change
-    can show it moved something real.
+    **This test was written in phase 1 to flip here**, and its previous half asserted the
+    *absence* of any remedy vocabulary in this branch's refusal -- checked as vocabulary rather
+    than as one phrase, so that phase 4 could not satisfy it by rewording. F188 was driven by
+    putting an ordinary directory where the agent's worktree belongs, which reaches
+    `ensure_worktree`'s "not the registered git worktree" branch, so it is that branch's remedy
+    the flipped assertion reads.
     """
     blocked = worktrees.worktree_path(repo, "f188-agent")
     blocked.mkdir(parents=True)
@@ -218,8 +218,9 @@ def test_a_plain_directory_in_the_way_refuses_with_no_remedy(repo):
     message = str(caught.value)
     assert str(blocked) in message
     assert "not the registered git worktree" in message
-    # No remedy today. Checked as vocabulary rather than as one phrase, so that phase 4 cannot
-    # satisfy it by rewording: an operator looking for the repair is looking for a verb.
-    assert not any(
-        word in message.lower() for word in ("remove", "delete", "prune", "rm ", "then run")
-    )
+    # The repair, not just the diagnosis: a verb, the directory it applies to, and what happens
+    # afterwards. Still vocabulary rather than one phrase -- the phase-1 half was written that way
+    # and inverting it in place keeps the two halves comparable.
+    assert any(word in message.lower() for word in ("remove", "delete"))
+    assert f"rm -r {blocked}" in message
+    assert "prune" in message

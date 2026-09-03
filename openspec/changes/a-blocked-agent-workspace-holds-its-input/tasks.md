@@ -115,15 +115,51 @@
 
 ## 4. The refusal says what would clear it
 
-- [ ] 4.1 `hub/hub/worktrees.py`: give `ensure_worktree`'s two refusal branches — a symlink, and a
+- [x] 4.1 `hub/hub/worktrees.py`: give `ensure_worktree`'s two refusal branches — a symlink, and a
   path that is not the registered worktree for the expected ref — their own remedies, following
   `_merge_prerequisites`' precedent that this module writes the operator-facing sentence. Name the
   directory to remove and the prune that follows it; do not write one sentence covering both.
-- [ ] 4.2 Do the same for the mid-merge refusal reached from the task arm, so the requirement's
+- [x] 4.2 Do the same for the mid-merge refusal reached from the task arm, so the requirement's
   third scenario ("a different obstruction at the same path states a different remedy") is satisfied
   by real branches rather than by two wordings of one.
-- [ ] 4.3 Assert the remedies at the `worktrees` layer, per branch, against the obstruction each was
+- [x] 4.3 Assert the remedies at the `worktrees` layer, per branch, against the obstruction each was
   written for — not by substring-matching one shared phrase.
+
+**Scope decided and recorded (task 4.1).** `ensure_worktree` did not have two refusal
+branches: it had one `if path.is_symlink() or _registered_worktree_branch(...) != expected_ref`
+raising one sentence, so 4.1 was a *split* of that `or`, not an edit of two existing arms. The same
+shape appears three times in the module, and two of the three were changed:
+
+- the agent's own workspace (`ensure_worktree`) -- split, two remedies. 4.1 verbatim.
+- a task's checkout (`ensure_task_worktree`) -- split, two remedies, both naming the task. In scope
+  because the requirement's *second* scenario ("a task's checkout is refused ... it states what
+  would clear the obstruction it found") is about this arm, and because 4.2's stated purpose --
+  making the third scenario hold "by real branches rather than by two wordings of one" -- needs a
+  second, differently-remedied obstruction at the same path to contrast the mid-merge one against.
+- the **review** checkout (`ensure_review_checkout`) -- deliberately **not** touched. Neither 4.1
+  nor 4.2 names it; the requirement scopes itself to "the agent's own, or a named task's"
+  workspace; and its guard is a different shape (`existing_review_checkout(...) is None`, which
+  swallows several errors into one `None`), so splitting it correctly is its own analysis rather
+  than a fourth application of this one. A wider edit here is a wider blast radius for no
+  requirement.
+
+**4.2 found the mid-merge branch already carrying a remedy** ("Resolve or abort that merge before
+this task runs again"), so it was sharpened rather than created: it now names the command
+(`git -C <path> merge --abort`) and says **not** to remove the directory, which is the point of the
+third scenario -- at one path, two obstructions whose remedies are opposites.
+
+**Measured, not assumed:** the wrong-ref remedy says the *next turn* prunes rather than telling the
+operator to. `ensure_worktree` already runs `git worktree prune` before `worktree add`, and
+`test_a_foreign_registered_worktree_asks_for_the_directory_and_the_prune_is_real` blocks the path
+with a worktree registered for another ref, removes it, asserts git still lists it `prunable`, and
+then reprovisions successfully. Every remedy in this phase is tested by *performing* it.
+
+**Known local gap:** the two symlink tests skip on this machine (Windows without the symlink
+privilege -- `Path.symlink_to` raises `WinError 1314`, the same limitation
+`_symlink_shared_dependencies` already degrades for). They run in CI's Linux job. Locally the two
+symlink branches were reached with a throwaway probe that forced `Path.is_symlink`, which confirmed
+both format their own remedy; that probe is not committed, and the two symlink remedies are the
+only ones in this phase whose mutation check could not be run here.
 
 ## 5. Reconcile what already exists
 
