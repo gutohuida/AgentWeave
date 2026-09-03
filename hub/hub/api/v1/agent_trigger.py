@@ -251,6 +251,7 @@ class TriggerAgentError(Exception):
         transient: bool = False,
         request_level: bool = False,
         agent_wide: bool = False,
+        agent_workspace_unavailable: bool = False,
     ) -> None:
         self.status_code = status_code
         self.detail = detail
@@ -317,6 +318,32 @@ class TriggerAgentError(Exception):
         #: marked, so an unmarked site keeps counting exactly as it does today and no starvation
         #: can be reintroduced by getting this wrong.
         self.agent_wide = agent_wide
+        #: Is this refusal that **the agent's own workspace** could not be prepared?
+        #:
+        #: The same question as `workspace_unavailable` one scope down: that flag means the
+        #: *project's* workspace could not be resolved, this one means the agent's isolated
+        #: worktree could not be. `resolve_turn_workspace` prepares one of two things depending on
+        #: `takes_task_workspace`, and until this flag existed both failures raised the identical
+        #: refusal, so nothing downstream could tell *this agent cannot work anywhere* apart from
+        #: *this task's checkout is blocked* (F188).
+        #:
+        #: **Not a fourth spelling of `agent_wide`** (design D2 of
+        #: `a-blocked-agent-workspace-holds-its-input`). `agent_wide` means giving up on the input
+        #: at the head of the queue would let **nothing** else run, and its own paragraph above
+        #: says only refusals that are *certainly* that are marked. An agent-workspace failure is
+        #: not certainly that: a task-bound entry queued behind this one would have run in the
+        #: task's checkout, which this failure does not touch. Marking it `agent_wide` would make
+        #: the older flag's documented invariant false. Who is starving behind the head of the
+        #: queue is a question only the scheduler can answer, because only it holds the queue, so
+        #: this flag states the *cause* and `turn_scheduler` draws the conclusion.
+        #:
+        #: **It does not imply `transient`, unlike `workspace_unavailable`.** A project directory
+        #: can come back on its own — a disconnected drive, a restore — and that is why that flag
+        #: sets `transient`. A blocked agent worktree cannot: somebody has to remove the directory
+        #: and prune. Borrowing `transient` would reach much further than the delivery counter as
+        #: well, because `schedule_agent` returns `terminal_failure=not transient` and the job and
+        #: flow-step outcomes in `scheduler.py` read it.
+        self.agent_workspace_unavailable = agent_workspace_unavailable
         super().__init__(detail)
 
 
@@ -877,9 +904,24 @@ async def trigger_agent_directly(
                 prerequisites=turn_workspace.prerequisites,
             )
         except (worktrees.GitCommandError, worktrees.IsolationUnavailableError) as exc:
+            # Which workspace failed? `resolve_turn_workspace` prepares the **task's** checkout or
+            # the **agent's** own, and both arms raise these two exception types carrying no scope.
+            # So ask the predicate the resolver itself obeys — the same call the one-turn-per-task
+            # refusal above already makes (design D1 of
+            # `a-blocked-agent-workspace-holds-its-input`), never the exception's type and never a
+            # path parsed out of its message. A classification derived from a message is one that
+            # breaks the next time the message improves, and phase 4 of that change improves these.
+            if worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id):
+                raise TriggerAgentError(
+                    status.HTTP_409_CONFLICT,
+                    f"Could not prepare the checkout for task {turn_workspace.task_id}: {exc}",
+                ) from exc
             raise TriggerAgentError(
                 status.HTTP_409_CONFLICT,
-                f"Could not prepare isolated worktree for {agent}: {exc}",
+                f"Could not prepare {agent}'s own workspace: {exc}",
+                # Not `agent_wide`, and not `transient` — see the flag's own paragraph. It says
+                # what failed; `turn_scheduler` decides whether anything was starving behind it.
+                agent_workspace_unavailable=True,
             ) from exc
         effective_work_dir = str(workspace)
         isolated_workspace = workspace if workspace != repo_root else None

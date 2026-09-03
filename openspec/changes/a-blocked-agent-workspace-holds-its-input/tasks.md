@@ -18,18 +18,18 @@
 
 ## 2. The refusal says which workspace it could not prepare
 
-- [ ] 2.1 `hub/hub/api/v1/agent_trigger.py`: add `agent_workspace_unavailable: bool = False` to
+- [x] 2.1 `hub/hub/api/v1/agent_trigger.py`: add `agent_workspace_unavailable: bool = False` to
   `TriggerAgentError.__init__` and store it, with a docstring paragraph in the style of its three
   neighbours — what the flag means, why it is not `agent_wide` (design D2), and that it does **not**
   imply `transient`, unlike `workspace_unavailable`.
-- [ ] 2.2 Split the `except` at `:879-883` into the two cases, deciding between them with
+- [x] 2.2 Split the `except` at `:879-883` into the two cases, deciding between them with
   `worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id)` — the same predicate
   `resolve_turn_workspace` obeys and the same call the one-turn-per-task refusal above already makes
   (design D1). Do not inspect the exception type or its message to decide this.
-- [ ] 2.3 The agent-workspace arm raises with `agent_workspace_unavailable=True` and a sentence
+- [x] 2.3 The agent-workspace arm raises with `agent_workspace_unavailable=True` and a sentence
   naming the agent's own workspace. The task arm keeps today's flags exactly — nothing new, nothing
   removed — and names the **task**, not the agent.
-- [ ] 2.4 Add a test asserting the dispatch itself: with a stubbed `resolve_turn_workspace` that
+- [x] 2.4 Add a test asserting the dispatch itself: with a stubbed `resolve_turn_workspace` that
   raises, a turn bound to no task produces a refusal carrying the flag and a turn bound to a task
   produces one without it. Assert the flags, not the wording.
 
