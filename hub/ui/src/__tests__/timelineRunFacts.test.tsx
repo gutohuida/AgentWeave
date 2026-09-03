@@ -197,6 +197,44 @@ describe('a turn that produced nothing still reports what it cost', () => {
     expect(screen.getAllByTestId('turn-worked-for')).toHaveLength(1)
     expect(screen.getByTestId('turn-worked-for')).toHaveTextContent('Worked for 5s')
   })
+
+  it('carries BOTH the terminal label and the stat line on a STOPPED turn that produced nothing', () => {
+    // Phase 7 drove this and found the fixture above is not the production shape. A stopped run
+    // now writes exactly two entries — the operator's message and the status row — and that row
+    // reads `{"phase": "completed", "exit_code": 2}` with content "Run stopped (exit 2)."
+    // (`agent_trigger.py:2141-2145`: `phase` means the run ENDED, the outcome is the run row's).
+    // So `isSuccessCompletionEntry` matches on a turn that must ALSO draw "Turn stopped", which
+    // no test covered: the completed fixture above draws no label, so nothing asserted that the
+    // label and the stat line survive together on the one shape production actually emits.
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'op-1',
+            kind: 'operator_input',
+            content: 'do the thing',
+            run_id: 'run-1',
+          }),
+          entry({
+            id: 'status-stopped',
+            kind: 'agent_output',
+            output_kind: 'status',
+            content: 'Run stopped (exit 2).',
+            payload: { phase: 'completed', exit_code: 2 },
+            run_id: 'run-1',
+            timestamp: '2026-08-02T00:00:05Z',
+          }),
+        ]}
+        roster={[agent]}
+        runs={{ 'run-1': facts('stopped', { ended_at: '2026-08-02T00:00:05Z', exit_code: 2 }) }}
+        isRunning={false}
+      />,
+    )
+    expect(screen.getByText(/Turn stopped/)).toBeInTheDocument()
+    expect(screen.getByTestId('turn-worked-for')).toHaveTextContent('Worked for 5s')
+    expect(screen.queryByText('Run stopped (exit 2).')).not.toBeInTheDocument()
+  })
 })
 
 /**
