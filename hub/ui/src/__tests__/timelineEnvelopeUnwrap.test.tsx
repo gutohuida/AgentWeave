@@ -152,13 +152,17 @@ describe('the timeline envelope is unwrapped by the two consumers that hold the 
     expect(screen.queryByText('No activity yet')).not.toBeInTheDocument()
   })
 
-  it('AgentOutputPanel hands the timeline both halves — the events it shows and the run facts it never reads', async () => {
+  it('AgentOutputPanel hands the timeline the run facts it never reads, and no events at all', async () => {
     render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
     await waitFor(() => expect(screen.getByTestId('timeline-stub')).toBeInTheDocument())
 
-    expect(handedToTimeline.timelineEvents).toEqual([stopEvent])
     // The point of task 3.3a: this panel is the only thing between the hook and the three
     // consumers, and it must carry a value it has no use for.
     expect(handedToTimeline.runs).toEqual({ 'run-1': stoppedRun })
+    // And the other half of the envelope stops here (task 4.6a). `AgentTimeline` had no reader
+    // left for the events, and the reader anyone would add back is the one F190 was: run state
+    // reduced out of a list the route truncates. Asserted rather than merely deleted, so
+    // re-threading it is a failing test rather than a silent regression.
+    expect(handedToTimeline).not.toHaveProperty('timelineEvents')
   })
 })

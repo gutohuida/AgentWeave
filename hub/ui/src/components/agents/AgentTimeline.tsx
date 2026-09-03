@@ -5,7 +5,7 @@ import { MarkdownMessage } from '@/components/agents/MarkdownMessage'
 import { ToolEditDiff } from '@/components/agents/ToolEditDiff'
 import { editDiffStat } from '@/lib/editDiff'
 import { formatElapsedSeconds, useElapsedSeconds } from '@/hooks/useElapsedSeconds'
-import type { AgentRunFacts, AgentSummary, AgentTimelineEvent, RunLifecycleStatus } from '@/api/agents'
+import type { AgentRunFacts, AgentSummary, RunLifecycleStatus } from '@/api/agents'
 import type { TimelineEntry } from '@/api/agentChat'
 import type { QueueStatus } from '@/api/queue'
 import type { TurnUsage } from '@/api/accounting'
@@ -25,15 +25,13 @@ interface AgentTimelineProps {
   agent: AgentSummary
   entries: TimelineEntry[]
   roster: AgentSummary[]
-  /** The agent's run-lifecycle events. Nothing in this component reads them any more — phase 4
-   *  pointed all three former readers at `runs` — and the prop survives only because deleting it
-   *  touches ~45 render sites, so task 4.6a decides it rather than this commit. Do not add a
-   *  reader back: an event list the route truncates is exactly what F190 was. */
-  timelineEvents: AgentTimelineEvent[]
-  /** The facts of the runs `timelineEvents` names, keyed by `run_id`, straight from the
-   *  timeline route. Required rather than optional and defaulted: a silently-empty map reads
-   *  as "no run ended" everywhere it is consulted, which is the exact failure this change
-   *  exists to delete. A caller with nothing to say must say `{}` on purpose. */
+  /** How every run in this window ended, keyed by `run_id`, straight from the timeline route.
+   *  This is the component's ONLY source of run state. It used to take the route's lifecycle
+   *  events too and reduce this out of them; that prop is gone (task 4.6a) because the route
+   *  truncates that list and a run whose terminal event fell off the end read as still going
+   *  forever (F190). Do not add it back. Required rather than optional and defaulted: a
+   *  silently-empty map reads as "no run ended" everywhere it is consulted, which is the exact
+   *  failure this change exists to delete. A caller with nothing to say must say `{}`. */
   runs: Record<string, AgentRunFacts>
   queueStatus?: QueueStatus
   isRunning: boolean
@@ -464,7 +462,14 @@ function TurnBody({
         const entry = block.entry
         // No end-of-turn text for a normal successful run (operator: "We don't want any
         // end-of-conversation message"). The event itself is untouched — only its card here.
-        if (isSuccessCompletionEntry(entry)) return null
+        //
+        // The fragment still returns `durationLine` rather than `null` (F269, task 4.5a). The
+        // stat line hangs off `firstAgentBlockId`, and a `status` entry is its own block, so a
+        // turn whose only agent output is this row — a run that ended successfully having
+        // produced nothing else — used to lose "Worked for Xs · N tokens" along with the card
+        // it was nested in. `durationLine` is already `null` for every block that is not
+        // `firstAgentBlockId`, so this adds nothing to a turn that had text of its own.
+        if (isSuccessCompletionEntry(entry)) return <Fragment key={entry.id}>{durationLine}</Fragment>
         if (entryCategory(entry) === 'result') {
           return (
             <Fragment key={entry.id}>

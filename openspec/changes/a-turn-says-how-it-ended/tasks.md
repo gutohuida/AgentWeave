@@ -327,7 +327,7 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
       `failed` phase does not satisfy it. **F269 is narrower than task 4.5a's prose suggests**: it
       needs a status row whose phase is `completed`, i.e. a run that ended *successfully* having
       produced nothing else. 4.5a's fix is unchanged; its scope note is.
-- [ ] 4.5a **The stat line must not vanish with the row it hangs on** — found by round RA,
+- [x] 4.5a **The stat line must not vanish with the row it hangs on** — found by round RA,
       2026-09-02, filed as **F269 (C)** in `scripts/drive/FINDINGS.md`, and it is where phase 2 and
       phase 4 meet. `firstAgentBlockId`
       (`AgentTimeline.tsx:384-389`) picks the first block that is a work block or carries an
@@ -356,13 +356,24 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
       is the turn's *only* `agent_output` block, so there is no later block to inherit the slot —
       and `blockId === firstAgentBlockId` is then false for every block. Measured: 2 of 6 fail, both
       of them the ones this task exists to make pass.
+      **DONE, iteration 6.** The named fix, and no other: the success-completion branch returns
+      `<Fragment key={entry.id}>{durationLine}</Fragment>`. Three assertions in
+      `timelineRunFacts.test.tsx`, written from the F269 shape iteration 5 measured — an
+      `operator_input` row and a `phase: "completed"` status row, nothing between — and **red
+      first**: 1 failed / 10 passed on the file before the fix, the failure being the stat line
+      itself. All three are mutation-checked: drawing the `ResultCard` from that branch kills
+      *still draws no card*, emitting the stat line without the `firstAgentBlockId` gate kills
+      *exactly one stat line*, and `return null` kills the first. **RB's rejection re-measured
+      against this test set and confirmed:** the `firstAgentBlockId` exclusion was implemented and
+      run here too — 1 of 3 fails, and it is the one this task exists to make pass. Same verdict,
+      independently reached.
 - [x] 4.6 **DONE, and done here rather than in phase 4b, because the compiler forced it.** Its
       only two consumers were the two reducers 4.3 and 4.4 delete, so the moment they went
       `tsc --noEmit` failed with `TS6133: 'LIFECYCLE_EVENT_STATUS' is declared but its value is
       never read` — not a judgement call, a build break. Deleted, and with it
       `agentTimelineModel.ts`'s now-unused `RunLifecycleStatus` import, exactly as iteration 4
       predicted when it moved that type to `api/agents.ts`.
-- [ ] 4.6a **`AgentTimeline`'s `timelineEvents` prop now has no reader at all** — discovered at
+- [x] 4.6a **`AgentTimeline`'s `timelineEvents` prop now has no reader at all** — discovered at
       4.3, not predicted by any round. All three former readers were the reducers; the only other
       mentions in the file are comments. It is left in place for now, still required, with a
       comment on the prop saying so, because deleting it touches `AgentOutputPanel` and ~45 render
@@ -371,7 +382,18 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
       keep receiving events it does not read. Note that `AgentActivityTab` genuinely does read the
       events, so the *route* keeps returning them either way — this is about one prop, not the
       envelope.
-- [ ] 4.7 Verify the third consequence is repaired **in both states, not just on reload**
+      **DECIDED, iteration 6: deleted.** The operator's standing preference is the cleanest design
+      over the least work, and the case here is stronger than tidiness — a required prop with no
+      reader is a standing invitation to add one, and *the* reader anyone would add is the one
+      F190 was: run state reduced out of a list the route truncates. Keeping it keeps the loaded
+      gun. Gone from `AgentTimeline`'s props and its `AgentTimelineEvent` import, from
+      `AgentOutputPanel` (the `timeline?.events ?? []` local and the pass-through), and from every
+      render site in the suite. `AgentActivityTab` is untouched and still lists the events, so the
+      route's envelope is unchanged. The deletion is **asserted, not merely done**:
+      `timelineEnvelopeUnwrap.test.tsx` now checks the panel hands the timeline `runs` and
+      `not.toHaveProperty('timelineEvents')`, so re-threading it is a failing test rather than a
+      silent regression.
+- [x] 4.7 Verify the third consequence is repaired **in both states, not just on reload**
       (`AgentTimeline.tsx:117-137`). Round 2's correction: `anotherRunIsUnderway` is OR'd into
       `runVisiblyActive`, so it defeats the live path too, and a reload-only check would pass while
       the live regression stood.
@@ -404,6 +426,18 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
         indicator lingers until the roster poll. After task 2.2 it must go out when the persisted
         status row lands. Bind this assertion to a stopped run specifically — a completed-run
         version of it passes today and proves nothing.
+      **DONE, iteration 6 — six tests appended to `workingIndicator.test.tsx`.** This is a
+      verification task, not a repair, so red-first does not apply and **mutation-checking is the
+      proof they are not vacuous.** Three mutations, and every one of the six is killed by at
+      least one: *`anotherRunIsUnderway` always true* kills LIVE, RELOADED and all three
+      per-runner guards (7 of the file's 20 tests); *always false* kills STILL-UNDERWAY;
+      *`lastRunSettled` loses signal 1* kills LIVE and all three guards. The live/reloaded split is
+      real and the mutations show it: RELOADED survives the signal-1 mutation because it rests on
+      the run row, LIVE does not. LIVE is rendered in the true live shape — the status row streamed
+      in, the newest run's ROW still reading `started` because the refetch has not landed, the
+      older run long since terminal. The CODEX and STOPPED guards each assert **both** halves of
+      the change (without the persisted row the indicator is present; with it, absent), so each
+      states what changed rather than only where it landed.
 
 ## 5. The testing rule is enforceable
 

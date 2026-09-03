@@ -18005,6 +18005,19 @@ status row itself stays unrendered, exactly one stat line is emitted when a text
 and the 86 existing assertions in `workingIndicator`, `agentTimeline`, `agentTimelineModel` and
 `agentHandoff` stay green. Task 4.5a now names that fix and withdraws the other.
 
+**FIXED IN CODE 2026-09-03 (night iteration 6, task 4.5a); NOT YET DRIVEN.** The placement fix is
+in `AgentTimeline.tsx`'s success-completion branch, and three assertions in
+`timelineRunFacts.test.tsx` cover it — the stat line appears, the row itself still draws no card,
+and exactly one stat line is emitted when a text row precedes the status row. All three are
+mutation-checked: drawing the card from that branch kills the second, emitting the stat line
+without the `firstAgentBlockId` gate kills the third, and reverting to `null` kills the first.
+
+**RB's rejection of the other fix was re-measured against a different test set and stands.** The
+`firstAgentBlockId` exclusion was implemented and run against these three assertions: 1 of 3 fails,
+and it is *the one this finding exists to make pass* — the same verdict RB reached with 2 of their
+6. This finding stays open until phase 6 watches the line appear against a running Hub; the
+committed UI bundle is not rebuilt yet, so a live Hub still serves the old client.
+
 ---
 
 ## F270 (C) — signal 1 has never fired for a Codex run, so a *cleanly completed* Codex turn still shows the 2026-08-18 lingering counter

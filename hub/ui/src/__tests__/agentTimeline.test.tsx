@@ -41,7 +41,7 @@ function entry(overrides: Partial<TimelineEntry>): TimelineEntry {
 describe('AgentTimeline', () => {
   it('shows an empty state when there is nothing to show', () => {
     render(
-      <AgentTimeline agent={agent} entries={[]} roster={[]} runs={{}} timelineEvents={[]} isRunning={false} />,
+      <AgentTimeline agent={agent} entries={[]} roster={[]} runs={{}} isRunning={false} />,
     )
     expect(screen.getByText('No conversation yet')).toBeInTheDocument()
   })
@@ -61,7 +61,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -87,7 +86,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -102,7 +100,6 @@ describe('AgentTimeline', () => {
         entries={[entry({ id: 'q1', kind: 'operator_input', content: 'not delivered yet', delivery_state: 'queued', run_id: undefined })]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -128,7 +125,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -160,7 +156,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
         onWithdraw={onWithdraw}
         onRelease={onRelease}
@@ -197,7 +192,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
         onWithdraw={vi.fn()}
         onRelease={vi.fn()}
@@ -225,7 +219,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
         onDeliverNow={onDeliverNow}
       />,
@@ -258,7 +251,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
         onRelease={onRelease}
         onWithdraw={onWithdraw}
@@ -290,7 +282,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
         onRelease={onRelease}
       />,
@@ -309,7 +300,6 @@ describe('AgentTimeline', () => {
         entries={[entry({ id: 'q2', kind: 'operator_input', delivery_state: 'queued', run_id: undefined })]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
         onWithdraw={onWithdraw}
       />,
@@ -325,7 +315,6 @@ describe('AgentTimeline', () => {
         entries={[entry({ id: 'a-tok', kind: 'agent_output', output_kind: 'text', run_id: 'run-done' })]}
         roster={[agent]}
         runs={{ 'run-done': { status: 'completed', started_at: '2026-08-02T00:00:00Z', ended_at: '2026-08-02T00:00:10Z' } }}
-        timelineEvents={[]}
         isRunning={false}
         recentTurns={[{
           id: 'tu-1',
@@ -356,7 +345,6 @@ describe('AgentTimeline', () => {
         entries={[entry({ id: 'a-notok', kind: 'agent_output', output_kind: 'text', run_id: 'run-done2' })]}
         roster={[agent]}
         runs={{ 'run-done2': { status: 'completed', started_at: '2026-08-02T00:00:00Z', ended_at: '2026-08-02T00:00:10Z' } }}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -372,7 +360,6 @@ describe('AgentTimeline', () => {
         entries={[entry({ id: 'a2', kind: 'agent_output', output_kind: 'text', run_id: 'run-done' })]}
         roster={[agent]}
         runs={{ 'run-done': { status: 'stopped', started_at: '2026-08-02T00:00:00Z', ended_at: '2026-08-02T00:00:03Z' } }}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -385,7 +372,7 @@ describe('AgentTimeline', () => {
     // being read collapsed the instant a new run appended one.
     const earlier = entry({ id: 'a3', kind: 'agent_output', output_kind: 'text', content: 'earlier turn body', run_id: 'run-old' })
     const { rerender } = render(
-      <AgentTimeline agent={agent} entries={[earlier]} roster={[agent]} runs={{}} timelineEvents={[]} isRunning={false} />,
+      <AgentTimeline agent={agent} entries={[earlier]} roster={[agent]} runs={{}} isRunning={false} />,
     )
     expect(screen.getByText('earlier turn body')).toBeInTheDocument()
 
@@ -398,7 +385,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -410,7 +396,7 @@ describe('AgentTimeline', () => {
   it('folds any turn on demand, including the only turn, and keeps it folded', () => {
     const only = entry({ id: 'a3b', kind: 'agent_output', output_kind: 'text', content: 'only turn body', run_id: 'run-only' })
     const { rerender } = render(
-      <AgentTimeline agent={agent} entries={[only]} roster={[agent]} runs={{}} timelineEvents={[]} isRunning={false} />,
+      <AgentTimeline agent={agent} entries={[only]} roster={[agent]} runs={{}} isRunning={false} />,
     )
 
     // A single-turn conversation is still foldable — the control used to be hidden on the
@@ -429,7 +415,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -447,7 +432,6 @@ describe('AgentTimeline', () => {
         entries={[entry({ id: 'a5', kind: 'agent_output', output_kind: 'text', content: 'latest turn body', run_id: 'run-new' })]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
         foldAllSignal={0}
       />,
@@ -460,7 +444,6 @@ describe('AgentTimeline', () => {
         entries={[entry({ id: 'a5', kind: 'agent_output', output_kind: 'text', content: 'latest turn body', run_id: 'run-new' })]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
         foldAllSignal={1}
       />,
@@ -487,7 +470,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -531,7 +513,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -561,7 +542,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -583,7 +563,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -606,7 +585,6 @@ describe('AgentTimeline', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -625,7 +603,6 @@ describe('AgentTimeline', () => {
           entries={[entry({ id: 'a6', kind: 'agent_output', output_kind: 'text', content: 'freshly opened turn', run_id: 'run-fresh' })]}
           roster={[agent]}
           runs={{}}
-          timelineEvents={[]}
           isRunning={false}
           foldAllSignal={0}
         />
@@ -646,7 +623,7 @@ describe('AgentTimeline — execution-order work blocks (2026-08-04-hub-charcoal
 
   it('renders work in execution order, never hoisted above the text that preceded it', () => {
     const { container } = render(
-      <AgentTimeline agent={agent} entries={interleavedEntries} roster={[agent]} runs={{}} timelineEvents={[]} isRunning={false} />,
+      <AgentTimeline agent={agent} entries={interleavedEntries} roster={[agent]} runs={{}} isRunning={false} />,
     )
     const text = container.textContent ?? ''
     const idxA = text.indexOf('let me check the file')
@@ -671,7 +648,6 @@ describe('AgentTimeline — execution-order work blocks (2026-08-04-hub-charcoal
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -680,7 +656,7 @@ describe('AgentTimeline — execution-order work blocks (2026-08-04-hub-charcoal
 
   it('tracks each work block\'s disclosure state independently', () => {
     render(
-      <AgentTimeline agent={agent} entries={interleavedEntries} roster={[agent]} runs={{}} timelineEvents={[]} isRunning={false} />,
+      <AgentTimeline agent={agent} entries={interleavedEntries} roster={[agent]} runs={{}} isRunning={false} />,
     )
     const [firstBlock, secondBlock] = screen.getAllByText('Work · 1 step')
 
@@ -703,7 +679,6 @@ describe('AgentTimeline — execution-order work blocks (2026-08-04-hub-charcoal
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -732,7 +707,6 @@ describe('AgentTimeline — WorkRow tool icon and label (Q7 D2)', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -759,7 +733,6 @@ describe('AgentTimeline — WorkRow tool icon and label (Q7 D2)', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -785,7 +758,6 @@ describe('AgentTimeline — WorkRow tool icon and label (Q7 D2)', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -824,7 +796,6 @@ describe('AgentTimeline — WorkRow edit diff view (Q7 D2 section 3)', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -846,7 +817,6 @@ describe('AgentTimeline — WorkRow edit diff view (Q7 D2 section 3)', () => {
         entries={[editEntry({ payload: { call_id: 'c1', tool: 'Edit', input: '{not valid json' } })]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -873,7 +843,6 @@ describe('AgentTimeline — WorkRow edit diff view (Q7 D2 section 3)', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -889,7 +858,6 @@ describe('AgentTimeline — WorkRow edit diff view (Q7 D2 section 3)', () => {
         entries={[editEntry({ payload: { call_id: 'c1', tool: 'Edit', input: JSON.stringify({ old_string: 'foo' }) } })]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -913,7 +881,6 @@ describe('AgentTimeline — WorkRow edit diff view (Q7 D2 section 3)', () => {
         ]}
         roster={[agent]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -945,7 +912,6 @@ describe('AgentTimeline — the outbound message folds (conversations-continue p
         ]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -979,7 +945,6 @@ describe('AgentTimeline — the outbound message folds (conversations-continue p
         ]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -1003,7 +968,6 @@ describe('AgentTimeline — the outbound message folds (conversations-continue p
         ]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -1027,7 +991,6 @@ describe('AgentTimeline — the outbound message folds (conversations-continue p
         entries={[first]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -1048,7 +1011,6 @@ describe('AgentTimeline — the outbound message folds (conversations-continue p
         ]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -1070,7 +1032,6 @@ describe('AgentTimeline — the outbound message folds (conversations-continue p
         ]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )
@@ -1094,7 +1055,6 @@ describe('AgentTimeline — the outbound message folds (conversations-continue p
         ]}
         roster={[agent, peer]}
         runs={{}}
-        timelineEvents={[]}
         isRunning={false}
       />,
     )

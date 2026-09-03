@@ -330,7 +330,6 @@ export function AgentOutputPanel({
   // This panel reads neither half; it is the only thing that can carry them. The hook lives
   // here and `AgentTimeline` takes both as props, so `runs` is threaded through unread.
   const { data: timeline } = useAgentTimeline(agent.name)
-  const timelineEvents = timeline?.events ?? []
   const runFacts = timeline?.runs ?? {}
   const { data: accounting } = useAccounting()
   const { data: conversationUsage } = useConversationAccounting(currentConversationId ?? null)
@@ -1034,7 +1033,6 @@ export function AgentOutputPanel({
             agent={agent}
             entries={timelineEntries}
             roster={roster}
-            timelineEvents={timelineEvents}
             runs={runFacts}
             queueStatus={queueStatus}
             isRunning={isRunning}
