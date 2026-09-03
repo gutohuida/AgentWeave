@@ -2,7 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [ master ]
+    # `autonomous/**` is here because the daily loop's cycle branch was otherwise invisible to CI.
+    # The standing rule is "push, do not open PRs", so neither trigger below could ever fire for it:
+    # between 2026-09-01 and 2026-09-03 the branch accumulated 173 commits across 114 files and was
+    # never once built by anything but the loop running CI's commands on one Windows machine. The
+    # morning merge gate in `.claude/loops/day-window.md` reads the conclusion of this run, so this
+    # line is what makes an unattended merge to master defensible rather than a leap.
+    branches: [ master, 'autonomous/**' ]
   pull_request:
     branches: [ master ]
 

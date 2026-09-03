@@ -80,6 +80,17 @@ $stateFilePath = Join-Path $Repo $StateFile
 # Forward slashes, because the prompt below is read by an agent that will type this path into
 # tools where a backslash is an escape.
 $stateRelative = $StateFile -replace '\\', '/'
+
+# The branch lock, derived from the state file so this script needs no window parameter and the
+# legacy single-window layout keeps working: STATE-day.json -> .heartbeat-day, STATE.json ->
+# .heartbeat. Two windows sharing one lock would spend the day standing down for each other.
+# Computed here rather than inside the heartbeat gate below, because the prompt names it even when
+# the gate is disabled with -HeartbeatGraceMinutes 0.
+$stateLeaf = [System.IO.Path]::GetFileNameWithoutExtension($StateFile)
+$lockSuffix = if ($stateLeaf -match '^STATE-(.+)$') { "-" + $Matches[1] } else { "" }
+$heartbeatPath = Join-Path (Split-Path $stateFilePath) (".heartbeat" + $lockSuffix)
+$lockRelative = ((Split-Path $stateRelative -Parent) -replace '\\', '/') + "/.heartbeat" + $lockSuffix
+
 if (-not (Test-Path $stateFilePath)) {
   Write-Log "No $stateRelative - nothing to resume. Stopping."
   try { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop } catch {}
@@ -127,12 +138,35 @@ if (-not $state.next_action) {
 # --- stand down for a live session --------------------------------------------------------------
 # Deliberately does NOT unregister: the session this is backing up may die at any moment, and the
 # next firing is what picks the work up. Standing down is a skip, not a stop.
+#
+# The lock is an untracked sidecar next to the state file -- `.heartbeat-day`, `.heartbeat-night` --
+# holding one ISO instant and nothing else. It used to be the `last_heartbeat` field inside the
+# TRACKED state json, which meant claiming and releasing the branch dirtied the tree and had to be
+# committed: half of every day's commits were that protocol, and none of them carried work. Nothing
+# ever required the lock to be in git. This driver reads it off the local disk, and a lock shared
+# through a remote would be actively wrong -- it guards one working tree, not the repository.
+#
+# The old field is still honoured when the sidecar is absent, so a state file written by the
+# previous arrangement (or by hand) still holds the branch instead of silently losing the lock.
 if ($HeartbeatGraceMinutes -gt 0) {
   $heartbeat = $null
-  try { $heartbeat = (Get-Content $stateFilePath -Raw | ConvertFrom-Json).last_heartbeat } catch {
-    Write-Log "STATE.json did not parse - proceeding, since a backup that defers to a file it cannot read is no backup."
+  $heartbeatSource = ""
+  if (Test-Path $heartbeatPath) {
+    try {
+      $heartbeat = (Get-Content $heartbeatPath -Raw).Trim()
+      $heartbeatSource = "sidecar"
+    } catch { Write-Log "Could not read $heartbeatPath - falling back to the state file." }
+  }
+  if (-not $heartbeat) {
+    try {
+      $heartbeat = (Get-Content $stateFilePath -Raw | ConvertFrom-Json).last_heartbeat
+      if ($heartbeat) { $heartbeatSource = "legacy state field" }
+    } catch {
+      Write-Log "STATE.json did not parse - proceeding, since a backup that defers to a file it cannot read is no backup."
+    }
   }
   if ($heartbeat) {
+    Write-Log "Branch lock read from the $heartbeatSource."
     try {
       $age = ([datetimeoffset]::Now - [datetimeoffset]::Parse($heartbeat, [System.Globalization.CultureInfo]::InvariantCulture)).TotalMinutes
       if ($age -lt $HeartbeatGraceMinutes) {
@@ -158,17 +192,23 @@ iterations - everything you need is on disk.
 2. Verify the branch and `git log` match what STATE.json claims. Reconcile in the log if not.
 3. Do exactly the one unit of work named in `next_action`, sized to finish in this turn.
 4. Verify it: run the tests, drive the real surface. A passing suite is not proof of behaviour.
-5. Append a log entry, rewrite STATE.json (including next_action and last_heartbeat), then
-   commit and push. Never end an iteration with a dirty tree.
-6. LAST of all, once everything is pushed: set last_heartbeat to an instant ~40 minutes in the
-   past and commit that one-line change. This releases the branch so the very next firing picks
-   the work up instead of standing down against your own heartbeat and idling a cycle. Do this
-   ONLY at the end -- while you are still working, keep refreshing last_heartbeat to now, which
-   is what keeps an interactive session and this driver off each other.
+5. Append a log entry, rewrite STATE.json (next_action, queue, iteration), then commit and push.
+   Never end an iteration with a dirty tree.
+6. When the queue is finished, set next_action to null. That is what makes the driver unregister
+   itself instead of spending a whole model invocation per firing to rediscover there is nothing
+   to do. A prose next_action that says "stand down" does not do this and costs a full invocation
+   every time it fires.
+
+The branch lock is the untracked file <<LOCK>>, holding one ISO instant and nothing else.
+It is gitignored, it is NOT part of the state file, and it must never be committed -- do not write
+a `last_heartbeat` field into STATE.json; that field is retired and only still read as a fallback
+for older layouts. Write the instant into <<LOCK>> when you start, refresh it as you work, and
+DELETE the file once everything is pushed. Deleting is the release: absence means free, so the very
+next firing picks the work up instead of idling a cycle against your own lock.
 
 Stamp every timestamp from PowerShell (Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz') or Python's
 datetime.now().astimezone(). Git Bash `date` on this machine prints UTC but labels it +0100, so a
-heartbeat written from it lands an hour in the future and stalls the loop until real time catches up.
+lock written from it lands an hour in the future and stalls the loop until real time catches up.
 
 Honour the limits recorded in STATE.json. Stay on the autonomous branch. If a decision is
 genuinely the user's, add it to decisions_for_user rather than guessing.
@@ -186,7 +226,8 @@ $prompt = $prompt.Replace('.claude/autonomous/STATE.json', '<<STATE>>').
                   Replace('STATE.json', '<<STATE>>').
                   Replace('.claude/autonomous/ for context.', '<<LOG>> for context.').
                   Replace('<<STATE>>', $stateRelative).
-                  Replace('<<LOG>>', $stateLogFile)
+                  Replace('<<LOG>>', $stateLogFile).
+                  Replace('<<LOCK>>', $lockRelative)
 
 Set-Location $Repo
 Write-Log "--- iteration start ($Runner, $PermissionMode) ---"

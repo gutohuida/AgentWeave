@@ -476,10 +476,15 @@ under `openspec/changes/` references it. What is left is not a prioritisation de
 entry: *F188 is the last unspecced severity-A.* Its cited ledger size of 219 headings is now 289.
 
 **From D-8 — a bring-forward list.** Absorbs entries 22-26, 28, 29. Re-queue or close, per row; none
-needs a decision from the operator except by being scheduled. One correction: the row claims the Hub
-suite runs "~25 minutes". **This file already disproves that** — `hub/tests/` was measured at
-**14:39** on 2026-09-01, recorded under *Closed by measurement* below. `STATE-night.json:101` still
-carries the 25-minute figure and should be corrected with it. Also still live there: F47/F120's
+needs a decision from the operator except by being scheduled. ~~One correction: the row claims the
+Hub suite runs "~25 minutes". **This file already disproves that** — `hub/tests/` was measured at
+**14:39** on 2026-09-01.~~ **Withdrawn 2026-09-03: the correction was wrong, and this is a better
+example of the failure it was trying to name than the thing it corrected.** One measurement does not
+disprove a range. Re-measured 2026-09-03 in a DECIDE session: **3850 passed, 84 skipped, 1 xpassed
+in 24:50** — with the UI suite and the CI lint set running alongside it, where the 14:39 run had the
+machine to itself. Both are real; the suite is **15–25 minutes and load-dependent**, which is what
+both playbooks now say. The "~25 minutes" figure was never disproven, and two days were spent with
+this file asserting it had been. Also still live there: F47/F120's
 categorical third-actor prohibition, F77 (an agent has no way to address the operator), F53/F65
 never queued, five findings queued 2026-08-29 and dropped from three runs, and the 8010 trial Hub
 serving four-day-old code.

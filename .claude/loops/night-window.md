@@ -37,9 +37,10 @@ Only the first firing of the window does this.
 
 3. **Confirm the tree is green before building on it.** A window that starts on a red suite cannot
    tell its own breakage from the one it inherited, and will spend hours attributing one to the
-   other. Run the relevant chunk, not the whole 25-minute suite. If it is red and you did not break
-   it, **that is tonight's first queue item** — fix the inherited breakage before adding to it, and
-   say so in the log.
+   other. Run the relevant chunk, not the whole suite — that is **15–25 minutes** depending on what
+   else is running (14:39 measured quiet on 2026-09-01, 24:50 measured contended on 2026-09-03) and
+   exceeds the 600s command cap. If it is red and you did not break it, **that is tonight's first
+   queue item** — fix the inherited breakage before adding to it, and say so in the log.
 
 4. **Write the queue**, in this order unless `ORDER:` says otherwise. Backlog first, decided
    2026-09-01; the rejected alternative was approved-first, which would let 8 unarchived changes and
@@ -49,6 +50,15 @@ Only the first firing of the window does this.
       repository. Read `openspec/changes/a-conflict-refusal-names-what-clears-it`'s task 6.4a
       **first**: it must not be archived before `a-loop-declares-whether-it-needs-evidence` is. That
       ordering constraint is real, and archiving out of order is not trivially reversible.
+
+      **Archiving a change retires the findings it fixes, in the same commit.** For every `F<n>` the
+      change's `proposal.md` names, set that section's `**Status:**` line in
+      `scripts/drive/FINDINGS.md` to `fixed <sha>`, and correct the index paragraph's open
+      severity-A list. This is not optional tidying — it is the step whose absence makes source 2
+      below unusable. Measured 2026-09-03: 145 of the ledger's 280 entries carry no status at all,
+      and the summary has twice been provably wrong about what is open (it read "one" for a week
+      while F188 sat in it, and carried F12 as open years after `5237ec5` fixed it). A backlog that
+      cannot say what is done is read as a backlog of everything.
    2. **Open findings from `scripts/drive/FINDINGS.md`,** severity A before B before C. A finding
       with no proposal needs the day window first — queue it as a note to tomorrow, not as work.
    3. **`APPROVED` rows**, via `openspec-apply-change`.
@@ -91,6 +101,16 @@ product. On 2026-08-28 all three rounds read the code and none thought to ask wh
 *returns* when the function it calls raises; the first live drive found it in one request.
 
 Every change this window implements gets driven before its queue item is closed.
+
+**A UI change is driven in a browser against the served bundle, or it is not driven.** No exception,
+and in particular a transcription of the component into another language is not a drive. This rule
+is here because `a-turn-says-how-it-ended` was verified in phases 6 and 7 against `aturn_model.py`,
+a Python transcription of the React component, and passed 29/29 — then the next morning's drive
+loaded the real bundle in Chromium and found **F274** in a single session: the very symptom F190 was
+filed for, still live, against the change that closed F190. A transcription can only confirm what
+the person who wrote it already believed, so it cannot find a defect that lives in the gap between
+the transcription and the component. Rebuild the bundle, restart 8011 from the implementing code,
+and look at the page. `scripts/drive/d1_aturn_browser.py` is the working pattern.
 
 - Restart the drive Hub on **8011** from the implementing code first, and confirm no `.py` under
   `hub/hub` or `src` is newer than the process start time. A stale build is the most expensive
@@ -140,6 +160,13 @@ invocation.
 - **Nothing destructive.** No deleting projects, databases, or kept reproductions.
 - **Do not browse the open web.** Nothing in this window's work needs it.
 - **Every claim is measured or labelled unverified.**
+- **Recording that something is wrong is not fixing it.** If a firing establishes that a file,
+  figure or instruction in this repository is wrong and does not repair it in that firing, it goes
+  into the queue as an item — not only into a log entry, a `DECISIONS.md` row, or a paragraph of
+  prose. This window is good at noticing and has been poor at converting: both playbooks carried a
+  Hub-suite figure that `spec-queue/DECISIONS.md` had already recorded as wrong, in writing, for two
+  days, while the window went on sizing its work against it. A note nobody is scheduled to act on is
+  indistinguishable from not having noticed.
 - **Decisions that are genuinely the operator's go to `decisions_for_user`, not guessed.**
 - Stage explicit paths, never `git add -A`. Never commit `kimichanges.md` or `kimiwork.md`.
 - `.agentweave/` and `spec/` at the repository root belong to the migration and are not stray test

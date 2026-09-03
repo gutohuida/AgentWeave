@@ -148,6 +148,14 @@ hub/agentweave.db
 # window gives each window its own log.
 .claude/autonomous/driver*.log
 
+# The branch lock, for exactly the reason stated above it. `last_heartbeat` used to live inside the
+# tracked STATE-<window>.json, so claiming and releasing the branch dirtied the tree and therefore
+# had to be committed -- 86 of the 173 commits between 2026-09-01 and 2026-09-03 were that protocol
+# talking to itself, and the log a fresh window has to read was mostly the loop breathing. The lock
+# never needed to be in git: run-iteration.ps1 reads it off the disk of the machine it runs on, and
+# a lock shared through a remote would be wrong anyway. One file per window.
+.claude/autonomous/.heartbeat*
+
 # Working files for the autonomous loop's own API-driving (request/response bodies), not
 # durable output - the findings/log files next to it are.
 .claude/autonomous/scratch/
