@@ -1,40 +1,98 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-03-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "2912736",
-    "stop_at":  "2026-09-04T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-03-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+  "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+  "playbook": ".claude/loops/night-window.md",
+  "runner": "claude",
+  "model": "opus",
+  "permission_mode": "unattended-full-access",
+  "branch": "autonomous/2026-09-03-daily",
+  "parent_branch": "master",
+  "parent_sha": "2912736",
+  "stop_at": "2026-09-04T07:00:00+01:00",
+  "iteration": 1,
+  "log_file": ".claude/autonomous/2026-09-03-night-log.md",
+  "findings_file": "scripts/drive/FINDINGS.md",
+  "approvals_file": "spec-queue/APPROVALS.md",
+  "current": "a-blocked-p1",
+  "next_action": "openspec/changes/a-blocked-agent-workspace-holds-its-input, phase 1 only (tasks 1.1, 1.2, 1.3). Write hub/tests/test_a_blocked_agent_workspace_holds_its_input.py and run it AGAINST UNMODIFIED CODE -- it must pass before any product line is touched. If it does not reproduce, stop, do not implement, and record why in decisions_for_user: the change's behaviour claim at HEAD is inference from the code, not a fresh drive. Tick 1.1-1.3 in tasks.md, commit, push. Touch no other phase.",
+  "queue": [
+    {
+      "id": "a-blocked-p1",
+      "status": "open",
+      "title": "a-blocked phase 1 -- reproduce F188 first",
+      "detail": "Tasks 1.1-1.3. New file hub/tests/test_a_blocked_agent_workspace_holds_its_input.py: (1.1) one agent, one conversation, one unbound operator entry, trigger_agent_directly patched to raise TriggerAgentError(409, 'Could not prepare isolated worktree for <agent>: ...') with NO flags; schedule DELIVERY_ATTEMPT_LIMIT times; assert withdrawn plus abandoned_reason claiming it failed 3 times. (1.2) the same loop with NO_RUNNER (agent_wide=True) leaves the entry queued at 0 attempts -- the asymmetry IS the finding. (1.3) at the worktrees layer without the Hub: a plain directory at .agentweave/worktrees/<agent> in a temp git repo makes ensure_worktree raise IsolationUnavailableError, and assert the message carries no remedy today. GATE: it must pass unmodified. A reproduction that does not pass first is not a reproduction."
+    },
+    {
+      "id": "a-blocked-p2",
+      "status": "open",
+      "title": "a-blocked phase 2 -- the refusal says which workspace it could not prepare",
+      "detail": "Tasks 2.1-2.4 in hub/hub/api/v1/agent_trigger.py. Add agent_workspace_unavailable: bool = False to TriggerAgentError.__init__ with a docstring paragraph in its three neighbours' style (what it means, why it is not agent_wide per design D2, and that it does NOT imply transient, unlike workspace_unavailable). Split the except at :879-883 on worktrees.takes_task_workspace(repo_root, config, turn_workspace.task_id) -- design D1, never on the exception type or its message. The agent arm raises with the flag and names the agent's own workspace; the task arm keeps today's flags exactly and names the TASK. 2.4 asserts the dispatch on flags, not wording."
+    },
+    {
+      "id": "a-blocked-p3a",
+      "status": "open",
+      "title": "a-blocked phase 3a -- the shared predicate and the scheduler helper",
+      "detail": "Tasks 3.0, 3.0a, 3.1, 3.2. Extract takes_own_checkout(task) in hub/hub/task_workspace.py and refactor resolve_turn_workspace_inputs onto it (design D8), keeping the logger.warning on the invalid-id branch. SPELL THE SCHEME CHECK WITH != AND AN EARLY return False -- test_task_workspace_scheme.py substring-scans for '.workspace_scheme =' and 'workspace_scheme=' over lowercased source, and the == spelling contains the first; measured red by R3. Do not relax the scan. 3.0a: re-run that file immediately, confirm 10 passed with migration 0095 the only match, and add the one-line docstring note saying why a READ here is constrained to the negative form. 3.1: the turn_scheduler helper answering whether other queued input for this agent would have run in a different workspace -- two queries in this order (the remaining entries' conversations first, then one over the union of the task ids the entries name and the ids those conversations carry), never one query per entry, and entries in the controlling conversation need no inheritance lookup. 3.2: write the argument and R1's and R3's corrections into its docstring, including which direction each approximation errs in -- a false yes destroys the operator's message, a false no only holds it."
+    },
+    {
+      "id": "a-blocked-p3b",
+      "status": "open",
+      "title": "a-blocked phase 3b -- wire the condition, plus the first four scheduler tests",
+      "detail": "Tasks 3.3-3.6. Extend the condition at turn_scheduler.py:204 so an agent_workspace_unavailable refusal skips the counter unless 3.1's helper says something else could have run; keep the existing transient and agent_wide terms untouched and readable, and do not collapse the three questions into one boolean. 3.4: the three scenarios from agent-conversation-workspace -- held when every other entry is unbound, counted-and-withdrawn when a task-bound entry waits in another conversation, counted when the refusal is the task-checkout one; the middle test's docstring says it is what keeps this change from breaching 'where other queued input could have run'. 3.5: the inherited binding -- the other conversation's entry names no task but its conversation does, and it must count. 3.6: an entry inside selected naming a task that no longer resolves must not count."
+    },
+    {
+      "id": "a-blocked-p3c",
+      "status": "open",
+      "title": "a-blocked phase 3c -- the grandfathered test and its siblings",
+      "detail": "Tasks 3.7, 3.8, 3.8a, 3.8b, 3.9 -- the tests round 3 exists for. 3.7: another conversation's entry naming a task whose workspace_scheme is 'agent' must NOT count; set the column directly in the fixture (no runtime path writes it) and say in the docstring that a scope test built on entry.task_id alone passes every other test in the file and fails this one. 3.8: the same for a task id validate_task_id refuses, a deleted task row, and a task in TERMINAL_FOR_BINDING -- BIND THE OTHER CONVERSATION TO NOTHING in the last two fixtures and say in the docstring that this is load-bearing rather than tidy. 3.8a: the inverse -- an entry naming a decided task on a conversation bound to a live task-scheme task MUST count. 3.8b: a review entry whose task has no evidence naming a commit must not count (design D3b); the sibling whose task does name one must. 3.9: over the hop budget, and a closed conversation -- neither counts."
+    },
+    {
+      "id": "a-blocked-p4",
+      "status": "open",
+      "title": "a-blocked phase 4 -- the refusal says what would clear it",
+      "detail": "Tasks 4.1-4.3 in hub/hub/worktrees.py. Give ensure_worktree's two refusal branches (a symlink; a path that is not the registered worktree for the expected ref) their own remedies, following _merge_prerequisites' precedent that this module writes the operator-facing sentence -- name the directory to remove and the prune that follows it, and do NOT write one sentence covering both. 4.2 does the same for the mid-merge refusal reached from the task arm, so the requirement's third scenario is satisfied by real branches rather than by two wordings of one. 4.3 asserts each remedy at the worktrees layer, per branch, against the obstruction it was written for -- never by substring-matching one shared phrase."
+    },
+    {
+      "id": "a-blocked-p5",
+      "status": "open",
+      "title": "a-blocked phase 5 -- reconcile what already exists",
+      "detail": "Tasks 5.1-5.4. 5.1: hub/tests/test_a_delivery_attempt_means_a_delivery.py's BAD_CHECKOUT is F188's exact sentence used there as the ENTRY-SPECIFIC example -- repoint it at a real task-checkout refusal; its assertion (still counts, still gives up) is correct and must not change. 5.2: grep for other readers of the old sentence (inbound_queue.py's status derivation, any UI string, any test) and RECORD WHAT THE GREP FOUND IN THE CHANGE, including 'nothing'. 5.3: update TriggerAgentError's agent_wide docstring at agent_trigger.py:304-318, which cites :756 as the entry-specific worktree example. 5.4: rewrite turn_scheduler.py:225-233 -- a shipped comment INSIDE the branch being edited that asserts the exact claim this change falsifies, and which 5.2's grep can never reach because it quotes no sentence. Repoint its D3a citation to 2026-08-28-a-delivery-attempt-means-a-delivery; this change's own predicate decision is D8 precisely so the two do not collide in this file."
+    },
+    {
+      "id": "a-blocked-p6-gates",
+      "status": "open",
+      "title": "a-blocked task 6.1 -- the full gates",
+      "detail": "pytest hub/tests/ under py -3.11 (15-25 minutes, load-dependent -- it exceeds the 600s command cap, so background it or run it in chunks), pytest tests/ separately for the CLI (collecting both together fails), ruff check src/ hub/ tests/, black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/, mypy src/. Mutation-check at least the phase 3 condition: delete the new term and watch a NAMED test fail; if nothing fails the test asserted over nothing. SIZING NOTE measured 2026-09-03 23:04: the nine-file chunk relevant to this change ran in 3:14 (242 passed, 1 xpassed), so the whole-suite figure is not a guide to it."
+    },
+    {
+      "id": "a-blocked-p6-drive",
+      "status": "open",
+      "title": "a-blocked tasks 6.2-6.4 -- three drive legs against the product",
+      "detail": "Restart the drive Hub on 8011 from hub/, from source, with the beta DATABASE_URL, and confirm no .py under hub/hub or src is newer than the process start time. Never 'agentweave --port'. Fresh project -- NEVER proj-5e960453 or proj-18e5d4e0, and never port 8000. Real agent bound to claude-haiku-4-5. Leg 6.2: block .agentweave/worktrees/<agent> with a plain directory, send a message, press Continue three times, confirm the message is STILL QUEUED and the queue reports the refusal with its remedy. Leg 6.3: queue a task-bound message for the same agent in another conversation behind the blocked one; the head must still be given up on at the limit and the task turn must then run -- holding everything would look like success to 6.2 alone. The task must be an ordinary one; a drive cannot produce a grandfathered task, which is why 3.7 exists and why this leg cannot stand in for it. Leg 6.4: remove the directory, git worktree prune, trigger once, and confirm the held message from 6.2 is DELIVERED -- F96's promise is the point of holding it. Never leave a job enabled. If this runs long, split after 6.2 and say so in the log."
+    },
+    {
+      "id": "a-blocked-archive",
+      "status": "open",
+      "title": "a-blocked task 6.5 -- retire F188 in the ledger, then archive the change",
+      "detail": "openspec validate --strict, sync the deltas into openspec/specs/, then archive with openspec-archive-change. IN THE SAME COMMIT, retire the finding: set F188's section Status: line in scripts/drive/FINDINGS.md to 'fixed <sha>' and correct the index paragraph's open severity-A list, which today reads 'three -- F271, F188 and now F274' near line 96 and carries F188 near line 90 as having no Status line at all. This is the step whose absence makes the backlog unreadable -- 145 of the ledger's 280 entries carry no status. Do NOT mark F188 retired on the strength of a green suite: append the 6.2-6.4 drive evidence under F188, or leave it open with what was measured."
+    },
+    {
+      "id": "a-write-split",
+      "status": "open",
+      "title": "a-write-outside-the-workspace-is-recorded -- split its 54 tasks before building any of them",
+      "detail": "DO NOT START THIS UNTIL a-blocked-archive IS COMMITTED. APPROVALS is explicit: the two changes collide on agent_trigger.py and worktrees.py, and a-write moves hub/hub/static/ui on top -- the one combination this repo cannot build concurrently. 54 tasks across 10 phases will not fit in one firing, so this item IS the split: read tasks.md, write firing-sized items back into this queue, then stop. Two facts verified 2026-09-03 23:0x and not needing a re-check: task 4.2's migration number 0101 IS correct (head is 0100_loop_work_needs_evidence.py), and zero of the 54 tasks are ticked. UI reminder for its later phases: commit hub/ui/src and hub/hub/static/ui together via py -3.11 scripts/refresh_ui_bundle.py after npm run build, and a UI change is driven in a browser against the served bundle or it is not driven (F274)."
+    }
+  ],
+  "decisions_for_user": [],
+  "limits": [
+    "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+    "Every claim is measured or labelled unverified.",
+    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+    "Tests under py -3.11, never bare python. black needs --target-version py311.",
+    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+  ]
 }
