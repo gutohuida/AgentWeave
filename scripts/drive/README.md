@@ -140,3 +140,32 @@ deleted by the harness on every run, so only the directory persists; keep it, or
 
   Costs no tokens: it triggers no agent turn, and the one `POST /agent/trigger` it makes carries a
   deliberately invalid model override that `validate_overrides` refuses before anything spawns.
+
+## The 2026-09-03 fixture — D-1, `a-turn-says-how-it-ended` in a real browser
+
+`drive-0903-d1` at `C:\Users\huida\Documents\drive-0903-d1`, registered as `proj-f0b9dc9732d3` on
+the **8011** Hub (`sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0903d1/aw0903d1.db`).
+Built by `setup_aturn_p6.py`, which the night window wrote for phase 6 and this window reused
+unchanged.
+
+The point of this set is that phases 6 and 7 both evaluated `aturn_model.py`, a Python
+transcription of the built component. **These drive the served bundle in Chromium**, which is how
+F274 was found: the transcription and the component agree, and the screen still loses the outcome.
+
+- `d1_aturn_runs.py stop|fail|clean|show` — makes the runs an operator would make and prints the
+  conversation and run ids. One real Haiku turn on the `stop` leg; the `fail` leg costs nothing.
+- `d1_aturn_browser.py <agent> [expected-label]` — opens the agent in the served bundle, counts
+  `data-turn-boundary` elements against terminal-label occurrences and `turn-worked-for` stat lines.
+- `d1_aturn_window.py <agent> <n>` — pushes an agent past the timeline route's fifty-event cap and
+  reports how many turns on screen have no run in the map. Costs nothing on the bad-flag agent.
+- `d1_aturn_conv_browser.py <agent> <needle>` — clicks the sidebar's `Switch to recent conversations`
+  rail and opens a *named* older conversation, which is the only way to see F274 from the operator's
+  seat.
+
+Two things they cost time to learn. `page.goto(..., wait_until="networkidle")` **never returns** —
+the dashboard holds an SSE connection open, so use `domcontentloaded`. And the sidebar's agent tree
+does not list conversations; the rail toggle at `aria-label="Switch to recent conversations"` does.
+
+`p6driver0903d1` is left bound to the bad-flag runner, which is where F274's reproduction ends.
+Rebind it to `haiku-0903d1` before reusing the fixture for anything that needs a real turn. No job
+or loop was ever created in this project.

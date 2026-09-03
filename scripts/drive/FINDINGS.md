@@ -93,6 +93,13 @@ F188** — and four more entries are in a third state this index has no word for
 | **F154** | no resolution prose | has an **implemented and archived** change — `2026-09-01-a-review-nobody-is-doing-is-named` |
 | **F155** | no resolution prose | has an **implemented and archived** change — `2026-09-01-a-conflict-refusal-names-what-clears-it` |
 
+**Revised 2026-09-03 (day window, D-1): three — F271, F188 and now F274.** The day window's drive
+of `a-turn-says-how-it-ended` filed **F274 (A)**: a turn's terminal label and its "Worked for Ns"
+line vanish once the agent's fifty-event timeline window moves past that run, which ordinary work in
+the agent's *other* conversations does. It is F190's symptom, reproduced live in the served bundle
+against the change that closed F190, and the route is not in breach of its spec — the gap is between
+two routes. See its own section below. F275 (C) was filed in the same drive.
+
 **The four in the third state are recorded as `unverified`, not as retired, and that distinction is
 the whole point.** What was measured is that a change naming each of them was archived on
 2026-09-01; that is a *plan having existed and been marked done*, which this repository's own rule
@@ -18701,3 +18708,185 @@ Fixture working directories `C:\Users\huida\Documents\drive-aturn-p7-0903` and
 product against phase 0's record and every observation moved as specified, with the one case that
 had to stay unchanged unchanged. F269 because its fix is asserted by two mutation-killed component
 tests — and its severity argument is overturned in the record rather than quietly dropped.
+
+---
+
+# D-1, 2026-09-03 - the day window's ordinary e2e slot, scoped to `a-turn-says-how-it-ended`
+
+Drive Hub `127.0.0.1:8011`, started from `hub/` with
+`py -3.11 -m uvicorn hub.main:app --port 8011` on a fresh database
+(`%TEMP%\aw0903d1\aw0903d1.db`). Listener pid 7528, started 09:06:13; **zero `.py` files under
+`hub/hub` or `src` newer than that**, and `refresh_ui_bundle.py --check` reports the served bundle
+was built from the source that is here - so every observation below is of the branch's own code and
+the branch's own dashboard.
+
+Fixture: `aturn-p6-0903d1` = `proj-f0b9dc9732d3` at `C:\Users\huida\Documents\drive-0903-d1`, built
+by `scripts/drive/setup_aturn_p6.py`. Two agents, both on `claude-haiku-4-5-20251001`:
+`p6driver0903d1` (spawns) and `p6fail0903d1` (same model, plus an unknown CLI flag, so it dies at
+exit 1 before a model is contacted and costs nothing).
+
+**This is not phase 7.** Phase 7 was the change's own verifying round and evaluated
+`scripts/drive/aturn_model.py` - a Python transcription of the built component. This slot drove the
+**served bundle in a real browser** for the first time, which is where F274 came from: the model and
+the component agree, and the screen still loses the outcome.
+
+## F274 (A) - a turn's outcome is erased by work in the agent's *other* conversations
+
+**Status:** open. Filed 2026-09-03 by the day window's drive. No change in `openspec/changes/`
+covers it. This is **F190's original symptom**, live, against the fix that closed F190 - reached by
+a route none of the three rounds asked about.
+
+`AgentTimeline` reads a turn's terminal label and its "Worked for Ns" line out of the same map:
+`runs[turn.runId]?.status` (`hub/ui/src/components/agents/AgentTimeline.tsx:237`) and
+`runDurationSeconds(runs[turn.runId])` (`:280`). The map is `AgentTimeline.runs` from
+`GET /projects/{p}/agents/{a}/timeline`, which sorts its merged events newest-first and truncates to
+fifty - `hub/hub/api/v1/agents.py:802-803` - and then builds the map from the ids the **surviving
+fifty** name (`:818-836`).
+
+The turns are not bounded by that. They come from the conversation-scoped chat history
+(`AgentOutputPanel.tsx:350`, `useAgentChatHistory(agent.name, currentConversationId)`), and the
+timeline's fifty events are **agent-scoped**: every conversation that agent has ever had competes
+for the same fifty slots. So an operator reading one conversation loses its outcomes as soon as the
+agent does enough work *somewhere else*.
+
+Measured, in this order, on one agent:
+
+```
+09:07  trigger a long turn in conv-f7870507f5c9, stop it after 6s
+       GET .../agents/p6driver0903d1/timeline
+         events=6   runs=1
+         run-d8b98481b31b  status=stopped  exit=2
+           started=2026-09-03T08:07:57.964994Z  ended=2026-09-03T08:08:04.178079Z
+       browser, served bundle, that conversation:
+         "Worked for 6s"
+         "Turn stopped - 09:08"          <- correct, and this is what phase 6/7 verified
+```
+
+Then four ordinary triggers on the **same agent, in four other conversations** - nothing touching
+the conversation above:
+
+```
+       GET .../agents/p6driver0903d1/timeline
+         events=50 (the cap)   runs=10
+         'run-d8b98481b31b' in runs  ->  False
+       browser, the SAME conversation, reloaded:
+         turn boundaries          1
+         terminal labels          {'Turn failed': 0, 'Turn stopped': 0, 'Turn interrupted': 0}
+         stat lines               0
+```
+
+The screenshot is one operator message on an empty page. Both halves of the change's deliverable are
+gone at once - the label *and* the duration - which is precisely the sentence the proposal opens
+with: *"A turn killed mid-sentence is indistinguishable from a turn that simply had nothing to
+say."*
+
+Reproduce:
+
+```bash
+AW_HUB=http://127.0.0.1:8011 AW_PROJECT=<pid> py -3.11 scripts/drive/setup_aturn_p6.py <dir>
+AW_HUB=... AW_PROJECT=... py -3.11 scripts/drive/d1_aturn_runs.py stop
+AW_HUB=... AW_PROJECT=... py -3.11 scripts/drive/d1_aturn_browser.py p6driver0903d1 "Turn stopped"
+#   -> RESULT expected='Turn stopped' present=True
+PATCH /projects/<pid>/agents/p6driver0903d1  {"runner_id": "<the bad-flag runner>"}
+AW_HUB=... AW_PROJECT=... py -3.11 scripts/drive/d1_aturn_window.py p6driver0903d1 3   # + one more
+AW_HUB=... AW_PROJECT=... py -3.11 scripts/drive/d1_aturn_conv_browser.py \
+        p6driver0903d1 "history of the bicycle"
+#   -> terminal labels: {'Turn failed': 0, 'Turn stopped': 0, 'Turn interrupted': 0}
+#      stat lines: 0
+```
+
+The rebind is a convenience, not part of the mechanism: it makes the four filler turns cost nothing.
+Four ordinary Haiku turns reach the same cap - the eviction is driven by event count, not by
+outcome.
+
+**The same thing happens inside one conversation**, without any second conversation, once it holds
+enough turns. `p6fail0903d1`, four triggers into `conv-f55ea58a6768`:
+
+```
+    timeline: events=50 (cap 50)   runs_in_map=10
+    chat:     distinct run ids across turns on screen = 12
+    turns whose run is NOT in the map = 2   ['run-d287dc866146', 'run-8039a5a50a5e']
+  browser: turn boundaries 12 - terminal-label occurrences 10 - stat lines 10
+```
+
+Twelve turns, ten outcomes. The two oldest read as turns that ended with nothing to say.
+
+**One defect or a design gap.** A design gap, and a specific one worth stating exactly, because the
+route is **not** in breach. `openspec/specs/agent-stream-events/spec.md:363-366` says in as many
+words: *"WHEN the agent has runs whose events fall entirely outside the returned event window THEN
+the map contains no entries for them."* The route does that. `The run facts cover every run the
+events name` (`:368`) is satisfied - every one of the ten is present. What no requirement says is
+that **the events must cover the turns the client renders**, and the two are drawn by different
+queries with different scopes and different bounds: fifty events across all conversations on one
+side, a conversation's history on the other.
+
+Rounds 1, 2 and 3 all argued about the run query - round 2 gave it a size bound, round 3 correctly
+replaced that with a lookup by id, and `design.md:323-335` reasons carefully about
+`reconcile_interrupted_runs` skewing recency. Every step of that is right. The argument is simply
+bounded by the event window it inherited, and nobody asked what the client was rendering *outside*
+it. Which is the round discipline's own lesson from 2026-08-28 in an unfamiliar shape: not an
+argument that is wrong about the right things, but an argument that is right and short.
+
+**Severity A, and why not B.** It is F190's own severity, and the population it hits is not a
+corner: it is every turn an operator scrolls back to, which is when they ask "did that stop, or did
+it just say nothing?" The degradation is silent - there is no "outcome unavailable", no dimmed
+label - and the reload story the change built (`Worked for 6s` must read the same after a refresh)
+inverts: refresh long enough after the fact and it reads differently.
+
+## F275 (C) - an abandoned operator message renders after the failures it caused
+
+**Status:** open. Filed 2026-09-03. A consequence of F87's fix, not an oversight in it.
+
+`_queued_entries_for` returns entries that are still `queued` **and** entries the Hub gave up on
+(`hub/hub/api/v1/agent_chat.py:249-280`), and both routes append its result **after** the timestamp
+sort - `agent_chat.py:701-703` (`entries.sort(key=...)`, `entries = entries[-limit:]`,
+`entries.extend(await _queued_entries_for(...))`) and `:634` for the conversation-scoped one.
+
+For a still-queued entry that is right: it belongs to the turn that drains it next. For an
+**abandoned** one it is not - that message is finished, it happened first, and putting it last
+inverts cause and effect on screen. Measured:
+
+```
+GET /projects/<pid>/agent/p6fail0903d1/chat
+  08:08:24.306  agent_output    run-d287dc866146  error: unknown option '--aw-p6-no-such-flag'
+  08:08:24.500  agent_output    run-d287dc866146  Run failed (exit 1).
+  08:08:27.899  agent_output    run-8039a5a50a5e  error: unknown option '--aw-p6-no-such-flag'
+  08:08:28.090  agent_output    run-8039a5a50a5e  Run failed (exit 1).
+  08:08:31.434  agent_output    run-086f573343b9  error: unknown option '--aw-p6-no-such-flag'
+  08:08:31.647  agent_output    run-086f573343b9  Run failed (exit 1).
+  08:08:20.830  operator_input  run-086f573343b9  Say hello.        <- earliest, returned last
+```
+
+The browser renders it in that order: three `Turn failed` turns, then `NOT DELIVERED - delivery
+failed 3 times; the Hub stopped retrying` beside `Say hello.` at the bottom. An operator reading
+top-to-bottom sees the agent fail three times before they said anything.
+
+The `NOT DELIVERED` chip does rescue the meaning, which is why this is **C** and not B - the fact is
+present, only its position lies. Worth noting beside F188, which is about the same three-attempt
+abandonment reaching the operator at all.
+
+## What held
+
+- **The label and the exit code, in the served bundle, inside the window.** The stopped run rendered
+  `Worked for 6s` / `Turn stopped - 09:08`; the failing agent rendered ten `Turn failed` labels and
+  ten stat lines for its ten in-window turns. Every value came from `Run` - `stopped`/`exit 2`,
+  `failed`/`exit 1` - not from an event name. This is the first time any of it has been read off the
+  real dashboard rather than off `aturn_model.py`.
+- **Durations are the row's, not the tab's.** `Worked for 6s` on a run that ended before any of these
+  browser sessions existed.
+- **The failing-runner path reports its cause.** `error: unknown option '--aw-p6-no-such-flag'` is on
+  screen, in the turn, with the terminal label under it - a refusal that says what went wrong.
+- **The extra SSE frame the night predicted is harmless.** `record_agent_output` firing
+  `agent_session_changed` when its row is the session's first was visible in the drive as nothing at
+  all: no duplicate turn, no flicker, no console error in any of the five browser sessions.
+- **Three delivery attempts, then a stop, and the operator is told.** `delivery failed 3 times; the
+  Hub stopped retrying` - the message is not silently dropped.
+- **`GET /health` and the bundle stamp.** Clean, and `--check` confirmed the served bundle matches
+  `hub/ui/src`, so no UI finding here is from a stale build.
+
+## Teardown
+
+`proj-f0b9dc9732d3` is left in place on the **8011** drive Hub only, so D-5 can cite it. No job or
+loop was created in this project at any point - nothing is enabled. `p6driver0903d1` is left bound
+to the bad-flag runner, which is how F274's reproduction ends; rebind it to `haiku-0903d1` before
+reusing the fixture for anything that needs a real turn.

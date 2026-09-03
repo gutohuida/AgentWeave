@@ -12,8 +12,8 @@
     "log_file": ".claude/autonomous/2026-09-03-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-1",
-    "next_action": "D-1 -- the drive. e2e scoped to what the night built: a-turn-says-how-it-ended (archived at 49bfd2b; phases 1-7). Use the e2e-loop skill. Fresh project on a drive Hub at port 8011 started from hub/ with `py -3.11 -m uvicorn hub.main:app --port 8011 --host 127.0.0.1` -- never `agentweave --port`, never 8010, never 8000, never proj-5e960453 or proj-18e5d4e0. Every real agent turn binds claude-haiku-4-5. Restart the Hub from branch code and confirm no .py under hub/hub or src is newer than process start before concluding anything. This is the window's ORDINARY e2e slot, NOT the change's phase 7 (already done, independently, at 3b4bb14) -- exercise the seams as an operator and file what breaks. New findings append to scripts/drive/FINDINGS.md with a severity, a file:line and a reproduction; a finding without a reproduction is a suspicion. Never leave a job enabled. Do NOT edit hub/hub/ or src/agentweave/ -- this window fills, it does not implement; drive fixtures belong in scripts/drive/.",
+    "current": "D-2",
+    "next_action": "D-2 -- Spec R1: explore and propose F188. F188 (A), scripts/drive/FINDINGS.md -- 'a repairable workspace fault destroys the operator's message after three schedules, and the identical fault one line away holds it forever.' Read the ledger section BEFORE anything else (grep '^## F188' -- the line number moved when D-1 appended, so measure it, do not trust a cited one). DIRECTION is explicit that the finding's whole force is the ASYMMETRY: agent_trigger.py:878-883 raises the worktree refusal with no agent_wide=True while the three sibling sites at :573, :594 and :624 pass it. 'A proposal that repairs one site without saying why the other is right has not understood it.' Night N-14 re-confirmed the mechanism at HEAD by READING the code, not by driving -- the reproduction in the ledger section is a week old, so R1 must treat the behaviour as inference and say so. Write openspec/changes/<name>/ with proposal.md, design.md, tasks.md and specs/<capability>/spec.md deltas; `openspec new change` refuses a name starting with a digit; `openspec validate --strict <name>` must pass and reads ONLY a requirement's first physical line for the modal, so SHALL goes on line 1. Specs live in openspec, never also in the Hub. Do NOT edit hub/hub/ or src/agentweave/ -- this window fills. Note for D-5: D-1 filed F274 (A) and F275 (C); the drive Hub on 8011 is still up with proj-f0b9dc9732d3.",
     "queue": [
         {
             "id": "compose",
@@ -23,9 +23,9 @@
         },
         {
             "id": "D-1",
-            "status": "open",
+            "status": "done",
             "title": "Drive -- e2e scoped to a-turn-says-how-it-ended",
-            "detail": "DIRECTION 2026-09-03: 'The drive is not phase 7.' Phase 7 was the change's own verifying round (3b4bb14, 29/29 harness) and it closed the change. D-1 is the window's ordinary e2e slot: exercise the built product at the seams as a real operator and file what breaks. Surface built by the night: the timeline route now carries the run's own facts (RunFacts/AgentTimeline in hub/hub/schemas/agents.py), the terminal status line is persisted at both spawn paths via record_agent_output, the client consumes the envelope, the run-status reducers are deleted in favour of the run row, and the stat line survives. Known side effect the night recorded: record_agent_output fires agent_session_changed when its row is the session's first, so a run that wrote nothing now emits one extra SSE frame -- worth watching in the drive. Hub 8011 from source; fresh project; Haiku on every agent turn."
+            "detail": "DONE iteration 2. Drive Hub 8011 from source on a fresh DB (pid 7528, started 09:06:13; zero .py under hub/hub or src newer; refresh_ui_bundle.py --check clean). Fixture proj-f0b9dc9732d3 = aturn-p6-0903d1 at C:/Users/huida/Documents/drive-0903-d1, built by the night's setup_aturn_p6.py. The distinct angle: phases 6 and 7 evaluated aturn_model.py, a Python transcription of the component; D-1 drove the SERVED BUNDLE in Chromium. Filed F274 (A) at FINDINGS.md:18726 -- a turn's terminal label AND its 'Worked for Ns' line vanish once the agent-scoped 50-event timeline window moves past that run, which four ordinary triggers in the agent's OTHER conversations achieve; the conversation reloads as 1 turn boundary / 0 labels / 0 stat lines. F190's symptom, live, against the change that closed F190. The route is NOT in breach -- the spec blesses it at :363-366 -- the gap is that nothing requires the events to cover the turns the client renders. Also F275 (C): an abandoned operator message renders after the failures it caused (_queued_entries_for is appended after the timestamp sort). Index paragraph updated: open severity-A is now THREE -- F271, F188, F274. Jobs and loops both []. Project left up for D-5; p6driver0903d1 left bound to the bad-flag runner."
         },
         {
             "id": "D-2",
@@ -71,5 +71,5 @@
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ],
-    "last_heartbeat": "2026-09-03T09:05:12+01:00"
+    "last_heartbeat": "2026-09-03T09:20:29+01:00"
 }
