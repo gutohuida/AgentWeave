@@ -21,12 +21,19 @@ Newest day first. Days below the newest are history and are not read.
 Review page: `review/review-2026-09-03.html`. **One change proposed, taken through all three rounds.**
 Rounds 2 and 3 each broke the round before them, and round 3's defect was measured rather than argued.
 
-**No real token is written below.** The day window proposed this change and must not appear to have
-approved its own work, so the line is a blank to fill, not a row. Write the token between the `-` and
-the change name, in a DECIDE session:
+**Written by the DECIDE session of 2026-09-03, not by the day window.** The day window proposed
+`a-blocked` and left both lines as blanks to fill, precisely so it could not appear to approve its own
+work. The operator filled them, and approved both:
 
-- __________  a-blocked-agent-workspace-holds-its-input
-- __________  a-write-outside-the-workspace-is-recorded   (carried forward, still undecided — see below)
+- APPROVED  a-blocked-agent-workspace-holds-its-input   F188 (A). First: Python only, no migration, no API shape change, no UI, no bundle.
+- APPROVED  a-write-outside-the-workspace-is-recorded   F115. Second: touches `AgentTimeline.tsx` and the committed bundle, so it must not run beside `a-blocked`.
+ORDER: a-blocked-agent-workspace-holds-its-input, a-write-outside-the-workspace-is-recorded
+
+`ORDER` is not decoration here. The two changes collide on `agent_trigger.py` and `worktrees.py`, and
+`a-write` moves `hub/hub/static/ui` on top of that — the one combination this repo cannot build
+concurrently. Sequential, severity-A first, is what makes approving both safe. 86 tasks will not fit in
+one window; **stopping part-way through `a-blocked` is the expected outcome and is fine.** What is not
+fine is starting `a-write` before `a-blocked` is finished and archived.
 
 `a-blocked-agent-workspace-holds-its-input` — **F188 (A)**. Two refusals stop an agent from running.
 One holds the operator's message until they perform the repair; the other destroys it on the third
@@ -64,10 +71,10 @@ legs. Four files, all Python: `agent_trigger.py`, `turn_scheduler.py`, `worktree
 `task_workspace.py`. **No migration, no API shape change, no UI.** `openspec validate --strict` passes.
 Nothing under `hub/hub/`, `hub/ui/` or `src/` is committed from today.
 
-`a-write-outside-the-workspace-is-recorded` — carried forward unchanged, still **undecided rather than
-rejected**, still with no row until you write one. It is R3-complete at 54 tasks. It collides with
+`a-write-outside-the-workspace-is-recorded` — carried forward unchanged from 2026-08-30, and
+**approved today after three days undecided**. It is R3-complete at 54 tasks. It collides with
 `a-blocked` on `agent_trigger.py` and `worktrees.py`, and touches `AgentTimeline.tsx` on top, so
-approving both means ordering them and eating a committed-bundle conflict. Its task 4.2 migration
+approving both means ordering them — which is what the `ORDER:` line above does. Its task 4.2 migration
 number **is already correct** — fixed to `0101` on 2026-09-02 and still right, since head is still
 `0100_loop_work_needs_evidence.py`.
 
@@ -76,13 +83,14 @@ number **is already correct** — fixed to `0101` on 2026-09-02 and still right,
 2026-09-02 by the night window (`7df21ea`, 29 of 29 tasks closed), and nothing by that name remains in
 `openspec/changes/`. Both items approved on 2026-09-01 have now shipped. Do not re-approve it.
 
-**If you approve nothing, the FIX window has nothing it is allowed to build** — and that is new
-tonight. Source 1 (implemented changes needing only archiving) is **empty**: both open changes sit at
-zero completed tasks. Source 2 lands on **F271**, then **F188**, then **F274**, but the playbook's own
-rule is that a finding with no proposal is a note to tomorrow rather than work — F271 and F274 have no
-proposal, and F188's is not approved, which source 3 does not reach. Source 3 is empty unless you write
-a row. `ORDER:` and `NOTHING TONIGHT` are both available, and `NOTHING TONIGHT` is an honest answer if
-you would rather the branch stopped growing before it is merged.
+**The day window warned that approving nothing would leave the FIX window with nothing it is allowed
+to build, and that is why both rows are approved.** Source 1 (implemented changes needing only
+archiving) is **empty**: both open changes sit at zero completed tasks. Source 2 lands on **F271**,
+then **F188**, then **F274**, but the playbook's own rule is that a finding with no proposal is a note
+to tomorrow rather than work — F271 and F274 have no proposal. `ORDER:` above therefore carries the
+whole night: source 3, in the stated order, and nothing else. **`NOTHING TONIGHT` was considered and
+rejected** — the branch growing unmerged for a fourth day is a real cost, but it is the operator's to
+weigh against a severity-A defect that destroys operator messages, and tonight it lost.
 
 Today's drive filed **F274 (A)** — a turn's terminal label and its "Worked for Ns" line vanish once the
 agent-scoped 50-event timeline window moves past that run, which four ordinary triggers in the agent's
