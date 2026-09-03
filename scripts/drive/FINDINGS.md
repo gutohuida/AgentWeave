@@ -13837,7 +13837,14 @@ A correct answer was available and was measured present in the same assertion:
 `.agentweave/worktrees/r5runnerr5b` **exists** and is where that turn actually ran. So the field is
 not merely unimplementable — the workspace resolution the run already performed knows the answer.
 
-## F190 (A) — no turn can ever say it was stopped, failed or interrupted, because the status map is built backwards from a payload sorted the other way
+## F190 (A) — RETIRED 2026-09-03 — no turn can ever say it was stopped, failed or interrupted, because the status map is built backwards from a payload sorted the other way
+
+> **RETIRED 2026-09-03 (night window, iteration 13), by the verification round the operator made
+> a condition of approval — a sitting that did not write the code.** `a-turn-says-how-it-ended`
+> phase 7. The write-up is *F190 phase 7 — verified by a round that did not build it* at the end
+> of this file: on one live capture per leg, the phase 0 UI still reads every run as `started` and
+> draws no label, and the built UI reads the run row and draws `Turn stopped`, `exit=2`,
+> `Worked for 5s` — through a reload, and with the *completed* case deliberately unchanged.
 
 The conversation surface has the feature. `AgentTimeline.tsx:56-60`:
 
@@ -17948,7 +17955,15 @@ One presentation note, deliberately **not** filed as a finding: the `422`'s sent
 own `msg` and names no field (`String should have at most 256 characters`). With one text input on
 screen that is unambiguous today, and inventing a field name in the client would be worse.
 
-## F269 (C) — a turn whose only agent output is a `status` row loses its "Worked for Xs" line, because the line renders inside the block that returns `null`
+## F269 (C) — RETIRED 2026-09-03 — a turn whose only agent output is a `status` row loses its "Worked for Xs" line, because the line renders inside the block that returns `null`
+
+> **RETIRED 2026-09-03 (night window, iteration 13), with its severity argument overturned on the
+> way out.** The fix is task 4.5a, and it is asserted by two mutation-killed component tests —
+> reverting `<Fragment key={entry.id}>{durationLine}</Fragment>` to `null` kills both. The
+> reachability paragraph below is now **wrong, and was wrong in the direction it warned about**:
+> a stopped run *does* hit this shape, and after task 2.2 it is the ordinary shape of every
+> stopped turn. Measured at three stop delays — two entries, the operator's message and the
+> status row, no `thinking` row ahead of it. See the phase 7 write-up at the end of this file.
 
 Found by round RA of `a-turn-says-how-it-ended` (2026-09-02) while re-deriving design D6, and
 **measured against today's unmodified code** with two throwaway vitest probes rather than left as a
@@ -18511,3 +18526,131 @@ that its fix fires, and this phase did not produce a turn whose only output is a
 Fixture project deleted (`204`), 24 → **23** projects, the count that predates this drive. Jobs and
 loops swept across all 23 **before and after**: none enabled. The fixture working directory
 `C:\Users\huida\Documents\drive-aturn-p6-0903` is left on disk (outside this repo, ~1 file).
+
+---
+
+# F190 phase 7 — verified by a round that did not build it, driven 2026-09-03
+
+The operator approved `a-turn-says-how-it-ended` on the condition that a round which did not write
+the code verifies it. This is that round. Phase 6 was the implementer checking its own work; it
+deliberately left F190 and F269 open (task 6.7) for this.
+
+**Setup, and what was checked before anything was concluded.** Hub on **8011**, started from `hub/`
+with `uvicorn hub.main:app` against a profile database of its own, from this branch's source. The
+newest `.py` under `hub/hub` and `src` is `db/engine.py` at `02:49:37`; the process started at
+`04:57` — **older, so the instance is not stale**, which is the check iteration 9 learned to make
+first. Fresh fixture project, deleted afterwards. Every real agent turn on `claude-haiku-4-5`.
+`/health` reported no staleness field, so the served bundle matches the committed source.
+
+**The comparison is made on one capture, not across two drives.** `scripts/drive/t_aturn_p7.py`
+reads all three routes once per assertion point and feeds the same bytes to both transcriptions:
+`f190_model.evaluate(entries, envelope["events"], running)` — the UI as it stood at phase 0 — and
+`aturn_model.evaluate(entries, envelope["runs"], running)` — the UI as built. The `events` half of
+the envelope is byte-identical to the bare list the route used to return, so the phase-0 model
+computes what the old UI would have computed **from today's data** rather than from a remembered
+drive. `f190_model.py` was not edited.
+
+## The four observations
+
+| phase 0 | phase 0 model, on today's data | built model, same bytes | verdict |
+|---|---|---|---|
+| 0.2 a stopped turn | `{"run-11aecfcb0285": "started"}`, label `None` | `stopped`, label `Turn stopped`, `exit=2`, `Worked for 5s` | **moved** |
+| 0.5 after a reload | label `None` | label `Turn stopped`, exit code intact | **moved** |
+| 0.4 two ended runs | `anotherRunIsUnderway=True`, every run `started` | `False`; each turn draws its **own** run's outcome | **moved** |
+| 0.3 a completed run | releases, signal 1 fires, no label | releases, signal 1 fires, no label | **unchanged, as required** |
+
+Three legs, **29 checks, 0 failed**: `stop` 9/9, `two` 9/9, `stopfast` 11/11.
+
+0.5's second half is the one that used to be impossible. `GET /agents/{name}/output` now holds a
+`kind="status"` row for the stopped run — `content="Run stopped (exit 2)."`,
+`payload={"phase": "completed", "exit_code": 2}` — where phase 0 measured **zero** such rows out of
+nine for the agent.
+
+**RB's Codex correction honoured, and not overstepped.** Every run driven here was a Claude runner.
+This drive says nothing about Codex; phase 0 has no Codex baseline, and none is read into it.
+
+**Not re-driven:** the interrupted case, which needs a Hub kill and which phase 6 measured. 7.1's
+own list does not name it.
+
+## Two things the round found that nobody had asked about
+
+### The isolation test was green for the wrong reason
+
+`test_bola.py` covers this route's cross-project isolation, and phase 1 kept it rather than
+deleting it when the response became an envelope — the structural half of task 7.3 is right. Then
+it was **mutation-checked instead of read**. Deleting `Run.project_id == project_id` from the
+route's run lookup left the file **green, 4 passed**.
+
+Task 1.6 had added a `Run` row to Project A's fixture specifically so `timeline["runs"] == {}`
+would not be vacuous, and the reasoning does not hold: Project B owns no event naming that run, so
+`run_ids` is empty and the map is `{}` whether or not the predicate is there. A cross-project leak
+needs an event **in Project B** naming a run **in Project A**. Written:
+
+```
+assert timeline["runs"] == {}, "the timeline's run facts leaked across projects"
+E   AssertionError: assert {'run-bola-a': {...'status': 'stopped'}} == {}
+```
+
+Predicate restored, 4 passed. The bait is synthetic and no product path is known to write such a
+row — which is exactly why the route's own comment calls the predicate *enforcement, not
+inference*. There is now a test that enforces it rather than one that agrees with it.
+
+### F269 stopped being uncommon, and the discriminating test did not exist
+
+`scripts/drive/t_aturn_p7_f269.py` stopped runs at 0.3 s, 1.0 s and 3.0 s and read the
+conversation each time. Every time, **two entries**:
+
+```
+kind=operator_input  output_kind=None    run=run-b891266b04c6
+kind=agent_output    output_kind=status  run=run-b891266b04c6  payload={"phase": "completed", "exit_code": 2}
+```
+
+No `thinking` row ahead of the status row — so `firstAgentBlockId` is the status entry's block, and
+`isSuccessCompletionEntry` matches it, on **every** stopped turn. F269's severity rested on the
+opposite ("a stopped or failed run cannot hit it, because it has no `status` row in the first
+place") together with the warning that task 2.2 would change that. It did, and this is the
+measurement of it.
+
+Two consequences.
+
+**Signal 1 now fires for a stopped run**, which D6 argued for and nothing had watched. Visible in
+the drive's own record: the phase-0 model reports `settled=False` on the first read after the stop
+and `settled=True` on the reload, from a status row that did not exist before task 2.2.
+
+**The stopped-and-silent turn is where two requirements meet** — it must draw the terminal label
+*and* keep its duration line, on a block whose fragment used to return `null`. Task 4.5a's fixture
+is a *completed* run, which draws no label, so nothing asserted the two survive together. A test
+for the measured shape was added to `timelineRunFacts.test.tsx`; reverting 4.5a's fragment to
+`null` kills it and the original 4.5a test both.
+
+**What the drive cannot say, stated rather than glossed.** `aturn_model.py` transcribes the
+duration as `runDurationSeconds(runs[runId])` and does **not** transcribe
+`reduceTurnBlocks`/`firstAgentBlockId`. So no drive check distinguishes 4.5a's placement fix from a
+`thinking` row having taken the slot. The drive establishes *reachability*; the component tests
+establish the *fix*. Task 7.1a as written claims the former proves the latter, and it does not.
+
+## Harness notes
+
+`session_mode` accepts only `new` or `resume` (`agent_trigger.py:1226`). A second turn in the same
+conversation is requested by naming `conversation_id`; passing `"continue"` returns 400, and a
+multi-run leg that does not assert on the second trigger's `run_id` will go on to measure one run
+and pass. The leg now asserts it.
+
+**Fourth time this window that the first red result was the apparatus.** The new component test
+failed on `getByText('Turn stopped')` — the label is a text node beside `· 01:00` inside the same
+element, so an exact-string matcher misses text that renders correctly. The rest of the file
+already used `/Turn stopped/`.
+
+## Teardown
+
+Both fixture projects deleted (`204` each); `GET /projects` back to **0**, the count that predates
+this drive on this profile database. Jobs and loops swept: none in either project, none enabled.
+Fixture working directories `C:\Users\huida\Documents\drive-aturn-p7-0903` and
+`...-p7b-0903` are left on disk, outside this repo.
+
+## Retired here
+
+**F190** and **F269**. F190 because the round the operator asked for has now compared the built
+product against phase 0's record and every observation moved as specified, with the one case that
+had to stay unchanged unchanged. F269 because its fix is asserted by two mutation-killed component
+tests — and its severity argument is overturned in the record rather than quietly dropped.

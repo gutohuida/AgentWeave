@@ -762,3 +762,52 @@ against unmodified code first. The completed-Claude test failed `1 == 2` — the
 there and the finalize block's is not — and the completed-Codex test failed `0 == 1`. That is the
 Claude row and the Codex row of D6's table, observed rather than read, and it is the first time
 either has been asserted in the suite.
+
+## Phase 7, 2026-09-03 — what the verification round found
+
+A sitting that did not write the code re-ran phase 0's observations against the built product
+(`scripts/drive/t_aturn_p7.py`, 29 checks, 0 failed) and read the route, the isolation test and the
+four artifacts. Every observation moved the way the change said it would, and the round found two
+things the implementation had not been asked about.
+
+**The isolation test could not fail for the reason it existed.** Task 1.6 added a `Run` row to
+`test_bola.py`'s Project A fixture so that `timeline["runs"] == {}` "would not be vacuous". It was
+still vacuous: Project B owns no event naming that run, so `run_ids` is empty and the map is `{}`
+whether or not the route filters by project. Measured — deleting `Run.project_id == project_id`
+left the file green at 4 passed. The leak the predicate prevents needs an event *in Project B*
+naming a run *in Project A*; with one written, the unfiltered query hands Project A's run facts to
+Project B's key and the assertion fails. The bait is synthetic and no product path is known to
+write such a row, which is the point: the route's comment calls the predicate *enforcement, not
+inference*, and there is now a test that enforces it rather than one that agrees with it.
+
+**F269's shape stopped being uncommon, and no test rendered the version production emits.** F269
+was filed Severity C on reachability — "a stopped or failed run cannot hit it, because it has no
+`status` row in the first place" — with the note that task 2.2 would change that. It did.
+Measured at three stop delays: a stopped run's conversation holds **exactly two entries**, the
+operator's message and the terminal status row, with no `thinking` row ahead of it. So
+`firstAgentBlockId` is the status entry's block on **every** stopped turn, and
+`isSuccessCompletionEntry` matches it, because the persisted row reads
+`{"phase": "completed", "exit_code": 2}` — `phase` means the run ended
+(`agent_trigger.py:2141-2145`), and the outcome is the run row's.
+
+That has a consequence D6 argued for and nothing had watched: **signal 1 now fires for a stopped
+run.** It is visible in the drive's own transition record — the phase-0 model reports
+`settled=False` on the first read after the stop and `settled=True` on the reload, from a status
+row that did not exist before task 2.2.
+
+It also means the stopped-and-silent turn is where two requirements meet: it must draw the terminal
+label (*A stopped run says it was stopped*) **and** keep its duration line (*A turn that produced
+nothing still reports what it cost*), on a block whose fragment used to return `null`. Task 4.5a's
+fixture is a *completed* run, which draws no label, so nothing asserted the two survive together.
+A test for the measured shape was added to `timelineRunFacts.test.tsx`; reverting 4.5a's fragment
+kills it and the original both.
+
+**One harness note, because it cost a leg.** `session_mode` accepts only `new` or `resume`
+(`agent_trigger.py:1226`). A second turn in the same conversation is requested by naming
+`conversation_id`. Passing `"continue"` returns 400, and a multi-run leg that does not assert on
+the second trigger's `run_id` will happily go on to measure one run and pass.
+
+**Fourth time this window that the first red result was the apparatus, not the product.** The new
+component test failed on `getByText('Turn stopped')` — the label is a text node beside `· 01:00` in
+the same element, so the exact-string matcher missed text that was rendering correctly. The rest of
+the file already used `/Turn stopped/` for that reason.

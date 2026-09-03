@@ -542,7 +542,27 @@ Full record in `scripts/drive/FINDINGS.md`.
 is the implementer checking its own work, which is necessary and is not this. This phase is a fresh
 sitting that did not write the code.
 
-- [ ] 7.1 Re-run the phase 0 observations against the implemented change and confirm each one moved
+- [x] 7.1 **DONE 2026-09-03 — 29 checks, 0 failed, on a Hub started from this branch's source on
+      8011 with a fresh fixture, every turn on `claude-haiku-4-5`.** The comparison was made on
+      **one capture per leg**: `scripts/drive/t_aturn_p7.py` reads the three routes once and feeds
+      the same bytes to both transcriptions — `f190_model.evaluate(entries, envelope["events"], …)`
+      for the phase 0 UI, `aturn_model.evaluate(entries, envelope["runs"], …)` for the built one.
+      The `events` half is byte-identical to the bare list the route used to return, so the phase-0
+      model computes what the old UI would have computed from *today's* data rather than from a
+      remembered drive. **0.2 moved**: on `run-11aecfcb0285` the phase-0 model reads
+      `{"run-…": "started"}` and draws no label; the built model reads `stopped` and draws
+      `Turn stopped`, `exit=2`, `Worked for 5s`. **0.5 moved**: both survive a second full read of
+      all three routes, and `/output` now holds one `kind="status"` row for the stopped run —
+      `content="Run stopped (exit 2)."`, `payload={"phase": "completed", "exit_code": 2}` — where
+      phase 0 measured zero of nine. **0.4 moved**: with two ended runs in one conversation the
+      phase-0 model still says `anotherRunIsUnderway=True` (every run reads `started`); the built
+      model says `False`, and each turn renders its **own** run's outcome. **0.3 unchanged, as
+      required**: a completed single-run conversation releases in *both* models, signal 1 fires in
+      both, and neither draws a label. **RB's correction honoured and not overstepped: every run
+      here was a Claude runner. This drive says nothing about Codex, phase 0 has no Codex baseline,
+      and none is inferred.** Not re-driven: the interrupted case, which needs a Hub kill and which
+      phase 6 measured; 7.1's own list does not name it.
+      Superseded, kept for the record: Re-run the phase 0 observations against the implemented change and confirm each one moved
       the way it was supposed to — the stopped turn names its stop, the multi-run indicator releases
       on the newest run's terminal signal rather than on the roster poll, a **stopped** single-run
       conversation now releases on its persisted status row, and all of them survive a reload.
@@ -552,18 +572,61 @@ sitting that did not write the code.
       Claude runner and only binds there** (round RB): the same case on a Codex runner has no
       signal-1 row today, so it is expected to *change*. Phase 0 has no Codex baseline, so do not
       read one into it — say so rather than inferring.
-- [ ] 7.1a Confirm *A turn that produced nothing still reports what it cost* holds against the built
+- [x] 7.1a **DONE 2026-09-03, and the task as written does not discriminate — say so rather than
+      claiming it does.** Driven: a run stopped at 1.0 s produced a turn with **zero** text entries
+      that carries `Turn stopped` *and* `Worked for 1s` together. But `aturn_model.py` transcribes
+      the duration as `runDurationSeconds(runs[runId])`; it does **not** transcribe
+      `reduceTurnBlocks`/`firstAgentBlockId`, so no drive check can tell 4.5a's placement fix from
+      a `thinking` row having taken the slot. What the drive *can* establish is reachability, and
+      it did: `scripts/drive/t_aturn_p7_f269.py` stopped runs at 0.3 s, 1.0 s and 3.0 s and read
+      the conversation each time — **two entries, every time**, the operator's message and the
+      status row, with **no `thinking` row at all**. So the F269 shape is not the uncommon case
+      F269 filed; after task 2.2 it is the ordinary shape of **every** stopped turn, exactly as
+      F269 predicted it would become. The discriminating evidence is therefore the component test,
+      and one was missing: 4.5a's fixture is a *completed* run, which draws no label. A test for
+      the shape production actually emits — `operator_input` + `status{phase: "completed",
+      exit_code: 2}` with `runs["run-1"].status = "stopped"` — was added to
+      `timelineRunFacts.test.tsx` and asserts the label and the stat line *together*. Reverting
+      4.5a's `<Fragment key={entry.id}>{durationLine}</Fragment>` to `null` kills it and the
+      existing 4.5a test both.
+      Superseded, kept for the record: Confirm *A turn that produced nothing still reports what it cost* holds against the built
       code, by stopping a run before it emits anything and reading the turn: it must carry both the
       terminal label and the "Worked for Xs" line. Task 4.5a exists because persisting the status
       row can take that line with it, and this is the check that the placement fix actually fired
       rather than the test being written around it.
-- [ ] 7.2 Read the implemented route against *The run facts cover every run the events name*
+- [x] 7.2 **DONE 2026-09-03 — confirmed, and it holds.** `agent_timeline`
+      (`hub/hub/api/v1/agents.py`) collects `run_ids` from `events` **after** `events.sort(...)` and
+      **after** `events = events[:50]`, then issues one primary-key lookup:
+      `select(Run).where(Run.project_id == project_id, Run.id.in_(run_ids))`. No `ORDER BY`, no
+      `LIMIT`, no fourth concurrent query ranked by `started_at`. The id set is the bound, which is
+      what the requirement asks for. Checked by reading the statement, not the comment beside it.
+      Superseded, kept for the record: Read the implemented route against *The run facts cover every run the events name*
       specifically: confirm the run lookup is keyed by the ids the returned events carry, carries
       the `project_id` predicate, and has no `ORDER BY` or `LIMIT` that could reintroduce the
       coverage gap. This requirement was breached by two consecutive rounds' own design; it is the
       one most likely to be breached again by the implementation.
-- [ ] 7.3 Confirm `test_bola.py`'s cross-project coverage for this route still exists and asserts
-      both halves of the envelope — that it was moved out of the `isinstance(data, list)` loop
-      rather than deleted from it.
-- [ ] 7.4 Re-read the four artifacts against the built code and correct whatever the implementation
-      taught. Only then mark F190 retired.
+- [x] 7.3 **DONE 2026-09-03 — the coverage exists, and it had no power. Fixed.** The structural
+      half is right: `/agents/alice/timeline` is out of the `isinstance(data, list)` loop, kept
+      rather than deleted, and asserts both halves — `timeline["events"]` carries no Project A id,
+      `timeline["runs"] == {}`, and Project A's run id is not a key of it. Then it was
+      **mutation-checked instead of read**: deleting `Run.project_id == project_id` from the route
+      left `test_bola.py` **green, 4 passed**. Task 1.6 gave Project A a `Run` row so the assertion
+      would not be vacuous, and the reasoning was wrong — Project B owns no event naming that run,
+      so `run_ids` is empty and `runs` is `{}` whatever the predicate does. A cross-project leak
+      needs an event *in Project B* naming a run *in Project A*. One was written; the unfiltered
+      query then returns `{'run-bola-a': {…'status': 'stopped'}}` to Project B's key and the test
+      fails. Predicate restored, 4 passed. **Stated honestly: the bait is synthetic and no product
+      path is known to write such a row** — which is exactly why the route's own comment calls the
+      predicate *enforcement, not inference*. The test now enforces it.
+- [x] 7.4 **DONE 2026-09-03.** Three corrections written back, all above: 7.1a's non-discrimination
+      and the F269 shape's promotion from uncommon to ordinary; 7.3's vacuous assertion and the
+      wrong reason recorded for it in 1.6; and the drive-harness note that `session_mode` accepts
+      only `new` or `resume` (`agent_trigger.py:1226`) — a second turn in the same conversation is
+      requested by naming `conversation_id`, and passing `"continue"` returns 400 and silently
+      leaves a multi-run leg measuring one run. The spec delta needed no text change: *A stopped
+      run says it was stopped* and *A turn that produced nothing still reports what it cost* meet
+      on the stopped-and-silent turn, and phase 7 added the test for their intersection rather
+      than a requirement for it. `design.md`'s phase 7 section records the rest.
+      **F190 is retired**; `scripts/drive/FINDINGS.md` carries the verification write-up. F269 is
+      retired with it — its fix is asserted by two mutation-killed component tests, and its
+      reachability claim is now measured rather than predicted.
