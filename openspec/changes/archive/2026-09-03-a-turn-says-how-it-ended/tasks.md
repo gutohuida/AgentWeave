@@ -300,7 +300,7 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
       line range**. Deleting the reducer forces its only test to go in the same commit or the tree
       does not compile, so 5.1 keeps its obligation (a replacement guarantee that the route's
       ordering is what the client depends on) but has lost its deletion half, already done here.
-- [ ] 4.4 **Its tests are still where task 3.1 said they would not be:** the
+- [x] 4.4 **Its tests are still where task 3.1 said they would not be:** the
       `runDurationsByRunId` describe block in `workingIndicator.test.tsx` was deliberately kept at
       phase 3 so the function did not ship untested. Delete it here, and read its
       negative-duration case before you do — it is the guard this task must carry across.
@@ -312,7 +312,7 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
       rather than a new export in `agentTimelineModel.ts` — 4.5 requires the assertion to live in
       the component test, and a second exported reducer would invite exactly the model-level test
       this phase exists to stop writing.
-- [ ] 4.5 Assert duration rendering in the component test, not only in a model test, since the model
+- [x] 4.5 Assert duration rendering in the component test, not only in a model test, since the model
       function it used to live in is gone. **Re-baseline it rather than reconciling it** (design D4,
       round 3): `Run.started_at` is stamped at row construction (`agent_trigger.py:1073`) and the
       `run_started` event only once the pty exists (`:1857-1864`), so every duration now includes the
