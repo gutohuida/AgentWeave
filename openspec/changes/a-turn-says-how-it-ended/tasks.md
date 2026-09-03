@@ -487,22 +487,54 @@ Phases 1 and 3 were not touched by either correction and need no re-reading beyo
 
 ## 6. Verified by the implementer against a running Hub
 
-- [ ] 6.1 Drive it: on the trial Hub with a fresh fixture project, start a turn, stop it mid-run,
+Driven 2026-09-03 against a Hub on 8011 started 02:56:24 from this branch's source; the newest
+`.py` under `hub/hub`/`src` was 02:49:37, so staleness was measured rather than assumed. Fixture
+project `proj-9e6825cdd64c`, deleted at the end. Harnesses: `scripts/drive/aturn_model.py` (the
+built component transcribed into Python — the successor to `f190_model.py`, which is KEPT because it
+speaks for the pre-change UI and phase 7 needs both baselines), `setup_aturn_p6.py`, `t_aturn_p6.py`.
+Full record in `scripts/drive/FINDINGS.md`.
+
+- [x] 6.1 Drive it: on the trial Hub with a fresh fixture project, start a turn, stop it mid-run,
       and confirm the conversation names the stop. Bind every real agent turn to `claude-haiku-4-5`.
-- [ ] 6.2 Reload the page and confirm the label and the exit code are both still there — the
-      scenario that neither carrier survived before this change.
-- [ ] 6.3 Repeat for a failed run and an interrupted run (restart the Hub mid-run to produce the
-      latter via `run_reconciliation.py:65`).
-- [ ] 6.4 Confirm `hub/hub/static/ui` is rebuilt and stamped via
+      **8 checks passed.** `runs[run].status == 'stopped'`, label `'Turn stopped'`, indicator gone,
+      and the persisted status row is there (`{"phase": "completed", "exit_code": 2}` — `phase`
+      means "ended", not "succeeded"; `agent_trigger.py:2141-2145` says so deliberately).
+- [x] 6.2 Reload the page and confirm the label and the exit code are both still there — the
+      scenario that neither carrier survived before this change. **Passed** on a fresh read of all
+      three routes: `'Turn stopped'`, `exit_code=2`, "Worked for 5s".
+- [x] 6.3 Repeat for a failed run and an interrupted run (restart the Hub mid-run to produce the
+      latter via `run_reconciliation.py:65`). **Both passed, 6 checks each.** Two things the tests
+      did not say: a failed spawn is **retried twice**, and the indicator correctly stays up across
+      the retries via `anotherRunIsUnderway` — a path nobody wrote it for; and an interrupted run is
+      **almost never the newest turn**, because reconciliation reschedules the agent in the same
+      startup, so a fresh run lands under it within ~3s. The first 6.3b read failed three checks for
+      that reason and the HARNESS was wrong, not the product. Phase 7 must assert on the
+      interrupted run's own turn, never on the last one.
+- [x] 6.4 Confirm `hub/hub/static/ui` is rebuilt and stamped via
       `py -3.11 scripts/refresh_ui_bundle.py`, and that the bundle actually carries the change —
-      grep the served bytes, not the source.
-- [ ] 6.5 Delete the fixture project, confirm the project count returns to its prior value, and sweep
-      for enabled jobs before finishing.
-- [ ] 6.6 Run `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
+      grep the served bytes, not the source. **Done.** `/health` went from `ui_stale: true` to no
+      staleness field. On the served `/assets/index-42oEFtKt.js`: the deleted
+      `run_started:"started",run_completed:"completed",…` literal went **1 → 0**, and `ended_at`
+      (`runDurationSeconds` reading the run row) went **0 → 2**. The change adds no new user-visible
+      string, so the marker is the minifier-stable literal it REMOVED.
+- [x] 6.5 Delete the fixture project, confirm the project count returns to its prior value, and sweep
+      for enabled jobs before finishing. **24 → 23**, the count that predates the drive; no enabled
+      job or loop in any of the 23, checked before and after.
+- [x] 6.6 Run `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
       hub/tests/ tests/`, `mypy src/`, the Hub suite and the UI suite. Record the numbers rather than
-      asserting green.
-- [ ] 6.7 Do **not** mark F190 retired here. Phase 7 closes it — the operator's approval condition
-      is that a round which did not build the change verifies it.
+      asserting green. **All eight CI checks measured first-hand on 2026-09-03, iteration 12** —
+      ruff: all checks passed; black: 537 files unchanged; mypy: no issues in 22 source files;
+      `tsc --noEmit`: clean; eslint at `--max-warnings 0`: clean; **Hub suite 3850 passed, 84
+      skipped, 1 xpassed, 0 failed (22:56)**; **CLI suite 440 passed, 3 skipped**; **UI suite 1495
+      passed / 144 files**. Two things the numbers say that "green" would not: **F272 did not
+      reproduce** (iteration 7 measured 3849 passed / 1 failed on the same Python tree, which is
+      what a load-dependent harness race looks like, not a product regression), and the phase 6
+      watch-item `test_codex_app_server_stop_signals_should_interrupt` **passed**. Iterations 10 and
+      11 each started this suite and were cut short at 7% and 5%; the capture is a file with
+      `--tb=long`, never a pipe to `tail`.
+- [x] 6.7 Do **not** mark F190 retired here. Phase 7 closes it — the operator's approval condition
+      is that a round which did not build the change verifies it. **Honoured** — F190 and F269 are
+      both still open in `FINDINGS.md`.
 
 ## 7. Verified by a round that did not build it
 
