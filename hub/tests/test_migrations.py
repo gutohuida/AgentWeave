@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0100"
+HEAD_REVISION = "0101"
 
 
 # ---------------------------------------------------------------------------
@@ -3198,3 +3198,146 @@ def test_running_migrations_leaves_existing_loggers_enabled(tmp_path) -> None:
         "running migrations disabled the Hub's own module loggers; every logger.warning it "
         "raises after startup goes nowhere (F151)"
     )
+
+
+# ---------------------------------------------------------------------------
+# 0101 — the writes a run made outside the directory it was given
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0101_adds_outside_workspace_writes_to_both_tables(tmp_path) -> None:
+    """F115, designs D5/D10/D11: two columns, nullable and undefaulted on both.
+
+    The two are one fact recorded for two readers — the run's durable record, and that record as
+    it stood when a footprint was captured. D10 keeps them in one revision.
+
+    **What this proves is the model, not the migration.** `_create_all_at` builds every table from
+    `Base.metadata` before alembic runs, which is the real startup order, so both columns are
+    already present when `0101` arrives and it is a no-op here. Measured, not assumed: with
+    `evidence_footprints` deleted from the migration's `_TABLES` this test still passes. The half
+    of `0101` that touches `evidence_footprints` is held by the downgrade in
+    `test_migration_0101_leaves_existing_rows_null_rather_than_claiming_they_were_watched`, which
+    does fail under that mutation — read the two together.
+    """
+    db_file = tmp_path / "outside_workspace_writes.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        for table in ("runs", "evidence_footprints"):
+            columns = {row[1]: row for row in conn.execute(f"PRAGMA table_info({table})")}
+            assert "outside_workspace_writes" in columns, table
+            assert columns["outside_workspace_writes"][3] == 0, table  # notnull
+            assert columns["outside_workspace_writes"][4] is None, table  # dflt_value
+
+
+def test_migration_0101_leaves_existing_rows_null_rather_than_claiming_they_were_watched(
+    tmp_path,
+) -> None:
+    """The load-bearing half. NULL is *nobody was looking*; `[]` is *observed, nothing escaped*.
+
+    A `server_default` of `'[]'` — or any backfill — would say of every run and every footprint
+    recorded before the detector existed that it was watched and found clean. That is the claim of
+    coverage design D12 refuses to let this change make, and it is the same reason `0096` did not
+    backfill `workspace_dir` and `0043` did not backfill `snapshot_commit_sha`.
+
+    Written as a downgrade-and-back-up, like `0100`'s, because neither `runs` nor
+    `evidence_footprints` is created by the migration chain — both exist only from the models.
+    That shape is also the only reason any test here reaches `0101`'s own `op.add_column`: the
+    downgrade removes what `create_all` put there, so the re-upgrade is the migration doing the
+    work rather than the model. This is therefore the test that fails if either table is dropped
+    from `_TABLES`.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "outside_workspace_writes_backfill.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    stamp = "2026-01-01T00:00:00Z"
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0100")
+
+        with sqlite3.connect(db_file) as conn:
+            for table in ("runs", "evidence_footprints"):
+                assert "outside_workspace_writes" not in {
+                    row[1] for row in conn.execute(f"PRAGMA table_info({table})")
+                }, table
+            conn.execute(
+                "INSERT INTO projects (id, name, created_at) " f"VALUES ('proj-1', 'p', '{stamp}')"
+            )
+            conn.execute(
+                "INSERT INTO runs (id, project_id, agent, status, started_at, initiator) "
+                f"VALUES ('run-1', 'proj-1', 'builder', 'completed', '{stamp}', 'operator')"
+            )
+            # No parent `requirement_evidence` row: sqlite leaves `foreign_keys` off by default,
+            # and what this test is about is the column's default, not referential integrity.
+            conn.execute(
+                "INSERT INTO evidence_footprints "
+                "(id, project_id, evidence_id, kind, observed_at) "
+                f"VALUES ('fp-1', 'proj-1', 'ev-1', 'git', '{stamp}')"
+            )
+            conn.commit()
+
+        command.upgrade(cfg, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute(
+            "SELECT outside_workspace_writes FROM runs WHERE id = 'run-1'"
+        ).fetchone() == (None,)
+        assert conn.execute(
+            "SELECT outside_workspace_writes FROM evidence_footprints WHERE id = 'fp-1'"
+        ).fetchone() == (None,)
+
+
+def test_migration_0101_is_guarded_when_neither_table_exists(tmp_path) -> None:
+    """Upgrades that start from an early revision reach 0101 with only that revision's tables.
+
+    Both guards are exercised at once here, and they are independent on purpose: `runs` and
+    `evidence_footprints` enter the schema at different points, so a database can arrive with one
+    and not the other.
+    """
+    db_file = tmp_path / "no_runs_or_footprints.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0100')")
+
+    _upgrade_to(db_url, "0101")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0101"
+
+
+def test_migration_0101_adds_the_column_to_whichever_table_is_present(tmp_path) -> None:
+    """The half-schema case the two independent guards exist for.
+
+    A single `if either table is missing: return` would have passed the test above and silently
+    skipped `evidence_footprints` on any database that happened to have `runs`. So stand up one
+    table without the other and assert the present one still gets its column.
+    """
+    db_file = tmp_path / "only_runs.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0100')")
+        conn.execute(
+            "CREATE TABLE runs ("
+            " id VARCHAR(64) PRIMARY KEY, project_id VARCHAR(64), agent VARCHAR(64),"
+            " status VARCHAR(32), started_at DATETIME)"
+        )
+
+    _upgrade_to(db_url, "0101")
+
+    with sqlite3.connect(db_file) as conn:
+        assert "outside_workspace_writes" in {
+            row[1] for row in conn.execute("PRAGMA table_info(runs)")
+        }
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0101"

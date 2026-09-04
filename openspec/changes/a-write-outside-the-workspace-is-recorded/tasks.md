@@ -135,11 +135,17 @@
 
 ## 4. Record it against the run
 
-- [ ] 4.1 Add `Run.outside_workspace_writes`, nullable JSON. `NULL` means *not observed*; `[]` means
+- [x] 4.1 Add `Run.outside_workspace_writes`, nullable JSON. `NULL` means *not observed*; `[]` means
   *observed, nothing left*. Do not backfill — migration `0096`'s own precedent for `workspace_dir`
   and `0043`'s for `snapshot_commit_sha`. A backfilled `[]` would claim every historical run was
   watched and found clean.
-- [ ] 4.2 **One** migration `0101` for both this column and task 5.2's, guarded for a missing table
+
+  *Landed 2026-09-04 (night N-17)*, directly under `workspace_dir` so the two comments are read
+  together — the one that says where the run started, then the one that says where it wrote. The
+  comment carries D12's warning as well as D5's semantics, because `[]` is simultaneously true and
+  the least informative sentence this product emits for a run whose workspace *is* the project
+  root, and a reader arriving at the column is exactly who would otherwise read it as confinement.
+- [x] 4.2 **One** migration `0101` for both this column and task 5.2's, guarded for a missing table
   the way `0033`/`0034`/`0075`/`0095`/`0096` are — design D10. Head today is `0100`
   (`0100_loop_work_needs_evidence.py`), so `down_revision = "0100"`. Bump
   `hub/tests/test_migrations.py`'s `HEAD_REVISION = "0100"` **and**
@@ -152,6 +158,23 @@
   Writing this change's migration as `0100` would collide on the revision identifier and give
   `0099` two children. If a further migration lands before this change is implemented, re-derive
   the number the same way instead of trusting this line.
+
+  *Landed 2026-09-04 (night N-17)* as `0101_outside_workspace_writes.py`, `down_revision = "0100"`,
+  after re-deriving all three anchors against the tree rather than trusting the paragraph above —
+  they still held. Both head assertions bumped to `0101`.
+
+  Two things decided while implementing. **The guards are per table, not one combined guard**:
+  `runs` and `evidence_footprints` enter the schema at different points, so an upgrade can arrive
+  with one and not the other, and `if not all(present): return` would silently skip the table that
+  *is* there. `test_migration_0101_adds_the_column_to_whichever_table_is_present` is what holds
+  that, and it fails under exactly that mutation.
+
+  And a blind spot worth stating rather than leaving for a later reader to trip on: **a migration
+  test built on `_create_all_at` cannot prove the migration did anything.** `create_all` builds
+  both tables from the models, columns included, so `0101` is a no-op on that path — measured, by
+  deleting `evidence_footprints` from `_TABLES` and watching the both-tables test stay green. Only
+  the downgrade-and-back-up test reaches `op.add_column`. Both docstrings now say so. `0100`'s
+  first test has the same property and does not say so.
 - [ ] 4.3 **Pass the project root down first.** Round 3 measured it: `repo_root` occurs nowhere in
   `_execute_run` (lines 1720-2274) or `_execute_codex_appserver_run` (2389-2752). `work_dir`,
   `run_id`, `project_id` and `agent` are all in scope; the project root, which D4 needs to compute
@@ -169,6 +192,16 @@
   the two sinks call one function rather than growing two opinions about it.
 - [ ] 4.4 Bound the list at 20 entries plus a total count. An unbounded column on a run that writes
   in a loop is a column nobody can read.
+
+  **Decide the top-level JSON shape here, deliberately — it is not decided yet.** Noted while
+  landing 4.1/4.2 (night N-17): D5, D12 and task 4.1 all spell the empty case `[]`, which makes the
+  column's value a *list*, while this task's "plus a total count" wants a scalar beside the list.
+  Both are satisfiable — a list whose entries each carry their own per-destination count, with the
+  overflow beyond 20 recorded as a final sentinel entry, keeps `[]` literally true — but the two
+  sentences as written do not pick one, and the wiring is where it has to be picked. Whatever is
+  chosen, `[] == observed and nothing escaped` and `NULL == not observed` are fixed by the column's
+  own comment and by 4.1, and must survive it. The migration constrains neither: `sa.JSON` holds
+  any of them.
 - [ ] 4.4b **Accumulate in the closure; write on first sight of each destination** (design D5, round
   3). Both bounds above and the once-per-destination rule in 4.5 are per-*run* facts, and the only
   sites that see the calls are per-*event* callbacks each opening their own session. Hold a `dict`
@@ -212,6 +245,13 @@
   derive it and `restamp_run_footprints` (`:845`, `_apply_footprint` at `:921`) would have to
   fabricate it — design D11. Both call sites (`:423`, `:921`) pass what they read from the run. The
   column rides migration `0101` from task 4.2; there is no second migration and no second head bump.
+
+  *The column is named, so phase 5 does not have to guess.* It shipped with `0101` on 2026-09-04
+  (night N-17) as **`EvidenceFootprint.outside_workspace_writes`** — deliberately the same name as
+  the `Run` column, because it holds the same value with the same two readings and a second name
+  would invite a reader to look for a second meaning. Nullable JSON, no server default: NULL is
+  *not observed*, which is what `_apply_footprint`'s parameter defaults to and what
+  `restamp_run_footprints` passes when it has nothing to pass.
 - [ ] 5.3 Do **not** change which directory the footprint is taken from, and do **not** refuse the
   evidence. Design D7 rules both out; add a test that asserts the footprint root is unchanged for a
   run that wrote outside, so a later reader cannot "fix" this by moving it.

@@ -1146,6 +1146,26 @@ class Run(Base):
     # backfilled on purpose: a computed per-agent path would be exactly the wrong answer for a
     # review run, and would make old rows indistinguishable from recorded ones.
     workspace_dir: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Where this run wrote *outside* `workspace_dir`, or NULL if nobody was looking.
+    #
+    # A workspace is a working directory, not a wall (F115). Under any posture that is not the
+    # default one, an absolute path named by a `Write`/`Edit`/`MultiEdit`/`NotebookEdit`/
+    # `apply_patch` call lands where it says — in another agent's worktree, or in the operator's
+    # own checkout — and until this column nothing recorded that it had. This is the durable
+    # record; the operator's notice is a separate `agent_wrote_outside_workspace` activity event,
+    # emitted once per distinct destination per run rather than once per call (design D5).
+    #
+    # NULL means *not observed*; `[]` means *observed, and nothing left the workspace*. That
+    # distinction is the whole value of the record, which is why this is not backfilled — the same
+    # reasoning as `workspace_dir` directly above, and as `snapshot_commit_sha`. A backfilled `[]`
+    # would claim every run that predates the detector was watched and found clean.
+    #
+    # `[]` is also the least informative true sentence this product can emit, deliberately: a run
+    # whose workspace *is* the project root — a read-only agent, a project that is not a git
+    # repository, a machine with no git — has the entire project inside its boundary, so nothing it
+    # writes there is outside anything (design D12). Read an empty list as "nothing left this run's
+    # boundary", never as "this run was confined".
+    outside_workspace_writes: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (
         CheckConstraint("initiator IN ('operator', 'autonomous')", name="ck_runs_initiator"),
@@ -2459,6 +2479,20 @@ class EvidenceFootprint(Base):
     # Whether this footprint is reachable from the project's main line of work, as last observed.
     # Null means not yet determined — distinct from False, which is an answer.
     reachable_from_main: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    # The producing run's `Run.outside_workspace_writes` as it stood when this footprint was taken,
+    # with the same two readings — NULL for *not observed*, `[]` for *observed, nothing escaped*.
+    #
+    # Copied onto the row rather than joined at read time so that a capture and a later re-stamp
+    # cannot come to disagree about what one footprint means. It is passed explicitly into
+    # `_apply_footprint` rather than carried on `Footprint`, which `capture_footprint` builds from
+    # git alone: this is database state on `Run`, and a git-derived value that had to carry it would
+    # leave `restamp_run_footprints` fabricating it (design D11).
+    #
+    # A non-empty value is what makes the rest of this row honest. `commit_sha` and `entries` still
+    # describe the tree the run was given, and that tree is missing whatever this lists. The
+    # footprint is deliberately not moved to another tree and the evidence is deliberately not
+    # refused (design D7); the exception is recorded where the recorder can still see it.
+    outside_workspace_writes: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
