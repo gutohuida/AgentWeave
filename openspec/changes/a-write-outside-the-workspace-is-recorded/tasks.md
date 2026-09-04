@@ -19,9 +19,9 @@
 
 ## 2. Extract write paths at the parse point
 
-- [ ] 2.1 Add `hub/hub/workspace_writes.py`: pure, stdlib-only, no session and no filesystem writes.
+- [x] 2.1 Add `hub/hub/workspace_writes.py`: pure, stdlib-only, no session and no filesystem writes.
   It owns the two halves that must not drift apart — which tools write, and where a path belongs.
-- [ ] 2.2 `written_paths(tool: str, input_data: Any) -> tuple[str, ...]` — the declared path
+- [x] 2.2 `written_paths(tool: str, input_data: Any) -> tuple[str, ...]` — the declared path
   argument(s) of a file-*writing* tool call, empty for everything else. Claude: `Write`, `Edit`,
   `MultiEdit`, `NotebookEdit`. Codex: `apply_patch`. (`MultiEdit` is back: round 2 dropped it on the
   false ground that nothing else recognises it - see 2.2b.) Reads (`Read`, `Glob`, `Grep`, `LS`) return empty, per design
@@ -31,24 +31,25 @@
   Not for cost. `tool_use_event` already runs `redact_secrets` and `json.dumps(sort_keys=True)` over
   every input unconditionally (`runner_events.py:142-143`), so a membership test is not measurable
   beside it (design D13).
-- [ ] 2.2b Reconcile the list against the source that shares its concept, per round 3's correction to
-  D3. The product states "which tools write" three times, not twice, and the match is
-  `WRITING_TOOLS` in `hub/ui/src/components/agents/AgentTimeline.tsx:573` -
+- [x] 2.2b Reconcile the list against the source that shares its concept, per round 3's correction to
+  D3. (Line numbers below re-measured 2026-09-04: `AgentTimeline.tsx` was `:573`, `mcp_server.py`
+  was `:858`, `runner_commands.py` was `:210`.) The product states "which tools write" three times, not twice, and the match is
+  `WRITING_TOOLS` in `hub/ui/src/components/agents/AgentTimeline.tsx:615` -
   `{Edit, MultiEdit, Write, NotebookEdit, apply_patch}` - both providers, already driving the "wrote
   to N files" summary an operator reads. Assert `written_paths`' writer set equals it.
-  **Do not** assert against `runner_commands.py:210`: that is `restrict_spec_writes`, an F4/D6
+  **Do not** assert against `runner_commands.py:203`: that is `restrict_spec_writes`, an F4/D6
   permissions flag scoping one kind of agent, Claude-only by construction, so the assertion round 2
   proposed is false for `apply_patch` and would force `MultiEdit` out for a reason that does not
-  hold. Separately assert that the **Claude** path keys are a subset of `mcp_server.py:858`'s
+  hold. Separately assert that the **Claude** path keys are a subset of `mcp_server.py:895`'s
   `_PATH_KEYS` (`MultiEdit` passes: its input is `{file_path, edits: [...]}`). Codex's
   `changes[].path` is nested and is deliberately not in `_PATH_KEYS`. `mcp_server.py` may import only
   stdlib plus fastmcp, so this is restate-and-assert, the shape `test_permission_approver.py` uses
   for `OPERATOR_POSTURE`.
-- [ ] 2.2c File, do not fix: `restrict_spec_writes` disallows `Edit,Write,NotebookEdit` and omits
+- [x] 2.2c File, do not fix: `restrict_spec_writes` disallows `Edit,Write,NotebookEdit` and omits
   `MultiEdit`, which the UI counts as a write, so a spec-restricted agent may be able to write
-  through it. Out of scope here, and this change must not inherit the gap by treating that flag as
-  the definition of a write tool.
-- [ ] 2.3 Cover the multi-path case. `NotebookEdit` names one file under `notebook_path`; `Write`,
+  through it. Filed 2026-09-04 as **F277**, with both postures measured. Out of scope here, and
+  this change must not inherit the gap by treating that flag as the definition of a write tool.
+- [x] 2.3 Cover the multi-path case. `NotebookEdit` names one file under `notebook_path`; `Write`,
   `Edit` and `MultiEdit` name one under `file_path` - `MultiEdit`'s several edits all target that one
   file, so it stays one-element; Codex's `apply_patch` names several under `changes[].path`. The
   tuple return is load-bearing for the Codex side.
@@ -65,7 +66,7 @@
   `exec` transport, which round 1 named nowhere); and `map_item_to_events`'s **`fileChange`** branch
   (`codex_appserver.py:448-459`, camelCase). All three call `tool_use_event`, so all three should
   need no change of their own — a test per transport is what proves it.
-- [ ] 2.5b Use F107's shape for the Codex `changes` element — `{"path": ..., "diff": ...}`,
+- [x] 2.5b Use F107's shape for the Codex `changes` element — `{"path": ..., "diff": ...}`,
   corroborated by `approval_subject` and `hub/tests/test_permission_approver.py:588-604`, which was
   written against a live item rather than off `_file_change_summary`. Copy its malformed-input cases
   verbatim: `None`, `{}`, `{"changes": "not-a-list"}`, `{"changes": [{"path": 1}, {}, None]}` — all
@@ -75,7 +76,7 @@
   asserts it, so a future second constructor fails here rather than silently escaping detection. The
   one boundary to state in the test's docstring: `POST .../output` accepts a `tool_use` kind from an
   agent the Hub did not spawn, which has no `RunEvent` and no workspace to be checked against.
-- [ ] 2.6 Assert the parser stays pure: no workspace argument, no filesystem access, no import of
+- [x] 2.6 Assert the parser stays pure: no workspace argument, no filesystem access, no import of
   anything that touches the database. A test that imports `runner_parsing` in isolation is enough to
   keep this honest.
 

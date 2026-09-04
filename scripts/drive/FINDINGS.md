@@ -19112,3 +19112,67 @@ than the queue slot.
 What was fixed: the paragraph now states what the code does, points at the task arm of the
 workspace `except` as the real environment-level-but-entry-specific example, and records this
 measurement inline so the next reader does not re-derive it.
+
+## F277 (C) - `restrict_spec_writes` omits `MultiEdit`, the one write tool that edits a file the same way the three it names do
+
+**Status:** open. Filed 2026-09-04 (night window, task 2.2c of
+`a-write-outside-the-workspace-is-recorded`). **Filed, deliberately not fixed** - see the last
+section.
+
+`restrict_spec_writes` is the flag a turn triggered with a specification document open runs under
+(F4/design D6 of `2026-08-17-authoring-rigor-and-scope`). It renders one argument
+(`hub/hub/runner_commands.py:203`):
+
+```python
+cmd += ["--disallowedTools", "Edit,Write,NotebookEdit"]
+```
+
+`MultiEdit` is not in it, and `MultiEdit` is a file-writing tool by every other reckoning in this
+product: `AgentTimeline.tsx`'s `WRITING_TOOLS` counts it, `lib/editDiff.ts` renders its diff, the
+timeline has a test written against a real `MultiEdit`-shaped payload, and
+`hub/hub/workspace_writes.py` (added in the same phase as this finding) counts it. Measured by
+building the command rather than reading the flag:
+
+| posture | `--disallowedTools` | `--allowedTools` | `MultiEdit` named anywhere |
+|---|---|---|---|
+| default (non-yolo, approver) | `Edit,Write,NotebookEdit` | `mcp__agentweave__*` | no |
+| `yolo=True` | `Edit,Write,NotebookEdit` | *(absent)* | no |
+
+So a spec-authoring agent can edit any file `MultiEdit` reaches, in either posture. Under yolo
+there is nothing else in the way at all. Under the default posture the approver still runs, but
+`_decide` checks *paths*, not tool names - a `MultiEdit` inside the run's own workspace is allowed,
+which is exactly where the source files a spec-authoring agent is supposed to be describing rather
+than changing live.
+
+**What it is not.** This is not a sandbox escape, and calling it one would overstate it: `Bash` is
+not in the disallow list either, so a run under this flag can already write through
+`echo ... > file`, and the flag's own comment describes an axis ("which tools exist at all") rather
+than a guarantee. The flag is a nudge that makes the *ordinary* way to edit a file unavailable, so
+a model reaching for one gets a refusal and proposes instead. `MultiEdit`'s omission is a hole in
+exactly that nudge: it is not a creative workaround a model has to think of, it is the tool Claude
+picks by default for a multi-hunk edit, and a model that reaches for it succeeds silently and never
+learns it was supposed to propose.
+
+`git log -S` puts the line at `2a52fcd`, the change that introduced the flag; it has never been
+edited since. The omission is almost certainly an oversight from enumerating Claude's write tools
+from memory rather than a decision - nothing anywhere argues for excluding it.
+
+**Not fixed here, and the reason matters more than the fix.** Round 2 of
+`a-write-outside-the-workspace-is-recorded` proposed asserting that every tool
+`workspace_writes.written_paths` calls a writer appears in this disallow list. That assertion is
+false by construction for the Codex half - `--disallowedTools` is a Claude argument and can never
+name `apply_patch` - and satisfying it would have forced `MultiEdit` *out* of the new writer list,
+propagating this gap into the change rather than exposing it. Round 3 measured all three existing
+statements of "which tools write", found they disagree, and reconciled against the UI's
+`WRITING_TOOLS` instead (design D3).
+
+`hub/tests/test_workspace_writes.py::test_restrict_spec_writes_is_not_the_definition_of_a_write_tool`
+pins that reasoning: it asserts the disallow list and the writer set are **not** equal and that
+`MultiEdit` is absent from the former, so the gap is measured on every run and closing it upstream
+fails that test loudly rather than silently. Its message says to retire this finding, not the test.
+
+The fix is one word in a string literal. What it is not is free: it is a behaviour change to how a
+spec-authoring turn runs, it is `authoring-rigor-and-scope`'s scenario rather than this change's,
+and the honest version of it asks the wider question this finding raises - whether a nudge that
+`Bash` walks straight through should be enumerating tools at all, or whether that posture wants the
+approver rather than a disallow list.
