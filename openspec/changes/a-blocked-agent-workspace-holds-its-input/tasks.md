@@ -255,8 +255,40 @@ grep for a sentence could have reached this comment, because it quotes none - wh
 
 ## 6. Verify it against the product, not only the suite
 
-- [ ] 6.1 `pytest hub/tests/ -v` under `py -3.11`, plus `ruff check src/ hub/ tests/`,
+- [x] 6.1 `pytest hub/tests/ -v` under `py -3.11`, plus `ruff check src/ hub/ tests/`,
   `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` and `mypy src/`.
+
+  Measured 2026-09-04, all from the repo root except the hub suite, which is run from `hub/`:
+
+  | Gate | Result |
+  |---|---|
+  | `cd hub && py -3.11 -m pytest tests/ -q` | **3874 passed, 86 skipped, 1 xpassed**, 24:27, exit 0 |
+  | `py -3.11 -m pytest tests/ -q` (CLI, repo root) | 440 passed, 3 skipped, 23s |
+  | `py -3.11 -m ruff check src/ hub/ tests/` | clean |
+  | `py -3.11 -m black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` | 541 files unchanged |
+  | `py -3.11 -m mypy src/` | no issues, 22 source files |
+
+  The whole hub suite had not been run at any point in this change, and neither had `mypy src/`;
+  both are first measurements here rather than confirmations. The 86 skips and the 1 xpass are the
+  suite's standing baseline, not this change's — the 2 symlink skips recorded in phase 4 are inside
+  that 86. The CLI and hub suites are **two invocations on purpose**: collecting `tests/` and
+  `hub/tests/` together fails.
+
+  **Mutation, re-done against the tree as it now stands** (phase 3b did it once at that point).
+  Deleting the whole `not getattr(exc, "agent_workspace_unavailable", False) or await
+  other_input_would_have_run_elsewhere(...)` term from the condition in `hub/hub/turn_scheduler.py`
+  — a 12-line deletion with no other diff — fails exactly three tests by name, the same three
+  phase 3b measured:
+
+  - `test_a_second_unbound_conversation_does_not_make_the_head_expendable` (3.4a)
+  - `test_an_entry_in_the_refused_batch_naming_a_vanished_task_does_not_count` (3.6)
+  - `test_a_blocked_agent_workspace_holds_the_operators_message` (1.1), asserting
+    `('withdrawn', 3) != ('queued', 0)` — F188's exact symptom returning the moment the term goes
+
+  16 of the 19 still passed under the mutant, which is the point of naming them: the other tests in
+  those two files are pinned by the *helper*, not by the condition, and phase 3c mutation-checked
+  those separately. The file was restored byte-for-byte (`git diff` empty, not merely "looks the
+  same") and the two files re-run green at 19 passed.
 - [ ] 6.2 Drive it on the trial Hub, on a fresh project, with a real agent bound to
   `claude-haiku-4-5`: block `.agentweave/worktrees/<agent>` with a plain directory, send a message,
   press Continue three times, and confirm the message is **still queued** and the queue reports the
