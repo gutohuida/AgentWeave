@@ -87,7 +87,7 @@ F188** — and four more entries are in a third state this index has no word for
 | Finding | What the section says | What is actually true, measured 2026-09-03 |
 |---|---|---|
 | **F271** | open | **open**, and unchanged. No proposal, no change directory. |
-| **F188** | filed, no `**Status:**` line at all | **open at HEAD, confirmed by reading the code it names.** `agent_trigger.py:878-883` still raises the worktree refusal with no `agent_wide=True`, while three sibling sites (`:573`, `:594`, `:624`) pass it. Nothing anywhere proposes it. |
+| **F188** | filed, no `**Status:**` line at all | **open at HEAD, confirmed by reading the code it names** (measured 2026-09-03). `agent_trigger.py:878-883` still raises the worktree refusal with no `agent_wide=True`, while three sibling sites (`:573`, `:594`, `:624`) pass it. Nothing anywhere proposes it. — **Superseded 2026-09-04: retired**, fixed by `467dfea` and driven; see its section. |
 | **F140** | *"open, filed not fixed"* | has an **implemented and archived** change — `2026-09-01-a-flow-briefing-names-its-contract` |
 | **F142** | *"open, filed not fixed"* | has an **implemented and archived** change — `2026-09-01-a-review-a-flow-cannot-staff-is-named` |
 | **F154** | no resolution prose | has an **implemented and archived** change — `2026-09-01-a-review-nobody-is-doing-is-named` |
@@ -99,6 +99,23 @@ line vanish once the agent's fifty-event timeline window moves past that run, wh
 the agent's *other* conversations does. It is F190's symptom, reproduced live in the served bundle
 against the change that closed F190, and the route is not in breach of its spec — the gap is between
 two routes. See its own section below. F275 (C) was filed in the same drive.
+
+**Revised 2026-09-04 (night window, iteration 11): two — F271 and F274.** **F188 is retired**, and
+retired the way this index says a finding has to be: `a-blocked-agent-workspace-holds-its-input` was
+specified through three rounds, built over phases 2–5, and then *driven* — three legs, 33/33, on a
+Hub serving the built code, with the leg that could have falsified the fix run deliberately. Its
+section carries the evidence and the commit (`467dfea`) that repairs the behaviour. The day window
+handed it over on 2026-09-03 because it had no proposal; it has one now, archived.
+
+**Recomputed rather than decremented, because this index's own post-mortem below says a decrement is how the last miscount happened.**
+All 40 severity-A headings were scanned mechanically for their `Status` line. The picture is exactly
+the 2026-09-03 rebuild minus F188: **F271** and **F274** open, **F140, F142, F154 and F155** still in
+the third state (a change naming each was archived on 2026-09-01; none has been driven, so none is
+retired), everything else fixed or retired in its own section. Two caveats on that scan, stated
+because an unstated one is how this index went wrong before: it reads the heading and the first
+`Status`-bearing line, not the section, so a finding whose resolution is buried in prose would read
+as open; and `open, filed not fixed` and `FIXED` are one substring apart, so no keyword rule
+classifies both — F140 and F142 were classified by hand.
 
 **The four in the third state are recorded as `unverified`, not as retired, and that distinction is
 the whole point.** What was measured is that a change naming each of them was archived on
@@ -13786,13 +13803,57 @@ reporter: whether a stopped process is actually **dead**, and whether the path t
 "where the agent's work happened" actually **exists**. The first vindicated the product; the
 second did not.
 
-## F188 (A) — a repairable workspace fault destroys the operator's message after three schedules, and the identical fault one line away holds it forever
+## F188 (A) — RETIRED 2026-09-04 — a repairable workspace fault destroys the operator's message after three schedules, and the identical fault one line away holds it forever
 
-**Status:** **open**, re-confirmed by reading the code at HEAD on 2026-09-03 (night window,
-iteration 14) — `agent_trigger.py:878-883` still raises with no `agent_wide=True` while `:573`,
-`:594` and `:624` pass it. Statically re-confirmed, **not re-driven**; the reproduction below is
-still the only live evidence. No proposal and no change directory names this finding. Handed to the
-day window as the open severity-A row the index had lost.
+**Status:** **fixed `467dfea`**, retired 2026-09-04 (night window, iteration 11) on the strength of a
+drive, not of a green suite.
+
+**Which commit that sha names, and why it is that one rather than this one.** `467dfea` is
+`night(5): a-blocked phase 3b`, the commit where the scheduler condition that fixes this actually
+landed — the third term in `turn_scheduler.py` that stops an `agent_workspace_unavailable` refusal
+counting a delivery attempt unless other queued input could have run somewhere this failure never
+touched. The commit that writes *this line* is later than it and cannot name its own sha without an
+amend this run is forbidden to make; naming the commit that repairs the behaviour is the more useful
+citation anyway. The whole repair is the change
+`openspec/changes/archive/2026-09-04-a-blocked-agent-workspace-holds-its-input`: phase 2 gave
+`TriggerAgentError` an `agent_workspace_unavailable` flag and split the raise site on *which*
+workspace could not be prepared, phase 3 wired the condition, phase 4 gave the refusal sentences
+their remedies — which retires the (C) sub-finding at the end of this section too.
+
+**The drive that retires it — 2026-09-04, three legs, 33/33, against a Hub serving the built code.**
+Port 8011 from source on an isolated database (`profiles/drive8011/ablocked-p6.db`, migrated to 0100
+at startup), fixture project `proj-4eb8215f9502`, one agent bound to `claude-haiku-4-5-20251001`.
+Harnesses kept: `scripts/drive/setup_ablocked_p6.py`, `t_ablocked_p6_held.py`,
+`t_ablocked_p6_elsewhere.py`, `t_ablocked_p6_cleared.py`.
+
+- **The message is held (8/8).** The same obstruction as the reproduction below — a plain directory
+  where the agent worktree belongs — and **four** delivery opportunities against a limit of three
+  (`POST /agent/trigger` schedules too, which the harness counts deliberately). `delivery_attempts`
+  **never left 0**, the entry stayed `queued`, `abandoned_reason` stayed null. Against the
+  reproduction below, where the head was `withdrawn` at 3 with *delivery failed 3 times*, that is
+  the symptom inverted.
+- **The remedy reaches the operator on three surfaces**, not one: the trigger response's
+  `waiting_reason`, `GET /queue/{agent}/status`, and — the one an operator actually clicks — the
+  Continue button's own 200 body. All three carry the path to remove, the `rm -r`, and the promise
+  that the next turn prunes. The conversation view renders the sentence unelided, checked in a
+  browser against the served bundle rather than assumed (F274).
+- **Holding is not blanket holding (14/14), and this is the leg that could have falsified the fix.**
+  An ordinary task (`workspace_scheme='task'`, asserted rather than assumed, because a grandfathered
+  one would have agreed for the wrong reason) bound in a *second* conversation moved the head from 0
+  attempts to **1 on that same schedule**: input existed that would have run in a workspace this
+  failure never touched, so F56's argument applied again. Two more Continues took it to 3, it was
+  withdrawn with `abandoned_reason` naming the obstruction, and one further schedule ran the task
+  turn to completion in its own task directory. A fix that simply held everything would have left
+  this at 0 attempts and starved the task.
+- **The holding ends when the operator performs the repair (11/11).** A fresh message under the same
+  obstruction, held at 0 with the remedy attached; then exactly what the sentence tells the operator
+  to do — remove the directory, `git worktree prune` — and one Continue. The turn ran **in the very
+  path that had been obstructed**, `git worktree list` registers it on the agent's own branch, and
+  the held entry is `delivered`. Holding input forever is a slower way to lose it; this is the leg
+  that says that is not what shipped.
+
+Both real turns billed `claude-haiku-4-5-20251001`, read from `turn_usage` rather than inferred from
+the binding. Everything below this line is the original 2026-09-03 filing, kept as filed.
 
 `hub/hub/api/v1/agent_trigger.py:879-883` raises the worktree refusal:
 
@@ -13857,6 +13918,13 @@ why it is A rather than higher.
 existing path C:\...\.agentweave\worktrees\r5runnerr5b: it is not the registered git worktree for
 refs/heads/agentweave/r5runnerr5b"* — and never says what would clear it. Removing that directory
 and pruning is the whole repair, and the operator has to know that from outside the product.
+
+> **RETIRED 2026-09-04 with the rest of this section.** Phase 4 of
+> `a-blocked-agent-workspace-holds-its-input` split that single refusal into a symlink arm and a
+> wrong-ref arm and gave each its own remedy — the directory to remove, the command to remove it,
+> and the prune that follows. The drive above read it back off three API surfaces and off the
+> screen. Each remedy is asserted at the `worktrees` layer by a test that *performs* it and then
+> provisions successfully (`hub/tests/test_a_blocked_workspace_refusal_states_its_remedy.py`).
 
 ## F189 (B) — the Workspace section shows a path that does not exist, and calls it where the work happened
 

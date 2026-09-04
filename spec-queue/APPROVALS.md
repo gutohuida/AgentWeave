@@ -29,6 +29,12 @@ work. The operator filled them, and approved both:
 - APPROVED  a-write-outside-the-workspace-is-recorded   F115. Second: touches `AgentTimeline.tsx` and the committed bundle, so it must not run beside `a-blocked`.
 ORDER: a-blocked-agent-workspace-holds-its-input, a-write-outside-the-workspace-is-recorded
 
+> **Status note appended by the night window, 2026-09-04 (not an operator decision).** The first row
+> is **built, driven and archived** — `openspec/changes/archive/2026-09-04-a-blocked-agent-workspace-holds-its-input`,
+> all 6 phases, F188 retired in the ledger. The gate two paragraphs down is therefore open:
+> `a-write` may now start. Its task 4.2 migration number was re-checked on 2026-09-03 and `0101` is
+> correct as written.
+
 `ORDER` is not decoration here. The two changes collide on `agent_trigger.py` and `worktrees.py`, and
 `a-write` moves `hub/hub/static/ui` on top of that — the one combination this repo cannot build
 concurrently. Sequential, severity-A first, is what makes approving both safe. 86 tasks will not fit in

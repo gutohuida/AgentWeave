@@ -348,6 +348,34 @@ grep for a sentence could have reached this comment, because it quotes none - wh
 
   **Both real turns billed `claude-haiku-4-5-20251001`**, read from `turn_usage` rather than inferred
   from the binding. No job or loop was created; `GET /jobs` and `GET /loops` are both empty.
-- [ ] 6.5 Append the drive's result to `scripts/drive/FINDINGS.md` under F188 — retired with the
+- [x] 6.5 Append the drive's result to `scripts/drive/FINDINGS.md` under F188 — retired with the
   evidence, or still open with what was measured. Do not mark it retired on the strength of a green
   suite.
+
+  **Retired 2026-09-04 on the drive, not on the suite.** F188's section is now headed
+  `RETIRED 2026-09-04` and its `**Status:**` line reads **fixed `467dfea`** — the phase 3b commit,
+  where the scheduler condition actually landed. The line says so explicitly, because the commit that
+  writes it is later than the repair and cannot name its own sha without an amend the run is
+  forbidden to make. Under it: the three legs at 33/33, each stated against the symptom the original
+  reproduction recorded (`withdrawn` at 3 with *delivery failed 3 times* → `queued` at 0 through four
+  delivery opportunities), the three surfaces the remedy reaches, the falsifying leg, and the leg
+  where performing the remedy releases the message. The (C) sub-finding at the end of that section —
+  the refusal naming the path but never what would clear it — is retired with it, by phase 4, with
+  its test named.
+
+  **The index was recomputed, not decremented**, which is what the ledger's own post-mortem of the
+  last miscount asks for. All 40 severity-A headings were scanned for their `Status` line: the
+  picture is the 2026-09-03 rebuild minus F188 — **F271** and **F274** open, **F140/F142/F154/F155**
+  still `unverified` (archived changes name them; none has been driven). Two limits of that scan are
+  stated in the new paragraph rather than left implied: it reads the heading and the first
+  `Status`-bearing line rather than the section, and `open, filed not fixed` contains `fixed`, so no
+  keyword rule classifies both — F140 and F142 were classified by hand. The stale table row near the
+  top and the *"three — F271, F188 and now F274"* paragraph are both marked superseded rather than
+  rewritten, so the record of what the index said on 2026-09-03 survives.
+
+  `openspec validate a-blocked-agent-workspace-holds-its-input --strict` → valid. Deltas folded into
+  `openspec/specs/` by hand (the ADDED requirement appended to `workspace-isolation`; the MODIFIED
+  one replacing its predecessor in `agent-conversation-workspace`, which `git diff` confirms was a
+  pure insertion of 84 lines — the delta restated every existing paragraph and scenario verbatim and
+  added four paragraphs and eight scenarios). `openspec validate --specs --strict` → 43 passed,
+  0 failed.
