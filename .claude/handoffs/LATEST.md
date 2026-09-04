@@ -1,1 +1,1 @@
-handoff-0106-2026-09-01-1923-the-open-specs-triaged-and-f190-reaches-r2.md
+.claude/handoffs/handoff-0107-2026-09-04-0110-the-cycle-merged-and-the-routine-repaired.md
