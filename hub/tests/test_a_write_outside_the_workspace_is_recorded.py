@@ -214,18 +214,28 @@ def mentions(value: Any, path: Path) -> bool:
 # --- 1.1 The parse side ------------------------------------------------------------------------
 
 
-def test_the_parsed_event_carries_the_path_only_as_a_blob(layout):
-    """1.1 -- what `parse_claude_line` knows about a write, which is nothing but the argument text.
+def test_the_parsed_event_says_nothing_about_where_the_write_went(layout):
+    """1.1 -- what `parse_claude_line` knows about a write. **Half-flipped by phase 2b.**
 
-    The `tool_use` branch (`runner_parsing.py:264-272`) hands the raw input to `tool_use_event`,
-    which redacts it and then `json.dumps`es it into `payload["input"]`
-    (`runner_events.py:142-143`). That stringification is why this test can say "blob only": after
-    it, the destination is a substring of a summary field, indistinguishable from a `pattern`
-    argument or a URL, and no consumer can ask where the write went without re-parsing the blob
-    and guessing which keys are paths.
+    As written in phase 1 this asserted two separate things: that the path survives only as text
+    inside `payload["input"]`, and that nothing structural carries it -- `RunEvent` had four
+    fields and none was about paths. Phase 2b (2026-09-04) falsified the second, deliberately and
+    on the rehearsed schedule: `write_paths` now arrives on the event, populated inside
+    `tool_use_event` *before* the redact and the 8 KiB truncation.
 
-    Phase 2 flips this by carrying `write_paths` on `RunEvent` -- populated *before* the redact
-    and the 8 KiB truncation, because the structured path may not survive them.
+    The flip is recorded here rather than in phase 4 because **task 4.7 does not cover it** --
+    4.7 flips tasks 1.2 and 1.3, the record-side pair, and 1.1 is the parse side. Checked rather
+    than assumed when the field landed.
+
+    What survives unfixed, and is what this test now measures:
+
+    * The **payload** -- the only part `record_agent_output` persists -- is byte-for-byte what it
+      was. The destination is still a substring of a stringified argument dump, indistinguishable
+      from a `pattern` argument or a URL, and still nothing says it was outside anything.
+    * `write_paths` reaches nobody. It is carried on an in-process event that is written to the
+      database as `kind` and `payload` only, so it survives exactly as long as the function call
+      that consumes it -- and phase 2 adds no consumer. That is the gap phases 3 and 4 close, and
+      until they do, F115 stands with the field in place.
     """
     parsed = parse_claude_line(write_call_line(layout.stray_file))
 
@@ -234,17 +244,25 @@ def test_the_parsed_event_carries_the_path_only_as_a_blob(layout):
     assert event.kind == "tool_use"
     assert event.payload["tool"] == "Write"
 
-    # The path is in there -- but only as text inside the argument dump.
+    # The path is in the payload -- but only as text inside the argument dump.
     blob = event.payload["input"]
     assert isinstance(blob, str)
     assert json.loads(blob)["file_path"] == str(layout.stray_file)
 
-    # And nothing structural carries it. `RunEvent` has four fields today; none is about paths.
-    assert {field.name for field in fields(RunEvent)} == {"kind", "content", "payload", "call_id"}
-    assert not hasattr(event, "write_paths")
+    # Phase 2b: it is now *also* carried structurally. Asserted here, not merely noted, so this
+    # test states the tree it is running against rather than the tree it was written against.
+    assert {field.name for field in fields(RunEvent)} == {
+        "kind",
+        "content",
+        "payload",
+        "call_id",
+        "write_paths",
+    }
+    assert event.write_paths == (str(layout.stray_file),)
 
-    # Nor does anything in the payload say the destination was outside anything. Exhaustive,
-    # because "nothing says" is not provable by checking the keys one happens to think of.
+    # And that changes nothing about what is *stored*: the payload has not grown a key, so the
+    # structured path cannot reach any reader of the row. Exhaustive, because "nothing says" is
+    # not provable by checking the keys one happens to think of.
     assert set(event.payload) == TOOL_USE_PAYLOAD_KEYS
     assert event.content == "Called Write"
     assert event.payload["summary"] == "Called Write"

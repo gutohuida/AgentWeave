@@ -19,6 +19,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
 
+from .workspace_writes import written_paths
+
 PAYLOAD_VERSION = 1
 MAX_PAYLOAD_BYTES = 64 * 1024
 MAX_TOOL_RESULT_BYTES = 8 * 1024
@@ -113,6 +115,22 @@ class RunEvent:
     content: str
     payload: Dict[str, Any]
     call_id: Optional[str] = None
+    #: The path(s) this event's tool call declared it would write, raw and structured.
+    #:
+    #: Empty for every kind but `tool_use`, and empty for a `tool_use` that is not a write --
+    #: which is why it defaults to `()` rather than being a required field: `text_event`,
+    #: `thinking_event`, `tool_result_event` and the status/diagnostic/error builders are
+    #: unchanged by its arrival, and so is every one of their call sites.
+    #:
+    #: **Never persisted.** `record_agent_output` stores `kind` and `payload` only, so this
+    #: field lives exactly as long as the in-process hop from the parser to whatever consumes
+    #: the event. Anything that must outlive the turn writes its own row.
+    #:
+    #: It is on `RunEvent` rather than on `ParsedLine` because the Codex app-server transport
+    #: never builds a `ParsedLine` at all -- `map_item_to_events` returns events directly
+    #: (design D2). One field on the event reaches all three transports; a field on
+    #: `ParsedLine` would reach two.
+    write_paths: Tuple[str, ...] = ()
 
 
 def text_event(text: str) -> RunEvent:
@@ -139,6 +157,23 @@ def tool_use_event(
     call_id: Optional[str] = None,
     summary: Optional[str] = None,
 ) -> RunEvent:
+    # Read the declared destination off the *structured* input, before the three transformations
+    # below. This ordering is not defensive tidiness: both of the next two lines were measured
+    # (2026-09-04) to destroy the path outright.
+    #
+    #   `redact_secrets` eats ordinary POSIX paths. `/` is inside `_SECRET_VALUE_RE`'s
+    #   high-entropy class, so any 32-character run without `.`, `_` or `-` matches:
+    #   `/workspace/project/src/services/handler.py` -> `<redacted>.py`. Filed as F278; a
+    #   Windows path survives only because `\` is not in the class.
+    #
+    #   `_truncate_utf8` cuts the JSON text at 8 KiB, and `json.dumps(sort_keys=True)` puts
+    #   `content` before `file_path`. A `Write` whose body exceeds 8 KiB therefore keeps the
+    #   file it is writing and loses the name of it -- measured, 16 KiB body, `truncated=True`
+    #   and no `file_path` anywhere in the blob.
+    #
+    # So the blob is not a fallback this field merely improves on. For the two commonest shapes
+    # of the write this change exists to notice, the blob has nothing left to fall back to.
+    declared_paths = written_paths(tool, input_data)
     safe_input = redact_secrets(input_data)
     input_text, input_truncated = _truncate_utf8(_stringify(safe_input), MAX_TOOL_RESULT_BYTES)
     readable_summary = summary or f"Called {tool}"
@@ -151,7 +186,13 @@ def tool_use_event(
         "summary": readable_summary,
         "truncated": input_truncated,
     }
-    return RunEvent(kind="tool_use", content=readable_summary, payload=payload, call_id=call_id)
+    return RunEvent(
+        kind="tool_use",
+        content=readable_summary,
+        payload=payload,
+        call_id=call_id,
+        write_paths=declared_paths,
+    )
 
 
 def tool_result_event(

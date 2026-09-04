@@ -19176,3 +19176,57 @@ spec-authoring turn runs, it is `authoring-rigor-and-scope`'s scenario rather th
 and the honest version of it asks the wider question this finding raises - whether a nudge that
 `Bash` walks straight through should be enumerating tools at all, or whether that posture wants the
 approver rather than a disallow list.
+
+---
+
+## F278 (C) - a deep POSIX file path in a recorded transcript reads `<redacted>.py`, because `/` is inside the high-entropy class
+
+**Status:** open. Filed 2026-09-04 (night window). Found while *measuring a claim rather than
+asserting it* - phase 2b of `a-write-outside-the-workspace-is-recorded` wanted a comment saying
+"the structured path may not survive redaction", and checking whether that was true turned up
+this. **Filed, not fixed:** it is `redact_secrets`' scope, not that change's.
+
+`_SECRET_VALUE_RE`'s third alternative is a bounded high-entropy catch-all,
+`[A-Za-z0-9+/=]{32,}` (`hub/hub/runner_events.py`). `/` is a member - it has to be, base64 uses
+it - and a POSIX path is mostly letters and slashes. So any 32-character run of a path that
+happens to contain no `.`, `_` or `-` matches the rule for a credential and is replaced whole.
+Measured against the module on 2026-09-04:
+
+| path | stored as |
+|---|---|
+| `/Users/operator/code/agentweave/hub/main.py` | `<redacted>.py` |
+| `src/services/user/repository/handler.py` | `<redacted>.py` |
+| `/workspace/proj/.agentweave/worktrees/beta/src/app.py` | `/workspace/proj/.<redacted>.py` |
+| `/workspace/my-project/src/app.py` | *(intact - the hyphen breaks the run)* |
+| `/workspace/myproject/src/app.py` | *(intact - the run is 28 characters)* |
+
+**This is F31's remainder, not a new rule gone wrong.** F31 narrowed the class by excluding `_`
+and `-`, on the argument that "identifiers a human or the Hub composed are made of joined words and
+carry one or the other". That argument holds for identifiers and does not transfer to paths: a path
+is joined with `/`, which stayed in the class. F118 is the same family again, one dimension over -
+`task-` ending in `sk-`. Three findings now, all from one regex, all of the form *a shape the rule
+was not thinking about looks like base64 for long enough*.
+
+**Windows is unaffected**, which is why this has gone unnoticed on the machine the product is
+developed on: `\` is not in the class, so `C:\Users\huida\...\notes.py` survives intact. Every
+Docker deployment - the shipped `hub/Dockerfile` and the documented self-host path - is Linux.
+
+**Why C and not B.** It fires *conditionally*, on depth and on the absence of three characters, so
+a transcript is not uniformly damaged the way F118's task ids were; a shallow path or one with a
+hyphen reads fine. But the conditionality is its own cost: an operator sees `<redacted>` in some
+tool inputs and not others, with no rule they can infer, and the marker positively suggests a
+credential was caught. The path most reliably eaten is the one under `.agentweave/worktrees/`,
+which is to say the agent's own checkout - the destination an operator reading a transcript is most
+often trying to establish.
+
+**Not fixed here.** The obvious narrowing - require the run to contain no `/`, or demand a `+` or
+`=` - is a change to the credential rule itself, and getting it wrong in the other direction stores
+a live key. That wants its own change with its own reproduction, weighed against the two prefixes
+that already catch the credential shapes this product actually mints (`aw_live_`, `sk-`). What this
+finding does establish is that the catch-all has now produced three false-positive families and
+zero recorded true positives that the two prefixes would have missed.
+
+**It does not affect `a-write-outside-the-workspace-is-recorded`, by construction.** That change
+reads the path off the structured input *before* `redact_secrets` runs, for exactly this reason,
+and `test_the_field_is_read_before_the_payload_is_redacted_and_truncated` pins the ordering. The
+finding is why that test exists rather than something it blocks.

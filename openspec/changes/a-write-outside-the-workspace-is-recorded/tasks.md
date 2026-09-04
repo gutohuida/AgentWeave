@@ -53,14 +53,14 @@
   `Edit` and `MultiEdit` name one under `file_path` - `MultiEdit`'s several edits all target that one
   file, so it stays one-element; Codex's `apply_patch` names several under `changes[].path`. The
   tuple return is load-bearing for the Codex side.
-- [ ] 2.4 Add `write_paths` to **`RunEvent`** (`hub/hub/runner_events.py:111-115`), not to
+- [x] 2.4 Add `write_paths` to **`RunEvent`** (`hub/hub/runner_events.py:111-115`), not to
   `ParsedLine` — see round 2's correction to D2. Carry tool name, call id and the raw path string,
   nothing else, defaulting to `()`. Populate it inside `tool_use_event`
   (`hub/hub/runner_events.py:134`) from the `input_data` it is handed **before** it redacts,
   stringifies and truncates at 8 KiB, because the structured path may not survive that. One
   population site serves all three transports, and the field is never persisted:
   `record_agent_output` stores `kind` and `payload` only.
-- [ ] 2.5 Assert the field arrives on all three transports, since this is what round 1 got wrong.
+- [x] 2.5 Assert the field arrives on all three transports, since this is what round 1 got wrong.
   `parse_claude_line`'s `tool_use` branch (`runner_parsing.py:264-272`);
   `parse_codex_line`'s **`file_change`** branch (`runner_parsing.py:486-499`, snake_case — the Codex
   `exec` transport, which round 1 named nowhere); and `map_item_to_events`'s **`fileChange`** branch
@@ -71,7 +71,7 @@
   written against a live item rather than off `_file_change_summary`. Copy its malformed-input cases
   verbatim: `None`, `{}`, `{"changes": "not-a-list"}`, `{"changes": [{"path": 1}, {}, None]}` — all
   extract nothing, none raise.
-- [ ] 2.5c **Answered in round 3; keep it as a regression test.** `kind="tool_use"` is constructed in
+- [x] 2.5c **Answered in round 3; keep it as a regression test.** `kind="tool_use"` is constructed in
   exactly one place in `hub/hub` - `runner_events.py:154`, inside `tool_use_event`. Add a test that
   asserts it, so a future second constructor fails here rather than silently escaping detection. The
   one boundary to state in the test's docstring: `POST .../output` accepts a `tool_use` kind from an
@@ -178,7 +178,10 @@
   worse outcome than one that wrote outside unnoticed.
 - [ ] 4.7 Expose the column on the run schema so a reader can see it, and flip tasks 1.2 and 1.3:
   the record exists, and the cross-worktree case names the *other* agent's workspace by kind and
-  name.
+  name. **Task 1.1 is not in this list and does not need to be** — checked 2026-09-04 rather than
+  assumed, when `write_paths` landed and turned 1.1 red on its `fields(RunEvent)` assertion. 1.1 is
+  the parse side, so phase 2b flipped it in the same commit that broke it; 1.2 and 1.3 are the
+  record side and are still red-free today because nothing is recorded yet.
 
 ## 5. Teach evidence footprinting about it
 
