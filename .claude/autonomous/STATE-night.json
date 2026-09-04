@@ -1,40 +1,80 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-04-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "a38caee",
-    "stop_at":  "2026-09-05T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-04-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-04-daily",
+    "parent_branch": "master",
+    "parent_sha": "a38caee",
+    "stop_at": "2026-09-05T07:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-09-04-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "phase-0-observe",
+    "next_action": "Do phase 0 of openspec/changes/a-terminal-run-releases-the-queue-behind-it/tasks.md (tasks 0.1-0.5) and STOP -- task 0 is an explicit gate that says an unattended window records phase 0, commits, and does not roll on into phase 1. Drive F286 live: Hub on 8011 from hub/ with uvicorn from source, fresh fixture project (never proj-5e960453 / proj-18e5d4e0, never port 8000), every agent turn bound to claude-haiku-4-5. The injection is the R3-rewritten one: add a guarded raise to this checkout's hub/hub/api/v1/agent_trigger.py behind AW_F286_INJECT, predicated on the IN-WINDOW call (kind == \"status\" at :2235, or _report_abandoned_entries at :2195) -- NOT record_agent_output/_broadcast_run_lifecycle, which fire before the terminal commit and would show the case that already works. git checkout the file when done. Record run ids, entry ids and timestamps under F286 in scripts/drive/FINDINGS.md.",
+    "queue": [
+        {
+            "id": "compose",
+            "status": "done",
+            "title": "Compose this window's queue from the playbook",
+            "detail": "Done N-1. APPROVALS.md 2026-09-04 carries `ORDER: a-terminal-run-releases-the-queue-behind-it`, so per the playbook that IS the queue verbatim and the backlog default is ignored. F285 is DONE (d9ad1e0) and must not be started. Green baseline measured, not assumed: hub/tests/test_agent_trigger.py 44 passed in 32.8s at 18ba8ba."
+        },
+        {
+            "id": "phase-0-observe",
+            "status": "open",
+            "title": "Phase 0 -- drive F286 live before implementing, then stop",
+            "detail": "tasks.md 0.1-0.5. This phase is a gate with its own stop instruction; honour it. Needs a source edit (the AW_F286_INJECT guarded raise) which is legal in this window and must be reverted with git checkout before the iteration commits. Deliverable: F286's ledger section carries measured run ids, entry ids and timestamps, plus 0.3's 'delivered by coincidence on a settings save' measurement and 0.4's confirmation that the run's recorded outcome is the one it reached and not `failed`."
+        },
+        {
+            "id": "phase-1-2-impl",
+            "status": "open",
+            "title": "Phases 1 and 2 -- ungate the redrain, then share one failure tail",
+            "detail": "tasks.md 1.1-1.3 and 2.1-2.4, in hub/hub/api/v1/agent_trigger.py only. 1.1 moves redrain_queued_agents out of `if not already_terminal:` and leaves the status relabel gated. 2.1 extracts the handler body into one coroutine; 2.3 gives _execute_codex_appserver_run an `except (Exception, asyncio.CancelledError)` between its outer try (:2536) and its finally (:2873) calling that helper with runner=\"codex\" and re-raising CancelledError. Do NOT pass _runtime_failure_fields on the app-server path -- `outcome` is unbound when the raise precedes run_turn's return, which is the trap R3 pulled out of R1/R2's task 2.2. Preserve the :2283-2303 comment block verbatim; leave both `finally` blocks alone."
+        },
+        {
+            "id": "phase-3-tests-pty",
+            "status": "open",
+            "title": "Phase 3a -- PTY-path tests (3.1, 3.2, 3.3)",
+            "detail": "hub/tests/test_agent_trigger.py. The exception is INJECTED, never obtained through F285's pool, and injected INSIDE the window (predicate on kind == \"status\", or patch _report_abandoned_entries) -- R3 found both earlier rounds had specified a raise that fires at :2014/:1939, before the terminal commit, so the test would pass without the fix. Assert the run was already terminal when the raise landed. Mutation-check every new test: revert 1.1 and watch a NAMED test fail."
+        },
+        {
+            "id": "phase-3-tests-appserver",
+            "status": "open",
+            "title": "Phase 3b -- app-server tests and the cost assertion (3.4-3.7)",
+            "detail": "3.4 reuses _fake_run_turn (test_agent_trigger.py:117) and _wait_for_active_app_server_run (:67) -- R1/R2 cited :126/:68, which are docstring lines. 3.5 raises BEFORE the terminal write and asserts the run ends terminal with `error` set and the agent runs again. 3.6 is a read, not a new test: if test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped now covers this by accident, say so in its docstring rather than duplicating it. 3.7 asserts D2's cost: an entry refused non-transiently, with the redrain then raising, is charged at most twice against DELIVERY_ATTEMPT_LIMIT=3."
+        },
+        {
+            "id": "phase-4-gates",
+            "status": "open",
+            "title": "Phase 4 gates 4.1-4.4 -- lint, the touched file whole, the wider suite in chunks, strict validate",
+            "detail": "ruff check src/ hub/ tests/ ; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/ ; py -3.11 -m pytest hub/tests/test_agent_trigger.py -v whole, not by -k ; the wider hub suite in FILE CHUNKS because it exceeds the 600s cap whole ; openspec validate --strict. py -3.11 always, never bare python."
+        },
+        {
+            "id": "phase-4-drive",
+            "status": "open",
+            "title": "Task 4.5 -- re-drive the PTY half live and expect the opposite result",
+            "detail": "Repeat 0.2 and 0.3 against a Hub restarted on 8011 from the IMPLEMENTING code, confirming no .py under hub/hub or src is newer than the process start time before believing anything the drive shows. A passing suite is not proof of behaviour. Record the result under F286 including anything the drive disproves."
+        },
+        {
+            "id": "sync-and-archive",
+            "status": "open",
+            "title": "Sync the delta spec, archive the change, retire F286 in the same commit",
+            "detail": "openspec-sync-specs for specs/agent-conversation-workspace/spec.md, verified header by header, then openspec-archive-change. Archiving retires the findings the proposal names: set F286's `**Status:**` line in scripts/drive/FINDINGS.md to `fixed <sha>` and correct the index paragraph's open-severity list. The playbook is explicit that this is not optional tidying -- a ledger that cannot say what is done reads as a backlog of everything."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ]
 }
