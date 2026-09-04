@@ -16,6 +16,48 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-04
+
+Review page: `review/review-2026-09-04.html`. **One change proposed, taken through all three rounds.**
+Neither review round changed nothing: round 2 found the code is in breach of a requirement that
+already shipped, and round 3 overturned a design decision by measurement and found that *both*
+earlier rounds had specified a regression test that would have passed without the fix.
+
+**Written by the day window, which does not fill in its own verdict.** The row below carries no
+status token. Write `APPROVED`, `REVISING` or `REJECTED` in front of the change name.
+
+-           a-terminal-run-releases-the-queue-behind-it   F286 (B). 24 tasks, 5 phases. Python only in `hub/hub/api/v1/agent_trigger.py` — no migration, no API shape change, no UI, no bundle. Splits `already_terminal`'s two jobs so a run that ended still redrains its queue, and shares one failure tail with the Codex app-server path, which today has no `except` clause at all.
+
+**Before you decide, read section 1 of the page.** The branch is 33 commits deep, unmerged, and CI
+has failed **24 consecutive runs** since `467dfea`. The merge gate was evaluated and did not open —
+dormant under this window's seeded limit, and it would have failed condition 3 regardless.
+
+**The decision that is not on this row, and matters more than it.** All three CI failures have one
+cause and it is **F285**, the in-memory `StaticPool` in `hub/tests/conftest.py:19` — a test-harness
+artefact that cannot fire in production. Three fixes are available (unshared pool, file-backed temp
+database per test, per-test engine disposal) and they differ in how much of the suite has to be
+re-timed. The loop did not pick, because the choice becomes a standing property of every future test
+here. **If you decide nothing, the night window picks one unattended**, because its playbook makes an
+inherited red suite the first queue item before anything else. A `DIRECTION.md` line naming the fix
+is the cheapest way to steer it.
+
+If you approve this change, **order F285's fix first**: this change's own tests run against whatever
+isolation you choose.
+
+If you approve nothing, the night falls to the backlog and stalls quickly — there is nothing to
+archive (`openspec/changes/` holds only this unimplemented change), and the two open severity-A rows
+(F271, F274) have no proposal, which the playbook makes a note to tomorrow rather than tonight's
+work. An `ORDER:` line and the stop-the-window token are both available -- both are spelled out
+in the format block at the top of this file. Neither is written here, deliberately: this section
+carries no directive of any kind until you write one.
+
+Three further items on the page are **not work** and want no row: removing `DIRECTION.md`'s stale
+"the coverage sweep is more than half unrun" paragraph and its expired resumption trigger (the sweep
+is **complete** — all 17 rows, measured, and the stale text cost a drive slot today); whether to merge
+the branch; and the four ledger rows carried forward with no proposal.
+
+---
+
 ## 2026-09-03
 
 Review page: `review/review-2026-09-03.html`. **One change proposed, taken through all three rounds.**

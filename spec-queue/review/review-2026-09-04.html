@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave daily review — 2026-09-03</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --panel-2: #f4f4f2;
+    --ink: #1c1c1a;
+    --ink-dim: #5c5c56;
+    --ink-faint: #85857d;
+    --rule: #e0e0da;
+    --rule-strong: #c9c9c1;
+    --accent: #6b4fbb;
+    --sev-a: #b3261e;
+    --sev-a-bg: #fbe9e7;
+    --sev-b: #a8590a;
+    --sev-b-bg: #fdf0e0;
+    --sev-c: #4d6a1f;
+    --sev-c-bg: #eef4e2;
+    --sev-d: #4a5568;
+    --sev-d-bg: #eceef2;
+    --ok: #2f6b3a;
+    --ok-bg: #e8f3ea;
+    --warn-bg: #fdf6e0;
+    --warn-rule: #d9b84a;
+    --code-bg: #f2f2ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --panel: #1e1e23;
+      --panel-2: #26262c;
+      --ink: #e9e9e6;
+      --ink-dim: #b0b0a8;
+      --ink-faint: #86867e;
+      --rule: #33333a;
+      --rule-strong: #4a4a52;
+      --accent: #b09aec;
+      --sev-a: #ff9c92;
+      --sev-a-bg: #3a1f1d;
+      --sev-b: #f0b878;
+      --sev-b-bg: #392a17;
+      --sev-c: #b3d67a;
+      --sev-c-bg: #26301a;
+      --sev-d: #b4c0d4;
+      --sev-d-bg: #24282f;
+      --ok: #8fd39c;
+      --ok-bg: #1c2c20;
+      --warn-bg: #322a14;
+      --warn-rule: #8a7527;
+      --code-bg: #24242a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    padding: 2.2rem 1.25rem 5rem;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  header.page { border-bottom: 2px solid var(--rule-strong); padding-bottom: 1.1rem; margin-bottom: 1.6rem; }
+  header.page h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -0.015em; }
+  header.page .sub { color: var(--ink-dim); font-size: .95rem; }
+  h2 {
+    font-size: 1.22rem; letter-spacing: -0.01em;
+    margin: 2.6rem 0 .5rem; padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: .5rem; }
+  h3 { font-size: 1.02rem; margin: 1.5rem 0 .4rem; }
+  h4 { font-size: .93rem; margin: 1.1rem 0 .3rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .8rem; padding-left: 1.35rem; }
+  li { margin: .3rem 0; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .875em;
+  }
+  code { background: var(--code-bg); padding: .1em .34em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule);
+    border-radius: 6px; padding: .75rem .9rem; overflow-x: auto; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0 1rem; font-size: .93rem; }
+  th, td { text-align: left; padding: .48rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); border-bottom: 1px solid var(--rule-strong); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0; }
+  .note { border-left: 3px solid var(--warn-rule); background: var(--warn-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .note strong:first-child { display: block; margin-bottom: .2rem; }
+  .sev { display: inline-block; min-width: 1.35rem; text-align: center; font-weight: 700; font-size: .78rem; padding: .1rem .38rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+  .sev.a { color: var(--sev-a); background: var(--sev-a-bg); }
+  .sev.b { color: var(--sev-b); background: var(--sev-b-bg); }
+  .sev.c { color: var(--sev-c); background: var(--sev-c-bg); }
+  .sev.d { color: var(--sev-d); background: var(--sev-d-bg); }
+  .pill { display: inline-block; font-size: .76rem; font-weight: 600; letter-spacing: .03em; padding: .12rem .5rem; border-radius: 999px; border: 1px solid var(--rule-strong); color: var(--ink-dim); }
+  .pill.ok, .pill.driven { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .pill.tested { color: var(--sev-b); background: var(--sev-b-bg); border-color: transparent; }
+  .fid { font-family: ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
+  .loc { font-family: ui-monospace, monospace; font-size: .82em; color: var(--ink-faint); white-space: nowrap; }
+  .lede { font-size: 1.02rem; color: var(--ink-dim); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .28rem 1rem; font-size: .93rem; margin: .6rem 0; }
+  .kv dt { color: var(--ink-faint); }
+  .kv dd { margin: 0; }
+  .ask { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1.1rem; margin: 1rem 0; background: var(--panel); }
+  .ask h4 { color: var(--accent); margin-top: 0; }
+  footer.page { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .85rem; }
+  .small { font-size: .88rem; color: var(--ink-dim); }
+  .measured { color: var(--ink-faint); font-size: .82rem; font-style: italic; }
+  @media (max-width: 34rem) {
+    body { padding: 1.4rem .8rem 3rem; font-size: 15px; }
+    table { font-size: .86rem; }
+    .kv { grid-template-columns: 1fr; gap: .1rem .5rem; }
+    .kv dd { margin-bottom: .45rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>AgentWeave daily review — Friday 2026-09-04</h1>
+  <div class="sub">
+    Written by the FILL window (09:00–17:00) on <code>autonomous/2026-09-03-daily</code>.
+    You decide; the FIX window (23:00–07:00) builds what you approved.
+    Approvals go in <code>spec-queue/APPROVALS.md</code>.
+  </div>
+</header>
+
+<p class="lede">
+  Today did something this loop has never been able to do: <strong>read its own CI</strong>. The
+  answer is that the branch has been red for 24 consecutive runs, all three failures have
+  <strong>one cause</strong>, and that cause is the <strong>test harness, not the product</strong>.
+  The drive found the coverage sweep was already <strong>finished</strong> — and had been for three
+  days while the loop's own direction file said it was half unrun. One proposal went through all
+  three rounds; <strong>R2 and R3 each broke the round before it</strong>, and R3 found that both
+  earlier rounds had specified a regression test that would have passed without the fix.
+</p>
+
+<div class="note">
+  <strong>Read section 1 before anything else.</strong>
+  The branch is <strong>unmerged, 33 commits deep, and its CI has been red since 23:04 last
+  night</strong>. Two nights of shipped product code and three days of findings live only there.
+  Merging is yours — neither window may do it.
+</div>
+
+
+<h2><span class="num">1</span>The branch, and the gate that did not open</h2>
+
+<div class="note">
+  <strong>Nothing on this branch is on <code>master</code>, and CI has failed 24 times in a row.</strong>
+  <code>autonomous/2026-09-03-daily</code> is <strong>33 commits ahead of <code>master</code> and
+  merged into nothing</strong> — <code>git branch --merged master</code> does not list it. The merge
+  gate is <strong>dormant</strong> under this window's seeded <code>limits[0]</code>, and
+  <strong>it would have failed anyway</strong>: condition 3 requires CI green for HEAD's sha, and the
+  branch's <em>only</em> green run is <code>467dfea</code> at 2026-09-03T23:04:01Z. Everything after
+  it is red.
+</div>
+
+<h3>The gate, checked at 09:02 and recorded rather than acted on</h3>
+
+<table>
+  <thead><tr><th>#</th><th>Condition</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>not <code>master</code>, and <code>git rev-list --count HEAD..master</code> is 0</td>
+        <td><span class="pill ok">pass</span> — a genuine fast-forward</td></tr>
+    <tr><td>2</td><td><code>git status --short</code> empty and <code>HEAD == @{u}</code></td>
+        <td><span class="pill ok">pass</span> — clean, both <code>059cc95</code></td></tr>
+    <tr><td>3</td><td>CI concluded <code>success</code> for HEAD's sha</td>
+        <td><strong style="color:var(--sev-a)">FAIL</strong> — <code>059cc95</code> was
+        <code>in_progress</code>, and the 21 completed runs before it were all <code>failure</code></td></tr>
+    <tr><td>4</td><td>newest <code>DIRECTION.md</code> section has no line-initial <code>HOLD MERGE</code></td>
+        <td><span class="pill ok">pass</span> — no such line in the file</td></tr>
+  </tbody>
+</table>
+
+<p>
+  Two things are worth separating. The gate being <strong>dormant</strong> is a seeded limit — a
+  standing instruction in this window's state file that outranks the playbook, so the gate is
+  evaluated and the verdict written down while nothing lands. The gate <strong>failing</strong> is
+  independent of that, and is the gate working as designed. If you lift the limit tomorrow, the
+  branch still does not merge until CI is green.
+</p>
+
+<h3>The measurement, re-taken at 09:30 for this page</h3>
+
+<dl class="kv">
+  <dt>Branch</dt><dd><code>autonomous/2026-09-03-daily</code></dd>
+  <dt>Spans</dt><dd>2026-09-03 and 2026-09-04 — <strong>two days</strong>, first commit
+    <code>aed4791</code> 2026-09-03T22:55</dd>
+  <dt>Ahead of <code>master</code></dt><dd><strong>33 commits</strong> (27 at 09:02 this morning)</dd>
+  <dt>Merged</dt><dd><strong>No.</strong></dd>
+  <dt>Last green CI</dt><dd><code>467dfea</code>, 2026-09-03T23:04:01Z — the branch's
+    <strong>only</strong> success</dd>
+  <dt>Since then</dt><dd><strong>24 completed runs, all <code>failure</code></strong>, plus 1
+    cancelled and 2 still pending. The morning figure quoted in the queue was 21; three more have
+    failed during today's own window.</dd>
+  <dt>Product code</dt><dd><code>git diff --shortstat master..HEAD -- hub/hub hub/ui/src src</code> →
+    <strong>20 files, +1309 / −54</strong></dd>
+  <dt>Whole branch</dt><dd>81 files, +12888 / −670 — the rest is <code>openspec/changes/</code>,
+    <code>scripts/drive/FINDINGS.md</code> and <code>SURVEY.md</code>, drive harnesses,
+    <code>spec-queue/</code>, and the loop's logs and state</dd>
+</dl>
+
+<div class="card">
+  <p style="margin-top:0"><strong>What the red actually is, in one line, because it changes how you read the number.</strong>
+  Every job is green except <code>hub-test</code> on Linux. Three tests fail. Section 3 gives the
+  verdict: they share one cause, it is in <code>hub/tests/conftest.py</code>, and it
+  <strong>cannot occur in production</strong>. The branch is not carrying 24 runs' worth of broken
+  product — it is carrying one broken fixture, uninterrupted, since the commit that first exposed it.</p>
+  <p style="margin-bottom:0" class="small">That does not make the gate wrong to have held. The gate
+  asks whether CI is green, and a fixture that makes CI red makes the branch unmergeable exactly as
+  a real defect would. It is the <em>fix</em> that is cheap, not the <em>state</em> that is
+  harmless.</p>
+</div>
+
+
+<h2><span class="num">2</span>What the night built, and which of it was driven</h2>
+
+<p>
+  The night ran the two-item <code>ORDER:</code> line from yesterday's approvals and finished both,
+  archiving each under <code>openspec/changes/archive/2026-09-04-*</code>. <code>openspec/changes/</code>
+  held <strong>only <code>archive</code></strong> when today's window opened — the queue was empty.
+  <strong>Both were driven, not merely tested.</strong>
+</p>
+
+<h3><code>a-blocked-agent-workspace-holds-its-input</code> <span class="pill driven">driven</span></h3>
+<p>
+  This is <strong>F188's proposal</strong> — the severity-A row that had been invisible in the ledger
+  for a week. Phase 6 legs 6.2–6.4 ran against a real Hub on 8011 with a fresh project and a real
+  agent turn, and the built behaviour was confirmed on screen rather than in a model.
+</p>
+<div class="note">
+  <strong>The drive nearly ran against your live trial database, and caught it.</strong> The first
+  attempt started 8011 on the <strong>beta</strong> profile — which is the database the live
+  <code>:8010</code> instance serves. It was stopped and restarted on
+  <code>profiles/drive8011/ablocked-p6.db</code>, created empty and migrated <code>0000 → 0100</code>.
+  The stale 8011 process it found was from <strong>Sep 3 09:06</strong>, sixteen hours older than
+  every product file it was supposed to be exercising. Both hazards are the harness's, not the
+  product's, and both are the kind that produce a confidently wrong green.
+</div>
+
+<h3><code>a-write-outside-the-workspace-is-recorded</code> <span class="pill driven">driven</span></h3>
+<p>
+  Phase 9 (N-23): a live 8011 Hub on a fresh project, a real Haiku turn under
+  <code>bypassPermissions</code>, three legs — <code>[]</code> on a clean run; two destinations
+  producing two <code>agent_wrote_outside_workspace</code> notices with matching
+  <code>destination_kind</code>s and both files present on disk; and the notice rendered from the
+  <strong>committed <code>hub/hub/static/ui</code> bundle</strong>, byte-compared against the served
+  asset. <strong>29/29</strong> on a clean re-run.
+</p>
+<p class="small">
+  That drive found a bug <em>in itself</em> — a UTF-8 arrow decoded through the console codepage,
+  turning a correct product red. A harness error in the unflattering direction is the one worth
+  reporting: it means the drive was capable of failing.
+</p>
+
+<h3>Carried forward with no proposal</h3>
+<p>
+  Four ledger rows the night could not act on: <strong>F271</strong> and <strong>F274</strong> (both
+  <span class="sev a">A</span>), plus <strong>F281</strong> <span class="sev b">B</span>,
+  <strong>F282</strong>, <strong>F283</strong> and <strong>F284</strong> <span class="sev c">C</span>
+  filed by the two changes it built. <strong>F284</strong> — the <code>manual</code> permission card
+  names the path and nothing else — was held out of <code>a-write</code>'s scope by its decision D3
+  and was <em>live-driven</em>, so it is an observation, not a suspicion.
+</p>
+
+
+<h2><span class="num">3</span>What today's triage and drive found</h2>
+
+<table>
+  <thead><tr><th>ID</th><th>Sev</th><th>What it is</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="fid">F285</td><td><span class="sev b">B</span></td>
+      <td>The hub suite runs on an in-memory SQLite engine whose pool is a <code>StaticPool</code>, so
+        every <code>AsyncSession</code> shares <strong>one</strong> DBAPI connection — a finishing HTTP
+        request's reset-on-return <code>ROLLBACK</code> erases whatever a background run is midway
+        through writing. <strong>This is the single cause of all three CI failures, and it cannot
+        fire in production.</strong></td>
+      <td class="loc">hub/tests/conftest.py:19</td>
+    </tr>
+    <tr>
+      <td class="fid">F286</td><td><span class="sev b">B</span></td>
+      <td>A real product gap: <code>_execute_run</code>'s exception handler gates the queue redrain on
+        <code>already_terminal</code>, so an exception raised <em>after</em> a run reaches a terminal
+        status leaves the input queued behind it undrained, with nothing on a timer to notice.</td>
+      <td class="loc">agent_trigger.py:2358<br>(commit :2175, redrain :2281)</td>
+    </tr>
+    <tr>
+      <td class="fid">F287</td><td><span class="sev c">C</span></td>
+      <td><code>record_agent_output</code> refreshes a row it has already fully populated —
+        <code>expire_on_commit=False</code> and the timestamp is a Python-side default — costing one
+        extra <code>SELECT</code> per output line on the Hub's hottest write path.</td>
+      <td class="loc">output_recording.py:92-94</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>How F285 was established, since &ldquo;it's a test artefact&rdquo; is the convenient answer</h3>
+<p>
+  Not by reading. Three separate measurements: the pool classes were printed
+  (<code>memory → StaticPool</code>, <code>file → AsyncAdaptedQueuePool</code>); the mechanism was
+  reduced to a standalone script (<code>scripts/drive/staticpool_shared_connection.py</code>); and
+  <strong>CI's exact error was reproduced inside the real suite on this machine</strong> by a plugin
+  that churns sessions (<code>scripts/drive/churn_sessions_plugin.py</code>, <code>CHURN_DELAY=0.3</code>).
+  Production is never reachable by this path — <code>config.py:16</code> is always file-backed.
+</p>
+
+<div class="ask">
+  <h4>Decision — which F285 fix</h4>
+  <p style="margin-bottom:0">Three are available and they differ in how much of the suite has to be
+  re-timed: an <strong>unshared pool</strong>, a <strong>file-backed temp database per test</strong>,
+  or <strong>per-test engine disposal</strong>. The loop did not pick, because the choice is a
+  standing property of how every future test in this repository behaves.
+  <strong>Until one is chosen the branch cannot satisfy the merge gate's condition 3.</strong></p>
+</div>
+
+<h3>The drive: the sweep was already finished, and had been for three days</h3>
+
+<div class="note">
+  <strong><code>spec-queue/DIRECTION.md</code> says the coverage sweep is &ldquo;more than half
+  unrun&rdquo;. It is finished.</strong> Measured today: <strong>all 17</strong> areas of
+  <code>SURVEY.md</code>'s inventory have a <code>t_sweep_row*</code> harness <em>and</em> a citation
+  of it by name in <code>FINDINGS.md</code>. <code>DIRECTION.md</code>'s &ldquo;rows 9c and 10–17 are
+  genuinely untouched&rdquo; was written <strong>one day after</strong> 9c, 10 and 11 were driven, and
+  has been copied forward unchanged ever since.
+</div>
+
+<p>
+  The cost of that stale paragraph was concrete: today's queue inherited it, and the drive slot spent
+  its iteration <strong>rediscovering F227–F229 line for line</strong> — row 11 (Questions) had been
+  driven on 2026-09-01 (<code>db5f964</code>). Row 9c is not Jobs + Loops (that is row 10); 9c closed
+  2026-09-01 as F215–F219, and row 10 the same day as F222–F226.
+</p>
+
+<p>
+  <strong>What survives from the slot anyway:</strong> a coverage map with a ledger line per row is
+  now in <code>SURVEY.md</code>, including the warning that <em>two</em> numbering systems are in the
+  ledger and a bare &ldquo;row N&rdquo; is ambiguous. And a re-driven row 11 produced a correction
+  rather than new findings — <strong>F228's reach is narrower than filed</strong>
+  (<code>lib/pendingQuestions.ts:26</code> <em>does</em> read <code>declined</code>, so it is the
+  Questions page, not the app), and <strong>F227 has a second, race-only path</strong> through
+  <code>AgentQuestionCard</code>'s asymmetric guards (<code>:99</code> vs <code>:127</code>/<code>:47</code>).
+  Both reproduce at HEAD. The live <code>ask_user</code> half held <strong>19/19</strong> with real
+  Haiku turns. The ledger still holds <strong>292</strong> findings; none were invented to fill the slot.
+</p>
+
+<div class="ask">
+  <h4>Decision — what replaces &ldquo;the next row&rdquo;</h4>
+  <p><code>DIRECTION.md</code> is your file and this window does not edit it. The stale paragraph and
+  the now-expired resumption trigger are yours to remove.</p>
+  <p style="margin-bottom:0">What the sweep answered is <em>&ldquo;does each area work&rdquo;</em>. It
+  never answered the <strong>crossings between areas</strong>, which is where the <code>e2e-loop</code>
+  skill says the serious defects live. <code>TESTPLAN.md</code>'s <strong>T-DEP, T-HOP, T-CONC, T-VOL,
+  T-DRIFT</strong> and <strong>T-BUDGET</strong> are all still unrun and are the natural replacement.</p>
+</div>
+
+
+<h2><span class="num">4</span>What was specced — <code>a-terminal-run-releases-the-queue-behind-it</code></h2>
+
+<dl class="kv">
+  <dt>Retires</dt><dd><strong>F286</strong> <span class="sev b">B</span></dd>
+  <dt>Rounds</dt><dd>R1, R2, R3 — <strong>neither review round changed nothing</strong></dd>
+  <dt>Cost</dt><dd><strong>24 tasks</strong> across 5 phases; 564 lines of change documents; one delta
+    on <code>agent-conversation-workspace</code> with <strong>2 <code>ADDED</code> requirements</strong>
+    and 8 scenarios, <strong>no <code>MODIFIED</code> block</strong>. Product surface: one function
+    split, one shared failure-tail helper, two call sites.</dd>
+  <dt>Gate</dt><dd><code>openspec validate --strict</code> clean after every round</dd>
+  <dt>Not in scope</dt><dd>F285 (the harness artefact that supplied the exception CI actually saw) and
+    F287</dd>
+</dl>
+
+<h3>The problem</h3>
+<p>
+  A run that has ended is supposed to release what was waiting behind it — the agent's own input,
+  queued while the run was busy, and any other agent parked behind the task checkout the run held.
+  Both are released by exactly one call, <code>redrain_queued_agents(project_id)</code>, and
+  <strong>nothing in the Hub runs on a timer to do it later</strong>; the code says so of itself at
+  <code>agent_trigger.py:1908</code>: <em>&ldquo;Nothing does on a timer.&rdquo;</em>
+  <code>_execute_run</code> places that call <strong>last</strong>, at <code>:2281</code>. The run's
+  terminal status is committed far earlier, at <code>:2175</code>. Between those two lines the
+  function does real work that can raise — five calls, each because it does uncaught database work.
+  The handler at <code>:2282</code> catches all of it and computes one flag,
+  <code>already_terminal</code>, then uses it to answer <strong>two different questions</strong>. The
+  first use is right: do not relabel a cleanly-ended run as <code>failed</code> because later
+  bookkeeping raised. The second is the redrain at <code>:2358</code>, which sits inside
+  <code>if not already_terminal:</code> — even though its own comment claims to be
+  <em>&ldquo;[u]nconditional&rdquo;</em>. So the redrain is skipped in exactly the window where the
+  normal path's redrain was also skipped. The run is correctly terminal, correctly labelled and
+  correctly broadcast, and the input behind it is queued with nobody coming for it —
+  <code>reconcile_interrupted_runs</code> does not recover it either, because it selects only
+  <code>Run.status == "running"</code> (<code>run_reconciliation.py:60</code>). The entry then waits
+  for an <em>unrelated</em> operator action — opening the project, saving settings, relocating the
+  workspace — and is delivered by coincidence. The operator-visible shape is a message that simply
+  never runs. <strong>This is observed, not derived:</strong> it is one of the three CI failures
+  above, <code>delivered_in_run_id is None</code> for an entry queued behind a stopped run.
+</p>
+
+<h4>What R1 found on its own account</h4>
+<p>
+  R1 corrected the finding, and the correction is worse than the finding. F286 said the Codex
+  app-server path <em>&ldquo;reaches the same handler.&rdquo;</em> It does <strong>not</strong>:
+  <code>_execute_run</code> delegates and returns above its own <code>try</code> blocks, and the
+  app-server function's outer construct is <code>try:</code>/<code>finally:</code> with
+  <strong>no <code>except</code> clause at all</strong>. An exception there escapes into a task whose
+  only done-callback is a set <code>discard</code>. After that path's terminal commit it is F286 with
+  no redrain attempt and no <code>logger.exception</code>; <em>before</em> it, the Run row stays
+  <code>running</code> with <code>error=None</code> and <strong>the agent is wedged until a Hub
+  restart</strong> — app-server runs never set <code>Run.pid</code>, so nothing can reap it.
+</p>
+
+<h3>What R2 changed — <span class="pill tested">it did not change nothing</span></h3>
+<ul>
+  <li><strong>The change is a restoration, not a pure gap — and this is the one that changes what the
+    proposal argues.</strong> R1 said the shipped requirement <em>&ldquo;Repeated delivery failure does
+    not wedge an agent&rdquo;</em> (<code>spec.md:1228</code>) does not reach F286, because the entry is
+    never <em>returned</em>. That is true only for the stopped-run instance. On the <strong>failed</strong>
+    branch, <code>return_run_entries</code> runs at <code>:2172</code> — inside the same <code>try</code>
+    and <em>before</em> the terminal commit — so the window strands <strong>returned</strong> input and
+    the shipped requirement covers it in terms. <strong>The code is in breach of a requirement that
+    already shipped.</strong></li>
+  <li><strong>R1's delivery-attempt accounting was a false dichotomy.</strong> Nothing charges on
+    <em>delivery</em>; the charge sites are a failed run returning an entry and a non-transient refusal.
+    So an entry the first redrain reached and refused stays queued, <em>was already charged once</em>,
+    and is charged again — and the limit is 3. R1's fix <strong>introduces</strong> that overlap rather
+    than inheriting it. A new task now asserts the bound.</li>
+  <li><strong>One R1 claim was simply wrong.</strong> <code>maybe_generate_title</code> cannot raise —
+    it says <em>&ldquo;Never raises&rdquo;</em> of itself. But the narrowing does not shrink the defect:
+    <code>except Exception</code> misses <code>CancelledError</code>, which this handler catches, and
+    that call awaits a ~19s CLI spawn — making it the <em>widest cancellation window</em> in the
+    function while contributing nothing to the exception window. The test is now forbidden to patch it.</li>
+</ul>
+
+<h3>What R3 changed — <span class="pill tested">it changed more than R2 did</span></h3>
+<ul>
+  <li><strong>Design decision D3 overturned, by measurement.</strong> R1 decided to <em>duplicate</em>
+    the handler onto the Codex path rather than share it, citing three differences between the two
+    success tails. R3 measured the tails — comments and blanks stripped, <strong>40 statements versus
+    41, and <code>diff</code> returns one hunk of one line</strong> — and then found the deeper error:
+    applied to the <em>handler</em>, all three differentiators are absent. The failure-fields helper D3
+    named needs a <code>TurnOutcome</code> an exception does not supply, and which may not even be
+    bound; neither handler passes <code>exit_code</code> at all; and the two structures D3 pointed at
+    live in <code>finally</code> blocks that were never part of what it proposed to copy. What is left
+    differs in <strong>one string</strong>. D3 is now <strong>one shared helper</strong>, and phase 2 of
+    <code>tasks.md</code> was replaced. Task 2.2 as it stood was actively dangerous: it told the
+    implementer to use the helper whose argument may be unbound.</li>
+  <li><strong>Both earlier rounds had specified a regression test that could not fail.</strong> The
+    injection points R1 and R2 named — <code>record_agent_output</code> and
+    <code>_broadcast_run_lifecycle</code> — both fire <em>before</em> the terminal commit. A raise there
+    lands with the row still <code>running</code>, <code>already_terminal</code> is <code>False</code>,
+    and <strong>today's code already redrains</strong>. A test written to that task
+    <strong>would have been green before the fix and after it</strong> — in a change whose decision D4
+    exists precisely to stop a test passing for the wrong reason, and the same failure shape as the
+    fixture-ordering rule this repo learned from F190. Injection is now predicated on a point a run
+    reaching the tail actually executes. The task's <em>method</em> was also unexecutable: a running
+    uvicorn cannot be monkeypatched from outside.</li>
+  <li><strong>One requirement's normative line made a shipped behaviour a violation.</strong> R1 and R2
+    both wrote <em>&ldquo;within the life of the process that started it&rdquo;</em> — but a Hub killed
+    mid-run deliberately leaves the row <code>running</code> and marks it <code>interrupted</code> at the
+    next start, and another capability already carves that case out in terms. Rescoped to a run whose
+    execution ends <strong>inside</strong> the process that started it, carve-out stated.</li>
+  <li><strong>One delta scenario duplicated a shipped one</strong> and was rewritten over the case the
+    shipped scenario provably cannot reach. Placement was re-derived from what each candidate
+    capability's requirements are <em>about</em> rather than by elimination; <strong>neither requirement
+    moves</strong>. And a line number both rounds asserted — one of them explicitly
+    &ldquo;confirmed&rdquo; — was <strong>stale</strong>: the function has two top-level
+    <code>try</code> blocks and they had named the wrong one. The conclusion survived; the citation
+    did not.</li>
+</ul>
+
+<div class="card">
+  <p style="margin:0"><strong>What this run of the discipline is evidence for.</strong> Round 3 was
+  told not to be cheaper than round 2, and the two findings that justify its cost are both of the
+  same kind: <em>an argument that is wrong about code that is right</em>. D3's reasoning was sound
+  about the success tails and simply not about the handler; the regression test was well-formed and
+  aimed outside the window. Neither is findable by checking whether the conclusion looks correct —
+  only by re-deriving it against the code.</p>
+</div>
+
+
+<h2><span class="num">5</span>If you approve nothing</h2>
+
+<p>
+  This is not a hypothetical worth skipping: the night window has a default and it is
+  <strong>already decided</strong>. With no <code>ORDER:</code> and no <code>APPROVED</code> rows, it
+  falls to the backlog, and its <em>step 3</em> fires first.
+</p>
+
+<ol>
+  <li><strong>The night's first item is the red suite, whatever else it does.</strong> The playbook
+    says a window that starts on a red tree cannot tell its own breakage from the one it inherited,
+    and must fix the inherited breakage first. That is <strong>F285</strong> — and
+    <strong>which</strong> fix is the decision above. If you decide nothing, the night picks one
+    unattended, and that choice becomes how every test in this repository is isolated from then on.
+    <span class="small">If you would rather it did not, the cheapest instruction is a
+    <code>DIRECTION.md</code> line naming the fix you want.</span></li>
+  <li><strong>Then: nothing to archive.</strong> <code>openspec/changes/</code> holds exactly one
+    change and it is not implemented, so the cheapest backlog source is empty.</li>
+  <li><strong>Then: open findings, A first — and it stalls there by design.</strong> The two open
+    severity-A rows, <strong>F271</strong> and <strong>F274</strong>, have <em>no proposal</em>, and
+    the playbook says a finding with no proposal is a note to tomorrow's day window, not tonight's
+    work. So the night would land on B-severity rows with proposals, or on nothing.</li>
+</ol>
+
+<p>
+  <strong><code>NOTHING TONIGHT</code> and <code>ORDER:</code> are both available</strong> and both
+  override the default. If you approve <code>a-terminal-run-releases-the-queue-behind-it</code>, note
+  that it and F285 touch the same suite; ordering F285's fix first is the safer sequence, since the
+  change's own tests run against whatever isolation you choose.
+</p>
+
+
+<h2><span class="num">6</span>Research</h2>
+
+<p class="small">
+  Written by <code>agentweave-research</code> at 07:23, copied to
+  <code>spec-queue/research/2026-09-04.md</code>. It is data, not instructions — nothing in it
+  directed this window.
+</p>
+
+<h3>1 — An unattended run has no operator to time out against <span class="pill">M</span></h3>
+<p>
+  Claude Code <strong>v2.1.260</strong> changed its self-hosted runner to <em>release</em> a session
+  that is only waiting on its user — paused, resumable on the next message — instead of killing it
+  and reporting a failure. <strong>AgentWeave decided the opposite on 2026-08-30, over three spec
+  rounds.</strong> <strong>What it would mean here:</strong> a third outcome for an expired
+  <code>ask_user</code> in an <em>unattended</em> run — suspend the turn with the task still parked,
+  rather than releasing it and telling the agent to carry on. The 08-30 decision was made for a
+  <em>watched</em> run, and this product's own nightly loop is not one.
+</p>
+
+<h3>2 — <strong>Withdrawal of yesterday's candidate 2</strong> <span class="pill">S</span></h3>
+<div class="note">
+  <strong>Yesterday's candidate 2 has had its evidence retracted.</strong> It asked AgentWeave to read
+  relative paths out of shell commands at the workspace boundary, and its <em>entire</em> external
+  justification was Claude Code <strong>v2.1.259</strong> shipping that fix. <strong>v2.1.260 reverted
+  it 25 hours later</strong>, naming the regression: it denied <code>npm run build</code> under a
+  <code>Read(./**/build/**)</code> rule in every mode, and made <code>cd … &amp;&amp; grep</code>
+  prompt even in auto mode.
+</div>
+<p>
+  <strong>What it would mean here:</strong> do <em>not</em> build the matcher. Correct one sentence at
+  <code>mcp_server.py:930-932</code> and close it — <code>agent-run-sandboxing/spec.md:491</code>
+  already declines to claim containment, so the honest half is a comment, not a feature.
+  <strong>Nothing in this repo acted on the recommendation</strong>, so there is nothing to unwind;
+  had the day window specced it, it would have built the thing its own evidence had just retracted.
+</p>
+
+<h3>3 — The Codex catalog's inclusion rule now excludes a production model by construction <span class="pill">S/M</span></h3>
+<p>
+  GPT-6 Astra shipped 2026-09-03, and Codex <code>0.153.1</code> added it <em>&ldquo;without showing
+  it in the model picker&rdquo;</em>. <strong>What it would mean here:</strong> AgentWeave's
+  <code>visibility: "list"</code> rule silently drops it. Measured today, this machine's
+  <code>models_cache.json</code> already carries a second hidden entry, <code>gpt-reserve</code>, that
+  the rule drops for a reason that was only ever true of <code>codex-auto-review</code>. The rule
+  needs to distinguish &ldquo;hidden because internal&rdquo; from &ldquo;hidden because new&rdquo;.
+</p>
+
+<p class="small">
+  The procedural point outlives all three: <strong>the research task caught its own prior
+  recommendation.</strong> That is the strongest argument yet for keeping the window that researches
+  separate from the window that acts on it.
+</p>
+
+
+<h2><span class="num">7</span>Decisions that are not work</h2>
+
+<p>These want no approval row. They are yours, and the loop deliberately did not guess.</p>
+
+<ul>
+  <li><strong>Which F285 fix</strong> — unshared pool, file-backed temp database per test, or per-test
+    engine disposal. Blocks the merge gate's condition 3. <em>The night will pick one unattended if you
+    do not.</em></li>
+  <li><strong><code>DIRECTION.md</code>'s stale sweep paragraph and expired resumption trigger</strong>
+    — the sweep is complete; the file still says it is half unrun, and that cost a drive slot today.</li>
+  <li><strong>Whether to merge the branch</strong>, and whether to hand the fast-forward step to the day
+    window. Conditions 1, 2 and 4 pass; only CI fails.</li>
+  <li><strong>Four ledger rows with no proposal</strong> — F271 and F274 (<span class="sev a">A</span>),
+    F281 (<span class="sev b">B</span>), F282/F283/F284 (<span class="sev c">C</span>).</li>
+</ul>
+
+
+<footer class="page">
+  Written by the FILL window on <code>autonomous/2026-09-03-daily</code>, iteration 7 (D-7),
+  2026-09-04. Every figure on this page is measured at the hour stated or labelled otherwise.
+  Sources: <code>.claude/autonomous/2026-09-04-day-log.md</code>,
+  <code>scripts/drive/FINDINGS.md</code> (292 findings),
+  <code>openspec/changes/a-terminal-run-releases-the-queue-behind-it/</code>,
+  <code>spec-queue/research/2026-09-04.md</code>.
+</footer>
+
+</div>
+</body>
+</html>
