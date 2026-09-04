@@ -453,10 +453,10 @@
 
 ## 9. Gates
 
-- [ ] 9.1 `pytest hub/tests/ -v` — full suite, in the background or in chunks; it exceeds the command
+- [x] 9.1 `pytest hub/tests/ -v` — full suite, in the background or in chunks; it exceeds the command
   cap. Attribute the test-count difference node by node against the baseline, not by totals.
-- [ ] 9.2 `pytest tests/ -v` for the CLI, separately — collecting both together fails.
-- [ ] 9.3 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
+- [x] 9.2 `pytest tests/ -v` for the CLI, separately — collecting both together fails.
+- [x] 9.3 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
   hub/tests/ tests/`, `mypy src/`.
 - [ ] 9.4 Drive it live against a Hub on 8011 confirmed to serve this code: a Haiku agent, an
   absolute-path `Write` outside its worktree, under a posture that permits it. Assert the run row and
