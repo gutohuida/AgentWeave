@@ -3,15 +3,21 @@
 ### Requirement: A run that has ended releases the queue behind it
 The system SHALL re-evaluate every agent holding queued input in a project whenever a run in that project reaches a terminal status, and SHALL do so regardless of whether the bookkeeping that follows the terminal status succeeds.
 
-Two kinds of work wait behind a running run: input that arrived for that agent while it was busy,
-and another agent parked behind a hold the run was carrying, such as the checkout of a task. A run
-ending is what frees both, and nothing else does on a timer — the re-evaluation is reachable only
-from a run ending and from unrelated operator actions such as opening the project or saving its
-settings.
+Three kinds of work wait behind a running run: input that arrived for that agent while it was busy
+and was never delivered; input the run was carrying that it handed back on failing; and another agent
+parked behind a hold the run was carrying, such as the checkout of a task. A run ending is what frees
+all three, and nothing else does on a timer — the re-evaluation is reachable only from a run ending
+and from unrelated operator actions such as opening the project or saving its settings.
+
+For the second of the three this restates a guarantee the system already owes: *Repeated delivery
+failure does not wedge an agent* requires that returning an input to the queue cause delivery to be
+attempted again without further operator action. That requirement is stated over returned input
+alone; this one is stated over the queue behind the run, so that all three are released by the same
+rule and for the same reason.
 
 The release SHALL therefore be a consequence of the run having ended and not of anything that runs
 after it. A run may end and then fail while recording its outcome, reporting abandonment,
-broadcasting its lifecycle event, persisting its terminal status line, or naming its conversation.
+broadcasting its lifecycle event, or persisting its terminal status line.
 Where that happens the run is correctly terminal and the input behind it is correctly queued, and an
 operator sees a message that never runs, with no error naming it and no surface saying it is waiting.
 

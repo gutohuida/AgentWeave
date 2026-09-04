@@ -51,15 +51,36 @@ abandonment report and terminal broadcast are still unwritten, so a task-checkou
 taken against a half-written boundary. Keep the happy-path release where it is; add the failure-path
 one.
 
-### D2 — A second redrain is acceptable, and bounded
+### D2 — A second redrain is acceptable, bounded, and does charge something
 
 The one new overlap is an exception raised *by* `redrain_queued_agents` itself at `:2281`: the
-handler would then call it again. This is bounded rather than free. `schedule_agent` charges a
-delivery attempt when it delivers, and attempts are finite by design (*Repeated delivery failure
-does not wedge an agent*), so a double charge is not nothing — but an entry the first call already
-delivered is no longer `queued` and the second call's query does not select it, and an entry the
-first call did not reach is exactly the one the second must serve. Retrying a release is the correct
-trade against not releasing at all.
+handler would then call it again. **D1 introduces this overlap rather than inheriting it** — today
+the gate prevents it, because a run that reached `:2281` is already terminal, so `already_terminal`
+is `True` and the handler's redrain is skipped.
+
+**R2 re-derived the accounting and R1 had the mechanism wrong.** R1 wrote that *"`schedule_agent`
+charges a delivery attempt when it delivers"*. Nothing charges on delivery: `mark_delivered` sets
+`entry.state = "delivered"` and increments nothing (`inbound_queue.py:154`). There are exactly two
+charge sites, and neither is a delivery — `inbound_queue.py:211`, where a *failed run returns* an
+entry it was carrying, and `turn_scheduler.py:462`, where a schedule is *refused* non-transiently
+(`not transient and not agent_wide and …`, `:378-406`).
+
+That matters, because R1's two-bucket split — already delivered, or not yet reached — is a false
+dichotomy. There is a third bucket, and it is the charging one: an entry the first redrain **reached
+and refused** non-transiently. It stays `queued`, it was charged once, and the second call's query
+selects it and charges it again. `DELIVERY_ATTEMPT_LIMIT` is `3` (`inbound_queue.py:178`), so one
+run boundary can burn two of an entry's three allowances. This is the same accounting F114 and F96
+already litigated in this file — *"the operator's own attempts to find out why nothing was happening
+were what consumed the allowance"* — so it is an in-family cost, not a novel one.
+
+The decision stands: **release twice rather than not at all.** The overlap needs an exception raised
+inside `redrain_queued_agents`/`schedule_agent` that is not a `TriggerAgentError` — a database
+failure, essentially — *and* an entry already refused non-transiently in the same sweep, whereas the
+defect being fixed needs only one raise anywhere in a hundred-line window. The residual is named
+here rather than argued away, and task 3.7 asserts its bound. The cheap alternative — having
+`redrain_queued_agents` swallow per-agent errors so the first call cannot raise partway — would
+remove the overlap entirely and is deliberately not taken: it is a change to `redrain_queued_agents`,
+which this change lists as a non-goal, and it would hide the same class of failure one layer down.
 
 ### D3 — The app-server path gets a handler of the same shape, not a shared helper
 
@@ -81,6 +102,10 @@ The window is "an exception between the terminal commit and the release". The te
 deterministically by patching a bookkeeping call that sits inside it — `_broadcast_run_lifecycle` or
 `record_agent_output` as `agent_trigger` resolves them — to raise once, then asserts that an entry
 queued behind that run is delivered to a successor run without any further request.
+
+Those two, and not `maybe_generate_title`, which is also in the window: it swallows every `Exception`
+itself (`conversation_titles.py:230-238`), so patching it to raise would produce a test that passes
+without the code under test ever seeing the exception.
 
 This matters: CI's actual failure came from the in-memory `StaticPool` artefact (F285), and when
 that is fixed the exception disappears with it. A test that reproduces F286 through F285 would go

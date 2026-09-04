@@ -66,6 +66,10 @@ item rather than proceeding to phase 1 on the strength of having just done phase
       asserting this behaviour by accident. If it is, say so in its docstring rather than adding a
       duplicate; it is currently the only existing test that would have caught F286, and it caught
       it only because a harness artefact supplied the exception.
+- [ ] 3.7 The cost D2 names, asserted rather than assumed: an entry refused non-transiently by the
+      first redrain, with that redrain then raising, is charged **at most twice** and is not
+      withdrawn by a single run boundary. `DELIVERY_ATTEMPT_LIMIT` is `3`; the point of the test is
+      that ungating cannot turn one failed boundary into a dropped message.
 
 ## 4. Gates
 

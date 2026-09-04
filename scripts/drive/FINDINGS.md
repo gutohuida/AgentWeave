@@ -19671,6 +19671,29 @@ at `:2282`, not `:2287`; and `already_terminal` is computed across `:2305-2313`.
 
 Specced 2026-09-04 as `openspec/changes/a-terminal-run-releases-the-queue-behind-it` (R1).
 
+**R2, 2026-09-04 -- F286 is not only a gap, it is a breach of a shipped requirement.** R1's proposal
+argued that `agent-conversation-workspace`'s *Repeated delivery failure does not wedge an agent*
+(`spec.md:1228`) does not reach this defect, because F286's entry is never *returned*. That holds
+for the instance F286 was filed from -- a **stopped** run keeps its input, so nothing is returned --
+and only for it. On the **failed** branch `return_run_entries` runs at `agent_trigger.py:2172`,
+inside the same `try` and *before* the terminal commit at `:2175`, so an exception in the window
+strands input the system had just handed back, and the shipped requirement says of exactly that:
+*"Returning an input to the queue SHALL cause the system to attempt its delivery again without
+requiring any further operator action."* So the code is in breach today for failed runs, and the
+gap is only over never-delivered input and over a second agent parked behind the ended run's
+checkout hold.
+
+**R2 also narrowed the window's composition.** F286 and R1 both counted `maybe_generate_title` among
+the calls that can raise between `:2175` and `:2281`. It cannot: it wraps its whole body in
+`try/except Exception` and documents itself as *"Never raises, never delays a turn"*
+(`conversation_titles.py:230-238`). Five calls can, all of them by doing uncaught database work --
+`evaluate_run_end`, `_report_abandoned_entries`, `_broadcast_run_lifecycle`, the per-entry
+`persist_event`, and `record_agent_output`. `consider_handover_from_run_end`
+(`checkpoint_handover.py:301`) cannot raise either. The narrowing does not shrink the defect:
+`maybe_generate_title` awaits a ~19s CLI spawn and `except Exception` does not catch
+`CancelledError`, which this handler explicitly does -- so it remains the widest *cancellation*
+window in the function while contributing nothing to the exception window.
+
 ## F287 (C) - `record_agent_output` refreshes a row it has already fully populated, one extra SELECT per output line on the Hub's hottest write path
 
 **Status:** open

@@ -9,9 +9,20 @@ checkout this run held (design D8). Both are released by exactly one call —
 
 `_execute_run` places that call **last**, at `hub/hub/api/v1/agent_trigger.py:2281`, after the
 whole post-turn bookkeeping block. The run's terminal status is committed far earlier, at `:2175`.
-Between those two lines the function does real work that can raise: `evaluate_run_end`,
-`_report_abandoned_entries`, `_broadcast_run_lifecycle`, a `persist_event` + broadcast per returned
-entry, `record_agent_output` for the terminal status row, and `maybe_generate_title`.
+Between those two lines the function does real work that can raise, and **five** calls can, each
+because it does uncaught database work: `evaluate_run_end`, `_report_abandoned_entries`,
+`_broadcast_run_lifecycle`, a `persist_event` + broadcast per returned entry, and
+`record_agent_output` for the terminal status row.
+
+`maybe_generate_title` is in the window and is **not** one of them — it wraps its whole body in
+`try/except Exception` and says so of itself: *"Fire-and-forget wrapper for the run-completion path.
+Never raises, never delays a turn"* (`conversation_titles.py:230-238`). It still belongs in the
+window for one reason, and it is the reason this handler catches what it catches: `except Exception`
+does not catch `CancelledError`, and the call awaits a ~19s CLI spawn — so it is the *widest*
+cancellation window in the function while contributing nothing to the exception window.
+`consider_handover_from_run_end` (`checkpoint_handover.py:301`) is in the window and cannot raise
+either: it returns early, catches the one `RuntimeError` it can provoke, and swallows everything
+inside the task it dispatches.
 
 The exception handler at `:2282` catches all of it, and computes `already_terminal` at `:2305-2313` by
 re-reading the run row and asking whether it is still `running`. It then uses that one flag for two
@@ -43,7 +54,7 @@ layout is the same; **the handler is not reached.** Two code facts:
 
 1. `_execute_run` delegates to `_execute_codex_appserver_run` at `:1824`, and the delegation is
    **above** `_execute_run`'s own `try:` (`:1846`), followed by `return`. Nothing that raises inside
-   the app-server path can reach the handler at `:2287`.
+   the app-server path can reach the handler at `:2282`.
 2. `_execute_codex_appserver_run`'s outer construct is `try: … finally:` (`:2536` / `:2873`) with
    **no `except` clause at all**. Its only `except` is an inner one covering the spawn/connect
    (`:2692`, for `FileNotFoundError`, `AppServerError`, `asyncio.TimeoutError`, `OSError`).
@@ -91,11 +102,33 @@ depends on what happened after the run ended, when it should depend only on the 
 
 Both requirements go to `agent-conversation-workspace` because that capability already owns the
 queue, its delivery and the wedge family — *Repeated delivery failure does not wedge an agent*
-(`spec.md:1228`) is the nearest neighbour, and it states the governing principle for *returned*
-input: *"an input left queued until an unrelated request happens to drain it is retried by
-coincidence rather than by design."* F286's entry is never returned — it is input that arrived while
-the agent was busy and was never delivered at all — so that requirement does not reach it, which is
-the gap this change fills rather than a contradiction of it.
+(`spec.md:1228`) is the nearest neighbour.
+
+**R2 correction: that requirement does reach half of this defect, and is already breached by it.**
+R1 argued it does not, on the grounds that F286's entry is never *returned* — it arrived while the
+agent was busy and was never delivered at all. That holds for the instance the *Observed* paragraph
+above cites, and only for it: a **stopped** run keeps its input, so nothing is returned. It does not
+hold for a **failed** run. `return_run_entries` runs at `:2172`, inside the same `try` and *before*
+the terminal commit at `:2175`, so on that branch `returned` is non-empty and an exception anywhere
+in the window strands input the system had just handed back. The shipped requirement says of exactly
+that: *"Returning an input to the queue SHALL cause the system to attempt its delivery again without
+requiring any further operator action. A limit on attempts protects nobody if nothing consumes the
+attempts; an input left queued until an unrelated request happens to drain it is retried by
+coincidence rather than by design."*
+
+So this change is two things at once, and saying only the second understates it. For returned input
+it **restores a guarantee that already shipped** — the code is in breach today and the requirement
+needs no amendment, which is why the delta carries no `MODIFIED` block. For the rest it is a genuine
+extension, over two cases the existing text cannot reach: input that was queued and never delivered
+at all, and a *second* agent parked behind the checkout hold the ended run was carrying, whose
+release has nothing to do with this run's own input. The new requirement is stated over "the queue
+behind a run" rather than over returned input so that all three are one rule.
+
+A precedent worth citing, because it shows the corpus has already decided this principle once:
+`agent-run-sandboxing/spec.md:219-223` requires that a permission request *"SHALL reach a terminal
+status whenever the run that raised it stops waiting"* and that *"[r]eaching that terminal status
+SHALL NOT depend on the run successfully reporting it."* Same shape, one object over — a consequence
+of a boundary must not be conditional on the bookkeeping at that boundary succeeding.
 
 `turn-outcome-visibility` was considered and rejected: its stated purpose is a run that ends without
 advancing its deliverable, not whether a run reaches an outcome at all. `run-task-binding` owns the
