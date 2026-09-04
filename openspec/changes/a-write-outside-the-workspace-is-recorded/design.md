@@ -603,9 +603,26 @@ order they were found. The change is still not implemented.
 
 ### For implementation
 
-- Task 1.4 is still the first thing to run and still the stop condition: if `_decide` does not refuse
-  the absolute path under the default posture, the proposal's premise is wrong and nothing should be
-  built on it. Three rounds have now read that code and none has executed it.
+- ~~Task 1.4 is still the first thing to run and still the stop condition: if `_decide` does not
+  refuse the absolute path under the default posture, the proposal's premise is wrong and nothing
+  should be built on it. Three rounds have now read that code and none has executed it.~~
+  **Executed 2026-09-04, phase 1. It refuses, so the premise holds and the change proceeds.**
+  `test_the_default_posture_refuses_the_same_path` asserts
+  `DEFAULT_CLAUDE_PERMISSION_MODE is WORKSPACE_PERMISSION_MODE` and then `_decide("Write", ...)`
+  returning `allow: False` for a path outside the project *and* for one inside a second agent's
+  checkout under the shared `.agentweave/worktrees/` parent — with a control inside the run's own
+  workspace, so "refuses everything" cannot pass for "refuses this". Mutation-checked: dropping
+  `file_path` from `_PATH_KEYS` turns it red and touches nothing else in the file.
+
+  One correction to how the three rounds framed this. *No round* had executed it, but **the suite
+  had**: `hub/tests/test_permission_approver.py::test_a_path_outside_the_workspace_is_denied_with_the_path_named`
+  has asserted the refusal since the approver shipped, and no round looked for it. So the premise
+  was never as unpinned as this bullet claimed — it was pinned in a file none of the rounds read.
+  What that test does *not* carry, and what 1.4 adds, is the link from the **default posture** to
+  `workspace` (it sets `AW_WORKSPACE_DIR` directly and never mentions
+  `DEFAULT_CLAUDE_PERMISSION_MODE`) and the sibling-checkout case. The lesson for the remaining
+  phases is the cheaper one: before recording that the product's behaviour is unmeasured, grep the
+  suite for it.
 - D12 is the one open question this change deliberately leaves: whether a run whose workspace is the
   project root should get a boundary at all is a product question about the non-repository case, and
   it is not this change's to answer.

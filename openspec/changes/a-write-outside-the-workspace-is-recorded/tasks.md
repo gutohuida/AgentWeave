@@ -1,18 +1,18 @@
 ## 1. Reproduce it first
 
-- [ ] 1.1 Add `hub/tests/test_a_write_outside_the_workspace_is_recorded.py`. Build F115's shape from
+- [x] 1.1 Add `hub/tests/test_a_write_outside_the_workspace_is_recorded.py`. Build F115's shape from
   the parse side: feed `parse_claude_line` a real `assistant` line carrying a `tool_use` block for
   `Write` with an absolute `file_path` outside the workspace, and assert the current behaviour — the
   parsed events carry the path only inside `payload["input"]` as a stringified blob, and nothing
   anywhere says it was outside anything. Run it against unmodified code and confirm it passes. A
   reproduction that does not pass first is not a reproduction.
-- [ ] 1.2 Add the record side: a `Run` with `workspace_dir` set to an agent worktree, and assert that
+- [x] 1.2 Add the record side: a `Run` with `workspace_dir` set to an agent worktree, and assert that
   after a turn containing that call the run carries no record of an outside write and no activity
   event mentions one. Confirm it passes against unmodified code.
-- [ ] 1.3 Add the cross-worktree shape: the same call, but with the absolute path inside a *second*
+- [x] 1.3 Add the cross-worktree shape: the same call, but with the absolute path inside a *second*
   agent's worktree under the same project. Assert that today nothing distinguishes it from the
   previous case. This is the case whose whole meaning is the destination.
-- [ ] 1.4 Pin the round-1 correction as a test rather than a claim: assert that `mcp_server._decide`
+- [x] 1.4 Pin the round-1 correction as a test rather than a claim: assert that `mcp_server._decide`
   **refuses** the same absolute path under the default posture, so the record of what the default
   posture does is in the suite and not only in this proposal. If it does not refuse, stop — the
   proposal's premise is wrong and rounds 2 and 3 need to know before anything is built.
