@@ -162,3 +162,22 @@ hub/agentweave.db
 
 # Staging output from scripts/migrate_openspec_corpus.py — derived, regenerate with --out
 .migration/
+
+# The handoff chain: session notes, quoting the operator verbatim and recording machine-local
+# environment detail. Untracked as a whole from 2026-09-04.
+#
+# It used to be split -- handoffs 0001-0073 tracked, 0074+ excluded per-file in
+# .git/info/exclude -- which is the one genuinely broken option. A clone got the tracked half,
+# `/resume` picked the newest handoff it could see, and worked from three-week-old state that
+# read as entirely current. The tracked half also carried two `aw_live_` trial-Hub keys into a
+# public repository. Track all of them or none; this repo chose none.
+#
+# DEAD-ENDS.md is the deliberate exception. It holds tool and environment facts rather than
+# session narrative -- what is not on PATH, which interpreter lies, which flags do not exist --
+# and it is the file that stops those being re-learned every few sessions. It stays tracked.
+#
+# Note the `/*` rather than `/`: git does not descend into an excluded *directory*, so a
+# negation under `.claude/handoffs/` would never be reachable. Excluding the contents instead
+# keeps the directory itself visible and makes the exception below actually work.
+.claude/handoffs/*
+!.claude/handoffs/DEAD-ENDS.md

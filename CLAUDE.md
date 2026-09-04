@@ -546,6 +546,26 @@ Do **not** carry the legacy CLI session vocabulary (session mode, principal agen
 pending messages) — that subsystem was deleted and the Hub owns execution. Trial-Hub state (project
 ID, document path, task and requirement IDs) *is* worth carrying when a trial change is in flight.
 
+## Session continuity — the handoff chain
+
+`/handoff` and `/resume` carry state across context resets. Three things about this repo override
+the skills' generic defaults, stated here so no session has to re-derive them:
+
+- **Commit each completed checkpoint without asking**, and **push; do not open PRs.** The generic
+  skill defaults to asking before committing and never pushing — this repo decided otherwise
+  (2026-08-01, reaffirmed since), and the whole autonomous loop depends on it. Merging to `master`
+  is still the operator's decision, made awake.
+- **`.claude/handoffs/` is untracked**, uniformly. It was split until 2026-09-04 — handoffs
+  `0001`–`0073` tracked, `0074`+ ignored — which meant a clone's `/resume` silently loaded
+  `handoff-0073` and worked from three-week-old state. The tracked half also carried two
+  `aw_live_` trial-Hub keys, which is why the whole directory is now ignored. Do not re-track it.
+- **`.claude/handoffs/DEAD-ENDS.md` is the exception and stays tracked.** It is the durable ledger
+  of what does not work on this machine — interpreters, PATH, pytest, openspec, the Hub's own
+  startup traps. **Read it before debugging an environment problem, and append to it rather than
+  re-copying facts forward in each handoff.** Measured across the 108-handoff chain, individual
+  facts were dropped and re-learned between three and seven times each before that file existed.
+  Entries are dated; verify one that looks old rather than believing it.
+
 ## Resources
 
 - GitHub: https://github.com/gutohuida/AgentWeave
