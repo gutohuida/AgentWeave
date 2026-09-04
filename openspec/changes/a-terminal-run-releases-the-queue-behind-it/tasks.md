@@ -34,13 +34,13 @@ item rather than proceeding to phase 1 on the strength of having just done phase
 
 ## 1. `_execute_run` — split the flag's two jobs
 
-- [ ] 1.1 In the handler at `hub/hub/api/v1/agent_trigger.py`, move the
+- [x] 1.1 In the handler at `hub/hub/api/v1/agent_trigger.py`, move the
       `redrain_queued_agents(project_id)` call out of `if not already_terminal:` so it runs on every
       exception. Leave the status relabel gated exactly as it is.
-- [ ] 1.2 Replace the comment above it. It currently says "unconditional, where this was gated on
+- [x] 1.2 Replace the comment above it. It currently says "unconditional, where this was gated on
       `returned`", which was true of one gate while the line sat inside another — the new comment
       states which two questions `already_terminal` answers and why only one of them is its business.
-- [ ] 1.3 Confirm by reading that no other statement in the handler depends on the redrain's
+- [x] 1.3 Confirm by reading that no other statement in the handler depends on the redrain's
       position, and that the `CancelledError` re-raise still happens after it.
 
 ## 2. The failure tail, once, shared by both paths
@@ -52,7 +52,7 @@ told the implementer to use the failure-fields helper "that path's own tail does
 `_runtime_failure_fields(outcome, …)` — and `outcome` is not bound when the exception is raised
 before `run_turn` returns.
 
-- [ ] 2.1 Extract the body of `_execute_run`'s handler into one coroutine in `agent_trigger.py`,
+- [x] 2.1 Extract the body of `_execute_run`'s handler into one coroutine in `agent_trigger.py`,
       taking `project_id`, `agent`, `run_id`, `conversation_id`, `runner` and `exc`: open a session,
       relabel to `failed` only where the row is still `running` (`expire_pending_for_run`,
       `record_turn_usage(sample=None)`, `finalize_job_run_for_conversation`, `return_run_entries`,
@@ -60,16 +60,16 @@ before `run_turn` returns.
       `_transport_failure_fields(exc, conversation_id)`, per-entry `queue_entry_queued`), then the
       **unconditional** release from 1.1. It returns nothing; the caller keeps `logger.exception`
       and the `CancelledError` re-raise.
-- [ ] 2.2 Rewrite `_execute_run`'s handler to call it, preserving the comment block at `:2283-2303`
+- [x] 2.2 Rewrite `_execute_run`'s handler to call it, preserving the comment block at `:2283-2303`
       — that block is the measured history of why the handler catches `CancelledError` and must not
       be lost in the move.
-- [ ] 2.3 Add `except (Exception, asyncio.CancelledError) as exc:` to
+- [x] 2.3 Add `except (Exception, asyncio.CancelledError) as exc:` to
       `_execute_codex_appserver_run` between its outer `try` (`:2536`) and its `finally` (`:2873`),
       calling the same helper with `runner="codex"`, then re-raising `CancelledError`. Do **not**
       pass `_runtime_failure_fields` here: it needs a `TurnOutcome` the exception path does not
       have, which is why the path's own pre-spawn `except` at `:2723` already uses
       `_transport_failure_fields`.
-- [ ] 2.4 Leave both `finally` blocks alone. `active_ptys` (`:2362`) and `active_app_server_runs`
+- [x] 2.4 Leave both `finally` blocks alone. `active_ptys` (`:2362`) and `active_app_server_runs`
       (`:2874`) genuinely differ and are not part of the shared body.
 
 ## 3. Tests

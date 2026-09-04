@@ -1774,6 +1774,96 @@ async def _broadcast_run_lifecycle(
     await sse_manager.broadcast(project_id, event_type, payload)
 
 
+async def _record_run_failure_tail(
+    *,
+    project_id: str,
+    agent: str,
+    run_id: str,
+    conversation_id: str,
+    runner: str,
+    exc: BaseException,
+) -> None:
+    """The tail an abnormally-ended run needs, shared by both transports (design D3).
+
+    One body, two callers -- `_execute_run`'s read loop and `_execute_codex_appserver_run` --
+    because the differences that would justify duplicating it are not in this body. What
+    genuinely differs between the transports is each caller's `finally` (`active_ptys` against
+    `active_app_server_runs`), and that is deliberately left where it is.
+
+    **The relabel is conditional; the release is not.** That distinction is the whole of F286. A
+    row that already reached a terminal status must not be relabelled `failed` because
+    bookkeeping downstream of it raised -- that guard is correct and is kept. Whether this run
+    still holds design D8's task checkout is a different question with a different answer: a run
+    that has ended has ended, whichever status it ended on, so the agents parked behind it have
+    to be re-evaluated either way. Gating the release on the relabel made the *cleanly completed*
+    run the one case that stranded its own queue. Driven 2026-09-04 before this was written: a
+    run that reached `completed` (exit 0, `error` null) left the entry behind it `queued`,
+    `delivery_attempts=0`, with no successor run, for as long as it was watched -- until an
+    unrelated settings save happened to re-drain the project and delivered it in 0.36s.
+
+    Returns nothing. Each caller keeps its own `logger.exception` and its own `CancelledError`
+    re-raise, since only the caller knows what it is re-raising into.
+
+    *exc* is typed `BaseException` rather than `Exception` because `CancelledError` is neither --
+    see `_execute_run`'s handler for the measurement behind catching it at all.
+    """
+    async with async_session_factory() as db:
+        run = await db.get(Run, run_id)
+        # A row that is gone, or one that had already reached a terminal status before this
+        # exception happened, is left exactly as it is: whatever failed is downstream of a turn
+        # that already succeeded or failed cleanly, and overwriting it here would let unrelated
+        # bookkeeping failures relabel a completed run as failed. What that no longer suppresses
+        # is the release below.
+        if run is not None and run.status == "running":
+            run.status = "failed"
+            run.error = str(exc)
+            run.ended_at = datetime.now(timezone.utc)
+            await expire_pending_for_run(db, run_id)
+            # The last terminal site either transport reaches, and the only one reached without
+            # knowing whether the turn produced telemetry -- so `sample=None`, an explicitly
+            # unavailable outcome, for the same reason `_execute_run`'s `FileNotFoundError`
+            # branch records one for a run that never spawned at all. Idempotent: a turn that had
+            # already parsed its result recorded a measured outcome, and `record_turn_usage`
+            # returns that existing row rather than overwriting it.
+            await record_turn_usage(
+                db,
+                run_id=run_id,
+                project_id=project_id,
+                agent=agent,
+                runner=runner,
+                sample=None,
+            )
+            # Design D13, task A4.3 -- same as the other finalize sites.
+            await finalize_job_run_for_conversation(db, conversation_id, "failed")
+            returned = await return_run_entries(db, run_id)
+            await db.commit()
+            await _report_abandoned_entries(db, project_id, agent, run_id)
+            await _broadcast_run_lifecycle(
+                db,
+                project_id,
+                "run_failed",
+                agent=agent,
+                run_id=run_id,
+                **_transport_failure_fields(exc, conversation_id),
+            )
+            for entry_id in returned:
+                payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
+                await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
+                await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
+
+    from ...turn_scheduler import redrain_queued_agents
+
+    # Unconditional, and not gated on the relabel above -- nor on `returned`, which is the gate it
+    # replaced earlier. A run that ends releases the task checkout it held whether it ended
+    # cleanly, failed, or was relabelled by nobody at all, and an agent parked behind it by design
+    # D8 has to be re-evaluated whether or not *this* run handed anything back. Both gates fail
+    # the same way: the hold outlives the holder.
+    #
+    # Project-scoped rather than "agents waiting on the task this run held", for the reason given
+    # in full at `_execute_run`'s success-path call.
+    await redrain_queued_agents(project_id)
+
+
 async def _execute_run(
     *,
     project_id: str,
@@ -2302,60 +2392,14 @@ async def _execute_run(
         # marked, to preserve real cancellation semantics for anything that legitimately depends
         # on it propagating.
         logger.exception("Unhandled error in run %s for %r", run_id, agent)
-        already_terminal = False
-        async with async_session_factory() as db:
-            run = await db.get(Run, run_id)
-            if run is None or run.status != "running":
-                # The turn itself already reached a terminal status (or the row is gone) before
-                # this exception happened, so whatever failed is downstream of a turn that
-                # already succeeded or failed cleanly. Overwriting that here would let unrelated
-                # bookkeeping failures relabel a completed run as failed.
-                already_terminal = True
-            else:
-                run.status = "failed"
-                run.error = str(exc)
-                run.ended_at = datetime.now(timezone.utc)
-                await expire_pending_for_run(db, run_id)
-                # The last of `_execute_run`'s five terminal sites to record one, and the only one
-                # reached without knowing whether the turn produced telemetry — so `sample=None`,
-                # an explicitly unavailable outcome, for the same reason the `FileNotFoundError`
-                # branch above records one for a run that never spawned at all. Idempotent: a turn
-                # that had already parsed its result recorded a measured outcome, and
-                # `record_turn_usage` returns that existing row rather than overwriting it.
-                await record_turn_usage(
-                    db,
-                    run_id=run_id,
-                    project_id=project_id,
-                    agent=agent,
-                    runner=runner,
-                    sample=None,
-                )
-                # Design D13, task A4.3 — same as `_execute_run`'s other finalize sites.
-                await finalize_job_run_for_conversation(db, conversation_id, "failed")
-                returned = await return_run_entries(db, run_id)
-                await db.commit()
-                await _report_abandoned_entries(db, project_id, agent, run_id)
-                await _broadcast_run_lifecycle(
-                    db,
-                    project_id,
-                    "run_failed",
-                    agent=agent,
-                    run_id=run_id,
-                    **_transport_failure_fields(exc, conversation_id),
-                )
-                for entry_id in returned:
-                    payload = {"entry_id": entry_id, "agent": agent, "run_id": run_id}
-                    await persist_event(db, project_id, "queue_entry_queued", payload, agent=agent)
-                    await sse_manager.broadcast(project_id, "queue_entry_queued", payload)
-        if not already_terminal:
-            from ...turn_scheduler import redrain_queued_agents
-
-            # Unconditional, where this was gated on `returned`. A run that fails releases the
-            # task checkout it held exactly as a run that succeeds does, so an agent parked behind
-            # it by design D8 has to be re-evaluated whether or not *this* run handed anything
-            # back. Gating on `returned` would mean the hold outlives the holder whenever the
-            # failing turn had no queue of its own — which is the ordinary case.
-            await redrain_queued_agents(project_id)
+        await _record_run_failure_tail(
+            project_id=project_id,
+            agent=agent,
+            run_id=run_id,
+            conversation_id=conversation_id,
+            runner=runner,
+            exc=exc,
+        )
         if isinstance(exc, asyncio.CancelledError):
             raise
     finally:
@@ -2870,6 +2914,31 @@ async def _execute_codex_appserver_run(
 
         # See `_execute_run`: the same release, for the same reason.
         await redrain_queued_agents(project_id)
+    except (Exception, asyncio.CancelledError) as exc:
+        # This path had no `except` of its own until F286's requirement 2. `_execute_run` calls
+        # this function *before* its own `try` (`:1824`), so anything raised here propagated out
+        # of both and left the `Run` row exactly where the run-started commit put it:
+        # `status="running"`, forever. `turn_scheduler.schedule_agent` then refuses every future
+        # turn for that agent, which is the unbounded outage `_execute_run`'s handler was written
+        # for -- the same wedge, on the transport that never got the fix. `CancelledError` is
+        # caught and re-raised here for the reason that handler's comment block measures.
+        #
+        # `_runtime_failure_fields` is deliberately not reachable from here. It needs a
+        # `TurnOutcome`, and `outcome` is unbound whenever the raise precedes `run_turn`
+        # returning -- which is most of what this `except` exists to catch. The pre-spawn
+        # `except` above uses `_transport_failure_fields` for exactly that reason, and so does
+        # the shared tail.
+        logger.exception("Unhandled error in app-server run %s for %r", run_id, agent)
+        await _record_run_failure_tail(
+            project_id=project_id,
+            agent=agent,
+            run_id=run_id,
+            conversation_id=conversation_id,
+            runner="codex",
+            exc=exc,
+        )
+        if isinstance(exc, asyncio.CancelledError):
+            raise
     finally:
         run_liveness.active_app_server_runs.discard(run_id)
         _stop_requested.discard(run_id)
