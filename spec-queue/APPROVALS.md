@@ -25,15 +25,20 @@ requirement that already shipped, and round 3 overturned design decision D3 by m
 found that *both* earlier rounds had specified a regression test that would have passed without the
 fix.
 
-- APPROVED  a-terminal-run-releases-the-queue-behind-it   F286 (B). 24 tasks, 5 phases. Python only in `hub/hub/api/v1/agent_trigger.py` — no migration, no API shape change, no UI, no bundle. Build it **second**, after F285: its own regression test runs against whatever test isolation F285 settles on.
+- APPROVED  a-terminal-run-releases-the-queue-behind-it   F286 (B). 24 tasks, 5 phases. Python only in `hub/hub/api/v1/agent_trigger.py` — no migration, no API shape change, no UI, no bundle. **It is now first**: F285 was fixed and pushed by the DECIDE session (`d9ad1e0`), so the test isolation its regression test runs against is already settled and green.
 
-ORDER: F285, a-terminal-run-releases-the-queue-behind-it
+ORDER: a-terminal-run-releases-the-queue-behind-it
 
-### F285 — the operator chose the fix. Do not pick one.
+**F285 is DONE — do not start it.** Fixed by the DECIDE session in `d9ad1e0` and pushed, with
+the file-backed fix named below. The full Hub suite is 3961 passed / 0 failed / 0 errors on this
+machine. Its `ORDER:` entry is removed above so tonight starts on the approved change; the
+section below is kept because it records why that fix and not the other two.
 
-**Use a file-backed temporary database per test.** Not an unshared pool, and not per-test engine
-disposal. This was decided by measurement in the DECIDE session, not by preference, and the other
-two options on the review page do not work:
+### F285 — DONE (`d9ad1e0`). Kept as the record of which fix and why.
+
+**A file-backed temporary database per test** — implemented, not merely chosen. Not an unshared
+pool, and not per-test engine disposal. Decided by measurement in the DECIDE session rather than
+by preference, because the other two options on the review page do not work:
 
 | Option | Measured result |
 |---|---|

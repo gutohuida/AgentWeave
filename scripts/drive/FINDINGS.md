@@ -19528,7 +19528,17 @@ place where the posture the operator believes they chose and the posture the run
 
 ## F285 (B) - the hub suite's in-memory engine shares one connection across every session, so any request that finishes rolls back whatever a background run is midway through writing
 
-**Status:** open
+**Status:** fixed `d9ad1e0` (2026-09-04, DECIDE session). The suite is file-backed in a
+per-process temporary directory, so `AsyncAdaptedQueuePool` replaces the StaticPool and each
+session holds its own connection. Fix chosen by the operator from the three below, after the other
+two were measured and found not to work: `NullPool` on `:memory:` gives every session its own
+*empty* database, a shared-cache memory URI dies with its last connection, and per-test engine
+disposal does not touch a race that happens *inside* one test. Verified: the churn reproduction
+below now passes, the three CI tests pass, and the full suite is 3961 passed / 0 failed. The move
+cost 65 harness failures on the way -- connections outliving their event loop, a background run
+outliving a test, and a teardown disposing a test double -- all fixed in the same commit, none of
+them a product defect. `test_suite_database_isolation.py` now asserts the engine's pool is not a
+StaticPool, which is the check that would have caught this before CI did.
 
 **Found 2026-09-04 (day D-2)** triaging CI. This is the single cause of all three tests the
 `hub-test` job has failed on every one of the 21 completed runs since `467dfea` (2026-09-04T00:03),
