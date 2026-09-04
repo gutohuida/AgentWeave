@@ -257,22 +257,12 @@ async def _await_agent_idle(project_id, agent, timeout=10.0):
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Fixture defect, not a product defect. `sqlite+aiosqlite:///:memory:` resolves to a "
-        "StaticPool: one DBAPI connection shared by every session in the process. SQLAlchemy "
-        "tracks transaction state per Session, SQLite per connection, so any session closing "
-        "concurrently rolls back the shared transaction and discards another session's pending "
-        "UPDATE while its commit() still returns cleanly. Measured in isolation at 105/200 "
-        "commits lost with a concurrent poller against 0/200 without, and observed here on CI "
-        "(3c1f33a): a ROLLBACK from another task landed 2.5ms before _execute_run's finalize "
-        "COMMIT, which then committed nothing. Production is unaffected -- a file-backed "
-        "DATABASE_URL gets AsyncAdaptedQueuePool, one connection per session. Un-xfail once the "
-        "fixture gives each session its own connection; the assertions below are correct as "
-        "written and this test has never failed for a product reason."
-    ),
-    strict=False,
-)
+# Un-xfailed 2026-09-04. The xfail here described F285 before it was filed and named its own
+# exit condition: "Un-xfail once the fixture gives each session its own connection; the
+# assertions below are correct as written and this test has never failed for a product reason."
+# The suite is now file-backed (`conftest.py`), so each session holds its own connection and
+# `AsyncAdaptedQueuePool` replaces the StaticPool that lost 105 of 200 commits under a
+# concurrent poller. The assertions were never changed.
 @pytest.mark.asyncio
 async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
     app, auth_headers, bind_runner

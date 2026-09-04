@@ -456,11 +456,12 @@ def test_alembic_0008_alters_text_to_string_500(tmp_path) -> None:
 async def test_init_db_skips_alembic_for_in_memory(tmp_path, monkeypatch) -> None:
     """init_db must not raise when DATABASE_URL points at in-memory SQLite.
 
-    Critical for the existing test suite: conftest.py uses `:memory:` and
-    every existing test depends on init_db succeeding there. The alembic
-    upgrade must be skipped (alembic's separate engine can't see the same
-    in-memory data) — but the rest of init_db must still complete so the
-    tables exist.
+    The alembic upgrade must be skipped (alembic's separate engine cannot see the
+    same in-memory data) — but the rest of init_db must still complete so the tables
+    exist. This suite stopped running on `:memory:` itself on 2026-09-04 (F285, see
+    `conftest.py`), so the case is now covered only here rather than incidentally by
+    every other test — which is a reason to keep it, not to retire it: `:memory:` is
+    still what a developer gets from an unset DATABASE_URL in a throwaway script.
     """
     monkeypatch.setattr(settings, "database_url", "sqlite+aiosqlite:///:memory:")
     # init_db should NOT raise even though alembic is skipped for :memory:.
@@ -516,9 +517,13 @@ async def test_init_db_runs_alembic_for_file_db(tmp_path, monkeypatch) -> None:
     db_url = f"sqlite+aiosqlite:///{db_file}"
     monkeypatch.setattr(settings, "database_url", db_url)
 
-    # Run the helper directly. (init_db uses the module-level engine which
-    # was bound to whatever URL was active at import time — typically
-    # `:memory:` under tests — so we test the unit that owns the URL.)
+    # Run the helper directly. (init_db uses the module-level engine, bound at import
+    # time to the suite's own temporary file database — see `conftest.py` — so we test
+    # the unit that owns the URL rather than the engine that happens to be bound.)
+    #
+    # This test must see the real `_run_alembic_upgrade`. The `app` fixture patches it to
+    # a no-op so that 1,500+ tests do not each apply every migration; this test does not
+    # take that fixture, which is why the patch is per-test rather than module-level.
     await _run_alembic_upgrade()
 
     import aiosqlite

@@ -1,14 +1,47 @@
 """Shared test fixtures for AgentWeave Hub."""
 
+import asyncio
+import atexit
+import contextlib
 import os
+import shutil
+import tempfile
 import warnings
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-# Use in-memory SQLite for tests.
+# Use a FILE-BACKED SQLite database for tests, in a directory this process makes and owns.
 #
+# It was `:memory:` until 2026-09-04, and that is what F285 was: SQLAlchemy's aiosqlite
+# dialect picks the pool from the URL, and an in-memory URL gets a **StaticPool**, which
+# hands *the same DBAPI connection* to every checkout with no in-use tracking. So every
+# AsyncSession in the suite — a background run task's, and every HTTP request's
+# `get_session` dependency — shared one connection and therefore one transaction, and
+# returning a connection to the pool resets it, which means ROLLBACK. An HTTP request
+# finishing was a rollback issued on the transaction a background task had open. Three
+# tests failed on it in every CI run from 2026-09-03 to 2026-09-04, and the same defect
+# made every concurrent-path test in the suite non-deterministic rather than just those.
+#
+# A file URL gets an `AsyncAdaptedQueuePool` — one connection per session, which is what
+# production has always used (`hub/hub/config.py` defaults to a file and native mode sets
+# DATABASE_URL to one). The two rejected alternatives were measured, not reasoned:
+# `NullPool` on `:memory:` gives every session its own *empty* database, and a
+# shared-cache memory URI is destroyed when its last connection closes. Both fail with
+# `no such table`.
+#
+# The directory is per-process and removed at the end of the session, so concurrent runs
+# cannot collide and a developer's TEMP does not accumulate a database per run. The
+# `atexit` registration is only a backstop for a process that dies before
+# `pytest_sessionfinish`; the ordered teardown that actually works is at the bottom of
+# this file, because on Windows the directory cannot be removed until the engine has let
+# go of the file.
+_TEST_DB_DIR = tempfile.mkdtemp(prefix="aw-hub-tests-")
+atexit.register(shutil.rmtree, _TEST_DB_DIR, True)
+TEST_DATABASE_URL = f"sqlite+aiosqlite:///{(Path(_TEST_DB_DIR) / 'hub-test.db').as_posix()}"
+
 # These are assignments, not `setdefault`. An inherited DATABASE_URL used to win here,
 # and the `app` fixture below drops every table before each test — so running this suite
 # from any shell that had one exported destroyed that database and still exited green.
@@ -16,7 +49,6 @@ from httpx import ASGITransport, AsyncClient
 # DATABASE_URL into the Hub's own environment, spawned agents inherited it, and this
 # repository's instructions tell an agent to run `pytest hub/tests/`. So the environment
 # most likely to run the suite was the one pointed at live operator data.
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 _inherited_database_url = os.environ.get("DATABASE_URL")
 if _inherited_database_url and _inherited_database_url != TEST_DATABASE_URL:
@@ -36,6 +68,8 @@ os.environ["AW_BOOTSTRAP_API_KEY"] = TEST_API_KEY = "aw_live_testkey_abcdefgh"
 TEST_PROJECT_ID = "proj-test"
 TEST_PROJECT_NAME = "Test Project"
 
+from sqlalchemy import event  # noqa: E402
+
 from hub.db.engine import async_session_factory, engine, init_db  # noqa: E402
 from hub.db.models import ApiKey, Base, Project  # noqa: E402
 from hub.main import create_app  # noqa: E402 — env must be set first
@@ -45,21 +79,129 @@ from hub.project_workspace import (  # noqa: E402
 )
 
 
+@event.listens_for(engine.sync_engine, "connect")
+def _test_only_sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ANN001
+    """Trade durability this database will never need for the speed of the one it replaced.
+
+    Moving off `:memory:` to fix F285 put every `drop_all` + `create_all` — roughly 90
+    tables, once per test, for 1,500+ tests — onto the filesystem, and measured on this
+    machine that was about 2.5x the whole suite's wall clock. Almost all of it is fsync:
+    SQLite defaults to `synchronous=FULL` and a rollback journal written to disk, both of
+    which exist to survive power loss.
+
+    This database is deleted when the process exits. It has nothing to survive for, so
+    the syncs stop. What is *not* traded away is the thing the move was for: each session
+    still gets its own connection from a real pool, which is what F285 was about. These
+    pragmas are per-connection and set only here, in the suite — production keeps
+    SQLite's defaults.
+
+    WAL rather than the faster `journal_mode=MEMORY`, deliberately. Under a rollback
+    journal a writer holds an exclusive lock across its commit and readers block on it,
+    so the sessions this change exists to let run concurrently would contend for the file
+    and some would surface `database is locked` after the 5s busy timeout. Trading F285's
+    shared-connection rollback for a fresh `SQLITE_BUSY` flake class would be no fix at
+    all. WAL lets readers proceed against the last committed snapshot while one writer
+    appends, which is the concurrency the suite actually exercises.
+    """
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA synchronous=OFF")
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=10000")
+    cursor.close()
+
+
+# The real engine, bound once. `test_suite_database_isolation.py` monkeypatches this module's
+# `engine` name with a stand-in to exercise the guard without binding to a file, and the teardown
+# fixture below must dispose the actual engine rather than whatever the name points at mid-test.
+# Same convention, and same reason, as `_REAL_RESOLVE_PROJECT_WORKSPACE` above.
+_REAL_ENGINE = engine
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _no_connection_outlives_its_event_loop():
+    """Return every pooled connection at the end of each test, before its loop is gone.
+
+    The other half of the F285 fix, and the half that is not obvious. A StaticPool held
+    exactly one connection forever, so nothing was ever *reused across* tests — the bug
+    was that everything shared it *within* one. Moving to a real pool fixed the sharing
+    and introduced the reuse: `pytest-asyncio` builds a fresh event loop per test, an
+    aiosqlite connection's futures belong to the loop that created them, and a pooled
+    connection checked out by the next test is bound to a loop that no longer exists.
+
+    Measured, before this fixture existed: 62 failures across 11 files, 57 of them
+    `RuntimeError: await wasn't used with future` or `ValueError: The future belongs to
+    a different loop`. None of them was a product defect; all of them were one
+    connection outliving one event loop.
+
+    `dispose()` here rather than `NullPool` on the engine, because the engine is built in
+    product code (`hub/db/engine.py`) from the URL alone and takes no pool argument from
+    a test. Disposing between tests keeps pooling *inside* a test — which is where the
+    concurrency this change exists to support actually happens — and gives each test a
+    pool with nothing carried over.
+    """
+    yield
+
+    # Settle in-flight background runs BEFORE disposing, and the order is the whole point.
+    # `_background_runs` is a module-level set in `agent_trigger`, so it outlives a test, and
+    # `_await_background_run()` (test_agent_trigger.py:44) awaits *everything* in it rather
+    # than only this test's tasks. Disposing the engine underneath a run still in flight takes
+    # away the connection it needs to finish, so it never completes, never reaches the
+    # `set.discard()` done-callback, and stays in the set — and the next test to call that
+    # helper awaits a task belonging to an event loop that no longer exists.
+    #
+    # That is one failure (`test_the_timeline_reports_what_a_run_wrote_outside_its_workspace`),
+    # it was caused by the dispose above rather than found by it, and cancelling first is what
+    # makes the two safe together. A test that already cancelled its own runs leaves an empty
+    # set and finds this a no-op.
+    import hub.api.v1.agent_trigger as _agent_trigger
+
+    leftover = list(_agent_trigger._background_runs)
+    if leftover:
+        for task in leftover:
+            task.cancel()
+        await asyncio.gather(*leftover, return_exceptions=True)
+        _agent_trigger._background_runs.clear()
+
+    await _REAL_ENGINE.dispose()
+
+
 def assert_engine_is_disposable() -> None:
-    """Refuse to drop tables on anything but an in-memory database.
+    """Refuse to drop tables on any database this process did not create for itself.
 
     The backstop for the assignment above: the environment is only one way the engine
     can end up bound to real data (an edited conftest, a `.env` discovered from the
     working directory, a future embedder). Whatever the route, the cost of being wrong
     is a destroyed database that no test failure reports — so the check lives next to
     the destruction, not only next to the configuration.
+
+    This used to require `":memory:" in url`, which was safe for the reason that made
+    F285 possible: an in-memory database cannot be anybody's data. A file can be, so the
+    guard now has to be positive rather than incidental — the database must live inside
+    the temporary directory `_TEST_DB_DIR` that this process created moments ago. No
+    operator database can be in there, and unlike the old check this one also rejects a
+    file that merely *looks* like a test database.
     """
+    # `make_url` rather than `engine.url.database`: the guard's own tests substitute a stand-in
+    # engine whose `url` is a plain string, deliberately, so that checking the guard does not
+    # require binding a real engine to a file. Parsing a string covers both.
+    from sqlalchemy.engine import make_url
+
     url = str(engine.url)
-    if ":memory:" not in url:
+    try:
+        database = make_url(url).database
+    except Exception:  # pragma: no cover - an unparseable URL is certainly not ours
+        database = None
+    inside_owned_tempdir = False
+    if database:
+        try:
+            inside_owned_tempdir = Path(database).resolve().parent == Path(_TEST_DB_DIR).resolve()
+        except OSError:  # pragma: no cover - an unresolvable path is simply not ours
+            inside_owned_tempdir = False
+    if not inside_owned_tempdir:
         raise RuntimeError(
             f"Refusing to run the Hub suite against {url!r}: its fixtures drop every "
-            f"table, and this is not an in-memory database. Unset DATABASE_URL (or set "
-            f"it to {TEST_DATABASE_URL}) and run again."
+            f"table, and this database is not the one this process created under "
+            f"{_TEST_DB_DIR!r}. Unset DATABASE_URL and run again."
         )
 
 
@@ -81,8 +223,27 @@ async def seed_test_project() -> None:
 
 
 @pytest_asyncio.fixture
-async def app():
+async def app(monkeypatch):
     application = create_app()
+
+    # `init_db` runs `alembic upgrade head` for a file database and skips it for
+    # `:memory:` — so moving this suite off `:memory:` for F285 would otherwise have
+    # started applying ~90 migrations on every one of the 1,500+ tests that use this
+    # fixture, against a schema `create_all` had just built. That is minutes of wall
+    # clock per run and a swallowed WARNING per test, in exchange for nothing: the
+    # suite's schema comes from `create_all`, which is what it has always come from.
+    #
+    # Patched here, per test, rather than on the module: `test_migrations.py` imports
+    # `_run_alembic_upgrade` inside the one test that must see the real thing
+    # (`test_init_db_runs_alembic_for_file_db`), and that test does not take this
+    # fixture. A module-level swap would have silently turned it into a no-op assertion.
+    import hub.db.engine as _engine_module
+
+    async def _skip_alembic() -> None:
+        return None
+
+    monkeypatch.setattr(_engine_module, "_run_alembic_upgrade", _skip_alembic)
+
     # ASGITransport does not trigger the FastAPI lifespan, so we run init_db
     # (create_all + the instance operator credential) explicitly before each test.
     assert_engine_is_disposable()
@@ -259,3 +420,18 @@ def bind_project_workspace(monkeypatch):
         return project
 
     return _bind
+
+
+def pytest_sessionfinish(session, exitstatus):  # noqa: ANN001
+    """Release the engine's connections, then delete the database this run created.
+
+    Order matters on Windows: the temporary directory cannot be removed while the pool
+    still holds the file open, and WAL adds `-wal` and `-shm` beside it. Disposing first
+    is what makes the removal actually happen rather than fail silently into the
+    `atexit` backstop registered at the top of this file.
+    """
+    # Teardown must never fail a green run, so every failure mode here is swallowed:
+    # the `atexit` backstop and the operating system both clean up after us.
+    with contextlib.suppress(Exception):
+        asyncio.run(engine.dispose())
+    shutil.rmtree(_TEST_DB_DIR, ignore_errors=True)

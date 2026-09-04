@@ -50,7 +50,7 @@ def test_get_returns_none_before_anything_has_loaded(monkeypatch):
 
 
 def test_in_memory_database_mints_an_id_without_writing_to_disk(monkeypatch, tmp_path):
-    """An in-memory sqlite DB (what the test suite itself uses) has no durable state to
+    """An in-memory sqlite DB has no durable state to
     bind a marker file to. Regression test for a real bug caught this session: the naive
     version of `_marker_path` fell back to `os.path.dirname(":memory:") or "."`, which
     resolved to the process's current working directory — writing a stray
