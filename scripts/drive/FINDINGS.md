@@ -19650,6 +19650,27 @@ In production the exception has to come from somewhere else - a database error, 
 fixing is the shape: the run is correctly terminal, correctly labelled, correctly broadcast, and the
 work behind it is silently stranded with no surface saying so.
 
+**Correction, 2026-09-04 (day D-4, spec R1).** The sentence above -- *"`_execute_codex_appserver_run`
+has the same layout ... and reaches the same handler"* -- is **half wrong, and wrong in the
+direction that makes it worse.** The layout is the same; the handler is not reached, because there
+is no handler. `_execute_run` delegates to `_execute_codex_appserver_run` at `:1824`, **above** its
+own `try:` at `:1846`, and returns; and `_execute_codex_appserver_run`'s outer construct is
+`try: ... finally:` (`:2536` / `:2873`) with **no `except` clause** -- its only `except` is the
+inner one covering spawn/connect at `:2692`. So on that path an exception after the spawn escapes
+into a task whose only done-callback is `_background_runs.discard` (`:1231`), which never retrieves
+it. After the terminal commit (`:2813`) that is F286 with not even an attempted redrain and no
+`logger.exception`; **before** it, the `Run` row stays `running` with `error=None`, `schedule_agent`
+refuses every later turn for that agent, and the only recovery is a Hub restart -- app-server runs
+never set `Run.pid` (`:1937` is the sole assignment, on the PTY path), so
+`reconcile_interrupted_runs` reconciles them to `interrupted` at the next start and only then.
+
+Also corrected: the terminal commit on the normal path is `:2175`, not `:2174`; the handler begins
+at `:2282`, not `:2287`; and `already_terminal` is computed across `:2305-2313`. And
+`reconcile_interrupted_runs` does not recover the stranded entry even on restart -- it selects only
+`Run.status == "running"` (`run_reconciliation.py:60`), and an F286 run is terminal.
+
+Specced 2026-09-04 as `openspec/changes/a-terminal-run-releases-the-queue-behind-it` (R1).
+
 ## F287 (C) - `record_agent_output` refreshes a row it has already fully populated, one extra SELECT per output line on the Hub's hottest write path
 
 **Status:** open
