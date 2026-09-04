@@ -1,81 +1,82 @@
 {
-    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook":  ".claude/loops/day-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-03-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "2912736",
-    "stop_at":  "2026-09-04T17:00:00+01:00",
-    "iteration":  1,
-    "log_file":  ".claude/autonomous/2026-09-04-day-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "D-2",
-    "next_action":  "D-2 CI triage. CI's hub-test job has failed on all 21 completed runs since 467dfea0 (2026-09-03T23:04Z); every other job is green. Three tests fail on Linux: tests/test_a_turn_says_how_it_ended.py::test_a_stopped_run_persists_its_terminal_status_line ('assert 0 == 1'), tests/test_agent_trigger.py::test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped ('assert None is not None' on queued_entry.delivered_in_run_id), and tests/test_agent_trigger.py::test_codex_app_server_stop_signals_should_interrupt (sqlalchemy InvalidRequestError, could not refresh a detached AgentOutput). Run exactly those three locally with `py -3.11 -m pytest hub/tests/test_a_turn_says_how_it_ended.py hub/tests/test_agent_trigger.py -v` (chunked if it exceeds the 600s cap) and establish whether they are green on this machine. Then decide, with evidence and not by preference, which of two readings holds for EACH of the three: a real product defect on the run-stop path, or a test artefact that only manifests under Linux/CI ordering or event-loop timing. Read the CI log for the full traceback via `gh run view <id> --log-failed` rather than guessing from the assertion line. File one finding per distinct cause in scripts/drive/FINDINGS.md with a severity, a file:line, a reproduction, and `**Status:** open` as the FIRST line of the body. Do NOT fix anything this iteration and do not edit hub/hub/ or src/ -- this window fills, it does not implement. The verdict is what selects D-4's spec target.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "done",
-                      "title":  "Compose this window's queue from the playbook",
-                      "detail":  "Done at iteration 1. Merge gate dormant (seeded limit) and would have failed condition 3 anyway. Research delivered to spec-queue/research/2026-09-04.md. DIRECTION.md has no section for today. Coverage-sweep resumption trigger has fired: F188 has a proposal (archived a-blocked-agent-workspace-holds-its-input)."
-                  },
-                  {
-                      "id":  "D-2",
-                      "status":  "open",
-                      "title":  "CI triage -- three hub tests red on Linux, green on this machine?",
-                      "detail":  "See next_action for the full instruction. The output is a verdict per failing test plus findings filed with reproductions. No product code changes."
-                  },
-                  {
-                      "id":  "D-3",
-                      "status":  "open",
-                      "title":  "Drive -- coverage sweep row 9c, Jobs + Loops",
-                      "detail":  "Resume the coverage sweep at row 9c. DIRECTION.md's 2026-09-03 section stated the resumption as a condition, not as that day's instruction: once F188 has a proposal all three severity-A findings are addressed and the pause expires, earliest 2026-09-04. F188's proposal exists and is archived, so the trigger has fired. Use the e2e-loop skill. Hub on 8011 started from hub/ with uvicorn FROM SOURCE, never `agentweave --port`; confirm no .py under hub/hub or src is newer than the process start time before drawing a conclusion. Fresh project -- never proj-5e960453, never proj-18e5d4e0, never port 8000. Every real agent turn binds claude-haiku-4-5. Never leave a job enabled -- this row is Jobs and Loops, so that limit is the one most likely to be tripped: disable and archive anything created. New findings append to scripts/drive/FINDINGS.md with severity, file:line, reproduction and `**Status:** open` as the first body line."
-                  },
-                  {
-                      "id":  "D-4",
-                      "status":  "open",
-                      "title":  "Spec R1 -- explore and propose (target set by D-2's verdict)",
-                      "detail":  "Target selection, in this order and by evidence rather than preference: (1) if D-2 found a real product defect on the run-stop path, that takes the slot -- a severity-A that blocks the branch from landing outranks everything else; (2) otherwise, if D-2's verdict is 'test artefact', it is a D-6-style repair rather than a spec, and this slot goes to the most valuable finding D-3's drive produced; (3) failing both, an open ledger finding with no proposal -- F271 or F274, both severity A; (4) only then research candidate 1 (give an unattended run a third outcome for an expired ask_user: suspend the turn with the task still parked instead of releasing it -- spec-queue/research/2026-09-04.md section 1). Real defects outrank market ideas. R1 explores the codebase and writes openspec/changes/<name>/ -- proposal.md, design.md, tasks.md and the specs/<capability>/spec.md deltas. `openspec new change` refuses a name starting with a digit. `openspec validate --strict <name>` must pass before the round is done, and it reads only a requirement's FIRST PHYSICAL LINE for the modal, so SHALL goes on line 1. Specs live in openspec, never also in the Hub."
-                  },
-                  {
-                      "id":  "D-5",
-                      "status":  "open",
-                      "title":  "Spec R2 -- re-derive R1's argument against the code, independently",
-                      "detail":  "Not a re-read of R1's reasoning: a fresh comparison against what the code actually does. Fix the proposal where the code disagrees. Record what R2 changed, and if it changed nothing say so -- a round that finds nothing is a real outcome and hiding it makes the next one look cheaper than it is. `openspec validate --strict` must pass again before the round closes."
-                  },
-                  {
-                      "id":  "D-6",
-                      "status":  "open",
-                      "title":  "Spec R3 -- re-derive again, independently",
-                      "detail":  "Same instruction as R2 and deliberately not cheaper. The failure mode this round exists to catch is that an argument can be wrong while everything it argues about is right -- a review that checks outcomes will not find that, only a round that re-derives the argument will. On 2026-08-28 round 3 caught rounds 1 and 2 both breaching a requirement that had shipped four days earlier. `openspec validate --strict` clean."
-                  },
-                  {
-                      "id":  "D-7",
-                      "status":  "open",
-                      "title":  "The review page and the APPROVALS section",
-                      "detail":  "Write spec-queue/review/review-2026-09-04.html. Self-contained -- no external stylesheets, scripts or fonts, the Artifact runtime blocks them. Full DOCTYPE/html/head/body wrapper so it also opens as a file. Theme-aware: light colours on bare :root, redefined under @media (prefers-color-scheme: dark), explicit background on body. Answer in this order: (1) the branch -- name, that it spans two days and 27+ commits, unmerged, and what the merge gate did, which is that it is dormant under the seeded limit AND would have failed condition 3 because CI has been red for 21 consecutive runs; that fact goes FIRST and in a form that cannot be skimmed past; (2) what the night built and which of it was driven rather than only tested; (3) what D-2 and D-3 found, severity and file:line, one sentence each; (4) what was specced -- the problem, the argument in a paragraph, what R2 and R3 each changed, and the cost, saying explicitly if a round changed nothing; (5) what the night window will do if the operator approves nothing; (6) the research last and briefly, each candidate ending in what it would mean for AgentWeave -- including that candidate 2 is a WITHDRAWAL of yesterday's candidate 2. Then append today's section to spec-queue/APPROVALS.md with a row per specced change and NO status token. Commit and push. Then set next_action to the literal JSON null."
-                  }
-              ],
-    "decisions_for_user":  [
-                               "CI has been red on this branch for 21 consecutive runs (every commit since 467dfea0 at 2026-09-03T23:04Z). Only the hub-test job fails; the six OS/Python matrix legs, ui-test and build are all green. Three tests on the run-stop path fail on Linux. The branch therefore cannot satisfy the merge gate's condition 3 and cannot land until this is resolved. D-2 diagnoses it; the fix belongs to a later window.",
-                               "The merge gate remains dormant because STATE-day.json's seeded limits[0] still forbids merges. Conditions 1, 2 and 4 passed this morning; only CI (condition 3) failed. Whether to hand the fast-forward step over to the day window is the operator's call, and this morning is evidence for keeping the gate rather than against it -- it correctly refused to land a branch whose CI is red.",
-                               "Four ledger rows carried forward by the night window with no proposal: F271 and F274 (both severity A), plus F281 (B), F282 (C), F283 and F284 (C) filed by the two changes it built. F284 -- the manual permission card names the path and nothing else -- was held out of a-write's scope by its decision D3 and was live-driven, so it is an observation rather than a suspicion.",
-                               "Research candidate 2 is a withdrawal: yesterday's candidate 2 rested entirely on Claude Code v2.1.259 shipping a cd DIR && cat FILE fix, and v2.1.260 reverted it 25 hours later naming the regression. If anything already acted on that recommendation it should be unwound; nothing in this repo has."
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
-                   "This window FILLS and does not implement. If you find yourself editing hub/hub/ or src/agentweave/, stop -- the one exception is a drive harness fixture, which belongs in scripts/drive/.",
-                   "The hub suite runs whole in 15-25 minutes and exceeds the 600s command cap. Run it in file chunks, and do not run it whole in this window unless something you did could plausibly have broken it."
-               ]
+    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+    "playbook": ".claude/loops/day-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-03-daily",
+    "parent_branch": "master",
+    "parent_sha": "2912736",
+    "stop_at": "2026-09-04T17:00:00+01:00",
+    "iteration": 2,
+    "log_file": ".claude/autonomous/2026-09-04-day-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "D-3",
+    "next_action": "D-3 drive. Resume the coverage sweep at row 9c, Jobs + Loops, using the e2e-loop skill. Hub on 8011 started FROM SOURCE from hub/ with uvicorn (never `agentweave --port`, whose bundled migrations lag this checkout); before drawing any conclusion, confirm no .py under hub/hub or src is newer than the process start time. A FRESH project -- never proj-5e960453, never proj-18e5d4e0, never port 8000. Every real agent turn binds claude-haiku-4-5. This row is Jobs and Loops, so the limit most likely to be tripped is the one about leaving a job enabled: disable and archive everything created, and check before you finish. New findings append to scripts/drive/FINDINGS.md with a severity, a file:line, a reproduction, and `**Status:** open` as the FIRST line of the body, continuing from F287. The drive's output also selects D-4's spec target -- D-2 came back 'test artefact', so the slot goes to the best thing this drive finds, and only if it finds nothing does it fall back to F286.",
+    "queue": [
+        {
+            "id": "compose",
+            "status": "done",
+            "title": "Compose this window's queue from the playbook",
+            "detail": "Done at iteration 1. Merge gate dormant (seeded limit) and would have failed condition 3 anyway. Research delivered to spec-queue/research/2026-09-04.md. DIRECTION.md has no section for today. Coverage-sweep resumption trigger has fired: F188 has a proposal (archived a-blocked-agent-workspace-holds-its-input)."
+        },
+        {
+            "id": "D-2",
+            "status": "done",
+            "title": "CI triage -- three hub tests red on Linux, green on this machine?",
+            "detail": "Done at iteration 2. Verdict: ONE cause, all three tests, and it is a TEST-HARNESS ARTEFACT -- filed F285 (B). The suite runs on sqlite+aiosqlite:///:memory: (hub/tests/conftest.py:19), whose aiosqlite pool is a StaticPool: one DBAPI connection shared by every AsyncSession, so a finishing HTTP request's reset-on-return ROLLBACK erases a background run's in-flight INSERT and record_agent_output's db.refresh(row) raises 'Could not refresh instance'. Measured (memory=StaticPool, file=AsyncAdaptedQueuePool), reduced in scripts/drive/staticpool_shared_connection.py, and reproduced inside the real suite with CI's exact error via scripts/drive/churn_sessions_plugin.py at CHURN_DELAY=0.3. Not reachable in production: config.py:16 is always file-backed. Two further findings: F286 (B) -- a real product gap, _execute_run's exception handler gates the queue redrain (:2358) on already_terminal, so an exception between the terminal commit (:2174) and the normal redrain (:2281) strands queued input with no tick to recover it; F287 (C) -- the refresh is dead weight (expire_on_commit=False, timestamp is a Python-side default) and costs one SELECT per output row."
+        },
+        {
+            "id": "D-3",
+            "status": "open",
+            "title": "Drive -- coverage sweep row 9c, Jobs + Loops",
+            "detail": "Resume the coverage sweep at row 9c. DIRECTION.md's 2026-09-03 section stated the resumption as a condition, not as that day's instruction: once F188 has a proposal all three severity-A findings are addressed and the pause expires, earliest 2026-09-04. F188's proposal exists and is archived, so the trigger has fired. Use the e2e-loop skill. Hub on 8011 started from hub/ with uvicorn FROM SOURCE, never `agentweave --port`; confirm no .py under hub/hub or src is newer than the process start time before drawing a conclusion. Fresh project -- never proj-5e960453, never proj-18e5d4e0, never port 8000. Every real agent turn binds claude-haiku-4-5. Never leave a job enabled -- this row is Jobs and Loops, so that limit is the one most likely to be tripped: disable and archive anything created. New findings append to scripts/drive/FINDINGS.md with severity, file:line, reproduction and `**Status:** open` as the first body line."
+        },
+        {
+            "id": "D-4",
+            "status": "open",
+            "title": "Spec R1 -- explore and propose (target set by D-2's verdict)",
+            "detail": "Target selection, updated by D-2's verdict at iteration 2. D-2's answer was TEST ARTEFACT, so rule (1) does not fire and the CI red is a repair, not a spec. Order now: (1) the most valuable finding D-3's drive produces; (2) failing that, F286 (B) -- the redrain gated on already_terminal, filed by D-2, a real product defect on the run-stop path with a named file:line and a reproduction, and the strongest standing candidate; (3) an open ledger finding with no proposal -- F271 or F274, both severity A; (4) only then research candidate 1 (a third outcome for an expired ask_user in an unattended run -- spec-queue/research/2026-09-04.md section 1). Real defects outrank market ideas. R1 explores the codebase and writes openspec/changes/<name>/ -- proposal.md, design.md, tasks.md and the specs/<capability>/spec.md deltas. `openspec new change` refuses a name starting with a digit. `openspec validate --strict <name>` must pass before the round is done, and it reads only a requirement's FIRST PHYSICAL LINE for the modal, so SHALL goes on line 1. Specs live in openspec, never also in the Hub."
+        },
+        {
+            "id": "D-5",
+            "status": "open",
+            "title": "Spec R2 -- re-derive R1's argument against the code, independently",
+            "detail": "Not a re-read of R1's reasoning: a fresh comparison against what the code actually does. Fix the proposal where the code disagrees. Record what R2 changed, and if it changed nothing say so -- a round that finds nothing is a real outcome and hiding it makes the next one look cheaper than it is. `openspec validate --strict` must pass again before the round closes."
+        },
+        {
+            "id": "D-6",
+            "status": "open",
+            "title": "Spec R3 -- re-derive again, independently",
+            "detail": "Same instruction as R2 and deliberately not cheaper. The failure mode this round exists to catch is that an argument can be wrong while everything it argues about is right -- a review that checks outcomes will not find that, only a round that re-derives the argument will. On 2026-08-28 round 3 caught rounds 1 and 2 both breaching a requirement that had shipped four days earlier. `openspec validate --strict` clean."
+        },
+        {
+            "id": "D-7",
+            "status": "open",
+            "title": "The review page and the APPROVALS section",
+            "detail": "Write spec-queue/review/review-2026-09-04.html. Self-contained -- no external stylesheets, scripts or fonts, the Artifact runtime blocks them. Full DOCTYPE/html/head/body wrapper so it also opens as a file. Theme-aware: light colours on bare :root, redefined under @media (prefers-color-scheme: dark), explicit background on body. Answer in this order: (1) the branch -- name, that it spans two days and 27+ commits, unmerged, and what the merge gate did, which is that it is dormant under the seeded limit AND would have failed condition 3 because CI has been red for 21 consecutive runs; that fact goes FIRST and in a form that cannot be skimmed past; (2) what the night built and which of it was driven rather than only tested; (3) what D-2 and D-3 found, severity and file:line, one sentence each; (4) what was specced -- the problem, the argument in a paragraph, what R2 and R3 each changed, and the cost, saying explicitly if a round changed nothing; (5) what the night window will do if the operator approves nothing; (6) the research last and briefly, each candidate ending in what it would mean for AgentWeave -- including that candidate 2 is a WITHDRAWAL of yesterday's candidate 2. Then append today's section to spec-queue/APPROVALS.md with a row per specced change and NO status token. Commit and push. Then set next_action to the literal JSON null."
+        }
+    ],
+    "decisions_for_user": [
+        "CI's three failures are ONE cause and it is the test harness, not the product (F285). The suite runs in-memory, whose SQLAlchemy pool is a StaticPool -- every AsyncSession shares one connection, so any request finishing rolls back whatever a background run is writing. Reproduced on this machine with CI's exact error (scripts/drive/churn_sessions_plugin.py, CHURN_DELAY=0.3) and shown not to occur on a file-backed engine, which is the only kind production uses. WHICH FIX is the operator's call: an unshared pool, a file-backed temp database per test, or per-test engine disposal. They differ in how much of the suite has to be re-timed. Until one is chosen the branch cannot satisfy the merge gate's condition 3.",
+        "F286 (B) is the part of the CI red that is NOT a harness problem and outlives its fix: _execute_run's exception handler gates the queue redrain on `already_terminal`, so an exception raised after a run reaches a terminal status leaves the input queued behind it undrained, with nothing on a timer to notice. It is a candidate for D-4's spec slot if the drive produces nothing stronger.",
+        "The merge gate remains dormant because STATE-day.json's seeded limits[0] still forbids merges. Conditions 1, 2 and 4 passed this morning; only CI (condition 3) failed, and D-2 has now explained why. Whether to hand the fast-forward step over to the day window is the operator's call.",
+        "Four ledger rows carried forward by the night window with no proposal: F271 and F274 (both severity A), plus F281 (B), F282 (C), F283 and F284 (C) filed by the two changes it built. F284 -- the manual permission card names the path and nothing else -- was held out of a-write's scope by its decision D3 and was live-driven, so it is an observation rather than a suspicion.",
+        "Research candidate 2 is a withdrawal: yesterday's candidate 2 rested entirely on Claude Code v2.1.259 shipping a cd DIR && cat FILE fix, and v2.1.260 reverted it 25 hours later naming the regression. If anything already acted on that recommendation it should be unwound; nothing in this repo has."
+    ],
+    "limits": [
+        "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
+        "This window FILLS and does not implement. If you find yourself editing hub/hub/ or src/agentweave/, stop -- the one exception is a drive harness fixture, which belongs in scripts/drive/.",
+        "The hub suite runs whole in 15-25 minutes and exceeds the 600s command cap. Run it in file chunks, and do not run it whole in this window unless something you did could plausibly have broken it."
+    ]
 }

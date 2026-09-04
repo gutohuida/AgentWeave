@@ -19525,3 +19525,161 @@ that `manual` is not the safer posture it reads as; it is the posture in which a
 make a judgement they have not been given the inputs for. Scope, if it is taken up, is the card's
 payload and its rendering, and it should be decided together with **F283 (B)**, which is the other
 place where the posture the operator believes they chose and the posture the run got come apart.
+
+## F285 (B) - the hub suite's in-memory engine shares one connection across every session, so any request that finishes rolls back whatever a background run is midway through writing
+
+**Status:** open
+
+**Found 2026-09-04 (day D-2)** triaging CI. This is the single cause of all three tests the
+`hub-test` job has failed on every one of the 21 completed runs since `467dfea` (2026-09-04T00:03),
+and therefore the only thing standing between two days of finished work and `master`.
+
+**What CI reports.** Three tests, two files, three different-looking assertions:
+
+| Test | Assertion CI prints |
+|---|---|
+| `tests/test_a_turn_says_how_it_ended.py::test_a_stopped_run_persists_its_terminal_status_line:362` | `assert 0 == 1` - no `phase="completed"` row |
+| `tests/test_agent_trigger.py::test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped:1349` | `assert None is not None` - `queued_entry.delivered_in_run_id` |
+| `tests/test_agent_trigger.py::test_codex_app_server_stop_signals_should_interrupt:2049` | the error propagates out of `_await_background_run()` |
+
+All three carry the same traceback, two of them only in the captured log:
+
+```
+hub/output_recording.py:94: in record_agent_output
+    await db.refresh(row)
+sqlalchemy.exc.InvalidRequestError: Could not refresh instance '<AgentOutput at 0x...>'
+```
+
+**The mechanism, measured rather than reasoned.** `hub/tests/conftest.py:19` pins the suite to
+`sqlite+aiosqlite:///:memory:`. SQLAlchemy's aiosqlite dialect selects the pool from the URL:
+in-memory gets a **StaticPool**, a file gets an `AsyncAdaptedQueuePool`. Measured on this machine:
+
+```
+sqlite+aiosqlite:///:memory:   pool=StaticPool
+sqlite+aiosqlite:///<file>     pool=AsyncAdaptedQueuePool
+```
+
+A StaticPool hands *the same DBAPI connection* to every checkout, with no in-use tracking. So every
+`AsyncSession` in the suite - the background run task's, and every HTTP request's `get_session`
+dependency - shares one connection and therefore one transaction. Returning a connection to a pool
+resets it, and reset means `ROLLBACK`. An HTTP request finishing is thus a rollback issued on the
+transaction a background task has open.
+
+`scripts/drive/staticpool_shared_connection.py` reduces it to nothing else - session A inserts and
+has not committed, session B opens and closes, session A commits and refreshes:
+
+```
+sqlite+aiosqlite:///:memory:   -> InvalidRequestError: Could not refresh instance '<Row at ...>'
+sqlite+aiosqlite:///<file>     -> no error; rows in db = ['r1']
+```
+
+**Reproduced inside the real suite, on this machine, with the exact CI error.**
+`scripts/drive/churn_sessions_plugin.py` is an autouse fixture that churns short-lived sessions
+during a test - it makes by demand the interleave CI hits by luck:
+
+```
+CHURN_DELAY=0.3 PYTHONPATH=scripts/drive py -3.11 -m pytest \
+  hub/tests/test_a_turn_says_how_it_ended.py -p churn_sessions_plugin -k stopped_run_persists
+```
+
+-> `sqlalchemy.exc.InvalidRequestError: Could not refresh instance '<AgentOutput at 0x...>'`, at
+`output_recording.py:94`, same class and same site as CI. It is still a race and not a switch: at
+`CHURN_DELAY=0.3` this machine lands on that exact error, at `0.25`, `0.35` and `0.4` the churn is
+coarser than CI's window and erases the stop path's own status write first, so the test fails on
+`assert 'running' == 'stopped'` instead. Either way the test fails and the cause is the same
+rollback. With no churn the three tests pass here every time, individually and by file -
+which is exactly what "green on Windows, red on Linux" means: not a platform difference in the
+product, a scheduling difference in when a request happens to finish.
+
+**Verdict: a test-harness artefact, not a product defect.** Production is never in-memory.
+`hub/hub/config.py:16` defaults the database to `~/.agentweave/hub/data/agentweave.db` and native
+mode sets `DATABASE_URL` to a file before `Settings` is instantiated; `:memory:` appears in
+`hub/hub/` only in two places that exist to *detect* it (`db/engine.py:76`,
+`instance_identity.py:41`). On a file-backed engine every session holds its own connection, so
+reset-on-return rolls back only its own transaction, and the demo above commits cleanly.
+
+**What this does not excuse.** The suite is the merge gate's condition 3, and a harness whose
+sessions cannot safely overlap makes every concurrent-path test in it non-deterministic rather than
+just these three. The fix is a decision about the test engine - a StaticPool that is not shared, a
+file-backed temporary database per test, or per-test engine disposal - and belongs to a window that
+implements. See **F287** for the one line that turns this artefact into a crash rather than a
+harmless extra query, and **F286** for the product gap the crash exposed.
+
+## F286 (B) - an exception after a run reaches its terminal status leaves the input queued behind it undrained, and nothing is on a timer to notice
+
+**Status:** open
+
+**Found 2026-09-04 (day D-2)**, downstream of **F285** - the CI failure is what put a real exception
+into that window, but the gap is in `hub/hub/api/v1/agent_trigger.py` and does not depend on how the
+exception arose.
+
+`_execute_run` writes the run's terminal status and commits at `agent_trigger.py:2174`, then does
+its post-turn bookkeeping - `_report_abandoned_entries`, `_broadcast_run_lifecycle`,
+`persist_event`, and the terminal status row at `:2235` - and only at **`:2281`** calls
+`redrain_queued_agents(project_id)`, which is what picks up input that arrived while the run was
+busy.
+
+The exception handler at `:2287` computes `already_terminal` (`:2306`) by re-reading the run row and
+asking whether it is still `running`. It uses that flag for two things. The first is correct and its
+comment argues it well: do not relabel a run that already ended cleanly as `failed` just because
+some later bookkeeping raised. The second is the redrain at **`:2358`**, which sits under
+`if not already_terminal:` (`:2350`) - and its own comment says it is *"[u]nconditional, where this
+was gated on `returned`"*, because "a run that fails releases the task checkout it held exactly as a
+run that succeeds does".
+
+So the redrain is skipped in precisely the case where the normal path's redrain was also skipped: an
+exception raised **between `:2174` and `:2281`**, when the run is already terminal and `:2281` was
+never reached. Nothing recovers it. `agent_trigger.py:1908` states the constraint plainly -
+*"Nothing does on a timer: `redrain_queued_agents` is reachable only from project open, settings..."*
+
+**Observed.** `test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped` asserts
+`queued_entry.delivered_in_run_id is not None` for an entry that arrived behind a run that was then
+stopped, and CI reports `None`: the stopped run's `record_agent_output` raised at `:2235`, `:2281`
+never ran, `already_terminal` was True, and the entry was never handed to a successor. The
+operator-visible shape is a queued message that simply never runs.
+
+`_execute_codex_appserver_run` has the same layout - terminal write, then bookkeeping, then
+`redrain_queued_agents` at `:2872` - and reaches the same handler.
+
+**Reproduction** is F285's, since that is what supplies the exception:
+`CHURN_DELAY=0.3 PYTHONPATH=scripts/drive py -3.11 -m pytest hub/tests/test_agent_trigger.py -p churn_sessions_plugin -k stop_endpoint_marks_run_stopped`.
+In production the exception has to come from somewhere else - a database error, a broadcast failure
+- which is rarer, not unreachable, and the handler is indifferent to which.
+
+**Severity B rather than A** because reaching it needs a second failure first. What makes it worth
+fixing is the shape: the run is correctly terminal, correctly labelled, correctly broadcast, and the
+work behind it is silently stranded with no surface saying so.
+
+## F287 (C) - `record_agent_output` refreshes a row it has already fully populated, one extra SELECT per output line on the Hub's hottest write path
+
+**Status:** open
+
+**Found 2026-09-04 (day D-2)** while triaging **F285**, which is the line's second cost.
+
+`hub/hub/output_recording.py:92-94` ends every write with:
+
+```python
+db.add(row)
+await db.commit()
+await db.refresh(row)
+```
+
+Nothing needs the refresh. `async_session_factory` is built with `expire_on_commit=False`
+(`hub/hub/db/engine.py:39`), so the commit does not expire the instance; and `AgentOutput` has no
+server-side defaults - every column is set explicitly by the caller except `timestamp`, which is
+`mapped_column(UTCDateTime(), default=_now, ...)` at `hub/hub/db/models.py:1247`, a **Python-side**
+default already applied at flush. The only attribute the broadcast below reads that the caller did
+not set is `row.timestamp`, and it is populated before the refresh runs.
+
+The cost is one extra `SELECT` by primary key for **every** agent output row - every streamed line
+of every turn, on both runners, through the one function both the self-report endpoint and the
+Hub's own spawn loop funnel into.
+
+The second cost is that a redundant query is the only reason F285 is a crash. A refresh is the one
+operation that fails loudly when the row it expects is not there; without it the harness artefact
+would have been an invisible no-op. That is an argument for deleting the line and *not* an argument
+for keeping it as a canary - a canary in the hot path that fires only under a pool the product never
+uses is not detection, it is noise.
+
+**Reproduction:** read the three lines. `scripts/drive/staticpool_shared_connection.py` shows the
+failure the refresh converts a harmless rollback into.
