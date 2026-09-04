@@ -94,6 +94,21 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     case 'task_worktree_release_failed':
       return `${data.task_id ?? 'a task'}: worktree not released${data.reason ? ` — ${data.reason}` : ''}`
     case 'agent_heartbeat': return `${data.agent} [${data.status}]${data.message ? ` — ${data.message}` : ''}`
+    // The wording is the requirement, not a style choice: this row says a write *landed*
+    // somewhere else, and the product never calls it an escape, a violation or a breach. It is
+    // recorded rather than prevented, and a row that sounded like a refusal would claim a wall
+    // the product does not have. `destination_name` is the whole point of the notice for the
+    // kinds that have one — "wrote into bob's workspace" is a different fact to "wrote outside".
+    case 'agent_wrote_outside_workspace': {
+      const named: Record<string, string> = { agent: 'workspace', task: 'task checkout', review: 'review checkout' }
+      const kind = String(data.destination_kind ?? '')
+      const where = named[kind] && data.destination_name
+        ? `${data.destination_name}'s ${named[kind]}`
+        : kind === 'project' ? 'the project directory'
+        : kind === 'hub' ? "the Hub's own directory"
+        : 'outside its workspace'
+      return `${data.agent ?? 'an agent'} wrote ${where === 'outside its workspace' ? where : `outside its workspace, into ${where}`}${data.path ? `: ${data.tool ?? 'a tool'} → ${data.path}` : ''}`
+    }
     // Both of these carry the only detail worth reading in a field the default branch does not
     // look at, so without a case they render as their own event name twice over.
     case 'permission_denied': return `${data.agent ?? ''} refused ${data.tool_name ?? 'an action'}${data.reason ? `: ${data.reason}` : ''}`

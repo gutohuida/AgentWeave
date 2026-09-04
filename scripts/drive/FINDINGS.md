@@ -19318,3 +19318,117 @@ which mutation M8 (drop the key from the agent response) turns red.
 the recording" was satisfied by fixing the response *one kind of recorder* receives. Both routes were
 already there; nothing pointed out that the sentence covered both. Worth a sweep: which other
 shipped requirements phrased around "the response" are implemented on the operator plane only?
+
+## F281 (B) - a shell command's writes are never recorded, in any posture, and the boundary that refuses some of them is the only thing that ever sees one
+
+**Found 2026-09-04 (night N-21)** doing task 8.1 of
+`a-write-outside-the-workspace-is-recorded`. **Filed, not fixed** - it is named out of scope in that
+change's proposal, and the label on the record it ships does not imply it.
+
+`written_paths` (`hub/hub/workspace_writes.py`) answers *the declared path argument(s) of a
+file-writing tool call*. A `Bash`/`shell` call declares no path: it carries a command string. So
+`written_paths("Bash", {"command": ...})` returns `()` for every command there is, and
+`OutsideWriteRecorder` - the whole of the new record - never sees a shell write at all. Measured:
+
+| command | `written_paths("Bash", …)` | `_decide` under the default posture |
+|---|---|---|
+| `echo hi > C:/…/tmp…/stray.txt` | `()` | refused, naming the path |
+| `echo hi > "$HOME/stray.txt"` | `()` | refused, on the fragment `'/stray.txt'` |
+| `D=/tmp; echo hi > $D/stray.txt` | `()` | refused, on the fragment `'/tmp'` |
+
+**The asymmetry is the finding.** The `workspace` posture's approver reads absolute paths out of the
+command *text* (`mcp_server._decide`, the `command` branch) and says so of itself - *"This does not
+make shell escape impossible … and is a boundary, not a sandbox."* So under the default posture the
+boundary catches the literal-path case, and even over-refuses on a fragment that was never a
+destination (`$D/stray.txt` refused for `/tmp`). Under the three postures where an outside write is
+actually *possible* - `manual` approved, `acceptEdits`, full access - nothing checks the command and
+nothing records it either. The record this change adds is blind to exactly the tool an agent reaches
+for when a file tool has been refused.
+
+**Why it is not fixed here, and what fixing it would take.** Recording a destination the run never
+declared means either parsing shell (`>`, `>>`, `tee`, `cp`, `mv`, `install`, a heredoc, any of a
+dozen more, in two shells) or watching the filesystem. The first invents coverage - the failure mode
+`written_paths` is deliberately written against, returning empty for an unknown tool rather than
+guessing from key names. The second is a different product decision (an OS-level sandbox, per the
+change's own out-of-scope note). Neither belongs inside a parse-time path extractor.
+
+**What a reader should take from it today.** `Run.outside_workspace_writes == []` means *no
+file-tool write left the workspace*. It does not mean *nothing left the workspace*, and the run's
+`Bash` calls are the gap. That is a narrower claim than the column's comment currently makes, and it
+is the honest one.
+
+## F282 (C) - a junction inside the workspace is correctly classified as outside and correctly refused; what is wrong is the path both of them then print
+
+**Found 2026-09-04 (night N-21)** doing task 8.2 of
+`a-write-outside-the-workspace-is-recorded`. **The task's premise did not survive being measured**,
+and the corrected finding is smaller and different in kind.
+
+Task 8.2 says to file *"symlink traversal: a link inside the workspace pointing out reports a path
+that is legitimately inside"*. Read as a detection gap, that is false. Both `classify`
+(`workspace_writes.py`) and `_decide` (`mcp_server.py`) call `os.path.realpath` on the joined path
+before comparing, which is the same reason `classify`'s docstring already gives for the two agreeing
+about a link. Measured on this machine with a directory **junction** - `mklink /J`, the cousin of a
+symlink that needs no elevation, which is what made the measurement possible where `os.symlink`
+raised `WinError 1314`:
+
+```
+declared   C:\…\tmp\ws\link\x.py          (link -> C:\…\tmp\elsewhere)
+realpath   C:\…\tmp\elsewhere\x.py
+classify   WriteLocation(kind='project', name=None)     # the destination's real location
+_decide    allow=False, "… is outside your workspace"   # refused under the default posture
+```
+
+So the link is followed, the write is classified where it really lands, and the default posture
+refuses it. Nothing is fooled.
+
+**What is actually wrong is the reporting.** Both the refusal reason and the recorded row name the
+**declared** path - `…\ws\link\x.py`, which reads as unambiguously *inside* the workspace - while the
+verdict beside it says outside. The recorder stores the first call's `tool` and `path` "raw and
+exactly as the tool declared it" on purpose, so the durable record and the operator's notice cannot
+describe different writes; the cost is that for a linked route they agree with each other and
+disagree with the verdict. An operator reading *"alice wrote outside its workspace: Write →
+C:/ws/link/x.py"* has no way to see why that path is outside anything.
+
+**Not fixed here** (this change ships no path rewriting, and carrying a second resolved path is a
+schema decision with its own argument). The cheap improvement, if it is ever wanted, is to record the
+resolved path *beside* the declared one rather than instead of it - the declared path is what the
+agent must be told about, the resolved path is what the operator must be shown.
+
+**And the one thing genuinely undetectable:** a hard link. No path comparison of any kind can see
+one, because there is no link to resolve - two names for one inode, both legitimately inside. That is
+a real hole and it is unrelated to symlinks; it is recorded here so a later sweep does not
+rediscover it and file it as the same thing.
+
+## F283 (B) - the Permissions pill sits on "Edit files" while the run it describes is spawned under "Workspace only"
+
+**Found 2026-09-04 (night N-21)** while documenting the postures (task 7.1). **Filed, not fixed** -
+it is outside `a-write-outside-the-workspace-is-recorded`, whose scope is observing writes, not
+choosing postures.
+
+There are two built-in defaults for one decision, in two modules, and they disagree:
+
+- `model_catalog.py` - the `permission_mode` control declares `default="acceptEdits"` (and
+  `DEFAULT_PERMISSION_MODE = "acceptEdits"` beside it, referenced by nothing else in the Hub).
+- `runner_commands.py` - `DEFAULT_CLAUDE_PERMISSION_MODE = WORKSPACE_PERMISSION_MODE`, applied when
+  the operator set no posture, spawning `--permission-mode manual --permission-prompt-tool
+  mcp__agentweave__approve_tool_call`.
+
+For an agent with no `default_permission_mode` (the column is nullable and NULL for every agent
+nobody has configured), the composer sends no `permission_mode` override, so `AgentOutputPanel`
+passes `EMPTY_CONTROLS` as `effectiveControls` and `ComposerModelControls` falls through
+`effectiveValue ?? control.default ?? …` to the catalog default. The pill therefore reads **"Edit
+files"** and the run is **"Workspace only"**.
+
+**Why this is a B and not cosmetic.** The pill is the operator's statement of what the run will do,
+and both sides of the wire already carry a comment saying so - `AgentOutputPanel.tsx`, *"without this
+the pill would sit at the catalog default while the run went elsewhere"*, which fixed the
+**agent-default** case and left the no-default case as it was; and `runner_commands.py`, calling the
+composer appearing to work and changing nothing *"the worst available failure mode"*. This is the
+same disagreement, in the case a fresh project is always in.
+
+The direction is worth stating: the run is **stricter** than the pill claims, not looser. An
+operator who reads "Edit files" and is told nothing is checked will see their agent refused for an
+absolute path, which is a confusing refusal rather than an unsafe permission. The fix is a decision
+about which default is the real one, not a patch: either the catalog's declared default becomes
+`workspace` (and Codex's own row is looked at in the same breath), or the composer resolves its
+at-rest display through the same fallback the spawn uses.

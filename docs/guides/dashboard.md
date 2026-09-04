@@ -63,7 +63,8 @@ place you can return to.
 - **Timeline** — operator input, the agent's own output, and agent-to-agent traffic in both
   directions, each placed by its recorded association rather than inferred from timestamps.
 - **Composer** — sets the model, the reasoning effort and the permission posture for the next
-  message, and shows how full *this* conversation's context is.
+  message, and shows how full *this* conversation's context is. What each posture does and does not
+  check is in [Permission postures](../reference/permission-postures.md).
 - **Checkpoint** — writes a record of where the work stands so it can continue in a fresh
   conversation, rather than letting one thread grow until it degrades.
 
@@ -128,6 +129,11 @@ Connected agents are auto-discovered from your session. Each card shows:
 Roles are gone — an agent's behaviour comes from the **charter** bound to it, and its execution
 capability from the **runner** bound to it. Permission posture is set per run from the composer,
 not as a property of the agent.
+
+An agent can carry a **default** posture for runs that state none — a peer message or a scheduled
+job has no composer to choose one. See [Permission postures](../reference/permission-postures.md)
+for what each posture checks; a workspace is a working directory rather than a wall, and a write
+that leaves it is recorded rather than prevented.
 
 ## Tips
 

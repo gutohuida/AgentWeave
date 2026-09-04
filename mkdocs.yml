@@ -64,6 +64,7 @@ nav:
   - Reference:
     - reference/cli-commands.md
     - reference/mcp-tools.md
+    - reference/permission-postures.md
     - reference/task-lifecycle.md
     - reference/hub-api.md
     - reference/agent-stream-contract.md

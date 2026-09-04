@@ -47,7 +47,7 @@ import hub.worktrees as worktrees
 from hub.db.engine import async_session_factory
 from hub.db.models import AgentOutput, EventLog, Run
 from hub.mcp_server import _decide
-from hub.model_catalog import WORKSPACE_PERMISSION_MODE
+from hub.model_catalog import WORKSPACE_PERMISSION_MODE, permission_mode_values
 from hub.runner_commands import DEFAULT_CLAUDE_PERMISSION_MODE
 from hub.runner_events import RunEvent
 from hub.runner_parsing import parse_claude_line
@@ -471,3 +471,91 @@ def test_the_default_posture_refuses_the_same_path(layout, monkeypatch):
     # whose cwd is the run's workspace; asserted here from a cwd that is not.
     assert os.path.realpath(os.getcwd()) != os.path.realpath(str(layout.workspace))
     assert _decide("Write", {"file_path": "note.txt"})["allow"] is True
+
+
+# --------------------------------------------------------------------------------------
+# Phase 7 -- the postures are documented, per posture, by what they check.
+# --------------------------------------------------------------------------------------
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+POSTURES_DOC = REPO_ROOT / "docs" / "reference" / "permission-postures.md"
+
+#: Every posture the model catalog offers an operator, and the phrase the documentation has to
+#: reach a verdict with for each. Built from the catalog rather than restated, so a fifth posture
+#: shipping with no documented verdict fails here rather than being documented by omission.
+_EXPECTED_VERDICTS = {
+    "workspace": "Checked by the Hub",
+    "manual": "Put to you",
+    "acceptEdits": "Not checked",
+    "bypassPermissions": "Not checked",
+}
+
+
+def _postures_doc() -> str:
+    if not (REPO_ROOT / "mkdocs.yml").exists():  # pragma: no cover - not a source checkout
+        pytest.skip("documentation is not present in this environment")
+    assert POSTURES_DOC.exists(), f"{POSTURES_DOC} is missing"
+    return POSTURES_DOC.read_text(encoding="utf-8")
+
+
+def test_every_posture_is_documented_by_what_it_checks():
+    """7.1 -- each posture states whether a file write is checked against the run's workspace.
+
+    Read off `permission_mode_values()` rather than from a list written here: the requirement is
+    about *the postures the product offers*, so a posture added to the catalog and not to the page
+    is exactly the failure this asserts, and a list restated in the test would not notice it.
+    """
+    text = _postures_doc()
+    offered = {value.id for value in permission_mode_values()}
+    assert offered == set(_EXPECTED_VERDICTS), (
+        "the catalog's postures and the documented ones have diverged: "
+        f"{sorted(offered)} vs {sorted(_EXPECTED_VERDICTS)}"
+    )
+    for posture, verdict in _EXPECTED_VERDICTS.items():
+        row = next((line for line in text.splitlines() if f"`{posture}`" in line), None)
+        assert row is not None, f"{posture} is not documented"
+        assert verdict in row, f"{posture} is documented without saying whether writes are checked"
+
+    # The default is part of the answer, not a footnote: an operator who never touches the pill is
+    # running `workspace`, and the page would be misread without it.
+    assert DEFAULT_CLAUDE_PERMISSION_MODE == WORKSPACE_PERMISSION_MODE
+    assert "**Workspace only**" in text
+
+
+def test_the_documentation_says_the_workspace_is_not_a_wall():
+    """7.2 -- the three sentences the requirement names, each present."""
+    text = _postures_doc()
+    for sentence in (
+        "working directory, not a wall",
+        "you are the boundary",
+        "recorded rather than prevented",
+    ):
+        assert sentence in text.lower() or sentence in text, f"missing: {sentence}"
+
+
+def test_containment_is_not_claimed_or_denied_for_a_mode():
+    """7.3 -- the prohibition, both halves.
+
+    Round 1's correction is the reason this is a test and not a note. "Native mode does not
+    confine" is the sentence a reader reaches for, and it is false for the default posture; its
+    mirror image ("native mode confines") is false for the two postures that check nothing. The
+    scan is for the *claims*, not for the word "native" -- the page is allowed to discuss the
+    subject, and does.
+    """
+    lowered = _postures_doc().lower()
+    for claim in (
+        "native mode does not confine",
+        "native execution does not confine",
+        "native does not confine",
+        "native mode confines",
+        "native execution confines",
+    ):
+        assert claim not in lowered, f"the page makes the prohibited claim: {claim!r}"
+
+
+def test_the_postures_page_is_published():
+    """A page absent from the nav is not documentation; it is a file in the repository."""
+    if not (REPO_ROOT / "mkdocs.yml").exists():  # pragma: no cover - not a source checkout
+        pytest.skip("documentation is not present in this environment")
+    nav = (REPO_ROOT / "mkdocs.yml").read_text(encoding="utf-8")
+    assert "reference/permission-postures.md" in nav

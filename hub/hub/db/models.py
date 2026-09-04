@@ -1130,8 +1130,14 @@ class Run(Base):
     # an identical message, and matching commits to turns by timestamp is guesswork. Recorded per
     # run, the union over a conversation's runs is exact.
     snapshot_commit_sha: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    # The directory this run actually executed in, written at spawn from `effective_work_dir`
+    # The directory this run *started* in, written at spawn from `effective_work_dir`
     # (`2026-08-27-work-is-isolated-per-task`, design D7).
+    #
+    # It is where the run was put, and nothing more. It is **not** a statement that the run's
+    # writes stayed there: a workspace is a working directory, not a wall (F115), and under any
+    # posture that is not the default one an absolute path lands where it says. Whether anything
+    # left is a separate recorded fact — `outside_workspace_writes` directly below — and a reader
+    # that treats this column as containment is reading a claim it does not make (design D6).
     #
     # A recorded fact rather than a derivation, because under per-task isolation the right
     # directory depends on the turn and no derivation answers every case:

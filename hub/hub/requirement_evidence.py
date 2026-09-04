@@ -349,7 +349,11 @@ def footprint_root(
 
 
 async def recorded_workspace_dir(session: AsyncSession, run_id: Optional[str]) -> Optional[str]:
-    """The directory a run executed in, or None when there is no run or it predates the column."""
+    """The directory a run *started* in, or None when there is no run or it predates the column.
+
+    Where it was put, not where it stayed: `Run.workspace_dir` makes no containment claim, and
+    `outside_writes_for_run` below is the separate fact about what left (design D6).
+    """
     if not run_id:
         return None
     return await session.scalar(select(Run.workspace_dir).where(Run.id == run_id))

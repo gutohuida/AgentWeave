@@ -360,31 +360,96 @@
 
 ## 6. Say what the recorded directory means
 
-- [ ] 6.1 Correct the comment on `Run.workspace_dir` (`hub/hub/db/models.py:1133-1148`): it records
+- [x] 6.1 Correct the comment on `Run.workspace_dir` (`hub/hub/db/models.py:1133-1148`): it records
   where the run started and is not a statement that the run's writes stayed there.
-- [ ] 6.2 No behaviour change here and no migration — part (1) is a specification change (design D6).
+  *Landed 2026-09-04 (night N-21).* The range was re-measured before editing and was still exact.
+  The first line now says the run *started* there, and a new paragraph says what the column is not:
+  not a containment claim, a workspace being a working directory rather than a wall (F115), with
+  the pointer to `outside_workspace_writes` directly below as the separate fact about what left.
+- [x] 6.2 No behaviour change here and no migration — part (1) is a specification change (design D6).
   Grep for any other reader of `workspace_dir` that treats it as containment and correct or file it.
+  *Landed 2026-09-04 (night N-21).* The grep covered `hub/hub`, `src/` and `hub/ui/src` for both
+  `workspace_dir` and `AW_WORKSPACE_DIR`, and separately for containment vocabulary (*confine*,
+  *sandbox*, *walled*, *jail*). **The database column has exactly three readers**, and none of the
+  unknown ones treated it as containment:
+  - `requirement_evidence.footprint_root` — the known one, corrected in N-20, not re-done;
+  - `requirement_evidence.recorded_workspace_dir` — its one-line docstring said "the directory a
+    run executed in", which is not a containment claim but is the sentence a reader would build
+    one from. Now says *started*, with the pointer to `outside_writes_for_run` beside it;
+  - `OutsideWriteRecorder.__init__` — the detector, which is the thing that exists because the
+    column is not containment.
+
+  **The UI reads it nowhere** (`workspace_dir`/`workspaceDir` return nothing under `hub/ui/src`),
+  so there was no operator-facing claim to correct. `AW_WORKSPACE_DIR` has one reader,
+  `mcp_server._decide`, which is a real check and already describes itself accurately as *a
+  boundary, not a sandbox*.
 
 ## 7. Document the postures
 
-- [ ] 7.1 Document, per posture, whether a file write is checked against the run's workspace:
+- [x] 7.1 Document, per posture, whether a file write is checked against the run's workspace:
   `workspace` — checked by the Hub; `manual` — put to the operator; `acceptEdits` — not checked;
   full access — not checked. Docker mode confines at the mount whatever the posture.
-- [ ] 7.2 Say plainly that a workspace is a working directory rather than a wall, that where no
+  *Landed 2026-09-04 (night N-21).* New page `docs/reference/permission-postures.md`, in the
+  mkdocs nav under Reference and linked from the dashboard guide at both places an operator meets
+  a posture (the composer's pill and the agent's default). One row per posture, each with the
+  verdict; the built-in default is stated, including the case where there is no approver
+  configured and it falls back to `acceptEdits`.
+  `test_every_posture_is_documented_by_what_it_checks` reads the postures off
+  `permission_mode_values()` rather than restating them, so a fifth posture added to the catalog
+  and not to the page fails rather than being documented by omission. Dropping the "Full access"
+  row turns it red.
+- [x] 7.2 Say plainly that a workspace is a working directory rather than a wall, that where no
   posture is checking the operator is the boundary, and that a write which leaves the workspace is
   recorded rather than prevented.
-- [ ] 7.3 Do not write "native mode does not confine". It is false for the default posture — see the
+  *Landed 2026-09-04 (night N-21).* All three sentences are the page's opening section and each is
+  asserted by `test_the_documentation_says_the_workspace_is_not_a_wall`. The page also states what
+  the record does **not** cover, corrected against measurement rather than copied from 8.1/8.2 —
+  see those tasks.
+- [x] 7.3 Do not write "native mode does not confine". It is false for the default posture — see the
   round-1 correction in `proposal.md`.
+  *Landed 2026-09-04 (night N-21).* Enforced as a test rather than as care:
+  `test_containment_is_not_claimed_or_denied_for_a_mode` scans for five spellings of the claim and
+  of its mirror image ("native mode confines"), both being false for some posture. It caught the
+  first draft of the page, which quoted the sentence verbatim in order to refute it — the scan
+  cannot tell a quotation from a claim, and the page was reworded rather than the test weakened.
 
 ## 8. File what is out of scope
 
-- [ ] 8.1 File a finding for shell-command writes: a `Bash`/`shell` call carries a command string, so
+- [x] 8.1 File a finding for shell-command writes: a `Bash`/`shell` call carries a command string, so
   `echo x > /abs/path` names no path this check can see.
-- [ ] 8.2 File a finding for symlink traversal: a link inside the workspace pointing out reports a
+  *Filed 2026-09-04 (night N-21) as **F281 (B)**, not fixed.* Measured rather than argued:
+  `written_paths("Bash", …)` returns `()` for a literal absolute redirect, for `$HOME/…` and for a
+  runtime-built `$D/…` alike, so **no shell write is ever recorded, under any posture**. The
+  asymmetry is the finding — under `workspace` the approver still refuses the literal case from the
+  command text (and over-refuses on a fragment: `$D/stray.txt` is refused for `/tmp`), so the
+  boundary sees strictly more than the record does, and in the three postures where an outside
+  write is *possible* neither sees anything.
+- [x] 8.2 File a finding for symlink traversal: a link inside the workspace pointing out reports a
   path that is legitimately inside.
-- [ ] 8.3 Neither is fixed here, and neither is implied by this change's label. Check the label in
+  *Filed 2026-09-04 (night N-21) as **F282 (C)**, with this task's premise corrected.* Read as a
+  detection gap it is **false**, and measuring it was cheap: `os.symlink` raises `WinError 1314`
+  without elevation, but a `mklink /J` junction needs none, and through one, `os.path.realpath`
+  resolves out of the workspace, `classify` returns the destination's real location, and `_decide`
+  refuses. Nothing is fooled. What is wrong is the **reporting**: the refusal reason and the
+  recorded row both name the *declared* path, which reads as inside, beside a verdict that says
+  outside. The genuinely undetectable case is a **hard link**, which is unrelated to symlinks and
+  is recorded in the same finding so a later sweep does not file it twice.
+- [x] 8.3 Neither is fixed here, and neither is implied by this change's label. Check the label in
   the UI and in the event payload once written: it must read *wrote outside the workspace*, never
   *escaped*.
+  *Landed 2026-09-04 (night N-21).* The payload passed on inspection — `EVENT_TYPE` is
+  `agent_wrote_outside_workspace`, severity `warn`, and N-19's
+  `test_the_record_is_not_a_refusal_and_does_not_read_as_one` already scans the product's own
+  vocabulary for *refus*, *denied*, *blocked*, *prevent*, *escap*, *violat*, *unauthor*.
+  **The UI did not.** `summaryForEvent` had no case for the kind and its payload names nothing the
+  default branch reads (`error`/`message`/`summary`/`title`), so the operator's notice rendered as
+  the bare string `agent_wrote_outside_workspace` — the F87 shape, in the change that introduced
+  the event. A case was added: it names the destination by kind and name (*"alice wrote outside its
+  workspace, into bob's workspace: Write → …"*), and its test asserts the wording as well as the
+  presence, refusing *escap*, *violat*, *breach*, *refus*, *denied*, *blocked*. Disabling the case
+  turns both new assertions red. The bundle was rebuilt and refreshed with the source, per the
+  repo's bundle rule; the strict `AW_CHECK_UI_BUNDLE=1` stamp check was green before the edit and
+  is green after it.
 
 ## 9. Gates
 
@@ -407,13 +472,20 @@
 
 ## 10. What round 2 added
 
-- [ ] 10.1 **Superseded by round 3.** Round 2 read *"Only refusals SHALL be recorded"* as a
+- [x] 10.1 **Superseded by round 3.** Round 2 read *"Only refusals SHALL be recorded"* as a
   constraint on every durable event and modified the shipped requirement to accommodate this change.
   The premise is false — 44 distinct `persist_event` types ship today and one is a refusal — so the
   MODIFIED delta keeps only the two-word clarification (*"as refusals"*, which the requirement's own
   fourth scenario already says) plus one sentence naming its scope. The paragraph legislating
   "allowed actions that are not ordinary" is removed: it wrote this change's policy into a
   requirement about refusals. Design D9.
+  *Verified 2026-09-04 (night N-21) — a check, not an edit.* Diffed the delta against the shipped
+  requirement in `openspec/specs/agent-run-sandboxing/spec.md`: they differ in **one paragraph**,
+  which is the two-word clarification (*"as refusals"*) plus one sentence of scope. Every scenario
+  is byte-identical to the shipped four; nothing was added to the modified requirement. The fact
+  round 2 wanted to pin lives where 10.2 put it — *The record is not a refusal*, a scenario of this
+  change's own ADDED requirement, asserted by
+  `test_the_record_is_not_a_refusal_and_does_not_read_as_one`.
 - [x] 10.2 The scenario that pins it moves to this change's **own** ADDED requirement, where the fact
   lives: *The record is not a refusal*. Assert it against the event payload, so the label check in
   task 8.3 has something to fail against.

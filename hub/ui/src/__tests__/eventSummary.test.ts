@@ -259,4 +259,36 @@ describe('summaryForEvent', () => {
       })
     ).toBe('run is already bound to conv-2')
   })
+  // Task 8.3 of `a-write-outside-the-workspace-is-recorded`: the label check. The event's payload
+  // names nothing the default branch reads, so before this case the operator's notice rendered as
+  // the bare string `agent_wrote_outside_workspace` — the F87 shape, in the change that added it.
+  //
+  // The wording is checked as well as the presence. The product records this write; it does not
+  // prevent it, and a row that read "escaped" or "violation" would claim a wall that is not there.
+  it("names where an outside write landed, and never calls it an escape", () => {
+    const summary = summaryForEvent('agent_wrote_outside_workspace', {
+      agent: 'alice',
+      tool: 'Write',
+      path: 'C:/checkouts/bob/notes.md',
+      destination_kind: 'agent',
+      destination_name: 'bob',
+    })
+    expect(summary).toBe("alice wrote outside its workspace, into bob's workspace: Write → C:/checkouts/bob/notes.md")
+    for (const forbidden of ['escap', 'violat', 'breach', 'refus', 'denied', 'blocked']) {
+      expect(summary.toLowerCase()).not.toContain(forbidden)
+    }
+  })
+
+  // A destination with no name still reads as a sentence rather than as a kind.
+  it('falls back to plain wording for a destination that names nothing', () => {
+    expect(
+      summaryForEvent('agent_wrote_outside_workspace', {
+        agent: 'alice',
+        tool: 'Edit',
+        path: '/tmp/stray.txt',
+        destination_kind: 'outside',
+        destination_name: null,
+      })
+    ).toBe('alice wrote outside its workspace: Edit → /tmp/stray.txt')
+  })
 })
