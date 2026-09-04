@@ -1092,11 +1092,21 @@ async def record_evidence(
         "spec_updated",
         {"evidence": evidence.id, "requirement": requirement.identifier},
     )
+    # **With its footprint**, for the reason the operator's handler carries one (finding F71): this
+    # is the moment the recorder is looking, and it is the last moment they can still say the
+    # evidence describes the wrong tree. It matters more here than there — a footprint's
+    # `outside_workspace_writes` is only ever non-empty for a *run*, so an agent is the only
+    # recorder who can be told that the tree its evidence names is missing part of its own work,
+    # and until now the only response carrying that fact was one no agent receives.
+    from .spec import _footprints_for, footprint_view
+
+    prints = await _footprints_for(session, [evidence.id])
     return {
         "id": evidence.id,
         "identifier": requirement.identifier,
         "review_state": evidence.review_state,
         "digest": evidence.digest,
+        "footprint": footprint_view(prints.get(evidence.id)),
     }
 
 

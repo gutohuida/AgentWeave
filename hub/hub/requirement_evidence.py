@@ -302,7 +302,15 @@ def footprint_root(
     actor: str,
     recorded_dir: Optional[str] = None,
 ) -> Path:
-    """The directory whose HEAD is the work this evidence is about.
+    """The directory whose HEAD is the work this evidence is about, as far as one directory can be.
+
+    **It is where the work was done, not a claim that all of it landed there.** A run is given this
+    directory; it is not walled into it, and a write that leaves it is recorded rather than
+    prevented. So where the producing run's `outside_workspace_writes` is non-empty, this root names
+    a tree that is missing some of what the run did — and the footprint says so on its own row
+    rather than being moved somewhere else, because there may be several other trees, one of them
+    may be the operator's own checkout, and picking one would be the "silently describes a tree
+    other than the one named" failure with extra steps (design D7).
 
     An agent works in its own checkout, on its own branch. Reading the *project* directory instead
     names whatever the operator happens to be sitting on — which on a fresh project is the main
@@ -347,6 +355,24 @@ async def recorded_workspace_dir(session: AsyncSession, run_id: Optional[str]) -
     return await session.scalar(select(Run.workspace_dir).where(Run.id == run_id))
 
 
+async def outside_writes_for_run(session: AsyncSession, run_id: Optional[str]) -> Optional[Any]:
+    """What a run wrote outside its own workspace, or None when nobody was watching.
+
+    The same one-row read as `recorded_workspace_dir`, on the same row, because the two answers
+    describe one run's relationship to one directory: where it was told to work, and what it wrote
+    elsewhere anyway.
+
+    `Run.outside_workspace_writes`'s two readings survive this: `None` is *not observed* — no run,
+    a run predating the column, or a posture nobody was recording for — and `[]` is *observed, and
+    nothing left the workspace*. A caller that collapses them turns "we did not look" into "we
+    looked and it was clean", which is the confinement claim this change exists to avoid making.
+    Both a missing row and a NULL column arrive here as `None`, and both mean the same thing.
+    """
+    if not run_id:
+        return None
+    return await session.scalar(select(Run.outside_workspace_writes).where(Run.id == run_id))
+
+
 async def task_bound_to_run(session: AsyncSession, run_id: Optional[str]) -> Optional[str]:
     """The task a run was started for, or None when there is no run and for an operator.
 
@@ -364,6 +390,7 @@ def _apply_footprint(
     evidence: RequirementEvidence,
     taken: Footprint,
     existing: Optional[EvidenceFootprint] = None,
+    outside_writes: Optional[Any] = None,
 ) -> EvidenceFootprint:
     """Write *taken* onto *evidence*'s footprint, creating the row where there is none.
 
@@ -371,6 +398,16 @@ def _apply_footprint(
     what a footprint means. `restamp_run_footprints` needs the create branch as well as the update
     one: where the workspace could not be resolved at record time the evidence exists with no
     footprint at all.
+
+    `outside_writes` is an **explicit parameter rather than a field on `Footprint`** (design D11).
+    `Footprint` is what `read_footprint` builds out of git alone; what a run wrote outside its
+    workspace is database state on `Run`, which git cannot derive — so a `Footprint` carrying it
+    would leave `restamp_run_footprints` fabricating a value it has no git source for. Both call
+    sites read it from the run instead and pass what they read.
+
+    It is written on every mapping, like every other column this function owns, so a re-stamp
+    cannot leave a row half-describing an older reading. `None` is *not observed* and is what a
+    caller with nothing to pass says; it is not the same claim as `[]`.
     """
     row = existing
     if row is None:
@@ -385,6 +422,7 @@ def _apply_footprint(
     row.branch = taken.branch
     row.entries = taken.entries or {}
     row.reachable_from_main = taken.reachable_from_main
+    row.outside_workspace_writes = outside_writes
     return row
 
 
@@ -408,7 +446,14 @@ async def capture_footprint(
     row exists, to answer the duplicate check, and re-reading here would spend a second set of git
     calls to learn the same answer. It is the same read, derived from the same root — `record`
     passes the actor it is about to write onto the row.
+
+    What the run wrote outside its workspace is read here regardless of `taken`, because `taken`
+    only spares the *git* read: it is a `Footprint`, and this is state on `Run` that no caller has
+    already resolved (design D11). The footprint is deliberately still taken at the same root and
+    the evidence is deliberately not refused (design D7) — what changes is that the row stops
+    implying it describes everything the run did.
     """
+    outside_writes = await outside_writes_for_run(session, evidence.run_id)
     if taken is None:
         # Resolved from the evidence row, keeping this function's stated principle: a later caller
         # gets the right answer without knowing the rule exists (design D7).
@@ -420,7 +465,7 @@ async def capture_footprint(
                 await recorded_workspace_dir(session, evidence.run_id),
             )
         )
-    return _apply_footprint(session, evidence, taken)
+    return _apply_footprint(session, evidence, taken, outside_writes=outside_writes)
 
 
 def _git(root: Path, *args: str) -> Optional[str]:
@@ -914,11 +959,25 @@ async def restamp_run_footprints(
         ),
     )
 
+    # Read once per run, like the footprint above it, and for the same reason: it is one fact about
+    # one run. This is the *final* value — a turn goes on writing after its evidence is recorded, so
+    # a row captured mid-turn can name fewer destinations than the run ended with (design D11).
+    outside_writes = await outside_writes_for_run(session, run_id)
+
     updated = 0
     for evidence, footprint in rows:
-        if footprint is not None and footprint.kind == "git" and footprint.commit_sha == target:
+        if (
+            footprint is not None
+            and footprint.kind == "git"
+            and footprint.commit_sha == target
+            # ...and it already carries the run's final answer. The commit alone is not enough to
+            # skip on: a run that committed its own work mid-turn footprints at the right commit
+            # from the start, and would then keep whatever outside-writes record existed when its
+            # evidence was recorded rather than the one the run finished with.
+            and footprint.outside_workspace_writes == outside_writes
+        ):
             continue
-        _apply_footprint(session, evidence, taken, footprint)
+        _apply_footprint(session, evidence, taken, footprint, outside_writes=outside_writes)
         updated += 1
     return updated
 

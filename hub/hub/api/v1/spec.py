@@ -1062,16 +1062,30 @@ def _evidence_view(evidence, footprint=None, latest_review=None) -> dict:
         # describes the work they think it does. A reviewer who could see `branch: master` on a
         # builder's evidence would have caught the 2026-08-13 defect by eye, months before any test
         # was written for it. Null where no footprint was captured.
-        "footprint": (
-            {
-                "kind": footprint.kind,
-                "branch": footprint.branch,
-                "commit_sha": footprint.commit_sha,
-                "reachable_from_main": footprint.reachable_from_main,
-            }
-            if footprint is not None
-            else None
-        ),
+        "footprint": footprint_view(footprint),
+    }
+
+
+def footprint_view(footprint) -> Optional[dict]:
+    """One shape for a footprint, wherever a response reports one.
+
+    Extracted so the agent's own recording response and every operator-facing view report the same
+    fields: a reader learning what `footprint` means from one of them has learned it for all.
+
+    `outside_workspace_writes` is *on* the footprint rather than beside it because it is a statement
+    about this tree — `commit_sha` and `branch` describe the directory the run was given, and a
+    non-empty list here says that directory is missing some of the run's work. Null is "not
+    observed" and `[]` is "observed, and nothing left the workspace"; collapsing the two into
+    "clean" is the confinement claim the product does not make.
+    """
+    if footprint is None:
+        return None
+    return {
+        "kind": footprint.kind,
+        "branch": footprint.branch,
+        "commit_sha": footprint.commit_sha,
+        "reachable_from_main": footprint.reachable_from_main,
+        "outside_workspace_writes": footprint.outside_workspace_writes,
     }
 
 

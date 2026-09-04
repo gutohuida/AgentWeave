@@ -553,3 +553,106 @@ async def test_retry_merges_the_snapshot_commit_after_a_restamp(
     assert merged, retried.json()["integrations"]
     assert merged[0]["commit_sha"] == snapshot, "the merged commit must be the one holding the work"
     assert snapshot in git(repo, "log", "--format=%H", "master").stdout.split()
+
+
+# --- the run's final answer about what it wrote outside (phase 5, design D11) -------------------
+
+
+async def _record_outside_writes(value, run_id: str = "run-rs") -> None:
+    """Set `Run.outside_workspace_writes`, the way `OutsideWriteRecorder` does mid-turn."""
+    async with async_session_factory() as session:
+        run = await session.get(Run, run_id)
+        run.outside_workspace_writes = value
+        await session.commit()
+
+
+def _wrote(path: str, calls: int = 1) -> dict:
+    return {"kind": "outside", "name": "elsewhere", "tool": "Write", "path": path, "calls": calls}
+
+
+@pytest.mark.asyncio
+async def test_restamp_carries_the_runs_final_outside_writes(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """A turn goes on writing after its evidence is recorded.
+
+    Evidence recorded at the first destination names one; the run ended having written to two. The
+    re-stamp is the same moment that fixes the commit, and for the same reason: it is the first
+    point at which the run's own answer is final.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+
+    await make_document(app, auth_headers, builder)
+    await _record_outside_writes([_wrote("/tmp/first/patch.py")])
+    dirty(worktree, "feature.py", "print('hi')\n")
+    await record_two(app, builder)
+    assert all(
+        f.outside_workspace_writes == [_wrote("/tmp/first/patch.py")] for f in await footprints()
+    )
+
+    await _record_outside_writes([_wrote("/tmp/first/patch.py", 3), _wrote("/tmp/second/x.py")])
+    snapshot = worktrees.snapshot_worktree(worktree, "builder")
+    assert await restamp(repo, commit_sha=snapshot) == 2
+
+    for footprint in await footprints():
+        assert footprint.outside_workspace_writes == [
+            _wrote("/tmp/first/patch.py", 3),
+            _wrote("/tmp/second/x.py"),
+        ]
+        assert footprint.commit_sha == snapshot
+
+
+@pytest.mark.asyncio
+async def test_restamp_does_not_skip_a_row_whose_commit_is_right_and_record_is_stale(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """The commit alone is not enough to skip on, and this is the shape that proves it.
+
+    An agent that commits its own work mid-turn is footprinted at the right commit from the start,
+    so the unchanged-commit guard would skip the row — and it would keep whatever outside-writes
+    record existed when the evidence was recorded rather than the one the run finished with. The
+    guard therefore compares both.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+
+    await make_document(app, auth_headers, builder)
+    own_commit = commit_in(worktree, "feature.py", "committed by the agent itself\n")
+    await record_two(app, builder)
+    assert [f.commit_sha for f in await footprints()] == [own_commit, own_commit]
+    assert all(f.outside_workspace_writes is None for f in await footprints())
+
+    # Nothing dirty is left, so `snapshot_worktree` returns None and the fallback reads the same
+    # HEAD the footprints already name: commit-wise this run is a genuine no-op.
+    assert worktrees.snapshot_worktree(worktree, "builder") is None
+    await _record_outside_writes([_wrote("/tmp/late/patch.py")])
+
+    assert await restamp(repo, commit_sha=None) == 2
+    for footprint in await footprints():
+        assert footprint.commit_sha == own_commit
+        assert footprint.outside_workspace_writes == [_wrote("/tmp/late/patch.py")]
+
+
+@pytest.mark.asyncio
+async def test_restamp_is_still_a_no_op_when_neither_the_commit_nor_the_record_moved(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """The other half of that guard: a widened condition must not restamp everything forever.
+
+    `[]` rather than NULL on both sides, so this also pins that the comparison reads the two as
+    equal instead of falling for `[] != None`.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+
+    await make_document(app, auth_headers, builder)
+    await _record_outside_writes([])
+    commit_in(worktree, "feature.py", "committed by the agent itself\n")
+    await record_two(app, builder)
+    assert all(f.outside_workspace_writes == [] for f in await footprints())
+
+    assert await restamp(repo, commit_sha=None) == 0

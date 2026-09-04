@@ -1034,3 +1034,218 @@ async def test_a_run_predating_the_column_keeps_the_behaviour_it_had(
     assert recorded.status_code == 201, recorded.text
 
     assert (await only_footprint()).commit_sha == own_commit
+
+
+# --- what the run wrote outside that tree (phase 5, design D7) ---------------------------------
+
+
+async def _record_outside_writes(run_id: str, value) -> None:
+    """Set `Run.outside_workspace_writes`, the way `OutsideWriteRecorder` does mid-turn.
+
+    The value shape is the recorder's own — `{kind, name, tool, path, calls}` per destination, first
+    path wins — and is written here rather than driven through a turn because these tests are about
+    what *evidence footprinting* does with the column. `test_outside_write_record.py` owns proving
+    that the column gets written at all; driving a turn here as well would prove that twice and this
+    once.
+    """
+    async with async_session_factory() as session:
+        run = await session.get(Run, run_id)
+        run.outside_workspace_writes = value
+        await session.commit()
+
+
+STRAY_WRITE = [
+    {
+        "kind": "outside",
+        "name": "elsewhere",
+        "tool": "Write",
+        "path": "/tmp/elsewhere/patch.py",
+        "calls": 2,
+    }
+]
+
+
+@pytest.mark.asyncio
+async def test_a_run_that_wrote_outside_says_so_on_its_footprint(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """The footprint stops implying a completeness it cannot have.
+
+    `commit_sha` and `entries` still describe the agent's own checkout — that is the point of D7 —
+    so the only thing that can tell a reviewer this tree is missing part of the run's work is this
+    field. Asserted alongside the unchanged commit, because either half on its own is a different
+    behaviour from the one specified.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+    agent_commit = commit_in(worktree, "feature.py", "print('hi')\n")
+    await _record_outside_writes("run-fp", STRAY_WRITE)
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    footprint = await only_footprint()
+    assert footprint.outside_workspace_writes == STRAY_WRITE
+    assert footprint.commit_sha == agent_commit
+    assert footprint.branch == "agentweave/builder"
+
+
+@pytest.mark.asyncio
+async def test_the_recording_response_reports_that_the_run_wrote_outside(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """Task 5.4, on the only response that can carry this fact to the one who caused it.
+
+    A footprint's `outside_workspace_writes` is non-empty only for a *run*, and the operator's
+    recording response — the one F71 taught to report its footprint — is never a run's. So the
+    agent's own recording response now reports its footprint too: this is the moment the recorder
+    is looking, and the last one at which they can say the evidence names a tree missing their work.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+    agent_commit = commit_in(worktree, "feature.py", "print('hi')\n")
+    await _record_outside_writes("run-fp", STRAY_WRITE)
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    reported = recorded.json()["footprint"]
+    assert reported is not None, "a captured footprint must not be reported as null"
+    assert reported["outside_workspace_writes"] == STRAY_WRITE
+    assert reported["commit_sha"] == agent_commit
+
+
+@pytest.mark.asyncio
+async def test_an_outside_write_does_not_move_the_footprint(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """The "fix" this test exists to fail: footprinting the tree that was written to instead.
+
+    The stray destination is a *real repository with its own commit*, so an implementation that
+    followed the recorded path would produce a footprint passing every other assertion in this file
+    — a plausible commit, a plausible branch, a plausible tree — while describing somebody else's
+    work. D7 refuses it because there may be several such trees and one may be the operator's own
+    checkout.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+    agent_commit = commit_in(worktree, "feature.py", "print('hi')\n")
+
+    stray = init_repo(tmp_path / "elsewhere", branch="unrelated")
+    stray_commit = commit_in(stray, "escaped.py", "written outside\n")
+    assert stray_commit != agent_commit
+
+    await _record_outside_writes(
+        "run-fp",
+        [
+            {
+                "kind": "outside",
+                "name": "elsewhere",
+                "tool": "Write",
+                "path": str(stray / "escaped.py"),
+                "calls": 1,
+            }
+        ],
+    )
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    footprint = await only_footprint()
+    assert footprint.commit_sha == agent_commit
+    assert footprint.commit_sha != stray_commit
+    assert footprint.branch == "agentweave/builder"
+    assert "escaped.py" not in (footprint.entries or {})
+
+
+@pytest.mark.asyncio
+async def test_an_outside_write_does_not_refuse_the_evidence(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """An observation must not become a gate.
+
+    Recording refuses in exactly two shipped cases — a duplicate, and a locator naming a commit the
+    repository does not have — and neither is this. Turning an escaped write into a third would
+    build, through the evidence door, the containment this change is forbidden to build.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+    commit_in(worktree, "feature.py", "print('hi')\n")
+    await _record_outside_writes("run-fp", STRAY_WRITE)
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+    assert recorded.json()["review_state"] == "awaiting"
+    assert (await only_footprint()).outside_workspace_writes == STRAY_WRITE
+
+
+@pytest.mark.asyncio
+async def test_a_watched_run_that_stayed_put_records_the_empty_list(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """`[]` is an answer: watched, and nothing left the workspace.
+
+    Paired with the test below it, which is the same code path with nothing recorded. The pair is
+    the point — a reader that collapses `[]` and `None` into "clean" has turned "nobody looked"
+    into a confinement claim the product does not make.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+    commit_in(worktree, "feature.py", "print('hi')\n")
+    await _record_outside_writes("run-fp", [])
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    footprint = await only_footprint()
+    assert footprint.outside_workspace_writes == []
+    assert footprint.outside_workspace_writes is not None
+    assert recorded.json()["footprint"]["outside_workspace_writes"] == []
+
+
+@pytest.mark.asyncio
+async def test_a_run_nobody_watched_leaves_the_footprint_unobserved(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """`None` is the other answer: nobody was watching, so nothing is claimed.
+
+    A run predating the column reaches here, and so does an operator, who has no run at all — the
+    read is by `run_id` and theirs is NULL.
+    """
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    worktree = worktrees.ensure_worktree(repo, "builder")
+    commit_in(worktree, "feature.py", "print('hi')\n")
+
+    async with async_session_factory() as session:
+        assert (await session.get(Run, "run-fp")).outside_workspace_writes is None
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    footprint = await only_footprint()
+    assert footprint.outside_workspace_writes is None
+    assert recorded.json()["footprint"]["outside_workspace_writes"] is None

@@ -333,9 +333,9 @@
 
 ## 5. Teach evidence footprinting about it
 
-- [ ] 5.1 Add `outside_writes_for_run(session, run_id)` beside `recorded_workspace_dir`
+- [x] 5.1 Add `outside_writes_for_run(session, run_id)` beside `recorded_workspace_dir`
   (`hub/hub/requirement_evidence.py:343`) — the same one-row read, on the same row.
-- [ ] 5.2 Carry the fact onto `EvidenceFootprint` through `_apply_footprint`
+- [x] 5.2 Carry the fact onto `EvidenceFootprint` through `_apply_footprint`
   (`hub/hub/requirement_evidence.py:362`) and nowhere else, so capture and re-capture cannot come to
   disagree about what a footprint means. As an **explicit parameter**, not a field on `Footprint`:
   that value is built from git alone and this fact is database state on `Run`, so `Footprint` cannot
@@ -349,13 +349,13 @@
   would invite a reader to look for a second meaning. Nullable JSON, no server default: NULL is
   *not observed*, which is what `_apply_footprint`'s parameter defaults to and what
   `restamp_run_footprints` passes when it has nothing to pass.
-- [ ] 5.3 Do **not** change which directory the footprint is taken from, and do **not** refuse the
+- [x] 5.3 Do **not** change which directory the footprint is taken from, and do **not** refuse the
   evidence. Design D7 rules both out; add a test that asserts the footprint root is unchanged for a
   run that wrote outside, so a later reader cannot "fix" this by moving it.
-- [ ] 5.4 Report it in the response that already reports the captured footprint, since the shipped
+- [x] 5.4 Report it in the response that already reports the captured footprint, since the shipped
   requirement is that the recorder can see which tree their evidence was attached to at the moment
   they can still correct it.
-- [ ] 5.5 Correct `footprint_root`'s docstring — *"The directory whose HEAD is the work this evidence
+- [x] 5.5 Correct `footprint_root`'s docstring — *"The directory whose HEAD is the work this evidence
   is about"* — which is true only when nothing escaped.
 
 ## 6. Say what the recorded directory means

@@ -1316,7 +1316,11 @@ def record_evidence(
         document: Only needed when the same identifier exists in more than one document.
         task_id: The task this came out of, when there is one.
 
-    Returns the evidence `id`, its `identifier` and its `review_state`.
+    Returns the evidence `id`, its `identifier`, its `review_state` and the `footprint` captured for
+    it — the branch and commit your evidence has been attached to. Read it. If its
+    `outside_workspace_writes` is a non-empty list, your turn wrote into a directory that footprint
+    does not describe, so the tree your evidence names is missing part of your own work; say so in
+    the summary while somebody can still act on it.
     """
     return _hub_request(
         "POST",

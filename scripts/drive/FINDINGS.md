@@ -19287,3 +19287,34 @@ which is a much cheaper starting point for the investigation than the stop path.
 The 4.4c test was rewritten to avoid the collision rather than to tolerate it: the fake process
 signals a `threading.Event` at the moment it blocks, so the test reads the row only when the run is
 quiescent. Twenty-two tests across the two files then passed 4/4 consecutive runs.
+
+## F280 (C) - an agent's recording response reports no footprint, so the recorder is the one party who cannot see what their evidence was attached to
+
+**Found 2026-09-04 (night N-20)** while implementing phase 5 of
+`a-write-outside-the-workspace-is-recorded`, and fixed in the same iteration.
+
+`requirement-traceability` says: *"Where a footprint is captured, the response to the recording SHALL
+report it, so the recorder can see what their evidence was attached to at the moment they can still
+correct it."* That was implemented on the operator's route (`spec.py`'s `record_evidence`, the second
+half of **F71**) and never on the agent's (`agent_actions.py`'s `record_evidence`), whose response
+carried `id`, `identifier`, `review_state` and `digest` and nothing about the footprint.
+
+**Why it matters more than the operator case it was fixed for.** An agent's footprint is the one that
+is *routinely* not what the recorder would assume: it names the agent's own checkout at the commit
+the turn started from, with the work still uncommitted, later corrected by `restamp_run_footprints`.
+And phase 5 adds a field that can only ever be non-empty for a **run** - a footprint's
+`outside_workspace_writes` says the tree this evidence names is missing part of the run's own work,
+and the operator, having no run, can never see a non-null one on their own recording. So the fact
+existed, was recorded, was reported... on the one response its cause never receives.
+
+**Fixed here**: the agent's recording response carries `footprint`, through a `footprint_view` helper
+extracted from `_evidence_view` so both responses shape a footprint the same way, and
+`record_evidence`'s tool docstring tells the agent to read `outside_workspace_writes` and say so in
+its summary while somebody can still act on it. Covered by
+`test_evidence_footprint_root.py::test_the_recording_response_reports_that_the_run_wrote_outside`,
+which mutation M8 (drop the key from the agent response) turns red.
+
+**The general shape, which is the part worth keeping.** A requirement written about "the response to
+the recording" was satisfied by fixing the response *one kind of recorder* receives. Both routes were
+already there; nothing pointed out that the sentence covered both. Worth a sweep: which other
+shipped requirements phrased around "the response" are implemented on the operator plane only?
