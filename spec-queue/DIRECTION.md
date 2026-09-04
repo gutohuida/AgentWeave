@@ -71,16 +71,22 @@ Read F188's ledger section before anything else, and note that the finding's who
 *asymmetry* -- two adjacent call sites treating the same fault oppositely. A proposal that repairs
 one site without saying why the other is right has not understood it.
 
-### Do not resume the coverage sweep -- but the trigger fires tomorrow
+### The coverage sweep is COMPLETE — corrected 2026-09-04, do not resume it
 
-Unchanged in substance from the 2026-09-02 section, and now one day from expiring. Rows 9c and
-10-17 are genuinely untouched -- Jobs+Loops, Questions, Permissions, Checkpoints, Accounting,
-Worktrees, Logs/Events/SSE, Messages -- and the sweep is more than half unrun.
+**This subsection said the opposite until 2026-09-04, and the stale version cost a drive slot.**
+It read *"[r]ows 9c and 10-17 are genuinely untouched … the sweep is more than half unrun"*, and
+set a trigger resuming it *"2026-09-04 at row 9c"*. That text was written on 2026-09-02 and copied
+forward; rows 9c, 10 and 11 had already been driven by then. Today's FILL window inherited the
+trigger, sent itself to an already-closed row, and spent D-3 rediscovering F227 and F228 line for
+line before establishing that nothing was left to sweep.
 
-**The trigger is: once F188 has a proposal, all severity-A findings are addressed and the argument
-for pausing expires.** D-2 through D-4 are that proposal. So if this window completes them, the
-sweep resumes **2026-09-04 at row 9c**, and that is the default rather than a decision anyone needs
-to take. If the spec loop does not complete, the pause holds another day.
+**Measured 2026-09-04: all 17 areas of the inventory have a driven harness cited in
+`scripts/drive/FINDINGS.md`.** The row-by-row map is `scripts/drive/SURVEY.md:144` — *"Coverage map
+— the 17-row sweep is COMPLETE (measured 2026-09-04)"* — which is now the authority on what has
+been driven. Do not re-derive coverage from this file.
+
+The resumption trigger is therefore **discharged, not pending**. A window that wants drive work
+picks it from open findings or from a change it just built, not from the sweep.
 
 ### If the window finishes early
 

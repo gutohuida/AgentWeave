@@ -18,43 +18,60 @@ Newest day first. Days below the newest are history and are not read.
 
 ## 2026-09-04
 
-Review page: `review/review-2026-09-04.html`. **One change proposed, taken through all three rounds.**
-Neither review round changed nothing: round 2 found the code is in breach of a requirement that
-already shipped, and round 3 overturned a design decision by measurement and found that *both*
-earlier rounds had specified a regression test that would have passed without the fix.
+Review page: `review/review-2026-09-04.html`, published as an Artifact and walked through with the
+operator in the DECIDE session at 19:00–19:40. **One change proposed, taken through all three
+rounds; approved.** Neither review round changed nothing: round 2 found the code in breach of a
+requirement that already shipped, and round 3 overturned design decision D3 by measurement and
+found that *both* earlier rounds had specified a regression test that would have passed without the
+fix.
 
-**Written by the day window, which does not fill in its own verdict.** The row below carries no
-status token. Write `APPROVED`, `REVISING` or `REJECTED` in front of the change name.
+- APPROVED  a-terminal-run-releases-the-queue-behind-it   F286 (B). 24 tasks, 5 phases. Python only in `hub/hub/api/v1/agent_trigger.py` — no migration, no API shape change, no UI, no bundle. Build it **second**, after F285: its own regression test runs against whatever test isolation F285 settles on.
 
--           a-terminal-run-releases-the-queue-behind-it   F286 (B). 24 tasks, 5 phases. Python only in `hub/hub/api/v1/agent_trigger.py` — no migration, no API shape change, no UI, no bundle. Splits `already_terminal`'s two jobs so a run that ended still redrains its queue, and shares one failure tail with the Codex app-server path, which today has no `except` clause at all.
+ORDER: F285, a-terminal-run-releases-the-queue-behind-it
 
-**Before you decide, read section 1 of the page.** The branch is 33 commits deep, unmerged, and CI
-has failed **24 consecutive runs** since `467dfea`. The merge gate was evaluated and did not open —
-dormant under this window's seeded limit, and it would have failed condition 3 regardless.
+### F285 — the operator chose the fix. Do not pick one.
 
-**The decision that is not on this row, and matters more than it.** All three CI failures have one
-cause and it is **F285**, the in-memory `StaticPool` in `hub/tests/conftest.py:19` — a test-harness
-artefact that cannot fire in production. Three fixes are available (unshared pool, file-backed temp
-database per test, per-test engine disposal) and they differ in how much of the suite has to be
-re-timed. The loop did not pick, because the choice becomes a standing property of every future test
-here. **If you decide nothing, the night window picks one unattended**, because its playbook makes an
-inherited red suite the first queue item before anything else. A `DIRECTION.md` line naming the fix
-is the cheapest way to steer it.
+**Use a file-backed temporary database per test.** Not an unshared pool, and not per-test engine
+disposal. This was decided by measurement in the DECIDE session, not by preference, and the other
+two options on the review page do not work:
 
-If you approve this change, **order F285's fix first**: this change's own tests run against whatever
-isolation you choose.
+| Option | Measured result |
+|---|---|
+| Unshared pool (`NullPool` on `:memory:`) | Every session gets its own **empty** database — `OperationalError: no such table` |
+| Shared-cache memory URI + `NullPool` | The last connection closing destroys the database — same error |
+| Per-test engine disposal | Does not address the mechanism: the race is *within* one test (the background run task against an HTTP request), not between tests |
+| **File-backed temp DB per test** | **Works.** `AsyncAdaptedQueuePool` — the pool production already uses |
 
-If you approve nothing, the night falls to the backlog and stalls quickly — there is nothing to
-archive (`openspec/changes/` holds only this unimplemented change), and the two open severity-A rows
-(F271, F274) have no proposal, which the playbook makes a note to tomorrow rather than tonight's
-work. An `ORDER:` line and the stop-the-window token are both available -- both are spelled out
-in the format block at the top of this file. Neither is written here, deliberately: this section
-carries no directive of any kind until you write one.
+The day window's reproduction was re-run at HEAD in the DECIDE session and holds:
+`sqlite+aiosqlite:///:memory:` → `InvalidRequestError: Could not refresh instance`, file-backed →
+clean. Cost is disk I/O across a 15–25 minute suite and is **unmeasured** — time the suite before
+and after, and record the figure rather than asserting one.
 
-Three further items on the page are **not work** and want no row: removing `DIRECTION.md`'s stale
-"the coverage sweep is more than half unrun" paragraph and its expired resumption trigger (the sweep
-is **complete** — all 17 rows, measured, and the stale text cost a drive slot today); whether to merge
-the branch; and the four ledger rows carried forward with no proposal.
+**F287 is NOT ordered and must not be bundled into this.** Deleting
+`output_recording.py:94`'s redundant `db.refresh` would very likely turn CI green on its own, by
+removing the one operation that makes the shared-connection rollback loud. That is masking, not
+fixing. It stays an open `C` for a later window, on its own merits as one extra `SELECT` per
+streamed output line.
+
+### Why the order is F285 first
+
+Getting `hub-test` green is the point of tonight. The branch is 34 commits ahead of `master`, 0
+behind — a clean fast-forward — and the operator has decided **not to merge until CI is genuinely
+green**, rather than merge over a red run known to be a harness artefact. So F285 is what unblocks
+the merge, and it is also what the approved change's regression test has to run on.
+
+The night window does not merge, and that limit is unchanged. The merge stays the operator's, awake.
+
+### Two corrections to the review page
+
+1. **The page's own steering advice was wrong about which file.** It said *"a `DIRECTION.md` line
+   naming the fix is the cheapest way to steer it"*. `README.md` in this directory says
+   `DIRECTION.md` is read by the **FILL window and nothing else**; the FIX window reads
+   `APPROVALS.md` and nothing else. A steer for tonight placed in `DIRECTION.md` would never have
+   been read. That is why the F285 instruction is here.
+2. **The page's `<title>` element still read `2026-09-03`** — the stylesheet was reused verbatim
+   from yesterday and carried the title tag with it. Corrected in the published Artifact; the
+   window that writes tomorrow's page should set the title from the same date as the `<h1>`.
 
 ---
 
