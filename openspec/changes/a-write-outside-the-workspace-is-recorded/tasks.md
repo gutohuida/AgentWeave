@@ -82,12 +82,30 @@
 
 ## 3. Classify a path against the run's workspace
 
-- [ ] 3.1 In `workspace_writes.py`, add `classify(path, *, workspace_dir, project_root)` returning a
+- [x] 3.1 In `workspace_writes.py`, add `classify(path, *, workspace_dir, project_root)` returning a
   workspace kind and name: `agent`/`task`/`review` from the layout helpers in `worktrees.py`
   (`worktree_path`, `task_worktree_path`, `review_path`), **`hub` for anything else under
   `<root>/.agentweave/`**, `project` for the project's own directory, `outside` for anything else. Kind-and-name, per design D4 and `workspace-isolation`'s existing
   requirement that a reported workspace says which namespace it belongs to.
-- [ ] 3.1b The `hub` kind is round 3's correction and it is not cosmetic: the Hub seeds
+
+  *Implemented 2026-09-04 (night N-16) as **restate-and-assert**, not as an import.* Task 2.6's
+  purity test runs a fresh interpreter and requires `hub.workspace_writes` to pull in no other
+  `hub` module; `worktrees` reaches `subprocess`, `shutil` and `repo_hygiene`, so importing the
+  helpers would fail it. The layout is restated as `HUB_DIRECTORY` plus a
+  `CHECKOUT_SEGMENTS = {worktrees: agent, tasks: task, reviews: review}` map -- the same shape
+  `mcp_server.py` lives under -- and
+  `test_the_restated_layout_is_the_one_the_worktree_helpers_use` asserts the three roots the
+  classifier believes in are exactly `worktree_root`/`task_root`/`review_root`. Every other
+  phase-3 test builds its paths by *calling* the helpers, so the helpers remain the source of
+  truth for the layout and the restatement cannot drift silently.
+
+  Two shapes decided while implementing, both asserted: `name` is `None` for `project`, `hub`,
+  `inside`, `outside` and `unknown`, because there is exactly one of each per project and a name
+  would only repeat the kind; and whatever sits directly under a checkout root is read as that
+  checkout's name without a `stat`, because the path being classified has usually not been
+  written yet. `WriteLocation` is a `NamedTuple` so task 4.4b can key its once-per-destination
+  accounting on a whole location.
+- [x] 3.1b The `hub` kind is round 3's correction and it is not cosmetic: the Hub seeds
   `.agentweave/worktrees|reviews|tasks|logs|evidence|context` into the repository's `info/exclude` on
   every turn (`repo_hygiene.py:59-80`, called first in `resolve_agent_workspace`), so that subtree is
   the one part of the project root git has been told to hide - while the requirement described
@@ -95,7 +113,7 @@
   and asserts every `.agentweave/` pattern classifies as `agent`, `task`, `review` or `hub`, never
   `project`. The classifier still derives the three checkouts from the layout helpers, not from the
   exclude list - one source of truth - and this test is what keeps the two from drifting.
-- [ ] 3.2 **Join before resolving**, then compare on `os.path.realpath` + `os.path.commonpath` +
+- [x] 3.2 **Join before resolving**, then compare on `os.path.realpath` + `os.path.commonpath` +
   `os.path.normcase` - `_decide`'s whole construction, including the first line rounds 1 and 2 both
   omitted (`mcp_server.py:901`):
   `absolute = candidate if os.path.isabs(candidate) else os.path.join(root, candidate)`.
@@ -106,12 +124,12 @@
   uvicorn was started. Test a relative `../../x` explicitly and assert it classifies against the
   workspace, not the Hub's cwd - run the test from a cwd other than the fixture workspace, or it
   proves nothing. `commonpath` compares components so `/work-other` does not read as inside `/work`.
-- [ ] 3.3 Return "inside" for a path within the run's own workspace, and record nothing for it.
-- [ ] 3.4 Return "unknown" — never "outside" — when `workspace_dir` is absent or `realpath` raises.
+- [x] 3.3 Return "inside" for a path within the run's own workspace, and record nothing for it.
+- [x] 3.4 Return "unknown" — never "outside" — when `workspace_dir` is absent or `realpath` raises.
   Test it explicitly: an unresolvable workspace must not produce a record accusing the run of
   writing outside. This is the one place the design deliberately does not copy `_decide`, which
   refuses; see D4.
-- [ ] 3.5 Test the Windows cross-drive case (`commonpath` raises `ValueError`) and the case-only
+- [x] 3.5 Test the Windows cross-drive case (`commonpath` raises `ValueError`) and the case-only
   difference case, both of which `_decide` already handles and both of which this must handle the
   same way or the two will disagree about the same path.
 
@@ -262,7 +280,7 @@
 - [ ] 10.2 The scenario that pins it moves to this change's **own** ADDED requirement, where the fact
   lives: *The record is not a refusal*. Assert it against the event payload, so the label check in
   task 8.3 has something to fail against.
-- [ ] 10.4 Test the classification of a path under `<root>/.agentweave/` that is not a worktree, task
+- [x] 10.4 Test the classification of a path under `<root>/.agentweave/` that is not a worktree, task
   or review checkout — `.agentweave/evidence/x` is the sharp case, being the Hub's own record-keeping
   about runs. It must classify as `hub`, never `project` (design D4, task 3.1b).
 - [ ] 10.5 Test the run whose workspace **is** the project root (design D12): a read-only agent, or a

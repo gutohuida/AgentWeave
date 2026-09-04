@@ -24,16 +24,34 @@ disagreement gets one member wider, so the reconciliation is asserted rather tha
 
 import ast
 import inspect
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
+from unittest import mock
 
+import pytest
+
+from hub.mcp_server import _decide
+from hub.repo_hygiene import EXCLUDE_PATTERNS
 from hub.workspace_writes import (
+    CHECKOUT_SEGMENTS,
     CLAUDE_WRITE_TOOLS,
     CODEX_WRITE_TOOL,
+    HUB_DIRECTORY,
+    WRITE_LOCATION_KINDS,
     WRITE_TOOLS,
+    classify,
     written_paths,
+)
+from hub.worktrees import (
+    review_path,
+    review_root,
+    task_root,
+    task_worktree_path,
+    worktree_path,
+    worktree_root,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -262,3 +280,309 @@ def test_importing_the_module_pulls_in_no_other_hub_module_and_no_database():
 
     parsing = _imports_of("hub.runner_parsing")
     assert all(module.startswith("hub") for module in parsing), parsing
+
+
+# --------------------------------------------------------------------------------------------
+# Phase 3: classifying a path against the run's workspace.
+#
+# Still no call site -- the recorder is phase 4's. What is under test is the answer `classify`
+# gives, and the two traps rounds 1 and 2 of the proposal both fell into: the join that must
+# happen before the resolve, and the `hub` kind that must not be folded into `project`.
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def project(tmp_path, monkeypatch):
+    """A project root, and a working directory that is neither it nor any workspace in it.
+
+    The cwd matters. `classify` runs in the Hub process, which serves many projects from wherever
+    uvicorn was started, so a test that happened to run from inside the fixture workspace would
+    pass for `realpath`'s reasons rather than for the join's (task 3.2). Every test in this
+    section therefore runs from `elsewhere/deep`.
+    """
+    root = tmp_path / "project"
+    (root / ".agentweave").mkdir(parents=True)
+    elsewhere = tmp_path / "elsewhere" / "deep"
+    elsewhere.mkdir(parents=True)
+    monkeypatch.chdir(elsewhere)
+    return root
+
+
+def _in(project_root, workspace, path):
+    return classify(str(path), workspace_dir=str(workspace), project_root=str(project_root))
+
+
+def test_a_path_inside_the_runs_own_workspace_is_inside(project):
+    """Task 3.3. `inside` is the answer that records nothing, so it is the one the recorder leans
+    on hardest -- a file at the top, a file deep down, and the workspace directory itself."""
+    workspace = worktree_path(project, "alice")
+    assert _in(project, workspace, workspace / "a.txt") == ("inside", None)
+    assert _in(project, workspace, workspace / "src" / "deep" / "a.txt") == ("inside", None)
+    assert _in(project, workspace, workspace) == ("inside", None)
+
+
+def test_another_agents_worktree_is_named_by_kind_and_by_agent(project):
+    """Task 3.1, and the case whose whole meaning is the destination (task 1.3).
+
+    The path is built by `worktree_path` itself rather than spelled out here -- the classifier
+    restates the layout, and this is what binds the restatement to the helper.
+    """
+    workspace = worktree_path(project, "alice")
+    assert _in(project, workspace, worktree_path(project, "bob") / "a.txt") == ("agent", "bob")
+
+
+def test_a_task_checkout_and_a_review_checkout_are_their_own_kinds(project):
+    """Task 3.1. A task id is not an oddly named agent (`workspace-isolation`), and a reviewer's
+    detached checkout is neither -- so all three come from their own layout helper."""
+    workspace = worktree_path(project, "alice")
+    task = task_worktree_path(project, "task-ab12cd34")
+    assert _in(project, workspace, task / "a.txt") == ("task", "task-ab12cd34")
+    assert _in(project, workspace, review_path(project, "bob") / "a.txt") == ("review", "bob")
+
+
+def test_the_restated_layout_is_the_one_the_worktree_helpers_use(project):
+    """Task 3.1's one-source-of-truth half, asserted rather than described.
+
+    `workspace_writes` may not import `worktrees`: the purity test above runs a fresh interpreter
+    and demands the module pull in no other `hub` module, and `worktrees` reaches `subprocess`,
+    `shutil` and `repo_hygiene`. So the layout is restated -- the same restate-and-assert shape
+    `mcp_server.py` lives under -- and this is the assertion that keeps the copy honest: the
+    three roots the classifier believes in are the three roots the helpers compute.
+    """
+    roots = {
+        "worktrees": worktree_root(project),
+        "tasks": task_root(project),
+        "reviews": review_root(project),
+    }
+    assert set(roots) == set(CHECKOUT_SEGMENTS)
+    for segment, helper_root in roots.items():
+        assert helper_root == project / HUB_DIRECTORY / segment
+    assert CHECKOUT_SEGMENTS["worktrees"] == "agent"
+    assert CHECKOUT_SEGMENTS["tasks"] == "task"
+    assert CHECKOUT_SEGMENTS["reviews"] == "review"
+
+
+def test_every_hub_excluded_path_is_a_checkout_or_the_hub_and_never_the_project(project):
+    """Task 3.1b, round 3's correction, and it is not cosmetic.
+
+    `seed_repo_excludes` writes `EXCLUDE_PATTERNS` into the repository's `info/exclude` on every
+    turn -- `resolve_agent_workspace` calls it as its first statement -- so every `.agentweave/`
+    pattern below names a directory git has been *told to hide*. The requirement justifies
+    `project` as the mild destination on the grounds that a write there sits visibly in its
+    owner's `git status`. That justification is exactly inverted here, so none of these may
+    classify as `project`.
+
+    Walked rather than listed: the classifier derives the three checkouts from the layout helpers
+    and not from this list -- one source of truth for the layout -- and this walk is what stops
+    the two drifting when a pattern is added.
+    """
+    workspace = worktree_path(project, "alice")
+    hub_patterns = [p for p in EXCLUDE_PATTERNS if p.startswith(HUB_DIRECTORY + "/")]
+    assert len(hub_patterns) >= 6, hub_patterns
+
+    for pattern in hub_patterns:
+        target = project.joinpath(*pattern.rstrip("/").split("/")) / "x" / "a.txt"
+        location = _in(project, workspace, target)
+        assert location.kind in {"agent", "task", "review", "hub"}, (pattern, location)
+        assert location.kind != "project", pattern
+
+
+def test_the_hubs_own_record_keeping_about_the_run_is_hub_not_project(project):
+    """Task 10.4, the sharp case of 3.1b.
+
+    `.agentweave/evidence/` is where the Hub keeps its own record of runs. A run writing there is
+    writing into the bookkeeping about itself, in a directory that appears in no `git status`
+    anywhere. Calling that "the project" would attach the mildest reading to the least visible
+    destination.
+    """
+    workspace = worktree_path(project, "alice")
+    evidence = project / HUB_DIRECTORY / "evidence" / "x"
+    assert _in(project, workspace, evidence) == ("hub", None)
+    assert _in(project, workspace, evidence / "footprint.json") == ("hub", None)
+    # The residue of the subtree, not only the six excluded directories.
+    assert _in(project, workspace, project / HUB_DIRECTORY / "project.json") == ("hub", None)
+    # A checkout *root* itself is not a checkout: the layout needs a name under it before the
+    # path belongs to anybody. What sits directly under a root *is* read as that name, whatever
+    # it turns out to be on disk -- the classifier stats nothing, deliberately, because the path
+    # it is handed has usually not been written yet.
+    assert _in(project, workspace, worktree_root(project)) == ("hub", None)
+    assert _in(project, workspace, worktree_root(project) / "bob") == ("agent", "bob")
+
+
+def test_the_projects_own_tracked_tree_is_project(project):
+    """Task 3.1. The destination the requirement describes as landing where its owner's
+    `git status` will show it -- true of the tracked tree and, per 3.1b, of nothing under
+    `.agentweave/`."""
+    workspace = worktree_path(project, "alice")
+    assert _in(project, workspace, project / "src" / "main.py") == ("project", None)
+    assert _in(project, workspace, project / "README.md") == ("project", None)
+
+
+def test_a_path_in_no_project_at_all_is_outside(project, tmp_path):
+    workspace = worktree_path(project, "alice")
+    assert _in(project, workspace, tmp_path / "somewhere" / "a.txt") == ("outside", None)
+
+
+def test_without_a_project_root_a_write_is_outside_rather_than_unknown(project):
+    """`unknown` is reserved for a workspace that could not be established (task 3.4). A missing
+    project root leaves the *destination* unnameable, but the workspace resolved and the write
+    did leave it -- which is the fact being recorded."""
+    workspace = worktree_path(project, "alice")
+    target = str(worktree_path(project, "bob") / "a.txt")
+    assert classify(target, workspace_dir=str(workspace), project_root=None) == ("outside", None)
+    assert classify(target, workspace_dir=str(workspace), project_root="  ") == ("outside", None)
+
+
+def test_a_relative_path_is_joined_to_the_workspace_before_it_is_resolved(project):
+    """Task 3.2, the trap rounds 1 and 2 both fell into.
+
+    Round 1 asserted `realpath` alone would catch the `..` case. It will not: `realpath` resolves
+    a relative path against the *calling process's* cwd, and this runs in the Hub process, not in
+    the run. The `project` fixture has chdir'd to `elsewhere/deep`, which is in neither the
+    workspace nor the project, so the control below is what makes the first assertion mean
+    anything -- resolved against the cwd, the same string lands outside the project entirely and
+    would have read as `outside` rather than as another agent's workspace.
+    """
+    workspace = worktree_path(project, "alice")
+    relative = os.path.join("..", "bob", "a.txt")
+
+    assert classify(relative, workspace_dir=str(workspace), project_root=str(project)) == (
+        "agent",
+        "bob",
+    )
+
+    against_cwd = os.path.realpath(relative)
+    assert not against_cwd.startswith(str(project))
+    assert classify(against_cwd, workspace_dir=str(workspace), project_root=str(project)) == (
+        "outside",
+        None,
+    )
+
+
+def test_a_relative_path_that_traverses_out_of_the_project_is_outside(project):
+    """The delta's scenario *A relative path that traverses outside is caught*, end to end."""
+    workspace = worktree_path(project, "alice")
+    escape = os.path.join("..", "..", "..", "..", "elsewhere", "a.txt")
+    assert classify(escape, workspace_dir=str(workspace), project_root=str(project)) == (
+        "outside",
+        None,
+    )
+
+
+def test_a_sibling_sharing_a_prefix_does_not_read_as_inside(tmp_path, monkeypatch):
+    """Task 3.2's `commonpath` half. `/work-other` does not start inside `/work`, and a string
+    prefix test would say it does."""
+    monkeypatch.chdir(tmp_path)
+    root = tmp_path / "p"
+    workspace = root / "work"
+    sibling = root / "work-other"
+    workspace.mkdir(parents=True)
+    sibling.mkdir()
+    assert classify(
+        str(sibling / "a.txt"), workspace_dir=str(workspace), project_root=str(root)
+    ) == ("project", None)
+
+
+def test_an_absent_or_unresolvable_workspace_is_unknown_and_never_outside(project):
+    """Task 3.4, and the one place the design deliberately does not copy `_decide`.
+
+    `_decide` refuses when it cannot establish a boundary, which is right for a gate. A record is
+    not a gate: writing "it wrote outside" when the truth is "nobody could tell" would attribute
+    to an agent something it may not have done. Asserted as `!= "outside"` as well as
+    `== "unknown"`, because it is the *accusation* that must not happen.
+    """
+    target = str(project / "src" / "a.txt")
+    for absent in (None, "", "   "):
+        location = classify(target, workspace_dir=absent, project_root=str(project))
+        assert location == ("unknown", None), absent
+        assert location.kind != "outside"
+
+    with mock.patch("hub.workspace_writes.os.path.realpath", side_effect=OSError("boom")):
+        assert classify(target, workspace_dir=str(project), project_root=str(project)) == (
+            "unknown",
+            None,
+        )
+
+
+def test_an_unresolvable_written_path_is_unknown_too(project):
+    """The same rule, other operand. If the *candidate* cannot be resolved, nobody can tell where
+    it would have landed, and the run must not be accused of leaving its workspace."""
+    workspace = worktree_path(project, "alice")
+    real = os.path.realpath
+
+    def fail_on_candidate(value):
+        if "candidate" in str(value):
+            raise OSError("boom")
+        return real(value)
+
+    with mock.patch("hub.workspace_writes.os.path.realpath", side_effect=fail_on_candidate):
+        location = classify(
+            str(project / "candidate.txt"),
+            workspace_dir=str(workspace),
+            project_root=str(project),
+        )
+    assert location == ("unknown", None)
+
+
+def test_a_case_only_difference_is_decided_the_same_way_as_the_permission_approver(
+    project, monkeypatch
+):
+    """Task 3.5, half one. Whether two paths differing only in case are one directory is the
+    platform's answer, not this module's -- `normcase` gives it, and `_decide` asks the same way.
+
+    Asserted as *agreement with `_decide`* rather than as a fixed expectation, because the whole
+    risk is the two disagreeing about the same path: on Windows both must say inside, on POSIX
+    both must say outside, and a test pinning either answer would be wrong on one of them.
+    """
+    workspace = worktree_path(project, "alice")
+    workspace.mkdir(parents=True)
+    target = os.path.join(str(workspace).swapcase(), "a.txt")
+
+    monkeypatch.setenv("AW_WORKSPACE_DIR", str(workspace))
+    approver_allows = _decide("Write", {"file_path": target})["allow"]
+    location = classify(target, workspace_dir=str(workspace), project_root=str(project))
+
+    assert (location.kind == "inside") is approver_allows, (location, approver_allows)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="only Windows has drives for commonpath to raise on")
+def test_a_cross_drive_path_is_not_inside_and_the_approver_agrees(project, monkeypatch):
+    """Task 3.5, half two. `commonpath` raises `ValueError` across drives; that is not
+    containment, and this and `_decide` must read it the same way."""
+    workspace = worktree_path(project, "alice")
+    workspace.mkdir(parents=True)
+    other_drive = "Z:\\elsewhere\\a.txt" if str(workspace)[0].upper() != "Z" else "Y:\\a.txt"
+
+    monkeypatch.setenv("AW_WORKSPACE_DIR", str(workspace))
+    assert _decide("Write", {"file_path": other_drive})["allow"] is False
+    assert classify(other_drive, workspace_dir=str(workspace), project_root=str(project)) == (
+        "outside",
+        None,
+    )
+
+
+def test_classify_takes_no_session_and_returns_only_declared_kinds(project):
+    """The signature half of task 2.6, extended to phase 3's addition: a session parameter here
+    would put a database connection on the path of every tool call of every run.
+
+    The second half walks one path per row of design D4's table and asserts the set of kinds
+    reached is exactly `WRITE_LOCATION_KINDS` -- so a kind added to the tuple without a case that
+    produces it, or produced without being declared, fails here.
+    """
+    assert list(inspect.signature(classify).parameters) == [
+        "path",
+        "workspace_dir",
+        "project_root",
+    ]
+    workspace = worktree_path(project, "alice")
+    reached = {
+        _in(project, workspace, workspace / "a.txt").kind,
+        _in(project, workspace, worktree_path(project, "bob") / "a.txt").kind,
+        _in(project, workspace, task_worktree_path(project, "task-ab12") / "a.txt").kind,
+        _in(project, workspace, review_path(project, "bob") / "a.txt").kind,
+        _in(project, workspace, project / HUB_DIRECTORY / "evidence" / "x").kind,
+        _in(project, workspace, project / "src" / "a.txt").kind,
+        _in(project, workspace, project.parent / "a.txt").kind,
+        classify("a.txt", workspace_dir=None, project_root=None).kind,
+    }
+    assert reached == set(WRITE_LOCATION_KINDS)
