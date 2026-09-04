@@ -95,22 +95,46 @@ before `run_turn` returns.
       row, two writing agents, `bind_project_workspace`); reproducing ~60 lines of it in
       `test_agent_trigger.py` to honour a filename would leave the two halves of the same
       claim in different files. 3.1 and 3.2 are in `test_agent_trigger.py` as written.
-- [ ] 3.4 App-server variants of 3.1 and 3.2 using the existing `_fake_run_turn` harness
+- [x] 3.4 App-server variants of 3.1 and 3.2 using the existing `_fake_run_turn` harness
       (`hub/tests/test_agent_trigger.py:117`) and the in-flight poll helper
       `_wait_for_active_app_server_run` (`:67`). R1 and R2 cited `:126` and `:68`, which are those
       two definitions' docstring lines rather than their `def`s; R3 re-read both and they are
       otherwise exactly as described.
-- [ ] 3.5 An app-server test that raises **before** the terminal write and asserts the run ends
+
+      Written as `test_an_app_server_run_that_ended_releases_its_queue_when_its_tail_raises`,
+      carrying 3.2's half in the same test exactly as 3.1 does. One deviation from the PTY twin
+      it copies: the first turn is held open by an `asyncio.Event`, not 3.1's `threading.Event`.
+      This transport never leaves the event loop, so blocking a thread there would deadlock the
+      test rather than park the run.
+- [x] 3.5 An app-server test that raises **before** the terminal write and asserts the run ends
       terminal with `error` set, and that the agent runs a subsequent turn — the wedge from
-      requirement 2.
-- [ ] 3.6 Check whether `test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped` is now
+      requirement 2. Written as
+      `test_an_app_server_turn_that_raises_before_its_terminal_write_is_not_a_wedge`: `run_turn`
+      raises once and then behaves, so the successor is a real turn rather than a retry failing
+      the same way, and no second request is made — the failed run hands its own input back and
+      the release delivers it.
+- [x] 3.6 Check whether `test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped` is now
       asserting this behaviour by accident. If it is, say so in its docstring rather than adding a
       duplicate; it is currently the only existing test that would have caught F286, and it caught
       it only because a harness artefact supplied the exception.
-- [ ] 3.7 The cost D2 names, asserted rather than assumed: an entry refused non-transiently by the
+
+      **Measured: it is not.** With F285 fixed the stopped run reaches its terminal write without
+      raising at all, so the release it observes is the normal path's, which was never gated. The
+      check was the mutation, not a reading: with the pre-F286 gate restored in
+      `_record_run_failure_tail` this test still passes while 3.1 and 3.4 both fail. A docstring
+      recording that now sits on the test, so the F286 tests are not mistaken for duplicates of it
+      and it is not mistaken for a regression test for the ungating.
+- [x] 3.7 The cost D2 names, asserted rather than assumed: an entry refused non-transiently by the
       first redrain, with that redrain then raising, is charged **at most twice** and is not
       withdrawn by a single run boundary. `DELIVERY_ATTEMPT_LIMIT` is `3`; the point of the test is
       that ungating cannot turn one failed boundary into a dropped message.
+
+      Written as `test_a_second_release_charges_a_refused_entry_at_most_twice` on the **PTY** path
+      (the overlap is transport-independent, and that harness is already there). It builds D2's
+      premise rather than assuming it: an entry seeded straight into the queue for a second agent
+      whose schedule is refused with the flagless task-checkout `TriggerAgentError` — the arm the
+      counter actually charges — and `redrain_queued_agents` wrapped to sweep, then raise, on its
+      first call only. Measured cost: **2**, entry still `queued`, `abandoned_reason` null.
 
 ## 4. Gates
 

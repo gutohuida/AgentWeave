@@ -1127,6 +1127,364 @@ async def test_a_run_that_ended_releases_its_queue_even_when_its_tail_raises(
 
 
 @pytest.mark.asyncio
+async def test_an_app_server_run_that_ended_releases_its_queue_when_its_tail_raises(
+    app, auth_headers
+):
+    """F286, task 3.4 — 3.1 and 3.2's claim on the transport that had no handler at all.
+
+    The PTY test above observes the release being gated on the relabel. This one observes the
+    same window on `_execute_codex_appserver_run`, which until requirement 2 had `try:`/`finally:`
+    and no `except` between them: anything raised after the spawn escaped the coroutine into a
+    background task whose only done-callback discards it. Past that path's terminal commit the
+    consequence was F286 again *and* silent — no `logger.exception`, no relabel, no redrain.
+
+    Same injection as 3.1 by design (D4): patched inside the window, never obtained from F285's
+    connection pool, and pinned there by `status_when_it_raised`. `_report_abandoned_entries` is
+    the first `await` this path takes past `db.commit()` too, so the same one-line predicate
+    places the raise in both transports without either test knowing the other's line numbers.
+
+    Nothing here makes a third request. The successor run exists because the run that ended let
+    go of what it was holding.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"f286-appserver": {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await _bind_codex_app_server_runner(app, auth_headers)("f286-appserver")
+
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import InboundQueueEntry, Run
+
+    gate = asyncio.Event()
+    turns = []
+    # `_fake_run_turn` still drives the callbacks — thread bound first, outcome last — this only
+    # holds the first turn open long enough for a second message to arrive behind it. An
+    # `asyncio.Event` rather than the PTY test's `threading.Event`: this transport never leaves
+    # the event loop, so blocking one would deadlock the test rather than park the run.
+    first_turn = _fake_run_turn(thread_id="thread-f286-first")
+    later_turns = _fake_run_turn(thread_id="thread-f286-later")
+
+    async def _hold_the_first_turn_open(**kwargs):
+        turns.append(kwargs)
+        if len(turns) == 1:
+            await gate.wait()
+            return await first_turn(**kwargs)
+        return await later_turns(**kwargs)
+
+    first_run_id = None
+    status_when_it_raised = []
+    real_report = agent_trigger._report_abandoned_entries
+
+    async def _raise_once_inside_the_window(db, project_id, agent, run_id):
+        if run_id == first_run_id and not status_when_it_raised:
+            # Its own connection: `async_session_factory` sets `expire_on_commit=False`, so the
+            # window's own session object reads "completed" from above the commit as well and a
+            # same-session probe would guard nothing.
+            async with async_session_factory() as probe:
+                status_when_it_raised.append((await probe.get(Run, run_id)).status)
+            raise RuntimeError("app-server bookkeeping after the terminal commit blew up")
+        return await real_report(db, project_id, agent, run_id)
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.codex_run_turn", AsyncMock(side_effect=_hold_the_first_turn_open)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            with patch.object(
+                agent_trigger, "_report_abandoned_entries", _raise_once_inside_the_window
+            ):
+                try:
+                    first = await app.post(
+                        "/api/v1/projects/proj-test/agent/trigger",
+                        json={"agent": "f286-appserver", "message": "hi", "session_mode": "new"},
+                        headers=auth_headers,
+                    )
+                    assert first.status_code == 200, first.text
+                    first_run_id = first.json()["run_id"]
+                    await _wait_for_active_app_server_run(first_run_id)
+
+                    second = await app.post(
+                        "/api/v1/projects/proj-test/agent/trigger",
+                        json={
+                            "agent": "f286-appserver",
+                            "message": "and this one",
+                            "session_mode": "new",
+                        },
+                        headers=auth_headers,
+                    )
+                    assert second.status_code == 200, second.text
+                    assert second.json()["status"] == "queued"
+                finally:
+                    gate.set()
+                    # Repeatedly: the successor is created *inside* the first run's task, so one
+                    # pass over the set that existed at the first look would miss it.
+                    await _await_background_run()
+
+    assert status_when_it_raised == ["completed"], (
+        "the raise has to land on a row that has already ended — that is what makes this a test "
+        "of the release rather than of the relabel"
+    )
+
+    async with async_session_factory() as db:
+        runs = (await db.execute(select(Run).where(Run.agent == "f286-appserver"))).scalars().all()
+        ended = next(run for run in runs if run.id == first_run_id)
+        # 3.4 carries 3.2's half too: the tail raised, and the outcome the run reached is kept.
+        assert ended.status == "completed"
+        assert ended.error is None
+
+        successors = [run for run in runs if run.id != first_run_id]
+        assert len(successors) == 1, (
+            "the entry queued behind an app-server run that ended was never delivered — the run "
+            "released nothing on its way out"
+        )
+
+        queued = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.content == "and this one")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(queued) == 1
+        assert queued[0].delivered_in_run_id == successors[0].id
+
+
+@pytest.mark.asyncio
+async def test_an_app_server_turn_that_raises_before_its_terminal_write_is_not_a_wedge(
+    app, auth_headers
+):
+    """F286, task 3.5 — requirement 2's half: the raise that lands *before* the terminal write.
+
+    3.4 covers the window past `db.commit()`. This is the other side of it, and its consequence
+    was worse than a stranded queue. With no `except` on this path the exception escaped
+    `_execute_codex_appserver_run`, and `_execute_run` cannot catch it either — it calls this
+    coroutine above both of its own `try` blocks and returns. The `Run` row therefore stayed
+    exactly where the run-started commit put it, `status="running"` with `error=None` and no
+    terminal broadcast, and `turn_scheduler.schedule_agent` refuses a new turn for an agent whose
+    run is `running`. Every later trigger queued instead of running, with nothing in the log and
+    nothing in the UI. Recovery was a Hub restart: app-server runs never set `Run.pid`, so
+    `reconcile_interrupted_runs` only reaches the row at the next start.
+
+    What is asserted here is that the outage is bounded by the run rather than by the process:
+    the run ends terminal *with the failure recorded on it*, its input goes back to the queue, and
+    the agent takes the next turn without anybody touching the Hub. `run_turn` raises once and
+    then behaves, so the successor is a real turn rather than a retry that fails the same way.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"f286-wedge": {"runner": "codex"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await _bind_codex_app_server_runner(app, auth_headers)("f286-wedge")
+
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import InboundQueueEntry, Run
+
+    raised = []
+    later_turns = _fake_run_turn(thread_id="thread-f286-recovered")
+
+    async def _raise_once_before_the_terminal_write(**kwargs):
+        if not raised:
+            raised.append(True)
+            # Before `run_turn` returns, so `outcome` is unbound in the caller — which is why the
+            # shared tail uses `_transport_failure_fields` and never `_runtime_failure_fields`.
+            raise RuntimeError("the app-server turn blew up before its terminal write")
+        return await later_turns(**kwargs)
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.codex_run_turn",
+        AsyncMock(side_effect=_raise_once_before_the_terminal_write),
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/codex"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "f286-wedge", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200, resp.text
+            wedged_run_id = resp.json()["run_id"]
+            await _await_background_run()
+
+    assert raised == [True]
+
+    async with async_session_factory() as db:
+        runs = (await db.execute(select(Run).where(Run.agent == "f286-wedge"))).scalars().all()
+        wedged = next(run for run in runs if run.id == wedged_run_id)
+        assert wedged.status == "failed", (
+            "the run that raised before its terminal write is still `running` — every later turn "
+            "for this agent will queue behind it until the Hub restarts"
+        )
+        assert wedged.error is not None
+        assert "before its terminal write" in wedged.error
+        assert wedged.ended_at is not None
+
+        successors = [run for run in runs if run.id != wedged_run_id]
+        assert len(successors) == 1, "the agent never took another turn"
+        assert successors[0].status == "completed"
+
+        entries = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.agent == "f286-wedge")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(entries) == 1
+        # Handed back by the failed run and delivered by the successor — one charge for the one
+        # turn that really was attempted and lost.
+        assert entries[0].state == "delivered"
+        assert entries[0].delivered_in_run_id == successors[0].id
+        assert entries[0].delivery_attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_a_second_release_charges_a_refused_entry_at_most_twice(
+    app, auth_headers, bind_runner
+):
+    """F286, task 3.7 — design D2's residual cost, asserted rather than argued.
+
+    Ungating the release introduces exactly one new overlap: an exception raised *by*
+    `redrain_queued_agents` itself, in the run's normal tail, is now followed by the handler
+    calling it a second time. Before the ungating the gate hid that, because a run reaching that
+    line is already terminal.
+
+    Only one bucket of entries pays for the second call, and it is not the obvious one. Nothing
+    charges on delivery — `mark_delivered` increments nothing. The two charge sites are a failed
+    run handing an entry back, and `turn_scheduler`'s non-transient, non-agent-wide refusal. So
+    the entry that costs something is one the first sweep *reached and refused*: it stays
+    `queued`, it was charged, and the second sweep selects and charges it again.
+
+    `DELIVERY_ATTEMPT_LIMIT` is 3, and this pins the bound the decision rests on: one run boundary
+    burns two of an entry's three allowances and **cannot withdraw it**. A boundary that could
+    destroy queued input on its own would make the fix worse than the defect it removes — that is
+    the accounting F114 and F96 litigated, where the operator's own attempts to find out why
+    nothing was happening were what consumed the allowance.
+    """
+    from hub import turn_scheduler
+    from hub.api.v1.agent_trigger import TriggerAgentError
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={
+            "data": {
+                "agents": {"f286-ends": {"runner": "claude"}, "f286-refused": {"runner": "claude"}}
+            }
+        },
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("f286-ends", cli="claude")
+    await bind_runner("f286-refused", cli="claude")
+
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Conversation, InboundQueueEntry, Project
+    from hub.inbound_queue import new_entry
+
+    # Written straight to the queue, so nothing has scheduled it and its allowance is untouched
+    # when the run boundary arrives. `delivery_attempts` below is therefore the boundary's own
+    # bill and nobody else's.
+    async with async_session_factory() as db:
+        project = await db.get(Project, "proj-test")
+        project.hop_budget = 6
+        db.add(
+            Conversation(
+                id="conv-f286-refused",
+                project_id="proj-test",
+                agent="f286-refused",
+                lifecycle="open",
+            )
+        )
+        db.add(
+            new_entry(
+                project_id="proj-test",
+                agent="f286-refused",
+                origin_type="operator",
+                content="refused every time it is reached",
+                hop_depth=0,
+                conversation_id="conv-f286-refused",
+            )
+        )
+        await db.commit()
+
+    real_trigger = agent_trigger.trigger_agent_directly
+
+    async def _refuse_the_second_agent(*args, **kwargs):
+        if kwargs.get("agent") == "f286-refused":
+            # The task-checkout arm: no `agent_wide`, no `agent_workspace_unavailable`, so it is
+            # the refusal the counter charges. An agent-wide one would charge nothing and this
+            # test would assert an unrelated zero.
+            raise TriggerAgentError(
+                409,
+                "Could not prepare the checkout for task task-f286bad: refusing existing path",
+            )
+        return await real_trigger(*args, **kwargs)
+
+    real_redrain = turn_scheduler.redrain_queued_agents
+    redrains = []
+
+    async def _raise_after_the_first_release(project_id):
+        await real_redrain(project_id)
+        redrains.append(project_id)
+        if len(redrains) == 1:
+            # D2's premise: the failure is *inside* the release, after it has already swept — a
+            # database error, essentially, not a `TriggerAgentError`, which the sweep handles
+            # itself.
+            raise RuntimeError("the release itself blew up, after charging what it refused")
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty([], exit_code=0)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch.object(agent_trigger, "trigger_agent_directly", _refuse_the_second_agent):
+                with patch.object(
+                    turn_scheduler, "redrain_queued_agents", _raise_after_the_first_release
+                ):
+                    ending = await app.post(
+                        "/api/v1/projects/proj-test/agent/trigger",
+                        json={"agent": "f286-ends", "message": "hi", "session_mode": "new"},
+                        headers=auth_headers,
+                    )
+                    assert ending.status_code == 200, ending.text
+                    await _await_background_run()
+
+    assert len(redrains) == 2, (
+        "the run's tail raised inside the release and the handler did not call it again — this "
+        "test measures the overlap the ungating introduces, so without it there is nothing to "
+        "bound"
+    )
+
+    async with async_session_factory() as db:
+        refused = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.agent == "f286-refused")
+                )
+            )
+            .scalars()
+            .one()
+        )
+        assert refused.delivery_attempts == 2
+        assert refused.delivery_attempts < DELIVERY_ATTEMPT_LIMIT
+        assert refused.state == "queued", (
+            "one run boundary withdrew a queued entry on its own — the second release must cost "
+            "an allowance, not the message"
+        )
+        assert refused.abandoned_reason is None
+
+
+@pytest.mark.asyncio
 async def test_spawn_failure_marks_run_failed(app, auth_headers, bind_runner):
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",
@@ -1412,6 +1770,20 @@ def _stoppable_pty(pid=555, exit_code=15):
 async def test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped(
     app, auth_headers, bind_runner
 ):
+    """A stop is not a failure: the run ends `stopped`, keeps what it delivered, and the entry
+    that arrived behind it is picked up by a different run.
+
+    **F286, task 3.6 — this does *not* cover F286, and the check is a measurement.** This is the
+    test whose CI failure the finding was observed through: `delivered_in_run_id` came back `None`
+    because F285's exhausted connection pool made `record_agent_output` raise inside the window
+    past the terminal commit, so the release was skipped along with the relabel it was gated on.
+    That exception was a harness artefact, and with F285 fixed this run reaches its terminal write
+    without raising at all — the release below is the *normal* path's, which was never gated.
+    Confirmed by restoring the pre-F286 gate in `_record_run_failure_tail` and re-running: this
+    test still passes, while `test_a_run_that_ended_releases_its_queue_even_when_its_tail_raises`
+    and its app-server twin both fail. So the F286 tests are not duplicates of this one, and this
+    one is not a regression test for the ungating.
+    """
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",
         json={"data": {"agents": {"stoppable-claude": {"runner": "claude"}}}},
