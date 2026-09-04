@@ -28,7 +28,7 @@ import asyncio
 import subprocess
 from pathlib import Path
 from typing import Optional
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import select
@@ -737,3 +737,131 @@ async def test_a_run_ending_redrains_the_agents_it_was_holding_back(
         "run-completion path re-drains an agent other than the one whose run it was"
     )
     assert run.task_id == HELD_TASK
+
+
+async def test_a_holder_whose_tail_raises_still_releases_the_task_it_held(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """F286, task 3.3 — the same release as the test above, on the run that used to skip it.
+
+    `test_a_run_ending_redrains_the_agents_it_was_holding_back` ends the holder's run through the
+    spawn-failure branch, so the run is relabelled `failed` and the release rode along with the
+    relabel. This one ends it the other way: the turn runs, exits 0, and something *after* the
+    terminal commit raises. Before F286 the release was gated on the relabel having happened, so
+    exactly this shape — a run that ended cleanly and then tripped over its own bookkeeping — kept
+    D8's checkout for good, and the challenger parked behind it never ran. Nothing recovers that
+    on its own: `redrain_queued_agents` is reachable from project open, settings save and relocate,
+    and from nowhere else.
+
+    The exception is **injected** rather than provoked, and injected **after the terminal commit**
+    (`_report_abandoned_entries` is the first `await` past `db.commit()` in `_execute_run`'s
+    finalize block). `holder_status_when_it_raised` is the guard on that placement: raised any
+    earlier the row would still read `running`, which is the case that always worked.
+
+    As in the F90 test above, **nothing here schedules the challenger.**
+    """
+    repo = _init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {HOLDER: {"runner": "claude"}, CHALLENGER: {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200, sync.text
+    await bind_runner(HOLDER, cli="claude")
+    await bind_runner(CHALLENGER, cli="claude")
+    holder_conversation = await _conversation(HOLDER)
+    challenger_conversation = await _conversation(CHALLENGER)
+    await _task(HELD_TASK)
+
+    async with async_session_factory() as session:
+        project = await session.get(Project, "proj-test")
+        project.hop_budget = 6
+        session.add(
+            new_entry(
+                project_id="proj-test",
+                agent=CHALLENGER,
+                origin_type="operator",
+                content="my turn on this task",
+                hop_depth=0,
+                conversation_id=challenger_conversation,
+                task_id=HELD_TASK,
+            )
+        )
+        await session.commit()
+
+    def _spawn(cmd, cwd=None, env=None, **rest):
+        """A turn that succeeds — the opposite of the F90 test's `FileNotFoundError`.
+
+        The whole point here is a run that reaches a *terminal* status of its own before anything
+        goes wrong, so the failure has to happen downstream of the finalize commit rather than at
+        the spawn.
+        """
+        pty = MagicMock()
+        pty.pid = 4321
+        pty.read.side_effect = lambda *a, **k: ""
+        pty.wait.return_value = 0
+        return pty
+
+    holder_status_when_it_raised = []
+    real_report = agent_trigger._report_abandoned_entries
+
+    async def _raise_once_for_the_holder(db, project_id, agent, run_id):
+        if agent == HOLDER and not holder_status_when_it_raised:
+            # Its own connection, so this is the committed status: `async_session_factory` sets
+            # `expire_on_commit=False`, and the window's own session would read the value it
+            # assigned in memory whether or not the commit had happened yet.
+            async with async_session_factory() as probe:
+                holder_status_when_it_raised.append((await probe.get(Run, run_id)).status)
+            raise RuntimeError("bookkeeping after the terminal commit blew up")
+        return await real_report(db, project_id, agent, run_id)
+
+    async def _challenger_run():
+        async with async_session_factory() as session:
+            return (
+                (await session.execute(select(Run).where(Run.agent == CHALLENGER)))
+                .scalars()
+                .first()
+            )
+
+    async with async_session_factory() as session:
+        with patch("hub.api.v1.agent_trigger.PtySession.spawn", _spawn):  # noqa: SIM117
+            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+                with patch.object(
+                    agent_trigger, "_report_abandoned_entries", _raise_once_for_the_holder
+                ):
+                    await trigger_agent_directly(
+                        project_id="proj-test",
+                        agent=HOLDER,
+                        message="I have this task",
+                        conversation_id=holder_conversation,
+                        session=session,
+                        task_id=HELD_TASK,
+                    )
+                    for _ in range(400):
+                        if agent_trigger._background_runs:
+                            await asyncio.gather(
+                                *list(agent_trigger._background_runs), return_exceptions=True
+                            )
+                        if await _challenger_run() is not None:
+                            break
+                        await asyncio.sleep(0.01)
+
+    assert holder_status_when_it_raised == ["completed"], (
+        "the raise has to land on a row that has already ended — otherwise this tests the "
+        "relabel, which was never the broken half"
+    )
+
+    run = await _challenger_run()
+    assert run is not None, (
+        "the challenger never got a turn: the holder's run ended cleanly, its tail raised, and "
+        "the task checkout it was holding was never released"
+    )
+    assert run.task_id == HELD_TASK
+
+    async with async_session_factory() as session:
+        holder_run = (await session.execute(select(Run).where(Run.agent == HOLDER))).scalars().one()
+        # The relabel stays gated, and this is the row it is gated for. A completed run whose
+        # bookkeeping raised is still a completed run.
+        assert holder_run.status == "completed"
+        assert holder_run.error is None

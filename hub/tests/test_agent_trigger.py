@@ -984,6 +984,149 @@ async def test_second_trigger_while_first_is_running_is_queued(app, auth_headers
 
 
 @pytest.mark.asyncio
+async def test_a_run_that_ended_releases_its_queue_even_when_its_tail_raises(
+    app, auth_headers, bind_runner
+):
+    """F286, tasks 3.1 and 3.2 — the release is not the relabel's dependent.
+
+    `_execute_run`'s handler answers two different questions with one flag. *Did this run already
+    reach a terminal status?* decides whether to relabel it `failed`, and that gate is correct: a
+    completed run must not be re-labelled because bookkeeping downstream of it raised. *Does this
+    run still hold anything?* has the opposite answer — a run that has ended has ended — and it
+    used to be answered by the same flag, so the **cleanly completed** run was the one case that
+    stranded the queue parked behind it.
+
+    The exception is **injected, never obtained through F285's connection pool** (design D4): a
+    reproduction that rides on a harness artefact goes green when the artefact is fixed, for the
+    wrong reason. And it is injected **inside the window**, after the terminal commit at
+    `agent_trigger.py`'s `await db.commit()` — `_report_abandoned_entries` is the first `await`
+    past it. `status_when_it_raised` is what stops that from silently drifting: the two calls an
+    earlier round of this proposal named (`record_agent_output` per output event,
+    `_broadcast_run_lifecycle`'s `run_started`) both fire while the row still reads `running`,
+    which is the case that already worked, so a test injected there passes without the fix.
+
+    Nothing below makes a third request. The successor run exists because the run that ended
+    released what it was holding, which is the whole claim.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"f286-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("f286-claude", cli="claude")
+
+    import threading
+
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import InboundQueueEntry, Run
+
+    release = threading.Event()
+    spawns = []
+
+    def _spawn(*args, **kwargs):
+        """The first spawn blocks in the executor until released; every later one is EOF at once.
+
+        A single reused session is not enough here, for the reason `_fake_pty`'s docstring gives
+        in the other direction: the successor turn this test exists to observe spawns again, and
+        a mock still blocked in `read` would hang it rather than fail it.
+        """
+        session = MagicMock()
+        session.pid = 900 + len(spawns)
+        if not spawns:
+
+            def _blocking_read(*a, **k):
+                release.wait()
+                return ""
+
+            session.read.side_effect = _blocking_read
+        else:
+            session.read.side_effect = lambda *a, **k: ""
+        session.wait.return_value = 0
+        spawns.append(session)
+        return session
+
+    first_run_id = None
+    status_when_it_raised = []
+    real_report = agent_trigger._report_abandoned_entries
+
+    async def _raise_once_inside_the_window(db, project_id, agent, run_id):
+        if run_id == first_run_id and not status_when_it_raised:
+            # Read on its own connection, so this is the *committed* status rather than the value
+            # the window assigned in memory — `async_session_factory` sets `expire_on_commit=False`,
+            # so the in-session object would read "completed" even from above the commit.
+            async with async_session_factory() as probe:
+                status_when_it_raised.append((await probe.get(Run, run_id)).status)
+            raise RuntimeError("bookkeeping after the terminal commit blew up")
+        return await real_report(db, project_id, agent, run_id)
+
+    with patch(  # noqa: SIM117
+        "hub.api.v1.agent_trigger.PtySession.spawn", MagicMock(side_effect=_spawn)
+    ):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch.object(
+                agent_trigger, "_report_abandoned_entries", _raise_once_inside_the_window
+            ):
+                try:
+                    first = await app.post(
+                        "/api/v1/projects/proj-test/agent/trigger",
+                        json={"agent": "f286-claude", "message": "hi", "session_mode": "new"},
+                        headers=auth_headers,
+                    )
+                    assert first.status_code == 200, first.text
+                    first_run_id = first.json()["run_id"]
+
+                    second = await app.post(
+                        "/api/v1/projects/proj-test/agent/trigger",
+                        json={
+                            "agent": "f286-claude",
+                            "message": "and this one",
+                            "session_mode": "new",
+                        },
+                        headers=auth_headers,
+                    )
+                    assert second.status_code == 200, second.text
+                    assert second.json()["status"] == "queued"
+                finally:
+                    release.set()
+                    # Repeatedly: the successor run is created *inside* the first run's task, so
+                    # one pass over the set that existed at the first look would miss it.
+                    await _await_background_run()
+
+    assert status_when_it_raised == ["completed"], (
+        "the raise has to land on a row that has already ended — that is what makes this a test "
+        "of the release rather than of the relabel"
+    )
+
+    async with async_session_factory() as db:
+        runs = (await db.execute(select(Run).where(Run.agent == "f286-claude"))).scalars().all()
+        ended = next(run for run in runs if run.id == first_run_id)
+        # 3.2. The tail raised; the outcome the run actually reached is the outcome it keeps.
+        assert ended.status == "completed"
+        assert ended.error is None
+
+        successors = [run for run in runs if run.id != first_run_id]
+        assert len(successors) == 1, (
+            "the entry queued behind a run that ended was never delivered — the run released "
+            "nothing on its way out"
+        )
+
+        queued = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.content == "and this one")
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(queued) == 1
+        assert queued[0].delivered_in_run_id == successors[0].id
+
+
+@pytest.mark.asyncio
 async def test_spawn_failure_marks_run_failed(app, auth_headers, bind_runner):
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",

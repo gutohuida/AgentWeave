@@ -74,7 +74,7 @@ before `run_turn` returns.
 
 ## 3. Tests
 
-- [ ] 3.1 `hub/tests/test_agent_trigger.py`: a PTY-path test that patches a bookkeeping call between
+- [x] 3.1 `hub/tests/test_agent_trigger.py`: a PTY-path test that patches a bookkeeping call between
       the terminal commit and the release to raise once, with an entry queued behind the run, and
       asserts the entry is delivered — `delivered_in_run_id is not None` and a successor run exists —
       with no further request made. **The exception is injected, never obtained through F285's
@@ -85,10 +85,16 @@ before `run_turn` returns.
       terminal commit, and the test then passes without the fix — R3 found both rounds had specified
       exactly that. The test also asserts the run was already terminal when the raise landed, so the
       injection cannot silently drift back out of the window.
-- [ ] 3.2 The same test asserts the run's outcome was **not** relabelled `failed`.
-- [ ] 3.3 A second-agent variant: agent B's entry is refused while agent A's run holds a task
+- [x] 3.2 The same test asserts the run's outcome was **not** relabelled `failed`.
+- [x] 3.3 A second-agent variant: agent B's entry is refused while agent A's run holds a task
       checkout, A's run ends abnormally, B runs. This is the half that no existing test covers and
       the half the operator would notice as "the other agent stopped working".
+      **Written in `hub/tests/test_task_turn_collision.py`, not `test_agent_trigger.py`**, beside
+      `test_a_run_ending_redrains_the_agents_it_was_holding_back` — the F90 test it is the
+      other half of. That file already owns the D8 collision harness (a real repo, a task
+      row, two writing agents, `bind_project_workspace`); reproducing ~60 lines of it in
+      `test_agent_trigger.py` to honour a filename would leave the two halves of the same
+      claim in different files. 3.1 and 3.2 are in `test_agent_trigger.py` as written.
 - [ ] 3.4 App-server variants of 3.1 and 3.2 using the existing `_fake_run_turn` harness
       (`hub/tests/test_agent_trigger.py:117`) and the in-flight poll helper
       `_wait_for_active_app_server_run` (`:67`). R1 and R2 cited `:126` and `:68`, which are those
