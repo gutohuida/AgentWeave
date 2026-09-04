@@ -485,12 +485,21 @@
   byte-identical to the checkout's copy and confirmed to contain the case): both rows in the
   Activity log under an amber `Warn` badge, paths unelided. N-21's finding was that this rendered
   as its own event name; it does not.
-- [ ] 9.5 `openspec validate --strict` on the change, then sync every delta into `openspec/specs/`
+- [x] 9.5 `openspec validate --strict` on the change, then sync every delta into `openspec/specs/`
   by verbatim header — the ADDED requirements in `agent-run-sandboxing` and `workspace-isolation`,
   the MODIFIED requirement in `requirement-traceability`, and the now-minimal MODIFIED requirement
   *A refusal is recorded wherever it is decided* in `agent-run-sandboxing` (design D9, as corrected
   in round 3: two words plus one sentence of scope, nothing more) — then archive. `--strict` does not
   compare capabilities, so a missed delta validates clean; verify the sync by grep, not by exit code.
+  *Done 2026-09-04 (night N-24).* `openspec validate --strict` clean on the change, and
+  `openspec validate --specs --strict` clean afterwards at **43 passed, 0 failed**. Five deltas,
+  five greps, each header found **exactly once** in `openspec/specs/`: the two ADDED in
+  `agent-run-sandboxing`, the ADDED in `workspace-isolation`, and the two MODIFIED in
+  `requirement-traceability` and `agent-run-sandboxing`. The refusal requirement's sync came out at
+  **+3/-2 lines, one paragraph**, exactly the size round 3 said it should be — the check that would
+  have caught a delta silently carrying more than D9 allowed. F115 retired in both of its sections;
+  what this change does not fix was carried forward rather than retired with it (F281, F282, and a
+  new **F284 (C)** lifted out of the reproduction's approval-card paragraph).
 
 
 ## 10. What round 2 added

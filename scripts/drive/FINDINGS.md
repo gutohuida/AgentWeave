@@ -7667,10 +7667,60 @@ assertion in this finding's closure that rests on a test rather than on the prod
 
 ---
 
-## F115 (B?) — the agent worktree is a working directory, not a boundary: an absolute path writes straight into the operator's checkout, and the Hub still records the worktree
+## F115 (B?) — RETIRED 2026-09-04 — the agent worktree is a working directory, not a boundary: an absolute path writes straight into the operator's checkout, and the Hub still records the worktree
 
-**Status:** **open, severity is the operator's call.** Found 2026-08-29 driving rows 13 and 14 — the
-first live agent turns ever spent on this product. Reproduced across four runs.
+**Status:** **fixed `ec342cb`**, retired 2026-09-04 (night window, iteration 24) on the strength of
+a drive, not of a green suite. Found 2026-08-29 driving rows 13 and 14 — the first live agent turns
+ever spent on this product. Reproduced across four runs.
+
+**Which commit that sha names, and why it is that one rather than this one.** `ec342cb` is
+`night(18): a-write phase 4 wiring`, where the repair actually landed —
+`hub/hub/outside_write_record.py` and its two call sites in `agent_trigger.py`, one on each of the
+two output sinks, so the recorder cannot see a write on one path and miss it on the other. The
+commit that writes *this line* is later than it and cannot name its own sha without an amend this
+run is forbidden to make; naming the commit that repairs the behaviour is the more useful citation
+anyway. The whole repair is the change
+`openspec/changes/archive/2026-09-04-a-write-outside-the-workspace-is-recorded`.
+
+**What the repair is, stated against what this finding asked for.** This finding's two halves were
+(a) an absolute path writes outside the worktree and (b) *nothing recorded that it had*. Only (b) is
+fixed, and deliberately: the worktree is a working directory, and the change's own spec now says so
+in `workspace-isolation` — *a run's recorded workspace says where it started, not where its writes
+landed*. What changed is that the Hub no longer records a directory that quietly implies
+containment. Every file-writing tool call resolving outside the run's workspace is now classified by
+destination kind and name, written to `Run.outside_workspace_writes`, and surfaced once per
+destination as an `agent_wrote_outside_workspace` activity notice at `warn` — in **every** posture,
+including the ones that check nothing and the one where the operator approved the call. A run
+observed and clean records `[]`; a run never observed stays `NULL`; the two are distinguishable,
+which is the half of this finding that made the recorded `workspace_dir` misleading in the first
+place. Evidence footprints report it too, without moving the footprint and without refusing the
+evidence.
+
+**The drive that retires it — 2026-09-04 (N-23), three legs, 29/29, two real Haiku turns.** Port
+8011 from source on its own fresh database (`profiles/drive8011/awrite-p9.db`, migrated `0000 →
+0101` at startup, `0101` being this change's own migration — the cheapest proof the process serves
+this checkout). Leg A: a turn told to write one *relative* path finished `completed` with
+`outside_workspace_writes == []` and no notice, which is the `[]` no test can produce and only a
+live run can. Leg B: one turn, two absolute paths — one inside the project root, one outside the
+project entirely — came back as destination kinds `project` and `outside` with the declared paths
+and `calls: 1` each, both files present on disk, and two `agent_wrote_outside_workspace` rows whose
+`destination_kind`s match the row's pair exactly. Leg C: the real `summaryForEvent`, bundled with
+`esbuild` and run over the payloads the Hub had just written, and then a browser against the
+**committed** `hub/hub/static/ui` bundle (fetched and `cmp`'d byte-for-byte against the checkout's
+copy) — both rows in the Activity log under an amber **Warn** badge, full paths unelided. Harnesses
+kept: `scripts/drive/setup_awrite_p9.py`, `scripts/drive/t_awrite_p9_recorded.py`.
+
+**What is NOT retired with it, and is carried forward rather than buried here.** Three rows, all
+filed with their own numbers so a later sweep finds them in the index rather than in this section:
+
+- **F281 (B)** — a shell command's writes are never recorded, in any posture.
+  `written_paths("Bash", …)` returns `()` for a literal absolute redirect, for `$HOME/…` and for a
+  runtime-built path alike. The record is named for what it catches; this is what it does not.
+- **F282 (C)** — a junction inside the workspace is classified and refused correctly; what is wrong
+  is that the refusal reason and the recorded row both print the *declared* path, which reads as
+  inside, beside a verdict that says outside. The genuinely undetectable case is a hard link.
+- **F284 (C)** — the reproduction below asked for a marker on the approval card, and there is none.
+  See its own section.
 
 Project `drive-2026-08-29` (`proj-8e29ef6813e4`), one agent `asker` on a Haiku runner, no task
 binding. Every run was told the same thing in different words: *write a line to a new file in the
@@ -9685,7 +9735,7 @@ not exist, and a name that is not legal). Row 3 also hard-codes the agents `driv
 here rather than made self-provisioning: creating agents inside a probe script is how a sweep starts
 testing its own setup code.
 
-## F115, reproduced independently — two identical triggers, one inside the boundary and one outside
+## F115, reproduced independently — RETIRED IN PART 2026-09-04 — two identical triggers, one inside the boundary and one outside
 
 **Driven 2026-08-30, iteration 11, on the 8011 Hub, `proj-1964cdedffe2` (`drive-0830-sweep`), a
 fresh project created this morning. Not a new finding — the same defect F115 states, reached by a
@@ -9733,6 +9783,20 @@ blocking question in ~20s, `PATCH /questions/{id}` answered it and it left the o
 immediately; the `manual` posture raised a permission card in ~12s on both runs and
 `POST …/decide {"allow": true}` cleared it in under a poll. Neither row was passing when this
 iteration started — see F135 continued below for why the harness said otherwise.
+
+> **RETIRED IN PART 2026-09-04, fixed `ec342cb`.** The reproduction itself is retired: two runs
+> given the same sentence landing on opposite sides of the boundary with nothing in the product
+> distinguishing them is exactly what the recorder now distinguishes — `run-0d750fe5d14d`'s write
+> would today carry a `project` destination on the run row and an `agent_wrote_outside_workspace`
+> notice in the project's activity, while `run-dddadb7f817e`'s would record `[]`. The paragraph
+> *"What this adds to F115"* is **not** retired: the permission card still names the path and
+> nothing else, with no marker that it leaves the run's workspace and no comparison against the
+> boundary the Hub computed to launch the run. That was held out of scope on purpose (decision D3
+> records against the Run; widening to the approval surface is the operator's call) and it is now
+> filed as **F284 (C)** rather than left inside a retired section. The *"Also driven, and held"*
+> paragraph is a harness result, not a finding, and needs no disposition. The
+> hard-coded-repository note that names this finding belongs to **F135, continued** below — it is a
+> harness defect, already fixed there, and is not F115's to retire.
 
 ## F135, continued — three more of the sweep's own wrong turns, all in the live-turn harnesses
 
@@ -19432,3 +19496,32 @@ absolute path, which is a confusing refusal rather than an unsafe permission. Th
 about which default is the real one, not a patch: either the catalog's declared default becomes
 `workspace` (and Codex's own row is looked at in the same breath), or the composer resolves its
 at-rest display through the same fallback the spawn uses.
+
+## F284 (C) - the permission card the operator answers gives them no way to see that the path leaves the run's workspace
+
+**Carried forward 2026-09-04 (night N-24) out of F115's second section, which is retired around it.**
+Not a new observation — it was measured live on 2026-08-30 (iteration 11) and has sat inside a
+finding that is now retired, which is precisely how a live-driven observation gets lost.
+
+Under the `workspace` posture the Hub answers each tool call itself and refuses a path outside the
+run's workspace, so this does not arise. Under `manual` the **operator** answers, and the card they
+answer with names the tool and the full absolute path and nothing else: no marker that this
+particular path leaves the workspace, and no comparison against the boundary the Hub itself computed
+a moment earlier to launch the run. Two runs of the same agent, same posture, same sentence, were
+driven nine minutes apart; one card offered a path under
+`\.agentweave\worktrees\asker\` and the other a path directly in the project root, and the two
+cards were indistinguishable in every respect an operator can read.
+
+**Why it survives `a-write-outside-the-workspace-is-recorded`.** That change records the write and
+notifies once per destination — *after* the call. The operator approving the card is the last human
+who could have stopped it, and they are the one party the record does not reach in time. The
+classifier such a card would need already exists and is already reachable from the request path
+(`hub/hub/outside_write_record.py`), so what is missing is a decision about the approval surface,
+not a mechanism.
+
+**Severity is C and the reason matters:** nothing is lost or misattributed — the write is now
+recorded, named by destination, and surfaced to the operator in the activity log. What remains is
+that `manual` is not the safer posture it reads as; it is the posture in which a human is asked to
+make a judgement they have not been given the inputs for. Scope, if it is taken up, is the card's
+payload and its rendering, and it should be decided together with **F283 (B)**, which is the other
+place where the posture the operator believes they chose and the posture the run got come apart.

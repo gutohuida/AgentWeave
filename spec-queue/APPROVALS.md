@@ -35,6 +35,22 @@ ORDER: a-blocked-agent-workspace-holds-its-input, a-write-outside-the-workspace-
 > `a-write` may now start. Its task 4.2 migration number was re-checked on 2026-09-03 and `0101` is
 > correct as written.
 
+> **Second status note, night window 2026-09-04 iteration 24 (not an operator decision).** The second
+> row is now **built, driven and archived** too —
+> `openspec/changes/archive/2026-09-04-a-write-outside-the-workspace-is-recorded`, all 9 phases,
+> driven live at N-23 (29/29, two real Haiku turns, on a Hub serving this checkout's own migration
+> `0101`), five deltas synced into `openspec/specs/` and verified header by header, and **F115
+> retired** in both of its ledger sections. Both approved rows for 2026-09-03 are closed, in the
+> `ORDER` given and without the two ever overlapping on `agent_trigger.py` or the bundle.
+>
+> Three things the change deliberately did **not** fix are carried forward as their own ledger rows
+> rather than closed with it: **F281 (B)** (a shell command's writes are never recorded, in any
+> posture), **F282 (C)** (a junction is classified and refused correctly but both the refusal and
+> the record print the declared path), and **F284 (C)** (the `manual` permission card gives the
+> operator no marker that the path leaves the run's workspace — lifted out of F115's reproduction so
+> retiring that section would not bury it). None has a proposal, so by the night window's own rule
+> they are the day window's to take up, and F284 should be decided together with **F283 (B)**.
+
 `ORDER` is not decoration here. The two changes collide on `agent_trigger.py` and `worktrees.py`, and
 `a-write` moves `hub/hub/static/ui` on top of that — the one combination this repo cannot build
 concurrently. Sequential, severity-A first, is what makes approving both safe. 86 tasks will not fit in
