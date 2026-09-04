@@ -289,19 +289,65 @@ grep for a sentence could have reached this comment, because it quotes none - wh
   those two files are pinned by the *helper*, not by the condition, and phase 3c mutation-checked
   those separately. The file was restored byte-for-byte (`git diff` empty, not merely "looks the
   same") and the two files re-run green at 19 passed.
-- [ ] 6.2 Drive it on the trial Hub, on a fresh project, with a real agent bound to
+- [x] 6.2 Drive it on the trial Hub, on a fresh project, with a real agent bound to
   `claude-haiku-4-5`: block `.agentweave/worktrees/<agent>` with a plain directory, send a message,
   press Continue three times, and confirm the message is **still queued** and the queue reports the
   refusal with its remedy. This is the leg no unit test reaches, and the leg the ledger's own
   reproduction used.
-- [ ] 6.3 Second leg, same project: queue a task-bound message for the same agent in another
+
+  **Driven 2026-09-04, 8/8.** Hub restarted on `:8011` from `hub/`, from source, on a database of
+  its own (`profiles/drive8011/ablocked-p6.db`, migrated to 0100 at startup) — **not** the beta
+  profile the queue item named. Beta is what the live `:8010` instance serves, and a second process
+  writing it would have put that instance's scheduler in reach of this drive's project; an isolated
+  file removes the question entirely. Fixture `proj-4eb8215f9502` at
+  `C:/Users/huida/Documents/aw-ablocked-p6`, its own git repository, one agent on
+  `claude-haiku-4-5-20251001`. Harness `scripts/drive/setup_ablocked_p6.py` plus
+  `scripts/drive/t_ablocked_p6_held.py`.
+
+  Four delivery opportunities against a limit of three — `POST /agent/trigger` schedules too, which
+  the harness counts deliberately — and **`delivery_attempts` never left 0**. The entry stayed
+  `queued`, `abandoned_reason` stayed null. Phase 4's remedy reaches the operator verbatim on three
+  separate surfaces: the trigger response's `waiting_reason`, `GET /queue/{agent}/status`, and the
+  Continue button's own 200 body. All three carry the path to remove, the `rm -r`, and the promise
+  that the next turn prunes.
+- [x] 6.3 Second leg, same project: queue a task-bound message for the same agent in another
   conversation behind the blocked one, and confirm the head is still given up on at the limit and
   the task turn then runs. Holding everything would look like success to leg 6.2 alone. The task must
   be an ordinary one — a drive cannot produce a grandfathered task, which is exactly why 3.7 exists
   and why this leg cannot stand in for it.
-- [ ] 6.4 Third leg: remove the directory, `git worktree prune`, trigger once, and confirm the held
+
+  **Driven 2026-09-04, 14/14** (`scripts/drive/t_ablocked_p6_elsewhere.py`). The task was created
+  through `POST /tasks` with nothing special about it and the row came back `workspace_scheme='task'`
+  — asserted, because a grandfathered one would have made this leg agree with 6.2 for the wrong
+  reason. Queueing the task-bound message in a second conversation moved the head from 0 attempts to
+  **1 on that same schedule**: the helper found input that would have run in a different workspace,
+  so the condition stopped holding. Two more Continues took it to 3 and it was withdrawn, with
+  `abandoned_reason` naming the obstruction. One further schedule started the task turn
+  (`started: true`) and it completed in `.agentweave/tasks/task-e3df8b4ddca8`, a directory the
+  obstruction never touched, with the task-bound entry `delivered`.
+
+  This is the leg that could have falsified the change and did not. A fix that simply held
+  everything would have left `attempts` at 0 here and starved the task.
+- [x] 6.4 Third leg: remove the directory, `git worktree prune`, trigger once, and confirm the held
   message from 6.2 is delivered. F96's promise is the whole point of holding it, and it is unproven
   until the repair delivers it.
+
+  **Driven 2026-09-04, 11/11** (`scripts/drive/t_ablocked_p6_cleared.py`). 6.2's own entry is gone by
+  then — 6.3 withdrew it, which is 6.3 working — so this leg queues a *fresh* message under the same
+  obstruction, confirms it is held at 0 attempts with the remedy attached, and then performs exactly
+  what the sentence told the operator to do. One `Continue` after that started a real turn, which
+  completed **in the very path that had been obstructed**, `git worktree list` shows it registered on
+  `agentweave/blocked012902`, and the held entry is `delivered`. The remedy is not advice: doing it
+  releases the message.
+
+  **F274's check, done in a browser rather than assumed.** `scripts/uishot.py` against the served
+  bundle on `:8011` (not a dev server): the conversation view renders the whole refusal under the
+  queued message — three lines, unelided — so the operator reads the directory to remove and the
+  command to remove it without opening an API client. `AgentTimeline.tsx:376` and
+  `AgentOutputPanel`'s session notice are the two render sites and neither truncates.
+
+  **Both real turns billed `claude-haiku-4-5-20251001`**, read from `turn_usage` rather than inferred
+  from the binding. No job or loop was created; `GET /jobs` and `GET /loops` are both empty.
 - [ ] 6.5 Append the drive's result to `scripts/drive/FINDINGS.md` under F188 — retired with the
   evidence, or still open with what was measured. Do not mark it retired on the strength of a green
   suite.
