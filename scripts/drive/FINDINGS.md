@@ -19264,3 +19264,26 @@ the change than without. Whatever the race is, it predates both.
 `record_agent_output` in flight is its own investigation with its own reproduction; this records that
 the flakiness is real, measured, pre-existing, and attributable to neither of the two changes on this
 branch that touch these paths.
+
+**Confirmed again 2026-09-04 (night N-19), and the shape of the race got sharper.**
+`test_codex_app_server_stop_signals_should_interrupt` failed once in a five-file regression run and
+then passed 3/3 alone immediately afterwards, on the same tree - the same coin flip, now costing a
+re-run to attribute for the second night running.
+
+What sharpened it is a failure met from the other direction. N-19's task 4.4c wanted to observe a
+run's own row *while the run was still mid-turn*, and its first draft polled the database in a loop
+while the run was writing. That intermittently broke the run itself, with exactly F279's signature:
+`sqlalchemy.exc.InvalidRequestError: Could not refresh instance` raised out of
+`record_agent_output`'s `db.refresh(row)` at `output_recording.py:94`, killing `_execute_run`. No
+stop endpoint was involved and nothing was being torn down - only a second `async_session_factory()`
+session reading the same SQLite database concurrently with the run's own writes.
+
+That makes "the run is torn down while `db.refresh` is in flight" look like the wrong half of the
+description. The *teardown* may be incidental; what both cases share is a **concurrent session
+against the run's own in-flight transaction**, and `db.refresh` immediately after `db.commit` is
+where it surfaces. A reproduction that does not involve stopping anything is now known to exist,
+which is a much cheaper starting point for the investigation than the stop path.
+
+The 4.4c test was rewritten to avoid the collision rather than to tolerate it: the fake process
+signals a `threading.Event` at the moment it blocks, so the test reads the row only when the run is
+quiescent. Twenty-two tests across the two files then passed 4/4 consecutive runs.

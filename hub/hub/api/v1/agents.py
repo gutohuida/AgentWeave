@@ -833,6 +833,11 @@ async def agent_timeline(
                 exit_code=run.exit_code,
                 started_at=run.started_at,
                 ended_at=run.ended_at,
+                # Task 4.7. The row's own value, passed through without a default: `None` means
+                # this run was never observed and `[]` means it was observed and nothing left its
+                # workspace, and coalescing the first into the second would be the one mistake
+                # this column exists to prevent.
+                outside_workspace_writes=run.outside_workspace_writes,
             )
 
     return AgentTimeline(events=events, runs=runs)

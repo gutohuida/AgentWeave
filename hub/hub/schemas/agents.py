@@ -146,6 +146,21 @@ class RunFacts(BaseModel):
     exit_code: Optional[int] = None
     started_at: datetime
     ended_at: Optional[datetime] = None
+    # What this run wrote outside its own workspace, `Run.outside_workspace_writes` verbatim
+    # (task 4.7). Carried here so a reader has somewhere to read it: without this the column is
+    # written on every run and served to nobody.
+    #
+    # `None` and `[]` are different answers and both are meaningful, which is why this is not
+    # `Field(default_factory=list)` — `None` is *this run was never observed*, `[]` is *observed,
+    # and nothing left its workspace*. A default that turned the first into the second would
+    # claim every run predating the detector was watched and found clean.
+    #
+    # `List[Dict[str, Any]]` rather than a per-entry model, deliberately: the list holds
+    # destination entries and, beyond the bound, one overflow sentinel of a different shape
+    # (`hub.outside_write_record.OutsideWriteRecorder`), and a schema naming only the first would
+    # drop the second on the floor at serialisation time. Every element carries `kind`, which is
+    # what a reader dispatches on.
+    outside_workspace_writes: Optional[List[Dict[str, Any]]] = None
 
     model_config = {"from_attributes": True}
 

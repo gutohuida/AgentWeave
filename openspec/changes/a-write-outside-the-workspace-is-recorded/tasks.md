@@ -210,12 +210,31 @@
   and only one of the two runs for any given run). On the **first** sighting of a destination, one
   transaction writes the `Run` column and emits 4.5's event together; later writes to a destination
   already recorded touch the closure only.
-- [ ] 4.4c Do **not** flush the column at the run boundary the way `turn_produced_nothing` does. That
+- [x] 4.4c Do **not** flush the column at the run boundary the way `turn_produced_nothing` does. That
   is the natural reading of D5 as round 2 wrote it and it loses the whole record for a run that is
   killed or whose Hub restarts - exactly the runs whose stray writes matter. Add a test that kills a
   run mid-turn after one outside write and asserts the destination and its first path survived. The
   exact per-destination call count is best-effort at the boundary and is the only field it is safe
   to lose.
+  *Landed 2026-09-04 (night N-19).*
+  `test_a_run_killed_mid_turn_keeps_the_destination_it_already_reached`, driven through
+  `POST /agent/trigger` with a new fake spawn, `_pty_that_stalls_after`, which streams its lines
+  and then **blocks in `read` while staying alive** rather than returning EOF. That is what makes
+  the claim measurable: the run is genuinely mid-turn, `_execute_run` is still in its read loop,
+  and a record swept at the boundary is simply not on the row yet. The mid-turn read asserts the
+  destination, the first path, and `calls == 1` **while the run has already made two writes into
+  it** - the design stated as a measurement. Then the background task is cancelled and the
+  destination and first path are read again; `calls` is deliberately not re-asserted, being the
+  one field the boundary owns.
+
+  **Two things this cost, both worth writing down.** (1) The first draft polled the column in a
+  loop while the run was still writing, and intermittently broke the run itself -
+  `record_agent_output` raising `Could not refresh instance` under concurrent SQLite sessions. The
+  fake now sets a `threading.Event` at the moment it starts blocking, which is a stronger signal
+  than a poll: `read` is only called again once the previous chunk has been through `_flush_line`,
+  so every scripted line is fully processed and the run is quiescent. (2) The stop endpoint was
+  deliberately not used - F279 records both existing stop-then-await tests failing intermittently
+  on an unmodified tree (7 in 12), and a new test on that pattern would inherit a coin-flip red.
 - [x] 4.5 Emit `persist_event(..., "agent_wrote_outside_workspace", severity="warn")` naming the run,
   the agent, the tool, the path and the destination workspace — once per distinct destination per
   run, not once per call, in the same transaction as 4.4b's first-sighting write. Follow
@@ -269,12 +288,48 @@
   `not hasattr(run, "outside_workspace_writes")` false and that iteration's targeted runs did not
   cover them. Narrowed to `is None` here so the branch is not left red; 4.7 still owns the real
   flip.
-- [ ] 4.7 Expose the column on the run schema so a reader can see it, and flip tasks 1.2 and 1.3:
+- [x] 4.7 Expose the column on the run schema so a reader can see it, and flip tasks 1.2 and 1.3:
   the record exists, and the cross-worktree case names the *other* agent's workspace by kind and
   name. **Task 1.1 is not in this list and does not need to be** — checked 2026-09-04 rather than
   assumed, when `write_paths` landed and turned 1.1 red on its `fields(RunEvent)` assertion. 1.1 is
   the parse side, so phase 2b flipped it in the same commit that broke it; 1.2 and 1.3 are the
   record side and are still red-free today because nothing is recorded yet.
+  *Landed 2026-09-04 (night N-19).*
+
+  **The schema.** `RunFacts` (`hub/hub/schemas/agents.py`) gains
+  `outside_workspace_writes: Optional[List[Dict[str, Any]]] = None`, passed through by
+  `agent_timeline` (`hub/hub/api/v1/agents.py`) from the row without a default. That route is
+  where a run's own facts are already served and it keys them by the run ids the returned events
+  name - and the `agent_wrote_outside_workspace` event carries `run_id`, so an escaping run is in
+  that map by construction. `List[Dict[str, Any]]` rather than a per-entry model, because the list
+  ends with an overflow sentinel of a different shape beyond the bound and a model naming only the
+  destination shape would drop it at serialisation.
+  `test_the_timeline_reports_what_a_run_wrote_outside_its_workspace` drives two real turns and
+  reads both answers off the route: destinations for the run that escaped, `[]` for the watched
+  clean one.
+
+  **The UI is deliberately not touched, and that is task 8.3's, not this one's.** `AgentRunFacts`
+  in `hub/ui/src/api/agents.ts` does not mirror the new field: nothing in the UI reads it yet, and
+  8.3 already owns checking the label this record is shown under. Adding an unread TypeScript
+  field would also have obliged a `npm run build` + `refresh_ui_bundle.py` round to keep
+  `/health` from reporting `ui_stale`, for a declaration no component consumes.
+
+  **1.2 and 1.3 flipped, and driven rather than mirrored.** Both now go through
+  `POST /agent/trigger` and the real `_flush_line` (new `prepare`/`drive` helpers in the
+  reproduction file); `seed_run` and `record_turn` are gone. That was the honest option and it was
+  the more expensive one: `record_turn` was a hand-rolled mirror of `_flush_line` that does not
+  call `OutsideWriteRecorder`, so a flipped assertion written against it would have passed with
+  the wiring in `agent_trigger.py` deleted - measured, not feared: mutation M5 below turns the
+  driven tests red and could not have touched a mirrored one. Teaching the mirror to call the
+  recorder would have been cheaper and would have tested the mirror.
+
+  Two things the flip did **not** change, and both are now asserted rather than dropped: the
+  `tool_use` payload is byte-for-byte what it was, and 1.3's two turns are still byte-identical in
+  the transcript once the destination path is normalised out. The fix is a record *beside* the
+  transcript. The `layout` fixture had to move its root to `tmp_path` itself, because
+  `conftest._default_project_workspace` resolves every project id there and a layout rooted
+  anywhere else puts every path outside the project - collapsing the `agent` case into `outside`
+  and quietly making 1.3 unable to fail.
 
 ## 5. Teach evidence footprinting about it
 
@@ -359,17 +414,43 @@
   fourth scenario already says) plus one sentence naming its scope. The paragraph legislating
   "allowed actions that are not ordinary" is removed: it wrote this change's policy into a
   requirement about refusals. Design D9.
-- [ ] 10.2 The scenario that pins it moves to this change's **own** ADDED requirement, where the fact
+- [x] 10.2 The scenario that pins it moves to this change's **own** ADDED requirement, where the fact
   lives: *The record is not a refusal*. Assert it against the event payload, so the label check in
   task 8.3 has something to fail against.
+  *Landed 2026-09-04 (night N-19).* The scenario was already in the ADDED requirement (checked,
+  not assumed); what was missing was the assertion.
+  `test_the_record_is_not_a_refusal_and_does_not_read_as_one` checks the event type is not
+  `permission_denied` - the literal `agent_actions`, `agent_trigger` and `permissions` all write
+  for a refused decision - and scans the product's own vocabulary (event type, severity, payload
+  keys, `destination_kind`) for `refus`, `denied`, `blocked`, `prevent`, `escap`, `violat`,
+  `unauthor`. **The values the run supplied are excluded on purpose**, and the first draft is why:
+  scanning the whole row failed on `refus` inside pytest's temp directory, named after the test. A
+  path or an agent name is the run's data, and a project in a directory called `denied/` is not
+  the product presenting a refusal.
 - [x] 10.4 Test the classification of a path under `<root>/.agentweave/` that is not a worktree, task
   or review checkout — `.agentweave/evidence/x` is the sharp case, being the Hub's own record-keeping
   about runs. It must classify as `hub`, never `project` (design D4, task 3.1b).
-- [ ] 10.5 Test the run whose workspace **is** the project root (design D12): a read-only agent, or a
+- [x] 10.5 Test the run whose workspace **is** the project root (design D12): a read-only agent, or a
   project that is not a git repository. Writing anywhere in the project records nothing, including
   into another agent's worktree. Assert that, and assert the requirement's wording does not let the
   empty record read as confinement.
-- [ ] 10.3 Test the review-turn case explicitly. A review run's workspace *is* the detached review
+  *Landed 2026-09-04 (night N-19).*
+  `test_a_run_whose_workspace_is_the_project_root_records_nothing_inside_it`: the tracked tree,
+  the Hub's own subtree and another agent's checkout all classify `inside`, the run ends `[]`, and
+  no notice is emitted - **plus a control**, a sibling of the root, which *is* recorded, so the
+  empty list is an answer rather than a silence.
+  The wording half was a **check, not an edit**: the requirement already carries the paragraph
+  beginning *A run whose workspace is the project's own directory is outside this requirement's
+  reach*, and `Run.outside_workspace_writes`'s own comment in `models.py` says the same thing
+  where a reader would look. No test asserts a requirement's prose - nothing in this suite reads
+  `openspec/`, and a test of the change's own document would not be a test of the product - so the
+  claim is carried in the test's docstring, which is where a reader of the behaviour meets it.
+- [x] 10.3 Test the review-turn case explicitly. A review run's workspace *is* the detached review
   checkout (`agent_trigger.py:824`), so a reviewer writing into its own agent worktree is a write
   outside its workspace and is recorded as one. That is correct and it should be a test rather than
   a surprise found later.
+  *Landed 2026-09-04 (night N-19).*
+  `test_a_reviewer_writing_into_its_own_checkout_is_outside_its_workspace`: the review checkout
+  itself is `inside`; the reviewer's own worktree is `agent`/`<reviewer>`; the task checkout under
+  review is `task`/`<task-id>`. The third case is the one that makes the kinds earn their keep,
+  and mutation M7 (dropping `tasks` from `CHECKOUT_SEGMENTS`) turns this test red by name.

@@ -7,11 +7,18 @@ survives only inside the tool call's stringified `input` blob, alongside every o
 every other call, and nothing distinguishes "wrote into its own workspace" from "wrote into a
 second agent's workspace" from "wrote into a directory outside the project".
 
-**This file is the reproduction, and it is written to become the gate on the fix.** Every test
-here passed against unmodified code first -- that is what makes the change's behaviour claim a
-measurement rather than an inference from reading the source. Tests 1.1, 1.2 and 1.3 are written
-to flip in phase 4: the parsed event will carry the paths structurally, the run will carry the
-record, and the cross-worktree case will name the *other* agent's workspace by kind and name.
+**This file is the reproduction, and it is now the gate on the fix.** Every test here passed
+against unmodified code first -- that is what makes the change's behaviour claim a measurement
+rather than an inference from reading the source. Tests 1.1, 1.2 and 1.3 were written to flip in
+phase 4, and all three have: the parsed event carries the paths structurally (1.1, flipped by
+phase 2b), the run carries the record (1.2), and the cross-worktree case names the *other*
+agent's workspace by kind and name (1.3).
+
+What did **not** flip is everything each test says about the *transcript*. The `tool_use` payload
+is byte-for-byte what it was, and the two turns 1.3 compares are still indistinguishable in it.
+That is deliberate and is asserted rather than dropped: the fix is a record beside the transcript,
+not a change to it, so a future change that starts putting classified paths into the payload
+should have to come here and say so.
 
 Test 1.4 is not written to flip, and is not really a test of this change at all -- it is the
 change's **premise**, pinned. F115 says that "in the posture an operator is most likely to be
@@ -31,19 +38,25 @@ import re
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any, List
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import select
 
+import hub.worktrees as worktrees
 from hub.db.engine import async_session_factory
-from hub.db.models import AgentOutput, Conversation, EventLog, Run
+from hub.db.models import AgentOutput, EventLog, Run
 from hub.mcp_server import _decide
 from hub.model_catalog import WORKSPACE_PERMISSION_MODE
-from hub.output_recording import record_agent_output
 from hub.runner_commands import DEFAULT_CLAUDE_PERMISSION_MODE
 from hub.runner_events import RunEvent
 from hub.runner_parsing import parse_claude_line
 from hub.worktrees import worktree_path
+
+# The fake spawn `test_agent_trigger.py` drives the Claude path with, imported rather than
+# re-declared -- the convention this suite already follows. Tasks 1.2 and 1.3 are driven through
+# a real turn rather than through a local mirror of `_flush_line`; see `drive` below.
+from tests.test_agent_trigger import _await_background_run, _fake_pty
 
 PROJECT = "proj-test"
 WRITER = "f115-writer"
@@ -95,21 +108,36 @@ class Layout:
 
 @pytest.fixture()
 def layout(tmp_path) -> Layout:
-    root = tmp_path / "project"
+    """The three destinations, laid out under the root the suite resolves for this project.
+
+    `root` is `tmp_path` itself and not a directory beneath it, because `conftest`'s
+    `_default_project_workspace` resolves every project id to this test's own `tmp_path` -- so
+    that, and nothing else, is what a driven turn's classifier will compare against. Tasks 1.2
+    and 1.3 are driven turns (see `drive`), and a layout rooted anywhere else would put every
+    path outside the project and quietly collapse the `agent` case into the `outside` one.
+
+    `stray` is therefore a sibling of the root rather than a child of it. Shared between tests in
+    a session, hence `exist_ok`; nothing is ever written into it.
+    """
+    root = tmp_path
     workspace = worktree_path(root, WRITER)
     neighbour = worktree_path(root, NEIGHBOUR)
-    stray = tmp_path / "elsewhere"
+    stray = tmp_path.parent / "f115-elsewhere"
     for directory in (workspace, neighbour, stray):
-        directory.mkdir(parents=True)
+        directory.mkdir(parents=True, exist_ok=True)
     return Layout(root=root, workspace=workspace, neighbour=neighbour, stray=stray)
 
 
-def write_call_line(path: Path, *, call_id: str = "call_w1") -> str:
+def write_call_line(path: Path, *, call_id: str = "call_w1", session_id: str = SESSION) -> str:
     """One `assistant` line of Claude's `stream-json`, carrying a `Write` at *path*.
 
     The shape `test_runner_parsing.py`'s `CLAUDE_TOOL_USE_LINE` uses, with a `Write` in place of
     its `Bash` and an absolute `file_path` -- which is what F115 reproduced live, on
     `run-72de0f5c6898`.
+
+    *session_id* is a parameter because two driven turns for one agent are two conversations, and
+    a provider session id is unique per project and agent: 1.3 drives two and would otherwise
+    fail on that constraint rather than on anything it is about.
     """
     return json.dumps(
         {
@@ -129,54 +157,50 @@ def write_call_line(path: Path, *, call_id: str = "call_w1") -> str:
                     }
                 ],
             },
-            "session_id": SESSION,
+            "session_id": session_id,
         }
     )
 
 
-async def seed_run(run_id: str, agent: str, workspace: Path) -> None:
-    """A run the Hub owns, executing in *workspace* -- `Run.workspace_dir` as spawn writes it."""
-    async with async_session_factory() as db:
-        db.add(Conversation(id=f"conv-{run_id}", project_id=PROJECT, agent=agent, lifecycle="open"))
-        db.add(
-            Run(
-                id=run_id,
-                project_id=PROJECT,
-                agent=agent,
-                conversation_id=f"conv-{run_id}",
-                session_id=SESSION,
-                status="running",
-                workspace_dir=str(workspace),
-            )
-        )
-        await db.commit()
+async def prepare(app, auth_headers, bind_runner, agent: str) -> None:
+    """Register *agent* and bind it a Claude runner. Once per agent, not once per turn."""
+    sync = await app.post(
+        f"/api/v1/projects/{PROJECT}/session/sync",
+        json={"data": {"agents": {agent: {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200, sync.text
+    await bind_runner(agent, cli="claude")
 
 
-async def record_turn(run_id: str, agent: str, line: str) -> None:
-    """Mirror `_flush_line`'s per-event loop (`agent_trigger.py:1981-1996`).
+async def drive(app, auth_headers, agent: str, destination: Path, *, session_id=SESSION) -> str:
+    """Run one real turn for *agent* whose only tool call is a `Write` at *destination*.
 
-    Parse, then one `record_agent_output` per event with an incrementing sequence. That call is
-    the *only* per-event write on that path -- the surrounding block writes nothing else unless
-    the line binds a provider session or conflicts with one, and this line does neither -- so a
-    turn reproduced here records exactly what a spawned turn records.
+    **This replaced a local mirror of `_flush_line` when phase 4 landed, and the replacement is
+    the point.** Tasks 1.2 and 1.3 assert what the *product* records about a turn, and until
+    phase 4 nothing recorded anything, so a hand-rolled loop that called `record_agent_output`
+    the way `_flush_line` does was an adequate stand-in for a turn: the claim was that the
+    database ends up empty, and an empty database is easy to reproduce. Once there is a record,
+    the mirror stops being adequate -- it does not call `OutsideWriteRecorder` and could not, so
+    a flipped assertion written against it would have measured a copy of the product rather than
+    the product, and would have passed just as happily with the wiring deleted from
+    `agent_trigger.py`.
+
+    So this goes through `POST /agent/trigger`, the background task, `_execute_run`, the real
+    parser and both of `_flush_line`'s writes, with only the spawned process faked.
     """
-    parsed = parse_claude_line(line)
-    # `_flush_line` carries `sequence` as a `nonlocal` across lines; one line is one call here, so
-    # `enumerate` from 1 produces the identical values without the mutable counter.
-    for sequence, event in enumerate(parsed.events, start=1):
-        async with async_session_factory() as db:
-            await record_agent_output(
-                db,
-                PROJECT,
-                agent,
-                content=event.content,
-                session_id=SESSION,
-                conversation_id=f"conv-{run_id}",
-                kind=event.kind,
-                payload=event.payload,
-                run_id=run_id,
-                sequence=sequence,
+    line = write_call_line(destination, session_id=session_id)
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty([line])):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            trigger = await app.post(
+                f"/api/v1/projects/{PROJECT}/agent/trigger",
+                json={"agent": agent, "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
             )
+            assert trigger.status_code == 200, trigger.text
+            run_id = trigger.json()["run_id"]
+            await _await_background_run()
+    return run_id
 
 
 async def outputs_for(run_id: str) -> List[AgentOutput]:
@@ -273,68 +297,107 @@ def test_the_parsed_event_says_nothing_about_where_the_write_went(layout):
 
 
 @pytest.mark.asyncio
-async def test_the_run_records_nothing_about_an_outside_write(app, layout):
-    """1.2 -- the same call against a run whose workspace is known, and still nothing.
+async def test_the_run_records_the_outside_write(
+    app, auth_headers, bind_runner, layout, monkeypatch
+):
+    """1.2 -- **flipped by phase 4 (task 4.7).** The same call, and now the run says where it went.
 
     The run's `workspace_dir` is its own agent checkout and the write lands outside the project
-    entirely, so every value needed to notice is on the row. Today the turn produces one
-    `AgentOutput` and no event at all: the path exists exactly once in the database, inside the
-    blob 1.1 measured.
+    entirely, so every value needed to notice is on the row. As reproduced, the turn produced one
+    `AgentOutput` and no event at all, and the path existed exactly once in the database, inside
+    the blob 1.1 measured. It now produces the same `AgentOutput`, *plus* a record on the run and
+    one `agent_wrote_outside_workspace` event.
 
-    Phase 4 flips this -- `Run.outside_workspace_writes`, and one `agent_wrote_outside_workspace`
-    event per distinct destination.
+    **Driven through a real turn, which is the flip's whole cost.** As a reproduction this test
+    used a local mirror of `_flush_line`, and that was adequate while the assertion was that the
+    database stays empty. It is not adequate for asserting a record exists: the mirror does not
+    call `OutsideWriteRecorder`, so an assertion written against it would pass with the wiring in
+    `agent_trigger.py` deleted -- the exact failure mode this repository keeps producing. The
+    alternative, teaching the mirror to call the recorder, would have been cheaper and would have
+    tested the mirror. See `drive`.
+
+    The three things that did *not* change are asserted too, because the fix is a record beside
+    the transcript rather than a change to it: the payload still holds the path only as text
+    inside the argument dump, the destination still appears exactly once among the output rows,
+    and `write_paths` still reaches no persisted column.
     """
-    run_id = "run-f115-outside"
-    await seed_run(run_id, WRITER, layout.workspace)
-    await record_turn(run_id, WRITER, write_call_line(layout.stray_file))
+    monkeypatch.setattr(
+        worktrees, "resolve_agent_workspace", lambda repo_root, name, config: layout.workspace
+    )
+    await prepare(app, auth_headers, bind_runner, WRITER)
+    run_id = await drive(app, auth_headers, WRITER, layout.stray_file)
 
     async with async_session_factory() as db:
         run = await db.get(Run, run_id)
-        # This was `not hasattr(...)` -- deliberately stronger than `is None`, because when 1.2
-        # was written there was no column at all. Migration `0101` added it (night N-17) and
-        # turned this line red without anything noticing, since that iteration ran only the
-        # migration and column-enumerating suites. Narrowed to `is None` on 2026-09-04 rather
-        # than deleted: `NULL` is the column's own word for *not observed*, so the reproduction
-        # still says exactly what it said -- nothing watched this turn. **Task 4.7 owns the real
-        # flip**, which asserts the record exists and is driven through the sink rather than
-        # through this file's hand-rolled mirror of it.
-        assert run.outside_workspace_writes is None
-
-    rows = await outputs_for(run_id)
-    assert [row.kind for row in rows] == ["tool_use"]
+        # Was `not hasattr(...)`, then `is None` between migration `0101` and the wiring landing.
+        # Now the record itself. `name` is `None` because a path belonging to no workspace has no
+        # *which one* to answer -- `outside` is the whole answer, and the field is present rather
+        # than absent so one loop reads every entry the same way.
+        assert run.workspace_dir == str(layout.workspace)
+        assert run.outside_workspace_writes == [
+            {
+                "kind": "outside",
+                "name": None,
+                "tool": "Write",
+                "path": str(layout.stray_file),
+                "calls": 1,
+            }
+        ]
 
     events = await all_events()
-    assert [event.event_type for event in events] == []
+    (notice,) = [event for event in events if event.event_type == "agent_wrote_outside_workspace"]
+    assert notice.severity == "warn"
+    assert notice.agent == WRITER
+    assert notice.data["destination_kind"] == "outside"
+    assert notice.data["path"] == str(layout.stray_file)
+    assert notice.data["workspace_dir"] == str(layout.workspace)
 
-    # The one appearance of the destination anywhere the operator's product can read.
+    # And the transcript is unchanged. One `tool_use` row, the destination in it exactly once,
+    # and still only inside the stringified argument dump.
+    rows = await outputs_for(run_id)
+    tool_rows = [row for row in rows if row.kind == "tool_use"]
+    assert [row.payload["tool"] for row in tool_rows] == ["Write"]
+    assert set(tool_rows[0].payload) == TOOL_USE_PAYLOAD_KEYS
     appearances = [row.id for row in rows if mentions(row.payload, layout.stray_file)]
-    assert appearances == [rows[0].id]
-    assert not any(mentions(event.data, layout.stray_file) for event in events)
+    assert appearances == [tool_rows[0].id]
 
 
 # --- 1.3 The cross-worktree shape --------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_a_write_into_another_agents_workspace_looks_identical(app, layout):
-    """1.3 -- the case whose whole meaning is the destination, and the destination is what is lost.
+async def test_a_write_into_another_agents_workspace_is_named_as_theirs(
+    app, auth_headers, bind_runner, layout, monkeypatch
+):
+    """1.3 -- **flipped by phase 4 (task 4.7).** The case whose whole meaning is the destination.
 
     A stray file in a temp directory is untidy. A write into
     `.agentweave/worktrees/<other-agent>` is work appearing on another agent's branch, under
     another agent's identity, attributed to them by every snapshot commit that follows --
-    proposal.md's "launders work through the wrong identity". The product's record of the two is
-    the same record.
+    proposal.md's "launders work through the wrong identity". As reproduced, the product's record
+    of the two was the same record.
 
-    Asserted by normalisation rather than by listing fields: both turns are recorded, the
-    destination path is replaced by a placeholder in each, and what is left must be
-    byte-identical. That is what "nothing distinguishes them" means, and it fails the moment phase
-    4 gives either one a record the other does not have.
+    **Both halves are asserted, and they now say opposite things.** The transcript still cannot
+    tell them apart: normalise the two turns' output rows by replacing the destination path with
+    a placeholder, and what is left is byte-identical. That has not been fixed and is not being
+    fixed -- the payload is unchanged by design. What changed is beside it: one run records
+    `outside` with no name, the other records `agent`/`f115-neighbour`, and only the second names
+    a workspace that belongs to somebody.
+
+    The normalisation is the assertion that would break first if a later change started putting
+    classified paths into the payload -- at which point this test should be revisited rather than
+    relaxed.
     """
-    stray_run, neighbour_run = "run-f115-stray", "run-f115-neighbour"
-    await seed_run(stray_run, WRITER, layout.workspace)
-    await seed_run(neighbour_run, WRITER, layout.workspace)
-    await record_turn(stray_run, WRITER, write_call_line(layout.stray_file))
-    await record_turn(neighbour_run, WRITER, write_call_line(layout.neighbour_file))
+    monkeypatch.setattr(
+        worktrees, "resolve_agent_workspace", lambda repo_root, name, config: layout.workspace
+    )
+    await prepare(app, auth_headers, bind_runner, WRITER)
+    stray_run = await drive(
+        app, auth_headers, WRITER, layout.stray_file, session_id=f"{SESSION}-stray"
+    )
+    neighbour_run = await drive(
+        app, auth_headers, WRITER, layout.neighbour_file, session_id=f"{SESSION}-neighbour"
+    )
 
     def normalised(rows: List[AgentOutput], destination: Path) -> str:
         dumped = json.dumps(
@@ -344,21 +407,27 @@ async def test_a_write_into_another_agents_workspace_looks_identical(app, layout
         )
         return flatten_slashes(dumped).replace(flatten_slashes(str(destination)), "<DESTINATION>")
 
-    stray_rows = await outputs_for(stray_run)
-    neighbour_rows = await outputs_for(neighbour_run)
+    stray_rows = [row for row in await outputs_for(stray_run) if row.kind == "tool_use"]
+    neighbour_rows = [row for row in await outputs_for(neighbour_run) if row.kind == "tool_use"]
     assert mentions(stray_rows[0].payload, layout.stray_file)
     assert mentions(neighbour_rows[0].payload, layout.neighbour_file)
     assert normalised(stray_rows, layout.stray_file) == normalised(
         neighbour_rows, layout.neighbour_file
-    )
-
-    # And neither run says anything about a workspace it does not own. Narrowed from
-    # `not hasattr(...)` to `is None` on 2026-09-04 for the reason given in 1.2 above.
-    for run_id in (stray_run, neighbour_run):
-        async with async_session_factory() as db:
-            assert (await db.get(Run, run_id)).outside_workspace_writes is None
-    assert [event.event_type for event in await all_events()] == []
+    ), "the transcript still cannot distinguish the two, and that is not what phase 4 changed"
     assert NEIGHBOUR not in normalised(neighbour_rows, layout.neighbour_file)
+
+    # Beside it, the record -- and it distinguishes them by kind and by name.
+    async with async_session_factory() as db:
+        (stray_entry,) = (await db.get(Run, stray_run)).outside_workspace_writes
+        (neighbour_entry,) = (await db.get(Run, neighbour_run)).outside_workspace_writes
+    assert (stray_entry["kind"], stray_entry["name"]) == ("outside", None)
+    assert (neighbour_entry["kind"], neighbour_entry["name"]) == ("agent", NEIGHBOUR)
+    assert neighbour_entry["path"] == str(layout.neighbour_file)
+
+    notices = [
+        event for event in await all_events() if event.event_type == "agent_wrote_outside_workspace"
+    ]
+    assert [event.data["destination_name"] for event in notices] == [None, NEIGHBOUR]
 
 
 # --- 1.4 The premise, not a behaviour this change changes --------------------------------------

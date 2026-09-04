@@ -20,10 +20,13 @@ Two halves, deliberately:
   call turns a third red -- measured, not assumed.
 """
 
+import asyncio
 import json
+import threading
+import time
 from pathlib import Path
 from typing import Any, List, Optional
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -431,6 +434,175 @@ async def test_recording_that_fails_never_reaches_the_turn(app, layout):
 
 
 # ---------------------------------------------------------------------------
+# The destinations the tasks named one at a time (tasks 10.2, 10.3, 10.5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_record_is_not_a_refusal_and_does_not_read_as_one(app, layout):
+    """Task 10.2, against the payload rather than against the prose that describes it.
+
+    The requirement says the record *SHALL NOT be a refusal and SHALL NOT be presented as one*:
+    the action it describes was allowed, by an operator who answered for it or by a posture that
+    checked nothing, and a record reading as a refusal would tell the operator the write did not
+    land when it did. Two things follow, and both are asserted here.
+
+    First, this is not the product's refusal record. That record has a name --
+    `permission_denied`, which `agent_actions`, `agent_trigger` and `permissions` all write when
+    a decision comes back `allowed=False` (grepped 2026-09-04; it is a literal at all three
+    sites, not a shared constant) -- and this is a different event type, so nothing reading
+    refusals by type picks this up.
+
+    Second, the payload's own vocabulary. Task 8.3 requires the label to read *wrote outside the
+    workspace* and never *escaped* -- because two write vectors are out of scope by construction
+    (a shell redirect, a symlink inside the workspace pointing out), so a name promising
+    containment would read as coverage this does not have. That check needs something to fail
+    against, which is what the scan below is: every name the product chose, against the words
+    that would make this a refusal or a claim of prevention.
+    """
+    await seed_run("run-allowed-write", "p4-writer")
+    rec = recorder(
+        "run-allowed-write",
+        "p4-writer",
+        workspace_dir=str(layout["workspace"]),
+        project_root=str(layout["root"]),
+    )
+    await rec.watch()
+    await rec.note(_write_event(layout["stray"] / "left-behind.txt"))
+    await rec.flush()
+
+    (notice,) = await notices("run-allowed-write")
+    assert notice.event_type != "permission_denied", "a refusal reader must not pick this up"
+    assert notice.event_type == EVENT_TYPE == "agent_wrote_outside_workspace"
+
+    # Scanned over every name the *product* chose -- the event type, the severity, every payload
+    # key, and the one payload value the recorder decides rather than copies -- because "does not
+    # read as a refusal" is not provable by checking the key one happens to think of.
+    #
+    # The values the run supplied are deliberately excluded, and the first draft of this test is
+    # why: it scanned the whole row and failed on `refus` inside pytest's own temp directory,
+    # named after this test. A path, an agent name or a run id is the run's own data, and a
+    # project in a directory called `denied/` is not the product presenting a refusal.
+    vocabulary = " ".join(
+        [
+            notice.event_type,
+            notice.severity,
+            *notice.data.keys(),
+            str(notice.data["destination_kind"]),
+        ]
+    ).lower()
+    for word in ("refus", "denied", "blocked", "prevent", "escap", "violat", "unauthor"):
+        assert word not in vocabulary, "the record reads as a refusal: " + word
+
+    # And the write it describes really did land -- the record is of an allowed action. The
+    # recorder has no opinion about permission and consults no approver: nothing here asked a
+    # posture anything, and the entry exists anyway.
+    (entry,) = await column_of("run-allowed-write")
+    assert entry["kind"] == "outside"
+    assert entry["path"] == str(layout["stray"] / "left-behind.txt")
+
+
+@pytest.mark.asyncio
+async def test_a_reviewer_writing_into_its_own_checkout_is_outside_its_workspace(app, tmp_path):
+    """Task 10.3: the review turn, whose workspace is not the reviewer's own directory.
+
+    A review run executes in the detached review checkout -- `.agentweave/reviews/<reviewer>`,
+    which `agent_trigger` prepares through `review_turn.prepare_review_turn` -- and *not* in
+    `.agentweave/worktrees/<reviewer>`. So a reviewer writing into its own agent worktree is
+    writing outside the workspace it was given, and is recorded as having done so, naming itself.
+
+    That reads odd and it is correct. A review turn's work does not belong on the reviewer's own
+    branch; a file left there arrives on that branch under that agent's identity and is
+    attributed by the next snapshot commit to work the reviewer was not doing. It is written down
+    here so the first person to meet it finds a test that expected it rather than a surprise.
+
+    The task checkout under review is the same story with a different kind: a reviewer writing
+    into the tree it is reviewing is writing outside its own workspace, and `task` is what
+    distinguishes that from the agent case.
+    """
+    from hub.worktrees import review_path, task_worktree_path
+
+    reviewer = "p4-reviewer"
+    root = tmp_path / "project"
+    workspace = review_path(root, reviewer)
+    own_worktree = worktree_path(root, reviewer)
+    task_checkout = task_worktree_path(root, "task-ab12cd34ef56")
+    for directory in (workspace, own_worktree, task_checkout):
+        directory.mkdir(parents=True)
+
+    await seed_run("run-review", reviewer)
+    rec = recorder("run-review", reviewer, workspace_dir=str(workspace), project_root=str(root))
+    await rec.watch()
+    await rec.note(_write_event(workspace / "review-notes.md"))
+    await rec.note(_write_event(own_worktree / "leftover.py", call_id="call-2"))
+    await rec.note(_write_event(task_checkout / "patch.py", call_id="call-3"))
+    await rec.flush()
+
+    entries = await column_of("run-review")
+    assert [(entry["kind"], entry["name"]) for entry in entries] == [
+        ("agent", reviewer),
+        ("task", "task-ab12cd34ef56"),
+    ], "the review checkout itself is inside; the reviewer's own worktree is not"
+    assert [entry["path"] for entry in entries] == [
+        str(own_worktree / "leftover.py"),
+        str(task_checkout / "patch.py"),
+    ]
+    assert len(await notices("run-review")) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_run_whose_workspace_is_the_project_root_records_nothing_inside_it(app, tmp_path):
+    """Task 10.5, design D12: the least confined run the product has, recorded as `[]`.
+
+    A read-only agent, a project that is not a git repository, or a machine with no git all
+    produce a run whose workspace *is* the project directory. Every path inside the project is
+    then inside that run's workspace -- the tracked tree, the Hub's own subtree, and another
+    agent's checkout alike -- so nothing it writes there is outside anything, and the run ends
+    `[]`.
+
+    **`[]` here means "nothing left this run's boundary", never "this run was confined."** The
+    two readings are only compatible while the recorded directory is read as *where the run
+    started*, which is what `workspace-isolation`'s companion requirement establishes and what
+    this change's own requirement says in the paragraph beginning *A run whose workspace is the
+    project's own directory is outside this requirement's reach*. This test is that paragraph's
+    behaviour. Nothing in the product turns the empty list into a confinement claim, and the
+    column's own comment in `models.py` says so where a reader would look.
+
+    The control matters as much as the claim: a path outside the project *is* recorded for the
+    same run. Without it this would also pass against a recorder that had stopped working.
+    """
+    agent = "p4-rootbound"
+    root = tmp_path / "project"
+    neighbour = worktree_path(root, "p4-someone-else")
+    hub_dir = root / ".agentweave" / "evidence"
+    tracked = root / "src"
+    for directory in (neighbour, hub_dir, tracked):
+        directory.mkdir(parents=True)
+
+    await seed_run("run-rootbound", agent)
+    rec = recorder("run-rootbound", agent, workspace_dir=str(root), project_root=str(root))
+    await rec.watch()
+    await rec.note(_write_event(tracked / "module.py"))
+    await rec.note(_write_event(neighbour / "note.txt", call_id="call-2"))
+    await rec.note(_write_event(hub_dir / "e-1.json", call_id="call-3"))
+    await rec.flush()
+
+    assert await column_of("run-rootbound") == [], (
+        "everything inside the project is inside this run's workspace, including another "
+        "agent's checkout"
+    )
+    assert await notices("run-rootbound") == []
+
+    # The control. `tmp_path` is the project's parent, so a sibling of the root is genuinely
+    # outside it, and this run notices -- so the empty list above is an answer, not a silence.
+    stray = tmp_path / "elsewhere" / "drive-note.txt"
+    stray.parent.mkdir(parents=True)
+    await rec.note(_write_event(stray, call_id="call-4"))
+    (entry,) = await column_of("run-rootbound")
+    assert entry["kind"] == "outside"
+
+
+# ---------------------------------------------------------------------------
 # Both sinks, driven through a real turn
 # ---------------------------------------------------------------------------
 
@@ -596,3 +768,200 @@ async def test_a_codex_app_server_turn_records_it_the_same_way(app, auth_headers
     assert entry["path"] == str(stray)
     (notice,) = await notices(run_id)
     assert notice.data["run_id"] == run_id
+
+
+# ---------------------------------------------------------------------------
+# A run that is killed, and a reader that can see the result (tasks 4.4c, 4.7)
+# ---------------------------------------------------------------------------
+
+
+def _pty_that_stalls_after(lines, stalled: threading.Event, gate: threading.Event, pid: int = 4343):
+    """A fake `PtySession` that streams *lines*, then stops talking while still alive.
+
+    `_fake_pty` returns EOF after its lines, so a run driven with it can only be observed after
+    `_execute_run`'s `finally` -- and a test built on that could not tell a record written on
+    first sight from one swept at the run boundary. This one blocks instead, in the worker thread
+    `pty.read` already runs in, until the test opens *gate*.
+
+    *stalled* is set at the moment the block begins, which is a stronger signal than it looks:
+    `read` is only called again once the previous chunk has been through `_flush_line`, so by the
+    time the block starts, every scripted line has been fully processed and the run is making no
+    further database writes of its own. The test therefore reads the row from a quiescent
+    mid-turn state rather than polling into the middle of the run's own transactions -- which the
+    first draft did, and which intermittently broke the run itself with a `Could not refresh
+    instance` out of `record_agent_output` under concurrent SQLite sessions.
+
+    The `wait` carries a timeout so a failing test cannot wedge the executor's worker forever;
+    the test opens the gate in a `finally` regardless.
+    """
+
+    def _spawn(*args, **kwargs):
+        session = MagicMock()
+        session.pid = pid
+        remaining = iter(lines)
+
+        def _read(*args, **kwargs):
+            try:
+                return next(remaining)
+            except StopIteration:
+                stalled.set()
+                gate.wait(timeout=10.0)
+                return ""
+
+        session.read.side_effect = _read
+        session.wait.return_value = 0
+        return session
+
+    return MagicMock(side_effect=_spawn)
+
+
+async def _wait_for(flag: threading.Event, what: str, timeout: float = 5.0) -> None:
+    """Wait on a thread event from the loop without touching the database while the run works."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if flag.is_set():
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError(f"timed out waiting for {what}")
+
+
+@pytest.mark.asyncio
+async def test_a_run_killed_mid_turn_keeps_the_destination_it_already_reached(
+    app, auth_headers, bind_runner, tmp_path
+):
+    """Task 4.4c: the record survives a run that never reaches its own end.
+
+    This is why the design refuses to follow `turn_produced_nothing`'s *timing*. That event is
+    emitted from `evaluate_run_end`, and a record written there is lost entirely for a run that
+    is killed or whose Hub restarts -- exactly the population whose stray writes matter most. A
+    recorder-level test of the same claim already exists
+    (`test_every_destination_survives_a_run_that_never_reaches_its_end`); what this adds is the
+    claim through a real spawned turn.
+
+    **The mid-turn read is the half that cannot be faked.** The fake process has stopped talking
+    and has not exited, so `_execute_run` is still inside its read loop and its `finally` has not
+    begun. A record swept at the boundary is simply not on the row at that moment. `calls` is 1
+    there while the run has made two writes into that destination, which is the design stated as
+    a measurement: the destination is durable from first sight, and the count is refreshed once
+    at the end.
+
+    **Then the run is killed** -- its background task is cancelled, which is what an event loop
+    going down does to a run in flight -- and the destination and its first path are still there.
+    `calls` is deliberately not asserted afterwards: it is the one field the boundary owns and
+    the only one it is safe to lose.
+
+    Deliberately **not** driven through the stop endpoint. F279 records both of this suite's
+    stop-then-await tests failing intermittently on an unmodified tree (7 failures in 12,
+    measured 2026-09-04), and a new test on that pattern would inherit a coin-flip red no gate
+    could attribute.
+    """
+    import hub.api.v1.agent_trigger as agent_trigger
+
+    agent = "p4-killed"
+    stray = tmp_path.parent / "p4-outside-killed" / "left-behind.txt"
+    again = tmp_path.parent / "p4-outside-killed" / "and-again.txt"
+    await _sync(app, auth_headers, agent)
+    await bind_runner(agent, cli="claude")
+
+    stalled, gate = threading.Event(), threading.Event()
+    lines = [write_call_line(stray), write_call_line(again, call_id="call_w2")]
+    try:
+        with patch(
+            "hub.api.v1.agent_trigger.PtySession.spawn",
+            _pty_that_stalls_after(lines, stalled, gate),
+        ):
+            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+                trigger = await app.post(
+                    f"{BASE}/agent/trigger",
+                    json={"agent": agent, "message": "hi", "session_mode": "new"},
+                    headers=auth_headers,
+                )
+                assert trigger.status_code == 200, trigger.text
+                run_id = trigger.json()["run_id"]
+                await _wait_for(stalled, "the run to finish its scripted output")
+
+                # Mid-turn: both writes are through the sink, nothing has ended.
+                (entry,) = await column_of(run_id)
+                assert (entry["kind"], entry["tool"], entry["path"]) == (
+                    "outside",
+                    "Write",
+                    str(stray),
+                ), "the destination is on the row before the run ends, or not at all"
+                assert entry["calls"] == 1, (
+                    "written once, on first sight: the second write into the same destination "
+                    "touched the run's own accumulator and nothing else"
+                )
+                async with async_session_factory() as db:
+                    assert (await db.get(Run, run_id)).status == "running"
+
+                # The kill.
+                running = list(agent_trigger._background_runs)
+                assert running, "the run's background task should still be in flight"
+                for task in running:
+                    task.cancel()
+                gate.set()
+                await asyncio.gather(*running, return_exceptions=True)
+    finally:
+        gate.set()
+
+    (survivor,) = await column_of(run_id)
+    assert (survivor["kind"], survivor["tool"], survivor["path"]) == (
+        "outside",
+        "Write",
+        str(stray),
+    ), "a killed run keeps the destination and the first path into it"
+    (notice,) = await notices(run_id)
+    assert notice.data["path"] == str(stray)
+
+
+@pytest.mark.asyncio
+async def test_the_timeline_reports_what_a_run_wrote_outside_its_workspace(
+    app, auth_headers, bind_runner, tmp_path
+):
+    """Task 4.7: the column reaches a reader, through the route that already serves run facts.
+
+    Written on the row by `OutsideWriteRecorder` and read by nobody, this record would be a
+    column the product maintains and never shows. `GET /agents/{name}/timeline` is where a run's
+    own facts are already served -- `RunFacts`, keyed by the run ids the returned events name --
+    and the `agent_wrote_outside_workspace` event carries `run_id`, so a run whose write escaped
+    is in that map by construction.
+
+    Both readings are asserted, because only one of them is reachable through a written entry. A
+    run that escaped reports its destinations; a watched, clean run reports `[]`. `None` and `[]`
+    are different answers and `RunFacts` must not collapse them: a `Field(default_factory=list)`
+    here would tell an operator that every run predating the detector was watched and found
+    clean.
+    """
+    escaping, clean = "p4-timeline", "p4-timeline-clean"
+    stray = tmp_path.parent / "p4-outside-timeline" / "left-behind.txt"
+    runs = {}
+    for agent, target in ((escaping, stray), (clean, tmp_path / "note.txt")):
+        await _sync(app, auth_headers, agent)
+        await bind_runner(agent, cli="claude")
+        with patch(
+            "hub.api.v1.agent_trigger.PtySession.spawn", _fake_pty([write_call_line(target)])
+        ):
+            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+                trigger = await app.post(
+                    f"{BASE}/agent/trigger",
+                    json={"agent": agent, "message": "hi", "session_mode": "new"},
+                    headers=auth_headers,
+                )
+                assert trigger.status_code == 200, trigger.text
+                runs[agent] = trigger.json()["run_id"]
+                await _await_background_run()
+
+    escaped = await app.get(f"{BASE}/agents/{escaping}/timeline", headers=auth_headers)
+    assert escaped.status_code == 200, escaped.text
+    (reported,) = escaped.json()["runs"][runs[escaping]]["outside_workspace_writes"]
+    assert (reported["kind"], reported["tool"], reported["path"]) == (
+        "outside",
+        "Write",
+        str(stray),
+    )
+
+    quiet = await app.get(f"{BASE}/agents/{clean}/timeline", headers=auth_headers)
+    assert quiet.status_code == 200, quiet.text
+    assert (
+        quiet.json()["runs"][runs[clean]]["outside_workspace_writes"] == []
+    ), "watched and clean is `[]`, and the schema must not turn it into `None` or the reverse"
