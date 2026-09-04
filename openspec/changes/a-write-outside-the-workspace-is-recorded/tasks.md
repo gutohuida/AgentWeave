@@ -458,10 +458,33 @@
 - [x] 9.2 `pytest tests/ -v` for the CLI, separately — collecting both together fails.
 - [x] 9.3 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
   hub/tests/ tests/`, `mypy src/`.
-- [ ] 9.4 Drive it live against a Hub on 8011 confirmed to serve this code: a Haiku agent, an
+- [x] 9.4 Drive it live against a Hub on 8011 confirmed to serve this code: a Haiku agent, an
   absolute-path `Write` outside its worktree, under a posture that permits it. Assert the run row and
   the activity event, not just the test. A passing suite is not proof of behaviour, and this change
   exists because a live drive found what the suite could not.
+  *Driven 2026-09-04 (night N-23) — **29/29**, two real Haiku turns.* `scripts/drive/
+  setup_awrite_p9.py` + `scripts/drive/t_awrite_p9_recorded.py`, against a uvicorn on **8011** on
+  its own fresh database (`profiles/drive8011/awrite-p9.db`, migrated `0000 → 0101` at startup,
+  process started 23s before the first request — never beta, never 8000, never this repo's own
+  project). Posture `bypassPermissions`, because `workspace` would put the write to the approver
+  and a refused write is not a write to record.
+  **Leg A — `[]` is reachable, and it is not a docstring.** A turn told to write one relative path
+  ended `completed` with `outside_workspace_writes == []` and no notice. That is `watch()` firing
+  on a real run; without it the clean case would be `NULL` and indistinguishable from a run that
+  predates the detector.
+  **Leg B — two destinations, two notices, one run.** Two absolute paths, one in the project root
+  and one outside the project entirely, came back on the row as `project` and `outside`, each with
+  `tool: "Write"`, the raw declared path, `calls: 1`, and no overflow sentinel. Both files exist on
+  disk. Two `agent_wrote_outside_workspace` rows, `severity=warn`, both naming this run, this agent
+  and the same two destination kinds the row does — and nothing in the type, severity, payload keys
+  or `destination_kind` reads as a refusal.
+  **Leg C — it renders, twice over.** The real `summaryForEvent` was bundled with `esbuild` and run
+  over the payloads the Hub had *just* written: "wrote outside its workspace, into the project
+  directory: Write → …" and "wrote outside its workspace: Write → …". Then in a browser
+  (`scripts/uishot.py` against 8011, which serves `hub/hub/static/ui` — the **committed** bundle,
+  byte-identical to the checkout's copy and confirmed to contain the case): both rows in the
+  Activity log under an amber `Warn` badge, paths unelided. N-21's finding was that this rendered
+  as its own event name; it does not.
 - [ ] 9.5 `openspec validate --strict` on the change, then sync every delta into `openspec/specs/`
   by verbatim header — the ADDED requirements in `agent-run-sandboxing` and `workspace-isolation`,
   the MODIFIED requirement in `requirement-traceability`, and the now-minimal MODIFIED requirement
