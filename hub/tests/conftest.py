@@ -98,7 +98,9 @@ def _test_only_sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ANN
     WAL rather than the faster `journal_mode=MEMORY`, deliberately. Under a rollback
     journal a writer holds an exclusive lock across its commit and readers block on it,
     so the sessions this change exists to let run concurrently would contend for the file
-    and some would surface `database is locked` after the 5s busy timeout. Trading F285's
+    and some would surface `database is locked` after the busy timeout (30s here, raised
+    from SQLite's 5s default because a schema reset waits on whatever a previous test left
+    open). Trading F285's
     shared-connection rollback for a fresh `SQLITE_BUSY` flake class would be no fix at
     all. WAL lets readers proceed against the last committed snapshot while one writer
     appends, which is the concurrency the suite actually exercises.
@@ -106,7 +108,7 @@ def _test_only_sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ANN
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA synchronous=OFF")
     cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=10000")
+    cursor.execute("PRAGMA busy_timeout=30000")
     cursor.close()
 
 
@@ -243,6 +245,21 @@ async def app(monkeypatch):
         return None
 
     monkeypatch.setattr(_engine_module, "_run_alembic_upgrade", _skip_alembic)
+
+    # Empty the pool before the schema reset, not only after the test.
+    #
+    # `drop_all` is a schema change, and SQLite will not make one while another connection
+    # holds the database open — in WAL that surfaces as `OperationalError: database is
+    # locked` once the busy timeout expires, which is how CI failed at the *setup* of
+    # `test_a_wedged_review_is_restaffed_to_a_real_reviewer` on Linux (run 33913450471,
+    # 3957 passed, this the only error). The teardown fixture disposes after each test, but
+    # a test that leaves a live `JobScheduler` — which that file does — can still be holding
+    # a checked-out connection when the next test starts. Disposing here makes the reset
+    # depend on this fixture rather than on the previous test having tidied up.
+    #
+    # This is contention the suite did not have on `:memory:`, where there were no file
+    # locks at all. It is the cost of the pool that fixes F285, and it is paid here.
+    await _REAL_ENGINE.dispose()
 
     # ASGITransport does not trigger the FastAPI lifespan, so we run init_db
     # (create_all + the instance operator credential) explicitly before each test.
