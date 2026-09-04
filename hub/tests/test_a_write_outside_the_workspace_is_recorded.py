@@ -290,9 +290,15 @@ async def test_the_run_records_nothing_about_an_outside_write(app, layout):
 
     async with async_session_factory() as db:
         run = await db.get(Run, run_id)
-        # Not `is None`: there is no column at all, which is a stronger statement than an
-        # unpopulated one and is what phase 4's migration changes.
-        assert not hasattr(run, "outside_workspace_writes")
+        # This was `not hasattr(...)` -- deliberately stronger than `is None`, because when 1.2
+        # was written there was no column at all. Migration `0101` added it (night N-17) and
+        # turned this line red without anything noticing, since that iteration ran only the
+        # migration and column-enumerating suites. Narrowed to `is None` on 2026-09-04 rather
+        # than deleted: `NULL` is the column's own word for *not observed*, so the reproduction
+        # still says exactly what it said -- nothing watched this turn. **Task 4.7 owns the real
+        # flip**, which asserts the record exists and is driven through the sink rather than
+        # through this file's hand-rolled mirror of it.
+        assert run.outside_workspace_writes is None
 
     rows = await outputs_for(run_id)
     assert [row.kind for row in rows] == ["tool_use"]
@@ -346,10 +352,11 @@ async def test_a_write_into_another_agents_workspace_looks_identical(app, layout
         neighbour_rows, layout.neighbour_file
     )
 
-    # And neither run says anything about a workspace it does not own.
+    # And neither run says anything about a workspace it does not own. Narrowed from
+    # `not hasattr(...)` to `is None` on 2026-09-04 for the reason given in 1.2 above.
     for run_id in (stray_run, neighbour_run):
         async with async_session_factory() as db:
-            assert not hasattr(await db.get(Run, run_id), "outside_workspace_writes")
+            assert (await db.get(Run, run_id)).outside_workspace_writes is None
     assert [event.event_type for event in await all_events()] == []
     assert NEIGHBOUR not in normalised(neighbour_rows, layout.neighbour_file)
 

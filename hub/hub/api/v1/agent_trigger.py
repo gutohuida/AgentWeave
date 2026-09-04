@@ -88,6 +88,7 @@ from ...model_catalog import (
     validate_overrides,
 )
 from ...output_recording import record_agent_output, record_context_usage
+from ...outside_write_record import OutsideWriteRecorder
 from ...permission_requests import expire_pending_for_run
 from ...pty_runner import (
     STRUCTURED_OUTPUT_DIMENSIONS,
@@ -1197,6 +1198,10 @@ async def trigger_agent_directly(
             model=model,
             work_dir=effective_work_dir,
             known_session_id=resume_session_id,
+            # The project root, already resolved above for the worktree work. `_execute_run` needs
+            # it to tell one of this project's other checkouts from somewhere else entirely when a
+            # tool call declares an absolute path (task 4.3).
+            repo_root=str(repo_root),
             env=env,
             # A **review** turn passes None, deliberately. `_execute_run` snapshots this directory
             # when the turn ends, and a reviewer is not an author: there is nothing of its to
@@ -1780,6 +1785,7 @@ async def _execute_run(
     model: Optional[str],
     work_dir: Optional[str],
     known_session_id: Optional[str],
+    repo_root: Optional[str] = None,
     env: Optional[Dict[str, str]] = None,
     worktree: Optional[Path] = None,
     use_codex_app_server: bool = False,
@@ -1805,6 +1811,14 @@ async def _execute_run(
     caller renders *into* that argv therefore has to arrive here by its own parameter or it
     reaches nothing: `permission_mode` was rescued by hand, and `config_overrides` — every
     config-style control, Codex's Effort today — is the rest of that class (F99).
+
+    *repo_root* is the project's own root directory, `ProjectWorkspace`'s answer as the trigger
+    body already computed it. It arrives by parameter for the same reason as everything above and
+    for one more: `OutsideWriteRecorder` needs it on every tool call to tell a write into another
+    checkout under the project from one that left the project entirely, and re-reading the project
+    row inside the callback would be a query per tool call to answer a question that is constant
+    for the whole run. `None` is a project whose root could not be resolved, and classification
+    then stops at *inside or outside this run's workspace*.
     """
     if use_codex_app_server:
         await _execute_codex_appserver_run(
@@ -1817,6 +1831,7 @@ async def _execute_run(
             model=model,
             work_dir=work_dir,
             known_session_id=known_session_id,
+            repo_root=repo_root,
             yolo=yolo,
             mcp_command=mcp_command,
             env=env,
@@ -1905,6 +1920,16 @@ async def _execute_run(
         return
 
     run_liveness.active_ptys[run_id] = pty
+    # One recorder for the whole run, built here so `_flush_line` closes over it (task 4.3a).
+    # `work_dir` is `effective_work_dir` — the same value that reached `AW_WORKSPACE_DIR` and
+    # `Run.workspace_dir` — and never a workspace recomputed from the agent's name (design D4).
+    outside_writes = OutsideWriteRecorder(
+        project_id=project_id,
+        agent=agent,
+        run_id=run_id,
+        workspace_dir=work_dir,
+        project_root=repo_root,
+    )
     try:
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
@@ -1920,6 +1945,10 @@ async def _execute_run(
                 runner=runner,
                 model=model,
             )
+
+        # After the spawn succeeded, so a run that never started stays NULL rather than claiming
+        # it was watched and found clean. Writes `[]`; see `OutsideWriteRecorder.watch`.
+        await outside_writes.watch()
 
         parse_line = parse_claude_line if runner in ("claude", "claude_proxy", "native") else None
 
@@ -1994,6 +2023,9 @@ async def _execute_run(
                         run_id=run_id,
                         sequence=sequence,
                     )
+                # Task 4.3a. After the output row, not before: the timeline entry is what the
+                # operator is shown, and this is observational bookkeeping about it.
+                await outside_writes.note(event)
             if parsed.usage is not None:
                 async with async_session_factory() as db:
                     await record_context_usage(
@@ -2329,6 +2361,12 @@ async def _execute_run(
     finally:
         run_liveness.active_ptys.pop(run_id, None)
         _stop_requested.discard(run_id)
+        # Last, and after the two synchronous releases above, deliberately. This is the only
+        # `await` in this block: a cancelled task raises `CancelledError` at its first await
+        # point, and anything after it would be skipped — so nothing that must happen goes below
+        # it. Every destination is already on the row; this only makes `calls` exact, and losing
+        # it is what `OutsideWriteRecorder.flush` documents as safe to lose.
+        await outside_writes.flush()
 
 
 # How Codex's approval methods read on the operator's card. The raw method names
@@ -2469,6 +2507,7 @@ async def _execute_codex_appserver_run(
     mcp_command: Optional[List[str]],
     env: Optional[Dict[str, str]],
     worktree: Optional[Path],
+    repo_root: Optional[str] = None,
     permission_mode: Optional[str] = None,
     config_overrides: Optional[Dict[str, str]] = None,
 ) -> None:
@@ -2480,8 +2519,20 @@ async def _execute_codex_appserver_run(
     two transports are indistinguishable to everything downstream of a `Run` row (task 2.5's
     stated goal) — a `Run`, its `AgentOutput` rows, its usage accounting, and its lifecycle
     broadcasts all look the same regardless of which transport produced them.
+
+    *repo_root* is `_execute_run`'s own parameter, passed straight through — see its docstring.
     """
     run_liveness.active_app_server_runs.add(run_id)
+    # The same recorder `_execute_run` builds, for the same run-long reasons — this transport
+    # never reaches `_flush_line`, so without its own instance and its own `note` call below the
+    # change would cover two transports of three (task 4.3b).
+    outside_writes = OutsideWriteRecorder(
+        project_id=project_id,
+        agent=agent,
+        run_id=run_id,
+        workspace_dir=work_dir,
+        project_root=repo_root,
+    )
     try:
         async with async_session_factory() as db:
             await _broadcast_run_lifecycle(
@@ -2493,6 +2544,10 @@ async def _execute_codex_appserver_run(
                 runner="codex",
                 model=model,
             )
+
+        # `_execute_run`'s counterpart, at the same point of the run: writes `[]` so that a clean
+        # run on this transport is distinguishable from an unwatched one too.
+        await outside_writes.watch()
 
         session_id = known_session_id
         binding_conflict: Optional[str] = None
@@ -2555,6 +2610,9 @@ async def _execute_codex_appserver_run(
                     run_id=run_id,
                     sequence=sequence,
                 )
+            # Task 4.3b — the same call `_flush_line` makes, on the same recorder class, in the
+            # same position relative to the output row.
+            await outside_writes.note(event)
 
         async def _on_usage(usage) -> None:
             async with async_session_factory() as db:
@@ -2815,6 +2873,8 @@ async def _execute_codex_appserver_run(
     finally:
         run_liveness.active_app_server_runs.discard(run_id)
         _stop_requested.discard(run_id)
+        # See `_execute_run`'s identical last line, including why it is last.
+        await outside_writes.flush()
 
 
 @router.get("/sessions/{agent}")

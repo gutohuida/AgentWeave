@@ -19230,3 +19230,37 @@ zero recorded true positives that the two prefixes would have missed.
 reads the path off the structured input *before* `redact_secrets` runs, for exactly this reason,
 and `test_the_field_is_read_before_the_payload_is_redacted_and_truncated` pins the ordering. The
 finding is why that test exists rather than something it blocks.
+
+## F279 (C) - the two "a stopped run" tests fail about half the time, on an unmodified tree
+
+**Measured 2026-09-04 (night N-18), on `autonomous/2026-09-03-daily` at `e28bbdf`,** while running
+the regression suites around phase 4 of `a-write-outside-the-workspace-is-recorded`. Two tests fail
+intermittently, with no change to the tree at all:
+
+- `tests/test_agent_trigger.py::test_codex_app_server_stop_signals_should_interrupt`
+- `tests/test_a_turn_says_how_it_ended.py::test_a_stopped_run_persists_its_terminal_status_line`
+
+Twelve runs of the pair, six with that iteration's change applied and six with the working tree
+stashed: **7 failures in 12 without the change, 4 in 12 with it.** Both fail alone as readily as in
+a full-file run, in 1.5 seconds, so it is not contention with the rest of the suite. Both belong to
+the same family - trigger a run, poll until it registers as live, `POST .../stop`, then await the
+background task - and both take the same shape when they fail: the run is torn down while
+`record_agent_output`'s `db.refresh(row)` is in flight, and the awaited background task raises out
+of `_await_background_run` rather than settling.
+
+**Why it is worth a finding rather than a shrug.** A test that fails half the time on an unmodified
+tree is indistinguishable, to the next iteration, from a test its own change broke - and the cost is
+paid every time somebody runs the suite and has to prove the failure was already there. This
+iteration paid it twice, once for each test, by stashing and re-running. It also means the *full*
+suite has a coin-flip red in it that no gate can currently attribute, which is exactly the condition
+under which a real regression gets waved through as "the flaky one again".
+
+**Not the change under it.** Phase 4 adds one `await` to each execution path's `finally` (the
+best-effort count flush) and one at run start, so the suspicion that it widened a teardown race was
+the first thing checked - and the measurement points the other way: the failure rate is *lower* with
+the change than without. Whatever the race is, it predates both.
+
+**Not diagnosed.** Establishing which of the stop path's steps is unordered against the
+`record_agent_output` in flight is its own investigation with its own reproduction; this records that
+the flakiness is real, measured, pre-existing, and attributable to neither of the two changes on this
+branch that touch these paths.

@@ -207,6 +207,18 @@ def classify(
     return _within_project(project, resolved)
 
 
+def can_classify(workspace_dir: Optional[str]) -> bool:
+    """Whether `classify` can return anything but `unknown` for this workspace.
+
+    The same question `classify` asks first, exposed so a caller can ask it **once per run**
+    instead of once per tool call, and so that "we were watching" is a decision with a name. A
+    run this returns `False` for is one where nobody could tell where its writes went, which is
+    what `Run.outside_workspace_writes` spells `NULL` — as distinct from `[]`, *observed and
+    nothing left*.
+    """
+    return _resolved_directory(workspace_dir) is not None
+
+
 def _resolved_directory(value: Optional[str]) -> Optional[str]:
     """*value* as a real path, or `None` if there is nothing usable to compare against."""
     if not isinstance(value, str) or not value.strip():

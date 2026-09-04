@@ -175,22 +175,22 @@
   deleting `evidence_footprints` from `_TABLES` and watching the both-tables test stay green. Only
   the downgrade-and-back-up test reaches `op.add_column`. Both docstrings now say so. `0100`'s
   first test has the same property and does not say so.
-- [ ] 4.3 **Pass the project root down first.** Round 3 measured it: `repo_root` occurs nowhere in
+- [x] 4.3 **Pass the project root down first.** Round 3 measured it: `repo_root` occurs nowhere in
   `_execute_run` (lines 1720-2274) or `_execute_codex_appserver_run` (2389-2752). `work_dir`,
   `run_id`, `project_id` and `agent` are all in scope; the project root, which D4 needs to compute
   `worktree_path`/`task_worktree_path`/`review_path` and to tell `project` from `outside`, is not.
   Add it as a parameter to both, from the trigger body that already computes it. Do **not** re-read
   the project row inside the callback: that is a query per tool call to answer a question that is
   constant for the run.
-- [ ] 4.3a In `_flush_line` (`hub/hub/api/v1/agent_trigger.py:1880`), classify each event's
+- [x] 4.3a In `_flush_line` (`hub/hub/api/v1/agent_trigger.py:1880`), classify each event's
   `write_paths` against `work_dir` and the project root, and append the outside ones to the run.
   `work_dir`, `AW_WORKSPACE_DIR` and `Run.workspace_dir` are all `effective_work_dir` — use the value
   already in scope, never a workspace recomputed from the agent's name (design D4).
-- [ ] 4.3b Do the same in `_on_event` (`hub/hub/api/v1/agent_trigger.py:2474`), the Codex app-server
+- [x] 4.3b Do the same in `_on_event` (`hub/hub/api/v1/agent_trigger.py:2474`), the Codex app-server
   sink, which never reaches `_flush_line` and now has the same five values in scope. Without this the
   change covers two of three transports; round 1 covered one. Factor the classify-and-record step so
   the two sinks call one function rather than growing two opinions about it.
-- [ ] 4.4 Bound the list at 20 entries plus a total count. An unbounded column on a run that writes
+- [x] 4.4 Bound the list at 20 entries plus a total count. An unbounded column on a run that writes
   in a loop is a column nobody can read.
 
   **Decide the top-level JSON shape here, deliberately — it is not decided yet.** Noted while
@@ -202,7 +202,7 @@
   chosen, `[] == observed and nothing escaped` and `NULL == not observed` are fixed by the column's
   own comment and by 4.1, and must survive it. The migration constrains neither: `sa.JSON` holds
   any of them.
-- [ ] 4.4b **Accumulate in the closure; write on first sight of each destination** (design D5, round
+- [x] 4.4b **Accumulate in the closure; write on first sight of each destination** (design D5, round
   3). Both bounds above and the once-per-destination rule in 4.5 are per-*run* facts, and the only
   sites that see the calls are per-*event* callbacks each opening their own session. Hold a `dict`
   keyed by destination as a `nonlocal`, the same shape `sequence` and `accounting_sample` already
@@ -216,7 +216,7 @@
   run mid-turn after one outside write and asserts the destination and its first path survived. The
   exact per-destination call count is best-effort at the boundary and is the only field it is safe
   to lose.
-- [ ] 4.5 Emit `persist_event(..., "agent_wrote_outside_workspace", severity="warn")` naming the run,
+- [x] 4.5 Emit `persist_event(..., "agent_wrote_outside_workspace", severity="warn")` naming the run,
   the agent, the tool, the path and the destination workspace — once per distinct destination per
   run, not once per call, in the same transaction as 4.4b's first-sighting write. Follow
   `turn_produced_nothing`'s **payload and severity** (`hub/hub/run_divergence.py:622-635`); do not
@@ -224,9 +224,51 @@
   to record: `persist_event` carries 44 distinct event types in the shipped Hub and one of them is a
   refusal, so `agent-run-sandboxing`'s *"Only refusals SHALL be recorded"* was never a constraint on
   this event (design D9).
-- [ ] 4.6 Recording must never be able to kill a turn. Wrap it the way `_report_decision` is wrapped:
+- [x] 4.6 Recording must never be able to kill a turn. Wrap it the way `_report_decision` is wrapped:
   a failure here is observational, and a run that dies because a path could not be classified is a
   worse outcome than one that wrote outside unnoticed.
+  *Landed 2026-09-04 (night N-18), as one item.* All of it lives in a new module,
+  `hub/hub/outside_write_record.py`, holding `OutsideWriteRecorder` - one class, two sinks, so
+  neither can grow its own opinion about what counts as outside. `agent_trigger.py` gains a
+  `repo_root` parameter on both execution functions, one instance per run, one `note` call in each
+  sink, one `watch` at run start and one `flush` in each `finally`. 13 tests in
+  `hub/tests/test_outside_write_record.py`, half against the recorder directly and half driving a
+  real turn through `_fake_pty` and `_fake_run_turn`.
+
+  **Task 4.4's shape, decided.** A **list**, each element a destination
+  `{kind, name, tool, path, calls}` where `tool`/`path` are the *first* call into that destination
+  and `calls` is the count at the last write. "Plus a total count" is a final element of a
+  different shape, `{"kind": "overflow", "destinations": N}`, present only beyond 20. Every element
+  carries `kind`, so one loop reads the whole list, and `[]` stays literally true - which an object
+  wrapping the list beside a count would have destroyed.
+
+  **One addition the tasks did not name, and the change is wrong without it: `watch()`.** 4.4b says
+  write on first sight of a destination, and that alone leaves every *clean* run `NULL` - so `[]`,
+  which 4.1, D5 and D12 all make load-bearing, would have been unreachable and the column's
+  documented distinction unsatisfiable by any run. `watch()` writes `[]` at run start, for a run
+  whose workspace `classify` can actually answer for; a run it cannot answer for is deliberately
+  left `NULL`, because nobody was looking. That needed one new public predicate,
+  `workspace_writes.can_classify`, asked once per run rather than once per call.
+
+  **`unknown` is not recorded and emits no event** - it is the classifier saying nobody could tell,
+  and an entry under an event named `agent_wrote_outside_workspace` would turn that into an
+  accusation.
+
+  **Ten mutations, each attributed to a named test, with an M0 control at 13 green.** Removing
+  either sink's `note` call, the `watch` call, the `flush` call, or `repo_root` from the call site
+  each turns exactly the expected test red. The `repo_root` one is the reason
+  `test_a_turn_writing_into_a_neighbours_checkout_names_it_because_the_root_arrived` exists at all:
+  every other driven test passes with `repo_root=None`, because a path outside the workspace *and*
+  outside the project reads `outside` either way. Only a run executing in its own checkout, writing
+  into a neighbour's, can tell whether 4.3's parameter arrived.
+
+  **Left for 4.4c and 4.7:** nothing here flushes at the run boundary except the counts, so the
+  killed-run test 4.4c asks for is still unwritten; the recorder-level equivalent
+  (`test_every_destination_survives_a_run_that_never_reaches_its_end`) exists and passes. Phase 1's
+  1.2 and 1.3 were **already red at `e28bbdf`** - N-17's migration made
+  `not hasattr(run, "outside_workspace_writes")` false and that iteration's targeted runs did not
+  cover them. Narrowed to `is None` here so the branch is not left red; 4.7 still owns the real
+  flip.
 - [ ] 4.7 Expose the column on the run schema so a reader can see it, and flip tasks 1.2 and 1.3:
   the record exists, and the cross-worktree case names the *other* agent's workspace by kind and
   name. **Task 1.1 is not in this list and does not need to be** — checked 2026-09-04 rather than
