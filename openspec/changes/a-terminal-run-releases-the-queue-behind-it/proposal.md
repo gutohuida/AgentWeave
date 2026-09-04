@@ -52,9 +52,12 @@ This is **F286 (B)** in `scripts/drive/FINDINGS.md`.
 F286 says `_execute_codex_appserver_run` *"has the same layout … and reaches the same handler."* The
 layout is the same; **the handler is not reached.** Two code facts:
 
-1. `_execute_run` delegates to `_execute_codex_appserver_run` at `:1824`, and the delegation is
-   **above** `_execute_run`'s own `try:` (`:1846`), followed by `return`. Nothing that raises inside
-   the app-server path can reach the handler at `:2282`.
+1. `_execute_run` delegates to `_execute_codex_appserver_run` at `:1824` and `return`s at `:1842`,
+   above **both** of the function's `try` blocks. R1 and R2 each cited `:1846` here; that is the
+   *spawn* try, whose `except` is `:1870` and whose failure branch returns at `:1911`. The try that
+   pairs with the handler at `:2282` is `:1933`, and `:2361` is its `finally`. The conclusion is
+   unchanged and in fact stronger — the delegation is above both — but a reader implementing this
+   needs the right one.
 2. `_execute_codex_appserver_run`'s outer construct is `try: … finally:` (`:2536` / `:2873`) with
    **no `except` clause at all**. Its only `except` is an inner one covering the spawn/connect
    (`:2692`, for `FileNotFoundError`, `AppServerError`, `asyncio.TimeoutError`, `OSError`).
@@ -134,3 +137,35 @@ of a boundary must not be conditional on the bookkeeping at that boundary succee
 advancing its deliverable, not whether a run reaches an outcome at all. `run-task-binding` owns the
 checkout hold but not the queue. A later round may still move the second requirement; it should say
 so if it does.
+
+**R3 correction: requirement 2's normative line was too broad, and made a shipped behaviour a
+violation.** R1 and R2 both wrote it as *"within the life of the process that started it"*. A Hub
+killed mid-run cannot satisfy that and is not meant to: `run_reconciliation` selects runs still
+recorded as `running` and marks them `interrupted` at the next start (`run_reconciliation.py:60-67`),
+and `agent-stream-events`' *A run's terminal status line is persisted* already carves exactly that
+case out in terms — *"A run reconciled as `interrupted` after a Hub restart has no terminal status
+line and is not required to gain one: there was no Hub process to write it."* Read literally, the
+requirement forbade the recovery path the corpus has already blessed. It is now scoped to a run
+whose execution ends **inside** the process that started it, which is the case F286 is about, and
+the carve-out is stated in the requirement rather than left to be discovered by whoever implements
+it.
+
+**R3 checked the two homes R2 did not, and neither requirement moves.** `agent-stream-events` owns
+the terminal status *line* — a persisted output row, and its own text bounds it to "the two spawn
+paths' finalize blocks" — not the run's status field and not the wedge that follows from it.
+`agent-run-sandboxing:219-223` is about permission requests: it is the precedent R2 correctly cited,
+and a precedent is not a home. What makes requirement 2 matter to an operator is that an agent is
+refused every subsequent turn while a row reads `running`, and the wedge family is
+`agent-conversation-workspace`'s. Two rounds defended this placement by elimination; this one
+defended it by naming what each candidate capability's requirements are *about*, which is a
+different argument reaching the same answer.
+
+**R3 correction: one delta scenario duplicated a shipped one.** *The stranded input is not waiting
+for an unrelated operator action* was stated over "input left queued behind a run that ended
+abnormally", which includes returned input — and for returned input the shipped requirement already
+carries *A returned input is retried without being asked for* (`spec.md:1329-1333`, whose **AND** is
+*"no operator action is required to make that happen"*). It also asserted nothing the delta's first
+scenario did not already assert. It is rewritten over the case the shipped scenario provably cannot
+reach: input that arrived while the agent was busy and so was never returned by anything. The
+delta's five scenarios now cover the three kinds of waiting work one each, with no overlap against
+the corpus.

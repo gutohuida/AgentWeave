@@ -9,11 +9,22 @@ item rather than proceeding to phase 1 on the strength of having just done phase
       `hub/` with uvicorn from source, against a fresh fixture project. Every real agent turn binds
       `claude-haiku-4-5`.
 - [ ] 0.2 **The headline.** Start a turn; while it runs, send a second message so an entry is
-      `queued`; make a bookkeeping call between the terminal commit and the release raise once
-      (patch `_broadcast_run_lifecycle` or `record_agent_output` in the running Hub, or use the
-      injected-exception harness from 3.1). Confirm the run reaches a terminal status, and that the
-      queued entry stays `queued` with `delivered_in_run_id` null and no successor run — the defect
-      as filed.
+      `queued`; make a bookkeeping call *inside the window* raise once; confirm the run reaches a
+      terminal status and the queued entry stays `queued` with `delivered_in_run_id` null and no
+      successor run — the defect as filed.
+
+      **R3 rewrote this task, because it was not executable as written and the injection it named
+      was wrong.** (i) A running uvicorn cannot be monkeypatched from outside, so "patch … in the
+      running Hub" describes nothing you can do; the executable form is to add a guarded raise to
+      the 8011 checkout's `agent_trigger.py` behind an environment variable
+      (`if os.environ.get("AW_F286_INJECT") and kind == "status": raise RuntimeError(...)`), start
+      8011 with it set, drive, then `git checkout` the file. That is a source edit, so it belongs to
+      the implementation window and not to a window that only fills. (ii) The two calls it named
+      fire **before** the window on every run — `record_agent_output` at `:2014` per streamed output
+      event, `_broadcast_run_lifecycle` at `:1939` as `run_started` — so the raise would land with
+      the row still `running`, which is the case that already works. Predicate the raise on the
+      in-window call: `kind == "status"` (`:2235`), or `_report_abandoned_entries` (`:2195`). See
+      design D4.
 - [ ] 0.3 Confirm nothing recovers it: with the Hub left running and untouched, the entry is still
       `queued` after several minutes. Then save the project's settings and confirm it is delivered
       instantly — which is what makes "delivered by coincidence" a measurement rather than a phrase.
@@ -32,18 +43,34 @@ item rather than proceeding to phase 1 on the strength of having just done phase
 - [ ] 1.3 Confirm by reading that no other statement in the handler depends on the redrain's
       position, and that the `CancelledError` re-raise still happens after it.
 
-## 2. `_execute_codex_appserver_run` — the guarantee the path never had
+## 2. The failure tail, once, shared by both paths
 
-- [ ] 2.1 Add `except (Exception, asyncio.CancelledError) as exc:` between the function's outer
-      `try` and its `finally`, mirroring `_execute_run`'s handler: `logger.exception`, relabel to
-      `failed` only where the row is still `running` (with `expire_pending_for_run`,
+**R3 replaced this phase.** R1 and R2 had it duplicate `_execute_run`'s handler onto the app-server
+path; design D3 now shares one helper, because R3 measured the three differences that decision
+rested on and none of them exists in the handler. Task 2.2 in particular was actively dangerous: it
+told the implementer to use the failure-fields helper "that path's own tail does", which is
+`_runtime_failure_fields(outcome, …)` — and `outcome` is not bound when the exception is raised
+before `run_turn` returns.
+
+- [ ] 2.1 Extract the body of `_execute_run`'s handler into one coroutine in `agent_trigger.py`,
+      taking `project_id`, `agent`, `run_id`, `conversation_id`, `runner` and `exc`: open a session,
+      relabel to `failed` only where the row is still `running` (`expire_pending_for_run`,
       `record_turn_usage(sample=None)`, `finalize_job_run_for_conversation`, `return_run_entries`,
-      commit, abandonment report, `run_failed` broadcast, per-entry `queue_entry_queued`), then an
-      **unconditional** release, then re-raise `CancelledError`.
-- [ ] 2.2 Use `_runtime_failure_fields`/`_transport_failure_fields` as that path's own tail does —
-      do not copy `_execute_run`'s choice without checking which one this path uses.
-- [ ] 2.3 Comment the duplication with design D3's reason, so the next reader knows it was decided
-      rather than overlooked.
+      commit, `_report_abandoned_entries`, `run_failed` broadcast with
+      `_transport_failure_fields(exc, conversation_id)`, per-entry `queue_entry_queued`), then the
+      **unconditional** release from 1.1. It returns nothing; the caller keeps `logger.exception`
+      and the `CancelledError` re-raise.
+- [ ] 2.2 Rewrite `_execute_run`'s handler to call it, preserving the comment block at `:2283-2303`
+      — that block is the measured history of why the handler catches `CancelledError` and must not
+      be lost in the move.
+- [ ] 2.3 Add `except (Exception, asyncio.CancelledError) as exc:` to
+      `_execute_codex_appserver_run` between its outer `try` (`:2536`) and its `finally` (`:2873`),
+      calling the same helper with `runner="codex"`, then re-raising `CancelledError`. Do **not**
+      pass `_runtime_failure_fields` here: it needs a `TurnOutcome` the exception path does not
+      have, which is why the path's own pre-spawn `except` at `:2723` already uses
+      `_transport_failure_fields`.
+- [ ] 2.4 Leave both `finally` blocks alone. `active_ptys` (`:2362`) and `active_app_server_runs`
+      (`:2874`) genuinely differ and are not part of the shared body.
 
 ## 3. Tests
 
@@ -52,13 +79,21 @@ item rather than proceeding to phase 1 on the strength of having just done phase
       asserts the entry is delivered — `delivered_in_run_id is not None` and a successor run exists —
       with no further request made. **The exception is injected, never obtained through F285's
       in-memory pool** (design D4): a test that reproduces this through F285 goes green when F285 is
-      fixed, for the wrong reason.
+      fixed, for the wrong reason. **And it is injected inside the window**: predicate the patched
+      call on `kind == "status"`, or patch `_report_abandoned_entries`. A bare "raise once" on
+      `record_agent_output` or `_broadcast_run_lifecycle` fires at `:2014`/`:1939`, before the
+      terminal commit, and the test then passes without the fix — R3 found both rounds had specified
+      exactly that. The test also asserts the run was already terminal when the raise landed, so the
+      injection cannot silently drift back out of the window.
 - [ ] 3.2 The same test asserts the run's outcome was **not** relabelled `failed`.
 - [ ] 3.3 A second-agent variant: agent B's entry is refused while agent A's run holds a task
       checkout, A's run ends abnormally, B runs. This is the half that no existing test covers and
       the half the operator would notice as "the other agent stopped working".
 - [ ] 3.4 App-server variants of 3.1 and 3.2 using the existing `_fake_run_turn` harness
-      (`hub/tests/test_agent_trigger.py:126`) and the in-flight poll helper (`:68`).
+      (`hub/tests/test_agent_trigger.py:117`) and the in-flight poll helper
+      `_wait_for_active_app_server_run` (`:67`). R1 and R2 cited `:126` and `:68`, which are those
+      two definitions' docstring lines rather than their `def`s; R3 re-read both and they are
+      otherwise exactly as described.
 - [ ] 3.5 An app-server test that raises **before** the terminal write and asserts the run ends
       terminal with `error` set, and that the agent runs a subsequent turn — the wedge from
       requirement 2.

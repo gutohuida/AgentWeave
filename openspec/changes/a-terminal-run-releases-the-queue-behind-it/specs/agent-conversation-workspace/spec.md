@@ -36,11 +36,13 @@ not examine a run that ended, so it cannot recover input stranded this way.
 - **AND** input for that agent is queued behind the run
 - **THEN** the queued input is delivered to a successor run without any further operator action
 
-#### Scenario: The stranded input is not waiting for an unrelated operator action
+#### Scenario: Input that was never delivered is released too
 
-- **WHEN** input has been left queued behind a run that ended abnormally
-- **THEN** its delivery does not depend on the operator opening the project, saving settings, or
-  relocating the workspace
+- **WHEN** input arrived for an agent while it was busy, so it was queued rather than delivered and
+  nothing has returned it
+- **AND** the run it was waiting behind reaches a terminal status and the work that follows raises
+- **THEN** it is delivered without the operator opening the project, saving settings, or relocating
+  the workspace
 
 #### Scenario: An agent parked behind an ended run's hold is re-evaluated
 
@@ -61,7 +63,13 @@ not examine a run that ended, so it cannot recover input stranded this way.
   executed over a process transport
 
 ### Requirement: Every started run reaches a terminal status without a restart
-The system SHALL bring every run it starts to a terminal status within the life of the process that started it, on every execution path, and SHALL record why when the run ended abnormally.
+The system SHALL bring every run whose execution ends inside the process that started it to a terminal status, on every execution path and without requiring a restart, and SHALL record why when the run ended abnormally.
+
+This is bounded to a run whose execution ends while the process that started it is still there to
+observe it, including an execution that ends by raising. A run whose Hub was killed under it is not
+in scope and is recovered by reconciliation at the next start — the corpus already carves that case
+out, under *A run's terminal status line is persisted*, for the same reason: there was no process to
+write the outcome. A run whose execution raised is the opposite case, and has no such excuse.
 
 An agent is refused a new turn while it has a run recorded as running. A run whose execution failed
 without recording an outcome therefore stops that agent from ever running again: every later trigger

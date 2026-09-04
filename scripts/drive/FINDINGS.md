@@ -19694,6 +19694,31 @@ the calls that can raise between `:2175` and `:2281`. It cannot: it wraps its wh
 `CancelledError`, which this handler explicitly does -- so it remains the widest *cancellation*
 window in the function while contributing nothing to the exception window.
 
+**R3, 2026-09-04 -- two code corrections, one of which changes what a regression test would prove.**
+
+*The `try` this finding names is the wrong one.* F286's paragraph above and R1's proposal both say
+the app-server delegation at `:1824` sits above `_execute_run`'s "own `try:` at `:1846`".
+`_execute_run` has **two** top-level `try` blocks: `:1846`, whose `except` is `:1870` and whose
+failure branch returns at `:1911`, and `:1933`, which is the one paired with the handler at `:2282`
+and the `finally` at `:2361`. The delegation returns at `:1842`, above both, so the conclusion --
+nothing raised on the app-server path can reach `:2282` -- is unchanged and slightly stronger. The
+number was wrong in R1 and confirmed wrong in R2; both rounds shipped it.
+
+*Neither of the two injection points the proposal named is inside the window.* This matters because
+a regression test written to them is green with or without the fix. `record_agent_output` is called
+at `:2014`, once per streamed output event, and `_broadcast_run_lifecycle` at `:1939` as
+`run_started` -- both before the terminal commit at `:2175`. A raise at either lands in the handler
+with the row still `running`, so `already_terminal` is `False` and today's code already redrains. To
+land in the window the injection has to be predicated: `record_agent_output` with `kind == "status"`
+(`:2235` on the PTY path, `:2854` on the app-server one), or `_report_abandoned_entries`, whose
+`:2195` call is the only one a run reaching the tail executes.
+
+*And a measurement about the two paths, recorded here because it outlives this change.* Stripped of
+comments and blank lines, the PTY success tail `:2169-2281` is 40 statements and the app-server one
+`:2807-2872` is 41; `diff` returns a single hunk of a single line, the app-server broadcast's
+`**_runtime_failure_fields(outcome, lifecycle_event)`. The two paths' post-turn tails are otherwise
+identical text.
+
 ## F287 (C) - `record_agent_output` refreshes a row it has already fully populated, one extra SELECT per output line on the Hub's hottest write path
 
 **Status:** open
