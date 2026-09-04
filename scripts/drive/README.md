@@ -169,3 +169,25 @@ does not list conversations; the rail toggle at `aria-label="Switch to recent co
 `p6driver0903d1` is left bound to the bad-flag runner, which is where F274's reproduction ends.
 Rebind it to `haiku-0903d1` before reusing the fixture for anything that needs a real turn. No job
 or loop was ever created in this project.
+
+## The 2026-09-04 fixture — F286's phase-0 observation
+
+`f286-230652` at `C:/Users/huida/AppData/Local/Temp/aw-f286/fixture`, registered as
+`proj-96849871dd06` on an **8011** Hub over a fresh database
+(`sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw-f286/f286.db`). One agent,
+`f286a230652`, on `claude-haiku-4-5-20251001`. Deliberately empty subject matter: F286 is about
+what happens *after* a turn ends, so what the turn did is irrelevant.
+
+- `setup_f286.py <dir>` — builds it and prints `AW_PROJECT` / `AW_AGENT`.
+- `t_f286_phase0_observe.py` — tasks 0.2–0.4 of
+  `openspec/changes/a-terminal-run-releases-the-queue-behind-it`. Two real Haiku turns and four
+  idle minutes; ~6 minutes wall clock.
+
+**It only reproduces against a Hub started with the injection compiled in.** The exception has to
+land between the terminal commit (`agent_trigger.py:2175`) and `redrain_queued_agents` (`:2286`),
+and no operator action puts one there — so the drive adds a guarded
+`if os.environ.get("AW_F286_INJECT"): raise RuntimeError(...)` immediately before the in-window
+status write at `:2235`, starts 8011 with `AW_F286_INJECT=1`, and `git checkout`s the file
+afterwards. That edit is never committed. A raise on `record_agent_output` or
+`_broadcast_run_lifecycle` without the predicate fires at `:2014`/`:1939`, before the window, and
+shows the case that already works.

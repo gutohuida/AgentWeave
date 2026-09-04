@@ -5,10 +5,10 @@ drivable here and should be driven before a line is implemented. **If phase 0 ha
 do phase 0 and stop**; an unattended window then commits the write-up and moves on to the next queue
 item rather than proceeding to phase 1 on the strength of having just done phase 0.
 
-- [ ] 0.1 Trial Hub on **8011** — never `proj-5e960453` or `proj-18e5d4e0`, never port 8000 — from
+- [x] 0.1 Trial Hub on **8011** — never `proj-5e960453` or `proj-18e5d4e0`, never port 8000 — from
       `hub/` with uvicorn from source, against a fresh fixture project. Every real agent turn binds
       `claude-haiku-4-5`.
-- [ ] 0.2 **The headline.** Start a turn; while it runs, send a second message so an entry is
+- [x] 0.2 **The headline.** Start a turn; while it runs, send a second message so an entry is
       `queued`; make a bookkeeping call *inside the window* raise once; confirm the run reaches a
       terminal status and the queued entry stays `queued` with `delivered_in_run_id` null and no
       successor run — the defect as filed.
@@ -25,12 +25,12 @@ item rather than proceeding to phase 1 on the strength of having just done phase
       the row still `running`, which is the case that already works. Predicate the raise on the
       in-window call: `kind == "status"` (`:2235`), or `_report_abandoned_entries` (`:2195`). See
       design D4.
-- [ ] 0.3 Confirm nothing recovers it: with the Hub left running and untouched, the entry is still
+- [x] 0.3 Confirm nothing recovers it: with the Hub left running and untouched, the entry is still
       `queued` after several minutes. Then save the project's settings and confirm it is delivered
       instantly — which is what makes "delivered by coincidence" a measurement rather than a phrase.
-- [ ] 0.4 Confirm the run's recorded outcome is the one it reached (not `failed`), so the fix in 1.1
+- [x] 0.4 Confirm the run's recorded outcome is the one it reached (not `failed`), so the fix in 1.1
       is known to be the ungating and not a relabel.
-- [ ] 0.5 Record run ids, entry ids and timestamps in `scripts/drive/FINDINGS.md` under F286.
+- [x] 0.5 Record run ids, entry ids and timestamps in `scripts/drive/FINDINGS.md` under F286.
 
 ## 1. `_execute_run` — split the flag's two jobs
 

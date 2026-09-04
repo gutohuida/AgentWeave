@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "a38caee",
     "stop_at": "2026-09-05T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-09-04-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "phase-0-observe",
-    "next_action": "Do phase 0 of openspec/changes/a-terminal-run-releases-the-queue-behind-it/tasks.md (tasks 0.1-0.5) and STOP -- task 0 is an explicit gate that says an unattended window records phase 0, commits, and does not roll on into phase 1. Drive F286 live: Hub on 8011 from hub/ with uvicorn from source, fresh fixture project (never proj-5e960453 / proj-18e5d4e0, never port 8000), every agent turn bound to claude-haiku-4-5. The injection is the R3-rewritten one: add a guarded raise to this checkout's hub/hub/api/v1/agent_trigger.py behind AW_F286_INJECT, predicated on the IN-WINDOW call (kind == \"status\" at :2235, or _report_abandoned_entries at :2195) -- NOT record_agent_output/_broadcast_run_lifecycle, which fire before the terminal commit and would show the case that already works. git checkout the file when done. Record run ids, entry ids and timestamps under F286 in scripts/drive/FINDINGS.md.",
+    "current": "phase-1-2-impl",
+    "next_action": "Do phases 1 and 2 of openspec/changes/a-terminal-run-releases-the-queue-behind-it/tasks.md (1.1-1.3, 2.1-2.4), in hub/hub/api/v1/agent_trigger.py only. Phase 0 is DONE and must not be re-driven. 1.1: move `await redrain_queued_agents(project_id)` (currently :2363) out from under `if not already_terminal:` (:2350) so it runs on every exception; leave the status relabel gated exactly as it is. Phase 0 measured why: `already_terminal` was correctly True for a run that had genuinely completed, so relabelling must stay gated and only the release moves. 1.2 rewrites the comment above it (it currently says 'unconditional, where this was gated on `returned`', which was true of one gate while the line sat inside another). 2.1 extracts the handler body into one coroutine taking project_id, agent, run_id, conversation_id, runner, exc; 2.2 preserves the :2283-2303 comment block verbatim; 2.3 adds `except (Exception, asyncio.CancelledError) as exc:` to _execute_codex_appserver_run between its outer try (:2536) and its finally (:2873), calling the helper with runner=\"codex\" and re-raising CancelledError. Do NOT pass _runtime_failure_fields on the app-server path -- `outcome` is unbound when the raise precedes run_turn's return. 2.4: leave both `finally` blocks alone. No tests this firing; phase 3 is the next two queue items.",
     "queue": [
         {
             "id": "compose",
@@ -23,9 +23,9 @@
         },
         {
             "id": "phase-0-observe",
-            "status": "open",
+            "status": "done",
             "title": "Phase 0 -- drive F286 live before implementing, then stop",
-            "detail": "tasks.md 0.1-0.5. This phase is a gate with its own stop instruction; honour it. Needs a source edit (the AW_F286_INJECT guarded raise) which is legal in this window and must be reverted with git checkout before the iteration commits. Deliverable: F286's ledger section carries measured run ids, entry ids and timestamps, plus 0.3's 'delivered by coincidence on a settings save' measurement and 0.4's confirmation that the run's recorded outcome is the one it reached and not `failed`."
+            "detail": "DONE N-2. Driven on 8011 over a fresh db against fresh project proj-96849871dd06, agent f286a230652 on claude-haiku-4-5-20251001. Reproduced exactly as filed: run-3be49e8af2f2 reached `completed` (exit 0, error None) and entry-646cde350c96 stayed `queued` / delivered_in_run_id null / attempts 0 with no successor run for 4m05s, then a byte-identical settings save delivered it in 0.36s into run-107d6f280ee2. 0.4 confirms the fix is the ungating, not a relabel. Harnesses kept as scripts/drive/setup_f286.py and t_f286_phase0_observe.py; the AW_F286_INJECT edit was reverted with git checkout and never committed. The app-server half was NOT driven (Codex is undrivable here) and stays a code-read claim."
         },
         {
             "id": "phase-1-2-impl",

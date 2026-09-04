@@ -19729,6 +19729,56 @@ comments and blank lines, the PTY success tail `:2169-2281` is 40 statements and
 `**_runtime_failure_fields(outcome, lifecycle_event)`. The two paths' post-turn tails are otherwise
 identical text.
 
+**Phase 0, 2026-09-04 (night) -- driven live, and it reproduces exactly as filed.**
+
+Every claim above this line was read from code plus one CI failure. This one was watched. Hub on
+**8011** from source (`hub/hub/api/v1/agent_trigger.py` carrying a temporary `AW_F286_INJECT`
+guarded `raise RuntimeError` immediately before the in-window status write at `:2235` -- after the
+terminal commit at `:2175`, before `redrain_queued_agents` at `:2286`; reverted with
+`git checkout` before this entry was committed, never on a commit), a fresh database at
+`C:/Users/huida/AppData/Local/Temp/aw-f286/f286.db`, a fresh fixture project
+`proj-96849871dd06` at `.../aw-f286/fixture`, one agent `f286a230652` bound to
+`claude-haiku-4-5-20251001`. Harness: `.../aw-f286/t_f286_phase0.py`.
+
+| | |
+|---|---|
+| Run #1 | `run-3be49e8af2f2`, conversation `conv-d76f5e0cdddd`, started `22:07:46.864983Z` |
+| Entry behind it | `entry-646cde350c96`, queued `23:07:50` local (`22:07:50Z`) while run #1 was `running` |
+| Raise | once, `agent_trigger.py:2239`, logged `ERROR Unhandled error in run run-3be49e8af2f2 for 'f286a230652'` |
+| Run #1 terminal | `completed`, exit `0`, `error=None`, `ended_at 22:08:27.734406Z` -- t+41.2s |
+| Entry, 5s later | `state='queued'`, `delivered_in_run_id=None`, `delivery_attempts=0`, `waiting_reason=None` |
+| Successor run | none. Runs for this agent: **1** |
+
+**0.2 -- the defect as filed.** The run reached a terminal status and the input behind it was left
+`queued` with `delivered_in_run_id` null and nothing scheduled. The traceback confirms the raise
+landed in the handler at `:2282` with the row already `completed`, which is what makes
+`already_terminal` True and skips the redrain at `:2363`.
+
+**0.3 -- nothing recovers it, and "delivered by coincidence" is now a measurement.** The Hub was
+left running and untouched and the entry was read every 30 seconds for **4 minutes 5 seconds**
+(23:08:33 to 23:12:33 local): `queued`, `delivered_in_run_id=None`, `delivery_attempts=0`, every
+single poll, no drift. Then one `PUT /api/v1/projects/proj-96849871dd06/settings` -- the settings
+save, byte-identical to what `GET` had just returned, changing nothing -- and the entry was
+`delivered` into `run-107d6f280ee2` **0.36 seconds later**. Runs for this agent before the save: 1.
+After: 2. So the recovery is real, instant, and reachable only through an unrelated operator action
+the operator has no reason to take.
+
+**0.4 -- the fix is the ungating, not a relabel.** Run #1's recorded outcome is `completed` with
+`error=None` and `exit_code=0` -- the outcome it actually reached. The `already_terminal` guard did
+its first job correctly: an exception in downstream bookkeeping did not relabel a clean run as
+`failed`. Only its second job, the redrain, is wrong. Task 1.1 is therefore confirmed as the whole
+of the behavioural change on the PTY path: move the release out from under the flag, leave the
+relabel exactly where it is.
+
+**What the drive adds that the code read could not.** The stranded entry carries
+`delivery_attempts=0` and `waiting_reason=None` -- so `GET /queue/{agent}/status` reports an entry
+waiting for no stated reason, and the surface an operator would check to find out why their message
+never ran says nothing at all. That is the operator-visible shape of F286, and no test asserted it
+before this drive.
+
+**Not driven.** The app-server half (requirement 2, tasks 3.4-3.5) was not driven: it needs Codex,
+and Codex is undrivable on this machine. It stays a code-read claim until a test covers it.
+
 ## F287 (C) - `record_agent_output` refreshes a row it has already fully populated, one extra SELECT per output line on the Hub's hottest write path
 
 **Status:** open
