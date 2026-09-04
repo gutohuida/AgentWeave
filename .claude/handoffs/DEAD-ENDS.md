@@ -105,6 +105,20 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 - **`git worktree add` into the scratchpad fails** with "Filename too long".
 - **Stage explicit paths.** `git add -A` sweeps in scratch files.
 - **CI triggers only on push to `master` and PRs to it.** A feature branch push runs nothing.
+- **A `.gitignore` entry ending in `/` cannot be un-ignored by a later `!` negation.** Git does
+  not descend into an excluded *directory*, so the negation is unreachable and the file stays
+  ignored with no error. Exclude the contents instead — `dir/*` plus `!dir/keepme` — which
+  leaves the directory itself visible. *(Hit 2026-09-04 adding `.claude/handoffs/*` with an
+  exception for `DEAD-ENDS.md`.)*
+- **`git check-ignore -v` cannot answer "is this ignored?" when a negation matches.** It prints
+  the matching rule — including a `!` rule — and its exit code does not distinguish "ignored"
+  from "explicitly un-ignored", so the obvious `&& echo ignored || echo not` test reports the
+  opposite of the truth. Verify with `git add <path>` (does it get staged?) or
+  `git status --short --untracked-files=all`. *(Hit 2026-09-04.)*
+- **A commit made while an unattended window owns the tree must stage explicit paths and land
+  immediately.** The window's agent is instructed to "never end an iteration with a dirty
+  tree" (`.claude/skills/autonomous-session/scripts/run-iteration.ps1:196`), so any stray
+  modified file left sitting will be swept into *its* commit. *(2026-09-04.)*
 
 ## openspec
 
