@@ -19683,3 +19683,61 @@ uses is not detection, it is noise.
 
 **Reproduction:** read the three lines. `scripts/drive/staticpool_shared_connection.py` shows the
 failure the refresh converts a harmless rollback into.
+
+---
+
+# F227/F228 revisited, 2026-09-04 — a second surface, and one measurement that was scoped too narrowly
+
+Not a new finding. Row 11 was re-driven from scratch on 2026-09-04 by a day window whose
+`next_action` sent it to an already-closed row (see the coverage map in `SURVEY.md`), and the drive
+independently rediscovered `F227` and `F228` line for line — `q-bfb4a0f5b5ed` declined at
+`08:40:58.221` and answered at `08:40:58.248`, then a re-answer of a completed two-question batch
+(`qbatch-11edf6108da4`) producing `entry-1c7f4f14a179` and a real spawned run `run-d8c7d4a9b8d4`.
+Both findings reproduce at HEAD. The duplicated work is recorded in the log rather than as new
+ledger rows, and two things came out of it that the originals do not carry.
+
+**One measurement in F228 is scoped too narrowly, and the correction cuts against it.** F228 says
+*"no component anywhere reads a question's `declined` flag — measured across `hub/ui/src/components`,
+0 hits"*. That is true of `components/` and it misses `hub/ui/src/lib/pendingQuestions.ts:26`, which
+filters exactly this:
+
+```ts
+.filter((q) => q.from_agent === agent && !q.answered && !q.declined)
+```
+
+So the agent panel's question card **does** drop a declined question, and F228's "forever" applies
+to `QuestionsPanel` — the Questions page — rather than to every surface. The finding stands; its
+reach is one page, not the whole app.
+
+**The second surface reaches F227 by a different door: a race, not a persistent form.** Because the
+card disappears once either resolution lands, an operator can only produce the declined-and-answered
+row there by resolving twice before the first request returns — and the card's own guards make that
+asymmetric. In `AgentQuestionCard.tsx`:
+
+| control | line | disabled while |
+|---|---|---|
+| decline (`×`) | `:99` | `isResponding \|\| isDeclining` |
+| option buttons | `:127` | `isResponding` |
+| number-key shortcut | `:47` | `isResponding` |
+
+The decline button is held during an in-flight answer; nothing holds the answer path during an
+in-flight decline. Press `×`, then a number key before the round trip completes, and both land —
+`declined: true, answered: true`, and on a completed batch, a spent turn. The fix F227 already
+needs (a `declined` guard on `PATCH /questions/{id}`) closes this door too, which is the argument
+for fixing it in the Hub rather than in either component.
+
+**Also re-measured, and unchanged:** `answer_labels` is written by the UI
+(`api/questions.ts:69-73`) and read by nothing — 0 occurrences in the served bundle, 1 in
+`hub/ui/src` and that one is the field's own declaration at `api/questions.ts:22`. Control needles
+beside it in the same grep: `multi_select` 5/13, `asker_waiting` 4/23, `batch_size` 1/15. Too small
+to be worth a row of its own; recorded here so the next reader of F227's neighbourhood knows the
+structured half of an answer currently reaches no reader.
+
+**What held, re-confirmed with real `claude-haiku-4-5` turns** (19 assertions, 0 failures): a turn
+told to ask two questions in one `ask_user` call produced two rows on one `batch_id`, `batch_size 2`,
+both blocking, and the run stayed `running` the whole time they were outstanding; answering the
+first woke nobody (`queue_entry_queued` 8 → 8) and left the second outstanding; answering the second
+released the turn, which completed `exit 0` in 23 seconds with the agent's own reply reading
+`colour=red size=large` — the evidence that the answers returned through the tool call rather than
+the queue; and `asker_waiting` was `true` for both rows while the run lived and `false` for both
+once it ended.

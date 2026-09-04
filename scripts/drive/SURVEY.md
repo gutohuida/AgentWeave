@@ -138,3 +138,53 @@ requirements. A document created by mistake is permanent. Sandbox has one alread
 - `agent_auth.py`, `auth.py`, `permission_requests.py`
 - `mcp_server.py` (1193) — the agent-facing tool surface
 - UI: OverviewPage, SpecPage/PanelShell, TasksBoard, DependencyBoard, ConversationView
+
+---
+
+## Coverage map — the 17-row sweep is COMPLETE (measured 2026-09-04)
+
+**Read this before accepting any instruction to "resume the sweep at row N."** On 2026-09-04 the
+day window was sent to resume at "row 9c, Jobs + Loops" and found that row 9c had been closed on
+2026-09-01, that Jobs + Loops is row 10 and was driven the same day, and — after driving row 11
+from scratch and rediscovering `F227`–`F229` line for line — that **every row of the inventory
+above has been driven.** About an hour, and two kept harnesses overwritten and restored with
+`git checkout` before anything was committed.
+
+Measured, not asserted: every harness below exists in `scripts/drive/` **and** is cited by name in
+`FINDINGS.md`, so each row produced a written result rather than only a file.
+
+| row | area | harness | ledger |
+|---|---|---|---|
+| 1 | Projects | `t_sweep_row1_projects.py`, `t_sweep_row1_ui.py` | `FINDINGS.md:12845` |
+| 2 | Runners | `t_sweep_row2_runners.py`, `t_sweep_row2_ui.py` | `:13055` |
+| 3 | Agents | `t_sweep_row3_agents.py`, `t_sweep_row3_ui.py` | `:13364` |
+| 4 | Charters | `t_sweep_row4_charters.py`, `t_sweep_row4_ui.py` | `:13623` |
+| 5 | Runs | `t_sweep_row5_runs.py`, `t_sweep_row5_ui.py` | `:13853` |
+| 6 | Conversations | `t_sweep_row6_conversations.py`, `t_sweep_row6_ui.py` | `:14187` |
+| 7 | Inbound queue | `t_sweep_row7_queue.py`, `t_sweep_row7_ui.py` | `:14399` |
+| 8 | Tasks | `t_sweep_row8_tasks.py`, `t_sweep_row8_ui.py` | `:14706` |
+| 9a | Spec — documents, phase | `t_sweep_row9_documents.py`, `t_sweep_row9_ui.py` | `:15009` |
+| 9b | Spec — requirements, coverage, rigor, proposals | `t_sweep_row9b_requirements.py` | `:15275` |
+| 9c | Spec — evidence, decisions, reviews, drift, reindex | `t_sweep_row9c_evidence.py`, `t_sweep_row9c_agent_plane.py` | `:15540` |
+| 10 | Jobs + Loops | `t_sweep_row10_jobs_loops.py` | `:15981` |
+| 11 | Questions | `t_sweep_row11_questions.py`, `t_sweep_row11_batch.py` | `F227`–`F229` |
+| 12 | Permissions | `t_sweep_row12_permissions.py` | cited |
+| 13 | Checkpoints | `t_sweep_row13_checkpoints.py` | cited |
+| 14 | Accounting | `t_sweep_row14_accounting.py` | cited |
+| 15 | Worktrees | `t_sweep_row15_worktrees.py` | `:16777` |
+| 16 | Logs / Events / SSE | `t_sweep_row16_logs_events_sse.py` | cited |
+| 17 | Messages | `t_sweep_row17_messages.py` | cited |
+
+**Two numbering systems are in this ledger and they do not agree.** An older 19-row matrix
+(`t_row10_drift.py`, `t_row11_loop.py`, `t_row13_questions.py`, `t_row16_worktrees.py`, the
+`Row 19 x row N` crash-cross sections) numbers areas differently from the 17-row inventory above:
+under the old one row 11 is Loops and row 13 is Questions; under this one row 10 is Jobs+Loops and
+row 11 is Questions. **A bare "row N" in a handoff, a log or a `next_action` is ambiguous.** Name
+the area as well as the number, and check this table before driving anything.
+
+**What is genuinely uncovered is not a row.** The sweep answered "does each area work"; it did not
+answer the crossings between areas, which is where the skill says the serious defects live. The
+`Row 19 x row N` sections are the only crossings driven so far (crash × permission card, crash ×
+`ask_user`, crash × job firing, crash × task input). Anything proposing more drive work should
+name a **crossing or a scenario** — `T-DEP`, `T-HOP`, `T-CONC`, `T-VOL`, `T-DRIFT`, `T-BUDGET` in
+`TESTPLAN.md` are all still unrun — rather than a row number.
