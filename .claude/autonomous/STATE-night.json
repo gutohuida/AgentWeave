@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "a38caee",
     "stop_at": "2026-09-05T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-04-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "phase-4-gates",
-    "next_action": "Run phase 4 gates 4.1-4.4 of openspec/changes/a-terminal-run-releases-the-queue-behind-it/tasks.md. Phases 0, 1, 2, 3a and 3b are DONE -- do not re-implement or re-test them. 4.1: `py -3.11 -m ruff check src/ hub/ tests/` and `py -3.11 -m black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` -- ruff is NOT on PATH in Git Bash here, always `py -3.11 -m ruff`; black needs the --target-version flag or it refuses. Both were clean at ee6a8e7+3b over the touched file only, so 4.1 is the FULL path list, which has not been run this cycle. 4.2: `py -3.11 -m pytest hub/tests/test_agent_trigger.py -v` whole, never by -k; expect 48 (45 after 3a, +3 from 3b). 4.3: the wider hub suite in FILE CHUNKS -- it exceeds the 600s command cap whole, so batch hub/tests/*.py a few files at a time and record the per-chunk counts; anything that fails must be triaged as pre-existing or caused, by checking out ee6a8e7 for that file only if needed. 4.4: `openspec validate --strict a-terminal-run-releases-the-queue-behind-it` -- remember openspec reads only a requirement's FIRST PHYSICAL LINE for SHALL/MUST. Tick 4.1-4.4 in tasks.md with the measured numbers, not 'clean'. Do NOT start 4.5 (the live re-drive) in the same iteration -- it is its own queue item and needs a Hub on 8011.",
+    "current": "phase-4-drive",
+    "next_action": "Task 4.5 of openspec/changes/a-terminal-run-releases-the-queue-behind-it/tasks.md -- re-drive the PTY half live and expect the OPPOSITE result to phase 0. Phases 0-3 and gates 4.1-4.4 are DONE; do not re-run them. The harnesses from phase 0 are kept at scripts/drive/setup_f286.py and scripts/drive/t_f286_phase0_observe.py -- read both before writing anything new. Start a Hub on 8011 from hub/ with uvicorn from source against a FRESH db (never proj-5e960453, never proj-18e5d4e0, never port 8000), and before believing anything the drive shows, confirm no .py under hub/hub or src is newer than the process start time. Phase 0's injection is an AW_F286_INJECT-guarded raise predicated on the IN-WINDOW call (kind == 'status' at :2235, or _report_abandoned_entries at :2195) -- a raise on record_agent_output or _broadcast_run_lifecycle fires before the terminal commit and proves nothing. Repeat 0.2 and 0.3: run reaches terminal, and the entry queued behind it must now be delivered into a successor run WITHOUT a settings save. git checkout the injected file afterwards and leave the tree clean. Every real agent turn binds claude-haiku-4-5. Record the run ids, entry ids and timings under F286 in scripts/drive/FINDINGS.md, including anything the drive DISPROVES.",
     "queue": [
         {
             "id": "compose",
@@ -47,9 +47,9 @@
         },
         {
             "id": "phase-4-gates",
-            "status": "open",
+            "status": "done",
             "title": "Phase 4 gates 4.1-4.4 -- lint, the touched file whole, the wider suite in chunks, strict validate",
-            "detail": "ruff check src/ hub/ tests/ ; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/ ; py -3.11 -m pytest hub/tests/test_agent_trigger.py -v whole, not by -k ; the wider hub suite in FILE CHUNKS because it exceeds the 600s cap whole ; openspec validate --strict. py -3.11 always, never bare python."
+            "detail": "DONE N-6. 4.1 clean over the FULL CI path lists (ruff all passed; black 548 files unchanged). 4.2 48 passed in 35.7s (44 baseline + 1 in 3a + 3 in 3b). 4.4 valid. 4.3 all 251 hub/tests/test_*.py in nine chunks: 3966 passed, 14 skipped, 0 failed, 0 errors -- but only after a fix. The first pass gave 10 RuntimeError('Event loop is closed') errors raised by conftest's _no_connection_outlives_its_event_loop at task.cancel(), across test_inbound_queue/test_instance_identity/test_instructions. Triaged as CAUSED, not pre-existing: test_inbound_queue.py alone errors at HEAD and is clean with agent_trigger.py at 1529d91~1. Traced with a set that printed a stack on add: the phase-2 app-server except -> _record_run_failure_tail -> redrain_queued_agents -> schedule_agent -> trigger_agent_directly registers a NEW task during the fixture's own gather, and the fixture's clear() then dropped it onto a loop about to close. Product NOT changed, on three measurements: the respawn is requirement 2 (test 3.5 asserts it), it is bounded by DELIVERY_ATTEMPT_LIMIT 3 (observed chain of three tasks), and the comment at agent_trigger.py:2386 records that nothing in the product calls .cancel() on a run task. Fixed in hub/tests/conftest.py only: settle to a fixed point over _MAX_BACKGROUND_SETTLE_PASSES=10, difference_update(leftover) instead of clear(), loud AssertionError if it never settles. Mutation-checked -- restoring clear() INSIDE the new loop brings the error straight back, so the loop alone was not the fix. 4.1 and 4.2 re-run after the conftest change and still green."
         },
         {
             "id": "phase-4-drive",

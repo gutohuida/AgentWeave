@@ -138,10 +138,46 @@ before `run_turn` returns.
 
 ## 4. Gates
 
-- [ ] 4.1 `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` clean.
-- [ ] 4.2 `py -3.11 -m pytest hub/tests/test_agent_trigger.py -v` green — the file this change
-      touches, run whole rather than by `-k`.
-- [ ] 4.3 The wider hub suite in file chunks; it exceeds the 600s command cap when run whole.
-- [ ] 4.4 `openspec validate --strict a-terminal-run-releases-the-queue-behind-it` clean.
+- [x] 4.1 `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` clean.
+      Measured over the full CI path lists, not the touched file: ruff **All checks passed**,
+      black **548 files unchanged**. Re-run after the 4.3 fix below and still clean.
+      `ruff` is not on PATH in Git Bash here — `py -3.11 -m ruff`.
+- [x] 4.2 `py -3.11 -m pytest hub/tests/test_agent_trigger.py -v` green — the file this change
+      touches, run whole rather than by `-k`. **48 passed** in 35.7s (44 at the 18ba8ba baseline,
+      +1 in 3a, +3 in 3b).
+- [x] 4.3 The wider hub suite in file chunks; it exceeds the 600s command cap when run whole.
+      All 251 `hub/tests/test_*.py` in nine chunks: **3966 passed, 14 skipped, 0 failed, 0 errors.**
+      Per chunk (files 1–22 / 23–43 / 44–73 / 74–103 / 104–133 / 134–163 / 164–193 / 194–223 /
+      224–251): 271+2s, 334, 432, 365+2s, 698+4s, 441+4s, 469, 498, 458+2s.
+
+      **The first pass was not green, and the cause was this change.** Ten errors across
+      `test_inbound_queue.py`, `test_instance_identity.py` and `test_instructions.py`, all
+      `RuntimeError: Event loop is closed` raised by `conftest.py`'s
+      `_no_connection_outlives_its_event_loop` at `task.cancel()`. Triaged rather than assumed
+      pre-existing: `test_inbound_queue.py` **alone** errors at HEAD and is clean with
+      `hub/hub/api/v1/agent_trigger.py` checked out at `1529d91~1`.
+
+      Traced to a stack, not reasoned: `_execute_run` → `_execute_codex_appserver_run` → the
+      phase-2 `except` → `_record_run_failure_tail` → `redrain_queued_agents` → `schedule_agent`
+      → `trigger_agent_directly`, which registers a **new** task in `_background_runs`. So
+      cancelling a run is no longer terminal: the fixture cancelled the leftover task, gathered
+      it, and then `clear()`ed the set — dropping the successor the gather had just caused. That
+      successor stayed pending on an event loop that closed moments later, and every later test
+      in the process died in the same fixture.
+
+      **This is the fix working, not a product defect.** The respawn is requirement 2's behaviour
+      (3.5 asserts it), it is bounded by `DELIVERY_ATTEMPT_LIMIT` (3) rather than unbounded, and
+      the comment at `agent_trigger.py:2386` records that nothing in the product calls `.cancel()`
+      on a run task — `_stop_requested` is a cooperative flag. Loop teardown is the only caller,
+      so the gap is the fixture's, and it is fixed there: settle to a fixed point over up to
+      `_MAX_BACKGROUND_SETTLE_PASSES` passes, discarding only what each pass actually settled
+      (`difference_update`) instead of `clear()`.
+
+      Mutation-checked: restoring `clear()` inside the new loop brings the error straight back
+      (`test_inbound_queue.py` alone, 11 passed **1 error**), so the `difference_update` is what
+      fixes it and not the loop around it. `hub/tests/conftest.py` is the only file phase 4
+      touched; no production code changed.
+- [x] 4.4 `openspec validate --strict a-terminal-run-releases-the-queue-behind-it` clean —
+      "Change 'a-terminal-run-releases-the-queue-behind-it' is valid".
 - [ ] 4.5 Drive the PTY half live once more after the fix, repeating 0.2 and 0.3 and expecting the
       opposite result. A passing suite is not proof of behaviour.

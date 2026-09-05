@@ -118,6 +118,11 @@ def _test_only_sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ANN
 # Same convention, and same reason, as `_REAL_RESOLVE_PROJECT_WORKSPACE` above.
 _REAL_ENGINE = engine
 
+#: How many cancel-and-gather passes the teardown below will make before it gives up. Three is the
+#: product's own bound (`inbound_queue.DELIVERY_ATTEMPT_LIMIT`) on how long a failing entry can keep
+#: re-scheduling its agent; the rest is headroom for several agents chaining at once.
+_MAX_BACKGROUND_SETTLE_PASSES = 10
+
 
 @pytest_asyncio.fixture(autouse=True)
 async def _no_connection_outlives_its_event_loop():
@@ -155,14 +160,45 @@ async def _no_connection_outlives_its_event_loop():
     # it was caused by the dispose above rather than found by it, and cancelling first is what
     # makes the two safe together. A test that already cancelled its own runs leaves an empty
     # set and finds this a no-op.
+    #
+    # Cancelling is no longer terminal, which is why this settles to a fixed point instead of
+    # doing one pass. Since F286 a run whose tail raises — cancellation included — hands its
+    # input back and releases the queue, and that release can legitimately schedule the same
+    # agent again (`turn_scheduler.redrain_queued_agents` -> `trigger_agent_directly`), which
+    # registers a *new* task in this very set while the `gather` above it is still running. The
+    # single pass ended in `_background_runs.clear()`, so that successor was dropped from the
+    # set rather than settled: it stayed pending on an event loop that closed moments later, and
+    # every subsequent test in the process died in this fixture on `task.cancel()` with
+    # `RuntimeError: Event loop is closed`. Measured 2026-09-05 on `test_inbound_queue.py`
+    # (`test_queue_status_probes_the_bound_runner_not_the_agent_name` leaks the task; the error
+    # surfaces on the test *after* it), 10 errors across three files in one chunk.
+    #
+    # So: discard only what this pass actually settled, and loop while the set refills. The
+    # chain is bounded in the product by `DELIVERY_ATTEMPT_LIMIT` (3) — an entry that keeps
+    # failing is withdrawn rather than redelivered — so a handful of passes is a real fixed
+    # point and not a hopeful one. The cap is a backstop against a future unbounded respawn,
+    # and it fails loudly: a leak that poisons later tests is worth an error on the test that
+    # leaked rather than a confusing one on the next.
     import hub.api.v1.agent_trigger as _agent_trigger
 
-    leftover = list(_agent_trigger._background_runs)
-    if leftover:
+    for _ in range(_MAX_BACKGROUND_SETTLE_PASSES):
+        leftover = list(_agent_trigger._background_runs)
+        if not leftover:
+            break
         for task in leftover:
             task.cancel()
         await asyncio.gather(*leftover, return_exceptions=True)
+        # Not `clear()`: a successor scheduled during the `gather` is in the set by now, and
+        # this pass has not settled it. The `set.discard()` done-callbacks fire via `call_soon`
+        # and may not have run yet, so the settled tasks are removed here explicitly.
+        _agent_trigger._background_runs.difference_update(leftover)
+    else:
+        still_running = list(_agent_trigger._background_runs)
         _agent_trigger._background_runs.clear()
+        raise AssertionError(
+            f"background runs did not settle in {_MAX_BACKGROUND_SETTLE_PASSES} passes; "
+            f"{len(still_running)} still registered: {still_running!r}"
+        )
 
     await _REAL_ENGINE.dispose()
 
