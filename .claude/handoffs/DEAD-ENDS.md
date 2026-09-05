@@ -195,7 +195,13 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 ## PowerShell (when driving it from the Bash tool)
 
 - **`@'…'@` here-strings are PowerShell syntax and the Bash tool is Git Bash** — they do not work
-  there, and mangle commit messages when attempted.
+  there, and mangle commit messages when attempted. *What it looks like, measured 2026-09-05
+  (`6b98bdc`):* `git commit -m @'…'@` succeeds silently and produces a commit whose **subject line
+  is a bare `@`**, with the real subject demoted to line 2 and a trailing `@` after the trailer.
+  `git log --oneline` then shows `@` where the summary should be. It is not repairable after a
+  push under a no-force-push rule, so the cost is permanent — use a Bash heredoc (`-m "$(cat
+  <<'EOF' … EOF
+  )"`) or repeated `-m` flags.
 - **Bash-style quote escaping breaks PowerShell here-strings.** Keep each shell's syntax in its
   own tool.
 
