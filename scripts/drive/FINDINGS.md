@@ -19617,7 +19617,44 @@ harmless extra query, and **F286** for the product gap the crash exposed.
 
 ## F286 (B) - an exception after a run reaches its terminal status leaves the input queued behind it undrained, and nothing is on a timer to notice
 
-**Status:** open
+**Status:** fixed `1529d91` (2026-09-05, night window, change
+`a-terminal-run-releases-the-queue-behind-it`, archived under
+`openspec/changes/archive/2026-09-05-`). The release stopped asking whether the relabel happened:
+the former handler body moved into `_record_run_failure_tail` (`agent_trigger.py:1777`), the
+relabel stays gated on the row still being `running`, and `redrain_queued_agents` now runs
+unconditionally after it. `_execute_codex_appserver_run` gained the handler it never had at all.
+Only `1529d91` carries product code -- `ee6a8e7`, `ddcd07a`, `6b98bdc` and `57e1d2a` add tests, a
+test-harness fix and the drive.
+
+**Verified live, twice, as an A/B at one injection site** rather than by a green suite. Both drives
+on 8011 from source with `AW_F286_INJECT=1`, a fresh database and fresh fixture project each, one
+agent on `claude-haiku-4-5-20251001`. **Fixed** (`proj-b70dad75b4b7`): `run-16b449d4a80a` reached
+`completed` / exit 0 / `error=None`, the tail raised, and `entry-8992a0c0b036` was delivered into
+successor `run-9d0f885a67c4` **0.140s after the run boundary** with no operator action; the
+successor ran a real turn and replied. **Control** -- the same checkout with the pre-F286 gate
+restored and the same raise on the same line, so only the gate varies (`proj-5f386b6769de`): the
+entry stayed `queued`, `delivered_in_run_id` null, attempts 0 across four polls over 2m06s, and
+moved only when a settings save was made. Phase 0's stranding therefore reproduces at a second
+in-window site, three statements earlier -- the window is skipped whole, not from the status write
+onward. Run #1 kept its recorded outcome in both, which is the half of this finding that must not
+regress in fixing the other half.
+
+Five tests cover it: `test_a_run_that_ended_releases_its_queue_even_when_its_tail_raises`,
+`test_an_app_server_run_that_ended_releases_its_queue_when_its_tail_raises`,
+`test_an_app_server_turn_that_raises_before_its_terminal_write_is_not_a_wedge` and
+`test_a_second_release_charges_a_refused_entry_at_most_twice` in `hub/tests/test_agent_trigger.py`,
+and `test_a_holder_whose_tail_raises_still_releases_the_task_it_held` in
+`hub/tests/test_task_turn_collision.py`. Each was watched to fail against the pre-F286 gate
+restored in place, not merely watched to pass. The pre-existing
+`test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped` was **measured** not to cover
+this -- it passes under the restored gate -- and now says so in its docstring.
+
+**Two things this fix did not settle.** The app-server half is covered by tests and a code read
+only; Codex is undrivable on this machine. And the ungated redrain registers a new background task
+during the test fixture's own teardown gather, which broke ten unrelated tests until
+`hub/tests/conftest.py` was made to settle to a fixed point instead of clearing once -- a harness
+change, not a product one, and the reasoning for leaving the respawn alone is in the phase-4 log
+entry.
 
 **Found 2026-09-04 (day D-2)**, downstream of **F285** - the CI failure is what put a real exception
 into that window, but the gap is in `hub/hub/api/v1/agent_trigger.py` and does not depend on how the

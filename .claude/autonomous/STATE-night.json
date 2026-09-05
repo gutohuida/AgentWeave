@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "a38caee",
     "stop_at": "2026-09-05T07:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-09-04-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "sync-and-archive",
-    "next_action": "The `sync-and-archive` queue item for openspec/changes/a-terminal-run-releases-the-queue-behind-it. ALL of tasks.md is checked -- phases 0-4 including 4.5 are done and must not be re-run or re-driven. Three things, in one commit. (1) openspec-sync-specs: fold the change's specs/agent-conversation-workspace/spec.md delta into openspec/specs/agent-conversation-workspace/spec.md, verified header by header rather than pasted -- a requirement's SHALL must be on its first physical line or --strict misreads it. (2) openspec-archive-change to move the change into openspec/changes/archive/. (3) In the SAME commit, retire the findings the proposal names: set F286's `**Status:**` line in scripts/drive/FINDINGS.md from `open` to `fixed <sha of 1529d91>` (1529d91 is the commit that carries the product change; phases 3-4 added only tests), and correct the index paragraph's open-severity list near the top of FINDINGS.md so it no longer counts F286 as open. Read the proposal to see whether it names any finding besides F286 and retire those too. The playbook is explicit that this is not optional tidying. No Hub, no drive, no tests needed beyond `openspec validate --strict` on the archived change and a final `ruff`/`black` over the CI path lists if any .py is touched (none should be).",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -59,9 +59,9 @@
         },
         {
             "id": "sync-and-archive",
-            "status": "open",
+            "status": "done",
             "title": "Sync the delta spec, archive the change, retire F286 in the same commit",
-            "detail": "openspec-sync-specs for specs/agent-conversation-workspace/spec.md, verified header by header, then openspec-archive-change. Archiving retires the findings the proposal names: set F286's `**Status:**` line in scripts/drive/FINDINGS.md to `fixed <sha>` and correct the index paragraph's open-severity list. The playbook is explicit that this is not optional tidying -- a ledger that cannot say what is done reads as a backlog of everything."
+            "detail": "DONE N-8. Three edits, one commit, no production code and no Hub. SYNC: the delta had only `## ADDED Requirements` -- two requirements, eight scenarios -- and neither name existed anywhere in openspec/specs/ (grepped before touching anything), so both are genuine additions with no partial merge needed. Appended to openspec/specs/agent-conversation-workspace/spec.md with a blank line inserted after each `### Requirement:` header, because all 64 existing requirements in that file have one (counted: 64 blank, 0 not) while the delta has none; the SHALL stays on the first physical line, which is all --strict reads. Verified header by header rather than eyeballed: each delta block compared line-for-line against the merged block ignoring blank lines, scenario counts 5 and 3 matching, duplicate-header sweep clean, 64 -> 66 requirements. `openspec validate <change> --strict` valid, `<spec> --strict` valid, `--all --strict` 43 passed 0 failed. ARCHIVE: git mv to openspec/changes/archive/2026-09-05-a-terminal-run-releases-the-queue-behind-it; tasks.md had 0 unchecked / 24 checked; `openspec list` now reports no active changes. FINDINGS: F286 Status open -> `fixed 1529d91`, carrying both drives' project and run IDs, the 0.140s vs 2m06s A/B, the five test names, and the two things not settled (app-server never driven; the conftest settle-loop was harness, not product). Commit attribution checked with `git show --name-only`, not recalled -- only 1529d91 touches hub/hub/. Two errors in my own draft Status were caught against the tree before committing: `six tests` (it is five -- 3.1 and 3.2 are one test) and a stop-test name that does not resolve (it is test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped). The second half of the previous next_action was a NO-OP and is recorded as one: no index paragraph ever counted F286 as open -- the only open-severity list is FINDINGS.md:35, dated 2026-08-27, and F286 was filed 2026-09-04; every F286 occurrence in the file is inside its own section. Matches the F285 precedent (3c2230c: Status line only). ruff clean over src/ hub/ tests/; no .py touched this iteration."
         }
     ],
     "decisions_for_user": [],
