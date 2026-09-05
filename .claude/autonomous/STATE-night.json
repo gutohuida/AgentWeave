@@ -8,33 +8,72 @@
     "parent_branch":  "master",
     "parent_sha":  "a38caee",
     "stop_at":  "2026-09-06T07:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
     "log_file":  ".claude/autonomous/2026-09-05-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "current":  "N-1",
+    "next_action":  "N-1. F292 DIAGNOSIS ONLY -- name the connection that holds the database file at the schema reset. Do NOT change what the fixture does; the repair is DEC-1 and the operator did not write the line authorising it. Steps: (a) in hub/tests/conftest.py, immediately before the drop_all at ~line 298, log the sync engine pool's checked-out count AND whether any pooled connection is inside a transaction, and emit it only on failure so a green run stays quiet; (b) attempt local reproduction -- loop hub/tests/test_flow_fires_a_review_turn.py and hub/tests/test_reviewer_is_not_the_author.py together under py -3.11, and if it will not reproduce, lower busy_timeout in conftest.py:111 temporarily to make the contention loud rather than slow (put it back). (c) Record what the diagnostic names in F292's section, including a negative result -- 'did not reproduce in N runs' is a real finding here. The day window already ruled out a leaked reader and a leaked idle connection by control run (scripts/drive/f287_does_the_refresh_hold_a_lock.py): the leaker wrote and did not commit. Read F292 in full at scripts/drive/FINDINGS.md:20300 before starting.",
     "queue":  [
                   {
                       "id":  "compose",
+                      "status":  "done",
+                      "title":  "Compose this window's queue from the playbook",
+                      "detail":  "Done iteration 1. No APPROVED rows -- the 2026-09-05 APPROVALS row carries no status token, so the window falls to the backlog. Nothing to archive. Green-tree check run and recorded in the log entry."
+                  },
+                  {
+                      "id":  "N-1",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "F292 -- name the connection that holds the file. Diagnostic only.",
+                      "detail":  "See next_action. HARD LIMIT: this item may not change what the fixture does. F292's own text says 'Not a D-6 repair ... the mechanism is not established, and the last change made to this file on this evidence did not work.' The day window asked the operator for a DIRECTION.md line saying whether the night may make a second guess at conftest.py; no line was written, so the answer is no. Adding a diagnostic that prints on failure is additive and is not that guess."
+                  },
+                  {
+                      "id":  "N-2",
+                      "status":  "open",
+                      "title":  "Reconcile the ledger's open-severity-A index with the sections' own Status lines",
+                      "detail":  "scripts/drive/FINDINGS.md's index asserts 'Revised 2026-09-02: the open severity-A list is one -- F271.' Measured while composing: F140 (A), F142 (A) and F274 (A) also carry **Status:** open. Correct the paragraph, and for each say what it is blocked on (F140/F142: two defensible repairs, choice is the operator's; F271: no proposal; F274: proposed 2026-09-05, unapproved). Re-derive the list yourself from the Status lines rather than trusting this detail -- that is the whole point of the item. The playbook calls this non-optional: 'A backlog that cannot say what is done is read as a backlog of everything.' It also mis-steers tomorrow: today's APPROVALS.md reasons from this paragraph twice. Do not rewrite history in the ledger: add the correction as a dated revision paragraph in the same style as the ones already there, so the record of having been wrong survives."
+                  },
+                  {
+                      "id":  "N-3",
+                      "status":  "open",
+                      "title":  "F126 (B) -- a spent checkpoint can be cut over twice, and the duplicate does real billed work",
+                      "detail":  "scripts/drive/FINDINGS.md:8940 or thereabouts, section '## F126 (B)'. Reproduced live 2026-08-30 on this checkout; harness scripts/drive/t_row15_cutover.py exists. FIRST STEP is the three carve-out conditions from .claude/loops/day-window.md's D-6 section, and it is a real gate, not a formality: (1) grep openspec/specs/ for the checkpoint-cutover capability and confirm no requirement is touched; (2) no migration, no request/response shape change, no Pydantic schema the UI reads; (3) fully described by the finding with a reproduction, and the fix smaller than the argument for it. If any fails, STOP, write it up as a note to tomorrow's spec loop, and move to N-4 -- discovering that is a good outcome, not a failure. If they hold: guard the second cutover, add a test, MUTATION-CHECK it (delete the guard, watch a named test fail), run the CI lint set, drive it on 8011 from source against a fresh project, and set the finding's Status to fixed <sha>."
+                  },
+                  {
+                      "id":  "N-4",
+                      "status":  "open",
+                      "title":  "F3 (C) -- contact_mode still defaults to 'watchdog-spawn', naming a deleted subsystem on the public API",
+                      "detail":  "scripts/drive/FINDINGS.md:203. Same carve-out condition check as N-3 before anything else; note that changing a default *value* is not a response *shape* change, but grep openspec/specs/ for contact_mode before believing that, and check whether anything reads the value rather than merely returning it. If it is genuinely vestigial, the honest fix may be removing the field rather than renaming its default -- and removing a field IS a response shape change, which fails condition 2 and sends it to the spec loop. Say which it is."
+                  },
+                  {
+                      "id":  "N-5",
+                      "status":  "open",
+                      "title":  "Close the window",
+                      "detail":  "Per the playbook's 'Ending the window': what changed (marking product code vs documentation), what was proven with evidence vs merely inferred, what is open, decisions waiting for the operator, and what to distrust. Then set next_action to the literal JSON null so the driver unregisters itself. Carry forward the notes_for_tomorrow list below."
                   }
               ],
     "decisions_for_user":  [
-
+                               "DEC-1 (F292, carried from the day window, still unanswered). The 2026-09-05 APPROVALS section asked for a DIRECTION.md line saying whether the night window may make a second attempt at hub/tests/conftest.py on the F292 evidence. No line was written. This window has therefore NOT touched the fixture's behaviour: N-1 adds a diagnostic only. The intermittent 'database is locked' at test setup is the sole thing between this branch and the merge gate's condition 3, so this line is worth writing before tomorrow night.",
+                               "DEC-2. spec-queue/APPROVALS.md's 2026-09-05 row carries NO status token -- the DECIDE session did not sit down, so 2026-09-05-the-conversation-carries-its-own-run-facts (F274, the oldest open severity A) was neither approved nor rejected and could not be built tonight. It is 44 tasks across 8 phases and is the largest thing waiting. The same section also offers F288 as an alternative slot if you would rather close a nine-hour-old spec breach than the oldest A.",
+                               "DEC-3. F288 (B) is a breach of a requirement that shipped the night before (openspec/specs/agent-conversation-workspace/spec.md:2217, quantified over every agent holding queued input in the project). The finding's own text sends the question to the spec loop rather than to a repair: does the existing requirement already cover restart reconciliation, or does it need a scenario naming it so a test can be written? Either way it needs the day window first, so it is a note to tomorrow rather than tonight's work."
+                           ],
+    "notes_for_tomorrow":  [
+                               "F271 (A) has no proposal and is the day window's, per the night playbook's step 4.2.",
+                               "F140 (A) and F142 (A) are open, blocked on an operator choice between two defensible repairs -- and they are missing from the ledger's open-A summary, which N-2 corrects.",
+                               "F288 (B) and F289 (C) both need the spec loop, and F289 was found by F288's reproduction: the stale waiting_reason is what makes the F288 strand look like an ordinary wait.",
+                               "F276, F277 and F278 (all C) each say 'not fixed here' with a stated reason, and each names its own scenario. They are spec-loop material, not carve-out repairs.",
+                               "pytest-timeout is NOT installed on this machine -- py -3.11 -m pytest --timeout=N exits 4 with 'unrecognized arguments'. Cost one background run this iteration."
                            ],
     "limits":  [
                    "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
                    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
                ]
 }
