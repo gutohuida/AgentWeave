@@ -5,8 +5,10 @@ import atexit
 import contextlib
 import os
 import shutil
+import sys
 import tempfile
 import warnings
+import weakref
 from pathlib import Path
 
 import pytest
@@ -122,6 +124,170 @@ _REAL_ENGINE = engine
 #: product's own bound (`inbound_queue.DELIVERY_ATTEMPT_LIMIT`) on how long a failing entry can keep
 #: re-scheduling its agent; the rest is headroom for several agents chaining at once.
 _MAX_BACKGROUND_SETTLE_PASSES = 10
+
+
+# ---------------------------------------------------------------------------
+# F292 diagnostic - name the connection that holds the file at the schema reset.
+#
+# DIAGNOSTIC ONLY. Nothing below changes what any fixture *does*; it records who
+# checked out each pooled connection and prints that record only when the schema
+# reset actually fails. A green run is as quiet as it was before.
+#
+# Why the obvious diagnostic is not enough. F292 asked for "the pool's checked-out
+# count immediately before the `drop_all`", and that number is *structurally blind*
+# to the leak it is looking for - measured 2026-09-05, not reasoned:
+# `AsyncEngine.dispose()` does not merely empty the pool, it **replaces** it, and the
+# fresh pool's counters start at zero while a connection checked out from the old
+# pool is still open and still holding the file. So a leaked writer is invisible to
+# `pool.checkedout()` at exactly the line that wants to see it. Hence a registry of
+# our own, fed by engine-level `checkout`/`checkin` events, which survive the
+# replacement (SQLAlchemy re-applies engine-level pool listeners to the new pool, and
+# the old pool keeps its own - so a connection checked out before the dispose still
+# dispatches its checkin afterwards; both halves measured).
+#
+# What the registry answers that the count cannot: *which test* checked the surviving
+# connection out. The failure lands at the setup of the next test, which is never the
+# one that caused it - all three CI failures recorded in F292 blame a victim.
+_CHECKED_OUT: "dict[int, tuple[str, tuple[str, ...], weakref.ref]]" = {}
+
+#: The nodeid of the test currently running, stamped onto every checkout. Set from
+#: `pytest_runtest_logstart` rather than from a fixture, so that fixture ordering
+#: cannot mis-attribute a checkout made during setup.
+_CURRENT_TEST = "<no test running>"
+
+#: Frames from outside this repository are noise in a checkout origin.
+_REPO_MARKER = f"{os.sep}hub{os.sep}"
+
+
+def pytest_runtest_logstart(nodeid, location):  # noqa: ANN001, ANN201
+    global _CURRENT_TEST
+    _CURRENT_TEST = nodeid
+
+
+def _current_task_label() -> str:
+    """The asyncio task this checkout happened under, or why there is not one.
+
+    F292's standing hypothesis is *"a fire-and-forget `asyncio` task created during the
+    previous test"*. A task's name and the qualified name of its coroutine are what
+    distinguish that from a checkout made on the test's own path, and neither is
+    recoverable from a stack once the task is gone - so it is recorded here.
+    """
+    try:
+        task = asyncio.current_task()
+    except RuntimeError:  # pragma: no cover - diagnostic only
+        return "<no running loop>"
+    if task is None:  # pragma: no cover - diagnostic only
+        return "<no task>"
+    coroutine = task.get_coro()
+    return f"{task.get_name()} running {getattr(coroutine, '__qualname__', '?')}"
+
+
+def _checkout_origin():
+    """A few frames of this checkout's caller, from this repository only.
+
+    Deliberately a raw frame walk rather than `traceback.extract_stack`: the latter
+    resolves source text through `linecache` for every frame, and this runs on every
+    checkout in a 3,900-test suite. Filenames, line numbers and function names are
+    what identify the caller; the source line is not needed.
+
+    The greenlet hop is not optional, and the first version of this function did not
+    have it: SQLAlchemy runs the synchronous half of every async call inside a greenlet
+    (`util._concurrency_py3k.greenlet_spawn`), and a greenlet's frame chain **ends at
+    its own entry point**. Walking `f_back` from a pool event therefore reaches the
+    pool and stops, with the code that opened the session on the *parent* greenlet's
+    stack and unreachable. Measured on a forced reproduction: without the hop the only
+    frame this returned was the listener's own, which names nothing.
+    """
+    roots = [sys._getframe(2)]  # skip this function and the event listener that called it
+    try:
+        import greenlet
+
+        current = greenlet.getcurrent()
+        hops = 0
+        while current is not None and hops < 5:
+            current = current.parent
+            hops += 1
+            if current is not None and current.gr_frame is not None:
+                roots.append(current.gr_frame)
+    except Exception:  # pragma: no cover - diagnostic only
+        pass
+
+    frames = []
+    for root in roots:
+        frame = root
+        depth = 0
+        while frame is not None and depth < 80 and len(frames) < 6:
+            filename = frame.f_code.co_filename
+            if _REPO_MARKER in filename and "site-packages" not in filename:
+                frames.append(f"{Path(filename).name}:{frame.f_lineno} {frame.f_code.co_name}")
+            frame = frame.f_back
+            depth += 1
+    return tuple(frames)
+
+
+@event.listens_for(engine.sync_engine, "checkout")
+def _f292_record_checkout(dbapi_connection, connection_record, connection_proxy):  # noqa: ANN001
+    _CHECKED_OUT[id(connection_record)] = (
+        f"{_CURRENT_TEST} [task: {_current_task_label()}]",
+        _checkout_origin(),
+        weakref.ref(connection_record),
+    )
+
+
+@event.listens_for(engine.sync_engine, "checkin")
+def _f292_record_checkin(dbapi_connection, connection_record):  # noqa: ANN001
+    _CHECKED_OUT.pop(id(connection_record), None)
+
+
+@event.listens_for(engine.sync_engine, "close")
+def _f292_record_close(dbapi_connection, connection_record):  # noqa: ANN001
+    _CHECKED_OUT.pop(id(connection_record), None)
+
+
+def _in_transaction(connection_record) -> str:  # noqa: ANN001
+    """Whether this record's connection has an open transaction, or why we cannot say.
+
+    `aiosqlite.Connection.in_transaction` is a plain attribute read forwarding to the
+    underlying `sqlite3.Connection`; it schedules nothing on the connection's worker
+    thread or its event loop, so it is safe to read here even when the loop that
+    created the connection is gone (measured 2026-09-05). Every failure mode is
+    swallowed into the returned string - a diagnostic must not be able to replace the
+    error it is diagnosing.
+    """
+    try:
+        dbapi_connection = connection_record.dbapi_connection
+        if dbapi_connection is None:
+            return "closed"
+        return "IN TRANSACTION" if dbapi_connection._connection.in_transaction else "idle"
+    except Exception as exc:  # pragma: no cover - diagnostic only
+        return f"unknown ({type(exc).__name__})"
+
+
+def _f292_snapshot(stage: str) -> str:
+    """One line of pool state, plus one line per connection this process still holds out."""
+    lines = [f"  [{stage}] pool.status()={_REAL_ENGINE.sync_engine.pool.status()!r}"]
+    if not _CHECKED_OUT:
+        lines.append(f"  [{stage}] registry: no connection checked out")
+        return "\n".join(lines)
+    for nodeid, origin, record_ref in list(_CHECKED_OUT.values()):
+        record = record_ref()
+        state = "collected" if record is None else _in_transaction(record)
+        lines.append(f"  [{stage}] held by {nodeid} -> {state}")
+        for frame_line in origin:
+            lines.append(f"  [{stage}]     at {frame_line}")
+    return "\n".join(lines)
+
+
+def _f292_report(*snapshots: str) -> str:
+    return (
+        "\n"
+        + "=" * 78
+        + "\nF292 DIAGNOSTIC: the schema reset failed. Who was holding the database:\n"
+        + "\n".join(snapshots)
+        + "\n(`pool.status()` after the dispose counts a *new* pool and cannot see a "
+        "connection\nchecked out from the old one; the registry lines can. See F292 in "
+        "scripts/drive/FINDINGS.md.)\n" + "=" * 78 + "\n"
+    )
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -295,14 +461,25 @@ async def app(monkeypatch):
     #
     # This is contention the suite did not have on `:memory:`, where there were no file
     # locks at all. It is the cost of the pool that fixes F285, and it is paid here.
+    _f292_before_dispose = _f292_snapshot("before dispose")
     await _REAL_ENGINE.dispose()
+    _f292_before_drop = _f292_snapshot("before drop_all")
 
     # ASGITransport does not trigger the FastAPI lifespan, so we run init_db
     # (create_all + the instance operator credential) explicitly before each test.
     assert_engine_is_disposable()
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.drop_all)
-        await connection.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+            await connection.run_sync(Base.metadata.create_all)
+    except Exception:
+        # The F292 diagnostic above, printed only on the failure path. pytest shows
+        # captured stderr under "Captured stderr setup" for an ERROR at setup, which is
+        # exactly where this failure lands.
+        sys.stderr.write(
+            _f292_report(_f292_before_dispose, _f292_before_drop, _f292_snapshot("at failure"))
+        )
+        raise
     await seed_test_project()
     await init_db()
     async with AsyncClient(

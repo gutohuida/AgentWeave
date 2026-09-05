@@ -20327,6 +20327,74 @@ reclaim one a running task has checked out mid-transaction, which is precisely t
 locks. **The diagnostic this entry asks for should therefore log the pool's checked-out count *and*
 whether any connection is in a transaction, immediately before the `drop_all`.**
 
+**Instrumented 2026-09-05 (night N-1) -- and the diagnostic this entry asked for is blind.** Still
+open, still not reproduced from the suite. What follows is measurement; the mechanism sentence at
+the bottom of this entry is still a hypothesis.
+
+*The asked-for measurement could never have named the holder.* The paragraph above asks for "the
+pool's checked-out count immediately before the `drop_all`". `AsyncEngine.dispose()` does not empty
+the pool, it **replaces** it -- the pool object's identity changes and the new pool's counters start
+at zero, while a connection checked out from the old one stays open and keeps holding the file.
+Measured directly: after a dispose with one connection still out, `pool.status()` reads
+`Current Checked out connections: 0`. In the forced reproduction below it read `0` even *before* the
+fixture's own dispose, because the previous test's autouse teardown had already disposed once. So at
+that line the count is zero in precisely the situation being diagnosed.
+
+*What is in the tree instead.* `hub/tests/conftest.py` now keeps its own registry of checked-out
+connections, fed by `checkout`/`checkin`/`close` listeners registered on the **engine** rather than
+the pool -- measured to survive the replacement in both directions: SQLAlchemy re-applies
+engine-level pool listeners to the new pool, and a connection checked out from the old pool still
+dispatches its checkin to the old pool's copy of them. For every connection still out it records the
+nodeid of the test that checked it out, the asyncio task and its coroutine's qualified name, up to
+six frames of the call site from this repository, and a weakref to the `_ConnectionRecord` so the
+transaction state can be read later. It is printed to stderr **only when the schema reset raises**,
+so a green run is byte-for-byte as quiet as before, and it changes nothing about what the fixture
+does. This is not the DEC-1 repair and does not pre-empt it.
+
+Three implementation facts, recorded so the next attempt does not re-derive them:
+
+- The DBAPI connection object is **not weakref-able** -- SQLAlchemy's `AdaptedConnection` uses
+  `__slots__` with no `__weakref__`. The `_ConnectionRecord` is, and reaches the connection.
+- `aiosqlite.Connection.in_transaction` is a plain forward to `sqlite3.Connection.in_transaction`.
+  It schedules nothing on the connection's worker thread and touches no event loop, so it is safe to
+  read from the fixture after the loop that created the connection is gone.
+- SQLAlchemy runs the synchronous half of every async call **inside a greenlet**, and a greenlet's
+  frame chain ends at its own entry point. Walking `f_back` from a pool event therefore reaches the
+  pool and stops, with the code that opened the session unreachable on the parent greenlet's stack.
+  Without a hop to `greenlet.getcurrent().parent.gr_frame` the origin names only the listener itself.
+
+*The instrument is proven, on a forced reproduction.* A throwaway two-test file -- written, run and
+deleted inside this iteration -- leaked exactly the shape D-6's control established (a session that
+wrote and did not commit, held across the test boundary). The next test's `app` fixture then failed
+with **the error CI reports, at the same kind of statement**:
+`sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked` on
+`DROP TABLE requirement_drift`, `ERROR at setup`, 34.87s. The diagnostic printed:
+
+```
+F292 DIAGNOSTIC: the schema reset failed. Who was holding the database:
+  [before dispose] pool.status()='... Current Checked out connections: 0'
+  [before dispose] held by tests/test_zz_f292_diagnostic_probe.py::test_one_leaks_an_uncommitted_write
+                   [task: Task-7 running test_one_leaks_an_uncommitted_write] -> IN TRANSACTION
+  [before dispose]     at test_zz_f292_diagnostic_probe.py:22 test_one_leaks_an_uncommitted_write
+  ... same at [before drop_all] and [at failure] ...
+```
+
+Culprit test, task, source line and transaction state -- against a failure reported at the victim.
+
+*Negative result, and it is evidence.* **F292 does not reproduce locally from the two files CI
+blamed, and there is no contention in them at all.** 15 consecutive runs of
+`tests/test_flow_fires_a_review_turn.py tests/test_reviewer_is_not_the_author.py` under `py -3.11`:
+`21 passed` every time, 13.46s-14.87s. Then the same pair with `busy_timeout` temporarily lowered
+from 30000 ms to **50 ms** -- which turns any contention, however brief, from a wait into an
+immediate failure -- passed again. Sub-millisecond contention inside those two files is therefore
+ruled out, not merely unobserved. Whatever holds the file runs **before** them in full-suite order.
+
+That also disposes of one cheap explanation. CI runs plain `pytest tests/ -v` from `hub/` with no
+`pytest-randomly` installed and no `-n`, so the order is deterministic run to run: the intermittency
+is **timing**, not ordering, which is what a fire-and-forget task would look like and what a
+different test file's leak would not.
+
+
 F285 was the Hub suite sharing one DBAPI connection across every `AsyncSession`, because an
 in-memory SQLite URL gets a `StaticPool`. It was fixed on 2026-09-04 by moving the suite to a
 file-backed temporary database per process (`d9ad1e0`), which gets an `AsyncAdaptedQueuePool` -- one
@@ -20370,12 +20438,12 @@ pool's *idle* connections -- it cannot reclaim one that a still-running task has
 surviving writer is more likely a fire-and-forget `asyncio` task created during the previous test
 than the scheduler object itself. **That sentence is a hypothesis and has not been measured.**
 
-Reproduce (not yet run): run `hub/tests/test_flow_fires_a_review_turn.py` and
-`hub/tests/test_reviewer_is_not_the_author.py` in a loop under `py -3.11` and watch for a setup
-error; if it will not reproduce locally, lower `busy_timeout` in `conftest.py:111` to make the
-existing contention loud rather than slow. The diagnostic worth having either way is *which*
-connection holds the file -- log the checked-out count from the pool immediately before the
-`drop_all`, so the next occurrence names its cause instead of its victim.
+Reproduce -- **run 2026-09-05 (night N-1), both halves, and neither reproduced**: 15 loops of
+`hub/tests/test_flow_fires_a_review_turn.py` and `hub/tests/test_reviewer_is_not_the_author.py`
+under `py -3.11`, then the same pair at `busy_timeout=50`. See the instrumented section above for
+what that rules out and for the whole-suite loud run. The diagnostic that section asked for is now
+in the tree, so **the next occurrence in CI names its cause instead of its victim** -- the checkout
+registry prints under "Captured stderr setup" on the erroring test.
 
 Not a D-6 repair. The carve-out requires a fix smaller than the argument for it, and here the
 argument is unfinished: the mechanism is not established, and the last change made to this file on
