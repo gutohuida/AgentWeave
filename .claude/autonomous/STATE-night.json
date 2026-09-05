@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "a38caee",
     "stop_at": "2026-09-06T07:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-09-05-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "N-1b",
-    "next_action": "N-1b (retry). Read .claude/autonomous/scratch/loud-suite.txt -- the whole Hub suite at busy_timeout=50, RELAUNCHED detached in iteration 3 (WMI-parented, PID 25500, started 23:51, at 15% when iteration 3 closed; a full pass is ~25-30 min, so it should be finished). (a) Confirm it finished: the last line reads 'EXIT=<n>'; if that line is absent it is still running -- do NOT wait, take N-3 this firing and come back. (b) `grep -n 'held by' loud-suite.txt` and `grep -n 'ERROR at setup\\|database is locked'`. (c) Write the answer into F292's 'Instrumented 2026-09-05 (night N-1)' section, INCLUDING a clean negative -- 'no test in the suite held the file at 50ms' is a large result, not a non-result. TWO CAUTIONS: it is not a green check (the pragma is not the shipped one), and one failed schema reset cascades into tests that are only its victims -- attribute only the FIRST failure. Do not change hub/tests/conftest.py on what it says; DEC-1 is still unanswered.",
+    "current": "N-4",
+    "next_action": "N-4. F3 (C) -- `contact_mode` still defaults to 'watchdog-spawn', naming a deleted subsystem on the public API. scripts/drive/FINDINGS.md:203. RUN THE CARVE-OUT GATE FIRST and write down each of the three answers, as N-3 did: (1) grep openspec/specs/ for contact_mode -- and grep the whole tree for who READS the value, not just who returns it; (2) note that changing a default *value* is not a response *shape* change, but REMOVING the field is, and if the honest fix is removal then condition 2 fails and this goes to the spec loop; (3) the finding must carry a reproduction. Say plainly which of the two it is. N-3's lesson applies directly: the finding's own proposed fix may not be implementable as worded -- check the code before believing the shape. If it is a carve-out repair: fix, test, MUTATION-CHECK, run `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, drive it on 8011 from source against a fresh project (8011 is FREE -- the N-3 drive Hub was stopped; .claude/autonomous/scratch/n3drive/ has a reusable seed+drive pattern), commit the code first and then set Status to `fixed <sha>`. If it fails the gate, write it up for tomorrow's spec loop and go straight to N-5.",
     "queue": [
         {
             "id": "compose",
@@ -29,9 +29,9 @@
         },
         {
             "id": "N-1b",
-            "status": "open",
+            "status": "done",
             "title": "Read the whole-suite busy_timeout=50 run and record what it names in F292",
-            "detail": "RELAUNCHED iteration 3 -- the first run was DEAD, not slow. It died with iteration 2's process (mtime == that iteration's commit second, 12%, 588 bytes, zero failures, nothing named); kept as loud-suite-partial-2326.txt. A harness background process does not outlive its firing, which is the boundary a 25-min suite must cross. The relaunch is detached through WMI (Invoke-CimMethod Win32_Process Create, parented under WmiPrvSE, outside any job object the harness kills) via .claude/autonomous/scratch/run_loud.cmd, and needs NO edit to conftest.py: the pragma override is a scratch plugin (.claude/autonomous/scratch/aw_busy50.py, -p aw_busy50 + PYTHONPATH) that attaches its connect listener from pytest_sessionstart, so it registers AFTER conftest's 30000 listener and wins on last-write. Confirmed live: the file opens '[aw_busy50] busy_timeout=50 override attached'."
+            "detail": "Done iteration 4. The detached WMI-parented run finished: 3968 passed, 86 skipped, 1054.76s, EXIT=0. Zero 'held by', zero 'database is locked', zero 'ERROR at setup' -- the failure-path diagnostic never printed because the schema reset never raised. The override was MEASURED in force rather than trusted from its banner: reading the pragma back inside the app fixture gives 30000 without the plugin and 50 with it. Recorded in F292 as a clean negative with both cautions kept (not a green check, the pragma is not the shipped one) and two stated limits (collected 23:51 so it excludes N-3's tests; n=1 bounds mechanism, not frequency). conftest.py unchanged; DEC-1 still unanswered."
         },
         {
             "id": "N-2",
@@ -41,9 +41,9 @@
         },
         {
             "id": "N-3",
-            "status": "open",
+            "status": "done",
             "title": "F126 (B) -- a spent checkpoint can be cut over twice, and the duplicate does real billed work",
-            "detail": "scripts/drive/FINDINGS.md:8940 or thereabouts, section '## F126 (B)'. Reproduced live 2026-08-30 on this checkout; harness scripts/drive/t_row15_cutover.py exists. FIRST STEP is the three carve-out conditions from .claude/loops/day-window.md's D-6 section, and it is a real gate, not a formality: (1) grep openspec/specs/ for the checkpoint-cutover capability and confirm no requirement is touched; (2) no migration, no request/response shape change, no Pydantic schema the UI reads; (3) fully described by the finding with a reproduction, and the fix smaller than the argument for it. If any fails, STOP, write it up as a note to tomorrow's spec loop, and move to N-4 -- discovering that is a good outcome, not a failure. If they hold: guard the second cutover, add a test, MUTATION-CHECK it (delete the guard, watch a named test fail), run the CI lint set, drive it on 8011 from source against a fresh project, and set the finding's Status to fixed <sha>."
+            "detail": "Done iteration 4, fixed 3142a91, driven live 13/13 on 8011. The carve-out gate passed on all three conditions and the answers are in the log. The finding's recommended shape (2) needs a migration (fails condition 2), AND shape (1) as worded is not implementable without shape (2) -- nothing links an InboundQueueEntry to a checkpoint. So the guard is on `predecessor.lifecycle == 'archived'`, a SUPERSET of the reported defect: it also refuses a cutover from a conversation archived by hand. Recorded as a widening, not as an equivalent. Mutation-checked; the duplicate was printed directly from the guardless tree."
         },
         {
             "id": "N-4",
@@ -59,7 +59,7 @@
         }
     ],
     "decisions_for_user": [
-        "DEC-1 (F292, carried from the day window, still unanswered). Whether the night window may make a second attempt at hub/tests/conftest.py's BEHAVIOUR on the F292 evidence. Still not written, so iteration 2 did not: it added a failure-path diagnostic only. Two things now make the answer cheaper to give. First, the repair the day window would have guessed at is aimed at the wrong thing -- `dispose()` REPLACES the pool, so the checked-out count that mitigation reasons about is zero by construction. Second, the next CI occurrence will now NAME the test that holds the file instead of the one that trips over it, so waiting for one is no longer waiting blind. The intermittent lock at test setup is still the only thing between this branch and the merge gate's condition 3.",
+        "DEC-1 (F292, carried from the day window, still unanswered). Whether the night window may make a second attempt at hub/tests/conftest.py's BEHAVIOUR on the F292 evidence. Still not written, so iterations 2-4 did not touch it. The evidence has moved twice since it was asked. First, the repair the day window would have guessed at is aimed at the wrong thing -- dispose() REPLACES the pool, so the checked-out count it reasons about is zero by construction. Second, a full suite pass at busy_timeout=50 (600x shorter than shipped) produced 3968 passed / EXIT=0 with no contention anywhere, which makes ordinary in-suite contention between two test connections measurably absent rather than merely unobserved -- so a conftest fixture change is now the LEAST likely repair, and the next CI occurrence will name the holder instead of the victim. The cheapest answer may now be 'no, wait for CI to name it'.",
         "DEC-2. spec-queue/APPROVALS.md's 2026-09-05 row carries NO status token -- the DECIDE session did not sit down, so 2026-09-05-the-conversation-carries-its-own-run-facts (F274, the oldest open severity A) was neither approved nor rejected and could not be built tonight. It is 44 tasks across 8 phases and is the largest thing waiting. The same section also offers F288 as an alternative slot if you would rather close a nine-hour-old spec breach than the oldest A.",
         "DEC-3. F288 (B) is a breach of a requirement that shipped the night before (openspec/specs/agent-conversation-workspace/spec.md:2217, quantified over every agent holding queued input in the project). The finding's own text sends the question to the spec loop rather than to a repair: does the existing requirement already cover restart reconciliation, or does it need a scenario naming it so a test can be written? Either way it needs the day window first, so it is a note to tomorrow rather than tonight's work."
     ],
@@ -67,13 +67,19 @@
         "F271 (A) has no proposal and is the day window's, per the night playbook's step 4.2.",
         "F288 (B) and F289 (C) both need the spec loop, and F289 was found by F288's reproduction: the stale waiting_reason is what makes the F288 strand look like an ordinary wait.",
         "F276, F277 and F278 (all C) each say 'not fixed here' with a stated reason, and each names its own scenario. They are spec-loop material, not carve-out repairs.",
-        "pytest-timeout is NOT installed on this machine -- py -3.11 -m pytest --timeout=N exits 4 with 'unrecognized arguments'. Cost one background run this iteration.",
         "F292's own 'Reproduce' instruction asked for a measurement that cannot work (pool.checkedout() after a dispose is 0 by construction). Worth carrying as a habit rather than a one-off: a finding's proposed diagnostic is an argument too, and gets checked like one.",
         "CI runs the Hub suite as plain `pytest tests/ -v`, no pytest-randomly, no -n. Test order is deterministic run to run, so F292's intermittency is timing and not ordering.",
         "The open severity-A list is SIX, not two -- F271, F274, F140, F142, F154, F155 (re-derived 2026-09-06, night N-2, from the 40 A sections' own Status lines and banners). F140/F142/F154/F155 each have an archived 2026-09-01 change that was never driven, and each carries the ledger's own 'stays open until somebody re-drives it' banner. The cheapest way to make the old two-count true is to drive those four.",
         "spec-queue/APPROVALS.md (2026-09-05) reasons off the old two-count and contradicts itself doing so: line 85 'F274 is the only open A' vs line 91 'the one remaining open severity-A row (F271)'. Left as written deliberately -- it is the record of a decision session -- but read FINDINGS.md's 2026-09-06 revision alongside it.",
         "A harness background process dies with the firing that launched it. For anything crossing an iteration boundary, detach through WMI (Win32_Process Create) as .claude/autonomous/scratch/run_loud.cmd does. Iteration 2 lost a whole suite run to this.",
-        "A recount cannot find a definition error. 2026-09-04 recomputed the open-A count from scratch and still got two, because both readings of 'open' were live in the same file. Same shape as F292's blind diagnostic: an argument checks differently from an outcome."
+        "A recount cannot find a definition error. 2026-09-04 recomputed the open-A count from scratch and still got two, because both readings of 'open' were live in the same file. Same shape as F292's blind diagnostic: an argument checks differently from an outcome.",
+        "pytest-timeout is NOT installed on this machine -- py -3.11 -m pytest --timeout=N exits 4 with 'unrecognized arguments'.",
+        "F126 is closed with shape (1), NOT the shape (2) it recommended. The column `cut_over_to_conversation_id` is still worth having -- it answers 'where did this checkpoint go', which nothing can answer today -- and it would let the refusal be narrowed to a spent checkpoint rather than any archived predecessor. That is a migration, so it is spec-loop work.",
+        "F126's remaining half is untouched and wants the spec loop: the UI banner filters on `checkpoint.trigger === 'context_pressure'` (AgentOutputPanel.tsx:485), so an operator-generated checkpoint is never offered a cutover.",
+        "A finding's proposed FIX is an argument too, and gets checked like one. F126's shape (1) named a link between a queue entry and a checkpoint that does not exist. Second instance in two iterations -- F292's proposed diagnostic was blind for the same class of reason.",
+        "Restarting the drive Hub is NOT optional after reseeding its database: dropping and recreating the schema under a running Hub gave 401 'Invalid or revoked operator credential' on a key row that was there. Cost one confusing drive pass.",
+        "There is no `GET /projects/{p}/checkpoints/{id}`. The checkpoint list route is per conversation (`/conversations/{id}/checkpoints`); `/checkpoints/{id}/rendered` and `/checkpoints/{id}/cutover` are the only by-id routes.",
+        ".claude/autonomous/scratch/n3drive/ holds a reusable pattern for a cheap live drive: seed a fresh temp DB through the Hub's own functions, start uvicorn on 8011 from source against it, then drive over real HTTP with scripts/drive/aw.py."
     ],
     "limits": [
         "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",

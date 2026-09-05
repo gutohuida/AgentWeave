@@ -8987,8 +8987,10 @@ caught in the wild, it caught within a day, in a harness that was not looking fo
 
 ## F126 (B) — a spent checkpoint can be cut over again, and the second press mints a second successor that does the work a second time
 
-**Status:** open, filed not fixed (iteration 8, `t_row15_cutover.py`, the one `[BAD]` of 36).
-**Still open, reproduced 2026-08-30 08:24 on this checkout** — the same file, now runnable against any fixture, was the one `[BAD]` of 37 again: `ckpt-e85b2f8ad366` cut over twice, successors `conv-8e14f60f8cd2` and `conv-509580740b71`, and the second successor's queue entry was delivered and burned a turn without `continue` ever being called on it.
+**Status:** fixed 3142a91 (shape 1, guard + two tests), driven live on 8011 2026-09-06 — 13/13
+verdicts, second and third presses both **409** with exactly one successor and one queue entry.
+See "Fixed 2026-09-06 (night N-3)" at the end of this section for what was *not* done and why.
+**Was open, reproduced 2026-08-30 08:24 on this checkout** — the same file, now runnable against any fixture, was the one `[BAD]` of 37 again: `ckpt-e85b2f8ad366` cut over twice, successors `conv-8e14f60f8cd2` and `conv-509580740b71`, and the second successor's queue entry was delivered and burned a turn without `continue` ever being called on it.
 
 `POST /projects/{p}/checkpoints/{id}/cutover` has no guard against being called twice on the same
 checkpoint. Driven live against `ckpt-5acb5c671217`:
@@ -9073,6 +9075,65 @@ answer by reading queue entries, and (1) is a subset of it.
 | `GET /checkpoints/{id}/rendered` | 2,035 chars, envelope + body, honest about the task list not being conversation-scoped |
 | Cutover | predecessor `archived`, successor `open`/`handoff`, title derived not regenerated, queue entry `origin_type: checkpoint` addressed to the successor and framed with the preamble |
 | **The relay** | the predecessor was told **not** to write `CHECKPOINT_B.txt`; after `continue`, the successor wrote it, containing `RELAYTWO`. The handover carried the work across, end to end, and the file on disk is the proof. |
+
+
+### Fixed 2026-09-06 (night N-3) — shape 1, and the shape it is not
+
+`cut_over` now refuses when the predecessor is already archived
+(`hub/hub/checkpoint_cutover.py:88`), which is what makes a cutover happen at most once per
+conversation. Asked there rather than in `archivable`, whose first line returns None for an
+archived conversation — that early return is right for archiving (a no-op, not an error) and is
+exactly the wrong question for a handover.
+
+**The recommendation was shape (2) and shape (2) is not what shipped.** Two reasons, both worth
+recording rather than glossing.
+
+1. Shape (2) needs a migration, which fails the day-window carve-out's second condition, so it is
+   not a repair this window may make. It stays open as an improvement, not as a defect.
+2. **Shape (1) as this section worded it is not implementable without shape (2).** It said "409
+   when a conversation already exists whose `origin == "handoff"` and whose queue entry names this
+   checkpoint" — but nothing durably links a queue entry to a checkpoint. `InboundQueueEntry` has
+   `origin_type == "checkpoint"` and the rendered text, and no checkpoint id. The link shape (1)
+   assumed already existed *is* the column shape (2) proposes to add. A second argument in this
+   ledger that reads plausibly and does not match the code.
+
+So the guard is on the predecessor's lifecycle, which is a **superset** of the reported defect: it
+also refuses a cutover from a conversation the operator archived by hand, which was previously
+allowed. That is deliberate and defensible — a cutover closes a conversation and opens its
+successor, and there is nothing left to close — and the refusal says `unarchive it first`, naming
+the route (`POST /conversations/{id}/unarchive`) that makes it possible again. It is a wider
+behaviour change than the finding asked for, and if the operator wants the narrower rule it needs
+shape (2)'s column. **Flagged rather than assumed.**
+
+It also restores an invariant already required elsewhere: `conversation-checkpoint`'s *"Lineage is
+recorded and participation is derived"* says lineage "is linear and belongs to one agent", and two
+successors of one predecessor sharing a `lineage_id` is a fork. No requirement in `openspec/specs/`
+governs cutover refusals, so nothing was breached by the old behaviour and nothing is changed by
+the new one — the fix upholds a requirement rather than touching one.
+
+**Evidence.**
+
+- `hub/tests/test_checkpoint_cutover.py` — `test_a_spent_checkpoint_cannot_be_cut_over_a_second_time`
+  and `test_a_conversation_archived_by_hand_is_not_cut_over_either`. Asserted on the rows, not on
+  the exception: one successor conversation, one checkpoint queue entry.
+- **Mutation-checked.** With the guard deleted, exactly those two tests fail and the other 39 pass.
+  A temporary test run against the guardless tree printed the duplicate directly:
+  successors `['conv-3427029bb24d', 'conv-3ca793b8b5f8']`, one shared title
+  `'Continued: Wire up the worker'`, one shared `lineage_id`, two entries.
+- **Driven live**, uvicorn on 8011 from this branch's source (pid started 00:07, no `.py` under
+  `hub/hub` or `src` newer), fresh database, fresh project `proj-n3drive`, real HTTP:
+  `.claude/autonomous/scratch/n3drive/drive.py`, 13/13. First press 200; second **409** with the
+  refusal text; third **409**; one successor and one entry throughout. The 409 matters on its own —
+  a guard that raises where the route does not catch it is a 500, which is the F108 lesson.
+- The `ready` checkpoint was **seeded** through the Hub's own `create_checkpoint` rather than
+  generated by a Haiku turn. That is a seeded *prerequisite*, not a seeded subject; the cutover
+  itself was never touched except over HTTP. Stated because `scripts/drive/README.md` asks for real
+  surface only.
+
+**Still open from this section, and not fixed here:** the banner filter on
+`checkpoint.trigger === 'context_pressure'` (`AgentOutputPanel.tsx:485`), so an
+operator-generated checkpoint is still never offered a cutover in the UI. It is a UI behaviour
+question, not a duplicate-work defect, and it wants the spec loop.
 
 
 ## Row 11 LOOPS, third pass — the three stall shapes that had never been driven, and D6's coalescing
@@ -20445,6 +20506,49 @@ That also disposes of one cheap explanation. CI runs plain `pytest tests/ -v` fr
 `pytest-randomly` installed and no `-n`, so the order is deterministic run to run: the intermittency
 is **timing**, not ordering, which is what a fire-and-forget task would look like and what a
 different test file's leak would not.
+
+**The whole suite at `busy_timeout=50`, 2026-09-06 (night N-1b) -- a clean negative, and a large
+one.** The obvious next step after the two-file control was the same 600x reduction applied to
+*every* test, so that any contention anywhere in the suite fails instead of waiting. It was run
+detached (WMI `Win32_Process Create`, so it survived the iteration boundary that killed the first
+attempt) with the pragma forced by a scratch pytest plugin rather than an edit to
+`hub/tests/conftest.py`, whose behaviour DEC-1 has not authorised anyone to touch.
+
+```
+3968 passed, 86 skipped, 249 warnings in 1054.76s (0:17:34)   EXIT=0
+```
+
+Zero `database is locked`, zero `ERROR at setup`, zero `OperationalError`, and the failure-path
+diagnostic added above never printed -- because the schema reset never raised.
+
+*The override was in force, not merely announced.* The plugin prints a banner, which proves only
+that it attached. Measured separately by reading the pragma back from a real session inside the
+`app` fixture: **30000 without the plugin, 50 with it.** So for a full pass, no connection anywhere
+in the Hub suite held the database file long enough for the next test's `drop_all` to wait even
+50 ms.
+
+**Two cautions, both load-bearing.**
+
+1. *This is not a green check.* The pragma is not the shipped one, and a pass here says the suite
+   has no contention on **this machine, at this moment**, not that CI has none. The finding stays
+   open; the merge gate's condition 3 is unchanged.
+2. *Nothing was attributed, because nothing failed.* The instruction anticipated that one failed
+   schema reset cascades into tests that are only its victims, and that only the FIRST failure may
+   be blamed. That caution never had to be applied.
+
+*What it costs the hypothesis.* The mechanism sentence at the bottom of this entry -- one test's
+connection still holding the file when the next test's `drop_all` runs -- now has to explain why a
+600x-shortened patience window did not expose it once in 3,968 tests. Ordinary in-suite contention
+between two test connections is the reading this most damages: it is no longer merely unobserved,
+it is measurably absent from a full pass. What survives is something that does **not** run on the
+suite's own schedule -- a fire-and-forget task, a spawned process, or a worker thread outliving the
+loop that made it -- which is also the only reading consistent with the intermittency being timing
+rather than ordering.
+
+*Two things this run does not tell you.* The suite was collected at 23:51 on the pre-N-3 tree, so
+it did not include that iteration's two new cutover tests. And a single pass is one sample of an
+intermittent failure whose observed CI rate is far below one in a run; a negative at n=1 bounds
+nothing about frequency, only about mechanism.
 
 
 F285 was the Hub suite sharing one DBAPI connection across every `AsyncSession`, because an
