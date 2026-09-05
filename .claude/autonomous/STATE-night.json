@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "a38caee",
     "stop_at": "2026-09-06T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-05-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "N-4",
-    "next_action": "N-4. F3 (C) -- `contact_mode` still defaults to 'watchdog-spawn', naming a deleted subsystem on the public API. scripts/drive/FINDINGS.md:203. RUN THE CARVE-OUT GATE FIRST and write down each of the three answers, as N-3 did: (1) grep openspec/specs/ for contact_mode -- and grep the whole tree for who READS the value, not just who returns it; (2) note that changing a default *value* is not a response *shape* change, but REMOVING the field is, and if the honest fix is removal then condition 2 fails and this goes to the spec loop; (3) the finding must carry a reproduction. Say plainly which of the two it is. N-3's lesson applies directly: the finding's own proposed fix may not be implementable as worded -- check the code before believing the shape. If it is a carve-out repair: fix, test, MUTATION-CHECK, run `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, drive it on 8011 from source against a fresh project (8011 is FREE -- the N-3 drive Hub was stopped; .claude/autonomous/scratch/n3drive/ has a reusable seed+drive pattern), commit the code first and then set Status to `fixed <sha>`. If it fails the gate, write it up for tomorrow's spec loop and go straight to N-5.",
+    "current": "N-5",
+    "next_action": "N-5. Close the window. Per the playbook's 'Ending the window', write the final log entry: what changed across iterations 1-5 (marking product code vs documentation -- only 3142a91 carries product code, every other commit is documentation), what was proven with evidence vs merely inferred (F126 driven 13/13 on 8011; F292's suite negative measured, not assumed; F3's gate verdict read from source and NOT driven; N-2's recount is what the sections say and not a re-drive), what is open, the decisions_for_user list below verbatim, and what to distrust. Carry notes_for_tomorrow forward. Then set next_action to the literal JSON null so the driver unregisters itself -- not a sentence saying the window is done.",
     "queue": [
         {
             "id": "compose",
@@ -47,9 +47,9 @@
         },
         {
             "id": "N-4",
-            "status": "open",
-            "title": "F3 (C) -- contact_mode still defaults to 'watchdog-spawn', naming a deleted subsystem on the public API",
-            "detail": "scripts/drive/FINDINGS.md:203. Same carve-out condition check as N-3 before anything else; note that changing a default *value* is not a response *shape* change, but grep openspec/specs/ for contact_mode before believing that, and check whether anything reads the value rather than merely returning it. If it is genuinely vestigial, the honest fix may be removing the field rather than renaming its default -- and removing a field IS a response shape change, which fails condition 2 and sends it to the spec loop. Say which it is."
+            "status": "done",
+            "title": "F3 (C) -- contact_mode default: ran the carve-out gate, and it FAILED",
+            "detail": "Done iteration 5. NOTHING IMPLEMENTED, and that is the outcome -- the playbook says discovering a change wants a spec is a good outcome. Gate answers written down: (1) zero hits for contact_mode in openspec/specs/, so a value swap passes -- but the honest fix (deletion) makes runner-registry/spec.md:186-201's scenario 'A self-registered agent with a runner bound' UNREACHABLE, so condition 1 fails for it. (2) FAILS on all three clauses: real column (models.py:206, migration 0005), Pydantic response field the UI mirrors (agents.py:119 / agents.ts:75), and a route removal. (3) reproduction passes, 'fix smaller than the argument' fails. WHICH OF THE TWO: it is a REMOVAL, and the operator already decided that on 2026-08-29 -- F111's decision paragraph names F3 as the same root and says both close by deletion. The value-swap escape is unavailable for three measured reasons: no honest replacement exists in _CONTACT_MODES; the 400 error text still recites watchdog-spawn as valid; and test_operator_agent_creation.py:56 asserts the wrong name in a whole-body equality. Two new measurements recorded: NOTHING reads the value (scheduler.py:213 needs self_registered AND poll, and both defaulting paths set self_registered=False), and F111's '~30 test files' is 16/42, really 15 files / 20 sites after deleting the file that tests the route."
         },
         {
             "id": "N-5",
@@ -64,6 +64,8 @@
         "DEC-3. F288 (B) is a breach of a requirement that shipped the night before (openspec/specs/agent-conversation-workspace/spec.md:2217, quantified over every agent holding queued input in the project). The finding's own text sends the question to the spec loop rather than to a repair: does the existing requirement already cover restart reconciliation, or does it need a scenario naming it so a test can be written? Either way it needs the day window first, so it is a note to tomorrow rather than tonight's work."
     ],
     "notes_for_tomorrow": [
+        "F3 and F111 are ONE spec-loop change, not two. The operator decided on 2026-08-29 that self-registration leaves the product; F3 is the same root. Night N-4 ran the carve-out gate on F3 and it failed -- the write-up in FINDINGS.md carries the full footprint, so the spec loop does not need to re-measure it. The first question it must answer is NOT the file count: it is how a test creates an agent when no runner CLI exists, since POST /projects/{p}/agents answers 409 unless probe_agent finds one and CI runners have no `claude` on PATH.",
+        "Deleting self-registration makes a SHIPPED requirement unreachable -- runner-registry/spec.md:186-201, scenario 'A self-registered agent with a runner bound'. That requirement, not the re-fixturing bill, is what makes this spec work. It needs a delta.",
         "F271 (A) has no proposal and is the day window's, per the night playbook's step 4.2.",
         "F288 (B) and F289 (C) both need the spec loop, and F289 was found by F288's reproduction: the stale waiting_reason is what makes the F288 strand look like an ordinary wait.",
         "F276, F277 and F278 (all C) each say 'not fixed here' with a stated reason, and each names its own scenario. They are spec-loop material, not carve-out repairs.",
@@ -79,7 +81,10 @@
         "A finding's proposed FIX is an argument too, and gets checked like one. F126's shape (1) named a link between a queue entry and a checkpoint that does not exist. Second instance in two iterations -- F292's proposed diagnostic was blind for the same class of reason.",
         "Restarting the drive Hub is NOT optional after reseeding its database: dropping and recreating the schema under a running Hub gave 401 'Invalid or revoked operator credential' on a key row that was there. Cost one confusing drive pass.",
         "There is no `GET /projects/{p}/checkpoints/{id}`. The checkpoint list route is per conversation (`/conversations/{id}/checkpoints`); `/checkpoints/{id}/rendered` and `/checkpoints/{id}/cutover` are the only by-id routes.",
-        ".claude/autonomous/scratch/n3drive/ holds a reusable pattern for a cheap live drive: seed a fresh temp DB through the Hub's own functions, start uvicorn on 8011 from source against it, then drive over real HTTP with scripts/drive/aw.py."
+        ".claude/autonomous/scratch/n3drive/ holds a reusable pattern for a cheap live drive: seed a fresh temp DB through the Hub's own functions, start uvicorn on 8011 from source against it, then drive over real HTTP with scripts/drive/aw.py.",
+        "A finding read on its own can be stale in a way the ledger already knows about. F3's queue item asked whether it was a cheap value swap; F111 -- which CITES F3 -- had recorded the operator's answer eight days earlier. Grep the ledger for references TO a finding, not just the finding. Third instance of this class in three iterations (F292's blind diagnostic, F126's unimplementable shape (1), now F3's already-decided shape).",
+        "Vestiges found around contact_mode, none fixed, none filed separately because they go with the same change: src/agentweave/transport/http.py:567 get_agent_registration has NO caller anywhere in the repo; src/agentweave/constants.py:288 CONTACT_MODES is read by nothing in src/ or tests/; hub/ui/src/api/agents.ts:75 declares contact_mode and no component reads it. Also mypy-baseline line 152 already records that OperatorAgentResponse.contact_mode is typed `str` while the column is `str | None`, so a NULL row returned through that schema would be a 500.",
+        "`mcp-push` and `watchdog-spawn` are behaviourally identical today -- scheduler.py:213 special-cases only `poll`. The vocabulary has three words and the code knows two states."
     ],
     "limits": [
         "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",

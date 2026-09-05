@@ -254,7 +254,8 @@ word — "UTC" — not a timezone feature.
 
 ## F3 (C) — `contact_mode` still defaults to `"watchdog-spawn"`
 
-**Status:** open (no commit references it)
+**Status:** open — **failed the no-spec carve-out gate, 2026-09-06 (night N-4). Spec-loop work, jointly
+with F111.** Nothing was changed. See *The gate, run and failed* below.
 
 Every agent created through `POST /projects/{id}/agents` comes back with
 `"contact_mode": "watchdog-spawn"` (measured: `agent-61634fab`, `agent-ee3a289d`, `agent-b38ef2b7`).
@@ -262,6 +263,99 @@ The watchdog was deleted and CLAUDE.md lists `watchdog.py` among the modules tha
 recreated. The name survives on the public API surface as the default value of a field, which
 means the first thing a new integrator reads about how agents are contacted names a subsystem that
 does not exist.
+
+### The gate, run and failed — 2026-09-06, night N-4
+
+The night window took this as a candidate for the day playbook's no-spec carve-out and ran the three
+conditions first. It fails, and the useful part is *why* — the answer is not "removal is a shape
+change", which is the objection that was expected.
+
+**The finding is still live, read from source.** `hub/hub/api/v1/agents.py:671` (operator creation)
+and `:1647` (`request_agent`) both pass the literal `contact_mode="watchdog-spawn"` into the `Agent`
+constructor, unconditionally — no env, no config, no branch. Last confirmed live over HTTP
+2026-08-29 (see F116's drive notes below, *"F3 confirmed live on the default path"*).
+
+**Condition 1 — touches no requirement.** *Passes for a value swap, fails for the honest fix.*
+`grep` over `openspec/specs/` for `contact_mode`, `contact mode`, `watchdog-spawn` and `mcp-push`
+returns **zero hits**: no requirement names the vocabulary. But `self_registered` does.
+`runner-registry/spec.md:186-201`, *"Launchability reports the runner that would actually be
+spawned"*, carries the scenario **"A self-registered agent with a runner bound"** — quantified over a
+population that deleting self-registration removes. The honest fix does not merely fail to touch a
+requirement; it makes a shipped scenario unreachable.
+
+**Condition 2 — no migration, no shape change.** *Fails.* `contact_mode` is a real column
+(`db/models.py:206`, added by migration `0005`), it is a Pydantic **response** field
+(`OperatorAgentResponse.contact_mode`, `agents.py:119`) that the UI mirrors as
+`CreatedAgent.contact_mode` (`hub/ui/src/api/agents.ts:75`), and the deletion also removes a route.
+All three clauses, not one.
+
+**Condition 3 — described by a finding with a reproduction.** *Passes on the reproduction* — one
+request, with three measured agent ids — and *fails on "the fix is smaller than the argument"*, for
+the honest shape.
+
+### Why the value swap is not available either, which is the part that was not obvious
+
+The expected escape was "changing a default *value* is not a response *shape* change, so swap the
+default and leave the field". It does not work, for three measured reasons.
+
+1. **There is no honest replacement in the vocabulary.** `_CONTACT_MODES = ("poll", "mcp-push",
+   "watchdog-spawn")` (`agents.py:74`). An operator-created agent is spawned by the Hub through
+   `runner_commands`; it does not poll, and it is not push-contacted over MCP. Swapping to an
+   existing member substitutes one false statement for another. An honest value means **adding a
+   term to the product's public vocabulary**, which is a naming decision on a public API field — the
+   operator's, not a 03:00 repair's.
+2. **It fixes half the complaint at best.** After a default swap, `POST /agents/register` with an
+   unknown mode still answers `400 Invalid contact_mode 'x'. Valid: poll, mcp-push, watchdog-spawn`
+   (`agents.py:1729`). The deleted subsystem stays on the public surface, in an error message,
+   naming itself as a valid way to be contacted. Removing it from `_CONTACT_MODES` narrows the
+   accepted request values while existing rows still hold the string — condition 2 again.
+3. **A test currently certifies the wrong name.** `hub/tests/test_operator_agent_creation.py:56`
+   asserts `"contact_mode": "watchdog-spawn"` inside a whole-body equality. So even the "one-line"
+   swap is a change plus a test that pins the deleted subsystem as correct behaviour.
+
+### Two things measured here that F3 and F111 did not say
+
+**Nothing reads the value this finding is about.** The field's only live reader is
+`scheduler.py:213` — `if agent_row.self_registered and agent_row.contact_mode == "poll"`. **Both**
+conjuncts. Operator-created (`agents.py:672`) and `request_agent`-created (`:1648`) agents are
+`self_registered=False`, so their `contact_mode` is never consulted by anything. It is written,
+stored, returned on the API, mirrored into a TypeScript interface, and read by nobody. Two further
+vestiges around it: `src/agentweave/transport/http.py:567` `get_agent_registration` returns it and
+has **no caller anywhere in the repo**, and `src/agentweave/constants.py:288` `CONTACT_MODES`
+duplicates the list and is read by nothing in `src/` or `tests/`. The UI declares the field and
+references it in no component.
+
+A corollary worth stating plainly: because only `"poll"` is special-cased, **`mcp-push` and
+`watchdog-spawn` are behaviourally indistinguishable today.** The vocabulary has three words and
+the code knows two states.
+
+**The re-fixturing cost is roughly half what F111 recorded, and it is one design question rather
+than typing.** F111's decision paragraph sized the change at *"the ~30 test files that use the route
+for convenience"*. Measured 2026-09-06:
+
+| | |
+|---|---|
+| Hub test files calling `POST /agents/register` | **16** |
+| Call sites across them | **42** |
+| Of which in `test_agents_self_registered.py` | **22** — that file *tests the route*, so it is deleted, not re-fixtured |
+| Files actually needing a replacement fixture | **15**, **20** sites, **13 of them with exactly one call** |
+| Outside `hub/tests/` | 8 harnesses in `scripts/drive/`, two copies of `e2e.py` (`.claude/skills/`, `.agents/skills/`), 2 in `testbed/scratch/`, one row in `docs/reference/hub-api.md` |
+
+So the number that was doing the most work in the original decision overstates by about 2×. **That
+does not reverse the verdict** — conditions 1 and 2 fail on the shipped requirement, the column and
+the response shape, none of which the count touches. But it changes how the spec loop should size
+it, and it replaces the cost objection with the real one: `POST /projects/{p}/agents` calls
+`probe_agent` and answers **409** unless a runner CLI is launchable, which is *why* the register
+route became the fast fixture. Every one of the 15 files needs a probe stub or a shared fixture
+providing one (`test_operator_agent_creation.py` monkeypatches `hub.api.v1.agents.probe_agent` at
+five sites, so the pattern exists). CI runners have no `claude` on PATH, so this is load-bearing,
+not cosmetic. **How a test creates an agent when no runner CLI exists is a design question**, and it
+is the thing the spec loop should answer first.
+
+`hub/tests/test_request_strictness.py:49` already carries `register_agent` in
+`NO_CONTRACT_BY_DESIGN` naming F111 as the reason, so the exemption is on the record and does not
+need re-filing.
+
 
 ## F4 (C) — A fresh project does not adopt the main branch it can already see
 
@@ -7467,6 +7561,15 @@ code agrees. Measured before asking:
 So F111 and F3 both close by **deletion**, not by wording — the agent that reads the wrong sentence
 can no longer be created. The real cost is re-fixturing the ~30 test files that use the route for
 convenience. Queued as a spec loop.
+
+**The "~30 test files" figure is wrong, measured 2026-09-06 (night N-4): it is 16 files and 42 call
+sites, of which 22 are in `test_agents_self_registered.py`, which the change deletes rather than
+re-fixtures — so 15 files and 20 sites, 13 of them one-liners.** And the cost is not the typing:
+`POST /projects/{p}/agents` answers 409 unless `probe_agent` finds a launchable runner CLI, which is
+why the register route became the fast fixture in the first place, and CI runners have no `claude`
+on PATH. Read F3's *The gate, run and failed* for the full footprint and for the shipped requirement
+in `runner-registry/spec.md:186-201` that the deletion makes unreachable — that requirement, not the
+file count, is what makes this spec work.
 
 ---
 
