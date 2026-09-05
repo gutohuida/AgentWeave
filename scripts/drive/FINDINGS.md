@@ -20132,13 +20132,46 @@ Harnesses: `scripts/drive/setup_d1_0905.py`, `t_d1_0905_release.py` (`complete`/
 `t_d1_0905_checkout_hold.py`, `t_d1_0905_reconcile_hold.py`, `t_d1_0905_reconcile_strand.py`,
 `t_d1_0905_released_outcome.py`, and `d1_0905_restart_hub.sh`.
 
-## F290 (B) - a run interrupted at Hub restart broadcasts its outcome to nobody, so an open conversation shows that turn as unfinished until someone reloads
+## F290 (RETRACTED, was B) - a run interrupted at Hub restart broadcasts its outcome to nobody, and the client refetches anyway
 
-**Status:** open. Filed 2026-09-05 by the day window's D-2/R2 spec round. **Derived from the code,
-not yet driven** -- every line below is a citation on this checkout; the timing claim ("indefinitely")
-is the code's consequence and is labelled unverified until phase 0.4 of
-`2026-09-05-the-conversation-carries-its-own-run-facts` measures it. That task exists and is
-written to measure exactly this.
+**Status:** **retracted 2026-09-05 by the day window's D-4/R3 spec round -- this is not a defect.**
+Filed the same day by D-3/R2 off a code reading, and refuted by a code reading of the layer above the
+one it examined. Kept rather than deleted: the premise it establishes is correct and load-bearing for
+the change that cites it, and a finding that was wrong is worth more in the record than out of it.
+
+**Why it is wrong.** The entry below reasons over `onSseReconnect` and notes that `useAgentOutput`
+subscribes to it, then concludes nothing covers the chat or timeline queries. **`useSSE` itself
+subscribes**, and invalidates everything:
+
+```ts
+// hub/ui/src/hooks/useSSE.ts:404-412
+useEffect(() => {
+  return onSseReconnect(() => {
+    queryClient.invalidateQueries()
+  })
+}, [queryClient])
+```
+
+`invalidateQueries()` with no filter matches every query in the cache and refetches every mounted
+one (React Query v5, `refetchType: 'active'` by default -- `hub/ui/package.json` pins `^5.62.16`).
+`useSSE()` is mounted unconditionally at `App.tsx:216`. The reconnect fires only after a `fetch` to
+`/api/v1/events` has succeeded (`useSSE.ts:315-317`), which cannot happen before the new Hub process
+serves -- by which time `reconcile_interrupted_runs()` has already written `interrupted`, since it is
+awaited before `yield`. So the turn labels itself within one reconnect cycle of the Hub coming back,
+with no reload. The behaviour is already pinned by a test: `useSSE-lifecycle.test.tsx:229`,
+*"invalidates all queries once the stream actually reconnects (not on the initial connect)"*.
+
+**Still true, and still worth having read for:** everything the entry says about the broadcast
+reaching nobody. That is why `run_interrupted` in `eventTargetsAgent` cannot serve the restart case,
+which is what sent R3 looking for the case that *does* justify the four terminal events -- **F291**.
+
+**Not driven either way.** Task 0.4 of `2026-09-05-the-conversation-carries-its-own-run-facts` still
+measures it, and is now written to expect seconds rather than "never"; if it reads "never", this
+retraction is what is wrong and design D8 goes with it.
+
+---
+
+**The original entry, unedited, follows.**
 
 `reconcile_interrupted_runs()` is awaited inside the FastAPI lifespan at `hub/hub/main.py:350`. A
 lifespan startup runs to completion **before uvicorn serves a single request**, so at the moment it
@@ -20167,7 +20200,8 @@ This is distinct from **F274**: F274 is the map missing a run it should contain;
 never being re-read. Both surface as a turn with no outcome, which is presumably why the second hid
 behind the first.
 
-Where it is being handled: `2026-09-05-the-conversation-carries-its-own-run-facts` design D8 and
+Where it is being handled *(superseded by the retraction above: D8 now adds no subscription, and
+task 3.4 says so)*: `2026-09-05-the-conversation-carries-its-own-run-facts` design D8 and
 task 3.4 add a reconnect-triggered invalidation to both chat hooks, and its second ADDED requirement
 is stated over the reconnect rather than over the event so a client cannot satisfy the letter while
 failing this case. That change does **not** repair `useAgentTimeline`, whose own invalidation on
@@ -20178,4 +20212,49 @@ for it.
 Reproduce (not yet run): task 0.4 -- conversation open in a browser, restart the Hub while a run is
 `running`, touch nothing, and time how long the turn stays unlabelled. Task 3.5 is the narrower
 check: watch the reconnected stream for a `run_interrupted` frame and confirm none arrives.
+
+## F291 (C) - a run that fails before its process spawns tells the conversation nothing, and the one path where that is total leaves the turn silent
+
+**Status:** open. Filed 2026-09-05 by the day window's D-4/R3 spec round, while re-deriving why the
+`2026-09-05-the-conversation-carries-its-own-run-facts` change adds four run-terminal events to the
+chat hooks' SSE predicate. **Derived from the code, not yet driven** -- every line below is a
+citation on this checkout; task 0.5 of that change is written to measure it.
+
+`useAgentChatHistory` and `useAgentRecentChat` refetch on `message_created`, `agent_output` and five
+queue events (`hub/ui/src/api/agentChat.ts:272-290`). They do not listen to the run lifecycle events,
+which is fine for every run whose process actually started: the terminal status row is written by
+`record_agent_output` (`agent_trigger.py:2325`) **after** the run row's own commit (`:2265`), so the
+`agent_output` that row broadcasts triggers a refetch that reads a run which has already ended.
+
+A run that fails **before** the spawn has no such row. The pre-spawn `except` block
+(`agent_trigger.py:1960-2010`) sets `run.status = "failed"`, commits, broadcasts `run_failed`, and
+calls `record_agent_output` nowhere -- all four call sites in that file (`:2104`, `:2325`, `:2645`,
+`:2898`) are after the spawn. Its remaining broadcasts are `queue_entry_queued` for each entry
+`return_run_entries` hands back, and `queue_entry_abandoned` for each one it gives up on. The first
+is in `QUEUE_EVENT_TYPES` and would refetch the conversation; the second is not.
+
+So the gap is exactly the case where nothing is handed back: an entry at `DELIVERY_ATTEMPT_LIMIT` is
+abandoned rather than requeued (`inbound_queue.py:222-235`), and if every entry the run carried is at
+the limit, `requeued` is empty. The only two events that fire are then `run_failed` and
+`queue_entry_abandoned`, neither of which the chat hooks hear. The operator is left with a turn
+holding a delivered message, no outcome and no explanation, until unrelated traffic for that agent
+arrives, the SSE stream reconnects, or they reload.
+
+Two smaller things fall out of the same reading, recorded rather than filed separately:
+
+- `queue_entry_abandoned` is absent from `QUEUE_EVENT_TYPES` while the response it changes is the
+  chat response -- `_queued_entries_for` returns abandoned entries deliberately (F87,
+  `agent_chat.py`'s own docstring: *"a dropped input and a delivered one left the conversation
+  looking identical"*). Adding `run_failed` closes the pre-spawn case; it does not close an
+  abandonment that happens on any other path.
+- `useSSE`'s own handler *does* invalidate on these events, but at `['project', pid, 'queue', agent]`
+  and `['project', pid, 'agents']` -- never the chat key.
+
+Where it is being handled: task 3.1 of `2026-09-05-the-conversation-carries-its-own-run-facts` adds
+`run_failed` (with `run_completed`, `run_stopped`, `run_interrupted`) to `eventTargetsAgent`, which
+closes the case above. The `queue_entry_abandoned` omission is left open by that change.
+
+Reproduce (not yet run): task 0.5 -- bind an agent to a runner whose binary does not exist, deliver a
+message whose entry is already at `DELIVERY_ATTEMPT_LIMIT`, and watch the conversation with nothing
+else touching it.
 

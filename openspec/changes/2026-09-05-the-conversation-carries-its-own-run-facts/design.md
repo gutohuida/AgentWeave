@@ -19,7 +19,8 @@ same defect has now been shipped twice by an argument that was right about the w
 - A turn on screen presents its outcome for as long as its entries are on screen, whatever the agent
   did elsewhere.
 - Coverage by construction, not by a bound that could be chosen too small.
-- The outcome arrives live when a run ends, including when the run ends at Hub restart.
+- The outcome arrives live when a run ends, including when the run ends at Hub restart and
+  when it ends before its process ever spawned (D4, F291).
 
 **Non-Goals**
 
@@ -116,9 +117,34 @@ empty — the browser's stream died with the old process and has not reconnected
 simply gone (`hub/hub/sse.py:86-103`). Adding `run_interrupted` to `eventTargetsAgent` changes
 nothing at all for a run interrupted at restart. Phase 6.3's answer would still have been *never*.
 
-The four events are still added — they are the right backstop for the three cases the Hub does
-observe, where a live stream exists and `agent_output` may be slower or absent — but the restart
-case needs D8.
+**R3: the restart case was never this decision's to justify, and the case that does justify it is a
+different one.** R2 was right that the four events cannot reach a browser that was disconnected
+while the Hub started, and right about every line it cited. What both rounds missed is that the
+restart case is **already covered on this checkout**, by a mechanism that is not per-hook: `useSSE`
+itself subscribes to `onSseReconnect` and calls `queryClient.invalidateQueries()` **with no filter**
+(`hub/ui/src/hooks/useSSE.ts:404-412`), which invalidates every query in the cache — both chat
+queries and the timeline query included. `useSSE()` is mounted app-wide at `App.tsx:216`, and the
+behaviour is already pinned by a test (`useSSE-lifecycle.test.tsx:229`, *"invalidates all queries
+once the stream actually reconnects (not on the initial connect)"*). D8 is therefore a statement
+about existing behaviour rather than a new subscription, and F290 — filed off R2's reading — is
+retracted.
+
+So the four events need a justification of their own, and there is one, found by looking for a
+terminal run that reaches no chat-hook event at all: **a run that fails before its process ever
+spawns writes no output row.** The pre-spawn `except` block (`agent_trigger.py:1960-2010`) sets
+`run.status = "failed"`, commits, and broadcasts `run_failed`; it calls `record_agent_output`
+nowhere, and all four call sites in that file (`:2104`, `:2325`, `:2645`, `:2898`) are after the
+spawn. Its only other broadcasts are `queue_entry_queued` for the entries `return_run_entries` hands
+back and `queue_entry_abandoned` for the ones it gives up on — and when every entry has reached
+`DELIVERY_ATTEMPT_LIMIT` the requeued set is empty (`inbound_queue.py:222-235`), so the only events
+that fire are two the chat hooks do not listen to. That is **F291**, and `run_failed` in
+`eventTargetsAgent` is what closes it.
+
+Ordering was checked for the observed cases rather than assumed: the run row's terminal status is
+committed at `agent_trigger.py:2265` — **before** `_broadcast_run_lifecycle` (`:2286`) and before
+the terminal status row's `record_agent_output` (`:2325`) — so a refetch triggered by either event
+reads a run that has already ended. The four events are a backstop for the cases the Hub observes
+and the only signal for the pre-spawn one.
 
 ### D5 - `AgentTimeline.runs` stays
 
@@ -150,27 +176,65 @@ about run facts.
 
 ### D7 - `RunFacts` is reused, not re-declared
 
-`hub/hub/schemas/agents.py:136` already carries the four fields plus `outside_workspace_writes`, and
-the client's `AgentRunFacts` (`hub/ui/src/api/agents.ts:134`) mirrors it. `agent_chat.py` imports the
-schema rather than defining a parallel one; the TypeScript `ChatHistoryResponse` reuses
-`AgentRunFacts` by import from `./agents`. Two shapes for one concept is how a boundary rename gets
+`hub/hub/schemas/agents.py:136` already carries the four fields plus `outside_workspace_writes`.
+The client's `AgentRunFacts` (`hub/ui/src/api/agents.ts:134`) carries **four of the five** — it has
+no `outside_workspace_writes` (R3, measured; R2's round said it mirrored the Python shape and it does
+not). That asymmetry is deliberate and stays: the field has no UI consumer, TypeScript ignores extra
+JSON keys, and the server passes it through with no default so `None` and `[]` stay distinct. Task
+1.5's "passed through with no default" is a rule about the **server** construction only.
+`agent_chat.py` imports the schema rather than defining a parallel one; the TypeScript
+`ChatHistoryResponse` reuses `AgentRunFacts` by import from `./agents`. Two shapes for one concept is how a boundary rename gets
 applied to one of them.
 
-### D8 - The restart case is served by the stream reconnecting, not by an event
+### D8 - The restart case is served by the stream reconnecting, and that already works
 
-**Chosen:** both chat hooks also invalidate on `onSseReconnect` — the existing one-shot
-reconciliation the codebase already has for exactly this shape of gap.
+**Chosen:** nothing. The reconnect refresh this requirement is stated over **exists on this
+checkout**, app-wide, and is already covered by a test. This change adds no subscription; it adds a
+test that pins the existing behaviour at the chat query, because the requirement now depends on it.
 
-`useSSE` exposes `onSseReconnect` (`hub/ui/src/hooks/useSSE.ts:132`), documented as firing on every
-reconnect and deliberately **not** on the first connect, and `useAgentOutput` already subscribes to
-it (`hub/ui/src/api/agents.ts:557`) to "schedule a one-shot reconciliation poll after the stream was
-down (M21)". A Hub restart is precisely a stream that was down, and the run facts a restart changes
-are precisely the state that was decided while nobody was listening. So the mechanism is not new
-here; only its second subscriber is.
+R2 chose this decision believing the mechanism had to be built per hook — *"the mechanism is not new
+here; only its second subscriber is"* — reasoning from `useAgentOutput`'s subscription
+(`hub/ui/src/api/agents.ts:557`, "a one-shot reconciliation poll after the stream was down (M21)").
+R3 measured the layer above it. **`useSSE` itself subscribes**:
 
-Invalidate rather than poll. `useAgentOutput` polls because its cache is an append-only line buffer
-that a refetch would not reconcile; a chat response is a whole document and React Query already
-knows how to refetch one.
+```ts
+// hub/ui/src/hooks/useSSE.ts:404-412
+useEffect(() => {
+  return onSseReconnect(() => {
+    queryClient.invalidateQueries()
+  })
+}, [queryClient])
+```
+
+`invalidateQueries()` with no filter matches every query in the cache and, at React Query v5's
+default `refetchType: 'active'`, refetches every mounted one — both chat queries and the timeline
+query included. `useSSE()` is mounted unconditionally at `App.tsx:216`, and the reconnect fires only
+after a `fetch` to `/api/v1/events` has succeeded (`useSSE.ts:315-317`), which cannot happen until
+the new Hub process is serving — by which time `reconcile_interrupted_runs()` has already written
+`interrupted`, since it is awaited before `yield` in the lifespan. So the outcome is refetched
+within one reconnect cycle of the Hub coming back, with no reload.
+
+The behaviour is already pinned: `useSSE-lifecycle.test.tsx:229`, *"invalidates all queries once the
+stream actually reconnects (not on the initial connect)"*.
+
+*Rejected: adding an `onSseReconnect` subscription to each chat hook (R2's D8).* It would invalidate
+a key that a broader invalidation fired from the same callback list already covers — a second
+refetch of the same response, or none, depending on ordering. Redundant code that reads as
+load-bearing is worse than none, because the next reader repairs the wrong thing.
+
+*Rejected: replaying missed events on reconnect (a server-side ring buffer plus `Last-Event-ID`).*
+It is the general answer and a much larger change — every event type, every consumer, a retention
+policy, and a new correctness question about duplicates — for a case that is already answered.
+
+*Rejected: making `reconcile_interrupted_runs` broadcast later, after the server accepts
+connections.* It would trade a deterministic miss for a race, and it would make a startup routine's
+placement load-bearing for a UI refresh. The client knows when it reconnected; the server cannot
+know when the client will.
+
+**What this costs the change, stated plainly.** The requirement's reconnect half is satisfied before
+a line is written, so phase 6.3 is no longer a before/after comparison — it is a confirmation that
+the map move did not take away a refresh that already worked. Phase 0.4 will measure seconds, not
+"never", and tasks 0.4 and 6.3 say so.
 
 *Rejected: replaying missed events on reconnect (a server-side ring buffer plus `Last-Event-ID`).*
 It is the general answer and a much larger change — every event type, every consumer, a retention

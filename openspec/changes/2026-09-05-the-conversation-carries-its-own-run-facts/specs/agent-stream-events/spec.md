@@ -66,9 +66,11 @@ presents that turn exactly as it presents a run with no outcome yet.
 A client displaying a conversation SHALL refresh that conversation's run facts when a run for that agent reaches a terminal status and when the client's event stream reconnects after an interruption, rather than only when new conversation content arrives.
 
 A turn's outcome is now carried by the same response as its entries, so whatever causes that
-response to be re-read is what causes the outcome to appear. Content arriving is not sufficient:
-a run whose end the Hub did not observe produces no output row at all, and a client waiting for one
-waits forever while the run's row already records how it ended.
+response to be re-read is what causes the outcome to appear. Content arriving is not sufficient, and
+two different runs prove it. A run whose end the Hub did not observe produces no output row at all.
+So does a run that ended **before its process ever started** — there was nothing to produce one — and
+that run's end *is* observed, broadcast, and reaches a client with a live stream, which is why the
+rule is stated over the run reaching a terminal status rather than over any content it wrote.
 
 Two signals, because one run-ending is not observable by the client at all. A run reconciled at Hub
 restart has its status decided while the client is disconnected — the process that broadcasts the
@@ -94,6 +96,13 @@ costs more than it states.
   event for it can be delivered
 - **THEN** the conversation presents that outcome once the stream is back, without the operator
   reloading the page
+
+#### Scenario: A run that never started still says it failed
+
+- **WHEN** a run ends without its process ever having started, so it writes no output row of any
+  kind, while an operator has that conversation open
+- **THEN** the turn presents its terminal label as a consequence of the run reaching a terminal
+  status, without the operator reloading the page
 
 #### Scenario: A stopped run's outcome arrives on the run's own signal
 

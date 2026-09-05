@@ -81,14 +81,22 @@ run reconciled `interrupted` at Hub restart is the case that never arrives: the 
 `:393-400` that such a run writes no terminal status line, so there is no `agent_output` event to
 piggyback on.
 
-**And the run lifecycle events do not fix that case either**, which is R2's finding and the reason
-the change carries two mechanisms rather than one. `reconcile_interrupted_runs()` is awaited in the
-lifespan (`main.py:350`), before uvicorn serves anything, so the `run_interrupted` it broadcasts
-reaches an empty subscriber set — the browser's stream died with the previous process — and
-`SSEManager.broadcast` has no replay. The signal a disconnected client can actually receive is its
-own reconnect, which `useSSE` already exposes and `useAgentOutput` already uses for exactly this
-gap. So the four terminal events are added for the runs the Hub observes, and a reconnect
-invalidation is added for the one it does not (design D4, D8).
+**And the run lifecycle events do not fix that case either**, which is R2's finding:
+`reconcile_interrupted_runs()` is awaited in the lifespan (`main.py:350`), before uvicorn serves
+anything, so the `run_interrupted` it broadcasts reaches an empty subscriber set and
+`SSEManager.broadcast` has no replay. **But the case needs nothing built, which is R3's.** `useSSE`
+already subscribes to `onSseReconnect` and calls `queryClient.invalidateQueries()` with no filter
+(`useSSE.ts:404-412`) — every query, chat and timeline alike — from a hook mounted app-wide at
+`App.tsx:216`, and a test already pins it (`useSSE-lifecycle.test.tsx:229`). A restart refreshes the
+conversation today. So the restart case is not what the four terminal events are for, and F290,
+filed off R2's reading, is retracted.
+
+What the four events are for is the terminal run that reaches **no** chat-hook event at all: a run
+that fails before its process ever spawns writes no output row (`agent_trigger.py:1960-2010` calls
+`record_agent_output` nowhere), and if every entry it was carrying has exhausted
+`DELIVERY_ATTEMPT_LIMIT` its only broadcasts are `run_failed` and `queue_entry_abandoned`, neither of
+which the chat hooks listen to. That is F291, filed by this round, and `run_failed` in
+`eventTargetsAgent` closes it (design D4, D8).
 
 ## What does not change
 
@@ -108,7 +116,8 @@ invalidation is added for the one it does not (design D4, D8).
   `hub/ui/src/components/agents/AgentTimeline.tsx`'s `runs` prop documentation and the two working
   indicator comments that name the timeline route as that prop's source (`:133-135`, `:143-145`,
   `:152-155`).
-- No server code outside `agent_chat.py`. `main.py`'s startup ordering and
-  `run_reconciliation.py`'s broadcast are read by this change's argument (design D8) and changed by
-  neither.
-- Retires F274 (A). Does not touch F275, F288 or F289.
+- No server code outside `agent_chat.py`. `main.py`'s startup ordering, `run_reconciliation.py`'s
+  broadcast and `useSSE`'s app-wide reconnect invalidation are read by this change's argument
+  (design D8) and changed by none of them.
+- Retires F274 (A) and F291 (C). Retracts F290 (B) as not a defect. Does not touch F275, F288 or
+  F289.
