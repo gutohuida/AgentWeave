@@ -72,7 +72,9 @@ async def cut_over(
 
     Refuses outright when the predecessor cannot be archived — a run still in progress, or
     undelivered queue entries that archiving would strand. Cutting over anyway would leave the
-    operator with a successor holding a summary and a predecessor holding the actual work.
+    operator with a successor holding a summary and a predecessor holding the actual work. Also
+    refuses when the predecessor is already archived, which is what makes a cutover happen at
+    most once per conversation.
 
     Order matters: the successor and its entry are created **before** the predecessor is
     archived, so a failure part-way leaves the predecessor open and usable rather than closed
@@ -82,6 +84,22 @@ async def cut_over(
         raise CutoverRefusedError(
             f"Checkpoint {checkpoint.id} is {checkpoint.status!r}; only a ready checkpoint "
             "carries something to continue from."
+        )
+
+    # Asked here rather than left to `archivable`, whose first line returns None for an archived
+    # conversation. That early return is right for what `archivable` is for -- archiving an
+    # archived conversation is a no-op, not an error -- and wrong as the question a cutover asks.
+    # Without this, a spent checkpoint could be cut over a second time: `status` is unchanged by a
+    # cutover, so the check above still passes, and the second press minted a second successor
+    # that was delivered the same checkpoint and burned a whole turn rediscovering that its work
+    # was already done (F126, reproduced live 2026-08-30). It also contradicts the lineage
+    # requirement that a chain is linear -- two successors of one predecessor is a fork.
+    if predecessor.lifecycle == "archived":
+        raise CutoverRefusedError(
+            f"Conversation {predecessor.id} is already archived, so there is nothing left to "
+            "hand over. A cutover closes a conversation and opens its successor; if this one "
+            "was cut over already, its successor holds the work, and if it was archived by "
+            "hand, unarchive it first."
         )
 
     refusal = await archivable(db, predecessor)

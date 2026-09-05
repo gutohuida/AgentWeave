@@ -352,6 +352,74 @@ async def test_undelivered_work_blocks_a_cutover(app):
 
 
 @pytest.mark.asyncio
+async def test_a_spent_checkpoint_cannot_be_cut_over_a_second_time(app):
+    """F126: the second press minted a second successor that did the work again, billed.
+
+    `checkpoint.status` is unchanged by a cutover and `archivable` returns None for an already
+    archived conversation, so before the guard both refusals waved the second call through. The
+    assertion is on the rows, not on the exception: one successor, one queue entry.
+    """
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        checkpoint = await _ready_checkpoint(db, conversation)
+
+        successor, entry_id = await cut_over(db, conversation, checkpoint)
+
+        with pytest.raises(CutoverRefusedError, match="already archived"):
+            await cut_over(db, conversation, checkpoint)
+
+        successors = (
+            (
+                await db.execute(
+                    select(Conversation).where(
+                        Conversation.project_id == PROJECT, Conversation.origin == "handoff"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        entries = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(
+                        InboundQueueEntry.project_id == PROJECT,
+                        InboundQueueEntry.origin_type == "checkpoint",
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    assert [c.id for c in successors] == [successor.id]
+    assert [e.id for e in entries] == [entry_id]
+
+
+@pytest.mark.asyncio
+async def test_a_conversation_archived_by_hand_is_not_cut_over_either(app):
+    """The guard is on the predecessor's state, not on a record of the earlier cutover, so it
+    also refuses a conversation the operator closed themselves. Refusing is the honest answer:
+    a cutover closes a conversation, and there is nothing here left to close. Unarchive first."""
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        checkpoint = await _ready_checkpoint(db, conversation)
+        conversation.lifecycle = "archived"
+        await db.commit()
+
+        with pytest.raises(CutoverRefusedError, match="unarchive it first"):
+            await cut_over(db, conversation, checkpoint)
+
+        successors = (
+            (await db.execute(select(Conversation).where(Conversation.origin == "handoff")))
+            .scalars()
+            .all()
+        )
+
+    assert successors == []
+
+
+@pytest.mark.asyncio
 async def test_an_unwritten_checkpoint_cannot_be_cut_over_to(app):
     """There would be nothing for the successor to continue from — which is the original defect
     wearing a new hat."""
