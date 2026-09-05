@@ -62,7 +62,7 @@ by the same fifty events. It changes nothing.
 The id set is the bound, exactly as `agents.py:818-841` does it.
 
 *Rejected: `select(Run).where(Run.conversation_id == conversation_id)`.* `Run` does carry
-`conversation_id` and is indexed on it (`models.py:1180`, `ix_runs_conversation_started`), so this
+`conversation_id` and is indexed on it (`models.py:1179`, `ix_runs_conversation_started`), so this
 is available and would be one fewer parameter to bind. It is refused on two grounds. It relies on
 `Run.conversation_id` and `AgentOutput.conversation_id` agreeing - a denormalization holding, rather
 than the ids the response is literally returning - and the recent-chat route
@@ -105,6 +105,21 @@ and an extra refetch of an unbounded response is a real cost. This is a delibera
 `eventBelongsToTimeline` rather than reuse of it, and the reason belongs in a comment at the call
 site.
 
+**And that is not sufficient for the case it was chosen for. R2 measured it.** The paragraph above
+justified the four events by the Hub-restart case, and the four events cannot serve that case, for a
+reason that is entirely in the ordering: `reconcile_interrupted_runs()` is awaited inside the
+lifespan at `hub/hub/main.py:350`, so it runs **before uvicorn serves anything**. Its
+`sse_manager.broadcast(run.project_id, "run_interrupted", payload)`
+(`hub/hub/run_reconciliation.py:117`) therefore pushes into `self._subscribers` while that dict is
+empty — the browser's stream died with the old process and has not reconnected yet — and
+`SSEManager.broadcast` has no replay, no buffer and no last-event-id: an event with no subscriber is
+simply gone (`hub/hub/sse.py:86-103`). Adding `run_interrupted` to `eventTargetsAgent` changes
+nothing at all for a run interrupted at restart. Phase 6.3's answer would still have been *never*.
+
+The four events are still added — they are the right backstop for the three cases the Hub does
+observe, where a live stream exists and `agent_output` may be slower or absent — but the restart
+case needs D8.
+
 ### D5 - `AgentTimeline.runs` stays
 
 After this change nothing in the UI reads it: `AgentActivityTab` unwraps `events` only and says so
@@ -140,6 +155,74 @@ the client's `AgentRunFacts` (`hub/ui/src/api/agents.ts:134`) mirrors it. `agent
 schema rather than defining a parallel one; the TypeScript `ChatHistoryResponse` reuses
 `AgentRunFacts` by import from `./agents`. Two shapes for one concept is how a boundary rename gets
 applied to one of them.
+
+### D8 - The restart case is served by the stream reconnecting, not by an event
+
+**Chosen:** both chat hooks also invalidate on `onSseReconnect` — the existing one-shot
+reconciliation the codebase already has for exactly this shape of gap.
+
+`useSSE` exposes `onSseReconnect` (`hub/ui/src/hooks/useSSE.ts:132`), documented as firing on every
+reconnect and deliberately **not** on the first connect, and `useAgentOutput` already subscribes to
+it (`hub/ui/src/api/agents.ts:557`) to "schedule a one-shot reconciliation poll after the stream was
+down (M21)". A Hub restart is precisely a stream that was down, and the run facts a restart changes
+are precisely the state that was decided while nobody was listening. So the mechanism is not new
+here; only its second subscriber is.
+
+Invalidate rather than poll. `useAgentOutput` polls because its cache is an append-only line buffer
+that a refetch would not reconcile; a chat response is a whole document and React Query already
+knows how to refetch one.
+
+*Rejected: replaying missed events on reconnect (a server-side ring buffer plus `Last-Event-ID`).*
+It is the general answer and a much larger change — every event type, every consumer, a retention
+policy, and a new correctness question about duplicates — for a case that a single invalidation
+answers exactly. Worth its own change if a second consumer ever needs it; not worth carrying inside
+this one.
+
+*Rejected: making `reconcile_interrupted_runs` broadcast later, after the server accepts
+connections.* It would trade a deterministic miss for a race, and it would make a startup routine's
+placement load-bearing for a UI refresh. The client knows when it reconnected; the server cannot
+know when the client will.
+
+Note what this means for the requirement: the rule is *an ended run's outcome reaches an open
+conversation without new content arriving*, and the two mechanisms together are what satisfy it. A
+test that only exercises the four events would pass while the case that motivated them still fails.
+
+### D9 - The `runs` prop has two readers besides the terminal label, and both were checked
+
+`AgentTimeline` reads `runs` in three places, not one. Beyond `runs[turn.runId]` at `:237`/`:280`,
+the working indicator reads it twice: `lastRunSettled` (`AgentTimeline.tsx:150`) asks whether the
+newest turn's run has a terminal status, and `anotherRunIsUnderway` (`:166-172`) scans the whole map
+for a non-terminal run other than the newest turn's. The second one's own comment states the
+property it depends on: *"A new run's row is in `runs` before that run's first entry has been
+grouped into a turn"*. **The new map cannot have that property by construction** — its keys come
+from the entries — so this had to be measured rather than assumed.
+
+**It survives, and here is the chain that makes it survive.** `deliver_entries_with_run`
+(`hub/hub/inbound_queue.py:125-162`, the stamp at `:155`) stamps `entry.delivered_in_run_id = run.id` in the same commit
+that inserts the `Run`, so a delivered `InboundQueueEntry` names the new run from the instant the run
+exists. Both chat routes return delivered entries (`agent_chat.py:597-606`, `:665-674`) and
+`_queue_entry_to_timeline` carries `run_id=entry.delivered_in_run_id`, so the entry is in the
+response and `groupIntoTurns` makes it the newest turn. `queue_entry_delivered` is already in
+`QUEUE_EVENT_TYPES` (`agentChat.ts:272-278`), so the response is already refetched on delivery. The
+new run is therefore `lastRunId` with a non-terminal status, `lastRunSettled` is false, and the
+indicator shows — by a different route than today's, but it shows. Stop-then-send (operator,
+2026-08-20) is not regressed.
+
+**Two things follow that belong in the record rather than in a reader's head.**
+
+`agent_trigger.py:1175-1185` has an `else: session.add(run)` branch that creates a run with **no**
+delivery, and a run created there would be invisible to the new map until its first output row
+lands. It is unreachable in production today: `turn_scheduler.py:322` is the only production caller
+of `trigger_agent_directly` and it returns at `:304-305` when `selected` is empty, so
+`queue_entry_ids` is never empty there. Every other caller is a test. The branch is not removed by
+this change — it is out of scope — but the dependency is now written down, and the drive checks the
+behaviour rather than the argument.
+
+And there is a real narrowing. `anotherRunIsUnderway` scans an **agent-wide** map today, so a run
+executing in a *different* conversation can light the indicator in the conversation on screen. The
+conversation-scoped map cannot do that. This is an improvement — the indicator should describe the
+conversation being looked at — but it is a behaviour change, not a no-op, and it is chosen here
+rather than discovered later.
 
 ## Risks / Trade-offs
 

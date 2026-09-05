@@ -81,6 +81,15 @@ run reconciled `interrupted` at Hub restart is the case that never arrives: the 
 `:393-400` that such a run writes no terminal status line, so there is no `agent_output` event to
 piggyback on.
 
+**And the run lifecycle events do not fix that case either**, which is R2's finding and the reason
+the change carries two mechanisms rather than one. `reconcile_interrupted_runs()` is awaited in the
+lifespan (`main.py:350`), before uvicorn serves anything, so the `run_interrupted` it broadcasts
+reaches an empty subscriber set — the browser's stream died with the previous process — and
+`SSEManager.broadcast` has no replay. The signal a disconnected client can actually receive is its
+own reconnect, which `useSSE` already exposes and `useAgentOutput` already uses for exactly this
+gap. So the four terminal events are added for the runs the Hub observes, and a reconnect
+invalidation is added for the one it does not (design D4, D8).
+
 ## What does not change
 
 - `GET /agents/{a}/timeline` keeps its `runs` map and both its requirements. It is a correct
@@ -94,7 +103,12 @@ piggyback on.
 
 - Affected specs: `agent-stream-events` — two requirements added, one modified.
 - Affected code: `hub/hub/api/v1/agent_chat.py` (both chat routes, `ChatHistoryResponse`),
-  `hub/ui/src/api/agentChat.ts` (the response type and both hooks' SSE predicates),
-  `hub/ui/src/components/agents/AgentOutputPanel.tsx:333` and `:1036`,
-  `hub/ui/src/components/agents/AgentTimeline.tsx`'s `runs` prop documentation.
+  `hub/ui/src/api/agentChat.ts` (the response type, both hooks' SSE predicates, and both hooks'
+  reconnect subscription), `hub/ui/src/components/agents/AgentOutputPanel.tsx:330-333` and `:1036`,
+  `hub/ui/src/components/agents/AgentTimeline.tsx`'s `runs` prop documentation and the two working
+  indicator comments that name the timeline route as that prop's source (`:133-135`, `:143-145`,
+  `:152-155`).
+- No server code outside `agent_chat.py`. `main.py`'s startup ordering and
+  `run_reconciliation.py`'s broadcast are read by this change's argument (design D8) and changed by
+  neither.
 - Retires F274 (A). Does not touch F275, F288 or F289.

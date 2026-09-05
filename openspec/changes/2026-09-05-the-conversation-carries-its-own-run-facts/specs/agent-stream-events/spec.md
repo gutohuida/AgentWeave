@@ -30,8 +30,14 @@ presents that turn exactly as it presents a run with no outcome yet.
 
 - **WHEN** a turn in one conversation ended, and the agent afterwards runs any number of turns in
   other conversations
-- **THEN** reloading the first conversation still presents that turn's terminal label and its
-  duration
+- **THEN** the first conversation's response still carries that run's facts, because what the
+  agent did elsewhere is not one of the things its coverage depends on
+
+#### Scenario: The conversation's outcomes are read from the response that carried its turns
+
+- **WHEN** a client presents a turn's outcome
+- **THEN** the facts it presents come from the same response as the entries that turn was grouped
+  from, and not from any other response that also happens to carry a run facts map
 
 #### Scenario: A long conversation keeps its oldest outcomes
 
@@ -57,16 +63,23 @@ presents that turn exactly as it presents a run with no outcome yet.
   project can enter the map
 
 ### Requirement: A run ending refreshes the conversation that renders it
-A client displaying a conversation SHALL refresh that conversation's run facts when a run for that agent reaches a terminal status, rather than only when new conversation content arrives.
+A client displaying a conversation SHALL refresh that conversation's run facts when a run for that agent reaches a terminal status and when the client's event stream reconnects after an interruption, rather than only when new conversation content arrives.
 
 A turn's outcome is now carried by the same response as its entries, so whatever causes that
 response to be re-read is what causes the outcome to appear. Content arriving is not sufficient:
 a run whose end the Hub did not observe produces no output row at all, and a client waiting for one
 waits forever while the run's row already records how it ended.
 
-The refresh is required for the terminal statuses only. A run beginning changes nothing in the
-response that the arrival of its output will not already carry, and refetching an unbounded history
-on that signal costs more than it states.
+Two signals, because one run-ending is not observable by the client at all. A run reconciled at Hub
+restart has its status decided while the client is disconnected — the process that broadcasts the
+event is the process the client's stream died with — and a broadcast with no subscriber is not
+delivered later. The reconnect is the only moment at which such a client can learn anything, so the
+rule is stated over the reconnect and not over the event, and a client that listened only for the
+event would satisfy the letter of the terminal-status half while failing the case that motivates it.
+
+A run *beginning* is deliberately not a refresh trigger. It changes nothing in the response that
+the arrival of its output will not already carry, and refetching an unbounded history on that signal
+costs more than it states.
 
 #### Scenario: An interrupted run's outcome arrives without new content
 
@@ -74,6 +87,13 @@ on that signal costs more than it states.
   row, while an operator has that conversation open
 - **THEN** the turn presents its terminal label without the operator reloading the page and without
   unrelated traffic arriving for that agent
+
+#### Scenario: A decision made while the client was disconnected still reaches it
+
+- **WHEN** a run's outcome is recorded at a moment when the client has no live event stream, so no
+  event for it can be delivered
+- **THEN** the conversation presents that outcome once the stream is back, without the operator
+  reloading the page
 
 #### Scenario: A stopped run's outcome arrives on the run's own signal
 

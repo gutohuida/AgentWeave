@@ -20131,3 +20131,51 @@ harness is what the independent drive exists to check.
 Harnesses: `scripts/drive/setup_d1_0905.py`, `t_d1_0905_release.py` (`complete`/`stop`),
 `t_d1_0905_checkout_hold.py`, `t_d1_0905_reconcile_hold.py`, `t_d1_0905_reconcile_strand.py`,
 `t_d1_0905_released_outcome.py`, and `d1_0905_restart_hub.sh`.
+
+## F290 (B) - a run interrupted at Hub restart broadcasts its outcome to nobody, so an open conversation shows that turn as unfinished until someone reloads
+
+**Status:** open. Filed 2026-09-05 by the day window's D-2/R2 spec round. **Derived from the code,
+not yet driven** -- every line below is a citation on this checkout; the timing claim ("indefinitely")
+is the code's consequence and is labelled unverified until phase 0.4 of
+`2026-09-05-the-conversation-carries-its-own-run-facts` measures it. That task exists and is
+written to measure exactly this.
+
+`reconcile_interrupted_runs()` is awaited inside the FastAPI lifespan at `hub/hub/main.py:350`. A
+lifespan startup runs to completion **before uvicorn serves a single request**, so at the moment it
+calls `sse_manager.broadcast(run.project_id, "run_interrupted", payload)`
+(`hub/hub/run_reconciliation.py:117`) there cannot be an SSE subscriber: the browser's stream died
+with the previous process and its reconnect cannot succeed until startup finishes.
+`SSEManager.broadcast` pushes into the per-project subscriber queues and returns
+(`hub/hub/sse.py:86-103`) -- there is no buffer, no replay and no `Last-Event-ID`. The event is not
+delayed; it does not exist for that client.
+
+Downstream, `useAgentTimeline` invalidates on `run_interrupted` (`agents.ts:389-407`), so the run
+facts map that carries the turn's terminal label is refetched **on an event that never arrives**.
+Nothing else covers the gap: the query sets no `staleTime` and no `refetchInterval`
+(`agents.ts:420-425`), and the app disables focus refetching globally
+(`main.tsx:11`, `refetchOnWindowFocus: false`). `useSSE` does expose `onSseReconnect`
+(`useSSE.ts:132`) and `useAgentOutput` subscribes to it for exactly this shape of gap
+(`agents.ts:557`, "a one-shot reconciliation poll after the stream was down (M21)") -- but that
+reconciles the raw output line buffer, and an interrupted run writes no terminal status line at all,
+which the corpus states as a deliberate carve-out
+(`openspec/specs/agent-stream-events/spec.md:393-400`). So there is no line to poll and no event to
+receive.
+
+The visible consequence is one turn that stays presented as unfinished, in a conversation the
+operator is looking at, until they reload the page or some unrelated event for that agent lands.
+This is distinct from **F274**: F274 is the map missing a run it should contain; F290 is the map
+never being re-read. Both surface as a turn with no outcome, which is presumably why the second hid
+behind the first.
+
+Where it is being handled: `2026-09-05-the-conversation-carries-its-own-run-facts` design D8 and
+task 3.4 add a reconnect-triggered invalidation to both chat hooks, and its second ADDED requirement
+is stated over the reconnect rather than over the event so a client cannot satisfy the letter while
+failing this case. That change does **not** repair `useAgentTimeline`, whose own invalidation on
+`run_interrupted` stays dead -- acceptable only because after that change nothing reads the timeline
+route's run facts map (design D5). If that map ever regains a consumer, this finding is live again
+for it.
+
+Reproduce (not yet run): task 0.4 -- conversation open in a browser, restart the Hub while a run is
+`running`, touch nothing, and time how long the turn stays unlabelled. Task 3.5 is the narrower
+check: watch the reconnected stream for a `run_interrupted` frame and confirm none arrives.
+

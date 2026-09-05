@@ -53,11 +53,24 @@ choose deliberately. **If phase 0 has not been recorded, do phase 0 and stop.**
 - [ ] 2.2 `AgentOutputPanel.tsx:333`: `runFacts` comes from `chat.data?.runs ?? {}` and no longer
       from `timeline?.runs`. Check whether `useAgentTimeline` is still called in this component for
       anything else — as of this proposal it is not (`:332-333` is its only use) — and remove the
-      call if it has become dead. **Do not remove the timeline route's map** (design D5).
+      call if it has become dead. **Do not remove the timeline route's map** (design D5). The
+      two-line comment directly above it (`:330-331`, *"This panel reads neither half; it is the
+      only thing that can carry them"*) explains why the hook lives here and must go with the hook
+      rather than be left describing something that is no longer there.
 - [ ] 2.3 `AgentTimeline.tsx`'s `runs` prop comment currently reads *"straight from the timeline
       route"*. Rewrite it to name the chat response and to say why: the map must be keyed to the
       same query as `entries`, and the timeline route's map is scoped to a different window. Keep
       the existing "a caller with nothing to say must say `{}`" rule.
+- [ ] 2.4 **The working indicator reads this prop too, in two more places** (design D9), and neither
+      is about a turn's terminal label: `lastRunSettled` (`AgentTimeline.tsx:148-150`) and
+      `anotherRunIsUnderway` (`:166-172`), whose own comment says it depends on the map holding a
+      run *before that run's first entry has been grouped into a turn* — which the new map cannot do
+      by construction. Do not change the logic; R2 measured that it survives. Do correct the two
+      three comments that name the timeline route as that prop's source (`:133-135`, `:143-145`,
+      `:152-155`) and state the
+      chain instead: a delivered `InboundQueueEntry` names the new run from the instant the run is
+      committed, so the new run *is* the newest turn rather than an entry-less key. Task 6.7
+      measures it live rather than trusting this paragraph.
 
 ## 3. The invalidation moves with the map
 
@@ -70,6 +83,18 @@ choose deliberately. **If phase 0 has not been recorded, do phase 0 and stop.**
       the existing reader is right, not an assumption inherited from it.
 - [ ] 3.3 Both hooks share `eventTargetsAgent`, so 3.1 covers the recent view too. Verify that is
       still true rather than assuming it.
+- [ ] 3.4 **3.1 does not deliver the case it was chosen for; this does** (design D8). Both chat
+      hooks also subscribe to `onSseReconnect` (`hub/ui/src/hooks/useSSE.ts:132`) and invalidate
+      their query when it fires, following `useAgentOutput`'s existing subscription
+      (`agents.ts:557`, "a one-shot reconciliation poll after the stream was down (M21)") —
+      invalidate, do not poll, because a chat response is a whole document. Comment the reason:
+      `reconcile_interrupted_runs()` is awaited in the lifespan at `main.py:350`, before uvicorn
+      serves anything, so its `run_interrupted` broadcast reaches zero subscribers and
+      `SSEManager.broadcast` has no replay. Unsubscribe on unmount, as `useAgentOutput` does.
+- [ ] 3.5 Confirm that ordering on the checkout rather than inheriting it from this document: with
+      a browser attached, restart the Hub and check whether any `run_interrupted` frame arrives on
+      the reconnected stream. If one does, 3.4 is still correct but its comment is wrong, and the
+      comment is what a later reader will believe.
 
 ## 4. Tests — each one mutation-checked
 
@@ -95,6 +120,14 @@ not evidence, and this repository's dominant failure mode is exactly that.
       guard and the reason the two maps may coexist.
 - [ ] 4.8 `hub/ui/src/__tests__/` — `eventTargetsAgent` returns true for the four terminal run
       events and false for `run_started`. Mutation both directions.
+- [ ] 4.9 `hub/ui/src/__tests__/` — an SSE **reconnect** invalidates both chat queries (design D8).
+      `agentOutput-polling.test.tsx:22` already mocks `onSseReconnect` with a capturable callback;
+      reuse that shape. Mutation: drop the subscription and watch it fail. Note that 4.8 alone
+      cannot fail for the restart case — that is the whole reason this test exists beside it.
+- [ ] 4.10 `hub/ui/src/__tests__/` — the working indicator still shows for a just-started run whose
+      only entry is its delivered operator input, with the previous turn settled (design D9). This
+      is the 2026-08-20 stop-then-send behaviour, and it is the one thing the map move could take
+      away silently. Mutation: drop the delivered entry from the fixture and watch it fail.
 
 ## 5. Gates
 
@@ -114,6 +147,9 @@ A passing suite is not proof of behaviour, and phase 0 exists to make this compa
 - [ ] 6.2 Re-run 0.3 exactly: single conversation, every turn on screen labelled.
 - [ ] 6.3 Re-run 0.4 exactly: with the conversation open, restart the Hub and record how long the
       interrupted turn takes to label itself **without** a reload. Phase 0's answer was "never".
+      **This step measures 3.4, not 3.1** — design D8 argues the four events cannot reach a browser
+      that was disconnected while the Hub started. If this still reads "never" after 3.1 and before
+      3.4, that is D8 confirmed on the product rather than in prose; record it that way.
 - [ ] 6.4 The recent view — no conversation selected — labels its turns too. That branch of the
       ternary is untested by 6.1-6.3.
 - [ ] 6.5 Measure the added query's cost on a conversation large enough to matter: response time for
@@ -121,6 +157,12 @@ A passing suite is not proof of behaviour, and phase 0 exists to make this compa
       asserting it is negligible (design, Risks).
 - [ ] 6.6 Teardown: no job left enabled, fixture project named in the write-up so the review page
       can cite it.
+- [ ] 6.7 **The working indicator, live** (design D9). Stop a turn, then immediately send another
+      message, and watch the indicator across the window between the run being committed and its
+      first output row arriving. Today the timeline map covers that window; after this change a
+      delivered queue entry is what covers it. Record what the operator sees, not what the fixture
+      returns. Then do the negative half: with conversation A on screen, start a run in conversation
+      B on the same agent and confirm A's indicator stays quiet — that is the narrowing D9 chose.
 
 ## 7. Close the ledger
 
