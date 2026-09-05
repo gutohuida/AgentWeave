@@ -8,18 +8,18 @@
   "parent_branch": "master",
   "parent_sha": "a38caee",
   "stop_at": "2026-09-05T17:00:00+01:00",
-  "iteration": 1,
+  "iteration": 2,
   "log_file": ".claude/autonomous/2026-09-05-day-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "D-1",
-  "next_action": "D-1, the drive. Use the e2e-loop skill, SCOPED (not a full sweep -- the 17-row sweep was measured complete on 2026-09-04, map in scripts/drive/SURVEY.md). Drive what the night built: the change a-terminal-run-releases-the-queue-behind-it (F286), hub/hub/api/v1/agent_trigger.py. Drive it INDEPENDENTLY at the seam; do not re-run the night's own A/B harness -- the night wrote the tests for its own fix and says so. Start the drive Hub on 8011 from hub/ with uvicorn from source on THIS branch's code, confirm no .py under hub/hub or src is newer than the process start time, and make a FRESH project (never proj-5e960453, never proj-18e5d4e0, never port 8000). Every real agent turn binds claude-haiku-4-5. Never leave a job enabled. What to push on: a run reaching terminal status with input queued behind it, and the seams around it -- a second queued entry, a run that is stopped rather than completing, a queue entry whose agent is mid-turn elsewhere, and whether the released input's turn reports its own outcome correctly (that is F274's neighbourhood). Append every new finding to scripts/drive/FINDINGS.md with a severity, a file:line, a reproduction, and a Status line reading open as the FIRST line of the body.",
+  "current": "D-2",
+  "next_action": "D-2, spec R1 for F274. Explore the codebase and write the proposal into openspec/changes/<name>/ -- proposal.md, design.md, tasks.md and the specs/<capability>/spec.md delta. F274 is at scripts/drive/FINDINGS.md:18967 and it is the last open severity A: a turn's outcome is erased by work in the agent's OTHER conversations, because AgentTimeline reads every turn's terminal label and duration out of the run-facts map from GET /projects/{p}/agents/{a}/timeline, which truncates its merged events to fifty AGENT-scoped events (hub/hub/api/v1/agents.py:801-836) while the turns come from the CONVERSATION-scoped chat history. The route is NOT in breach: openspec/specs/agent-stream-events/spec.md:363-366 explicitly permits the empty map and :368 is satisfied. The gap is that no requirement says the events must cover the turns the CLIENT renders. R1 owns that design decision and must re-derive it against the code rather than inherit the finding's framing -- read agents.py:801-836 and its comment block first, because round 3 of the change that shipped it already reversed rounds 1 and 2 on exactly this map. The name must not start with a digit; openspec validate --strict <name> must pass; SHALL goes on a requirement's FIRST physical line. D-1 confirmed F274 did NOT reproduce at nine runs across six conversations on short Haiku turns -- the eviction is driven by event count, so any proposal that turns on 'how many turns' rather than 'how many events' is wrong. D-1's own finding F288 is severity B and is queued behind this deliberately; do not switch.",
   "queue": [
     {
       "id": "D-1",
-      "status": "open",
+      "status": "done",
       "title": "Independent e2e drive of the terminal-run queue release",
-      "detail": "Scoped drive of what the night window built (F286). Hub 8011, fresh project, Haiku turns. The night's evidence is self-marking and the Codex app-server half was never driven; this drive is the independent check. Findings to scripts/drive/FINDINGS.md, each with a Status line."
+      "detail": "DONE, iteration 2. Hub 8011 from source at e6997e9, fresh db aw0905.db, fresh project proj-aab643e8a931, two Haiku agents, no injected exception and the night's A/B harness deliberately not re-run. Six seams measured; F286's release holds at all of them (0.17s/0.16s complete, 0.12s stop, 0.27s task checkout -- the half the night only tested). Two new findings: F288 (B) reconcile_interrupted_runs ends runs and releases only their own agents, breaching agent-conversation-workspace:2217 which shipped last night -- driven, 6m15s strand cleared by an unrelated settings save; F289 (C) the queue status route repeats a spent refusal as the current reason, which is what makes F288 invisible. F274 did not reproduce at this volume; its own reproduction stands."
     },
     {
       "id": "D-2",
@@ -54,7 +54,8 @@
   ],
   "decisions_for_user": [
     "spec-queue/DIRECTION.md's newest section is still 2026-09-03 and two of its paragraphs are now spent: it schedules F188 for the next spec slot (F188 was retired 2026-09-04, fixed 467dfea) and it forbids resuming the coverage sweep, whose stated trigger has expired and which yesterday measured complete anyway. Yesterday's window lost a drive slot to that paragraph. Either write a section for today or retire the 2026-09-03 one.",
-    "The merge gate's condition zero is the limits line seeded by .claude/loops/arm-cycle.ps1 -- 'Never auto-merge'. Until you change it the gate can only ever report. Today it reports 3 of 4 conditions passing; only CI-not-yet-green-for-this-sha blocks. The branch now spans two days and 11 commits."
+    "The merge gate's condition zero is the limits line seeded by .claude/loops/arm-cycle.ps1 -- 'Never auto-merge'. Until you change it the gate can only ever report. Today it reports 3 of 4 conditions passing; only CI-not-yet-green-for-this-sha blocks. The branch now spans two days and 11 commits.",
+    "D-1 found F288 (B): a Hub restart ends runs but re-evaluates only their own agents, which breaches the requirement F286's change synced last night (openspec/specs/agent-conversation-workspace/spec.md:2217, 'every agent holding queued input in a project ... whenever a run in that project reaches a terminal status'). Driven: 6m15s strand, cleared by an unrelated settings save. The day is speccing F274 instead, because F274 is the only open severity A and F288 needs three consecutive interruptions to become observable. If you would rather tonight's build closed a live spec breach than the oldest A, say so on the review page and F288 takes the slot."
   ],
   "limits": [
     "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",

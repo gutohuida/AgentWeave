@@ -19961,3 +19961,161 @@ released the turn, which completed `exit 0` in 23 seconds with the agent's own r
 `colour=red size=large` — the evidence that the answers returned through the tool call rather than
 the queue; and `asker_waiting` was `true` for both rows while the run lived and `false` for both
 once it ended.
+
+---
+
+## F288 (B) - a Hub restart ends a run without releasing anything but that run's own agent, so an agent parked on the crashed run's task checkout is stranded
+
+**Status:** open. Filed 2026-09-05 by the day window's D-1 drive, driving F286's seam independently
+of the night window's own A/B harness. No change in `openspec/changes/` covers it.
+
+**This is a breach of a requirement that shipped last night, not an unspecified gap.**
+`openspec/specs/agent-conversation-workspace/spec.md:2217`, *A run that has ended releases the queue
+behind it*, synced from F286's change nine hours before this drive:
+
+> The system SHALL re-evaluate **every agent holding queued input in a project** whenever a run in
+> that project reaches a terminal status, and SHALL do so regardless of whether the bookkeeping that
+> follows the terminal status succeeds.
+
+`reconcile_interrupted_runs` writes a terminal status (`interrupted`) to a run in a project and
+re-evaluates one agent -- the interrupted run's own. Its third scenario, *An agent parked behind an
+ended run's hold is re-evaluated*, is exactly the case measured below. The requirement mentions
+restart reconciliation once, and only to say it cannot *recover* input stranded by the other paths
+(`:2245-2247`); nothing in it exempts reconciliation from being a terminal-status site of its own.
+The change's three rounds read `_execute_run`'s endings, wrote a requirement quantified over every
+run in the project, and did not go looking for the third site that ends one.
+
+**The same defect F286 and F90 each closed, at the third site that ends a run.** Every ending inside
+`_execute_run` and `_execute_codex_appserver_run` now calls `redrain_queued_agents(project_id)` --
+*every* agent with anything queued -- at `agent_trigger.py:1864` (the shared failure tail F286 added),
+`:2009`, `:2371`, `:2779` and `:2916`. `run_reconciliation.reconcile_interrupted_runs` ends runs too:
+it flips every orphaned row to `interrupted` (`run_reconciliation.py:65`) and then releases only the
+interrupted run's **own** agent -- `agents_to_schedule.add((run.project_id, run.agent))` at `:88`,
+handed to `_schedule_now`, which calls `schedule_agent(project_id, agent)` for those agents and
+nobody else (`:158-162`). An agent parked on the *interrupted run's* task checkout (design D8) is not
+among them, and nothing else is on a timer.
+
+The comment at `agent_trigger.py:2360-2371` states the invariant this site does not keep: *"a run
+ending frees whatever it held, and the task checkout is only today's instance of that; scoping to
+the task would be correct now and silently incomplete for the next hold anyone adds."*
+
+**One crash hides it, which is why it has survived two fixes of the same shape.** The interrupted
+run's entry goes back to the queue (`return_run_entries`), its agent *is* rescheduled, that
+replacement turn ends normally, and *its* ordinary completion re-drains the project and releases
+whoever was parked. Measured here: A interrupted at 08:15:36, A's replacement `run-3a85414acc85`
+completed 08:16:16.75, B's entry delivered into `run-fcb115c4ff54` at 08:16:17.03 -- **0.28s**, by
+the completion path, not by reconciliation.
+
+**The mask comes off at `inbound_queue.DELIVERY_ATTEMPT_LIMIT` (3).** The third crash withdraws the
+interrupted agent's entry, so that agent has nothing to schedule, so no run of its own ever ends, so
+nothing ever re-drains -- while the task checkout the parked agent is waiting for is free.
+
+Measured on 8011 from source on `autonomous/2026-09-04-daily` at `e6997e9`, fresh database
+(`aw0905.db`), fresh project `proj-aab643e8a931`, two agents on `claude-haiku-4-5-20251001`, task
+`task-edd780098418`:
+
+```
+08:17:05  d1a running on the task; d1b triggered on the same task -> 200 queued,
+          waiting_reason "d1a090658 is already running a turn on task task-edd780098418"
+08:17:14  crash 1 -> run-a6c250b82bc0 interrupted; d1a's entry back to queued, attempts 1
+08:17:18  crash 2 -> run-329750f61d12 interrupted; attempts 2
+08:17:24  crash 3 -> run-7e35d688a50a interrupted; attempts 3
+                     entry-ca8f985545 state=withdrawn
+                     "delivery failed 3 times; the Hub stopped retrying"
+          d1a: waiting_count 0, running false      <- nothing left to schedule
+          d1b: waiting_count 1, entry-6318dbfc7dd6 queued, delivery_attempts 0
+          no run on task-edd780098418 in any status but `interrupted`
+08:18:55  first look; then 240s of polling every 5s -- d1b has NO new run
+08:23:39  PATCH /projects/{p}/queue/settings {"hop_budget":6,"turn_delivery_cap":9}
+          -> delivered 2.87s later into run-8021881b0f2f
+```
+
+**Stranded 6m15s, cleared by a settings save that has nothing to do with it.** That is the exact
+signature of F90 and F286: the hold outlives the holder, and only an unrelated operator action
+re-drains.
+
+Reproduce:
+
+```bash
+export AW_HUB=http://127.0.0.1:8011 AW_PROJECT=<fresh pid> AW_A=<agent A> AW_B=<agent B>
+export AW_DB=C:/Users/huida/AppData/Local/Temp/aw0905/aw0905.db
+py -3.11 scripts/drive/setup_d1_0905.py <fresh dir>            # project + two Haiku agents
+py -3.11 scripts/drive/t_d1_0905_reconcile_strand.py setup     # prints AW_TASK
+for n in 1 2 3; do
+  bash scripts/drive/d1_0905_restart_hub.sh                    # kill the tree, start from source
+  curl -s -H "Authorization: Bearer $AW_KEY" $AW_HUB/api/v1/projects >/dev/null  # drains deferred
+  py -3.11 scripts/drive/t_d1_0905_reconcile_strand.py await-running
+done
+py -3.11 scripts/drive/t_d1_0905_reconcile_strand.py watch      # 240s, no run for B
+```
+
+Three crashes is not exotic on the machine this product is developed on: every Hub code change
+restarts the process, which is the first line of this repository's own "Still prohibited" table.
+
+The fix is one line in shape -- `redrain_queued_agents(project_id)` per distinct project in
+`_schedule_now`, or in place of it -- but it is **not** the D-6 carve-out, whose first condition is
+that the change touches no requirement in `openspec/specs/`. This one is a breach of a named
+requirement. Whether the existing requirement already covers it and only the code is wrong, or the
+requirement needs a scenario naming reconciliation so a test can be written against it, is the spec
+loop's question rather than this finding's.
+
+---
+
+## F289 (C) - the queue status route repeats a refusal's own sentence as the current reason long after it stopped being true
+
+**Status:** open. Filed 2026-09-05 by the day window's D-1 drive, alongside F288 and found by it.
+
+`GET /projects/{p}/queue/{agent}/status` answers with a `waiting_reason`. When none of its live,
+read-only checks finds anything, it falls back to the stored refusal of the last delivery attempt
+(`inbound_queue.py:183`). That fallback is deliberate and its comment says why -- it is what stopped
+"1 waiting" with no explanation at all (F97) -- and the comment even concedes the reason is *"a
+record of the last attempt, which a repair since then may already have cleared"*.
+
+What the route never asks is whether the specific, checkable claim in that stored sentence is still
+true. Measured during F288's reproduction, for **6m15s** while `d1a090658` was running nothing at all
+and every run on the task was `interrupted`:
+
+```
+GET /projects/proj-aab643e8a931/queue/d1b090658/status
+  {"agent":"d1b090658","waiting_count":1,"running":false,
+   "waiting_reason":"d1a090658 is already running a turn on task task-edd780098418;
+                     a task's checkout takes one writing turn at a time.",
+   "delivery_attempts":0}
+```
+
+`d1a090658`'s own status route, at the same moment, answered `waiting_count 0, running false`. So the
+Hub simultaneously told the operator that d1a was running a turn and that d1a was running nothing.
+
+**Why this is worse than a stale field.** It is the only diagnosis the operator gets, it names a
+holder and a task, and it is checkable -- so it reads as a live measurement rather than a memory. An
+operator following it goes to look at d1a, finds it idle, and has nowhere else to go. It is what
+makes F288 invisible: the strand presents as a plausible, ordinary wait.
+
+The live branch immediately above (`inbound_queue.py:139`) already asks whether *this* agent is
+running. Nobody asks whether the *named* agent is. `tasks_held_by_a_running_turn` is the same
+function the refusal was raised from (`agent_trigger.py:900`) and is a read -- so the route could
+re-derive this particular reason rather than remember it. Whether the general answer is
+re-derivation, an expiry, or clearing the reason when the entry is next re-evaluated is a design
+question, not this finding's.
+
+Reproduce: F288's reproduction, above; the route is queried at every step by
+`t_d1_0905_reconcile_strand.py`.
+
+**What held in the same drive, measured rather than assumed** — the independent check of F286 that
+D-1 was queued for. All on 8011 from source at `e6997e9`, fresh database and fresh project
+`proj-aab643e8a931`, two agents on `claude-haiku-4-5-20251001`, **no injected exception and no A/B**:
+the night window's harness was deliberately not re-run, because a fix tested by its own author's
+harness is what the independent drive exists to check.
+
+| seam | measured |
+|---|---|
+| a run **completes** with two entries queued behind it, each in its own conversation | released one per turn, `0.17s` and `0.16s` after each run boundary; every entry ended `delivered` with a `delivered_in_run_id` |
+| a run is **stopped** by `POST /agent/{a}/stop` with an entry queued behind it | run `stopped` exit 2 at 08:09:42.89, successor started 08:09:43.02 — `0.12s` |
+| an agent **parked on another agent's task checkout** (design D8) | `run-f3f3e2e3d2e2` completed 08:11:53.25, `d1b`'s entry delivered into `run-5b1ad56fbd42` at 08:11:53.52 — `0.27s`. The night window recorded this half as tested, not driven; it is now driven. |
+| the same, after **one** Hub crash | released, but by the *replacement* turn's ordinary completion (`0.28s` after it ended), not by reconciliation — see **F288**, which is what that mask hides |
+| a turn's own outcome after the release | at the timeline's fifty-event cap, all 9 runs across 6 conversations were still in the run-facts map and every conversation's chat named a run the map could label. **F274's eviction did not reproduce at this volume**; these turns are short, and F274's own reproduction stands unchanged |
+| a message the Hub gave up delivering | shows in its conversation as `delivery_state: "abandoned"` with the run that last tried, not silently absent (F87 holds) |
+
+Harnesses: `scripts/drive/setup_d1_0905.py`, `t_d1_0905_release.py` (`complete`/`stop`),
+`t_d1_0905_checkout_hold.py`, `t_d1_0905_reconcile_hold.py`, `t_d1_0905_reconcile_strand.py`,
+`t_d1_0905_released_outcome.py`, and `d1_0905_restart_hub.sh`.
