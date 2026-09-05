@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "a38caee",
     "stop_at": "2026-09-06T07:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-05-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "N-5",
-    "next_action": "N-5. Close the window. Per the playbook's 'Ending the window', write the final log entry: what changed across iterations 1-5 (marking product code vs documentation -- only 3142a91 carries product code, every other commit is documentation), what was proven with evidence vs merely inferred (F126 driven 13/13 on 8011; F292's suite negative measured, not assumed; F3's gate verdict read from source and NOT driven; N-2's recount is what the sections say and not a re-drive), what is open, the decisions_for_user list below verbatim, and what to distrust. Carry notes_for_tomorrow forward. Then set next_action to the literal JSON null so the driver unregisters itself -- not a sentence saying the window is done.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -53,9 +53,9 @@
         },
         {
             "id": "N-5",
-            "status": "open",
+            "status": "done",
             "title": "Close the window",
-            "detail": "Per the playbook's 'Ending the window': what changed (marking product code vs documentation), what was proven with evidence vs merely inferred, what is open, decisions waiting for the operator, and what to distrust. Then set next_action to the literal JSON null so the driver unregisters itself. Carry forward the notes_for_tomorrow list below."
+            "detail": "Done iteration 6, in the same firing as N-4 because N-4's own instruction said to go straight here on a gate failure. Closing entry written: six commits with only 3142a91 carrying product code (plus 6693d1d's 180 lines of failure-path diagnostic in hub/tests/conftest.py, which is test infrastructure and changes no fixture behaviour); what was proven (F126 driven 13/13, F292's measured negative, the green tree) split from what was only read (N-2's count is the sections' own words and not a re-drive, N-4 was not driven, F292's negative is n=1); what is open; the three decisions; and what to distrust. next_action is the literal null."
         }
     ],
     "decisions_for_user": [
