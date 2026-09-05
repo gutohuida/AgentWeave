@@ -179,5 +179,29 @@ before `run_turn` returns.
       touched; no production code changed.
 - [x] 4.4 `openspec validate --strict a-terminal-run-releases-the-queue-behind-it` clean —
       "Change 'a-terminal-run-releases-the-queue-behind-it' is valid".
-- [ ] 4.5 Drive the PTY half live once more after the fix, repeating 0.2 and 0.3 and expecting the
+- [x] 4.5 Drive the PTY half live once more after the fix, repeating 0.2 and 0.3 and expecting the
       opposite result. A passing suite is not proof of behaviour.
+
+      **Driven twice, as an A/B at one injection site.** Expecting an outcome is not measuring one,
+      so the fixed run was paired with a control: the same 8011 checkout with the pre-F286 gate
+      restored (`else: return` before the redrain in `_record_run_failure_tail`), the same guarded
+      raise at the same line, a fresh database and fixture project each time, Haiku both times.
+      Phase 0 raised at the in-window status write; this pair raises three statements earlier,
+      immediately before `_report_abandoned_entries` -- still between the terminal commit and
+      `redrain_queued_agents`, but not the same line, which is why the control matters.
+
+      **Fixed** (`run-16b449d4a80a`, `completed`, exit 0, `error=None`, ended `00:27:34.803750Z`):
+      `entry-8992a0c0b036` delivered into successor `run-9d0f885a67c4` at `00:27:34.943590Z` --
+      **0.140s after the run boundary, with no operator action**. The successor ran a real turn and
+      completed at `00:27:42.570573Z`. The settings save afterwards was a no-op: runs before 2,
+      after 2. `GET /queue/{agent}/status` reports `waiting_count: 0`.
+
+      **Control** (`run-262d0b6132ee`, `completed`, exit 0, `error=None`): the entry stayed `queued`,
+      `delivered_in_run_id=None`, `delivery_attempts=0` across four polls over **2 minutes 6
+      seconds**, then a settings save delivered it `0.14s` later into `run-1c8380d8b82c`; runs
+      before the save 1, after 2. Phase 0 reproduced.
+
+      0.4 holds in both: run #1 keeps the outcome it reached. The release was ungated without the
+      relabel moving. Recorded under F286 in `scripts/drive/FINDINGS.md`; the injection and the
+      control gate were reverted with `git checkout` and never committed. The app-server half was
+      not driven -- Codex is undrivable here.

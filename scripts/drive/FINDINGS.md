@@ -19779,6 +19779,60 @@ before this drive.
 **Not driven.** The app-server half (requirement 2, tasks 3.4-3.5) was not driven: it needs Codex,
 and Codex is undrivable on this machine. It stays a code-read claim until a test covers it.
 
+**Phase 4.5, 2026-09-05 (night) -- re-driven after the fix, with a control, and the result inverts.**
+
+Task 4.5 asked for phase 0 repeated against the implementing code, expecting the opposite result. It
+was run twice: once on the fix, and once with the pre-F286 gate restored in the same checkout, at
+the **same injection site**, so the difference between the two is the gate and not the site. Phase 0
+raised at the in-window status write; this pair raises three statements earlier, immediately before
+`_report_abandoned_entries` -- both sit between the terminal commit and `redrain_queued_agents`, but
+they are not the same line, and an A/B at one site is worth more than a comparison across two.
+
+Both drives: Hub on **8011** from `hub/` with uvicorn from source, `AW_F286_INJECT=1`, a fresh
+database and a fresh fixture project each time, one agent on `claude-haiku-4-5-20251001`, harness
+`scripts/drive/t_f286_phase0_observe.py` unchanged from phase 0. The guarded raise was reverted with
+`git checkout` and never committed. Confirmed before believing either drive: no `.py` under
+`hub/hub` or `src` was newer than the uvicorn process's start time (`agent_trigger.py` 01:26:04
+against a process started 01:26:26; 01:29:33 against 01:29:40).
+
+| | **fixed** (`proj-b70dad75b4b7`) | **control**, pre-F286 gate restored (`proj-5f386b6769de`) |
+|---|---|---|
+| Run #1 | `run-16b449d4a80a` | `run-262d0b6132ee` |
+| Its outcome | `completed`, exit 0, `error=None` | `completed`, exit 0, `error=None` |
+| `ended_at` | `00:27:34.803750Z` (t+40.1s) | `00:30:36.386410Z` (t+44.1s) |
+| Raise | once, `agent_trigger.py:2290`, `ERROR Unhandled error in run …` | same |
+| Entry behind it | `entry-8992a0c0b036`, arrived `00:26:58.040752Z` | `entry-5602402c96cd`, arrived while #1 ran |
+| Entry, 5s after #1 ended | **`delivered`**, `run-9d0f885a67c4` | `queued`, `delivered_in_run_id=None`, attempts 0 |
+| Delivered at | `00:27:34.943590Z` -- **0.140s after `ended_at`**, no operator action | only after a settings save |
+| Left idle | 1 min, 2 polls, `delivered` throughout | **2 min 6s, 4 polls, `queued` every one, no drift** |
+| Settings save | **no-op**: runs before 2, after 2 | delivered `0.14s` later into `run-1c8380d8b82c`; runs before 1, after 2 |
+| Successor turn | real Haiku turn, `completed` `00:27:42.570573Z`, exit 0, replied `OK` | started by the save |
+
+**0.2 inverted.** The run reaches a terminal status, the in-window tail raises, and the input behind
+it is handed to a successor run by the run boundary itself, 140 milliseconds later.
+
+**0.3 inverted.** There is nothing left for the coincidence to recover. The settings save changed
+nothing because the entry was already delivered 66 seconds earlier; the harness's
+`DELIVERED 0.01s after the settings save` line is an artefact of its phase-0 loop breaking on its
+first poll, not a second delivery -- `runs before the save: 2   after: 2` is the line that says so.
+
+**0.4 preserved, which was the point of keeping the relabel gated.** Run #1 is still recorded
+`completed` with `error=None` and `exit_code=0` in both drives. The fix released the queue without
+touching the outcome, exactly as task 1.1 scoped it.
+
+**The operator-visible surface phase 0 called out is now empty.** Phase 0 found the stranded entry
+reporting `delivery_attempts=0`, `waiting_reason=None` through `GET /queue/{agent}/status` -- an
+entry waiting for no stated reason. Queried on the fixed drive after the boundary:
+`{"waiting_count": 0, "running": false, "waiting_reason": null, "delivery_attempts": 0}`.
+
+**Nothing here disproves anything previously recorded under F286.** The control reproduces phase 0's
+measurement at a second injection site three statements earlier in the same window, which widens the
+finding slightly rather than narrowing it: the window is skipped as a whole, not from one particular
+line onward.
+
+**Still not driven.** The app-server half (requirement 2) remains a code-read claim covered by tests
+3.4 and 3.5 only -- it needs Codex, which is undrivable on this machine.
+
 ## F287 (C) - `record_agent_output` refreshes a row it has already fully populated, one extra SELECT per output line on the Hub's hottest write path
 
 **Status:** open
