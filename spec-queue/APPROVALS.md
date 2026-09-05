@@ -54,6 +54,29 @@ window's green-tree check lands on a red chunk, its playbook makes the inherited
 first item — so it would make the *second* guess at this file from the same evidence, unattended. A
 `DIRECTION.md` line saying whether it may is the cheapest way to steer that.
 
+**Narrowed after the page was written, by D-6's control run — read this with the paragraph above.**
+The evidence is no longer "the same evidence". Rebuilding the `app` fixture's exact conditions
+(file-backed `sqlite+aiosqlite`, WAL, `busy_timeout=30000`, `expire_on_commit=False`, a session
+leaked across the boundary, then `dispose()`, then `drop_all`) and varying only what the leaked
+session did last gives: a session that **committed** — with or without a following `refresh` — lets
+the DDL through in **0.0s**, and a session holding an **uncommitted write** fails it with
+`database is locked` after the busy timeout, **byte for byte the error CI reports, at the same
+statement**. So F292's leaker wrote and did not commit, a leaked reader is ruled out, and
+`be6a70d`'s `dispose()` provably could not have helped — it closes *idle* pooled connections and
+cannot reclaim one a running task holds mid-transaction. It is still **not reproduced from the suite
+itself**, so this narrows the guess rather than removing the need for your line.
+
+**F287 is fixed — `890cf40` — and yesterday's section forbade exactly that, so here is why.** The
+2026-09-04 note said deleting `output_recording.py`'s `db.refresh` "would very likely turn CI green
+on its own … That is masking, not fixing." Its premise was the shared connection, which is gone. The
+day window did not treat the expiry as a licence: it took F292 as a live reason to re-ask the
+question, and answered it with the control above — the refresh holds a SQLAlchemy transaction and a
+checked-out connection, and **no SQLite lock at all**, because pysqlite issues no `BEGIN` for a
+`SELECT`. Removing it cannot make F292 stop reproducing. Taken under the playbook's no-spec repair
+carve-out, with all three conditions verified, both tests mutation-checked, and a real
+`claude-haiku-4-5` turn driven against a Hub restarted from the edited source. **If you disagree
+with the override, this is the line to say so on** — the change is one commit and reverts cleanly.
+
 **A second decision the page argues both sides of.** Today's drive filed **F288 (B)**: a Hub restart
 ends every orphaned run but re-evaluates only those runs' own agents, stranding an agent parked on
 the crashed run's task checkout — driven, a 6m15s strand with the checkout free. That **breaches the

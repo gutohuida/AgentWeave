@@ -19884,7 +19884,43 @@ line onward.
 
 ## F287 (C) - `record_agent_output` refreshes a row it has already fully populated, one extra SELECT per output line on the Hub's hottest write path
 
-**Status:** open
+**Status:** fixed `890cf40` (2026-09-05, day window D-6, the playbook's no-spec repair carve-out).
+The three lines are now `db.add(row)` / `await db.commit()` and a comment saying why there is no
+third; `hub/hub/output_recording.py:92`.
+
+The 2026-09-04 APPROVALS note had forbidden this fix on the grounds that deleting the refresh
+"would very likely turn CI green on its own, by removing the one operation that makes the
+shared-connection rollback loud. That is masking, not fixing." That premise was spent -- F285 was
+fixed at `d9ad1e0` and the suite is file-backed -- but **F292**, filed the same morning, is a new
+intermittent `database is locked` on the same suite, so the masking question was re-asked rather
+than waved through, and **answered by measurement**: `scripts/drive/f287_does_the_refresh_hold_a_lock.py`
+reproduces the fixture's conditions (file-backed `sqlite+aiosqlite`, WAL, `busy_timeout=30000`,
+`expire_on_commit=False`, a session leaked across the boundary, then `dispose()` then
+`drop_all`/`create_all`) and gets:
+
+| leaked session | `session.in_transaction()` | `pool.checkedout()` | DDL |
+|---|---|---|---|
+| with the refresh | True | 1 | OK, 0.0s |
+| without it | False | 0 | OK, 0.0s |
+| **control: uncommitted write** | — | — | **`database is locked`, after 1.219s** |
+
+The refresh does keep a SQLAlchemy transaction open and a connection checked out; it holds no
+SQLite lock, because pysqlite issues no `BEGIN` for a `SELECT`. What reproduces F292's exact error
+is an uncommitted *write* held open across the boundary, which a read after a commit is not. So the
+fix cannot mask F292 — see F292's own entry, which that control narrows.
+
+Two tests in `hub/tests/test_agent_output_stream.py`, each mutation-checked against the mutation it
+exists to catch: `test_recording_an_output_row_issues_no_select_of_the_row_it_just_wrote` captures
+emitted SQL and fails if the refresh is restored, and
+`test_a_recorded_row_carries_its_timestamp_without_a_refresh` fails with exactly the predicted
+`AttributeError: 'NoneType' object has no attribute 'isoformat'` when `default=_now` is dropped from
+the column.
+
+**Driven, not only tested.** 8011 restarted from this source on a fresh database and fresh project
+`proj-f0caad877055`; one `claude-haiku-4-5` turn (`run-ab93602d5df7`) completed exit 0, error None,
+in 8.0s; 4 SSE `agent_output` events each carrying a parsable aware timestamp, 8 persisted rows none
+missing one, a real reply, and both terminal `kind="status"` rows from the two distinct call sites.
+`scripts/drive/t_d6_output_timestamps_without_a_refresh.py` is the drive.
 
 **Found 2026-09-04 (day D-2)** while triaging **F285**, which is the line's second cost.
 
@@ -20267,6 +20303,29 @@ else touching it.
 review page. **Measured from CI, not reproduced locally** -- the three runs below are the evidence;
 no local reproduction was attempted, and the mechanism sentence at the bottom is explicitly labelled
 unestablished.
+
+**Narrowed 2026-09-05 (day D-6), by a control run for a different finding.** Still open, still not
+reproduced from the suite itself, but the space of mechanisms is smaller than it was this morning.
+`scripts/drive/f287_does_the_refresh_hold_a_lock.py` rebuilds the `app` fixture's conditions
+exactly -- file-backed `sqlite+aiosqlite`, `PRAGMA journal_mode=WAL`, `PRAGMA busy_timeout=30000`,
+`expire_on_commit=False`, a session left un-closed by a notional previous test, then
+`await engine.dispose()`, then `drop_all`/`create_all` on a fresh connection -- and varies only what
+the leaked session did last:
+
+- leaked session that **committed** (with or without a following `refresh`): `drop_all` succeeds in
+  **0.0s**. A leaked read, and a leaked idle connection, do not block the reset. In WAL a reader
+  never blocks a writer, and pysqlite emits no `BEGIN` for a `SELECT` at all.
+- leaked session holding an **uncommitted write** (`flush()`, no `commit()`): `drop_all` fails with
+  `OperationalError: (sqlite3.OperationalError) database is locked`, after the DDL connection's busy
+  timeout expires — **byte-for-byte the error CI reports, at the same statement.**
+
+So F292's leaker is a session that **wrote and did not commit**, held across the test boundary — not
+merely a connection left open, and not a reader. That is consistent with the entry's own
+fire-and-forget-task hypothesis and rules out the milder shapes of it. It also explains why
+`be6a70d`'s `dispose()` did not hold: `dispose()` closes a pool's *idle* connections and cannot
+reclaim one a running task has checked out mid-transaction, which is precisely the only case that
+locks. **The diagnostic this entry asks for should therefore log the pool's checked-out count *and*
+whether any connection is in a transaction, immediately before the `drop_all`.**
 
 F285 was the Hub suite sharing one DBAPI connection across every `AsyncSession`, because an
 in-memory SQLite URL gets a `StaticPool`. It was fixed on 2026-09-04 by moving the suite to a
