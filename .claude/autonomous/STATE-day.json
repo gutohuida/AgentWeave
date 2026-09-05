@@ -1,84 +1,40 @@
 {
-    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook": ".claude/loops/day-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-03-daily",
-    "parent_branch": "master",
-    "parent_sha": "2912736",
-    "stop_at": "2026-09-04T17:00:00+01:00",
-    "iteration": 7,
-    "log_file": ".claude/autonomous/2026-09-04-day-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "compose",
-            "status": "done",
-            "title": "Compose this window's queue from the playbook",
-            "detail": "Done at iteration 1. Merge gate dormant (seeded limit) and would have failed condition 3 anyway. Research delivered to spec-queue/research/2026-09-04.md. DIRECTION.md has no section for today. Coverage-sweep resumption trigger has fired: F188 has a proposal (archived a-blocked-agent-workspace-holds-its-input)."
-        },
-        {
-            "id": "D-2",
-            "status": "done",
-            "title": "CI triage -- three hub tests red on Linux, green on this machine?",
-            "detail": "Done at iteration 2. Verdict: ONE cause, all three tests, and it is a TEST-HARNESS ARTEFACT -- filed F285 (B). The suite runs on sqlite+aiosqlite:///:memory: (hub/tests/conftest.py:19), whose aiosqlite pool is a StaticPool: one DBAPI connection shared by every AsyncSession, so a finishing HTTP request's reset-on-return ROLLBACK erases a background run's in-flight INSERT and record_agent_output's db.refresh(row) raises 'Could not refresh instance'. Measured (memory=StaticPool, file=AsyncAdaptedQueuePool), reduced in scripts/drive/staticpool_shared_connection.py, and reproduced inside the real suite with CI's exact error via scripts/drive/churn_sessions_plugin.py at CHURN_DELAY=0.3. Not reachable in production: config.py:16 is always file-backed. Two further findings: F286 (B) -- a real product gap, _execute_run's exception handler gates the queue redrain (:2358) on already_terminal, so an exception between the terminal commit (:2174) and the normal redrain (:2281) strands queued input with no tick to recover it; F287 (C) -- the refresh is dead weight (expire_on_commit=False, timestamp is a Python-side default) and costs one SELECT per output row."
-        },
-        {
-            "id": "D-3",
-            "status": "done",
-            "title": "Drive -- the sweep turned out to be COMPLETE; row 11 re-driven, F227/F228 re-confirmed",
-            "detail": "Done at iteration 3, and the unit of work it names could not be done as written. Row 9c is NOT Jobs + Loops (that is row 10); row 9c was driven and closed 2026-09-01 (FINDINGS.md:15540, F215-F219); row 10 was driven the same day (:15981, F222-F226). I then drove row 11 (Questions) as the apparent next row and it was ALSO already driven -- 2026-09-01 D-7, commit db5f964, F227-F229 -- which my drive rediscovered line for line. MEASURED ANSWER: every row of SURVEY.md's 17-area inventory has a t_sweep_row* harness AND a citation of it by name in FINDINGS.md. The sweep is COMPLETE. The coverage map with a ledger line per row is now in SURVEY.md under 'Coverage map -- the 17-row sweep is COMPLETE', including the warning that two numbering systems are in the ledger and a bare 'row N' is ambiguous. Two kept harnesses were overwritten by same-named files and restored with git checkout before any commit; a duplicate F288-F290 section was written and reverted. What survives: an appended note 'F227/F228 revisited' (a note, not new findings -- the ledger still holds 292) correcting F228's measurement scope (lib/pendingQuestions.ts:26 DOES read `declined`, so F228's reach is the Questions page, not the app) and recording a second, race-only path to F227 through AgentQuestionCard's asymmetric guards (:99 vs :127/:47). Both findings reproduce at HEAD, driven. The live ask_user half held 19/19 with real Haiku turns. Fixture deleted, 8011 stopped, 0 enabled jobs, 8010 untouched on pid 12108."
-        },
-        {
-            "id": "D-4",
-            "status": "done",
-            "title": "Spec R1 -- done: openspec/changes/a-terminal-run-releases-the-queue-behind-it",
-            "detail": "Done at iteration 4. proposal.md, design.md, tasks.md and an agent-conversation-workspace delta with two ADDED requirements; `openspec validate --strict` clean. R1's own discovery, and it corrects the finding: F286 says `_execute_codex_appserver_run` 'reaches the same handler' -- it does NOT, and the truth is worse. `_execute_run` delegates at :1824, ABOVE its own try: at :1846; and the codex function's outer construct is try:/finally: (:2536/:2873) with NO except clause (its only except is the inner spawn one at :2692). An exception there escapes into a task whose only done-callback is _background_runs.discard (:1231). After that path's terminal commit (:2813) it is F286 with no redrain attempt and no logger.exception; BEFORE it the Run row stays running with error=None and the agent is wedged until a Hub restart (app-server runs never set Run.pid -- :1937 is the sole assignment). Also corrected: terminal commit is :2175 not :2174, handler starts :2282 not :2287, already_terminal spans :2305-2313, and reconcile_interrupted_runs does not recover a stranded entry even on restart (it selects only Run.status == 'running', run_reconciliation.py:60). All corrections appended to F286 in FINDINGS.md. Decisions: D1 ungate the redrain and leave the relabel gated; finally-block placement REJECTED (:2364-2368 warns a cancelled task raises at its first await); early release REJECTED (successor starts against a half-written boundary); D3 duplicate the handler on the codex path rather than share; D4 the test INJECTS the exception so it does not go green when F285 is fixed; D5 codex half verified by the _fake_run_turn harness, PTY half driven live in phase 0."
-        },
-        {
-            "id": "D-5",
-            "status": "done",
-            "title": "Spec R2 -- done: four corrections, one of which changes what the proposal argues",
-            "detail": "Done at iteration 5, and it did NOT change nothing. (a) confirmed: no nested handler anywhere between :2175 and :2281 -- the only try nearby is :2075/:2079 inside _flush_line, upstream of the window. (b) WRONG in R1: maybe_generate_title cannot raise an Exception (conversation_titles.py:230-238, 'Never raises'); five calls can, all by uncaught DB work; consider_handover_from_run_end cannot either. The narrowing does not shrink the defect -- `except Exception` misses CancelledError, which this handler catches, and that call awaits a ~19s CLI spawn, so it is the widest CANCELLATION window while contributing nothing to the exception window. D4 now forbids patching it in the test. (c) confirmed on all three counts; added that the codex path's commit is :2813 and its redrain :2872, the last statement before finally: -- structurally identical to :2175/:2281. (d) confirmed safe: redrain takes only project_id, and schedule_agent re-validates the running run (:258-262) and the conversation (:277-283) itself. (e) WRONG in R1: nothing charges on delivery (mark_delivered, inbound_queue.py:154); the charge sites are inbound_queue.py:211 (a failed run RETURNING) and turn_scheduler.py:462 (a non-transient REFUSAL, :378-406). R1's two-bucket split is a false dichotomy -- an entry the first redrain reached and refused stays queued, was charged once, and is charged again, and DELIVERY_ATTEMPT_LIMIT is 3. Also: D1 INTRODUCES this overlap rather than inheriting it, because today already_terminal is True at :2281. D2 rewritten, decision kept, residual named, new task 3.7 asserts the bound. (f) HALF WRONG and it matters: R1 said 'Repeated delivery failure does not wedge an agent' (spec.md:1228) does not reach F286 because the entry is never returned -- true only for the STOPPED-run instance. On the FAILED branch return_run_entries runs at :2172, inside the same try and BEFORE the terminal commit, so the window strands RETURNED input and the shipped requirement covers it in terms. The code is in breach of a requirement that already shipped; the change is a restoration plus an extension, not a pure gap. No MODIFIED block -- the existing text is correct as written. Placement stands; added the agent-run-sandboxing:219-223 precedent R1 missed. Also fixed a stale ':2287' at proposal.md:46 that R1's write-up claims to have corrected, and removed 'naming its conversation' from the delta. openspec validate --strict clean. Ledger still 292; corrections appended to F286."
-        },
-        {
-            "id": "D-6",
-            "status": "done",
-            "title": "Spec R3 -- done: D3 overturned, and a test that could not have failed",
-            "detail": "Done at iteration 6, and it did NOT change nothing -- it changed more than R2. (c) D3 OVERTURNED. Measured the diff R3 was told to take: comments and blanks stripped, the PTY success tail :2169-2281 is 40 statements and the app-server :2807-2872 is 41, and `diff` returns ONE hunk of ONE line (`**_runtime_failure_fields(outcome, lifecycle_event)`). Worse, D3 justified duplicating the HANDLERS by citing differences between the success TAILS, and applied to the handler all three differentiators are absent: `_runtime_failure_fields` needs a TurnOutcome an exception does not supply (and which is unbound if the raise precedes run_turn returning), which is why the app-server path's own pre-spawn except at :2723 ALREADY uses `_transport_failure_fields`, the same helper the PTY handler uses at :2344; neither handler passes exit_code at all; and active_ptys/active_app_server_runs are in the two finally blocks (:2362, :2874) that were never part of what D3 proposed to copy. What remains differs in one string, `runner`. D3 is now ONE SHARED HELPER and tasks.md phase 2 was replaced. (d) tasks.md 0.2 was BOTH unexecutable and wrong. A running uvicorn cannot be monkeypatched from outside -- rewritten to an env-var-guarded raise in the 8011 checkout, driven, then git checkout. And NEITHER named injection point is inside the window: record_agent_output fires at :2014 per streamed output event, _broadcast_run_lifecycle at :1939 as run_started, both BEFORE the terminal commit at :2175 -- so the raise lands with the row still running, already_terminal is False, and today's code already redrains. A test written to task 3.1 as it stood WOULD HAVE BEEN GREEN BEFORE THE FIX AND AFTER IT. Injection is now predicated on kind == 'status' (:2235/:2854) or on _report_abandoned_entries (:2195). (b) Placement STANDS but the wording did not. R3 argued from what each candidate capability's requirements are ABOUT rather than by elimination: agent-stream-events owns the terminal status LINE, a persisted output row its own text bounds to 'the two spawn paths' finalize blocks'; agent-run-sandboxing:219-223 is about permission requests and is a precedent, not a home; the wedge family is agent-conversation-workspace's. Neither requirement moves. But requirement 2's normative line said 'within the life of the process that started it', which makes a SHIPPED behaviour a violation -- a killed Hub leaves the row running and run_reconciliation:60-67 marks it interrupted at the next start, and agent-stream-events already carves that case out in terms. Rescoped to a run whose execution ends INSIDE the process that started it, carve-out stated. (a) ADDED-only is RIGHT -- spec.md:1228's text is correct as written and the R2 breach is a breach of it, not a defect in it. But one delta scenario WAS a corpus duplicate: 'The stranded input is not waiting for an unrelated operator action' was stated over input queued behind a run that ended abnormally, which includes RETURNED input, for which the shipped requirement already carries 'A returned input is retried without being asked for' (spec.md:1329-1333). Rewritten over the case the shipped scenario cannot reach -- input never returned by anything. (e) Five citations R2 never checked: agent_trigger.py:1908, turn_scheduler.py:520, run_reconciliation.py:60 and projects.py:315/:527/:588 all exact; test_agent_trigger.py :68/:126 are docstring lines, defs are :67/:117. STALE AND 'CONFIRMED': `:1846`. _execute_run has TWO top-level trys -- :1846 (except :1870, returns :1911) and :1933, which is the one paired with the handler at :2282 and the finally at :2361. R1 asserted :1846 and R2 'confirmed' it. Conclusion survives (the delegation returns at :1842, above both); the number did not. openspec validate --strict clean. Ledger still 292; corrections appended to F286 including the 40-vs-41 tail measurement, which outlives this change."
-        },
-        {
-            "id": "D-7",
-            "status": "done",
-            "title": "The review page and the APPROVALS section -- done; queue finished",
-            "detail": "Done at iteration 7. spec-queue/review/review-2026-09-04.html written (36 KB, 7 sections). Self-containment VERIFIED not asserted: zero external src/href/@import/<script>/font references; full DOCTYPE/html/head/body wrapper; well-formed by html.parser (zero unclosed tags, zero mismatches); theme-aware and RENDERED in both themes by pointing scripts/uishot.py at a file:// URL (1100x7757 full-page capture each, both read back). Stylesheet reused verbatim from review-2026-09-03.html. Two figures had moved since D-1 and the page states both the morning and current value rather than substituting silently: 27 -> 33 commits ahead of master, and 21 -> 24 consecutive CI failures since the only green run 467dfea (2026-09-03T23:04:01Z); three of those six commits and three of those failures are this window's own. The page separates the gate being DORMANT (a seeded limit) from the gate FAILING (condition 3), because lifting the limit does not merge the branch -- only F285 does. openspec validate --strict re-run clean at write time. APPROVALS: today's section was INSERTED at the top, not appended -- the file's own contract is 'Newest day first. Days below the newest are history and are not read', so appending would have filed today's decisions where the night window is told not to look. One row, no status token. HAZARD FOUND AND REMOVED: the draft carried yesterday's closing sentence naming both NOTHING TONIGHT and ORDER: as literals. Yesterday that was safe because the section ALSO carried a real ORDER: line; today's section has neither, so a bare NOTHING TONIGHT in prose would have been the only directive-shaped string in the newest section of the one file the night window reads. Rewritten to name the token without spelling it. Ledger unchanged at 292. No hub/hub/ or src/agentweave/ file touched all window."
-        }
-    ],
-    "decisions_for_user": [
-        "TWO DECISIONS OUTRANK THE APPROVAL ROW, and the night window acts on their absence rather than waiting. (1) WHICH F285 FIX -- unshared pool, file-backed temp database per test, or per-test engine disposal. The night's playbook makes an inherited red suite its FIRST queue item before anything else, so with no instruction it picks one unattended, and that choice becomes a standing property of how every future test in this repository is isolated. A DIRECTION.md line naming the fix is the cheapest way to steer it. (2) DIRECTION.md's stale 'coverage sweep is more than half unrun' paragraph and its expired resumption trigger -- the sweep is COMPLETE (all 17 rows, measured), the stale text cost this window a drive slot today, and it will cost tomorrow's too while it stands. DIRECTION.md is the operator's file and neither window edits it.",
-        "THE COVERAGE SWEEP IS FINISHED, and spec-queue/DIRECTION.md still says it is 'more than half unrun'. Measured 2026-09-04: all 17 areas of SURVEY.md's inventory have a driven harness cited in FINDINGS.md. DIRECTION's 'rows 9c and 10-17 are genuinely untouched' was written one day after 9c, 10 and 11 were driven and has been copied forward unchanged ever since; this window's next_action inherited it and spent an iteration rediscovering F227-F229. The coverage map is now in SURVEY.md, but DIRECTION.md is the operator's file and this window does not edit it -- the stale paragraph and the expired resumption trigger are yours to remove. What replaces it: the sweep answered 'does each area work' and never answered the CROSSINGS between areas, which is where the e2e-loop skill says the serious defects live. TESTPLAN.md's T-DEP, T-HOP, T-CONC, T-VOL, T-DRIFT and T-BUDGET are all still unrun and are the natural replacement for 'the next row'.",
-        "CI's three failures are ONE cause and it is the test harness, not the product (F285). The suite runs in-memory, whose SQLAlchemy pool is a StaticPool -- every AsyncSession shares one connection, so any request finishing rolls back whatever a background run is writing. Reproduced on this machine with CI's exact error (scripts/drive/churn_sessions_plugin.py, CHURN_DELAY=0.3) and shown not to occur on a file-backed engine, which is the only kind production uses. WHICH FIX is the operator's call: an unshared pool, a file-backed temp database per test, or per-test engine disposal. They differ in how much of the suite has to be re-timed. Until one is chosen the branch cannot satisfy the merge gate's condition 3.",
-        "F286 (B) is the part of the CI red that is NOT a harness problem and outlives its fix: _execute_run's exception handler gates the queue redrain on `already_terminal`, so an exception raised after a run reaches a terminal status leaves the input queued behind it undrained, with nothing on a timer to notice. It is a candidate for D-4's spec slot if the drive produces nothing stronger.",
-        "The merge gate remains dormant because STATE-day.json's seeded limits[0] still forbids merges. Conditions 1, 2 and 4 passed this morning; only CI (condition 3) failed, and D-2 has now explained why. Whether to hand the fast-forward step over to the day window is the operator's call.",
-        "Four ledger rows carried forward by the night window with no proposal: F271 and F274 (both severity A), plus F281 (B), F282 (C), F283 and F284 (C) filed by the two changes it built. F284 -- the manual permission card names the path and nothing else -- was held out of a-write's scope by its decision D3 and was live-driven, so it is an observation rather than a suspicion.",
-        "Research candidate 2 is a withdrawal: yesterday's candidate 2 rested entirely on Claude Code v2.1.259 shipping a cd DIR && cat FILE fix, and v2.1.260 reverted it 25 hours later naming the regression. If anything already acted on that recommendation it should be unwound; nothing in this repo has."
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
-        "This window FILLS and does not implement. If you find yourself editing hub/hub/ or src/agentweave/, stop -- the one exception is a drive harness fixture, which belongs in scripts/drive/.",
-        "The hub suite runs whole in 15-25 minutes and exceeds the 600s command cap. Run it in file chunks, and do not run it whole in this window unless something you did could plausibly have broken it."
-    ]
+    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+    "playbook":  ".claude/loops/day-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-04-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "a38caee",
+    "stop_at":  "2026-09-05T17:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-05-day-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
