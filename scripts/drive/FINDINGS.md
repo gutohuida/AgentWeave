@@ -136,6 +136,58 @@ and it has no proposal — so by the night window's own rule (`.claude/loops/nig
 finding with no proposal needs the day window first*) it is not this window's to fix, however small
 the repair looks. It was invisible for a week because the index said the A list was one.
 
+**Revised 2026-09-06 (night window, N-2): the number is not the defect — the missing *definition*
+is, and by this index's own words the open list is six, not two.** This item was queued on the
+premise that the index still asserts *"the open severity-A list is one — F271"*. Re-deriving instead
+of trusting that premise falsified the premise first: that line is dated 2026-09-02 and is
+superseded twice below, on 2026-09-03 and 2026-09-04. The queue item said to re-derive rather than
+trust its own detail, and that is what the instruction bought.
+
+What the re-derivation found is worse than a stale number. All **40** severity-A headings were
+scanned again, mechanically and reproducibly (`^#{1,4} F\d+ \(A\)`, each section bounded by the next
+finding heading of any severity), for their `**Status:**` line *and* the banner above it. **Six
+sections say they are open. The paragraph above counts two.** The four in between are the ones this
+index invented the phrase "third state" for on 2026-09-03 — and then, the same night, wrote a banner
+onto each of them reading *"this entry stays open until somebody re-drives it."* A reader who greps
+`**Status:**` gets six; a reader of the index gets two; both are reading this file.
+
+| Finding | What its own section says | What it is blocked on |
+|---|---|---|
+| **F271** | no `**Status:**` line at all and no retirement banner — open by default, unchanged since filing | **Nobody has specced it.** No proposal and no change directory (`openspec/changes/` holds exactly one, and it is F274's). Half of it is a plain repair — render the load error instead of an empty editor with Save enabled — and half is an operator decision: should a PUT that blanks non-empty stored content ask first? The night window may not answer that, so it is the day window's, per `.claude/loops/night-window.md` step 4.2. |
+| **F274** | `**Status:** open, proposed 2026-09-05` | **An approval that was never given.** `2026-09-05-the-conversation-carries-its-own-run-facts` exists — 44 tasks, 8 phases — but `spec-queue/APPROVALS.md`'s 2026-09-05 row carries no status token, because the DECIDE session did not sit down. Specced, unapproved, unbuilt. |
+| **F140** | banner *"Unverified, not retired … stays open until somebody re-drives it"*, over a `**Status:** open, filed not fixed` that predates the banner | **Two things at once.** An operator choice between two defensible repairs — the stated reason it was filed rather than fixed — *and* a change naming it, `archive/2026-09-01-a-flow-briefing-names-its-contract`, archived without ever being driven. |
+| **F142** | same shape as F140 | Same archived-and-undriven change of its own (`archive/2026-09-01-a-review-a-flow-cannot-staff-is-named`). Its own text says it changes *which* of F140's repairs is worth building, so it cannot be settled before F140 is decided. |
+| **F154** | no `**Status:**` line; carries the same *"stays open until somebody re-drives it"* banner | `archive/2026-09-01-a-review-nobody-is-doing-is-named` — archived, never driven. |
+| **F155** | same | `archive/2026-09-01-a-conflict-refusal-names-what-clears-it` — archived, never driven. |
+
+Unchanged, and deliberately named here so the next recount does not rediscover them as anomalies:
+**F12** (severity-A half fixed `5237ec5`), **F52** (partially fixed; the underlying CLI refusal does
+not reproduce), **F60** (`FIXED 2026-08-30`), and the three retired behind banners — **F173**
+(2026-09-02), **F188** (2026-09-04), **F190** (2026-09-03).
+
+**The correction is a definition, not arithmetic.** "Open" has been used here to mean two different
+things, each defensible alone: *nothing has been built* (two — F271 and F274) or *no drive has shown
+the defect is gone* (six). This repository already decides between them — `CLAUDE.md`: *"Never mark a
+task complete on the strength of a plan existing"*, restated by this index four paragraphs above as
+*"a plan having existed and been marked done … is not evidence a defect is gone."* **So the open
+severity-A list is six: F271, F274, F140, F142, F154, F155.** Two was not a miscount; it was the
+older definition still standing next to the banner that had already replaced it, which is why
+recomputing the *count* on 2026-09-04 did not catch it. **A recount cannot find a definition
+error — only re-deriving the rule can.**
+
+**Where this has already mis-steered something.** Today's `spec-queue/APPROVALS.md` reasons off the
+two-count and contradicts itself doing so: line 85 tells the operator *"F274 is the only open A"*,
+while line 91 of the same page calls F271 *"the one remaining open severity-A row"*. Line 31 offers
+F274 as *"the last open severity A with no proposal"*, which F271 also is. That page is **left
+exactly as written** — it is the record of a decision session put in front of the operator, and
+editing it after the fact would destroy the thing it exists to be — but any window reading it should
+read this paragraph alongside it.
+
+**What this does not claim.** Six is what the *sections* say, not a re-drive. Nothing here drove
+F140, F142, F154 or F155; the banners' condition is still unmet and this revision does not pretend
+otherwise. The cheapest way to make the two-count true is to drive those four — until somebody does,
+they are open.
+
 **And one observation that outranks any single row of that table.** F88, F89 and F90 were found in
 one iteration, in three unrelated subsystems, and every one of them was a mechanism this repository
 tests *thoroughly* — against a state the product never produces. F88's access tests pass a

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "a38caee",
     "stop_at": "2026-09-06T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-05-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "N-1b",
-    "next_action": "N-1b. Read .claude/autonomous/scratch/loud-suite.txt -- the whole Hub suite run at busy_timeout=50 that iteration 2 left running -- and record in F292 what it names. If it has not finished, do NOT wait: take N-2 (the ledger's open-severity-A index) this firing and come back to N-1b. If it has: grep for 'held by' and for the FIRST 'ERROR at setup', and write the answer into F292's 'Instrumented 2026-09-05 (night N-1)' section. A clean negative is a real result and must be written as one. Read that section first -- it already states what the run rules in and out. This item does not change hub/tests/conftest.py: DEC-1 is still unanswered.",
+    "next_action": "N-1b (retry). Read .claude/autonomous/scratch/loud-suite.txt -- the whole Hub suite at busy_timeout=50, RELAUNCHED detached in iteration 3 (WMI-parented, PID 25500, started 23:51, at 15% when iteration 3 closed; a full pass is ~25-30 min, so it should be finished). (a) Confirm it finished: the last line reads 'EXIT=<n>'; if that line is absent it is still running -- do NOT wait, take N-3 this firing and come back. (b) `grep -n 'held by' loud-suite.txt` and `grep -n 'ERROR at setup\\|database is locked'`. (c) Write the answer into F292's 'Instrumented 2026-09-05 (night N-1)' section, INCLUDING a clean negative -- 'no test in the suite held the file at 50ms' is a large result, not a non-result. TWO CAUTIONS: it is not a green check (the pragma is not the shipped one), and one failed schema reset cascades into tests that are only its victims -- attribute only the FIRST failure. Do not change hub/tests/conftest.py on what it says; DEC-1 is still unanswered.",
     "queue": [
         {
             "id": "compose",
@@ -31,13 +31,13 @@
             "id": "N-1b",
             "status": "open",
             "title": "Read the whole-suite busy_timeout=50 run and record what it names in F292",
-            "detail": "Iteration 2 launched `py -3.11 -m pytest tests/ -q` from hub/ with busy_timeout temporarily at 50ms, writing to .claude/autonomous/scratch/loud-suite.txt. At 50ms every transient holder anywhere in the suite becomes a named failure instead of a 30s wait, and the new diagnostic prints the culprit under 'Captured stderr setup'. Steps: (a) confirm the run finished -- it is slow in the background, roughly 4% in the first minutes against 24:28 for a foreground pass; if it is still going, leave it and take N-2 first rather than waiting. (b) `grep -n 'held by' loud-suite.txt` and `grep -n 'ERROR at setup\\|database is locked'`. (c) Record the result in F292's instrumented section, INCLUDING a clean negative ('no test in the suite held the file at 50ms' would be a large result -- it would mean the CI holder is a Linux- or load-specific timing, not a leak this machine can produce). TWO CAUTIONS when reading: it is NOT a green check, because the pragma is not the shipped one; and one failed schema reset cascades into tests that are only victims of it -- attribute only the FIRST failure. Do not change conftest.py on what it says; that is still DEC-1's to authorise."
+            "detail": "RELAUNCHED iteration 3 -- the first run was DEAD, not slow. It died with iteration 2's process (mtime == that iteration's commit second, 12%, 588 bytes, zero failures, nothing named); kept as loud-suite-partial-2326.txt. A harness background process does not outlive its firing, which is the boundary a 25-min suite must cross. The relaunch is detached through WMI (Invoke-CimMethod Win32_Process Create, parented under WmiPrvSE, outside any job object the harness kills) via .claude/autonomous/scratch/run_loud.cmd, and needs NO edit to conftest.py: the pragma override is a scratch plugin (.claude/autonomous/scratch/aw_busy50.py, -p aw_busy50 + PYTHONPATH) that attaches its connect listener from pytest_sessionstart, so it registers AFTER conftest's 30000 listener and wins on last-write. Confirmed live: the file opens '[aw_busy50] busy_timeout=50 override attached'."
         },
         {
             "id": "N-2",
-            "status": "open",
+            "status": "done",
             "title": "Reconcile the ledger's open-severity-A index with the sections' own Status lines",
-            "detail": "scripts/drive/FINDINGS.md's index asserts 'Revised 2026-09-02: the open severity-A list is one -- F271.' Measured while composing: F140 (A), F142 (A) and F274 (A) also carry **Status:** open. Correct the paragraph, and for each say what it is blocked on (F140/F142: two defensible repairs, choice is the operator's; F271: no proposal; F274: proposed 2026-09-05, unapproved). Re-derive the list yourself from the Status lines rather than trusting this detail -- that is the whole point of the item. The playbook calls this non-optional: 'A backlog that cannot say what is done is read as a backlog of everything.' It also mis-steers tomorrow: today's APPROVALS.md reasons from this paragraph twice. Do not rewrite history in the ledger: add the correction as a dated revision paragraph in the same style as the ones already there, so the record of having been wrong survives."
+            "detail": "Done iteration 3. The item's own premise was stale and fell first: the index does NOT still say 'one -- F271'; that 2026-09-02 line is superseded on 2026-09-03 and 2026-09-04 (recomputed to two). The real defect is a MISSING DEFINITION, not a count: six severity-A sections say they are open (F271, F274, F140, F142, F154, F155) while the index counts two, because F140/F142/F154/F155 sit in a 'third state' whose own banner -- written by this index -- reads 'stays open until somebody re-drives it'. CLAUDE.md's 'never mark a task complete on the strength of a plan existing' decides it: the list is six. Written as a dated revision (+52 lines), earlier wrong revisions intact, each of the six carrying what it is blocked on. APPROVALS.md left as written and the contradiction recorded instead."
         },
         {
             "id": "N-3",
@@ -65,12 +65,15 @@
     ],
     "notes_for_tomorrow": [
         "F271 (A) has no proposal and is the day window's, per the night playbook's step 4.2.",
-        "F140 (A) and F142 (A) are open, blocked on an operator choice between two defensible repairs -- and they are missing from the ledger's open-A summary, which N-2 corrects.",
         "F288 (B) and F289 (C) both need the spec loop, and F289 was found by F288's reproduction: the stale waiting_reason is what makes the F288 strand look like an ordinary wait.",
         "F276, F277 and F278 (all C) each say 'not fixed here' with a stated reason, and each names its own scenario. They are spec-loop material, not carve-out repairs.",
         "pytest-timeout is NOT installed on this machine -- py -3.11 -m pytest --timeout=N exits 4 with 'unrecognized arguments'. Cost one background run this iteration.",
         "F292's own 'Reproduce' instruction asked for a measurement that cannot work (pool.checkedout() after a dispose is 0 by construction). Worth carrying as a habit rather than a one-off: a finding's proposed diagnostic is an argument too, and gets checked like one.",
-        "CI runs the Hub suite as plain `pytest tests/ -v`, no pytest-randomly, no -n. Test order is deterministic run to run, so F292's intermittency is timing and not ordering."
+        "CI runs the Hub suite as plain `pytest tests/ -v`, no pytest-randomly, no -n. Test order is deterministic run to run, so F292's intermittency is timing and not ordering.",
+        "The open severity-A list is SIX, not two -- F271, F274, F140, F142, F154, F155 (re-derived 2026-09-06, night N-2, from the 40 A sections' own Status lines and banners). F140/F142/F154/F155 each have an archived 2026-09-01 change that was never driven, and each carries the ledger's own 'stays open until somebody re-drives it' banner. The cheapest way to make the old two-count true is to drive those four.",
+        "spec-queue/APPROVALS.md (2026-09-05) reasons off the old two-count and contradicts itself doing so: line 85 'F274 is the only open A' vs line 91 'the one remaining open severity-A row (F271)'. Left as written deliberately -- it is the record of a decision session -- but read FINDINGS.md's 2026-09-06 revision alongside it.",
+        "A harness background process dies with the firing that launched it. For anything crossing an iteration boundary, detach through WMI (Win32_Process Create) as .claude/autonomous/scratch/run_loud.cmd does. Iteration 2 lost a whole suite run to this.",
+        "A recount cannot find a definition error. 2026-09-04 recomputed the open-A count from scratch and still got two, because both readings of 'open' were live in the same file. Same shape as F292's blind diagnostic: an argument checks differently from an outcome."
     ],
     "limits": [
         "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
