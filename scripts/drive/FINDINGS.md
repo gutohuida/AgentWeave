@@ -20258,3 +20258,66 @@ Reproduce (not yet run): task 0.5 -- bind an agent to a runner whose binary does
 message whose entry is already at `DELIVERY_ATTEMPT_LIMIT`, and watch the conversation with nothing
 else touching it.
 
+
+---
+
+## F292 (B) - the fix for F285 traded a deterministic rollback for an intermittent lock, and the mitigation written for it did not hold
+
+**Status:** open. Filed 2026-09-05 by the day window's D-5 while reading this branch's CI for the
+review page. **Measured from CI, not reproduced locally** -- the three runs below are the evidence;
+no local reproduction was attempted, and the mechanism sentence at the bottom is explicitly labelled
+unestablished.
+
+F285 was the Hub suite sharing one DBAPI connection across every `AsyncSession`, because an
+in-memory SQLite URL gets a `StaticPool`. It was fixed on 2026-09-04 by moving the suite to a
+file-backed temporary database per process (`d9ad1e0`), which gets an `AsyncAdaptedQueuePool` -- one
+connection per session, the pool production uses. That fix is correct and this finding does not ask
+for it to be reverted.
+
+What it bought instead is file locking, which `:memory:` did not have. `hub/tests/conftest.py:109-111`
+sets `journal_mode=WAL` and `busy_timeout=30000`, and the client fixture drops and recreates the
+schema before every test. `drop_all` is a schema change, and SQLite will not make one while another
+connection holds the database, so it waits out the 30s busy timeout and raises. The failure lands at
+the **setup** of whichever test is next, which is not the test that caused it.
+
+This was already seen once and mitigated: `be6a70d`, *"empty the pool before the schema reset, not
+only after the test"*, adds `await _REAL_ENGINE.dispose()` before the `drop_all`
+(`hub/tests/conftest.py:298`), and its comment names the run it was written for (33913450471) and the
+test that failed there (`test_a_wedged_review_is_restaffed_to_a_real_reviewer`).
+
+**The mitigation is in the tree at all three failures below, and one of them is the test it names.**
+Measured against `git show <sha>:hub/tests/conftest.py` for each: all three carry the dispose.
+
+| CI run | sha | Test that errored at setup |
+|---|---|---|
+| 33923797344 (2026-09-04T22:02Z) | `770cda5` | `test_reviewer_is_not_the_author.py::test_a_wedged_review_is_restaffed_to_a_real_reviewer` |
+| 33953849160 (2026-09-05T07:55Z) | `0b8aaf5` | `test_flow_fires_a_review_turn.py::test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn` |
+| 33955870588 (2026-09-05T08:39Z) | `acd7ea8` | `test_reviewer_is_not_the_author.py::test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted` |
+
+All three are `sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked`, all
+three are `ERROR at setup`, all three are the `hub-test` job on Linux with every other job green, and
+in each run it is the only error in the suite. **Three of the sixteen CI runs on
+`autonomous/2026-09-04-daily` failed this way -- the sixteenth was still in progress at 10:14 -- and
+no run on this branch has failed in any other way.** Green runs
+bracket each failure on the neighbouring commits, so it is intermittent rather than a property of any
+one sha, and it is the sole thing standing between this branch and the merge gate's condition 3.
+
+Both failing files construct `JobScheduler` (`test_reviewer_is_not_the_author.py:191`,
+`test_flow_fires_a_review_turn.py:137` and seven more), which is what the mitigation's comment
+blames. **But the comment's mechanism does not obviously fit these**, and saying so is the point of
+filing this rather than re-applying the same remedy: `_fire_job_internal` is awaited directly with an
+explicit session in both files, so no background scheduler loop is started, and `dispose()` closes a
+pool's *idle* connections -- it cannot reclaim one that a still-running task has checked out. The
+surviving writer is more likely a fire-and-forget `asyncio` task created during the previous test
+than the scheduler object itself. **That sentence is a hypothesis and has not been measured.**
+
+Reproduce (not yet run): run `hub/tests/test_flow_fires_a_review_turn.py` and
+`hub/tests/test_reviewer_is_not_the_author.py` in a loop under `py -3.11` and watch for a setup
+error; if it will not reproduce locally, lower `busy_timeout` in `conftest.py:111` to make the
+existing contention loud rather than slow. The diagnostic worth having either way is *which*
+connection holds the file -- log the checked-out count from the pool immediately before the
+`drop_all`, so the next occurrence names its cause instead of its victim.
+
+Not a D-6 repair. The carve-out requires a fix smaller than the argument for it, and here the
+argument is unfinished: the mechanism is not established, and the last change made to this file on
+this evidence did not work.

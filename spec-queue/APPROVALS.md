@@ -16,6 +16,63 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-05
+
+Review page: `review/review-2026-09-05.html`. **One change proposed, taken through all three
+rounds.** Neither review round changed nothing, and round 3 did something new: it overturned round
+2's own finding. Round 2 showed that a design decision could not deliver the case it was chosen for
+and filed F290 (B) underneath it; round 3 showed that round 2's replacement mechanism **already
+ships app-wide with a test on it**, retracted F290, and filed F291 (C) in the place it was pointing
+at.
+
+**Written by the day window, which does not fill in its own verdict.** The row below carries no
+status token. Write `APPROVED`, `REVISING` or `REJECTED` in front of the change name.
+
+-           2026-09-05-the-conversation-carries-its-own-run-facts   F274 (A), the last open severity A with no proposal. 44 tasks, 8 phases. Two Pydantic responses gain a `runs` map, two chat routes gain a primary-key lookup over the run ids their own returned entries name, one React prop changes source, one SSE predicate gains four events — plus a `MODIFIED` requirement that repoints a cross-reference which sent three earlier rounds to a rule that could not forbid this. No migration. UI change means the committed bundle must be rebuilt and `make ui` run.
+
+**Before you decide, read section 1 of the page.** The branch is 17 commits deep, spans two days,
+and is unmerged. The merge gate was evaluated at 09:02 and did not open — dormant under this
+window's seeded limit, and it would have failed condition 3 regardless.
+
+**The thing that changed after that check, and it is new since yesterday.** `0b8aaf5`'s CI run has
+since concluded `failure`, and it is the **third** failure on this branch with exactly one cause:
+`sqlalchemy.exc.OperationalError: database is locked`, always at the *setup* of some test, always
+the `hub-test` job on Linux with every other job green, always the only error in the run. Three of
+sixteen runs; green runs bracket each one. Filed today as **F292 (B)**.
+
+This is the residue of the F285 fix you made on 2026-09-04 — which was right, and is not in
+question. Moving the suite off `:memory:` removed a deterministic corruption and bought file
+locking in its place. **It was already mitigated once and the mitigation did not hold:** `be6a70d`
+adds `await _REAL_ENGINE.dispose()` before the schema reset, that dispose is present in the tree at
+all three failures (measured with `git show <sha>:hub/tests/conftest.py`), and the first failure
+*is* the test its comment names. The mechanism is **not established** — the comment blames a live
+`JobScheduler`, but both failing files await `_fire_job_internal` directly and `dispose()` cannot
+reclaim a connection a running task has checked out.
+
+**That is a decision, not a repair, and it is why the day window did not touch it.** If the night
+window's green-tree check lands on a red chunk, its playbook makes the inherited breakage tonight's
+first item — so it would make the *second* guess at this file from the same evidence, unattended. A
+`DIRECTION.md` line saying whether it may is the cheapest way to steer that.
+
+**A second decision the page argues both sides of.** Today's drive filed **F288 (B)**: a Hub restart
+ends every orphaned run but re-evaluates only those runs' own agents, stranding an agent parked on
+the crashed run's task checkout — driven, a 6m15s strand with the checkout free. That **breaches the
+requirement last night's change synced** (`agent-conversation-workspace/spec.md:2217`, quantified
+over every agent holding queued input in the project). The day specced F274 instead because severity
+decides and F274 is the only open A, while F288 needs three consecutive interruptions to become
+observable and self-heals under one. If you would rather tonight closed a nine-hour-old spec breach
+than the oldest A, say so and F288 takes the slot.
+
+If you approve nothing, the night falls to the backlog and stalls quickly — there is nothing to
+archive (`openspec/changes/` holds only this unimplemented change), the one remaining open
+severity-A row (F271) has no proposal, which the playbook makes a note to tomorrow rather than
+tonight's work, and an unapproved proposal is not in the default either. It would land on B rows:
+F288 and F292, filed today. An `ORDER:` line and the stop-the-window token are both available and
+both override the default; both are spelled out in the format block at the top of this file.
+
+---
+
+
 ## 2026-09-04
 
 Review page: `review/review-2026-09-04.html`, published as an Artifact and walked through with the
