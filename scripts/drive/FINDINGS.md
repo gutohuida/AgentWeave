@@ -18966,9 +18966,21 @@ the component agree, and the screen still loses the outcome.
 
 ## F274 (A) - a turn's outcome is erased by work in the agent's *other* conversations
 
-**Status:** open. Filed 2026-09-03 by the day window's drive. No change in `openspec/changes/`
-covers it. This is **F190's original symptom**, live, against the fix that closed F190 - reached by
-a route none of the three rounds asked about.
+**Status:** open, proposed 2026-09-05 (day window D-2, round 1) as
+`openspec/changes/2026-09-05-the-conversation-carries-its-own-run-facts` - not yet implemented, and
+rounds 2 and 3 have not run. Filed 2026-09-03 by the day window's drive. This is **F190's original
+symptom**, live, against the fix that closed F190 - reached by a route none of the three rounds
+asked about.
+
+**One correction to the analysis below, made by round 1 against the code.** The paragraph beginning
+*"One defect or a design gap"* says the route is not in breach and that no requirement covers the
+case. The first half is right and the second is not: *A run's terminal outcome is visible*
+(`openspec/specs/agent-stream-events/spec.md:299`) is stated over **the conversation**, requires an
+outcome for every run that ended, and permits none only for a run whose row genuinely cannot be
+found. These runs have rows, so that requirement **is** breached. What misled the reading is the
+requirement's own next sentence, which sends the reader to *The run facts cover every run the events
+name* - a rule quantified over the runs a returned event names, which cannot forbid omitting a run
+no returned event names. The proposal fixes the cross-reference as part of the change.
 
 `AgentTimeline` reads a turn's terminal label and its "Worked for Ns" line out of the same map:
 `runs[turn.runId]?.status` (`hub/ui/src/components/agents/AgentTimeline.tsx:237`) and
