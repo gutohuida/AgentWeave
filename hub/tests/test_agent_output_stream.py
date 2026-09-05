@@ -239,3 +239,103 @@ async def test_content_bound_matches_the_cli_stream_contract(app, auth_headers):
         headers=auth_headers,
     )
     assert over_contract.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_a_recorded_row_carries_its_timestamp_without_a_refresh(app, auth_headers):
+    """F287 removed `await db.refresh(row)` from the end of `record_agent_output`.
+
+    The only attribute the function reads that its caller did not set is `row.timestamp`, and
+    the SSE broadcast calls `.isoformat()` on it — so if the refresh had been what populated it,
+    deleting the refresh would raise `AttributeError: 'NoneType' has no attribute 'isoformat'`
+    on every output line. It is not: `AgentOutput.timestamp` is `default=_now`, a Python-side
+    default applied at flush, and `expire_on_commit=False` leaves it in place across the commit.
+
+    This test fails if that column ever becomes server-side, which is the change that would make
+    the refresh load-bearing again.
+    """
+    from datetime import timezone as _tz
+
+    from hub.output_recording import record_agent_output
+
+    project_id = await _project_id(app, auth_headers)
+    queue = sse_manager.subscribe(project_id)
+    try:
+        async with async_session_factory() as session:
+            row = await record_agent_output(
+                session,
+                project_id,
+                "no-refresh",
+                content="one line",
+                session_id="sess-no-refresh",
+                kind="text",
+                payload=None,
+                run_id="run-no-refresh",
+                sequence=1,
+            )
+            # Populated on the instance the caller gets back, not merely in the database.
+            assert row.timestamp is not None
+            assert isinstance(row.timestamp, datetime)
+            assert row.timestamp.tzinfo is not None
+            in_memory = row.timestamp
+
+        # And identical to what was persisted — a refresh's only possible contribution would have
+        # been to correct a divergence, so there must not be one.
+        async with async_session_factory() as verify:
+            stored = await verify.get(AgentOutput, row.id)
+            assert stored is not None
+            assert stored.timestamp.astimezone(_tz.utc) == in_memory.astimezone(_tz.utc)
+
+        # The broadcast that reads it went out with the same value.
+        event = queue.get_nowait()
+        assert event.event == "agent_output"
+        assert json.loads(event.data)["timestamp"] == in_memory.isoformat()
+    finally:
+        sse_manager.unsubscribe(project_id, queue)
+
+
+@pytest.mark.asyncio
+async def test_recording_an_output_row_issues_no_select_of_the_row_it_just_wrote(app, auth_headers):
+    """The cost F287 is about: one extra `SELECT ... WHERE id = ?` per streamed line.
+
+    Every agent output on both runners funnels through `record_agent_output`, so a redundant
+    primary-key read here is paid once per line of every turn. This pins that no statement issued
+    after the INSERT reads `agent_outputs` back — restoring `await db.refresh(row)` fails it.
+    """
+    from sqlalchemy import event as sa_event
+
+    from hub.db.engine import engine
+    from hub.output_recording import record_agent_output
+
+    project_id = await _project_id(app, auth_headers)
+    statements: list[str] = []
+
+    def _capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(" ".join(statement.split()))
+
+    sa_event.listen(engine.sync_engine, "before_cursor_execute", _capture)
+    try:
+        async with async_session_factory() as session:
+            await record_agent_output(
+                session,
+                project_id,
+                "no-extra-select",
+                content="one line",
+                session_id="sess-no-extra-select",
+                kind="text",
+                payload=None,
+                run_id="run-no-extra-select",
+                sequence=1,
+            )
+    finally:
+        sa_event.remove(engine.sync_engine, "before_cursor_execute", _capture)
+
+    inserts = [i for i, s in enumerate(statements) if s.startswith("INSERT INTO agent_outputs")]
+    assert len(inserts) == 1, statements
+    after_insert = statements[inserts[0] + 1 :]
+    reads_back = [
+        s
+        for s in after_insert
+        if s.startswith("SELECT") and "FROM agent_outputs" in s and "agent_outputs.id = ?" in s
+    ]
+    assert reads_back == [], reads_back

@@ -91,8 +91,16 @@ async def record_agent_output(
     )
     db.add(row)
     await db.commit()
-    await db.refresh(row)
 
+    # No `db.refresh(row)` here, deliberately (F287). It was one extra SELECT by primary key on
+    # the Hub's hottest write path -- every streamed line of every turn, on both runners -- and
+    # nothing read anything it could have loaded. `async_session_factory` sets
+    # `expire_on_commit=False` (`db/engine.py:39`), so the commit does not expire the instance;
+    # `AgentOutput` has no server-side defaults, and the one column the caller does not set,
+    # `timestamp`, is a Python-side `default=_now` (`db/models.py:1247`) already applied at flush.
+    # The broadcast below reads `row.timestamp`; that it is populated without a refresh is pinned
+    # by a test in `hub/tests/test_agent_output_stream.py`, which fails if the refresh is the only
+    # reason it is set.
     await sse_manager.broadcast(
         project_id,
         "agent_output",
