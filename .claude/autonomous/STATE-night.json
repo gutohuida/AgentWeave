@@ -1,80 +1,40 @@
 {
-    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-04-daily",
-    "parent_branch": "master",
-    "parent_sha": "a38caee",
-    "stop_at": "2026-09-05T07:00:00+01:00",
-    "iteration": 8,
-    "log_file": ".claude/autonomous/2026-09-04-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "compose",
-            "status": "done",
-            "title": "Compose this window's queue from the playbook",
-            "detail": "Done N-1. APPROVALS.md 2026-09-04 carries `ORDER: a-terminal-run-releases-the-queue-behind-it`, so per the playbook that IS the queue verbatim and the backlog default is ignored. F285 is DONE (d9ad1e0) and must not be started. Green baseline measured, not assumed: hub/tests/test_agent_trigger.py 44 passed in 32.8s at 18ba8ba."
-        },
-        {
-            "id": "phase-0-observe",
-            "status": "done",
-            "title": "Phase 0 -- drive F286 live before implementing, then stop",
-            "detail": "DONE N-2. Driven on 8011 over a fresh db against fresh project proj-96849871dd06, agent f286a230652 on claude-haiku-4-5-20251001. Reproduced exactly as filed: run-3be49e8af2f2 reached `completed` (exit 0, error None) and entry-646cde350c96 stayed `queued` / delivered_in_run_id null / attempts 0 with no successor run for 4m05s, then a byte-identical settings save delivered it in 0.36s into run-107d6f280ee2. 0.4 confirms the fix is the ungating, not a relabel. Harnesses kept as scripts/drive/setup_f286.py and t_f286_phase0_observe.py; the AW_F286_INJECT edit was reverted with git checkout and never committed. The app-server half was NOT driven (Codex is undrivable here) and stays a code-read claim."
-        },
-        {
-            "id": "phase-1-2-impl",
-            "status": "done",
-            "title": "Phases 1 and 2 -- ungate the redrain, then share one failure tail",
-            "detail": "DONE N-3. hub/hub/api/v1/agent_trigger.py only, +123/-54. New coroutine _record_run_failure_tail at :1777 holds the former handler body; the relabel stays gated on the row being `running`, the redrain is unconditional after it. The already_terminal flag was removed rather than kept, since the gate was its only reader; its comment moved onto the positive `if run is not None and run.status == \"running\":`. _execute_run's handler is now three statements and the CancelledError re-raise still follows the release. _execute_codex_appserver_run got an `except (Exception, asyncio.CancelledError)` at :2917 calling the helper with runner=\"codex\"; _runtime_failure_fields deliberately not passed. Both `finally` blocks untouched. 1.3 read: nothing depended on the app-server exception propagating -- _execute_run calls it before its own try (:1824) and is itself a create_task (:1191) whose only done-callback is _background_runs.discard. Gates: compileall clean, ruff clean, black clean, hub/tests/test_agent_trigger.py 44 passed in 41.6s -- the same 44 as the 18ba8ba baseline, which is a no-regression signal and NOT evidence of the fix; no existing test exercises the ungating."
-        },
-        {
-            "id": "phase-3-tests-pty",
-            "status": "done",
-            "title": "Phase 3a -- PTY-path tests (3.1, 3.2, 3.3)",
-            "detail": "DONE N-4. Two tests, no production code touched. 3.1/3.2 = test_a_run_that_ended_releases_its_queue_even_when_its_tail_raises in hub/tests/test_agent_trigger.py; 3.3 = test_a_holder_whose_tail_raises_still_releases_the_task_it_held in hub/tests/test_task_turn_collision.py -- NOT test_agent_trigger.py, because that file already owns the D8 harness and holds test_a_run_ending_redrains_the_agents_it_was_holding_back (F90), which is the same release observed on the spawn-failure branch; tasks.md records the deviation at 3.3. Both inject via a once-only patch of agent_trigger._report_abandoned_entries scoped to the run id / agent, and both record the run's COMMITTED status on a separate connection before raising, asserting it is `completed` -- expire_on_commit=False makes a same-session read useless as a drift guard. Both mutation-checked against an `else: return` restoring the pre-F286 gate in _record_run_failure_tail: len(successors) 0 != 1 and challenger run None respectively; file restored with git checkout. Gates: py -3.11 -m ruff clean, black reformatted then green, 55 passed (45 + 10) in 59.4s."
-        },
-        {
-            "id": "phase-3-tests-appserver",
-            "status": "done",
-            "title": "Phase 3b -- app-server tests and the cost assertion (3.4-3.7)",
-            "detail": "DONE N-5. Three tests in hub/tests/test_agent_trigger.py, one docstring on an existing one, no production code touched. 3.4 = test_an_app_server_run_that_ended_releases_its_queue_when_its_tail_raises -- 3a's injection verbatim (once-only _report_abandoned_entries keyed on the run id, committed status probed on its own connection, asserted ['completed']), except the first turn is held open with an asyncio.Event and not 3a's threading.Event, because this transport never leaves the event loop. 3.5 = test_an_app_server_turn_that_raises_before_its_terminal_write_is_not_a_wedge -- codex_run_turn raises once then behaves; run 1 ends `failed` with error and ended_at set, its input goes back and the successor delivers it at delivery_attempts 1. 3.6 answered by MEASUREMENT and it is NO: test_stop_endpoint_marks_run_stopped... still passes under the pre-F286 gate while 3.1 and 3.4 fail, so it does not cover F286; a docstring now says so on the test (it had none). 3.7 = test_a_second_release_charges_a_refused_entry_at_most_twice on the PTY path -- entry seeded straight to the queue for a second agent, refused with the flagless task-checkout TriggerAgentError (an agent_wide one charges nothing), redrain_queued_agents wrapped to sweep then raise on call 1 only; measured cost 2 of 3, entry still `queued`, abandoned_reason null. Two mutations: the pre-F286 `else: return` gate (3.4 assert 0==1, 3.7 assert 1==2, 3.5 and the stop test pass) and `raise` at the top of the phase-2 app-server except (3.4 and 3.5 both die on the escaping RuntimeError rather than on their own assertions -- stated, not glossed). agent_trigger.py restored with git checkout after each. Gates: ruff clean over src/ hub/ tests/, black clean on the touched file, 58 passed (48 + 10) in 63.8s."
-        },
-        {
-            "id": "phase-4-gates",
-            "status": "done",
-            "title": "Phase 4 gates 4.1-4.4 -- lint, the touched file whole, the wider suite in chunks, strict validate",
-            "detail": "DONE N-6. 4.1 clean over the FULL CI path lists (ruff all passed; black 548 files unchanged). 4.2 48 passed in 35.7s (44 baseline + 1 in 3a + 3 in 3b). 4.4 valid. 4.3 all 251 hub/tests/test_*.py in nine chunks: 3966 passed, 14 skipped, 0 failed, 0 errors -- but only after a fix. The first pass gave 10 RuntimeError('Event loop is closed') errors raised by conftest's _no_connection_outlives_its_event_loop at task.cancel(), across test_inbound_queue/test_instance_identity/test_instructions. Triaged as CAUSED, not pre-existing: test_inbound_queue.py alone errors at HEAD and is clean with agent_trigger.py at 1529d91~1. Traced with a set that printed a stack on add: the phase-2 app-server except -> _record_run_failure_tail -> redrain_queued_agents -> schedule_agent -> trigger_agent_directly registers a NEW task during the fixture's own gather, and the fixture's clear() then dropped it onto a loop about to close. Product NOT changed, on three measurements: the respawn is requirement 2 (test 3.5 asserts it), it is bounded by DELIVERY_ATTEMPT_LIMIT 3 (observed chain of three tasks), and the comment at agent_trigger.py:2386 records that nothing in the product calls .cancel() on a run task. Fixed in hub/tests/conftest.py only: settle to a fixed point over _MAX_BACKGROUND_SETTLE_PASSES=10, difference_update(leftover) instead of clear(), loud AssertionError if it never settles. Mutation-checked -- restoring clear() INSIDE the new loop brings the error straight back, so the loop alone was not the fix. 4.1 and 4.2 re-run after the conftest change and still green."
-        },
-        {
-            "id": "phase-4-drive",
-            "status": "done",
-            "title": "Task 4.5 -- re-drive the PTY half live and expect the opposite result",
-            "detail": "DONE N-7, and driven TWICE as an A/B at one injection site. Phase 0's line has moved (phases 1-2 extracted _record_run_failure_tail), so the raise was placed immediately before _report_abandoned_entries -- the other in-window site tasks.md names -- and the control is the SAME checkout with the pre-F286 gate restored (`else: return` before the redrain) and the SAME raise on the SAME line, so only the gate varies. Both on 8011 from source, AW_F286_INJECT=1, fresh db + fresh fixture project each, claude-haiku-4-5-20251001, t_f286_phase0_observe.py unchanged; staleness checked (agent_trigger.py 01:26:04 vs process 01:26:26, and 01:29:33 vs 01:29:40). FIXED (proj-b70dad75b4b7): run-16b449d4a80a `completed` exit 0 error None ended 00:27:34.803750Z; entry-8992a0c0b036 delivered into successor run-9d0f885a67c4 at 00:27:34.943590Z -- 0.140s after the boundary, no operator action; successor ran a real turn, `completed` 00:27:42.570573Z, replied OK; the settings save was a NO-OP, runs before 2 after 2; GET /queue/{agent}/status waiting_count 0. CONTROL (proj-5f386b6769de): run-262d0b6132ee `completed` exit 0; entry-5602402c96cd stayed `queued`, delivered_in_run_id null, attempts 0 across four polls over 2m06s, then a settings save delivered it 0.14s later into run-1c8380d8b82c, runs before 1 after 2 -- phase 0 reproduced. 0.4 holds in both: run #1 keeps the outcome it reached. Caveat recorded in FINDINGS: the fixed drive's line `DELIVERED 0.01s after the settings save` is a harness artefact (its poll loop breaks on the first poll, which follows the PUT) -- the entry was delivered 66s earlier and `runs before 2 after 2` is the line that proves the save started nothing. Nothing under F286 was disproved; the control widens it slightly by reproducing the stranding at a second in-window site. App-server half still not driven -- Codex is undrivable here. agent_trigger.py restored with git checkout after each drive; no production change in the tree."
-        },
-        {
-            "id": "sync-and-archive",
-            "status": "done",
-            "title": "Sync the delta spec, archive the change, retire F286 in the same commit",
-            "detail": "DONE N-8. Three edits, one commit, no production code and no Hub. SYNC: the delta had only `## ADDED Requirements` -- two requirements, eight scenarios -- and neither name existed anywhere in openspec/specs/ (grepped before touching anything), so both are genuine additions with no partial merge needed. Appended to openspec/specs/agent-conversation-workspace/spec.md with a blank line inserted after each `### Requirement:` header, because all 64 existing requirements in that file have one (counted: 64 blank, 0 not) while the delta has none; the SHALL stays on the first physical line, which is all --strict reads. Verified header by header rather than eyeballed: each delta block compared line-for-line against the merged block ignoring blank lines, scenario counts 5 and 3 matching, duplicate-header sweep clean, 64 -> 66 requirements. `openspec validate <change> --strict` valid, `<spec> --strict` valid, `--all --strict` 43 passed 0 failed. ARCHIVE: git mv to openspec/changes/archive/2026-09-05-a-terminal-run-releases-the-queue-behind-it; tasks.md had 0 unchecked / 24 checked; `openspec list` now reports no active changes. FINDINGS: F286 Status open -> `fixed 1529d91`, carrying both drives' project and run IDs, the 0.140s vs 2m06s A/B, the five test names, and the two things not settled (app-server never driven; the conftest settle-loop was harness, not product). Commit attribution checked with `git show --name-only`, not recalled -- only 1529d91 touches hub/hub/. Two errors in my own draft Status were caught against the tree before committing: `six tests` (it is five -- 3.1 and 3.2 are one test) and a stop-test name that does not resolve (it is test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped). The second half of the previous next_action was a NO-OP and is recorded as one: no index paragraph ever counted F286 as open -- the only open-severity list is FINDINGS.md:35, dated 2026-08-27, and F286 was filed 2026-09-04; every F286 occurrence in the file is inside its own section. Matches the F285 precedent (3c2230c: Status line only). ruff clean over src/ hub/ tests/; no .py touched this iteration."
-        }
-    ],
-    "decisions_for_user": [],
-    "limits": [
-        "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-04-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "a38caee",
+    "stop_at":  "2026-09-06T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-05-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
