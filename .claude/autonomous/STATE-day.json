@@ -1,40 +1,71 @@
 {
-    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook":  ".claude/loops/day-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-04-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "a38caee",
-    "stop_at":  "2026-09-05T17:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-05-day-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+  "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+  "playbook": ".claude/loops/day-window.md",
+  "runner": "claude",
+  "model": "opus",
+  "permission_mode": "unattended-full-access",
+  "branch": "autonomous/2026-09-04-daily",
+  "parent_branch": "master",
+  "parent_sha": "a38caee",
+  "stop_at": "2026-09-05T17:00:00+01:00",
+  "iteration": 1,
+  "log_file": ".claude/autonomous/2026-09-05-day-log.md",
+  "findings_file": "scripts/drive/FINDINGS.md",
+  "approvals_file": "spec-queue/APPROVALS.md",
+  "current": "D-1",
+  "next_action": "D-1, the drive. Use the e2e-loop skill, SCOPED (not a full sweep -- the 17-row sweep was measured complete on 2026-09-04, map in scripts/drive/SURVEY.md). Drive what the night built: the change a-terminal-run-releases-the-queue-behind-it (F286), hub/hub/api/v1/agent_trigger.py. Drive it INDEPENDENTLY at the seam; do not re-run the night's own A/B harness -- the night wrote the tests for its own fix and says so. Start the drive Hub on 8011 from hub/ with uvicorn from source on THIS branch's code, confirm no .py under hub/hub or src is newer than the process start time, and make a FRESH project (never proj-5e960453, never proj-18e5d4e0, never port 8000). Every real agent turn binds claude-haiku-4-5. Never leave a job enabled. What to push on: a run reaching terminal status with input queued behind it, and the seams around it -- a second queued entry, a run that is stopped rather than completing, a queue entry whose agent is mid-turn elsewhere, and whether the released input's turn reports its own outcome correctly (that is F274's neighbourhood). Append every new finding to scripts/drive/FINDINGS.md with a severity, a file:line, a reproduction, and a Status line reading open as the FIRST line of the body.",
+  "queue": [
+    {
+      "id": "D-1",
+      "status": "open",
+      "title": "Independent e2e drive of the terminal-run queue release",
+      "detail": "Scoped drive of what the night window built (F286). Hub 8011, fresh project, Haiku turns. The night's evidence is self-marking and the Codex app-server half was never driven; this drive is the independent check. Findings to scripts/drive/FINDINGS.md, each with a Status line."
+    },
+    {
+      "id": "D-2",
+      "status": "open",
+      "title": "Spec R1 -- explore and propose the F274 change",
+      "detail": "F274 (A, open, no proposal): scripts/drive/FINDINGS.md around lines 19010-19080. A turn's outcome is erased by work in the agent's other conversations -- the run-facts map is bounded by a 50-event window across ALL conversations while the chat renders one conversation's history, so old turns silently lose their terminal label. The route is NOT in breach: openspec/specs/agent-stream-events/spec.md:363-366 explicitly permits the empty map, and :368 is satisfied. The gap is that no requirement says the events must cover the turns the CLIENT renders. R1 owns the design decision and must re-derive it against the code rather than inherit the finding's framing. Write openspec/changes/<name>/ with proposal.md, design.md, tasks.md and the specs/<capability>/spec.md delta. The name must not start with a digit. openspec validate --strict <name> must pass, and SHALL goes on a requirement's FIRST physical line. If D-1's drive produced something that outranks F274, say so in the log and spec that instead -- a fresh drive finding is first in the playbook's priority order."
+    },
+    {
+      "id": "D-3",
+      "status": "open",
+      "title": "Spec R2 -- re-derive R1's argument against the code",
+      "detail": "Independently. Not a re-read of R1's reasoning: open the files R1 cites, check each citation resolves and says what R1 claims, and check the argument itself rather than only its outcome. Fix the proposal where the code disagrees. If the round changes nothing, say so explicitly in the log -- that is a real outcome, and hiding it makes the next round look cheaper than it is. Re-run openspec validate --strict."
+    },
+    {
+      "id": "D-4",
+      "status": "open",
+      "title": "Spec R3 -- re-derive again, independently",
+      "detail": "Same instruction as R2, from scratch, treating neither earlier round as settled. On 2026-09-04 R3 overturned a design decision R2 had confirmed, and found both earlier rounds specifying a regression test that would have passed without the fix. Check the citations R2 did not check. Re-run openspec validate --strict."
+    },
+    {
+      "id": "D-5",
+      "status": "open",
+      "title": "The review page and the APPROVALS section",
+      "detail": "spec-queue/review/review-2026-09-05.html, self-contained, theme-aware, answering the playbook's six questions in order. Section 1 leads with the branch spanning two days unmerged and the merge gate verdict (dormant; condition 3 -- CI in_progress for 0b8aaf5 -- would also have failed). Then today's section goes into spec-queue/APPROVALS.md INSERTED AT THE TOP, because that file's own contract says newest day first and days below the newest are not read. One row per specced change, NO status token, and no bare directive-shaped literal in prose."
+    },
+    {
+      "id": "D-6",
+      "status": "open",
+      "title": "Repairs that need no spec -- only if the day has room",
+      "detail": "The playbook's carve-out, and all three conditions must hold: touches no requirement in openspec/specs/ (grep the capability, do not assume), no migration and no API/Pydantic shape change, and fully described by an existing finding with a reproduction. F287 (C, the redundant db.refresh in hub/hub/output_recording.py:94) is the obvious candidate, but read the 2026-09-04 APPROVALS note first -- it argues fixing it would mask rather than fix. If taken: drive it, run the lint set CI runs, mutation-check any test added, and set the finding's Status line to fixed <sha>. If it turns out to want a spec, STOP and queue it for tomorrow."
+    }
+  ],
+  "decisions_for_user": [
+    "spec-queue/DIRECTION.md's newest section is still 2026-09-03 and two of its paragraphs are now spent: it schedules F188 for the next spec slot (F188 was retired 2026-09-04, fixed 467dfea) and it forbids resuming the coverage sweep, whose stated trigger has expired and which yesterday measured complete anyway. Yesterday's window lost a drive slot to that paragraph. Either write a section for today or retire the 2026-09-03 one.",
+    "The merge gate's condition zero is the limits line seeded by .claude/loops/arm-cycle.ps1 -- 'Never auto-merge'. Until you change it the gate can only ever report. Today it reports 3 of 4 conditions passing; only CI-not-yet-green-for-this-sha blocks. The branch now spans two days and 11 commits."
+  ],
+  "limits": [
+    "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+    "Every claim is measured or labelled unverified.",
+    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+    "Tests under py -3.11, never bare python. black needs --target-version py311.",
+    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+  ]
 }
