@@ -1,40 +1,80 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-04-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "ab60cf3",
-    "stop_at":  "2026-09-07T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-06-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-04-daily",
+    "parent_branch": "master",
+    "parent_sha": "ab60cf3",
+    "stop_at": "2026-09-07T07:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-09-06-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "n1-repro",
+    "next_action": "n1-repro: task 4.1b's PRE-FIX reproduction. Add the in-flight column to scripts/drive/t_d4_instructions_failed_load.py -- hold the instructions GET open (same route interception the other columns use) rather than aborting or 500ing it, and assert while the skeleton is on screen that Save is absent-or-inert and that interacting with the screen issues no PUT, then read the stored content back and assert it is byte-identical. Leave columns A/B/C's existing expectations UNINVERTED this iteration -- 4.1's inversion belongs to n5-drive. Start the drive Hub on :8011 from hub/ from source (never `agentweave --port`, never :8000), fresh throwaway project, and run it against the CURRENTLY SERVED pre-change bundle. Expect the new column to REPRODUCE (Save live over a skeleton). Record the result in scripts/drive/FINDINGS.md under F271. Do not touch InstructionsPage.tsx this iteration.",
+    "queue": [
+        {
+            "id": "n1-repro",
+            "status": "open",
+            "title": "Pre-fix reproduction of the in-flight destruction path (task 4.1b, first half)",
+            "detail": "MUST run before the bundle is rebuilt -- once hub/hub/static/ui holds the fixed page this stops being a reproduction and silently becomes a pass. Adds the in-flight column only; 4.1's inversion of the two existing failure columns is n5-drive's."
+        },
+        {
+            "id": "n2-impl",
+            "status": "open",
+            "title": "Phase 1 -- the component (tasks 1.1-1.7)",
+            "detail": "Three-branch render with `data` FIRST (not isError-first: a background refetch failure must not take a loaded editor away mid-edit). Copy the shape from components/environment/WorktreesPanel.tsx:44-62. 1.4 is the one that is easy to miss: Save is passed as `actions` and rendered in SettingsSection's HEADING, a sibling of {children}, so the three-branch render does NOT gate it -- move it inside or make `actions` conditional on the same `data` test. Adding `|| isError` to `disabled` is insufficient. 1.5: keep the failure inside {children}, replacing the whole SettingsSection breaches a shipped requirement. 1.6: also read saveMutation.isError. 1.7: do not touch hub/hub/api/v1/instructions.py."
+        },
+        {
+            "id": "n3-units",
+            "status": "open",
+            "title": "Phase 2 -- hub/ui/src/__tests__/instructionsUnreadEditor.test.tsx (tasks 2.1-2.8)",
+            "detail": "Eight tests. Each MUST be mutation-checked by reverting the guard and watching a NAMED test fail -- not by reasoning. 2.2 and 2.3 assert on the mutation/fetch, NOT on a `disabled` attribute: a markup-only assertion passes against a page that renders the error AND the textarea."
+        },
+        {
+            "id": "n4-bundle",
+            "status": "open",
+            "title": "Phase 3 -- rebuild the committed bundle (task 3.1)",
+            "detail": "cd hub/ui && npm run build, then py -3.11 scripts/refresh_ui_bundle.py (make is not on PATH in Git Bash here). Only that script writes the stamp. Commit hub/ui/src and hub/hub/static/ui TOGETHER. Skipping this makes n5-drive re-measure the old page and report success."
+        },
+        {
+            "id": "n5-drive",
+            "status": "open",
+            "title": "Phase 4 -- drive the fix in a browser (tasks 4.1, 4.1b post-fix, 4.2, 4.3)",
+            "detail": "Restart :8011 from source AFTER the rebuild and confirm no .py under hub/hub or src is newer than the process start. Invert the two failure columns' expectations (4.1) -- textarea absent, Save absent-or-inert, a stated failure present -- while column A's baseline keeps passing UNCHANGED. 4.2: read-back becomes a preservation check, byte-identical. Fresh project, never proj-5e960453 or proj-18e5d4e0, never :8000. No agent turn is needed so nothing binds a model. A UI change driven anywhere but a real browser against the SERVED bundle is not driven (F274)."
+        },
+        {
+            "id": "n6-retry",
+            "status": "open",
+            "title": "Task 4.4 -- drive Retry by hand as an operator would",
+            "detail": "Stop the Hub, open the page, see the failure, start the Hub, press Retry, confirm the stored text appears. This is the half no unit test reaches. May be folded into n5-drive if that iteration has room."
+        },
+        {
+            "id": "n7-close",
+            "status": "open",
+            "title": "Phase 5 -- close it out (tasks 5.1-5.3)",
+            "detail": "5.1 `cd hub/ui && npm run lint`; the Python lint set is not required because no Python path is touched -- SAY so rather than skipping it silently. 5.2 set F271's **Status:** to `fixed <sha>` in scripts/drive/FINDINGS.md, note the cross-project variant is now closed by construction rather than measurement, and correct the index paragraph's open severity-A list IN THE SAME COMMIT. 5.3 openspec-sync-specs into openspec/specs/project-instructions/spec.md, then archive."
+        },
+        {
+            "id": "n8-wrap",
+            "status": "open",
+            "title": "Final log entry and the note to tomorrow's day window",
+            "detail": "Playbook's 'Ending the window' section: what changed (marking product code vs docs), what was PROVEN with evidence vs only inferred, what is open, decisions waiting, what to distrust. Carry forward for the day window: F293 and F294 both need a spec loop and one change answers both (F126's deferred column PLUS a claim or uniqueness constraint -- the column alone races identically); the four remaining open severity-A findings have no proposal and are the day window's to take. Then set next_action to null so the driver unregisters."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ]
 }
