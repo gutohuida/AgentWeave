@@ -12,7 +12,7 @@ value (`hub/hub/api/v1/instructions.py` documents the empty string as legitimate
 
 That is the claim. This drives it in a real browser against the served bundle.
 
-Three questions:
+Four questions — D was added 2026-09-06 by the night window (task 4.1b):
 
   A. baseline — with the load succeeding, does the editor show what is stored, and is Save enabled?
   B. failed load — with only the GET failing (network abort, and separately a 500), what does the
@@ -21,6 +21,13 @@ Three questions:
   C. cross-project — the sharper variant a static read does not reach: if the component stays
      mounted while the selected project changes and the *new* project's load fails, `content` still
      holds the **previous project's** text, so Save writes A's instructions into B.
+  D. in-flight — the PRE-FIX reproduction of the second destruction path. B and C both need the
+     read to *fail*; this one needs it only to be **slow**. The GET is held open and never settles,
+     so the page stays on its skeleton — and Save is rendered in `SettingsSection`'s heading, a
+     sibling of the branch the skeleton lives in, so it is on screen and enabled over a page that
+     has never held the stored text. That is a live one-click blanking path on **every visit**, not
+     only on a failure. Asserted the way the requirement is stated: Save absent-or-inert, no PUT
+     issued by any interaction, stored content byte-identical afterwards.
 
 Run:  py -3.11 scripts/drive/t_d4_instructions_failed_load.py
 
@@ -301,6 +308,70 @@ def drive(pid_a, pid_b):
                         page.wait_for_timeout(3000)
                         print(f"    B stored after Save: {stored(pid_b)!r}")
         page.close()
+
+        # -------------------------------------------------------------- D, the read never settles
+        # Task 4.1b. This column does NOT need the load to fail — only to be in flight, which it is
+        # on every single visit for as long as the round trip takes. The GET route is held open and
+        # never resolved, so the skeleton stays on screen for the whole observation window.
+        print("\nD — the instructions GET is held open and never settles (in flight)")
+        call("PUT", f"/projects/{pid_a}/project/instructions", {"content": ALPHA})
+        check(stored(pid_a) == ALPHA, "A's instructions are stored before the in-flight column")
+
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.add_init_script(seed_script(pid_a))
+        held = {"get": 0, "put": 0}
+        parked = []
+
+        def handler_inflight(route, request):
+            # Playwright prints an `asyncio.exceptions.CancelledError` traceback on stderr when the
+            # parked route below is torn down at page close. That is this instrument's own noise,
+            # not a failure — read the PASS/FAIL lines, not the traceback.
+            if "/project/instructions" in request.url and request.method == "GET":
+                held["get"] += 1
+                # Deliberately resolve nothing: the request stays pending for the page's lifetime.
+                parked.append(route)
+            else:
+                if "/project/instructions" in request.url:
+                    held["put"] += 1
+                route.continue_()
+
+        page.route("**/project/instructions", handler_inflight)
+        page.goto(instructions_url(pid_a), wait_until="domcontentloaded")
+        page.wait_for_timeout(6000)
+        s = observe(page, "08-d-inflight")
+        check(held["get"] >= 1, f"the instructions GET is in flight, unanswered ({held['get']}x)")
+        check(s["skeleton"], "the page is on its skeleton — it has never held the stored text")
+        check(not s["textarea"], "and there is no editor on screen to type into")
+
+        # The requirement, stated the way an operator can observe it.
+        check(
+            (not s["save_visible"]) or s["save_disabled"] is True,
+            "Save is absent-or-inert while the read is in flight "
+            f"(visible={s['save_visible']}, disabled={s['save_disabled']})",
+        )
+
+        # ...and its sharper form: nothing an operator can do to this screen writes anything.
+        before = stored(pid_a)
+        if s["save_visible"] and s["save_disabled"] is False:
+            page.get_by_role("button", name="Save", exact=True).first.click()
+            page.wait_for_timeout(3000)
+        page.screenshot(path=os.path.join(SHOTS, "d4-09-d-after-save.png"))
+        after = stored(pid_a)
+        print(f"    PUT attempts seen: {held['put']}")
+        print(f"    stored before: {before!r}\n    stored after:  {after!r}")
+        check(before == ALPHA, "A's instructions were intact immediately before the interaction")
+        check(held["put"] == 0, f"no PUT was issued by interacting with the screen ({held['put']})")
+        check(
+            after == before,
+            f"and the stored content is byte-identical afterwards (after={after!r})",
+        )
+
+        try:
+            page.unroute_all(behavior="ignoreErrors")
+        except TypeError:  # a playwright without the behavior kwarg
+            page.unroute("**/project/instructions")
+        page.close()
+        call("PUT", f"/projects/{pid_a}/project/instructions", {"content": ALPHA})
         browser.close()
 
     print(f"\nscreenshots: {SHOTS}")

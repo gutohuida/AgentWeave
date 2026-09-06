@@ -8,18 +8,19 @@
     "parent_branch": "master",
     "parent_sha": "ab60cf3",
     "stop_at": "2026-09-07T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-09-06-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "n1-repro",
-    "next_action": "n1-repro: task 4.1b's PRE-FIX reproduction. Add the in-flight column to scripts/drive/t_d4_instructions_failed_load.py -- hold the instructions GET open (same route interception the other columns use) rather than aborting or 500ing it, and assert while the skeleton is on screen that Save is absent-or-inert and that interacting with the screen issues no PUT, then read the stored content back and assert it is byte-identical. Leave columns A/B/C's existing expectations UNINVERTED this iteration -- 4.1's inversion belongs to n5-drive. Start the drive Hub on :8011 from hub/ from source (never `agentweave --port`, never :8000), fresh throwaway project, and run it against the CURRENTLY SERVED pre-change bundle. Expect the new column to REPRODUCE (Save live over a skeleton). Record the result in scripts/drive/FINDINGS.md under F271. Do not touch InstructionsPage.tsx this iteration.",
+    "current": "n2-impl",
+    "next_action": "n2-impl: Phase 1, tasks 1.1-1.7, in hub/ui/src/components/instructions/InstructionsPage.tsx only. 1.1 read data, isLoading, isError, error and refetch from useInstructions(). 1.2 three-branch render with `data` FIRST, then isError, then the existing skeleton -- copy the shape from components/environment/WorktreesPanel.tsx:44-62, with the one deliberate divergence that it tests error first and this page tests data first, because a background refetch failure must not take a loaded editor away from an operator mid-edit. Keep the session-boundary disclaimer inside the gated block so it travels with the textarea. 1.3 the failure block is a role=alert region naming what could not be loaded, the sentence from readableApiError(error, <fallback>), and a Retry control calling refetch(); the fallback string must say that nothing stored has been changed. 1.4 IS THE ONE MEASURED TO BE NECESSARY -- iteration 2 observed skeleton:true together with save_visible=true and save_disabled=false, so 1.2's branch does NOT gate Save. Save is the actions prop rendered in SettingsSection's HEADING (SettingsSection.tsx:58), a sibling of the {children} at :60. Move the control inside the gated region, or make actions conditional on the same data test. Adding an isError term to `disabled` does not close the in-flight route, which is the one that opens on every visit. 1.5 keep the failure inside {children}; replacing the whole SettingsSection breaches project-environment-settings' shipped 'A configuration section states what it governs'. 1.6 also read saveMutation.isError and state it beside the button with readableApiError, as ProjectSettingsPanel.tsx:319 does -- a shipped requirement the component breaches today. 1.7 do not touch hub/hub/api/v1/instructions.py. No Hub is needed this iteration. Do NOT rebuild the bundle (n4-bundle) and do NOT write the unit tests (n3-units). Finish with `cd hub/ui && npm run lint` clean and vitest still green, then commit.",
     "queue": [
         {
             "id": "n1-repro",
-            "status": "open",
+            "status": "done",
             "title": "Pre-fix reproduction of the in-flight destruction path (task 4.1b, first half)",
-            "detail": "MUST run before the bundle is rebuilt -- once hub/hub/static/ui holds the fixed page this stops being a reproduction and silently becomes a pass. Adds the in-flight column only; 4.1's inversion of the two existing failure columns is n5-drive's."
+            "detail": "MUST run before the bundle is rebuilt -- once hub/hub/static/ui holds the fixed page this stops being a reproduction and silently becomes a pass. Adds the in-flight column only; 4.1's inversion of the two existing failure columns is n5-drive's.",
+            "result": "Column D added and run once against the served PRE-CHANGE bundle on a fresh :8011 from source. REPRODUCED: skeleton on screen with Save visible+enabled, one click issued 1 PUT, stored ALPHA -> ''. 24 passed / 3 failed, the three being D's new assertions. A/B/C left uninverted. Evidence in FINDINGS.md under F271; note added under task 4.1b, whose box stays open until the post-fix run. Hub stopped, 8011 free."
         },
         {
             "id": "n2-impl",

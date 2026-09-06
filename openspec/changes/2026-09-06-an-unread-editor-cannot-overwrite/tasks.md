@@ -92,6 +92,13 @@ by reasoning about it.
   interacting with the screen issues no PUT. Then read the stored content back and assert it is
   byte-identical. This is the state `F271` never measured, and against the pre-change bundle it is a
   reproduction of a second destruction path, so run it once **before** the fix as well.
+  **Pre-fix half done 2026-09-06 (night, n1-repro), box deliberately left open until the post-fix
+  run.** Column `D` is in the harness; against the served pre-change bundle it reproduced —
+  `skeleton: true` and `save_visible/save_disabled = true/false` observed together, one click issued
+  1 PUT, and the stored text went from ALPHA to `''`. 24 passed / 3 failed, the three being this
+  column's new assertions. Evidence in `scripts/drive/FINDINGS.md` under F271. This also **confirms
+  by measurement** what task 1.4 argues on the code: the three-branch render of 1.2 cannot close
+  this column, because Save is a sibling of the branch.
 - [ ] 4.2 Turn its end-to-end read-back from a destruction check into a preservation check: with the
   Hub reachable again, interact with the screen and assert the stored content is byte-identical to
   what it was before.

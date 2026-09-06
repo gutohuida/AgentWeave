@@ -18683,6 +18683,58 @@ evidence bears on it either way.
 
 ---
 
+### F271's second destruction path, reproduced 2026-09-06 (night window, task 4.1b) — the read only has to be *slow*
+
+**Why this column had to be run before the fix, not after.** `t_d4_instructions_failed_load.py`'s
+A/B/C columns all make the instructions GET *fail*. Column **D**, added tonight, makes it merely
+**not finish** — the route is held open and never resolved, so the page sits on its loading
+skeleton. That is not a contrived state: it is what every visit looks like for the length of the
+round trip. Once `hub/hub/static/ui` holds the fixed page this column stops being a reproduction and
+silently becomes a pass, so it was run first, against the **currently served pre-change bundle**.
+
+**Instrument.** Fresh uvicorn from source on `8011` started from `hub/`
+(`py -3.11 -m uvicorn hub.main:app`, never `agentweave --port`), fresh throwaway database
+`…/Temp/aw0906n1/n1.db`, two throwaway fixture projects created and deleted by the harness. Nothing
+on 8000; 8010 was not addressed. Staleness checked both before and after:
+`find hub/hub src -name '*.py' -newermt <process start>` returned empty. The served bundle is
+`ui-build-stamp.json` at `c063e28`, which is one commit stale — and the one commit
+(`5a5e026`) touches `lib/eventSummary.ts` and its test only, so **the instructions page in the
+served bundle is the pre-change component**, checked rather than assumed.
+
+**What the browser showed.** 24 passed / 3 failed, and the three failures are the reproduction:
+
+| Observation | Value |
+|---|---|
+| page state while the GET is in flight | `skeleton: true`, `textarea: false` — the editor has never held the stored text |
+| Save | `save_visible: true`, `save_disabled: false` — **live, over a skeleton** |
+| one click on it | **1 PUT issued** |
+| stored content before / after | `'ALPHA PROJECT RULES\n\n- Never force-push.\n- Every PR needs a test.\n'` → `''` |
+
+So the destruction does not need a dropped connection or a 500. It needs the operator to click Save
+during the load, and the window in which that is possible opens on **every** visit to the page. B1's
+column is the same blanking reached through a failure; D is the same blanking reached through
+latency, and it is the wider door of the two.
+
+**Why the three-branch render of task 1.2 does not close it by itself**, confirmed here rather than
+only argued: `skeleton: true` and `save_visible: true` were observed *simultaneously*. Save is
+`SettingsSection`'s `actions` prop, rendered in the heading — a sibling of the `{children}` the
+skeleton lives inside — so gating the children leaves the button exactly where it is. Task 1.4 is
+the task that closes this column.
+
+**Column C is still not driven**, unchanged from 2026-09-02: `'Switch project' controls on screen: 0`
+from this page, so the cross-project variant remains recorded rather than asserted. The change's
+task 2.6 covers that shape at the unit level.
+
+**One piece of instrument noise, so nobody chases it.** Playwright prints an
+`asyncio.exceptions.CancelledError` traceback on stderr when the parked route is torn down at page
+close. It is the held-open request being cancelled, not a failure — the PASS/FAIL lines are the
+result. Noted in the harness at the handler.
+
+**Status of F271 after this iteration: still open.** Nothing was fixed here. This is the pre-fix
+measurement that the fix will be checked against.
+
+---
+
 ## What D-5 measured, 2026-09-02 — the reachability walk N-10 and N-11 both said they had not done
 
 Both night scripts end on the same admission: their passes are **depth-1**, so they ask *"does any
