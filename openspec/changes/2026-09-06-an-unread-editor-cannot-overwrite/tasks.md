@@ -5,9 +5,9 @@ existing; only verified implementation closes a task.
 
 ## 1. The page
 
-- [ ] 1.1 Read the query's full state in `hub/ui/src/components/instructions/InstructionsPage.tsx:9`
+- [x] 1.1 Read the query's full state in `hub/ui/src/components/instructions/InstructionsPage.tsx:9`
   — `data`, `isLoading`, `isError`, `error`, `refetch` — instead of `{ data, isLoading }`.
-- [ ] 1.2 Replace the two-branch render at `:45` with three branches in this order: `data` present →
+- [x] 1.2 Replace the two-branch render at `:45` with three branches in this order: `data` present →
   the editor exactly as today; `isError` → the failure block; otherwise → the existing skeleton.
   The `data`-first ordering is load-bearing (see `design.md`) — an `isError`-first ordering would
   take a loaded editor away from an operator mid-edit on a background refetch failure.
@@ -21,11 +21,11 @@ existing; only verified implementation closes a task.
   inside the block being gated, so it travels with the textarea and is correctly absent from the
   failure and loading states — the delta's "Disclaimer shown" scenario was conditioned on the read in
   R3 to match.
-- [ ] 1.3 The failure block: a `role="alert"` region naming what could not be loaded, the sentence
+- [x] 1.3 The failure block: a `role="alert"` region naming what could not be loaded, the sentence
   from `readableApiError(error, <fallback>)`, and a Retry control calling `refetch()`. The fallback
   string is what a dropped connection produces — no `ApiError`, so nothing to quote — and it must
   say that nothing stored has been changed.
-- [ ] 1.4 **Gate the write, and note that 1.2 does not do it for you (R2).** Save is passed to
+- [x] 1.4 **Gate the write, and note that 1.2 does not do it for you (R2).** Save is passed to
   `SettingsSection` as `actions` (`:36-43`) and rendered in the heading
   (`components/environment/SettingsSection.tsx:58`), a sibling of the `{children}` (`:60`) that holds
   the branch 1.2 rewrites — so the three-branch render leaves Save on screen in every state,
@@ -33,12 +33,12 @@ existing; only verified implementation closes a task.
   inside the gated region or make `actions` conditional on the same `data` test. Adding
   `|| isError` to `disabled` is **not** sufficient: it leaves both the `data === undefined` routes
   open, the in-flight one on every visit.
-- [ ] 1.5 **Keep the failure inside `{children}`, not in place of the section (R3).**
+- [x] 1.5 **Keep the failure inside `{children}`, not in place of the section (R3).**
   `project-environment-settings`'s *A configuration section states what it governs* requires every
   section to open with its title and a statement of what it governs. `SettingsSection` renders both
   in the heading, outside the branch — so replacing the branch is conforming and replacing the whole
   `<SettingsSection>` with a failure panel would breach a shipped requirement. Cheap to get wrong.
-- [ ] 1.6 **Report a failed save, which this page does not do today (R3).** `saveMutation.isError`
+- [x] 1.6 **Report a failed save, which this page does not do today (R3).** `saveMutation.isError`
   is never read: `:20-26` binds only `isSuccess`, so a rejected PUT re-enables the button, shows
   nothing, and leaves the operator believing the save landed.
   `project-environment-settings`'s *Saving reports its outcome* already requires that "a failure
@@ -49,7 +49,7 @@ existing; only verified implementation closes a task.
   failures is *less* coherent than one that stated neither. Use `readableApiError(saveMutation.error,
   …)` in a `role="alert"` beside the button, as `ProjectSettingsPanel.tsx:319` does. Its unit test
   is 2.8.
-- [ ] 1.7 Leave `hub/hub/api/v1/instructions.py` alone. The server-side guard is intact and the
+- [x] 1.7 Leave `hub/hub/api/v1/instructions.py` alone. The server-side guard is intact and the
   empty string stays a legitimate value — whether a PUT should confirm before blanking non-empty
   stored content is the operator's open question, not part of this change.
 
