@@ -185,9 +185,41 @@ and the editor branch is unreachable with the previous project's text in it.
 
 ## 5. Close it out
 
-- [ ] 5.1 `cd hub/ui && npm run lint`. Python paths are untouched, so the Python lint set is not
+- [x] 5.1 `cd hub/ui && npm run lint`. Python paths are untouched, so the Python lint set is not
   required — say so rather than skipping it silently.
-- [ ] 5.2 Set `F271`'s `**Status:**` line in `scripts/drive/FINDINGS.md` to `fixed <sha>`, and record
+  **Done 2026-09-06 (night, n7-close).** `eslint . --ext ts,tsx --report-unused-disable-directives
+  --max-warnings 0` exits 0 with no output. **`ruff check src/ hub/ tests/`, `black --check` and
+  `mypy src/` were deliberately not run, and that is stated rather than passed over in silence:**
+  this change's diff touches `hub/ui/src/components/instructions/InstructionsPage.tsx`, a new
+  `hub/ui/src/__tests__/` file, the committed `hub/hub/static/ui` bundle, `scripts/drive/`
+  (harnesses, `ruff`-clean and checked in their own iterations) and markdown. No file that the
+  Python lint set covers is modified by the change itself.
+- [x] 5.2 Set `F271`'s `**Status:**` line in `scripts/drive/FINDINGS.md` to `fixed <sha>`, and record
   in it that the cross-project variant it left unfalsified is now closed by construction rather than
   by measurement.
-- [ ] 5.3 `openspec-sync-specs` into `openspec/specs/project-instructions/spec.md`, then archive.
+  **Done 2026-09-06 (night, n7-close).** `**Status:** fixed c7e615c` (component), `676eba4` (bundle),
+  `f664f45` (drive), with a three-row table separating what is closed **by measurement** (B1/B2, and
+  D against an expectation written before the fix existed) from what is closed **by construction**
+  (C — still not drivable, no in-page project switcher; per-query-key `data` plus unit test 2.6,
+  recorded as weaker evidence rather than folded into the 31/0). The stale *"Status of F271 after
+  this iteration: still open"* line at the section tail was re-anchored to the iteration it was
+  about instead of being left to contradict the head.
+  **The index paragraph was corrected in the same commit**, which is the step whose absence makes
+  the ledger unreadable. The correction is **not** the one this task anticipated: re-running the
+  index's own mechanical scan found **41** severity-A headings, not 40, because **F295** was filed
+  earlier the same day out of F292 and postdates the 2026-09-04 recount. So the open list is still
+  **six** — F274, F140, F142, F154, F155, **F295** — with F271 leaving it and F295 joining it. The
+  first pass of that scan reported five and was wrong: it tested for the substring `fixed`, which
+  F295's *"open, not specced, not fixed"* matches. Both the corrected list and the instrument error
+  are written into the file.
+- [x] 5.3 `openspec-sync-specs` into `openspec/specs/project-instructions/spec.md`, then archive.
+  **Done 2026-09-06 (night, n7-close).** The MODIFIED requirement replaced *Hub UI provides
+  instructions editor* in full (its three scenarios now carry the read-succeeded condition, the
+  disclaimer included) and both ADDED requirements were appended; the delta's change-relative
+  narration (*"this change repairs"*, *"R3 found"*) was dropped and its durable rationale kept, since
+  the main spec states current behaviour rather than a diff. `openspec validate project-instructions
+  --strict` → *valid*. **Only `project-instructions` was synced, and that was checked rather than
+  assumed:** task 1.6 closes a requirement living in `project-environment-settings` — *Saving reports
+  its outcome*, `openspec/specs/project-environment-settings/spec.md:70` — but it was already shipped
+  and binding, the component simply breached it, so there is no delta for it and its text needs no
+  edit. The change directory holds exactly one delta spec.

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ab60cf3",
     "stop_at": "2026-09-07T07:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-06-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "n7-close",
-    "next_action": "n7-close: close the change out (tasks 5.1-5.3). 5.1 `cd hub/ui && npm run lint` -- and SAY that the Python lint set is not required because no Python path is touched, rather than skipping it silently. 5.2 in scripts/drive/FINDINGS.md: set F271's **Status:** to `fixed <sha>` (use the n2-impl commit c7e615c as the fix, and name 676eba4 as the bundle that shipped it), record that the in-flight destruction path is now measured closed by column D and that the cross-project variant is closed BY CONSTRUCTION (per-query-key data) rather than by measurement since column C is still not drivable, and correct the index paragraph's open severity-A list IN THE SAME COMMIT -- that correction is the step whose absence makes the ledger unreadable, so do not defer it. 5.3 run openspec-sync-specs into openspec/specs/project-instructions/spec.md, then archive the change into openspec/changes/archive/. Check whether the delta also touches project-environment-settings (task 1.6 closes a requirement that lives there) before syncing only one spec. No Hub needed and nothing to drive; this is a docs-and-specs iteration.",
+    "current": "n8-wrap",
+    "next_action": "n8-wrap: write the closing log entry per .claude/loops/night-window.md's 'Ending the window' section -- what changed and whether it was product code or docs, what was PROVEN with named evidence versus only inferred, what is open, what decisions are waiting on the operator, and what the day window should distrust. Carry forward explicitly: F293+F294 want ONE change between them (F126's deferred column PLUS a claim or uniqueness constraint; the column alone races identically); the open severity-A list is six of which FIVE are unproposed -- F140, F142, F154, F155 and now F295 (filed 2026-09-06 out of F292, never before on the index) -- and F274 is specced-but-unapproved; and the instrument note that a substring test for 'fixed' reads 'not fixed' as fixed. No Hub, nothing to drive. Then set next_action to null so the driver unregisters itself.",
     "queue": [
         {
             "id": "n1-repro",
@@ -59,15 +59,16 @@
         },
         {
             "id": "n7-close",
-            "status": "open",
+            "status": "done",
             "title": "Phase 5 -- close it out (tasks 5.1-5.3)",
-            "detail": "5.1 `cd hub/ui && npm run lint`; the Python lint set is not required because no Python path is touched -- SAY so rather than skipping it silently. 5.2 set F271's **Status:** to `fixed <sha>` in scripts/drive/FINDINGS.md, note the cross-project variant is now closed by construction rather than measurement, and correct the index paragraph's open severity-A list IN THE SAME COMMIT. 5.3 openspec-sync-specs into openspec/specs/project-instructions/spec.md, then archive."
+            "detail": "5.1 `cd hub/ui && npm run lint`; the Python lint set is not required because no Python path is touched -- SAY so rather than skipping it silently. 5.2 set F271's **Status:** to `fixed <sha>` in scripts/drive/FINDINGS.md, note the cross-project variant is now closed by construction rather than measurement, and correct the index paragraph's open severity-A list IN THE SAME COMMIT. 5.3 openspec-sync-specs into openspec/specs/project-instructions/spec.md, then archive.",
+            "result": "5.1 UI lint exit 0, no output; the Python lint set NAMED as not required rather than skipped silently (diff is InstructionsPage.tsx, a new __tests__ file, the committed bundle, scripts/drive/ and markdown -- no file ruff/black/mypy cover). 5.3 delta synced into openspec/specs/project-instructions/spec.md (MODIFIED requirement replaced in full, both ADDED appended, change-relative narration dropped and durable rationale kept); openspec validate --all --strict = 44 passed / 0 failed; change moved to openspec/changes/archive/. Only project-instructions synced, CHECKED not assumed: task 1.6's requirement lives in project-environment-settings:70, was already shipped and binding, so no delta exists or is needed. 5.2 F271 Status set to fixed c7e615c (component) / 676eba4 (bundle) / f664f45 (drive), with a three-row table separating closed-by-MEASUREMENT (B1/B2, and D against a pre-fix expectation) from closed-by-CONSTRUCTION (C, still not drivable, recorded as weaker evidence rather than folded into the 31/0); the stale 'still open' line at the section tail re-anchored to its own iteration. THE INDEX CORRECTION WAS NOT THE ONE QUEUED: re-running the index's own scan first found 41 severity-A headings, not 40 -- F295 was filed earlier the same day out of F292 and had never been on any list. The open list is STILL SIX (F274, F140, F142, F154, F155, F295), F271 leaving and F295 joining; 'five' would have been a stale census, not a stale definition. The scan's first pass DID report five, wrongly, because it substring-tested for 'fixed' which F295's 'open, not specced, not fixed' matches -- written into FINDINGS.md too. Nothing driven, no Hub, no product code."
         },
         {
             "id": "n8-wrap",
             "status": "open",
             "title": "Final log entry and the note to tomorrow's day window",
-            "detail": "Playbook's 'Ending the window' section: what changed (marking product code vs docs), what was PROVEN with evidence vs only inferred, what is open, decisions waiting, what to distrust. Carry forward for the day window: F293 and F294 both need a spec loop and one change answers both (F126's deferred column PLUS a claim or uniqueness constraint -- the column alone races identically); the four remaining open severity-A findings have no proposal and are the day window's to take. Then set next_action to null so the driver unregisters."
+            "detail": "Playbook's 'Ending the window' section: what changed (marking product code vs docs), what was PROVEN with evidence vs only inferred, what is open, decisions waiting, what to distrust. Carry forward for the day window: (a) F293 and F294 both need a spec loop and ONE change answers both (F126's deferred column PLUS a claim or uniqueness constraint -- the column alone races identically); (b) the open severity-A list is FIVE unproposed rows, not four -- F140, F142, F154, F155 (all four have archived, never-driven changes and unmet re-drive banners) plus F295, filed 2026-09-06 out of F292, severity A, not specced and never listed on the index before tonight; F274 is the sixth but is specced and merely unapproved. (c) The instrument note from n7-close: a substring test for 'fixed' reads 'not fixed' as fixed -- any future recount must not repeat it. Then set next_action to null so the driver unregisters."
         }
     ],
     "decisions_for_user": [],

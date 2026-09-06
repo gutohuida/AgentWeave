@@ -188,6 +188,35 @@ F140, F142, F154 or F155; the banners' condition is still unmet and this revisio
 otherwise. The cheapest way to make the two-count true is to drive those four — until somebody does,
 they are open.
 
+**Revised 2026-09-06 (night window, n7-close): the open severity-A list is still six — but not the
+same six. F271 leaves it and F295 joins it: F274, F140, F142, F154, F155, F295.**
+
+**F271 is fixed** `c7e615c`, **shipped in the served bundle** `676eba4`, **and driven in a browser**
+`f664f45`. It leaves under the *stricter* of the two definitions above, not the looser one: a change
+was built **and** a drive against the served bundle observed the defect gone (31 passed / 0 failed),
+with the same inverted harness re-run against the pre-change bundle giving 19 passed / 12 failed and
+the baseline column identical in both. Its cross-project variant is closed by construction rather
+than by measurement — see F271's own section, which says so rather than folding it into the 31/0.
+
+**F295 was filed earlier today** (split out of F292) and postdates the 2026-09-04 recount, so it has
+never appeared on any list on this page. It is severity A, `**Status:** open, not specced, not
+fixed`. The count is therefore unchanged by coincidence, and reporting "five" would have been a
+different error from the one this section spent 2026-09-04 correcting: not a stale definition, a
+stale *census*. There are now **41** severity-A headings, not 40.
+
+The other five are unchanged in every respect. **F274** is specced and unapproved. **F140, F142,
+F154, F155** are still the four whose changes were archived without ever being driven, and the
+banner condition on each is still unmet — nothing tonight touched them. The definition correction
+above stands exactly as written; this revision applies it, it does not revise it.
+
+**How this was arrived at, so the next window can repeat it rather than trust it.** The scan above
+was re-run mechanically over all 41 sections. Its first pass reported **five** and was wrong: the
+classifier tested for the substring `fixed` in the status line, which F295's *"open, not specced,
+not fixed"* matches. **A substring test for `fixed` reads "not fixed" as fixed.** That is worth
+leaving written down — it is the same class of error as the definition drift above, an instrument
+agreeing with the expected answer, and it was caught only because the heading count came back 41
+against a remembered 40.
+
 **And one observation that outranks any single row of that table.** F88, F89 and F90 were found in
 one iteration, in three unrelated subsystems, and every one of them was a mechanism this repository
 tests *thoroughly* — against a state the product never produces. F88's access tests pass a
@@ -18508,6 +18537,34 @@ Codex bullet now assert it, so it cannot ship claiming a Claude-only result cove
 
 ## F271 (A) — a failed instructions load renders an empty editor with Save enabled, and one click destroys the project's instructions
 
+**Status:** fixed `c7e615c` (the component), shipped in the served bundle by `676eba4`, driven in a
+browser by `f664f45`. Change `openspec/changes/archive/2026-09-06-an-unread-editor-cannot-overwrite`.
+
+Both destruction paths this section measured are closed, and they were closed on different evidence,
+which is worth separating rather than reporting as one number:
+
+| Path | How it is closed |
+|---|---|
+| **B1 / B2** — the failed load (dropped connection, and a 500) | **By measurement.** The harness's expectations were inverted to the requirement and it observes no editor, **Save gone rather than merely inert**, the failure stated in a `role="alert"` with a Retry beside it, **0 PUTs**, and the stored row byte-identical. |
+| **D** — the read still in flight, the wider door of the two | **By measurement, against an expectation written before the fix existed.** Column D passes *unmodified*: the three assertions that failed on 2026-09-06 pre-fix now pass with their text untouched. |
+| **C** — the cross-project variant | **By construction, not by measurement**, and this is the one caveat on the row above. It is still not drivable: this page offers no in-page project switcher (`'Switch project' controls on screen: 0`, unchanged since 2026-09-02), so no browser has been made to perform the switch. What closes it instead is the shape of the data: `data` is per query key (`['project', projectId, 'instructions']`), so a newly selected project's key has no data of its own and the editor branch is unreachable holding the previous project's text. Unit test 2.6 asserts that shape; **an argument plus a unit test is weaker evidence than the other two rows have**, and it is recorded as such rather than folded into the 31/0. |
+
+The measurement is mutation-checked, which is what makes it mean anything: the *same* inverted
+harness re-run against the pre-change bundle (`git checkout 676eba4^ -- hub/hub/static/ui`, served
+JS confirmed back to `index-BXA4wQsi.js` on the wire) gives **19 passed / 12 failed** against
+**31 passed / 0 failed** post-fix, with the baseline column's two checks passing *identically* in
+both runs — so the 12 are this fix and nothing else. Pre-fix the drive's own typing reached the
+stored row (`'TYPED BY THE DRIVE'`), proving the instrument can see a write when there is one.
+
+Retry was additionally driven by hand with no route interception at all
+(`scripts/drive/t_d4_retry_by_hand.py`, 15 passed / 0 failed): a real uvicorn stopped and restarted
+under a live browser, asserted **not** to heal on its own, then healed by one click on Retry.
+
+**The operator question this section raised is still open and was deliberately not answered:** whether
+a PUT that blanks non-empty stored content should confirm first. `hub/hub/api/v1/instructions.py` was
+left alone — the empty string stays a legitimate value, and the client is now the only place the
+distinction lives.
+
 Found by driving, 2026-09-02 (day window, D-4). N-11 read this statically last night and
 **deliberately filed no finding number**, on the correct ground that a static read cannot say what
 the page renders. It reproduces, and it is worse than the static read claimed: the destruction takes
@@ -18730,8 +18787,9 @@ task 2.6 covers that shape at the unit level.
 close. It is the held-open request being cancelled, not a failure — the PASS/FAIL lines are the
 result. Noted in the harness at the handler.
 
-**Status of F271 after this iteration: still open.** Nothing was fixed here. This is the pre-fix
-measurement that the fix will be checked against.
+**Status of F271 after *that* iteration (n1-repro, 2026-09-06): still open.** Nothing was fixed
+there; that was the pre-fix measurement the fix would be checked against. It has since been checked
+against it and passes unmodified — see the `**Status:**` block at the head of this section.
 
 ---
 
