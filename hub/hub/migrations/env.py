@@ -48,10 +48,30 @@ def do_run_migrations(connection):
 
 
 async def run_async_migrations() -> None:
-    connectable = create_async_engine(settings.database_url)
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
-    await connectable.dispose()
+    # F292 investigation, 2026-09-06: this engine used to have no `connect_args` at all, so on
+    # SQLite it ran with the driver's default 5s busy timeout while `hub/hub/db/engine.py`'s
+    # engine (via `hub/tests/conftest.py`'s pragma listener) waits 30s -- six times shorter
+    # patience for exactly the writer this repository already knows can collide with a schema
+    # reset (F292's own control run). `timeout` here is the sqlite3/aiosqlite connect-time
+    # argument that sets `PRAGMA busy_timeout`, the same mechanism the pragma listener uses.
+    connectable = create_async_engine(
+        settings.database_url,
+        connect_args=(
+            {"check_same_thread": False, "timeout": 30.0}
+            if "sqlite" in settings.database_url
+            else {}
+        ),
+    )
+    try:
+        async with connectable.connect() as connection:
+            await connection.run_sync(do_run_migrations)
+    finally:
+        # Was unconditional and placed after the `async with` block, so a migration failure
+        # propagated straight past it -- this engine, and its one checked-out-then-rolled-back
+        # connection, were never disposed and lived until Python's garbage collector reclaimed
+        # them. `_run_alembic_upgrade` (hub/hub/db/engine.py) swallows the exception this raises,
+        # so nothing surfaced except the leak.
+        await connectable.dispose()
 
 
 def run_migrations_online() -> None:

@@ -20521,14 +20521,29 @@ else touching it.
 
 ## F292 (B) - the fix for F285 traded a deterministic rollback for an intermittent lock, and the mitigation written for it did not hold
 
-**Status:** open, and the standing mechanism is **falsified for the two occurrences that carried the
-instrument**. Filed 2026-09-05 by the day window's D-5 while reading this branch's CI for the
-review page. **Measured from CI, not reproduced locally** -- the five runs below are the evidence;
-no local reproduction has ever succeeded, and every mechanism sentence in this entry is explicitly
-labelled. The night N-1 checkout registry **fired in CI on 2026-09-06 and returned a negative**: no
-connection was checked out from the product engine at any probe point, which is the one shape the
-registry was built to catch. Read the sections in order -- the narrowing below is superseded by the
-D-1 section that follows it.
+**Status:** open. Root cause not fixed, but the mechanism now has a concrete, code-level, forced-
+reproduction-backed candidate: an `aiosqlite` connection's dedicated worker thread crashes (and dies
+permanently) if it tries to report a result back to an event loop that has already closed, and any
+later reuse of that same connection then awaits a `Future` nothing will ever resolve -- unbounded, no
+`busy_timeout` involved. Traced to a real, un-awaited background-task call site
+(`agent_trigger.py:1190`) reachable from both of F292's historically-failing test files, and to a gap
+in the teardown safety net meant to prevent exactly this. See the entry's most recent section for the
+full chain. Not fixed this session -- it is a run-cancellation design issue, not a one-line patch.
+The standing (main-engine registry) mechanism is **falsified for all four occurrences that carried
+the instrument**, n=4 as of 2026-09-06. The alembic-engine half of H1 is separately measured and
+**ruled out as a general mechanism** (it cannot explain an occurrence in a test file collected before
+`test_migrations.py` ever runs) -- two real, independent defects in `hub/hub/migrations/env.py` were
+fixed anyway (a 6x-shorter busy timeout than the main engine; a dispose skipped on any migration
+failure), covered by two new tests, but they are not this finding's fix, and are unrelated to the new
+hang. Filed 2026-09-05 by the day window's D-5 while reading this branch's CI for the review page.
+**A 2026-09-06 occurrence hung for 3.5 hours instead of failing** -- every occurrence before it, and
+every one this entry originally described, failed within 8-14.5 minutes; "bounded failure only" is
+now a stale characterization. The night N-1 checkout registry **has fired in CI four times and
+returned a negative every time**: no connection was checked out from the product engine at any probe
+point -- consistent with the new mechanism, since it lives in a different engine's connection
+entirely, invisible to that registry by construction. Read the sections in order -- each narrowing is
+superseded by the one that follows it, and the most recent section supersedes the "no hangs" framing
+of everything before it.
 
 **Narrowed 2026-09-05 (day D-6), by a control run for a different finding.** Still open, still not
 reproduced from the suite itself, but the space of mechanisms is smaller than it was this morning.
@@ -20850,6 +20865,200 @@ this branch between 07:55 and 08:52 UTC; six had completed by 10:00 local. **One
 all green. So condition 3 is *satisfiable*, just not reliably: on today's sample the gate has roughly
 a five-in-six chance of finding a green run at any given HEAD, and no way to distinguish a red one
 from a real regression without reading the log.
+
+**The alembic-engine half of H1 is measured now, not just reasoned about -- and it is ruled out as
+*this* mechanism, though two real defects in it are fixed regardless.** 2026-09-06, at the operator's
+explicit go-ahead ("let's fix the CI flake"), which also answers DEC-1 (`STATE-night.json`): yes, a
+second attempt at this evidence was authorised. This is a fresh investigation of H1's alembic half,
+not a repeat of the day's own reading of it.
+
+*First, a correction to H1 as written above.* "`test_init_db_runs_alembic_for_file_db`... is the one
+test that does not take the fixture and runs the real thing" is the wrong test to hang H1 on: it runs
+alembic against its own isolated `tmp_path` file (`hub/tests/test_migrations.py:516-518`), never the
+shared `TEST_DATABASE_URL` every other test's `drop_all` targets, so it structurally cannot lock the
+shared file. The test that actually matters and was never named is
+**`test_init_db_creates_no_project_even_with_the_legacy_bootstrap_env_set`**
+(`test_migrations.py:471-494`) -- it takes no `app` fixture, so it is not monkeypatched, and it calls
+`await init_db()` directly on the module-level `engine`/`settings.database_url`, which conftest.py
+binds to `TEST_DATABASE_URL` at import time. This is the **only** place in the whole suite where the
+real, un-monkeypatched `_run_alembic_upgrade()` runs against the shared file.
+
+*Two real defects in `hub/hub/migrations/env.py`'s `run_async_migrations`, found by reading the code
+and confirmed by forcing them:*
+
+1. `connectable`'s connect_args were empty, so on SQLite it ran at the aiosqlite/sqlite3 driver's
+   default busy timeout -- **measured at 5000ms** -- while the main engine (`hub/tests/conftest.py`'s
+   pragma listener) waits 30000ms. Six times shorter patience for exactly the kind of writer
+   contention this entry's own D-6 control proved locks a schema reset.
+2. `await connectable.dispose()` sat **after** the `async with connectable.connect()` block, not in a
+   `finally`. A migration failure propagates straight past it, leaking the engine (and its one
+   checked-out-then-rolled-back connection) until Python's garbage collector reclaims it.
+   `_run_alembic_upgrade` (`hub/hub/db/engine.py`) swallows the resulting exception, so nothing
+   surfaced but the leak.
+
+*Forced reproduction, standalone asyncio script, not pytest.* A task held an uncommitted write on the
+main engine for 6s while `_run_alembic_upgrade()` ran concurrently against the same file. **Before the
+fix:** alembic's connectable raised `OperationalError: database is locked` at 5.64s (its own 5000ms
+default), the warning fired exactly as `_run_alembic_upgrade`'s docstring describes, and the
+`connectable.dispose()` line was skipped. **After the fix** (busy_timeout raised to 30000ms to match):
+alembic waited out the holder and completed all 101 migrations at 6.20s -- the exact race is closed.
+
+*But the leaked connection did not go on to block a later write in this reproduction.* Immediately
+after the holder released, a fresh `drop_all` on the shared engine succeeded in 0.05s, with the failed
+`connectable` never explicitly disposed and not yet garbage-collected. Reading why: `async with
+connectable.connect() as connection:` calls `connection.close()` on exit regardless of exception, and
+SQLAlchemy's `close()` rolls back any open transaction before returning the connection to the pool --
+so the *individual connection* is released cleanly even when `connectable.dispose()` (the *pool*) is
+skipped. The leak is real (an engine, a pool, one idle connection, and the executor thread that ran
+`command.upgrade`, all held until GC) but this reproduction did not show it as the thing that holds a
+file lock past the point of failure. **This is a negative result on the locking question specifically,
+not a clean bill of health on the leak** -- it was tested with the failure landing on the very first
+DDL statement (`CREATE TABLE alembic_version`); a failure partway through the 101-migration sequence,
+after earlier statements have already run, was not tried and could behave differently.
+
+**Decisive negative evidence, from the very next CI occurrence.** `34029310406` (`7a6c782`, pushed
+this session before the fix), the **seventh** occurrence: `ERROR at setup of
+test_flow_fires_a_review_turn.py::test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn`
+-- a repeat of `0b8aaf5`'s failure, not a new test. Read with `gh run view 34029310406 --log-failed`.
+The registry printed its **fourth character-for-character identical negative** (`no connection checked
+out`, at all three probes) -- the falsification of the main-engine hypothesis is now n=4.
+
+*And it rules out alembic as this occurrence's cause, by collection order, measured, not assumed:*
+`pytest tests/ --collect-only -q` places `test_flow_fires_a_review_turn.py` at line **1386** and
+`test_migrations.py` (the file containing the one real-alembic-on-shared-DB test) at line **1780**.
+Pytest collects and runs test files in that order with no randomisation on this branch (no
+`pytest-randomly`, no `-n`) -- so **`test_migrations.py` had not run yet** when this failure occurred.
+Whatever held the database for this occurrence, it was not alembic. (`test_reviewer_is_not_the_author.py`,
+where three of the six earlier occurrences landed, collects at line 2721, *after* `test_migrations.py`
+-- so H1 remains structurally possible for those three specifically. It is now ruled out for at least
+one of the seven, which is different from being ruled out for all of them.)
+
+**Net effect on H1: the alembic engine is no longer a live suspect for a general mechanism**, since
+F292 demonstrably reproduces in a file collected before it ever runs. The two defects fixed in
+`env.py` are real and worth having independently of F292 (a shorter, needless timeout; a genuine
+resource leak on any alembic failure, not only this one) -- but they are **not F292's fix**, and this
+entry's status stays **open**. H3 (a fire-and-forget task or a worker thread outliving the loop that
+made it, general form -- not the alembic-specific instance of it) is what survives: something that can
+occur in the early files of a run, independent of alembic, invisible to the main-engine registry, and
+does not reproduce under any local condition tried so far including a 600x-shortened busy_timeout
+across the whole suite. The next occurrence's registry output is still the best available instrument;
+nothing this round added can name the holder.
+
+**Fixed, and covered:** `hub/hub/migrations/env.py`'s two defects, at `<pending commit>`.
+`hub/tests/test_migrations.py::test_run_async_migrations_uses_the_same_busy_timeout_as_the_main_engine`
+and `::test_run_async_migrations_disposes_its_engine_even_when_a_migration_raises`, both mutation-
+checked (reverting the fix fails both; restoring it passes both). Full `hub/tests/test_migrations.py`
+run clean: 85 passed, 1 skipped.
+
+**A qualitatively new occurrence, 2026-09-06, changed the shape of what this finding is: F292 can
+hang, not only fail.** CI run `34030001741` (sha `1c0bb2b`) sat `in_progress` in the `hub-test` job
+for **3.5 hours** -- started `11:21:41Z`, still running at `14:47:56Z`, manually cancelled. Every
+prior occurrence in this entry fails within 8-14.5 minutes (`busy_timeout` expires, pytest reports
+the error, the run ends); none had ever hung. GitHub cannot serve logs for a still-running job (the
+REST logs endpoint 404s with `BlobNotFound`), so there is no log evidence of where -- only the
+wall-clock fact that it exceeded every historical bound by 10x+ and never self-resolved. `1c0bb2b`
+carries no product or test code (`spec-queue/DIRECTION.md` only), so the hang is not caused by
+anything in this entry's own fix and was not introduced by it.
+
+**This changed the question from "what holds a connection a bit too long" to "is there a path with
+no timeout at all" -- and there is one, general and not specific to alembic, found by tracing a
+warning this session's own full-suite run produced as a side effect:**
+
+`hub/tests/test_migrations.py`'s local run (85 tests, this entry's two new ones included) was clean,
+but the **full** `hub/tests/` run (3972 passed, 86 skipped, 1033s) printed one
+`PytestUnhandledThreadExceptionWarning`, from `aiosqlite/core.py` (installed 0.22.1, the current
+latest -- not a version this repo is behind on):
+
+```
+File ".../aiosqlite/core.py", line 66, in _connection_worker_thread
+    future.get_loop().call_soon_threadsafe(set_result, future, result)
+...
+RuntimeError: Event loop is closed
+During handling of the above exception, another exception occurred:
+File ".../aiosqlite/core.py", line 75, in _connection_worker_thread
+    future.get_loop().call_soon_threadsafe(set_exception, future, e)
+...
+RuntimeError: Event loop is closed
+```
+
+Reading `aiosqlite/core.py`'s `_connection_worker_thread` (its whole body is 28 lines): every
+aiosqlite `Connection` runs one dedicated OS thread that pulls `(future, function)` off a
+`SimpleQueue` forever, runs `function()` synchronously, and reports back via
+`future.get_loop().call_soon_threadsafe(...)`. **If the coroutine that queued the work has moved on
+and its event loop has already closed by the time the thread finishes, `call_soon_threadsafe` raises
+-- and the `except` branch's own attempt to report *that* failure makes the identical call and raises
+again, uncaught. The worker thread's `while True` loop terminates. The thread is now permanently
+dead**, and nothing else in aiosqlite notices.
+
+*Forced reproduction, standalone, with a hard timeout so the repro script itself could not hang
+forever:* a coroutine connects, queues a 1s operation via `_execute` without awaiting it (fire-and-
+forget), and returns; `asyncio.run()` then closes its loop while that operation is still running in
+the worker thread.
+
+```
+worker thread alive? False
+uncaught thread exceptions captured: 1    RuntimeError: Event loop is closed
+reusing the same connection from a fresh loop: TIMED OUT (hung) after 5s
+```
+
+**The crash reproduces byte-for-byte identical to the warning the real suite produced, and reusing
+the same connection object afterward hangs -- unboundedly; `asyncio.wait_for(..., timeout=5.0)` is
+the only reason this script did not hang forever too.** No SQLite `busy_timeout` governs this at all:
+the failure is that nothing is left alive to ever resolve the `Future` a later `_execute` call
+awaits. This is the general, no-timeout hang mechanism the coordinator asked whether `_run_alembic_
+upgrade`'s `run_in_executor` specifically could produce -- it is not that call site, but the same
+class of bug, sitting one layer down in the driver every `AsyncSession` in this codebase uses.
+
+**Traced to a concrete, real call site: `agent_trigger.py`'s background run task, reachable from the
+exact two test files F292 has always failed in.** `hub/hub/api/v1/agent_trigger.py:1190` creates
+`task = asyncio.create_task(_execute_run(...))` and does not await it -- deliberately, so the
+triggering call returns while the run continues. It is tracked in a module-level `_background_runs`
+set with a `done_callback` to discard itself (`:1230-1231`), and dozens of tests across the suite
+explicitly drain that set before finishing. `hub/tests/conftest.py:317-367` is the general-purpose
+safety net for tests that do not drain it themselves: on teardown, it cancels every task still in
+`_background_runs`, `gather`s them with `return_exceptions=True` in a loop until the set is empty
+(handling the case where cancellation itself schedules a successor), *then* disposes the shared
+engine -- a fixture whose own comments already record one prior incident from getting this ordering
+wrong (`test_the_timeline_reports_what_a_run_wrote_outside_its_workspace`, 2026-09-05).
+
+**That safety net closes the asyncio-level race and does not close this one.** `task.cancel()` +
+`gather` waits only for the *coroutine* to unwind -- which can return as soon as the `Future` it is
+awaiting inside aiosqlite's `_execute` is marked cancelled. It does not, and structurally cannot,
+wait for the *worker thread* to finish whatever synchronous SQLite call is already in flight, because
+that thread is not asyncio-aware and does not observe the cancellation at all. If that call is still
+running when the fixture's loop settles, disposes the engine, and the test's event loop later closes,
+the worker thread finishes into exactly the crash above -- and the underlying `sqlite3.Connection` is
+never reached by any `close()` call, because the crash happens inside the `try/except` wrapped around
+`function()` itself, before control could reach anything that would close it. **That connection then
+sits open indefinitely, its thread dead, invisible to `hub/tests/conftest.py`'s N-1 checkout registry
+(which watches SQLAlchemy's own checkout/checkin events on the engine, not aiosqlite's internal
+thread lifecycle) -- consistent with the registry's four-for-four identical negative.**
+
+*Why this fits both symptoms.* If nothing later tries to use that specific dead connection again, it
+is a quiet leak that may or may not hold a lock depending on exactly what SQL it was mid-executing --
+a plausible source of the historical **bounded** failures (something eventually times out at 30s and
+`drop_all` reports the error). If SQLAlchemy's pool instead considers the connection still checked-in
+and hands it back out for real use, any operation on it awaits a `Future` that will never resolve --
+**unbounded**, matching the newly observed 3.5-hour hang exactly.
+
+*Why the two historically-failing files fit.* Both `test_reviewer_is_not_the_author.py` and
+`test_flow_fires_a_review_turn.py` fire a job via a `_fire(job_id)` helper that awaits
+`scheduler._fire_job_internal` -> `_do_fire_job` -> `turn_scheduler.schedule_agent` ->
+`agent_trigger.trigger_agent_directly` end-to-end -- but `trigger_agent_directly` itself does not
+await the `_execute_run` task it creates; it returns once the task is registered. So `_fire()`
+returning to the test proves the *trigger* completed, not that the *run* did. Traced by reading
+`hub/hub/scheduler.py:_do_fire_job` (calls `schedule_agent`) and `hub/hub/turn_scheduler.py:252-322`
+(calls `trigger_agent_directly`), not assumed.
+
+**Not fixed. This is a design-level asyncio/threading correctness issue in how a cancelled run's
+worker-thread-backed DB operations are waited for**, not a one-line patch, and it touches core
+run-execution/cancellation semantics this repository's own round discipline would want three
+independent passes on before changing. Recorded here as the most concrete, best-evidenced lead to
+date -- the next step is establishing whether `_execute_run`'s own database work can be made to
+either (a) genuinely await the underlying thread instead of only the coroutine on cancellation, or
+(b) run on a connection whose worker thread's lifetime is decoupled from any single test's event
+loop. Not attempted this session: it needs its own dedicated investigation, and this session's
+authorisation was for chasing F292's cause, not for changing run-cancellation behaviour.
 
 ---
 

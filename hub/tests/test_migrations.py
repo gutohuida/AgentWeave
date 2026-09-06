@@ -19,7 +19,7 @@ import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 import sqlalchemy as sa
@@ -565,6 +565,74 @@ async def test_init_db_alembic_failure_does_not_raise(tmp_path, monkeypatch) -> 
     # If we got here, the exception was caught. Verify the patch target
     # was actually invoked (defense against a missed patch).
     assert True, "Alembic upgrade failed silently — exception was caught"
+
+
+def test_run_async_migrations_uses_the_same_busy_timeout_as_the_main_engine(tmp_path) -> None:
+    """F292 investigation, 2026-09-06: alembic's own engine used to have no `connect_args`
+    at all, so on SQLite it ran with the driver's default 5s busy timeout while the main
+    engine (via conftest.py's pragma listener) waits 30s -- six times shorter patience for
+    exactly the kind of writer contention F292's own control run proved locks a schema reset.
+
+    alembic re-execs `env.py` fresh on every `command.upgrade` call (it must: `config =
+    context.config` at module scope only resolves inside an active invocation, which is also
+    why this test cannot simply `import hub.migrations.env`). So the patch target is the
+    *origin* of the name env.py imports from, not an attribute on env.py itself.
+    """
+    db_file = tmp_path / "busy_timeout_check.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    real_create_async_engine = create_async_engine
+    seen_kwargs = {}
+
+    def _spy(url, **kwargs):
+        seen_kwargs.update(kwargs)
+        return real_create_async_engine(url, **kwargs)
+
+    with patch("sqlalchemy.ext.asyncio.create_async_engine", side_effect=_spy):
+        _run_alembic_with(db_url)
+
+    assert seen_kwargs.get("connect_args") == {"check_same_thread": False, "timeout": 30.0}, (
+        "alembic's engine must match the main engine's busy timeout (30s) and "
+        f"check_same_thread setting; got connect_args={seen_kwargs.get('connect_args')!r}"
+    )
+
+
+def test_run_async_migrations_disposes_its_engine_even_when_a_migration_raises(tmp_path) -> None:
+    """F292 investigation, 2026-09-06: `await connectable.dispose()` used to sit after the
+    `async with connectable.connect()` block rather than in a `finally`, so a migration
+    failure propagated straight past it and leaked the engine and its one checked-out
+    connection until Python's garbage collector reclaimed them. `_run_alembic_upgrade`
+    (hub/hub/db/engine.py) swallows the resulting exception, so nothing surfaced but the leak.
+
+    Forces the failure at `connectable.connect()` itself, outside alembic's own internals
+    (which are awkward to patch reliably since `env.py` is re-exec'd fresh on every
+    `command.upgrade` call) -- that is still squarely inside the `try` the fix added.
+    `AsyncEngine`'s methods are read-only on the instance (slots), so the spies patch the
+    class for the duration of the call rather than the one instance.
+    """
+    from sqlalchemy.ext.asyncio import AsyncEngine
+
+    db_file = tmp_path / "dispose_on_failure.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    real_dispose = AsyncEngine.dispose
+    dispose_calls = []
+
+    async def _tracking_dispose(self, *args, **kwargs):
+        dispose_calls.append(self)
+        return await real_dispose(self, *args, **kwargs)
+
+    def _boom_connect(self, *args, **kwargs):
+        raise RuntimeError("boom")
+
+    with (
+        patch.object(AsyncEngine, "connect", _boom_connect),
+        patch.object(AsyncEngine, "dispose", _tracking_dispose),
+    ):
+        with pytest.raises(RuntimeError, match="boom"):
+            _run_alembic_with(db_url)
+
+    assert len(dispose_calls) == 1, "expected exactly one engine's dispose() to have run"
 
 
 # ---------------------------------------------------------------------------
