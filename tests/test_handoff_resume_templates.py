@@ -14,7 +14,8 @@ def test_handoff_template_has_valid_discovery_metadata_and_durable_contract():
 
     assert template.startswith("---\nname: handoff\n")
     assert "description:" in template.split("---", 2)[1]
-    assert ".handoffs/LATEST.md" in template
+    assert "handoff-NNNN" in template
+    assert "DEAD-ENDS.md" in template
     assert "Git state" in template
     assert "Pairs with /resume" in template
 
@@ -24,6 +25,7 @@ def test_resume_template_has_valid_discovery_metadata_and_reality_check():
 
     assert template.startswith("---\nname: resume\n")
     assert "description:" in template.split("---", 2)[1]
-    assert ".handoffs/LATEST.md" in template
+    assert "handoff-*.md" in template
+    assert "DEAD-ENDS.md" in template
     assert "git status --short" in template
     assert "Pairs with /handoff" in template
