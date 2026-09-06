@@ -8,14 +8,19 @@ promise a pre-filled textarea on every navigation, which is a promise it cannot 
 does not succeed — and keeping it anyway is what produced an empty editor over stored content.
 
 What the screen owes when the read has *not* succeeded is stated by the two requirements added
-alongside this one; the success path below is unchanged.
+alongside this one. The success path below is unchanged in substance; all three of its scenarios now
+carry the same condition as the requirement text, including the disclaimer. R3 found that one had
+been left unconditional — the disclaimer is rendered inside the same block as the textarea
+(`InstructionsPage.tsx:63-74`), so a screen that states a failure instead of an editor does not show
+it, and a scenario reading "WHEN the Instructions screen is displayed" would have required it in
+exactly the state this change removes it from.
 
 #### Scenario: User saves instructions
 - **WHEN** the stored instructions have been read, the user edits the textarea and clicks Save
 - **THEN** content is persisted via PUT and UI confirms success
 
 #### Scenario: Disclaimer shown
-- **WHEN** Instructions screen is displayed
+- **WHEN** the stored instructions have been read and the textarea is presented
 - **THEN** a notice reads "Changes take effect when agents start a new session"
 
 #### Scenario: Existing instructions loaded on open

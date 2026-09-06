@@ -14,6 +14,13 @@ existing; only verified implementation closes a task.
   (`isLoadingError` is the library's own name for `isError && !hasData` and is an equivalent
   spelling; R2.) Optional, not required: key the editor by project id so `content` cannot outlive a
   project switch — see the R2 residual in `design.md`.
+  **R3: copy the shape from `components/environment/WorktreesPanel.tsx:44-62`**, which already renders
+  these three branches in the same `SettingsSection` family — with the one deliberate divergence that
+  it tests `error` first and this page tests `data` first, for the reason in the line above (its list
+  is read-only; this one is typed into). Note also that the session disclaimer (`:63-74`) lives
+  inside the block being gated, so it travels with the textarea and is correctly absent from the
+  failure and loading states — the delta's "Disclaimer shown" scenario was conditioned on the read in
+  R3 to match.
 - [ ] 1.3 The failure block: a `role="alert"` region naming what could not be loaded, the sentence
   from `readableApiError(error, <fallback>)`, and a Retry control calling `refetch()`. The fallback
   string is what a dropped connection produces — no `ApiError`, so nothing to quote — and it must
@@ -26,7 +33,23 @@ existing; only verified implementation closes a task.
   inside the gated region or make `actions` conditional on the same `data` test. Adding
   `|| isError` to `disabled` is **not** sufficient: it leaves both the `data === undefined` routes
   open, the in-flight one on every visit.
-- [ ] 1.5 Leave `hub/hub/api/v1/instructions.py` alone. The server-side guard is intact and the
+- [ ] 1.5 **Keep the failure inside `{children}`, not in place of the section (R3).**
+  `project-environment-settings`'s *A configuration section states what it governs* requires every
+  section to open with its title and a statement of what it governs. `SettingsSection` renders both
+  in the heading, outside the branch — so replacing the branch is conforming and replacing the whole
+  `<SettingsSection>` with a failure panel would breach a shipped requirement. Cheap to get wrong.
+- [ ] 1.6 **Report a failed save, which this page does not do today (R3).** `saveMutation.isError`
+  is never read: `:20-26` binds only `isSuccess`, so a rejected PUT re-enables the button, shows
+  nothing, and leaves the operator believing the save landed.
+  `project-environment-settings`'s *Saving reports its outcome* already requires that "a failure
+  SHALL state why in the section rather than only in a log", so this is a **shipped requirement the
+  component breaches today** — found by reading that spec in full, not created by this change, and
+  no delta is needed because the requirement already binds. It is in scope because it is the same
+  component and the same lie: a page that starts stating read failures while still swallowing save
+  failures is *less* coherent than one that stated neither. Use `readableApiError(saveMutation.error,
+  …)` in a `role="alert"` beside the button, as `ProjectSettingsPanel.tsx:319` does. Its unit test
+  is 2.8.
+- [ ] 1.7 Leave `hub/hub/api/v1/instructions.py` alone. The server-side guard is intact and the
   empty string stays a legitimate value — whether a PUT should confirm before blanking non-empty
   stored content is the operator's open question, not part of this change.
 
@@ -48,6 +71,8 @@ by reasoning about it.
 - [ ] 2.6 Project change with the new project's load failing presents no textarea holding the
   previous project's content.
 - [ ] 2.7 The success path is unchanged: load, edit, Save, confirmation.
+- [ ] 2.8 **R3:** a save that is rejected states the failure in the section. Fails against the
+  pre-change component, which renders nothing at all on `saveMutation.isError`.
 
 ## 3. The bundle
 

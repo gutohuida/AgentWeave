@@ -107,7 +107,14 @@ has no instructions":
 - **the not-yet-enabled query** — `useInstructions` is `enabled: isConfigured && !!projectId`
   (`hub/ui/src/api/instructions.ts:14`), and a disabled query is `isPending && !isFetching`, so
   `isLoading` is false there too. Derived from the code; **its reachability in the running app is
-  not driven** (see `design.md`), and no scenario below depends on it being reachable.
+  not driven** (see `design.md`), and no scenario below depends on it being reachable. R3 narrowed
+  it further: this row **misinforms but cannot destroy**, because whichever half of `enabled` is
+  false also breaks the write — no `projectId` sends the PUT to a project the route 404s on, and no
+  `apiKey` sends it without a bearer token the route 401s on (`hub/hub/auth.py:144-158`). The gate
+  still owes it a non-editor, since showing an operator an empty editor over content nobody read is
+  a lie whether or not the Save behind it lands.
+
+Of the three, then, **two are one-click destruction paths and the third is misinformation only.**
 
 It closes the cross-project variant `F271` recorded as unfalsified in either direction — component
 stays mounted, selected project changes, the new project's load fails, and `content` still holds the

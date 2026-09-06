@@ -51,7 +51,7 @@ verdict.** `useInstructions` is `enabled: isConfigured && !!projectId`
 branch that carries `destination.projectId`, while the hook reads `selectedProjectId` from
 `useConfigStore` — a second source. R1 left "whether those two can disagree while the page is
 mounted" open. They can, and the mechanism is nameable: the two sources are reconciled in an
-**effect** (`App.tsx:145-151`, `setSelectedProject(destinationProjectId)` guarded by
+**effect** (`App.tsx:152-157`, `setSelectedProject(destinationProjectId)` guarded by
 `destinationProjectId !== projectId`), which runs *after* the render it corrects. The store's
 initial value is `loadSelectedProject()` from `localStorage` and `isConfigured` is `!!initial.apiKey`
 read synchronously from `sessionStorage` (`configStore.ts:129-131`), while the destination is
@@ -63,6 +63,25 @@ What is still **not** established is that any such window lasts longer than the 
 effect commits, and no drive has put an operator in one. So the verdict is unchanged: the gate above
 covers it either way, no scenario asserts the state is reachable, and none should until someone
 drives it.
+
+**R3: the disabled row misinforms, but it cannot destroy — and neither earlier round asked.** The
+two rounds before this one argued about whether the row is *reachable*. Neither asked what a Save
+click in it actually does, and the answer narrows the row. `enabled` is
+`isConfigured && !!projectId`, and each way of failing that test also breaks the write, because
+`useSaveInstructions` builds its URL and its credential from the same two values:
+
+- `!projectId` — the PUT goes to `/api/v1/projects/null/project/instructions` (a template literal of
+  `null`), and `get_project` looks the path parameter up with `session.get(Project, "null")` and
+  **404s** (`hub/hub/auth.py:156-158`).
+- `!isConfigured` — `isConfigured` is `!!apiKey` (`configStore.ts:131`), so there is no bearer token
+  to send (`client.ts:11,17`) and `get_project` **401s** (`hub/hub/auth.py:144-148`).
+
+So of the three states that render an empty editor over unread content, **two are one-click
+destruction paths and the third is not**: the disabled row shows the operator a lie, and the write
+it invites is refused by the route. That changes no requirement — the gate is `data` present, which
+covers all three, and "no textarea" is owed for a misinformation path as much as for a destructive
+one — but it is the difference between three live destruction paths and two, and the proposal should
+not claim the larger number.
 
 **The adjacent risk is out of scope and recorded here rather than filed.** In the `projectId = B,
 destination = A` variant the page is A's while the hook — read *and* write — is B's, which is a
@@ -142,12 +161,22 @@ that is not true, which is worse than a narrow requirement that is.
 It is a good candidate for its own change, after a sweep that measures the other seven. Recorded
 here so that the next person does not have to rediscover that it was considered.
 
-**R2 attacked this call rather than inheriting it, and part of the sweep it asks for is now done.**
-Statically, over the eight pages `App.tsx:483-490` mounts: **not one of them reads a read query's
-error state.** `grep` for `isError`/`isLoadingError` returns hits in exactly two files —
-`AccountingPanel.tsx:137,147`, which are `updateBudget.isError`, and `ProjectSettingsPanel.tsx:84`,
-which is `update.error ?? relocate.error` — and both are *mutation* errors, the save-side reporting
-that `project-environment-settings` already requires. On the read side the count is zero of eight.
+**R2 attacked this call rather than inheriting it, and part of the sweep it asks for is now done —
+but R2 got the count wrong, and R3 corrects it.** R2 reported **zero of eight** from a `grep` for
+`isError`/`isLoadingError`, which returns hits in exactly two files — `AccountingPanel.tsx:137,147`
+(`updateBudget.isError`) and `ProjectSettingsPanel.tsx:84` (`update.error ?? relocate.error`) — both
+*mutation* errors, the save-side reporting `project-environment-settings` already requires.
+
+That grep missed a page, because a component can bind a read error without ever writing the string
+`isError`. **`WorktreesPanel` does exactly that**: `const { data, isLoading, error } =
+useWorktrees()` (`WorktreesPanel.tsx:21`), passed down and rendered as
+`if (error) { … role="alert" "Could not read this project's checkouts." }` (`:44-50`). The honest
+count is **one of eight**, not zero.
+
+The rejection is unaffected — a capability-wide requirement would still promise seven pages that
+have not been measured against it, and one conforming page does not make it true of the other seven.
+What changes is that the follow-up candidate now has a *model* inside the codebase rather than only a
+gap, which is worth more to whoever writes it than the count was.
 
 That measurement points both ways and it is worth being precise about which way it decides.
 
@@ -159,6 +188,41 @@ That measurement points both ways and it is worth being precise about which way 
   write from the read it does not check. `F271`'s own 153-site sweep says only two sites in the
   whole application do, and one of them is this page, so the other seven are very likely
   *misinforming* rather than *destroying*. That belongs in the follow-up change's Why, not here.
+
+## R3: the shape proposed here is already shipped one page over
+
+`WorktreesPanel` is not merely a counterexample to a count. It is the same `SettingsSection` family,
+in the same `environment` tab, and it renders the three-branch structure this change proposes —
+error first, then a not-yet-answered gate, then content (`WorktreesPanel.tsx:44`, `:56`, `:64`). Two
+things follow, and both are worth more than the correction that surfaced them.
+
+**The disabled row was already decided, in a comment, by whoever wrote that page.** R1 derived the
+fourth row from `queryObserver.js` and labelled it "derived, not driven"; R2 spent its open question
+on whether the row is reachable. `WorktreesPanel.tsx:52-55` had answered the question the product
+actually has to answer:
+
+> `!data` covers more than the fetch in flight: with no project selected the query is disabled and
+> never resolves, so there is no answer rather than an empty one. Both are "nothing to say yet", and
+> neither is a failure — reporting either as an error would be the same lie in the other direction.
+
+That is this change's gate, arrived at independently, including its treatment of the disabled query
+and including the reason: an unanswered read is not a failed one. The `data`-present test is
+therefore not this change's invention and not a matter of taste — it is the convention the codebase
+already holds, and `InstructionsPage` is the page that departs from it.
+
+**Where this change diverges, it diverges deliberately, and the reason is the textarea.**
+`WorktreesPanel` checks `error` **first**; this change checks `data` **first** (see the ordering
+argument above). Both are right for their page. A worktrees list is read-only, so replacing it on a
+background refetch failure costs the operator nothing but a re-read; an instructions textarea is
+something the operator *types into*, so taking it away mid-edit destroys unsaved work — a second
+data-loss path, opened by the fix for the first. Stating the divergence and its reason is what keeps
+the two pages from looking inconsistent to whoever reads them next.
+
+**Consequence for the corpus, not just for this change.** Neither page's behaviour is required by
+anything shipped: no requirement in `openspec/specs/` states what a settings section owes on a
+failed read (checked across all 30 documents). So `WorktreesPanel` is *unspecced code precedent* —
+it can regress without breaching anything — which is a further argument for the capability-wide
+follow-up, and a note that the follow-up should codify the existing shape rather than invent one.
 
 The rejection therefore stands, on evidence rather than on caution.
 
@@ -225,3 +289,38 @@ requirement is that no PUT is issued: assert on the mutation, not on the markup.
 The bundle at `hub/hub/static/ui` is a committed build artefact and the drive runs against the
 **served** bundle. `npm run build` then `python scripts/refresh_ui_bundle.py`, committed with
 `hub/ui/src`, or the drive re-measures the old page and reports success.
+
+## R3: reading the two specs in full found a requirement this component already breaches
+
+R3's brief required reading `project-instructions` and `project-environment-settings` end to end
+rather than grepping them, because on 2026-08-28 round 3 caught rounds 1 and 2 both breaching a
+requirement that had shipped four days earlier. It happened again, in the milder form: nothing in
+this delta contradicts either document, but the component the delta edits does not satisfy one of
+them, and had not for as long as it has existed.
+
+`project-environment-settings` — *Saving reports its outcome*: "Changing a configuration section's
+settings SHALL report whether the change was saved, and a failure SHALL state why in the section
+rather than only in a log."
+
+`InstructionsPage` reports one half. `saveMutation.isError` and `saveMutation.error` are never read;
+`:20-26` binds `isSuccess` alone and drives a "Saved" badge from it. A rejected PUT therefore
+re-enables the button, renders nothing, and leaves an operator who watched the button return to
+"Save" with no way to tell a refusal from a success. That is a shipped requirement breached today.
+
+Three reasons it is folded into this change (task 1.6) rather than filed:
+
+1. It is **measured, on one page** — the same standard on which R1 rejected the capability-wide
+   requirement for promising seven pages nobody had looked at. This one was looked at.
+2. It is the **same defect class in the same component**: the page telling the operator something
+   about its own state that is not true. Fixing the read side and shipping the save side unchanged
+   leaves a page that announces failures it did not cause and hides the ones it did.
+3. It needs **no delta**. The requirement already binds; nothing is added to the corpus. What was
+   missing was an implementation and a test, which is what 1.6 and 2.8 are.
+
+The other direction was also checked and is clean. *A configuration section states what it governs*
+survives the new failure state, because `SettingsSection` renders the title and description in the
+heading (`:45-57`), outside the `{children}` the branch replaces — but only if the implementation
+replaces the branch rather than the section, which is now stated as task 1.5 because it is an easy
+and invisible way to breach it. Nothing in `project-instructions` is contradicted: its two
+server-side requirements are untouched, the route is untouched, and the MODIFIED requirement is the
+only client-side one.
