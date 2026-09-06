@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ab60cf3",
     "stop_at": "2026-09-07T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-06-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "n3-units",
-    "next_action": "n3-units: write hub/ui/src/__tests__/instructionsUnreadEditor.test.tsx, tasks 2.1-2.8, eight tests. A throwaway harness proving four of these already ran and was DELETED in iteration 3 -- do not assume it exists, and do not treat iteration 3's result as coverage; these eight are the kept ones. Mock '@/api/client' with importOriginal and spy getJson/putJson (readableApiError must stay real), wrap in a QueryClientProvider with retry:false, and set useConfigStore state {isConfigured:true, selectedProjectId:'proj-...'} in beforeEach -- that harness shape is proven to work. 2.2 and 2.3 assert NO putJson call after clicking every button on screen, NOT a `disabled` attribute: a markup-only assertion passes against a page that renders the error AND the textarea. 2.3 is the in-flight one -- getJson returns a promise that never settles. 2.6 is the project-switch column, which the component closes by construction via the query key rather than by an explicit guard, so write it and say which. EACH of the eight MUST be mutation-checked by `git stash push -- hub/ui/src/components/instructions/InstructionsPage.tsx`, re-running, and naming which tests fail -- not by reasoning; then `git stash pop`. Expect 2.7 (success path) to pass both before and after, and say so. Finish with `npm run lint` clean and the full vitest suite still at 144 files, then commit. Do NOT rebuild the bundle (n4-bundle).",
+    "current": "n4-bundle",
+    "next_action": "n4-bundle: rebuild the committed bundle (task 3.1). `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py` from the repo root -- `make` is not on PATH in Git Bash here, and only that script writes hub/hub/static/ui/ui-build-stamp.json. Commit hub/ui/src and hub/hub/static/ui TOGETHER in one commit. Before building, confirm the stamp still records src_commit c063e28 (the pre-change bundle) so the rebuild is provably the thing that changes what is served; after `refresh_ui_bundle.py`, confirm the new stamp names a commit containing InstructionsPage.tsx's fix and that `git status` shows hub/hub/static/ui actually changed -- a build that produces a byte-identical bundle means the fix did not reach it and is a hard stop, not a pass. Do NOT start a Hub and do NOT drive anything: n5-drive owns the browser, and it must start :8011 from source AFTER this commit. Nothing else in the tree should change -- no test edits, no component edits.",
     "queue": [
         {
             "id": "n1-repro",
@@ -31,9 +31,10 @@
         },
         {
             "id": "n3-units",
-            "status": "open",
+            "status": "done",
             "title": "Phase 2 -- hub/ui/src/__tests__/instructionsUnreadEditor.test.tsx (tasks 2.1-2.8)",
-            "detail": "Eight tests. Each MUST be mutation-checked by reverting the guard and watching a NAMED test fail -- not by reasoning. 2.2 and 2.3 assert on the mutation/fetch, NOT on a `disabled` attribute: a markup-only assertion passes against a page that renders the error AND the textarea."
+            "detail": "Eight tests. Each MUST be mutation-checked by reverting the guard and watching a NAMED test fail -- not by reasoning. 2.2 and 2.3 assert on the mutation/fetch, NOT on a `disabled` attribute: a markup-only assertion passes against a page that renders the error AND the textarea.",
+            "result": "hub/ui/src/__tests__/instructionsUnreadEditor.test.tsx, 8 tests, all passing. lint clean, tsc --noEmit exit 0, full suite 145 files / 1506 tests = the 144/1498 baseline plus these eight. Mutation-checked by `git checkout c7e615c^ -- InstructionsPage.tsx` (the component was already committed, so `git stash` had nothing to save -- use checkout, not stash): 6 of 8 FAIL, each on its own claim -- 2.1/2.4/2.8 on the absent role=alert, 2.2 and 2.3 on putJson actually called once (a real write), 2.6 on a textarea holding alpha's text on beta's page. 2.2 and 2.6 had to be rewritten to wait on the query settling rather than on the alert, because in their first form they failed pre-change for 2.1's reason. 2.5 and 2.7 pass before AND after: 2.7 is the success path, 2.5's mutation is an isError-first ordering, not the pre-change page. 2.5 initially SURVIVED that mutation -- React Query notifies only on fields a render read, and a data-first branch never reads isError while data is present, so the failed refetch re-rendered nothing; it now keeps typing to force the re-render and fails against it. Also needed vi.clearAllMocks() first in beforeEach: the shared setup.ts's restoreAllMocks does not empty a module-factory vi.fn()'s call history, so 'no PUT was issued' was silently an assertion about earlier tests. Bundle NOT rebuilt."
         },
         {
             "id": "n4-bundle",

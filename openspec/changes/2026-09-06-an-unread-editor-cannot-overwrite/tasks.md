@@ -58,21 +58,44 @@ existing; only verified implementation closes a task.
 Each of these must fail against the pre-change component. Mutation-check by reverting the guard, not
 by reasoning about it.
 
-- [ ] 2.1 Failed load renders no textarea and an announced failure.
-- [ ] 2.2 **The assertion that carries the requirement:** with the load failed, no PUT is issued by
+- [x] 2.1 Failed load renders no textarea and an announced failure.
+- [x] 2.2 **The assertion that carries the requirement:** with the load failed, no PUT is issued by
   any interaction with the screen. Assert on the mutation/fetch, not on the presence of a `disabled`
   attribute — a test that only asserts markup passes against a page that renders the error *and* the
   textarea.
-- [ ] 2.3 **R2:** with the read still in flight (the query never settling), no PUT is issued by any
+- [x] 2.3 **R2:** with the read still in flight (the query never settling), no PUT is issued by any
   interaction with the screen. This one fails against the pre-change component for a reason 2.2 does
   not cover — the skeleton is rendered and Save is enabled beside it.
-- [ ] 2.4 Retry calls the query again and, on success, presents the pre-filled textarea.
-- [ ] 2.5 A successful load followed by a failing refetch keeps the textarea and its content.
-- [ ] 2.6 Project change with the new project's load failing presents no textarea holding the
+- [x] 2.4 Retry calls the query again and, on success, presents the pre-filled textarea.
+- [x] 2.5 A successful load followed by a failing refetch keeps the textarea and its content.
+- [x] 2.6 Project change with the new project's load failing presents no textarea holding the
   previous project's content.
-- [ ] 2.7 The success path is unchanged: load, edit, Save, confirmation.
-- [ ] 2.8 **R3:** a save that is rejected states the failure in the section. Fails against the
+- [x] 2.7 The success path is unchanged: load, edit, Save, confirmation.
+- [x] 2.8 **R3:** a save that is rejected states the failure in the section. Fails against the
   pre-change component, which renders nothing at all on `saveMutation.isError`.
+
+**Done 2026-09-06 (night, n3-units).** All eight written and passing; `npm run lint` clean,
+`tsc --noEmit` exit 0, full suite 145 files / 1506 tests — the 144/1498 baseline plus these eight.
+
+**Mutation-checked against the pre-change component** (`git checkout c7e615c^ -- InstructionsPage.tsx`),
+not reasoned about: **6 of the 8 fail**, each on its own claim rather than on a neighbour's —
+2.1 and 2.4 on the absent `role="alert"`, 2.2 and 2.3 on `putJson` *actually called once* (a real
+write of the emptiness), 2.6 on a textarea holding alpha's text on beta's page, 2.8 on the absent
+save-failure alert. 2.2 and 2.6 were rewritten to wait on the query settling rather than on the
+alert appearing, because in their first form both failed pre-change for 2.1's reason instead of
+their own. **2.5 and 2.7 pass before and after, and that is expected**: 2.7 is the success path,
+whose being untouched is the point, and 2.5's mutation is not the pre-change page but an
+`isError`-first ordering.
+
+**2.5 needed a second mutation check and initially failed it.** Against `data && !isError`
+(the `isError`-first ordering) it still passed, because React Query only notifies on result fields a
+render read, and a `data`-first branch never reads `isError` while data is present — so the failed
+refetch re-rendered nothing and the wrong ordering stayed invisible. It now keeps typing after the
+failed refetch, which forces the re-render, and it **fails** against that mutation.
+
+2.6 is closed by **construction**, not by a guard: `data` is per query key
+(`['project', projectId, 'instructions']`), so a newly selected project's key has no data of its own
+and the editor branch is unreachable with the previous project's text in it.
 
 ## 3. The bundle
 
