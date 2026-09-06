@@ -12,12 +12,20 @@ value (`hub/hub/api/v1/instructions.py` documents the empty string as legitimate
 
 That is the claim. This drives it in a real browser against the served bundle.
 
+**Inverted 2026-09-06 (night, n5-drive), tasks 4.1 and 4.2.** Columns B1 and B2 now assert the
+*fixed* behaviour — no editor, Save absent-or-inert, the failure stated on screen — and their
+end-to-end read-back is a **preservation** check rather than a destruction one. Column A's baseline
+is untouched: if it moves, something other than this fix moved. What B1 asserted before the fix is
+kept verbatim in the log entry and in `FINDINGS.md` under F271; the harness itself now describes the
+requirement, not the defect.
+
 Four questions — D was added 2026-09-06 by the night window (task 4.1b):
 
   A. baseline — with the load succeeding, does the editor show what is stored, and is Save enabled?
-  B. failed load — with only the GET failing (network abort, and separately a 500), what does the
-     page actually render, is Save enabled, and is any failure visible to the operator at all?
-     Then click Save with the Hub reachable again and read the row back from the API.
+  B. failed load — with only the GET failing (network abort, and separately a 500), is the editor
+     withheld, is Save gone, and is the failure stated to the operator with a way to retry?
+     Then interact with everything on the screen with the Hub reachable again, and read the row back
+     from the API to confirm nothing was written.
   C. cross-project — the sharper variant a static read does not reach: if the component stays
      mounted while the selected project changes and the *new* project's load fails, `content` still
      holds the **previous project's** text, so Save writes A's instructions into B.
@@ -111,6 +119,35 @@ def observe(page, label):
     return state
 
 
+def interact(page):
+    """Everything an operator could do to this screen that could plausibly write.
+
+    Types into every textbox on screen and clicks every Save, whatever they happen to be. The
+    requirement is that no PUT is issued — asserted on the wire by the caller's route counter, never
+    on a `disabled` attribute, because a page that renders the failure *and* the editor would still
+    satisfy a markup assertion.
+    """
+    boxes = page.locator("textarea")
+    typed = 0
+    for i in range(boxes.count()):
+        try:
+            boxes.nth(i).fill("TYPED BY THE DRIVE")
+            typed += 1
+        except Exception as exc:  # inert or detached — that is itself the guard working
+            print(f"    (textarea {i} refused input: {type(exc).__name__})")
+    saves = page.get_by_role("button", name="Save", exact=True)
+    clicked = 0
+    for i in range(saves.count()):
+        try:
+            saves.nth(i).click(timeout=2000)
+            clicked += 1
+        except Exception as exc:
+            print(f"    (Save {i} refused the click: {type(exc).__name__})")
+    page.wait_for_timeout(3000)
+    print(f"    interacted: typed into {typed} textbox(es), clicked {clicked} Save button(s)")
+    return typed, clicked
+
+
 def seed_script(pid):
     return (
         "sessionStorage.setItem('agentweave-session', "
@@ -200,31 +237,37 @@ def drive(pid_a, pid_b):
         page.wait_for_timeout(6000)
         s = observe(page, "02-abort")
         check(seen["get"] >= 1, f"the instructions GET was attempted and failed ({seen['get']}x)")
-        check(not s["skeleton"], "the skeleton is gone — the page is no longer 'loading'")
-        check(s["textarea"] and s["value"] == "", "and an EMPTY textarea is what the operator sees")
-        check(s["save_disabled"] is False, "with Save ENABLED over a failed load")
+        check(not s["skeleton"], "the skeleton is gone — the page has settled out of 'loading'")
+        check(not s["textarea"], "and NO editor is offered over instructions that were never read")
         check(
-            not s["alerts"],
-            "and nothing on screen tells the operator the load failed "
-            "(recorded: no role=alert)",
+            (not s["save_visible"]) or s["save_disabled"] is True,
+            "Save is absent-or-inert after a failed load "
+            f"(visible={s['save_visible']}, disabled={s['save_disabled']})",
         )
-        body_text = page.locator("body").inner_text().lower()
-        says = [w for w in ("error", "failed", "could not", "unable", "retry") if w in body_text]
-        print(f"    failure words anywhere in the page text: {says or 'none'}")
+        check(
+            any("could not be loaded" in a.lower() for a in s["alerts"]),
+            f"and the failure is STATED to the operator in a role=alert ({s['alerts']!r:.200})",
+        )
+        check(
+            any("nothing stored has been changed" in a.lower() for a in s["alerts"]),
+            "including the reassurance that nothing stored has been changed",
+        )
+        retry = page.get_by_role("button", name="Retry", exact=True)
+        check(retry.count() > 0, f"with a Retry control to press ({retry.count()} on screen)")
 
-        # the operator now types nothing and clicks Save — the Hub is reachable again
+        # 4.2 — the read-back is now a PRESERVATION check. The Hub is reachable for writes (only the
+        # GET is aborted), so a PUT issued here would really land; the assertion is that none is.
         before = stored(pid_a)
-        page.get_by_role("button", name="Save", exact=True).first.click()
-        page.wait_for_timeout(3000)
+        interact(page)
         after = stored(pid_a)
         page.screenshot(path=os.path.join(SHOTS, "d4-03-after-save.png"))
-        saved_badge = page.locator("[role='status']").count() > 0
-        print(f"    PUT attempts seen: {seen['put']}; 'Saved' badge: {saved_badge}")
-        print(f"    stored before Save: {before!r}\n    stored after  Save: {after!r}")
-        check(before == ALPHA, "A's instructions were intact immediately before the click")
+        print(f"    PUT attempts seen: {seen['put']}")
+        print(f"    stored before: {before!r}\n    stored after:  {after!r}")
+        check(before == ALPHA, "A's instructions were intact immediately before the interaction")
+        check(seen["put"] == 0, f"no PUT was issued by interacting with the screen ({seen['put']})")
         check(
-            after == "",
-            "ONE CLICK ON SAVE BLANKED THEM — the failed load's empty editor was written through",
+            after == before,
+            f"and the stored content is byte-identical afterwards (after={after!r})",
         )
         page.close()
 
@@ -248,8 +291,16 @@ def drive(pid_a, pid_b):
         page.wait_for_timeout(6000)
         s = observe(page, "04-500")
         check(
-            s["textarea"] and s["value"] == "" and s["save_disabled"] is False,
-            "a 500 lands identically: empty editor, Save enabled",
+            (not s["textarea"])
+            and ((not s["save_visible"]) or s["save_disabled"] is True)
+            and any("could not be loaded" in a.lower() for a in s["alerts"]),
+            "a 500 lands identically: no editor, Save absent-or-inert, the failure stated",
+        )
+        # A 500 *does* carry an ApiError, so unlike the aborted connection there is a server
+        # sentence to quote — the page must not fall back to "no reason" when it has one.
+        check(
+            any("boom" in a.lower() for a in s["alerts"]),
+            f"and the server's own reason is quoted rather than a generic fallback ({s['alerts']!r:.200})",
         )
         page.close()
 

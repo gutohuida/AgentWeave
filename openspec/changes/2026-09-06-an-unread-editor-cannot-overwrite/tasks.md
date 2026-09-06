@@ -117,10 +117,21 @@ and the editor branch is unreachable with the previous project's text in it.
 
 ## 4. The drive — this is what closes the change
 
-- [ ] 4.1 Invert `scripts/drive/t_d4_instructions_failed_load.py`'s expectations for the two failure
+- [x] 4.1 Invert `scripts/drive/t_d4_instructions_failed_load.py`'s expectations for the two failure
   columns: textarea absent, Save absent-or-inert, a stated failure present. Its baseline column must
   keep passing **unchanged**.
-- [ ] 4.1b **R2: add the in-flight column the harness does not have.** Hold the GET open rather than
+  **Done 2026-09-06 (night, n5-drive).** B1 and B2 inverted; A untouched. Against the served fixed
+  bundle (`index-C9-G-wn9.js`, stamp `src_commit eb1d1d7`) on a fresh `:8011` from source:
+  **31 passed / 0 failed.** B1 observes `textarea: false`, `save_visible: false`, and one
+  `role="alert"` reading *This project's instructions could not be loaded. / The Hub did not return
+  a reason. / Nothing stored has been changed…*, with a Retry control beside it. B2 adds an
+  assertion the pre-fix harness had no use for: a 500 **does** carry an `ApiError`, so the server's
+  own sentence (`boom`) must be quoted rather than the dropped-connection fallback — it is.
+  **Mutation-checked, not reasoned about.** The inverted harness was re-run against the *pre-change*
+  bundle (`git checkout 676eba4^ -- hub/hub/static/ui`, served JS back to `index-BXA4wQsi.js`,
+  confirmed on the wire): **19 passed / 12 failed**, and column A's two checks passed **identically**
+  in both runs — so the 12 are this fix and nothing else. Bundle restored, tree clean.
+- [x] 4.1b **R2: add the in-flight column the harness does not have.** Hold the GET open rather than
   aborting it or answering 500 — the same route-interception the harness already uses for the other
   two columns — and assert, while the skeleton is on screen, that Save is absent or inert and that
   interacting with the screen issues no PUT. Then read the stored content back and assert it is
@@ -133,14 +144,44 @@ and the editor branch is unreachable with the previous project's text in it.
   column's new assertions. Evidence in `scripts/drive/FINDINGS.md` under F271. This also **confirms
   by measurement** what task 1.4 argues on the code: the three-branch render of 1.2 cannot close
   this column, because Save is a sibling of the branch.
-- [ ] 4.2 Turn its end-to-end read-back from a destruction check into a preservation check: with the
+  **Post-fix half done 2026-09-06 (night, n5-drive) — box now closed.** Column `D` passes
+  **unmodified** against the fixed bundle: `skeleton: true`, `textarea: false`,
+  `save_visible: false`, no PUT issued, stored content byte-identical. Not a rewritten expectation —
+  the same assertions that failed three times last iteration now pass, which is the whole value of
+  having run it before the fix.
+- [x] 4.2 Turn its end-to-end read-back from a destruction check into a preservation check: with the
   Hub reachable again, interact with the screen and assert the stored content is byte-identical to
   what it was before.
-- [ ] 4.3 Run it against a fresh Hub on `:8011` started from source from `hub/`, on a throwaway
+  **Done 2026-09-06 (night, n5-drive).** B1's read-back is now preservation. Only the GET is
+  intercepted, so a PUT issued from that screen would really land — the assertion is that none is,
+  read off the wire (`seen["put"] == 0`) and confirmed by reading the row back. A shared `interact()`
+  helper types into **every** textbox on screen and clicks **every** Save, whatever they happen to
+  be, rather than asserting a `disabled` attribute. Stated plainly: post-fix it types into 0 and
+  clicks 0, because there is nothing there — the guard is the absence, not a refused interaction.
+  The pre-change run is what proves the instrument can see a write: it typed `TYPED BY THE DRIVE`
+  into the empty editor, clicked Save, and the stored row became that string.
+- [x] 4.3 Run it against a fresh Hub on `:8011` started from source from `hub/`, on a throwaway
   project. Never `proj-5e960453` or `proj-18e5d4e0`; never `:8000`. No agent turn is needed, so
   nothing binds a model.
-- [ ] 4.4 Drive the retry by hand as an operator would: stop the Hub, open the page, see the failure,
+  **Done 2026-09-06 (night, n5-drive).** `py -3.11 -m uvicorn hub.main:app --port 8011` from `hub/`,
+  fresh database under `%TEMP%/aw0906n5/`, key minted from `/setup/token`. Fixtures
+  `proj-2f2559e39c35` / `proj-f2ec075f8ff8`, both created and deleted by the harness and confirmed
+  absent from `GET /projects` afterwards. `find hub/hub src -name '*.py' -newermt <process start>`
+  empty, so the running Hub is this tree. Nothing addressed on `:8000`; `:8010` untouched. No agent
+  turn, so nothing bound a model. Hub stopped and `8011` free at the end.
+- [x] 4.4 Drive the retry by hand as an operator would: stop the Hub, open the page, see the failure,
   start the Hub, press Retry, confirm the stored text appears. This is the half no unit test reaches.
+  **Done 2026-09-06 (night, folded into n5-drive).** New harness
+  `scripts/drive/t_d4_retry_by_hand.py`, **15 passed / 0 failed**. No route interception anywhere in
+  it: a real uvicorn is started, stopped, and started again on the same database while a real
+  browser sits on the page. The one wrinkle worth recording, because it shapes the whole script:
+  **the SPA is served by the Hub**, so an operator cannot "open the page" while it is down. The app
+  is therefore loaded first on Environment → Diagnostics (so nothing is cached for the instructions
+  key), the Hub is stopped, and **Instructions** is clicked in the sidebar — client-side navigation
+  into a query whose GET meets a socket that refuses. Observed: no editor, Save absent, the failure
+  stated, Retry present. The Hub is then restarted and the page **does not heal on its own** —
+  asserted, not assumed — and one click on Retry brings back the textarea holding the stored text
+  byte-for-byte, with the alert gone and Save enabled again.
 
 ## 5. Close it out
 

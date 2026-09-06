@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ab60cf3",
     "stop_at": "2026-09-07T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-06-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "n5-drive",
-    "next_action": "n5-drive: drive the fix in a real browser against the SERVED bundle (tasks 4.1, 4.1b post-fix, 4.2, 4.3). The bundle now holds the fix as of this commit -- stamp src_commit eb1d1d7, served JS index-C9-G-wn9.js -- so start :8011 FROM SOURCE (cd hub; DATABASE_URL=... py -3.11 -m uvicorn hub.main:app --port 8011 --host 127.0.0.1) only AFTER checking out this commit's tree, and confirm no .py under hub/hub or src is newer than the process start. Then invert scripts/drive/t_d4_instructions_failed_load.py's expectations for the two failure columns B and C (textarea absent, Save absent-or-inert, a stated failure present) while column A's baseline keeps passing UNCHANGED -- if A changes too, something other than the fix moved. Column D (the in-flight column n1-repro added) must now PASS unmodified: that inversion is the post-fix half of 4.1b and closes its box. 4.2: the read-back becomes a preservation check, byte-identical to what was stored. Fresh project, never proj-5e960453 or proj-18e5d4e0, never :8000. No agent turn is needed so nothing binds a model. Stop the Hub and free 8011 before ending the iteration.",
+    "current": "n7-close",
+    "next_action": "n7-close: close the change out (tasks 5.1-5.3). 5.1 `cd hub/ui && npm run lint` -- and SAY that the Python lint set is not required because no Python path is touched, rather than skipping it silently. 5.2 in scripts/drive/FINDINGS.md: set F271's **Status:** to `fixed <sha>` (use the n2-impl commit c7e615c as the fix, and name 676eba4 as the bundle that shipped it), record that the in-flight destruction path is now measured closed by column D and that the cross-project variant is closed BY CONSTRUCTION (per-query-key data) rather than by measurement since column C is still not drivable, and correct the index paragraph's open severity-A list IN THE SAME COMMIT -- that correction is the step whose absence makes the ledger unreadable, so do not defer it. 5.3 run openspec-sync-specs into openspec/specs/project-instructions/spec.md, then archive the change into openspec/changes/archive/. Check whether the delta also touches project-environment-settings (task 1.6 closes a requirement that lives there) before syncing only one spec. No Hub needed and nothing to drive; this is a docs-and-specs iteration.",
     "queue": [
         {
             "id": "n1-repro",
@@ -45,15 +45,17 @@
         },
         {
             "id": "n5-drive",
-            "status": "open",
+            "status": "done",
             "title": "Phase 4 -- drive the fix in a browser (tasks 4.1, 4.1b post-fix, 4.2, 4.3)",
-            "detail": "Restart :8011 from source AFTER the rebuild and confirm no .py under hub/hub or src is newer than the process start. Invert the two failure columns' expectations (4.1) -- textarea absent, Save absent-or-inert, a stated failure present -- while column A's baseline keeps passing UNCHANGED. 4.2: read-back becomes a preservation check, byte-identical. Fresh project, never proj-5e960453 or proj-18e5d4e0, never :8000. No agent turn is needed so nothing binds a model. A UI change driven anywhere but a real browser against the SERVED bundle is not driven (F274)."
+            "detail": "Restart :8011 from source AFTER the rebuild and confirm no .py under hub/hub or src is newer than the process start. Invert the two failure columns' expectations (4.1) -- textarea absent, Save absent-or-inert, a stated failure present -- while column A's baseline keeps passing UNCHANGED. 4.2: read-back becomes a preservation check, byte-identical. Fresh project, never proj-5e960453 or proj-18e5d4e0, never :8000. No agent turn is needed so nothing binds a model. A UI change driven anywhere but a real browser against the SERVED bundle is not driven (F274).",
+            "result": "31 passed / 0 failed against the SERVED fixed bundle (index-C9-G-wn9.js, stamp eb1d1d7) on a fresh :8011 from source, fresh DB, fixtures created and deleted. B1/B2 inverted to the requirement (no editor, Save GONE not merely inert, the failure stated in a role=alert, a Retry beside it); 4.2's read-back is now preservation, driven by an interact() helper that types into every textbox and clicks every Save rather than reading a `disabled` attribute -- post-fix it finds 0 of each, which is the guard. B2 gained a new assertion: a 500 carries an ApiError so the server's own sentence (`boom`) is quoted, not the fallback. Column D passes UNMODIFIED, closing 4.1b. MUTATION-CHECKED: the same inverted harness re-run against the pre-change bundle (checkout 676eba4^, served JS confirmed back to index-BXA4wQsi.js on the wire) gives 19 passed / 12 FAILED, with column A's two checks passing identically in both runs -- so the 12 are this fix alone. Pre-fix the drive's own typing reached the stored row ('TYPED BY THE DRIVE'), proving the instrument can see a write. Bundle restored, git diff HEAD empty. Column C still not driven (no in-page switcher). Hub stopped, 8011 free."
         },
         {
             "id": "n6-retry",
-            "status": "open",
+            "status": "done",
             "title": "Task 4.4 -- drive Retry by hand as an operator would",
-            "detail": "Stop the Hub, open the page, see the failure, start the Hub, press Retry, confirm the stored text appears. This is the half no unit test reaches. May be folded into n5-drive if that iteration has room."
+            "detail": "Stop the Hub, open the page, see the failure, start the Hub, press Retry, confirm the stored text appears. This is the half no unit test reaches. May be folded into n5-drive if that iteration has room.",
+            "result": "Folded into n5-drive as planned. New harness scripts/drive/t_d4_retry_by_hand.py, 15 passed / 0 failed, no route interception: a real uvicorn started, stopped and started again on the same DB with a real browser on the page. The SPA is served BY the Hub, so 'stop the Hub, open the page' is unreachable -- the driven form loads the app on Environment > Diagnostics (nothing cached for the instructions key), stops the Hub, then clicks Instructions in the sidebar so the GET meets a refusing socket. Asserted explicitly that the page does NOT heal on its own when the Hub returns (otherwise the Retry assertion would be vacuous), then one click on Retry restores the textarea holding the stored text byte-for-byte, alert gone, Save enabled. Screenshot read by eye: the section heading and its statement of what it governs survive the failure state (task 1.5)."
         },
         {
             "id": "n7-close",
