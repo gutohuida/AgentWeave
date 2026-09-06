@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ab60cf3",
     "stop_at": "2026-09-07T07:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-09-06-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "n8-wrap",
-    "next_action": "n8-wrap: write the closing log entry per .claude/loops/night-window.md's 'Ending the window' section -- what changed and whether it was product code or docs, what was PROVEN with named evidence versus only inferred, what is open, what decisions are waiting on the operator, and what the day window should distrust. Carry forward explicitly: F293+F294 want ONE change between them (F126's deferred column PLUS a claim or uniqueness constraint; the column alone races identically); the open severity-A list is six of which FIVE are unproposed -- F140, F142, F154, F155 and now F295 (filed 2026-09-06 out of F292, never before on the index) -- and F274 is specced-but-unapproved; and the instrument note that a substring test for 'fixed' reads 'not fixed' as fixed. No Hub, nothing to drive. Then set next_action to null so the driver unregisters itself.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "n1-repro",
@@ -66,9 +66,10 @@
         },
         {
             "id": "n8-wrap",
-            "status": "open",
+            "status": "done",
             "title": "Final log entry and the note to tomorrow's day window",
-            "detail": "Playbook's 'Ending the window' section: what changed (marking product code vs docs), what was PROVEN with evidence vs only inferred, what is open, decisions waiting, what to distrust. Carry forward for the day window: (a) F293 and F294 both need a spec loop and ONE change answers both (F126's deferred column PLUS a claim or uniqueness constraint -- the column alone races identically); (b) the open severity-A list is FIVE unproposed rows, not four -- F140, F142, F154, F155 (all four have archived, never-driven changes and unmet re-drive banners) plus F295, filed 2026-09-06 out of F292, severity A, not specced and never listed on the index before tonight; F274 is the sixth but is specced and merely unapproved. (c) The instrument note from n7-close: a substring test for 'fixed' reads 'not fixed' as fixed -- any future recount must not repeat it. Then set next_action to null so the driver unregisters."
+            "detail": "Playbook's 'Ending the window' section: what changed (marking product code vs docs), what was PROVEN with evidence vs only inferred, what is open, decisions waiting, what to distrust. Carry forward for the day window: (a) F293 and F294 both need a spec loop and ONE change answers both (F126's deferred column PLUS a claim or uniqueness constraint -- the column alone races identically); (b) the open severity-A list is FIVE unproposed rows, not four -- F140, F142, F154, F155 (all four have archived, never-driven changes and unmet re-drive banners) plus F295, filed 2026-09-06 out of F292, severity A, not specced and never listed on the index before tonight; F274 is the sixth but is specced and merely unapproved. (c) The instrument note from n7-close: a substring test for 'fixed' reads 'not fixed' as fixed -- any future recount must not repeat it. Then set next_action to null so the driver unregisters.",
+            "result": "Closing entry written to the log per the playbook's 'Ending the window' section: what changed split into product code (ONE file, InstructionsPage.tsx at c7e615c) versus tests, generated bundle, harnesses and prose; what was PROVEN in a browser against the served bundle (31/0, mutation-checked at 19/12 against the pre-change bundle with the baseline column identical in both; Retry driven through a real uvicorn stop/start at 15/0) versus proven only by tests (8 units, 6 of 8 fail on the reverted component) versus INFERRED (F271 path C, closed by construction, no in-page switcher to drive); what is open; decisions waiting; what to distrust. All carry-forward facts were RE-CHECKED against the files rather than copied from next_action: F293/F294 both '**Status:** open' and both about F126's cutover guard (one change answers both -- the deferred column alone races identically); the open severity-A list is six with FIVE unproposed (F140, F142, F154, F155, F295) and F274 the sixth, specced at openspec/changes/2026-09-05-the-conversation-carries-its-own-run-facts (44 tasks, 0 done, the only unarchived change) and sitting at APPROVALS.md:99 with NO verdict token -- that is decision 1 for the operator. Instrument note carried: a substring test for 'fixed' reads 'not fixed' as fixed. Queue empty; next_action set to null so the driver unregisters."
         }
     ],
     "decisions_for_user": [],
