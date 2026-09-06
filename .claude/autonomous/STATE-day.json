@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "a38caee",
   "stop_at": "2026-09-06T17:00:00+01:00",
-  "iteration": 1,
+  "iteration": 2,
   "log_file": ".claude/autonomous/2026-09-06-day-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "D-1",
-  "next_action": "D-1 (ledger, no product code). Revise F292 in scripts/drive/FINDINGS.md with the CI occurrence that fired overnight. Facts already measured and recorded in iteration 1's log entry: run 33998598976 (sha 3a96ddb, job hub-test, 3966 passed / 18 skipped / 1 error in 741.71s) failed at 'ERROR at setup of test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted' with sqlite3.OperationalError: database is locked, and the N-1 diagnostic printed 'registry: no connection checked out' at ALL THREE probe points (before dispose, before drop_all, at failure). Re-read those lines yourself with `gh run view 33998598976 --log-failed` before writing, do not trust this summary. Run 33998517779 (sha 2da52ce) failed the same job -- check whether it printed the same thing. What this falsifies: the entry's standing mechanism, narrowed by D-6's control run to 'a session that wrote and did not commit, held across the test boundary', is exactly the shape the registry catches, so it was NOT that here. Write what remains possible (another engine on the same file, a non-SQLAlchemy writer, a separate process) and label each as hypothesis. Keep the old text, correct in place, do not restate the finding twice. Then set the entry's Status line to reflect that the instrument fired and returned a negative. No product or test code this iteration -- FILL does not implement.",
+  "current": "D-2",
+  "next_action": "D-2 (drive, e2e). Independently drive the night's F126 checkpoint-cutover guard -- the 20-line guard in hub/hub/checkpoint_cutover.py added by commit 3142a91, which the SAME process wrote, tested and drove 13/13 with its own harness. That is the whole point of this item: an independent drive, not a re-run of its harness. Use the e2e-loop skill, scoped to this change -- NOT a coverage sweep (DIRECTION.md 2026-09-03 says the sweep is COMPLETE, do not resume it). Setup: fresh Hub on port 8011, started from hub/ with `py -3.11 -m uvicorn hub.main:app --port 8011 --host 127.0.0.1` and a DATABASE_URL pointing at a FRESH scratch database -- never `agentweave --port` (its bundled migrations lag this checkout and it dies on 'Can't locate revision'), never port 8000 (the operator's real usage) or 8010 (the trial Hub), never proj-5e960453 or proj-18e5d4e0. Register a fresh throwaway project. Before drawing ANY conclusion, confirm no .py under hub/hub or src is newer than the server process start time -- a stale process invalidates the drive. Any real agent turn binds claude-haiku-4-5. Never leave a job enabled; stop the Hub at the end. New findings append to scripts/drive/FINDINGS.md with severity, file:line, a reproduction, and `**Status:** open` as the FIRST line of the body. If the drive finds nothing, say so plainly in the log -- a negative from an independent drive is a real result and is exactly what this item was queued to obtain. Do not edit hub/hub/ or src/agentweave/; a drive fixture belongs in scripts/drive/.",
   "queue": [
     {
       "id": "compose",
@@ -23,9 +23,9 @@
     },
     {
       "id": "D-1",
-      "status": "open",
+      "status": "done",
       "title": "F292 -- record the CI occurrence and what it falsifies",
-      "detail": "Ledger only. The full instruction is in next_action while this item is current; iteration 1's log entry carries the measurements. Do not start a Hub. Do not touch hub/tests/conftest.py -- DEC-1 has not authorised anyone to change its behaviour."
+      "detail": "Done iteration 2, ledger only (scripts/drive/FINDINGS.md, +108/-5). Both CI runs re-read first-hand with `gh run view --log-failed`. 33998517779 (2da52ce) printed the SAME negative diagnostic as 33998598976 (3a96ddb) -- byte-identical apart from timestamps -- but errored on a DIFFERENT test in the SAME module, one line apart in the progress stream, both at 66%. Order is deterministic (no randomisation), so the failure window slid by one test between runs: timing, not a particular test's leak. Falsified: D-6's 'wrote and did not commit, held across the boundary' narrowing, and conftest's own live-JobScheduler blame. Also ELIMINATED by measurement: APScheduler's separate sync engine (scheduler.py:2367), documented at api/v1/jobs.py:497-517 as a real cause of this exact error in the product, but never started in tests. Surviving lead: alembic's own async engine (migrations/env.py:51) driven from a default-executor worker thread by _run_alembic_upgrade (db/engine.py:54-107); the app fixture no-ops it per test and test_migrations.py::test_init_db_runs_alembic_for_file_db runs the real thing. All labelled hypothesis. conftest.py untouched; DEC-1 unaffected."
     },
     {
       "id": "D-2",
@@ -69,7 +69,7 @@
       "id": "DAY-2",
       "question": "F292 now blocks the merge gate in practice: the branch cannot show a green CI at HEAD often enough to land, because hub-test fails intermittently on 'database is locked' and the failure is not caused by anything the loop changed. Overnight the N-1 instrumentation fired in CI and returned a NEGATIVE -- no connection checked out from the app fixture's engine at any probe point -- which falsifies the leading hypothesis. Is chasing F292 to a root cause worth a night-window slot, or would you rather the gate tolerate a re-run?",
       "status": "open",
-      "note": "Raised by iteration 1 from measurement, not carried forward from the night window. The night's DEC-1 (may this window take a second guess at hub/tests/conftest.py's behaviour) is the adjacent question and is still open in STATE-night.json."
+      "note": "Raised by iteration 1 from measurement, not carried forward from the night window. The night's DEC-1 (may this window take a second guess at hub/tests/conftest.py's behaviour) is the adjacent question and is still open in STATE-night.json. Updated iteration 2: the negative is now confirmed on BOTH overnight runs (33998517779 and 33998598976), not one. D-1 eliminated the APScheduler sync-engine reading by measurement and left alembic's worker-thread engine as the concrete surviving lead -- so the question is narrower than this morning, but still a night-window-sized job."
     }
   ],
   "limits": [

@@ -20515,10 +20515,14 @@ else touching it.
 
 ## F292 (B) - the fix for F285 traded a deterministic rollback for an intermittent lock, and the mitigation written for it did not hold
 
-**Status:** open. Filed 2026-09-05 by the day window's D-5 while reading this branch's CI for the
-review page. **Measured from CI, not reproduced locally** -- the three runs below are the evidence;
-no local reproduction was attempted, and the mechanism sentence at the bottom is explicitly labelled
-unestablished.
+**Status:** open, and the standing mechanism is **falsified for the two occurrences that carried the
+instrument**. Filed 2026-09-05 by the day window's D-5 while reading this branch's CI for the
+review page. **Measured from CI, not reproduced locally** -- the five runs below are the evidence;
+no local reproduction has ever succeeded, and every mechanism sentence in this entry is explicitly
+labelled. The night N-1 checkout registry **fired in CI on 2026-09-06 and returned a negative**: no
+connection was checked out from the product engine at any probe point, which is the one shape the
+registry was built to catch. Read the sections in order -- the narrowing below is superseded by the
+D-1 section that follows it.
 
 **Narrowed 2026-09-05 (day D-6), by a control run for a different finding.** Still open, still not
 reproduced from the suite itself, but the space of mechanisms is smaller than it was this morning.
@@ -20654,6 +20658,100 @@ intermittent failure whose observed CI rate is far below one in a run; a negativ
 nothing about frequency, only about mechanism.
 
 
+**The instrument fired in CI, 2026-09-06 (day D-1) -- and it returned a negative. The standing
+mechanism is falsified for both occurrences.** Read from `gh run view <id> --log-failed` directly,
+not from a summary. Two runs, both overnight, both the `hub-test` job on Linux with every other job
+green, and in each the only error in the suite:
+
+| CI run | sha | Result | Errored at setup of |
+|---|---|---|---|
+| 33998517779 | `2da52ce` | 3966 passed, 18 skipped, 1 error in 488.37s | `test_a_wedged_review_is_restaffed_to_a_real_reviewer` |
+| 33998598976 | `3a96ddb` | 3966 passed, 18 skipped, 1 error in 741.71s | `test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted` |
+
+Both carried the N-1 registry (`6693d1d`), both printed the diagnostic, and the two printouts are
+**identical line for line** apart from the timestamps:
+
+```
+F292 DIAGNOSTIC: the schema reset failed. Who was holding the database:
+  [before dispose] pool.status()='Pool size: 5  Connections in pool: 0 Current Overflow: -5 Current Checked out connections: 0'
+  [before dispose] registry: no connection checked out
+  [before drop_all] pool.status()='Pool size: 5  Connections in pool: 0 Current Overflow: -5 Current Checked out connections: 0'
+  [before drop_all] registry: no connection checked out
+  [at failure] pool.status()='Pool size: 5  Connections in pool: 1 Current Overflow: -4 Current Checked out connections: 0'
+  [at failure] registry: no connection checked out
+```
+
+*This is a result, not a miss.* The instrument is not blind -- N-1 proved it on a forced
+reproduction, where it named the culprit test, its asyncio task, the source line and the transaction
+state, against a failure reported at the victim. So **the holder was not a connection checked out
+from `hub.db.engine.engine`.** That falsifies two things stated above as this entry's leading
+reading:
+
+- D-6's narrowing -- *"a session that wrote and did not commit, held across the test boundary"* --
+  is **exactly** the shape the registry catches, and it caught it in the forced reproduction. It was
+  not that here.
+- `hub/tests/conftest.py`'s own mitigation comment, which blames *"a test that leaves a live
+  `JobScheduler` ... still holding a checked-out connection when the next test starts"*. Not that
+  either, on the same evidence. The entry already doubted this on reading; it is now measured.
+
+*A sharper localisation, which is new.* Both overnight failures are in the **same module and one
+test apart**, at the same point in a deterministic run. In the progress stream of both logs the
+module occupies the same lines at `[ 66%]`; in `2da52ce` the error is
+`test_a_wedged_review_is_restaffed_to_a_real_reviewer` and the test after it passes, in `3a96ddb`
+that test passes and `test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted` errors
+instead. Five recorded failures now sit in two files, and the failing setup is in both cases
+adjacent to the tests that call this module's `_fire()` helper
+(`hub/tests/test_reviewer_is_not_the_author.py:190-196`). The window slides by one test between
+runs, which is what a timing-dependent holder looks like and not what a particular test's leak looks
+like.
+
+*What remains possible.* Each of these is a **hypothesis**; none is measured to be the cause.
+
+- **H1 -- another `Engine` on the same file, in this process.** Measured: the Hub creates exactly
+  three engines, `hub/hub/db/engine.py:34` (the product engine, the only one the registry watches),
+  `hub/hub/migrations/env.py:51`, and `hub/hub/scheduler.py:2367`.
+  - APScheduler's synchronous engine (`JobScheduler._get_sync_engine`, `scheduler.py:2354-2367`) is
+    **eliminated for the test suite, by measurement** -- and it had to be checked rather than
+    assumed away, because it is a *documented* cause of exactly this error elsewhere in the product
+    (`hub/hub/api/v1/jobs.py:497-517`: "a separate synchronous engine pointed at the same SQLite
+    file ... cannot take the write lock and raises `database is locked`"). It is not live here:
+    `JobScheduler.__init__` is inert (`scheduler.py:2317-2319`), `_get_sync_engine` is reached only
+    from `start()`, the only assignments to `_scheduler_instance` are in
+    `scheduler.py:3243-3254`, the suite's only reference sets it to `None`
+    (`hub/tests/test_runtime_diagnostics.py:75`), and `hub/tests/conftest.py:468` records that
+    ASGITransport does not trigger the FastAPI lifespan -- so nothing starts a scheduler.
+  - Alembic's engine (`migrations/env.py:51`) is **not eliminated.** `_run_alembic_upgrade`
+    (`hub/hub/db/engine.py:54-107`) runs `command.upgrade` **in a worker thread** precisely because
+    `env.py` drives its own async engine with its own `asyncio.run`; that engine is built from the
+    same `settings.database_url` and is invisible to engine-level pool listeners by construction.
+    The thread comes from `loop.run_in_executor(None, ...)` (`engine.py:104`) -- the loop's *default*
+    executor, whose threads outlive the coroutine and the loop that queued the work.
+    The `app` fixture monkeypatches it to a no-op, but deliberately **per test**, and that patch's
+    own comment (`conftest.py:440-449`) names
+    `test_migrations.py::test_init_db_runs_alembic_for_file_db` as a test that does not take the
+    fixture and runs the real thing. `env.py` does `await connectable.dispose()`, so this is a
+    hypothesis about that disposal not being complete or not being reached, not about a missing
+    one.
+- **H2 -- a writer that is not SQLAlchemy.** Weakest of the three: there is no `sqlite3.connect(`
+  anywhere under `hub/hub/`, so a raw connection would have to come from a dependency rather than
+  this codebase.
+- **H3 -- a separate process, or a worker thread outliving the loop that made it.** This is what
+  N-1b's whole-suite `busy_timeout=50` negative already pointed at, and the registry negative is
+  consistent with it for the same structural reason: a thread or process holding the file through
+  its own connection cannot appear in engine-level pool events. H1's alembic path is a concrete
+  instance of the thread half, which is why it is worth checking first.
+
+*What the registry structurally cannot see, so the negative is not read as broader than it is.* It
+records connections **checked out** from the product engine. A connection of that engine sitting
+idle *in the pool* while still holding a lock would also print "no connection checked out" -- but
+the fixture disposes the engine between the first and second probe, and `dispose()` closes the old
+pool's idle connections, so that reading is weak rather than dead. The `Connections in pool: 1` at
+failure is the `drop_all` attempt's own connection on the replacement pool, not a survivor.
+
+*Two cautions.* Two occurrences with a negative each falsify the mechanism **for those two**; the
+three earlier runs in the table ran before the instrument existed and are not covered. And nothing
+here was reproduced -- this is CI evidence plus code read in this repository, with no local run.
+
 F285 was the Hub suite sharing one DBAPI connection across every `AsyncSession`, because an
 in-memory SQLite URL gets a `StaticPool`. It was fixed on 2026-09-04 by moving the suite to a
 file-backed temporary database per process (`d9ad1e0`), which gets an `AsyncAdaptedQueuePool` -- one
@@ -20679,12 +20777,17 @@ Measured against `git show <sha>:hub/tests/conftest.py` for each: all three carr
 | 33923797344 (2026-09-04T22:02Z) | `770cda5` | `test_reviewer_is_not_the_author.py::test_a_wedged_review_is_restaffed_to_a_real_reviewer` |
 | 33953849160 (2026-09-05T07:55Z) | `0b8aaf5` | `test_flow_fires_a_review_turn.py::test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn` |
 | 33955870588 (2026-09-05T08:39Z) | `acd7ea8` | `test_reviewer_is_not_the_author.py::test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted` |
+| 33998517779 (2026-09-05T23:31Z) | `2da52ce` | `test_reviewer_is_not_the_author.py::test_a_wedged_review_is_restaffed_to_a_real_reviewer` |
+| 33998598976 (2026-09-05T23:37Z) | `3a96ddb` | `test_reviewer_is_not_the_author.py::test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted` |
 
 All three are `sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked`, all
 three are `ERROR at setup`, all three are the `hub-test` job on Linux with every other job green, and
 in each run it is the only error in the suite. **Three of the sixteen CI runs on
 `autonomous/2026-09-04-daily` failed this way -- the sixteenth was still in progress at 10:14 -- and
-no run on this branch has failed in any other way.** Green runs
+no run on this branch has failed in any other way.** *(Corrected 2026-09-06, day D-1: the last two
+rows were added that morning. The count is now **five**, and the two newest are the branch's two
+most recent completed runs, which is why the merge gate's condition 3 cannot pass. "No run on this
+branch has failed in any other way" still holds.)* Green runs
 bracket each failure on the neighbouring commits, so it is intermittent rather than a property of any
 one sha, and it is the sole thing standing between this branch and the merge gate's condition 3.
 
