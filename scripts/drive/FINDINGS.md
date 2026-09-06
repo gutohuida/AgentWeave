@@ -9093,6 +9093,12 @@ caught in the wild, it caught within a day, in a harness that was not looking fo
 **Status:** fixed 3142a91 (shape 1, guard + two tests), driven live on 8011 2026-09-06 — 13/13
 verdicts, second and third presses both **409** with exactly one successor and one queue entry.
 See "Fixed 2026-09-06 (night N-3)" at the end of this section for what was *not* done and why.
+**Narrowed, not closed — amended 2026-09-06 (day D-2), by an independent drive.** The sequential
+three-press case reproduces exactly as recorded above. Two other routes to the same rows do not:
+following the refusal's own "unarchive it first" (**F293**) and pressing twice at the same instant
+(**F294**), both driven live, both minting a second successor and a second billed delivery. Both
+are open, and both are answered by the shape (2) column this section recommended and the night
+deferred.
 **Was open, reproduced 2026-08-30 08:24 on this checkout** — the same file, now runnable against any fixture, was the one `[BAD]` of 37 again: `ckpt-e85b2f8ad366` cut over twice, successors `conv-8e14f60f8cd2` and `conv-509580740b71`, and the second successor's queue entry was delivered and burned a turn without `continue` ever being called on it.
 
 `POST /projects/{p}/checkpoints/{id}/cutover` has no guard against being called twice on the same
@@ -20810,3 +20816,142 @@ registry prints under "Captured stderr setup" on the erroring test.
 Not a D-6 repair. The carve-out requires a fix smaller than the argument for it, and here the
 argument is unfinished: the mechanism is not established, and the last change made to this file on
 this evidence did not work.
+
+---
+
+## F293 (B) — the F126 guard is on the predecessor's lifecycle, so following the refusal's own advice mints the duplicate successor it was built to prevent
+
+**Status:** open. Found 2026-09-06 (day D-2) by driving the night's guard (`3142a91`)
+independently, on a fresh Hub on 8011 with a fresh database and a throwaway project. The guard is
+real and the night's own three-press drive reproduces exactly as recorded — this is a **different
+route to the same rows**, not a retraction of the fix.
+
+`cut_over` refuses when `predecessor.lifecycle == "archived"`
+(`hub/hub/checkpoint_cutover.py:97`), and the refusal it raises ends with:
+
+> …if this one was cut over already, its successor holds the work, and if it was archived by
+> hand, **unarchive it first**.
+
+`POST /projects/{p}/agent/{a}/conversations/{c}/unarchive`
+(`hub/hub/api/v1/agent_chat.py:549`) is *"Never refused — reopening obstructs nothing."* It sets
+`lifecycle = "open"` and nothing else. So an operator who reads the 409, follows the sentence it
+ends with, and presses again gets **F126 back, in full**: the same spent checkpoint mints a second
+successor, delivers it the same rendered checkpoint, and the second delivery is a whole billed turn
+spent rediscovering that the work is done.
+
+The refusal cannot tell the two cases apart, because nothing in the schema records that this
+checkpoint was already handed over — which is precisely the `cut_over_to_conversation_id` column
+F126 recommended as shape (2) and the night deferred as needing a migration. The guard that shipped
+is a *proxy* for "this checkpoint is spent", and the proxy is erasable by a route that is
+documented as never refusing.
+
+**Reproduced live**, `scripts/drive/t_d2_cutover_guard.py` probe 1, twice on two separate fresh
+databases:
+
+```
+POST .../checkpoints/ckpt-9476f5dc1d25/cutover                 200  successor conv-d4609d88f98f
+POST .../checkpoints/ckpt-9476f5dc1d25/cutover                 409  "...unarchive it first."
+POST .../agent/delta/conversations/conv-d2-unarchive/unarchive 200  lifecycle: open
+POST .../checkpoints/ckpt-9476f5dc1d25/cutover                 200  successor conv-7b9118e2c2f7
+```
+
+Rows afterwards — two successors of one predecessor, two undelivered checkpoint entries:
+
+```
+conv-d4609d88f98f  handoff  open  lineage conv-d2-unarchive  "Continued: Ship the parser"
+conv-7b9118e2c2f7  handoff  open  lineage conv-d2-unarchive  "Continued: Ship the parser"
+entry-3ce5ff1eb8fe  checkpoint  conv-d4609d88f98f
+entry-9b7ebcb1dd0c  checkpoint  conv-7b9118e2c2f7
+```
+
+`GET /projects/{p}/conversations?lifecycle=all` returns both, identically titled and both `open`,
+so the operator sees two continuations of one conversation in the navigation tree with nothing to
+choose between them. Same `lineage_id` — the fork that
+`conversation-checkpoint`'s *"Lineage is recorded and participation is derived"* says cannot happen.
+
+Rated **B** to match F126, whose outcome this is, rather than argued up to A on the strength of
+"the product's own error message routes the operator into it".
+
+### Shapes
+
+1. **Shape (2) from F126, now with a second reason.** `Checkpoint.cut_over_to_conversation_id`,
+   set in the same commit as the successor, refused when set. Unarchiving cannot erase it, and the
+   refusal can then say *where* the checkpoint went instead of guessing between two cases. One
+   migration.
+2. **Cheaper, and only half.** Keep the lifecycle guard and also refuse when a `handoff`
+   conversation already exists in this lineage. Closes this route without a migration, but it is
+   still a proxy: it refuses a legitimate re-handover of a conversation that was archived by hand
+   and never cut over, and it cannot name the successor for *this* checkpoint because the link
+   still does not exist.
+3. **Change the sentence, not the code.** Drop "unarchive it first" from the refusal. Cheapest,
+   and wrong: the hole stays, and the operator who finds `unarchive` in the UI — where it is a
+   button — walks into it without being told.
+
+Recommendation: (1), the same recommendation F126 made, now blocking two routes rather than one.
+
+---
+
+## F294 (B) — two cutover presses at the same instant both succeed: the guard reads the lifecycle it is about to write, with nothing serialising the two
+
+**Status:** open. Found 2026-09-06 (day D-2), same drive as F293. This is the case F126's own
+section named as how the defect reaches an operator in the wild — *"a second browser tab, a reload
+between the 201 and the cutover, a retried request after a network timeout, or any non-UI client"* —
+and it is the one the `3142a91` guard does not close, because every one of those is **concurrent**,
+not sequential.
+
+`cut_over` reads `predecessor.lifecycle` at `hub/hub/checkpoint_cutover.py:97` and writes it at
+`:144`, committing at `:145`. Between the two it awaits `archivable`, creates the successor and
+builds the queue entry. Two requests arriving inside that window each get their own
+`AsyncSession`, each read `open`, and each go on to mint a successor. There is no row claim (unlike
+`take_checkpoint`, which holds `_checkpoint_claims` at `hub/hub/api/v1/checkpoints.py:27` for the
+*cheaper* half of the same pair), no `SELECT … FOR UPDATE`, and no uniqueness constraint that a
+second insert could violate.
+
+**Reproduced live**, `scripts/drive/t_d2_cutover_guard.py` probe 2 — two threads, one unspent
+checkpoint, both presses issued without waiting for the other, twice on two separate fresh
+databases:
+
+```
+press 0  200  successor conv-52fc8929e0fd  entry-21a198de0def
+press 1  200  successor conv-f29dbde784d8  entry-0865f3946f88
+```
+
+Two `200`s, no `409`, no `500`. Rows afterwards: two `handoff` successors of `conv-d2-race`, both
+`open`, both titled `"Continued: Ship the tokenizer"`, both on `lineage conv-d2-race`, and two
+undelivered `checkpoint` queue entries — the second of which is a billed turn whenever the agent
+next runs.
+
+The predecessor is archived twice, which is harmless (`archive()` is idempotent in effect), so
+nothing downstream errors and nothing surfaces. **The duplicate is silent.**
+
+Note what this does *not* say: shape (2) alone does not fix it either. A
+`cut_over_to_conversation_id` column read at `:97` and written at `:145` races in exactly the same
+window. The fix has to be a claim or a constraint, not another field to read.
+
+### Shapes
+
+1. **A uniqueness constraint that the database enforces.** With shape (2)'s column in place, a
+   partial unique index on the successor side — one `handoff` conversation per predecessor per
+   lineage — turns the second commit into an `IntegrityError` the route can render as the same 409
+   it already returns. The only shape where the guarantee does not depend on timing.
+2. **An in-process claim, like `take_checkpoint`'s.** `_checkpoint_claims` already exists three
+   files away and is the Hub's own established answer to this question. Cheap, no migration,
+   and honest about its limit: it is per-process, so it is a guarantee only while the Hub is one
+   process.
+3. **`SELECT … FOR UPDATE` on the predecessor row.** Standard, and a no-op on SQLite, which is the
+   deployment this is driven on. Not sufficient alone here.
+
+Recommendation: (2) now — it is the pattern the file next door already uses, it needs no migration,
+and it closes the retry-and-second-tab case that actually happens — with (1) recorded as what makes
+it durable once shape (2)'s column exists.
+
+### What held, and is worth recording as a negative
+
+The same drive checked that the guard does **not** over-refuse. A legitimate chain still works:
+cut over `conv-d2-chain`, let its successor's checkpoint entry be consumed, take a checkpoint on
+the successor, cut *that* over — `200`, a two-hop chain, first hop `archived` and second `open`,
+one `lineage_id` throughout, and no `"Continued: Continued:"` in either title. The widening the
+night flagged (a conversation archived by hand can no longer be handed over) is real but does not
+touch the chain, which is the feature. 12 of 20 verdicts held; the 8 that did not are F293 and this
+finding, and nothing else.
+
