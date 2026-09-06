@@ -19,7 +19,7 @@ import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 import sqlalchemy as sa
