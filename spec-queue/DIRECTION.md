@@ -25,6 +25,39 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ---
 
+## 2026-09-07
+
+Written by the operator in a DECIDE session, 2026-09-06, answering **DAY-3** from
+`review/review-2026-09-06.html` (id `day3`).
+
+**Queue a new change: confirm before a save blanks non-empty project instructions.** The question
+was whether the product should ask before a destructive overwrite when an operator, having actually
+seen real content in the editor, clears it on purpose and hits Save. **Answered: yes, add a
+confirmation.**
+
+This is new scope, not a correction to `2026-09-06-an-unread-editor-cannot-overwrite` (already
+`APPROVED` and unaffected either way — it fixes the *misleading-empty-editor* paths, not the
+*honest, intentional clear* path DAY-3 is about) and it is not urgent enough to displace whatever
+else is already queued for the day this section lands on; take it as the day's spec-loop item once
+prior-queued work is clear.
+
+Give it the full round discipline (`explore/propose → review → review`) — it changes UI behaviour
+(`InstructionsPage.tsx` and whatever confirmation primitive the codebase already uses elsewhere, if
+one exists; check before inventing a new one). Two things the review page already put on record and
+the proposal should read before starting:
+
+- The API accepts an empty string as a real, intentional value — `InstructionsUpdate`'s docstring
+  says the field was named precisely so no malformed request could blank the row by accident. The
+  confirmation is about the *destructive-if-wrong* UI action, not a change to what the route accepts.
+- A confirmation dialog alone does not fix the misleading-empty-editor problem DAY-3 was raised
+  next to — it does nothing for a client that cannot yet tell "still loading" from "genuinely
+  empty" (that is what F271 fixes). Land both; neither substitutes for the other. If F271 has
+  shipped by the time this is proposed, the round should confirm the disabled/error/loading states
+  it introduces are what "non-empty" is measured against, so the confirmation cannot fire over a
+  state that was never really loaded.
+
+---
+
 ## 2026-09-03
 
 Written by the operator in a DECIDE session, 2026-09-02 20:40. It settles the ambiguity the
