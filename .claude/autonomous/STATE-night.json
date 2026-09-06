@@ -1,101 +1,40 @@
 {
-    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-04-daily",
-    "parent_branch": "master",
-    "parent_sha": "a38caee",
-    "stop_at": "2026-09-06T07:00:00+01:00",
-    "iteration": 7,
-    "log_file": ".claude/autonomous/2026-09-05-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "compose",
-            "status": "done",
-            "title": "Compose this window's queue from the playbook",
-            "detail": "Done iteration 1. No APPROVED rows -- the 2026-09-05 APPROVALS row carries no status token, so the window falls to the backlog. Nothing to archive. Green-tree check run and recorded in the log entry."
-        },
-        {
-            "id": "N-1",
-            "status": "done",
-            "title": "F292 -- name the connection that holds the file. Diagnostic only.",
-            "detail": "Done iteration 2. Diagnostic-only, fixture behaviour unchanged (the temporary busy_timeout=50 experiment is out of the tree; conftest.py:113 reads 30000). Found that the measurement the finding asked for is structurally blind -- AsyncEngine.dispose() REPLACES the pool, so pool.checkedout() is 0 in exactly the situation being diagnosed -- and built a checkout registry on engine-level events instead. Proven on a forced reproduction that printed the culprit test, task, source line and IN TRANSACTION. Negative result: 15 loops of the two CI-blamed files passed, and so did the same pair at busy_timeout=50, which rules out contention inside them rather than merely not finding it."
-        },
-        {
-            "id": "N-1b",
-            "status": "done",
-            "title": "Read the whole-suite busy_timeout=50 run and record what it names in F292",
-            "detail": "Done iteration 4. The detached WMI-parented run finished: 3968 passed, 86 skipped, 1054.76s, EXIT=0. Zero 'held by', zero 'database is locked', zero 'ERROR at setup' -- the failure-path diagnostic never printed because the schema reset never raised. The override was MEASURED in force rather than trusted from its banner: reading the pragma back inside the app fixture gives 30000 without the plugin and 50 with it. Recorded in F292 as a clean negative with both cautions kept (not a green check, the pragma is not the shipped one) and two stated limits (collected 23:51 so it excludes N-3's tests; n=1 bounds mechanism, not frequency). conftest.py unchanged; DEC-1 still unanswered."
-        },
-        {
-            "id": "N-2",
-            "status": "done",
-            "title": "Reconcile the ledger's open-severity-A index with the sections' own Status lines",
-            "detail": "Done iteration 3. The item's own premise was stale and fell first: the index does NOT still say 'one -- F271'; that 2026-09-02 line is superseded on 2026-09-03 and 2026-09-04 (recomputed to two). The real defect is a MISSING DEFINITION, not a count: six severity-A sections say they are open (F271, F274, F140, F142, F154, F155) while the index counts two, because F140/F142/F154/F155 sit in a 'third state' whose own banner -- written by this index -- reads 'stays open until somebody re-drives it'. CLAUDE.md's 'never mark a task complete on the strength of a plan existing' decides it: the list is six. Written as a dated revision (+52 lines), earlier wrong revisions intact, each of the six carrying what it is blocked on. APPROVALS.md left as written and the contradiction recorded instead."
-        },
-        {
-            "id": "N-3",
-            "status": "done",
-            "title": "F126 (B) -- a spent checkpoint can be cut over twice, and the duplicate does real billed work",
-            "detail": "Done iteration 4, fixed 3142a91, driven live 13/13 on 8011. The carve-out gate passed on all three conditions and the answers are in the log. The finding's recommended shape (2) needs a migration (fails condition 2), AND shape (1) as worded is not implementable without shape (2) -- nothing links an InboundQueueEntry to a checkpoint. So the guard is on `predecessor.lifecycle == 'archived'`, a SUPERSET of the reported defect: it also refuses a cutover from a conversation archived by hand. Recorded as a widening, not as an equivalent. Mutation-checked; the duplicate was printed directly from the guardless tree."
-        },
-        {
-            "id": "N-4",
-            "status": "done",
-            "title": "F3 (C) -- contact_mode default: ran the carve-out gate, and it FAILED",
-            "detail": "Done iteration 5. NOTHING IMPLEMENTED, and that is the outcome -- the playbook says discovering a change wants a spec is a good outcome. Gate answers written down: (1) zero hits for contact_mode in openspec/specs/, so a value swap passes -- but the honest fix (deletion) makes runner-registry/spec.md:186-201's scenario 'A self-registered agent with a runner bound' UNREACHABLE, so condition 1 fails for it. (2) FAILS on all three clauses: real column (models.py:206, migration 0005), Pydantic response field the UI mirrors (agents.py:119 / agents.ts:75), and a route removal. (3) reproduction passes, 'fix smaller than the argument' fails. WHICH OF THE TWO: it is a REMOVAL, and the operator already decided that on 2026-08-29 -- F111's decision paragraph names F3 as the same root and says both close by deletion. The value-swap escape is unavailable for three measured reasons: no honest replacement exists in _CONTACT_MODES; the 400 error text still recites watchdog-spawn as valid; and test_operator_agent_creation.py:56 asserts the wrong name in a whole-body equality. Two new measurements recorded: NOTHING reads the value (scheduler.py:213 needs self_registered AND poll, and both defaulting paths set self_registered=False), and F111's '~30 test files' is 16/42, really 15 files / 20 sites after deleting the file that tests the route."
-        },
-        {
-            "id": "N-5",
-            "status": "done",
-            "title": "Close the window",
-            "detail": "Done iteration 6, in the same firing as N-4 because N-4's own instruction said to go straight here on a gate failure. Closing entry written: six commits with only 3142a91 carrying product code (plus 6693d1d's 180 lines of failure-path diagnostic in hub/tests/conftest.py, which is test infrastructure and changes no fixture behaviour); what was proven (F126 driven 13/13, F292's measured negative, the green tree) split from what was only read (N-2's count is the sections' own words and not a re-drive, N-4 was not driven, F292's negative is n=1); what is open; the three decisions; and what to distrust. next_action is the literal null."
-        }
-    ],
-    "decisions_for_user": [
-        "DEC-1 (F292, carried from the day window, still unanswered). Whether the night window may make a second attempt at hub/tests/conftest.py's BEHAVIOUR on the F292 evidence. Still not written, so iterations 2-4 did not touch it. The evidence has moved twice since it was asked. First, the repair the day window would have guessed at is aimed at the wrong thing -- dispose() REPLACES the pool, so the checked-out count it reasons about is zero by construction. Second, a full suite pass at busy_timeout=50 (600x shorter than shipped) produced 3968 passed / EXIT=0 with no contention anywhere, which makes ordinary in-suite contention between two test connections measurably absent rather than merely unobserved -- so a conftest fixture change is now the LEAST likely repair, and the next CI occurrence will name the holder instead of the victim. The cheapest answer may now be 'no, wait for CI to name it'.",
-        "DEC-2. spec-queue/APPROVALS.md's 2026-09-05 row carries NO status token -- the DECIDE session did not sit down, so 2026-09-05-the-conversation-carries-its-own-run-facts (F274, the oldest open severity A) was neither approved nor rejected and could not be built tonight. It is 44 tasks across 8 phases and is the largest thing waiting. The same section also offers F288 as an alternative slot if you would rather close a nine-hour-old spec breach than the oldest A.",
-        "DEC-3. F288 (B) is a breach of a requirement that shipped the night before (openspec/specs/agent-conversation-workspace/spec.md:2217, quantified over every agent holding queued input in the project). The finding's own text sends the question to the spec loop rather than to a repair: does the existing requirement already cover restart reconciliation, or does it need a scenario naming it so a test can be written? Either way it needs the day window first, so it is a note to tomorrow rather than tonight's work."
-    ],
-    "notes_for_tomorrow": [
-        "F3 and F111 are ONE spec-loop change, not two. The operator decided on 2026-08-29 that self-registration leaves the product; F3 is the same root. Night N-4 ran the carve-out gate on F3 and it failed -- the write-up in FINDINGS.md carries the full footprint, so the spec loop does not need to re-measure it. The first question it must answer is NOT the file count: it is how a test creates an agent when no runner CLI exists, since POST /projects/{p}/agents answers 409 unless probe_agent finds one and CI runners have no `claude` on PATH.",
-        "Deleting self-registration makes a SHIPPED requirement unreachable -- runner-registry/spec.md:186-201, scenario 'A self-registered agent with a runner bound'. That requirement, not the re-fixturing bill, is what makes this spec work. It needs a delta.",
-        "F271 (A) has no proposal and is the day window's, per the night playbook's step 4.2.",
-        "F288 (B) and F289 (C) both need the spec loop, and F289 was found by F288's reproduction: the stale waiting_reason is what makes the F288 strand look like an ordinary wait.",
-        "F276, F277 and F278 (all C) each say 'not fixed here' with a stated reason, and each names its own scenario. They are spec-loop material, not carve-out repairs.",
-        "F292's own 'Reproduce' instruction asked for a measurement that cannot work (pool.checkedout() after a dispose is 0 by construction). Worth carrying as a habit rather than a one-off: a finding's proposed diagnostic is an argument too, and gets checked like one.",
-        "CI runs the Hub suite as plain `pytest tests/ -v`, no pytest-randomly, no -n. Test order is deterministic run to run, so F292's intermittency is timing and not ordering.",
-        "The open severity-A list is SIX, not two -- F271, F274, F140, F142, F154, F155 (re-derived 2026-09-06, night N-2, from the 40 A sections' own Status lines and banners). F140/F142/F154/F155 each have an archived 2026-09-01 change that was never driven, and each carries the ledger's own 'stays open until somebody re-drives it' banner. The cheapest way to make the old two-count true is to drive those four.",
-        "spec-queue/APPROVALS.md (2026-09-05) reasons off the old two-count and contradicts itself doing so: line 85 'F274 is the only open A' vs line 91 'the one remaining open severity-A row (F271)'. Left as written deliberately -- it is the record of a decision session -- but read FINDINGS.md's 2026-09-06 revision alongside it.",
-        "A harness background process dies with the firing that launched it. For anything crossing an iteration boundary, detach through WMI (Win32_Process Create) as .claude/autonomous/scratch/run_loud.cmd does. Iteration 2 lost a whole suite run to this.",
-        "A recount cannot find a definition error. 2026-09-04 recomputed the open-A count from scratch and still got two, because both readings of 'open' were live in the same file. Same shape as F292's blind diagnostic: an argument checks differently from an outcome.",
-        "pytest-timeout is NOT installed on this machine -- py -3.11 -m pytest --timeout=N exits 4 with 'unrecognized arguments'.",
-        "F126 is closed with shape (1), NOT the shape (2) it recommended. The column `cut_over_to_conversation_id` is still worth having -- it answers 'where did this checkpoint go', which nothing can answer today -- and it would let the refusal be narrowed to a spent checkpoint rather than any archived predecessor. That is a migration, so it is spec-loop work.",
-        "F126's remaining half is untouched and wants the spec loop: the UI banner filters on `checkpoint.trigger === 'context_pressure'` (AgentOutputPanel.tsx:485), so an operator-generated checkpoint is never offered a cutover.",
-        "A finding's proposed FIX is an argument too, and gets checked like one. F126's shape (1) named a link between a queue entry and a checkpoint that does not exist. Second instance in two iterations -- F292's proposed diagnostic was blind for the same class of reason.",
-        "Restarting the drive Hub is NOT optional after reseeding its database: dropping and recreating the schema under a running Hub gave 401 'Invalid or revoked operator credential' on a key row that was there. Cost one confusing drive pass.",
-        "There is no `GET /projects/{p}/checkpoints/{id}`. The checkpoint list route is per conversation (`/conversations/{id}/checkpoints`); `/checkpoints/{id}/rendered` and `/checkpoints/{id}/cutover` are the only by-id routes.",
-        ".claude/autonomous/scratch/n3drive/ holds a reusable pattern for a cheap live drive: seed a fresh temp DB through the Hub's own functions, start uvicorn on 8011 from source against it, then drive over real HTTP with scripts/drive/aw.py.",
-        "A finding read on its own can be stale in a way the ledger already knows about. F3's queue item asked whether it was a cheap value swap; F111 -- which CITES F3 -- had recorded the operator's answer eight days earlier. Grep the ledger for references TO a finding, not just the finding. Third instance of this class in three iterations (F292's blind diagnostic, F126's unimplementable shape (1), now F3's already-decided shape).",
-        "Vestiges found around contact_mode, none fixed, none filed separately because they go with the same change: src/agentweave/transport/http.py:567 get_agent_registration has NO caller anywhere in the repo; src/agentweave/constants.py:288 CONTACT_MODES is read by nothing in src/ or tests/; hub/ui/src/api/agents.ts:75 declares contact_mode and no component reads it. Also mypy-baseline line 152 already records that OperatorAgentResponse.contact_mode is typed `str` while the column is `str | None`, so a NULL row returned through that schema would be a 500.",
-        "`mcp-push` and `watchdog-spawn` are behaviourally identical today -- scheduler.py:213 special-cases only `poll`. The vocabulary has three words and the code knows two states."
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-04-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "ab60cf3",
+    "stop_at":  "2026-09-07T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-06-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
