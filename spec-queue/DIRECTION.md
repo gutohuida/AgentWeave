@@ -56,6 +56,17 @@ the proposal should read before starting:
   it introduces are what "non-empty" is measured against, so the confirmation cannot fire over a
   state that was never really loaded.
 
+**Also queue: propose a fix for F295**, filed today (`scripts/drive/FINDINGS.md`) — severity A. A
+background run task (`agent_trigger.py:1190`'s un-awaited `_execute_run`) can leave a permanently
+dead aiosqlite worker thread on cancellation, and any later reuse of that connection hangs forever
+with no timeout. Found while chasing F292 (the CI flake); it is a real production correctness issue
+in run-cancellation, not a test-fixture artifact — the finding explains F292's history including a
+3.5-hour CI hang cancelled by hand on 2026-09-06. Give this its own round discipline; do not conflate
+it with F292 (still open, still a test-flake symptom of this same class of bug, not yet resolved by
+anything landed today) or with the instructions-editor changes above. This is Hub run-execution
+core, higher blast radius than either UI change — if the day has room for only one spec loop, take
+this one first.
+
 ---
 
 ## 2026-09-03

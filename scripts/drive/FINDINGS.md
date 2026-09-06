@@ -21198,3 +21198,62 @@ night flagged (a conversation archived by hand can no longer be handed over) is 
 touch the chain, which is the feature. 12 of 20 verdicts held; the 8 that did not are F293 and this
 finding, and nothing else.
 
+## F295 (A) - a cancelled or superseded run's background task can leave a permanently dead worker thread, and any later reuse of its connection hangs forever
+
+**Status:** open, not specced, not fixed. Split out from F292's entry 2026-09-06, where it was found
+while chasing F292's alembic hypothesis — it is a distinct, more general and more severe defect than
+the CI flake it was discovered underneath, so it gets its own number rather than staying folded into
+an entry framed around test-suite intermittency. Read `scripts/drive/FINDINGS.md`'s F292 entry, the
+section starting *"A qualitatively new occurrence, 2026-09-06, changed the shape of what this finding
+is"*, for the full derivation — this entry is the summary, not a replacement.
+
+**The mechanism, measured with a standalone forced reproduction, not merely reasoned about.** Every
+`aiosqlite.Connection` runs one dedicated OS worker thread that pulls `(future, function)` off a
+queue forever and reports results back via `future.get_loop().call_soon_threadsafe(...)`
+(`aiosqlite/core.py:_connection_worker_thread`, installed 0.22.1, current latest). If the coroutine
+that queued the work has moved on and its event loop has already closed by the time the thread
+finishes, that call raises `RuntimeError: Event loop is closed` — and the `except` branch's own
+attempt to report *that* failure makes the identical call and raises again, uncaught. **The worker
+thread's loop terminates and the thread is permanently dead**, with no SQLite `busy_timeout`
+governing any of it. A forced standalone reproduction (fire-and-forget a 1s operation, close the
+loop while it is still running) crashes byte-for-byte identically to the warning the real suite
+produced, and reusing the same connection afterward hangs unboundedly — only an explicit
+`asyncio.wait_for` kept the repro script itself from hanging forever.
+
+**The real call site: `hub/hub/api/v1/agent_trigger.py:1190`.** `trigger_agent_directly` creates
+`task = asyncio.create_task(_execute_run(...))` and deliberately does not await it, so the triggering
+call can return while the run continues in the background. `hub/tests/conftest.py:317-367`'s teardown
+safety net cancels every such task and `gather`s them before disposing the shared engine — but
+`task.cancel()` + `gather` only waits for the **coroutine** to unwind, which can return as soon as
+the `Future` it awaits inside aiosqlite is marked cancelled. It does not, and structurally cannot,
+wait for the **worker thread** to finish whatever synchronous SQLite call is already in flight,
+because that thread is not asyncio-aware and never observes the cancellation. If the fixture's loop
+closes while that call is still running, the thread dies into the crash above, and the underlying
+`sqlite3.Connection` is never reached by any `close()` — the crash happens inside `_execute_run`'s own
+`try/except`, before control could reach anything that would close it.
+
+**Why this is a production concern, not only a test-fixture one.** Nothing about the mechanism is
+test-specific — it is `agent_trigger.py` and aiosqlite's own driver, both of which run in production.
+Anything that cancels, times out, or otherwise moves on from a run while its background DB write is
+still in flight (a superseded turn, an operator-cancelled run, a process shutdown) can leave the same
+dead thread and the same permanently un-resolvable connection behind it. **Depending on whether
+SQLAlchemy's pool still considers the connection checked-in and hands it back out**, the visible
+symptom is either a quiet leak (bounded — something else eventually times out and reports a
+downstream error) or an **unbounded hang** on whatever next tries to use that connection. Both shapes
+are consistent with F292's own history: the CI occurrences that fail in 8-14.5 minutes, and the one
+that sat for 3.5 hours before being cancelled by hand.
+
+**Why F292's own instrumentation could never have named this.** `hub/tests/conftest.py`'s checkout
+registry watches SQLAlchemy's engine-level `checkout`/`checkin`/`close` events — it is blind to
+aiosqlite's internal worker-thread lifecycle by construction, which is exactly why it printed an
+identical negative on all four instrumented F292 occurrences.
+
+**Not fixed, and not attempted.** This is a design-level asyncio/threading correctness issue in how a
+cancelled run's worker-thread-backed DB operations are waited for, not a one-line patch — it touches
+core run-execution/cancellation semantics, which this repository's round discipline (explore/propose
+→ review → review) should get three independent passes on before anything changes. The next step is
+establishing whether `_execute_run`'s database work can be made to either (a) genuinely await the
+underlying thread on cancellation rather than only the coroutine, or (b) run on a connection whose
+worker-thread lifetime is decoupled from any single caller's event loop. Queued in
+`spec-queue/DIRECTION.md` for the day window's spec loop rather than repaired ad hoc.
+
