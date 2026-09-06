@@ -1,40 +1,89 @@
 {
-    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook":  ".claude/loops/day-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-04-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "a38caee",
-    "stop_at":  "2026-09-06T17:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-06-day-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+  "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+  "playbook": ".claude/loops/day-window.md",
+  "runner": "claude",
+  "model": "opus",
+  "permission_mode": "unattended-full-access",
+  "branch": "autonomous/2026-09-04-daily",
+  "parent_branch": "master",
+  "parent_sha": "a38caee",
+  "stop_at": "2026-09-06T17:00:00+01:00",
+  "iteration": 1,
+  "log_file": ".claude/autonomous/2026-09-06-day-log.md",
+  "findings_file": "scripts/drive/FINDINGS.md",
+  "approvals_file": "spec-queue/APPROVALS.md",
+  "current": "D-1",
+  "next_action": "D-1 (ledger, no product code). Revise F292 in scripts/drive/FINDINGS.md with the CI occurrence that fired overnight. Facts already measured and recorded in iteration 1's log entry: run 33998598976 (sha 3a96ddb, job hub-test, 3966 passed / 18 skipped / 1 error in 741.71s) failed at 'ERROR at setup of test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted' with sqlite3.OperationalError: database is locked, and the N-1 diagnostic printed 'registry: no connection checked out' at ALL THREE probe points (before dispose, before drop_all, at failure). Re-read those lines yourself with `gh run view 33998598976 --log-failed` before writing, do not trust this summary. Run 33998517779 (sha 2da52ce) failed the same job -- check whether it printed the same thing. What this falsifies: the entry's standing mechanism, narrowed by D-6's control run to 'a session that wrote and did not commit, held across the test boundary', is exactly the shape the registry catches, so it was NOT that here. Write what remains possible (another engine on the same file, a non-SQLAlchemy writer, a separate process) and label each as hypothesis. Keep the old text, correct in place, do not restate the finding twice. Then set the entry's Status line to reflect that the instrument fired and returned a negative. No product or test code this iteration -- FILL does not implement.",
+  "queue": [
+    {
+      "id": "compose",
+      "status": "done",
+      "title": "Compose this window's queue from the playbook",
+      "detail": "Done iteration 1. Merge gate checked and dormant (condition zero unmet; condition 3 also fails -- CI in_progress at HEAD). Research copied to spec-queue/research/2026-09-06.md. DIRECTION.md has no section for today."
+    },
+    {
+      "id": "D-1",
+      "status": "open",
+      "title": "F292 -- record the CI occurrence and what it falsifies",
+      "detail": "Ledger only. The full instruction is in next_action while this item is current; iteration 1's log entry carries the measurements. Do not start a Hub. Do not touch hub/tests/conftest.py -- DEC-1 has not authorised anyone to change its behaviour."
+    },
+    {
+      "id": "D-2",
+      "status": "open",
+      "title": "Drive -- the night's F126 checkpoint-cutover guard, independently",
+      "detail": "Scoped e2e drive, not a sweep (DIRECTION.md 2026-09-03 says the coverage sweep is COMPLETE). Use the e2e-loop skill. The night built one 20-line guard in hub/hub/checkpoint_cutover.py (3142a91) and drove it 13/13 with its own harness -- the point of this item is that the same process wrote the guard, the tests and the drive. Drive it independently: fresh Hub on 8011 started from hub/ with uvicorn FROM SOURCE (never `agentweave --port`), fresh database, fresh project -- NEVER proj-5e960453 or proj-18e5d4e0, never port 8000 or 8010. Confirm no .py under hub/hub or src is newer than the process start time before drawing a conclusion. Any real agent turn binds claude-haiku-4-5. Never leave a job enabled. New findings append to scripts/drive/FINDINGS.md with severity, file:line, a reproduction, and `**Status:** open` as the FIRST line of the body."
+    },
+    {
+      "id": "D-3",
+      "status": "open",
+      "title": "Spec R1 -- explore and propose for F271",
+      "detail": "F271 (A), scripts/drive/FINDINGS.md:18503 -- a failed instructions load renders an empty editor with Save enabled, and one click destroys the project's instructions. Reproduced live 2026-09-02 against the served bundle, 19 assertions, harness at scripts/drive/t_d4_instructions_failed_load.py. R1 explores the codebase and writes openspec/changes/<name>/ -- proposal.md, design.md, tasks.md and the specs/<capability>/spec.md deltas. `openspec new change` refuses a name starting with a digit. SHALL goes on a requirement's FIRST PHYSICAL LINE; `openspec validate --strict <name>` must pass before the round is done. Specs live in openspec, never also in the Hub. If the drive in D-2 produced a finding that outranks F271, the playbook's priority order lets it take this slot instead -- say so in the log if you swap."
+    },
+    {
+      "id": "D-4",
+      "status": "open",
+      "title": "Spec R2 -- re-derive R1's argument against the code, independently",
+      "detail": "Not a re-read of R1's reasoning. A fresh comparison against what the code actually does; fix the proposal where the code disagrees. An argument can be wrong while everything it argues about is right -- only re-deriving finds that. Re-run `openspec validate --strict`. If this round changed nothing, say so explicitly in the log; that is a real outcome and hiding it makes the next round look cheaper than it is."
+    },
+    {
+      "id": "D-5",
+      "status": "open",
+      "title": "Spec R3 -- re-derive again, independently",
+      "detail": "Same instruction as D-4, run fresh. On 2026-08-28 round 3 caught rounds 1 and 2 both breaching a requirement that had shipped four days earlier. Re-run `openspec validate --strict`."
+    },
+    {
+      "id": "D-6",
+      "status": "open",
+      "title": "The review page, then APPROVALS.md",
+      "detail": "Write spec-queue/review/review-2026-09-06.html -- self-contained, no external stylesheets/scripts/fonts, full DOCTYPE/html/head/body wrapper, light colours on bare :root and redefined under @media (prefers-color-scheme: dark), explicit body background. Six sections in order: (1) the branch -- autonomous/2026-09-04-daily, 3 days, 29 commits over 42 files, and what the merge gate did (dormant on condition zero AND failing condition 3; the two most recent completed CI runs on the branch both failed hub-test on F292). The unmerged cycle goes FIRST, unskimmable. (2) what the night built and which of it was driven -- one 20-line guard, driven by the process that wrote it. (3) what today's drive found. (4) what was specced, one section per change, including what R2 and R3 each changed -- say so if a round changed nothing. (5) what tonight does if the operator approves nothing. (6) the research last and briefly -- three ranked candidates in spec-queue/research/2026-09-06.md, each ending in what it means for AgentWeave. Then append a 2026-09-06 section to spec-queue/APPROVALS.md with a row per specced change and NO status token. Then set next_action to the literal JSON null -- that is what unregisters the driver."
+    }
+  ],
+  "decisions_for_user": [
+    {
+      "id": "DAY-1",
+      "question": "The morning merge gate is still dormant and cannot open on its own. STATE-day.json's seeded limits[0] ('No commits, merges or rebases onto master. Never auto-merge.') outranks the playbook, and that line comes from .claude/loops/arm-cycle.ps1, so it is re-seeded every cycle. autonomous/2026-09-04-daily is now 3 days and 29 commits unmerged. Do you want to relax that seeded line so the gate can execute under its four conditions, or keep the landing as your own awake decision?",
+      "status": "open",
+      "note": "Reported, not acted on. Nothing touched master. Note that the gate would not have opened this morning regardless: condition 3 fails -- CI for f819dc6 was still in_progress at 09:00, and the branch's two most recent completed runs (3a96ddb, 2da52ce) both failed hub-test on F292."
+    },
+    {
+      "id": "DAY-2",
+      "question": "F292 now blocks the merge gate in practice: the branch cannot show a green CI at HEAD often enough to land, because hub-test fails intermittently on 'database is locked' and the failure is not caused by anything the loop changed. Overnight the N-1 instrumentation fired in CI and returned a NEGATIVE -- no connection checked out from the app fixture's engine at any probe point -- which falsifies the leading hypothesis. Is chasing F292 to a root cause worth a night-window slot, or would you rather the gate tolerate a re-run?",
+      "status": "open",
+      "note": "Raised by iteration 1 from measurement, not carried forward from the night window. The night's DEC-1 (may this window take a second guess at hub/tests/conftest.py's behaviour) is the adjacent question and is still open in STATE-night.json."
+    }
+  ],
+  "limits": [
+    "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+    "Every claim is measured or labelled unverified.",
+    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+    "Tests under py -3.11, never bare python. black needs --target-version py311.",
+    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
+    "This window FILLS. It does not implement. If you find yourself editing hub/hub/ or src/agentweave/, stop -- the only exception is a drive fixture, which belongs in scripts/drive/.",
+    "Do not run the whole Hub suite in this window unless something done here could plausibly have broken it. It takes 15-25 minutes and exceeds the 600s command cap."
+  ]
 }
