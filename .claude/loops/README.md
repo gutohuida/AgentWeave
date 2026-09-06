@@ -101,4 +101,9 @@ The day window's first iteration checks whether the previous one is merged into 
 cuts a fresh branch from `master`. Not merged, it stays on it and says so at the top of the review
 page, so the operator sees they are looking at more than one day of accumulated diff.
 
-**Never auto-merge.** Merging is the operator's decision, made awake. That is unchanged.
+**The day window's merge gate may fast-forward master itself, since 2026-09-06.** The operator
+relaxed the seeded `limits[0]` line that had kept condition zero permanently unmet
+(`day-window.md`, Iteration 1 step 1). The other three conditions are unchanged and still gate it:
+a genuine fast-forward, a clean pushed HEAD, CI green at that exact commit, and no `HOLD MERGE` in
+`DIRECTION.md`. `git merge --ff-only` only — the gate still cannot invent a merge commit or resolve
+a conflict with nobody awake. The night window still never merges, under any condition.

@@ -195,7 +195,7 @@ $state = [ordered]@{
   )
   decisions_for_user = @()
   limits            = @(
-    "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
     "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
     "Nothing destructive: no deleting projects, databases, or kept reproductions.",
     "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
