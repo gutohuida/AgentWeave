@@ -6,8 +6,10 @@ The obvious repair is to read `isError` alongside `isLoading` and add a branch. 
 cleanest one, because `isError` is a *reason*, and what the textarea needs is a *fact*: has this
 project's stored content arrived?
 
-React Query 5.62 gives four combinations at this call site, and only one of them has content to
-show:
+React Query gives four combinations at this call site, and only one of them has content to show.
+(R2 re-read the table out of the **installed** package rather than the declared range: `package.json`
+says `^5.62.16`, `node_modules/@tanstack/react-query` is 5.90.21, and it is the installed copy the
+bundle is built from.)
 
 | query state | `isPending` | `isFetching` | `isLoading` | `isError` | `data` | current page renders |
 |---|---|---|---|---|---|---|
@@ -35,13 +37,37 @@ after a successful load keeps the operator's editor rather than snatching it awa
 a deliberate choice and it is stated as a scenario, because the naive `isError`-first ordering gets
 it wrong — a background refetch failure would replace a screen the operator is typing into.
 
-**The fourth row is derived, not driven.** `useInstructions` is
-`enabled: isConfigured && !!projectId` (`hub/ui/src/api/instructions.ts:14`), and `App.tsx:484`
-renders `<InstructionsPage />` from a `destination.kind === 'project'` branch that carries
-`destination.projectId`, while the hook reads `selectedProjectId` from `useConfigStore` — a second
-source. Whether those two can ever disagree while this page is mounted was **not** established. The
-gate above covers it either way; no scenario in this change asserts the state is reachable, and none
-should until someone drives it.
+**R2: the library agrees, and says so in its own vocabulary.** R1 argued that ordering from first
+principles. The same observer that computes `isLoading` also computes
+`isLoadingError = isError && !hasData` and `isRefetchError = isError && hasData`
+(`queryObserver.js:331` and `:335`) — which is exactly the `data`-before-`isError` split, shipped as
+two named flags. `data present -> editor; isError -> failure` is therefore equivalent to
+`isLoadingError -> failure`, and an implementation may use either. This is corroboration, not a
+correction: it makes the ordering the library's own distinction rather than this change's taste.
+
+**The fourth row is derived, not driven — and R2 sharpened the derivation without changing the
+verdict.** `useInstructions` is `enabled: isConfigured && !!projectId`
+(`hub/ui/src/api/instructions.ts:14`), and `App.tsx:484` renders `<InstructionsPage />` from a
+branch that carries `destination.projectId`, while the hook reads `selectedProjectId` from
+`useConfigStore` — a second source. R1 left "whether those two can disagree while the page is
+mounted" open. They can, and the mechanism is nameable: the two sources are reconciled in an
+**effect** (`App.tsx:145-151`, `setSelectedProject(destinationProjectId)` guarded by
+`destinationProjectId !== projectId`), which runs *after* the render it corrects. The store's
+initial value is `loadSelectedProject()` from `localStorage` and `isConfigured` is `!!initial.apiKey`
+read synchronously from `sessionStorage` (`configStore.ts:129-131`), while the destination is
+resolved from `window.location` in a `useState` initialiser (`useWorkspaceNavigation.ts:25-27`). So
+a first paint in which the destination names project A and the store still says `null` — or says
+project B — is a committed render, not a hypothetical.
+
+What is still **not** established is that any such window lasts longer than the frame before the
+effect commits, and no drive has put an operator in one. So the verdict is unchanged: the gate above
+covers it either way, no scenario asserts the state is reachable, and none should until someone
+drives it.
+
+**The adjacent risk is out of scope and recorded here rather than filed.** In the `projectId = B,
+destination = A` variant the page is A's while the hook — read *and* write — is B's, which is a
+second identity source disagreeing with the one the operator is looking at. That is not this
+change's defect and it has not been driven; it is a drive candidate, not a claim.
 
 ## What the failure block owes the operator
 
@@ -73,6 +99,30 @@ outcome form is satisfied only by the gate actually holding.
 It also survives the obvious implementation, which is not to render Save at all when there is no
 editor to save. Both shapes pass; the requirement does not pick one.
 
+### R2: Save is not where the branch is, and the loading state is unguarded today
+
+R1 wrote the gate as a rewrite of the render at `:45` and assumed Save came with it. It does not.
+The button is handed to `SettingsSection` as `actions` (`InstructionsPage.tsx:36-43`) and
+`SettingsSection` renders `{actions}` in the heading (`SettingsSection.tsx:58`), a sibling of
+`{children}` (`:60`) where the `isLoading` ternary lives. Three consequences:
+
+1. The three-branch rewrite reaches the textarea and not the button. Gating Save has to be a
+   separate, explicit act — either the control moves inside the gated region or `actions` is made
+   conditional on the same `data` test. `tasks.md` 1.4 said "not rendering Save in the failure block
+   is an acceptable implementation of this", which is not implementable as written: there is no
+   failure block that contains Save. R2 corrected the task.
+2. **The loading state is already a destruction path**, not merely a correct skeleton. While the
+   skeleton renders, Save is on screen and enabled, and `content` is `''`. This is the *third* state
+   the current page cannot distinguish from an empty project, and unlike the other two it is on
+   every visit. It is short when the request fails fast (`retry: 1` plus a backoff) and unbounded
+   when the request hangs, since `isPending && isFetching` stays true.
+3. The requirement as written already forbids it — "for a project whose stored instructions have not
+   been read successfully" covers in-flight as much as failed — so no requirement text changed. What
+   was missing was a scenario, a unit test and a drive column, and R2 added all three.
+
+The severity does not change: the driven case is still the one that took stored content away. But
+R1's table describes the loading row as "correct", and it is only correct about the editor.
+
 ## Scope: a page, not a family — and the capability-wide requirement is rejected
 
 `F271`'s 2026-09-03 sweep (`scripts/drive/d6_seed_writeback_sweep.py`) counted, over 153 query call
@@ -92,6 +142,26 @@ that is not true, which is worse than a narrow requirement that is.
 It is a good candidate for its own change, after a sweep that measures the other seven. Recorded
 here so that the next person does not have to rediscover that it was considered.
 
+**R2 attacked this call rather than inheriting it, and part of the sweep it asks for is now done.**
+Statically, over the eight pages `App.tsx:483-490` mounts: **not one of them reads a read query's
+error state.** `grep` for `isError`/`isLoadingError` returns hits in exactly two files —
+`AccountingPanel.tsx:137,147`, which are `updateBudget.isError`, and `ProjectSettingsPanel.tsx:84`,
+which is `update.error ?? relocate.error` — and both are *mutation* errors, the save-side reporting
+that `project-environment-settings` already requires. On the read side the count is zero of eight.
+
+That measurement points both ways and it is worth being precise about which way it decides.
+
+- It **confirms the rejection**: a capability-wide "a section whose settings failed to load says so"
+  would be breached by seven pages the day it shipped, which is exactly the corpus-lying failure R1
+  named. Writing it now would be describing an intention, not the product.
+- It **strengthens the candidate**: this is no longer "someone should look" but a counted, named
+  gap. What remains unmeasured is the part that decides severity — whether any of the seven seeds a
+  write from the read it does not check. `F271`'s own 153-site sweep says only two sites in the
+  whole application do, and one of them is this page, so the other seven are very likely
+  *misinforming* rather than *destroying*. That belongs in the follow-up change's Why, not here.
+
+The rejection therefore stands, on evidence rather than on caution.
+
 `AgentOutputPanel.tsx:207` is likewise out of scope: it is composer/override seeding, not a settings
 editor, it belongs to a different capability, and it has never been driven. The drive that would
 settle it is unchanged and unqueued.
@@ -110,6 +180,15 @@ page as a question. Note that it is also *not sufficient* on its own: it does no
 misleading empty editor, and a client that cannot tell "not loaded" from "empty" would still be
 lying to the operator with the confirmation dialog on the screen.
 
+**R2 residual, recorded and not specced: the seeding lag on a *successful* project switch.** The
+gate is `data` present, and the effect that copies `data.content` into `content` runs after the
+render in which `data` arrived. So when the selected project changes and the new project's read
+*succeeds*, there is a render where the editor is shown (`data` present, for the new project) while
+`content` still holds the previous project's text. The failure variant is covered by a scenario; this
+success variant is not, because it is a frame, not a state, and no drive has produced it. The cheap
+remedy if implementation wants it is to key the editor by project id so `content` cannot survive the
+switch — noted in `tasks.md` 1.2 as an option, deliberately not made a requirement.
+
 **Track the loaded state in a `useState` beside `content`.** A second source of truth for something
 the query already answers, and one that has to be reset by hand on every project change. The bug
 being fixed is a component that kept state the query had invalidated.
@@ -120,7 +199,19 @@ rather than stating it, and makes the empty editor arrive more slowly instead of
 ## Verification
 
 `scripts/drive/t_d4_instructions_failed_load.py` currently **asserts the defect**: its 19 assertions
-pass today because the page is broken. It is the regression drive for this change and its
+pass today because the page is broken.
+
+**R2 checked what could be checked here without a Hub, and says plainly what it did not.** The
+harness asserts through a `check(ok, label)` helper (`:60`), and the assertions that carry the claim
+are readable in the source: `:196` *"the skeleton is gone — the page is no longer 'loading'"*, `:197`
+*"and an EMPTY textarea is what the operator sees"*, `:198` *"with Save ENABLED over a failed load"*,
+and the read-back pair at `:217`/`:226`. So "it asserts the defect" is verified from the file, and
+task 4.1's instruction to invert exactly those is correct — including that the baseline column
+(`:172-173`) survives inversion untouched, since it asserts the success path. What is **not**
+re-verified is that they all still pass: that is `F271`'s 2026-09-02 run, and neither R1 nor R2
+started a Hub. The harness also has **no in-flight column at all** — every `check` sits in the
+success, aborted or 500 case — which is how the loading-state write path went unmeasured; `tasks.md`
+4.1b adds it. It is the regression drive for this change and its
 expectations invert — the empty-editor and Save-enabled assertions become "no editor, no Save, a
 stated failure", and the end-to-end read-back stops being a destruction check and becomes a
 preservation check (stored content unchanged after the operator's click). Its baseline column must

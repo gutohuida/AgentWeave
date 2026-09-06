@@ -36,10 +36,28 @@ Three lines, none of which is wrong on its own:
    (`:14-18`). A failed load leaves `data` undefined, so `content` stays at its `useState('')`
    initial value — the same value a genuinely empty project produces.
 3. The only branch that hides the editor is `isLoading` (`:45`), and
-   `isLoading = isPending && isFetching` (`@tanstack/react-query` 5.62,
-   `query-core/.../queryObserver.js:310`). After `retry: 1` (`hub/ui/src/main.tsx:12`) exhausts,
+   `isLoading = isPending && isFetching` (`query-core/build/modern/queryObserver.js:310`, read by
+   R1 and re-read by R2 in the **installed** copy — `@tanstack/react-query` 5.90.21; `package.json`
+   declares `^5.62.16`, which is the floor, not what is bundled). After `retry: 1` (`hub/ui/src/main.tsx:12`) exhausts,
    the query is `error`/idle: `isLoading` is **false**. The skeleton branch is not taken and the
    textarea renders.
+
+**A fourth line, which R2 found and R1 missed: Save is not inside any of those branches.** The
+button is passed to `SettingsSection` as its `actions` prop (`:36-43`), and `SettingsSection` renders
+`{actions}` in the section *heading* (`components/environment/SettingsSection.tsx:58`), while the
+`isLoading` ternary lives in `{children}` (`:60`). So the branch at `:45` governs the editor and
+nothing else. Two consequences, and the second is a defect in its own right:
+
+- the three-branch rewrite this change proposes does **not** reach Save; it has to be gated
+  explicitly (see `tasks.md` 1.4, corrected by R2);
+- **the in-flight state is already a one-click destruction path today, independently of the error
+  state.** While the skeleton is on screen, Save is rendered and enabled — `disabled` is
+  `saveMutation.isPending` alone — and `content` is still `''`. A click there sends
+  `{"content": ""}` for a project whose stored content has not been read. In the two driven failure
+  modes that window is short (`retry: 1`, so two attempts and a backoff); against a request that
+  hangs rather than fails, `isPending && isFetching` stays true and the window is unbounded. Read
+  from the code by R2, **not driven** — `F271`'s table has no in-flight column, and adding one is a
+  task in this change.
 
 Save's `disabled` is `saveMutation.isPending` alone (`:39`). The PUT then sends `{"content": ""}`,
 which `hub/hub/api/v1/instructions.py` accepts **deliberately** — its `InstructionsUpdate` docstring
@@ -79,10 +97,13 @@ The editor is rendered only when this project's stored instructions have actuall
 one condition instead of three and is the only condition that is true exactly when the textarea has
 something truthful to show.
 
-That single condition also closes two states the current code cannot distinguish from "the project
+That single condition also closes three states the current code cannot distinguish from "the project
 has no instructions":
 
 - **the failed load** — the driven case;
+- **the read still in flight** — reachable on every single visit to the page, because it is the
+  ordinary loading window; the editor is correctly hidden there today but Save is not (see the
+  mechanism above). R2 added this row; R1's table had this state as "correct".
 - **the not-yet-enabled query** — `useInstructions` is `enabled: isConfigured && !!projectId`
   (`hub/ui/src/api/instructions.ts:14`), and a disabled query is `isPending && !isFetching`, so
   `isLoading` is false there too. Derived from the code; **its reachability in the running app is
@@ -98,10 +119,14 @@ Three requirement changes, all in `project-instructions`:
 - **MODIFIED** *Hub UI provides instructions editor* — its "pre-filled with the current saved
   content" scenario is unconditional today, which is precisely the promise the failed load breaks.
   Restated as conditional on the load having succeeded, with the success path otherwise unchanged.
-- **ADDED** *A failed instructions load is stated, not rendered as an empty editor* — the failure is
-  named in the section, in a live region, and the operator can retry in place.
-- **ADDED** *Save is unavailable until the project's stored instructions have been read* — the gate,
-  stated as an outcome (no PUT can be issued) rather than as a `disabled` attribute.
+- **ADDED** *An unread instructions editor is not presented as the project's instructions* — the
+  failure is named in the section, in a live region, and the operator can retry in place. (R2:
+  this bullet named a requirement heading that the delta does not contain; corrected to the
+  heading actually written.)
+- **ADDED** *Save cannot write instructions that were never read* — the gate, stated as an outcome
+  (no PUT can be issued) rather than as a `disabled` attribute. R2 added a scenario for the
+  in-flight read alongside the failed one; the requirement's own wording already covered it, but
+  nothing asserted it and the implementation plan did not reach it.
 
 ## What this deliberately does not change
 

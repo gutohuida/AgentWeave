@@ -11,13 +11,21 @@ existing; only verified implementation closes a task.
   the editor exactly as today; `isError` → the failure block; otherwise → the existing skeleton.
   The `data`-first ordering is load-bearing (see `design.md`) — an `isError`-first ordering would
   take a loaded editor away from an operator mid-edit on a background refetch failure.
+  (`isLoadingError` is the library's own name for `isError && !hasData` and is an equivalent
+  spelling; R2.) Optional, not required: key the editor by project id so `content` cannot outlive a
+  project switch — see the R2 residual in `design.md`.
 - [ ] 1.3 The failure block: a `role="alert"` region naming what could not be loaded, the sentence
   from `readableApiError(error, <fallback>)`, and a Retry control calling `refetch()`. The fallback
   string is what a dropped connection produces — no `ApiError`, so nothing to quote — and it must
   say that nothing stored has been changed.
-- [ ] 1.4 Gate the write: Save issues no PUT unless `data` is present. Not rendering Save in the
-  failure block is an acceptable implementation of this; adding `|| isError` to `disabled` is not,
-  because it leaves the `data === undefined` route open.
+- [ ] 1.4 **Gate the write, and note that 1.2 does not do it for you (R2).** Save is passed to
+  `SettingsSection` as `actions` (`:36-43`) and rendered in the heading
+  (`components/environment/SettingsSection.tsx:58`), a sibling of the `{children}` (`:60`) that holds
+  the branch 1.2 rewrites — so the three-branch render leaves Save on screen in every state,
+  including the skeleton, which is a live one-click blanking path today. Either move the control
+  inside the gated region or make `actions` conditional on the same `data` test. Adding
+  `|| isError` to `disabled` is **not** sufficient: it leaves both the `data === undefined` routes
+  open, the in-flight one on every visit.
 - [ ] 1.5 Leave `hub/hub/api/v1/instructions.py` alone. The server-side guard is intact and the
   empty string stays a legitimate value — whether a PUT should confirm before blanking non-empty
   stored content is the operator's open question, not part of this change.
@@ -32,11 +40,14 @@ by reasoning about it.
   any interaction with the screen. Assert on the mutation/fetch, not on the presence of a `disabled`
   attribute — a test that only asserts markup passes against a page that renders the error *and* the
   textarea.
-- [ ] 2.3 Retry calls the query again and, on success, presents the pre-filled textarea.
-- [ ] 2.4 A successful load followed by a failing refetch keeps the textarea and its content.
-- [ ] 2.5 Project change with the new project's load failing presents no textarea holding the
+- [ ] 2.3 **R2:** with the read still in flight (the query never settling), no PUT is issued by any
+  interaction with the screen. This one fails against the pre-change component for a reason 2.2 does
+  not cover — the skeleton is rendered and Save is enabled beside it.
+- [ ] 2.4 Retry calls the query again and, on success, presents the pre-filled textarea.
+- [ ] 2.5 A successful load followed by a failing refetch keeps the textarea and its content.
+- [ ] 2.6 Project change with the new project's load failing presents no textarea holding the
   previous project's content.
-- [ ] 2.6 The success path is unchanged: load, edit, Save, confirmation.
+- [ ] 2.7 The success path is unchanged: load, edit, Save, confirmation.
 
 ## 3. The bundle
 
@@ -50,6 +61,12 @@ by reasoning about it.
 - [ ] 4.1 Invert `scripts/drive/t_d4_instructions_failed_load.py`'s expectations for the two failure
   columns: textarea absent, Save absent-or-inert, a stated failure present. Its baseline column must
   keep passing **unchanged**.
+- [ ] 4.1b **R2: add the in-flight column the harness does not have.** Hold the GET open rather than
+  aborting it or answering 500 — the same route-interception the harness already uses for the other
+  two columns — and assert, while the skeleton is on screen, that Save is absent or inert and that
+  interacting with the screen issues no PUT. Then read the stored content back and assert it is
+  byte-identical. This is the state `F271` never measured, and against the pre-change bundle it is a
+  reproduction of a second destruction path, so run it once **before** the fix as well.
 - [ ] 4.2 Turn its end-to-end read-back from a destruction check into a preservation check: with the
   Hub reachable again, interact with the screen and assert the stored content is byte-identical to
   what it was before.

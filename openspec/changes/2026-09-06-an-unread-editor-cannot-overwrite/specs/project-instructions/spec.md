@@ -100,6 +100,12 @@ what neither may do is let a write leave.
   screen
 - **THEN** no request that writes instruction content is issued for that project
 
+#### Scenario: A read still in flight issues no write
+
+- **WHEN** the read of a project's instructions has not settled — whether on first attempt or
+  during a retry — and the operator interacts with the screen
+- **THEN** no request that writes instruction content is issued for that project
+
 #### Scenario: Stored instructions survive the failed read
 
 - **WHEN** the read fails, the operator interacts with the screen, and the stored instructions are
