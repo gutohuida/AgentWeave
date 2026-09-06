@@ -99,10 +99,21 @@ and the editor branch is unreachable with the previous project's text in it.
 
 ## 3. The bundle
 
-- [ ] 3.1 `cd hub/ui && npm run build`, then `python scripts/refresh_ui_bundle.py`
+- [x] 3.1 `cd hub/ui && npm run build`, then `python scripts/refresh_ui_bundle.py`
   (`make ui` is unavailable in Git Bash on this machine). Commit `hub/ui/src` and
   `hub/hub/static/ui` together. The drive reads the **served** bundle; skipping this makes the drive
   re-measure the old page and report success.
+  **Done 2026-09-06 (night, n4-bundle), and proven to have reached the bundle rather than assumed.**
+  The stamp moved from `src_commit c063e28` (the pre-change bundle, built 2026-09-04) to `eb1d1d7`,
+  which contains the fixed component. The served JS changed name — `index-BXA4wQsi.js` →
+  `index-C9-G-wn9.js` — and `index.html` now points at it. The decisive check is content, not
+  filename: the fix's own string, `This project's instructions could not be loaded`, occurs **once**
+  in the new bundle and **zero** times in the old one committed at `HEAD` (both greps run against a
+  bundle where a control string, `instructions`, does match, so a zero is a real absence and not a
+  broken grep). `AW_CHECK_UI_BUNDLE=1 pytest hub/tests/test_ui_build_stamp.py` — 13 passed, the
+  strict bundle-matches-source assertion included. `hub/ui/src` had nothing to stage: it was already
+  committed at `c7e615c`/`eb1d1d7` on this same branch, so the bundle catches up in the next commit
+  and the two never diverge across a push.
 
 ## 4. The drive — this is what closes the change
 

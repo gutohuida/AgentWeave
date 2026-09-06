@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ab60cf3",
     "stop_at": "2026-09-07T07:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-09-06-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "n4-bundle",
-    "next_action": "n4-bundle: rebuild the committed bundle (task 3.1). `cd hub/ui && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py` from the repo root -- `make` is not on PATH in Git Bash here, and only that script writes hub/hub/static/ui/ui-build-stamp.json. Commit hub/ui/src and hub/hub/static/ui TOGETHER in one commit. Before building, confirm the stamp still records src_commit c063e28 (the pre-change bundle) so the rebuild is provably the thing that changes what is served; after `refresh_ui_bundle.py`, confirm the new stamp names a commit containing InstructionsPage.tsx's fix and that `git status` shows hub/hub/static/ui actually changed -- a build that produces a byte-identical bundle means the fix did not reach it and is a hard stop, not a pass. Do NOT start a Hub and do NOT drive anything: n5-drive owns the browser, and it must start :8011 from source AFTER this commit. Nothing else in the tree should change -- no test edits, no component edits.",
+    "current": "n5-drive",
+    "next_action": "n5-drive: drive the fix in a real browser against the SERVED bundle (tasks 4.1, 4.1b post-fix, 4.2, 4.3). The bundle now holds the fix as of this commit -- stamp src_commit eb1d1d7, served JS index-C9-G-wn9.js -- so start :8011 FROM SOURCE (cd hub; DATABASE_URL=... py -3.11 -m uvicorn hub.main:app --port 8011 --host 127.0.0.1) only AFTER checking out this commit's tree, and confirm no .py under hub/hub or src is newer than the process start. Then invert scripts/drive/t_d4_instructions_failed_load.py's expectations for the two failure columns B and C (textarea absent, Save absent-or-inert, a stated failure present) while column A's baseline keeps passing UNCHANGED -- if A changes too, something other than the fix moved. Column D (the in-flight column n1-repro added) must now PASS unmodified: that inversion is the post-fix half of 4.1b and closes its box. 4.2: the read-back becomes a preservation check, byte-identical to what was stored. Fresh project, never proj-5e960453 or proj-18e5d4e0, never :8000. No agent turn is needed so nothing binds a model. Stop the Hub and free 8011 before ending the iteration.",
     "queue": [
         {
             "id": "n1-repro",
@@ -38,9 +38,10 @@
         },
         {
             "id": "n4-bundle",
-            "status": "open",
+            "status": "done",
             "title": "Phase 3 -- rebuild the committed bundle (task 3.1)",
-            "detail": "cd hub/ui && npm run build, then py -3.11 scripts/refresh_ui_bundle.py (make is not on PATH in Git Bash here). Only that script writes the stamp. Commit hub/ui/src and hub/hub/static/ui TOGETHER. Skipping this makes n5-drive re-measure the old page and report success."
+            "detail": "cd hub/ui && npm run build, then py -3.11 scripts/refresh_ui_bundle.py (make is not on PATH in Git Bash here). Only that script writes the stamp. Commit hub/ui/src and hub/hub/static/ui TOGETHER. Skipping this makes n5-drive re-measure the old page and report success.",
+            "result": "Built and refreshed. Stamp src_commit c063e28 -> eb1d1d7 (HEAD, containing c7e615c's fixed component); served JS index-BXA4wQsi.js -> index-C9-G-wn9.js with index.html rewritten to match. PROVEN to have reached the bundle by content, not by the build having run: the fix's string \"This project's instructions could not be loaded\" occurs once in the new bundle and zero times in the old one at HEAD, both greps validated against a control string that does match in both. AW_CHECK_UI_BUNDLE=1 pytest hub/tests/test_ui_build_stamp.py = 13 passed with the strict bundle-matches-source assertion on. hub/ui/src had nothing to stage (already committed at c7e615c/eb1d1d7 on this branch), so the pair does not diverge across a push. No Hub started, nothing driven, no component or test edits."
         },
         {
             "id": "n5-drive",
