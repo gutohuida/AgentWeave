@@ -1,76 +1,40 @@
 {
-  "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-  "playbook": ".claude/loops/day-window.md",
-  "runner": "claude",
-  "model": "opus",
-  "permission_mode": "unattended-full-access",
-  "branch": "autonomous/2026-09-04-daily",
-  "parent_branch": "master",
-  "parent_sha": "a38caee",
-  "stop_at": "2026-09-05T17:00:00+01:00",
-  "iteration": 7,
-  "log_file": ".claude/autonomous/2026-09-05-day-log.md",
-  "findings_file": "scripts/drive/FINDINGS.md",
-  "approvals_file": "spec-queue/APPROVALS.md",
-  "current": null,
-  "next_action": null,
-  "queue": [
-    {
-      "id": "D-1",
-      "status": "done",
-      "title": "Independent e2e drive of the terminal-run queue release",
-      "detail": "DONE, iteration 2. Hub 8011 from source at e6997e9, fresh db aw0905.db, fresh project proj-aab643e8a931, two Haiku agents. Six seams measured; F286's release holds at all of them (0.17s/0.16s complete, 0.12s stop, 0.27s task checkout). Two new findings: F288 (B) reconcile_interrupted_runs ends runs and releases only their own agents, breaching agent-conversation-workspace:2217 -- driven, 6m15s strand; F289 (C) the queue status route repeats a spent refusal as the current reason. F274 did not reproduce at this volume; its own reproduction stands."
-    },
-    {
-      "id": "D-2",
-      "status": "done",
-      "title": "Spec R1 -- explore and propose the F274 change",
-      "detail": "DONE, iteration 3. Proposed as openspec/changes/2026-09-05-the-conversation-carries-its-own-run-facts -- proposal.md, design.md, tasks.md and the specs/agent-stream-events/spec.md delta (two ADDED requirements, one MODIFIED). validate --strict passes. The fix: both chat-history responses carry runs: Dict[str, RunFacts] built by primary-key lookup over the run ids their OWN returned entries name, and AgentTimeline takes its runs prop from the chat response instead of the timeline query. R1 overturned F274's own requirement position and corrected FINDINGS.md accordingly. Also found get_chat_history applies no limit at all, and that the chat hooks do not invalidate on run lifecycle events."
-    },
-    {
-      "id": "D-3",
-      "status": "done",
-      "title": "Spec R2 -- re-derive R1's argument against the code",
-      "detail": "DONE, iteration 4. R2 did NOT confirm the proposal. (1) D4 could not deliver the case it was chosen for: reconcile_interrupted_runs is awaited in the lifespan (main.py:350), before uvicorn serves, so its run_interrupted broadcast reaches zero subscribers and SSEManager.broadcast has no replay. Added onSseReconnect as design D8, tasks 3.4/3.5, test 4.9 and a rewritten SHALL line. (2) The runs prop has three readers, not one; measured that the working indicator survives the map move (design D9, task 2.4, test 4.10, drive 6.7). Filed F290 (B). One citation corrected (models.py:1180 -> :1179)."
-    },
-    {
-      "id": "D-4",
-      "status": "done",
-      "title": "Spec R3 -- re-derive again, independently",
-      "detail": "DONE, iteration 5. R3 did NOT confirm R2. The headline: R2's D8 proposed building a mechanism that already exists app-wide -- useSSE itself subscribes to onSseReconnect and calls queryClient.invalidateQueries() with NO filter (useSSE.ts:404-412), from a hook mounted unconditionally at App.tsx:216, already pinned by useSSE-lifecycle.test.tsx:229. So the Hub-restart case is already covered today, F290 (B) is RETRACTED (entry kept with the refutation on top), and D8/task 3.4/test 4.9 were rewritten to add no subscription and instead pin the existing global call, whose narrowing is the only regression that could break the requirement. That left the four terminal events with no justification, so R3 found the one that survives and filed it: F291 (C) -- a run that fails BEFORE its process spawns (agent_trigger.py:1960-2010) writes no output row at all, and when every entry it carried is at DELIVERY_ATTEMPT_LIMIT its only broadcasts are run_failed and queue_entry_abandoned, neither of which the chat hooks hear. Task 3.1's comment now carries that reason. Also repaired tasks 0.4 and 6.3, which were about to send the implementer to measure 'never' for a number that will be seconds, and added task 0.5 for the case that IS a before/after. D9 re-derived link by link and survives. D6's sqlite ceiling measured (3.45.1). One D7 claim was false -- the TS AgentRunFacts does NOT mirror the Python RunFacts, it lacks outside_workspace_writes -- corrected. validate --strict passes."
-    },
-    {
-      "id": "D-5",
-      "status": "done",
-      "title": "The review page and the APPROVALS section",
-      "detail": "DONE, iteration 6. spec-queue/review/review-2026-09-05.html, 718 lines, self-contained (re.findall for src=/href=/@import/https?:// returns []), theme-aware, seven sections. Rendered in BOTH themes with scripts/uishot.py against a file:// URL and both PNGs read back; html.parser reports zero tag errors and zero unclosed. Today's section INSERTED AT THE TOP of spec-queue/APPROVALS.md at line 19, one row with no status token, no line-initial directive literal in the new section. Filed F292 (B) while measuring section 1: 0b8aaf5's CI concluded failure after the morning gate called it a timing artefact, and it is the third failure on this branch with one cause -- 'database is locked' at test setup, 3 of 16 runs, no run failing any other way. It is the residue of the F285 fix, the be6a70d mitigation is present at all three failures and one of them IS the test that mitigation names, and the mechanism is labelled unestablished. Ledger now 297."
-    },
-    {
-      "id": "D-6",
-      "status": "done",
-      "title": "Repairs that need no spec -- only if the day has room",
-      "detail": "DONE, iteration 7. F287 fixed at 890cf40 -- the redundant `db.refresh` is gone from `record_agent_output` (hub/hub/output_recording.py:92). The masking gate was answered by MEASUREMENT, not argument: scripts/drive/f287_does_the_refresh_hold_a_lock.py rebuilds the app fixture's conditions (file-backed sqlite+aiosqlite, WAL, busy_timeout=30000, expire_on_commit=False, leaked session, dispose, drop_all) and finds a committed session with OR without the refresh lets the DDL through in 0.0s, while the control -- a leaked UNCOMMITTED write -- reproduces F292's error byte for byte after 1.219s. The refresh holds a SQLAlchemy transaction and a checked-out connection but no SQLite lock (pysqlite emits no BEGIN for a SELECT), so it cannot mask F292. That control also NARROWS F292, which stays open: its leaker wrote and did not commit, which is why be6a70d's dispose() could not help. All three carve-out conditions verified: specs mention AgentOutput only at agent-context-usage:204 and agent-stream-events:240, both about which events become rows; no migration, no shape change (four of five call sites discard the return, the fifth returns row.id). Two tests, each mutation-checked against the mutation it exists to catch. Driven on 8011 from this source: run-ab93602d5df7 completed exit 0 in 8.0s, 4 SSE events and 8 persisted rows all timestamped, both terminal status rows present. ruff/black/mypy clean over CI's paths; 114 tests across the seven files covering the path pass."
-    }
-  ],
-  "decisions_for_user": [
-    "F292 (B) is NARROWED but still open, and the narrowing changes what tonight may safely do. A control run for F287 reproduced F292's exact error -- `database is locked` at `drop_all`, same statement -- from exactly one cause: a session that WROTE AND DID NOT COMMIT, held across the test boundary. A leaked reader does not do it; a leaked idle connection does not do it. That also explains why be6a70d's `dispose()` did not hold, since dispose() cannot reclaim a connection a running task has checked out mid-transaction. The mechanism is now one shape rather than a space, but it is still not reproduced FROM THE SUITE, so the earlier decision stands unchanged: if the night window's step 3 lands on a red chunk it will make the second unattended guess at conftest.py from evidence that is sharper but still incomplete. A DIRECTION.md line saying whether it may is still the cheapest steer.",
-    "spec-queue/DIRECTION.md's newest section is still 2026-09-03 and two of its paragraphs are now spent: it schedules F188 for the next spec slot (F188 was retired 2026-09-04, fixed 467dfea) and it forbids resuming the coverage sweep, whose stated trigger has expired and which yesterday measured complete anyway. Yesterday's window lost a drive slot to that paragraph; today's read it against the tree instead of obeying it. Either write a section for today or retire the 2026-09-03 one.",
-    "The merge gate's condition zero is the limits line seeded by .claude/loops/arm-cycle.ps1 -- 'Never auto-merge'. Until you change it the gate can only ever report. At 09:02 it reported 3 of 4 conditions passing and called condition 3 a timing artefact; iteration 6 measured that it was not -- see the F292 item below. The branch now spans two days and 17 commits.",
-    "F292 (B), filed iteration 6 from CI rather than from a drive: three of this branch's sixteen CI runs failed with 'database is locked' at TEST SETUP, always the hub-test job on Linux, always the only error in the run, and no run on this branch has ever failed in any other way. It is the residue of the F285 fix you made on 2026-09-04 -- which was right and is not in question -- and it was ALREADY MITIGATED ONCE (be6a70d) with the dispose present in the tree at all three failures, one of which IS the test that mitigation's comment names. The mechanism is unestablished and labelled so. This is the only thing between the branch and the merge gate's condition 3, and it is intermittent, so a green run does not mean it is gone. The decision: the night window's step 3 makes an inherited red suite tonight's first item, so if its chunk lands red it will make the SECOND unattended guess at this file from the same evidence. A DIRECTION.md line saying whether it may is the cheapest steer.",
-    "D-1 found F288 (B): a Hub restart ends runs but re-evaluates only their own agents, which breaches the requirement F286's change synced the night before (openspec/specs/agent-conversation-workspace/spec.md:2217, 'every agent holding queued input in a project ... whenever a run in that project reaches a terminal status'). Driven: 6m15s strand, cleared by an unrelated settings save. The day is speccing F274 instead, because F274 is the only open severity A and F288 needs three consecutive interruptions to become observable. If you would rather tonight closed a live spec breach than the oldest A, say so on the review page and F288 takes the slot.",
-    "F290 (B), filed by R2, was RETRACTED by R3: the interrupted turn does refresh itself, because useSSE's own reconnect handler invalidates every query (useSSE.ts:404-412). Nothing is owed on it. What the retraction cost is the justification for one task, which R3 replaced with F291 (C) -- a run that fails before its process spawns can leave a turn silent. The pattern worth your attention is that F288 and F290 were both filed off the Hub-restart path in two days and only one was real; if you want the restart path specced as one change rather than probed per symptom, say so on the review page.",
-    "Three consecutive spec rounds each overturned the one before -- R2 overturned R1's D4, R3 overturned R2's D8 and R2's own finding. That is the round discipline working exactly as CLAUDE.md claims, and it is also three rounds spent on one change. The alternative you might want is fewer changes per day at three rounds each, rather than more changes at fewer rounds; the loop currently does one change per day either way, so this costs nothing today but will if the queue ever holds two."
-  ],
-  "limits": [
-    "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
-    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-    "Every claim is measured or labelled unverified.",
-    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-  ]
+    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+    "playbook":  ".claude/loops/day-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-04-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "a38caee",
+    "stop_at":  "2026-09-06T17:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-06-day-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits, merges or rebases onto master. Never auto-merge.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
