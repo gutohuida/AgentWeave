@@ -104,7 +104,30 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 
 - **`git worktree add` into the scratchpad fails** with "Filename too long".
 - **Stage explicit paths.** `git add -A` sweeps in scratch files.
-- **CI triggers only on push to `master` and PRs to it.** A feature branch push runs nothing.
+- **CI triggers only on push to `master` and PRs to it.** ~~A feature branch push runs
+  nothing.~~ **RESOLVED 2026-09-06 — false as of the merge-gate work.** `ci.yml` now builds
+  `autonomous/**` too (a prerequisite for the day window's merge gate, landed circa
+  2026-09-04). Confirmed directly: every push to `autonomous/2026-09-04-daily` this session
+  (six of them) triggered its own CI run, checkable with
+  `gh run list --branch <branch> --limit N --json headSha,conclusion,status,databaseId`.
+- **`gh run view --log` and the REST job-logs endpoint both refuse a still-running job.**
+  `gh run view <id> --log` prints `run <id> is still in progress; logs will be available when
+  it is complete` (exit 0, no content); `gh api repos/<o>/<r>/actions/jobs/<jobid>/logs`
+  404s with `BlobNotFound`. There is no CLI-accessible live tail. The only thing you can read
+  from an in-progress run is job/step *status* and timestamps —
+  `gh run view <id> --json jobs --jq '.jobs[]|{name,status,conclusion}'`, or per-step
+  `startedAt`/`completedAt` — which is enough to notice a job has been running far longer
+  than its historical ceiling, just not to see why. *(Hit 2026-09-06, diagnosing a 3.5-hour
+  `hub-test` hang — F292/F295.)*
+- **A backgrounded `gh run watch <id> --exit-status` loses its exit code if anything is
+  chained after it.** `Bash({..., run_in_background: true})` reports the exit code of the
+  **last command in the string**, not of `gh run watch` specifically — `gh run watch $ID
+  --exit-status; echo "DONE=$?"` always notifies "exit code 0" because `echo` always
+  succeeds, even when the run actually failed. This is the `run_in_background`/task-
+  notification-specific case of the general piping trap two entries up; it cost a session a
+  wrong "CI is green" report to the operator on 2026-09-06 (the run had actually failed on an
+  unrelated lint error). Run `gh run watch ... --exit-status` **alone**, as the entire
+  backgrounded command, so the notification's exit code is the real one.
 - **A `.gitignore` entry ending in `/` cannot be un-ignored by a later `!` negation.** Git does
   not descend into an excluded *directory*, so the negation is unreachable and the file stays
   ignored with no error. Exclude the contents instead — `dir/*` plus `!dir/keepme` — which
