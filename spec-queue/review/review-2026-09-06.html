@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave daily review — 2026-09-06</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --panel-2: #f4f4f2;
+    --ink: #1c1c1a;
+    --ink-dim: #5c5c56;
+    --ink-faint: #85857d;
+    --rule: #e0e0da;
+    --rule-strong: #c9c9c1;
+    --accent: #6b4fbb;
+    --sev-a: #b3261e;
+    --sev-a-bg: #fbe9e7;
+    --sev-b: #a8590a;
+    --sev-b-bg: #fdf0e0;
+    --sev-c: #4d6a1f;
+    --sev-c-bg: #eef4e2;
+    --sev-d: #4a5568;
+    --sev-d-bg: #eceef2;
+    --ok: #2f6b3a;
+    --ok-bg: #e8f3ea;
+    --warn-bg: #fdf6e0;
+    --warn-rule: #d9b84a;
+    --code-bg: #f2f2ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --panel: #1e1e23;
+      --panel-2: #26262c;
+      --ink: #e9e9e6;
+      --ink-dim: #b0b0a8;
+      --ink-faint: #86867e;
+      --rule: #33333a;
+      --rule-strong: #4a4a52;
+      --accent: #b09aec;
+      --sev-a: #ff9c92;
+      --sev-a-bg: #3a1f1d;
+      --sev-b: #f0b878;
+      --sev-b-bg: #392a17;
+      --sev-c: #b3d67a;
+      --sev-c-bg: #26301a;
+      --sev-d: #b4c0d4;
+      --sev-d-bg: #24282f;
+      --ok: #8fd39c;
+      --ok-bg: #1c2c20;
+      --warn-bg: #322a14;
+      --warn-rule: #8a7527;
+      --code-bg: #24242a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    padding: 2.2rem 1.25rem 5rem;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  header.page { border-bottom: 2px solid var(--rule-strong); padding-bottom: 1.1rem; margin-bottom: 1.6rem; }
+  header.page h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -0.015em; }
+  header.page .sub { color: var(--ink-dim); font-size: .95rem; }
+  h2 {
+    font-size: 1.22rem; letter-spacing: -0.01em;
+    margin: 2.6rem 0 .5rem; padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: .5rem; }
+  h3 { font-size: 1.02rem; margin: 1.5rem 0 .4rem; }
+  h4 { font-size: .93rem; margin: 1.1rem 0 .3rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .8rem; padding-left: 1.35rem; }
+  li { margin: .3rem 0; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .875em;
+  }
+  code { background: var(--code-bg); padding: .1em .34em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule);
+    border-radius: 6px; padding: .75rem .9rem; overflow-x: auto; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0 1rem; font-size: .93rem; }
+  th, td { text-align: left; padding: .48rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); border-bottom: 1px solid var(--rule-strong); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0; }
+  .note { border-left: 3px solid var(--warn-rule); background: var(--warn-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .note strong:first-child { display: block; margin-bottom: .2rem; }
+  .sev { display: inline-block; min-width: 1.35rem; text-align: center; font-weight: 700; font-size: .78rem; padding: .1rem .38rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+  .sev.a { color: var(--sev-a); background: var(--sev-a-bg); }
+  .sev.b { color: var(--sev-b); background: var(--sev-b-bg); }
+  .sev.c { color: var(--sev-c); background: var(--sev-c-bg); }
+  .sev.d { color: var(--sev-d); background: var(--sev-d-bg); }
+  .pill { display: inline-block; font-size: .76rem; font-weight: 600; letter-spacing: .03em; padding: .12rem .5rem; border-radius: 999px; border: 1px solid var(--rule-strong); color: var(--ink-dim); }
+  .pill.ok, .pill.driven { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .pill.tested { color: var(--sev-b); background: var(--sev-b-bg); border-color: transparent; }
+  .fid { font-family: ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
+  .loc { font-family: ui-monospace, monospace; font-size: .82em; color: var(--ink-faint); white-space: nowrap; }
+  .lede { font-size: 1.02rem; color: var(--ink-dim); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .28rem 1rem; font-size: .93rem; margin: .6rem 0; }
+  .kv dt { color: var(--ink-faint); }
+  .kv dd { margin: 0; }
+  .ask { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1.1rem; margin: 1rem 0; background: var(--panel); }
+  .ask h4 { color: var(--accent); margin-top: 0; }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  a:visited { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  footer.page { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .85rem; }
+  .small { font-size: .88rem; color: var(--ink-dim); }
+  .measured { color: var(--ink-faint); font-size: .82rem; font-style: italic; }
+  @media (max-width: 34rem) {
+    body { padding: 1.4rem .8rem 3rem; font-size: 15px; }
+    table { font-size: .86rem; }
+    .kv { grid-template-columns: 1fr; gap: .1rem .5rem; }
+    .kv dd { margin-bottom: .45rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>AgentWeave daily review — Sunday 2026-09-06</h1>
+  <div class="sub">
+    Written by the FILL window (09:00–17:00) on <code>autonomous/2026-09-04-daily</code>.
+    You decide; the FIX window (23:00–07:00) builds what you approved.
+    Approvals go in <code>spec-queue/APPROVALS.md</code> — the only file the night window reads to
+    learn what you said.
+  </div>
+</header>
+
+<p class="lede">
+  One change proposed and taken through all three rounds. <strong>Neither review round was a
+  no-op</strong>, for the sixth consecutive outing: round&nbsp;2 found the change's own gate could
+  not reach the button it needed to gate, and round&nbsp;3 found the delta required a disclaimer in
+  the exact state the change removes it from — then falsified one of round&nbsp;2's own pieces of
+  evidence with a page that already ships the shape being proposed.
+</p>
+
+<div class="card">
+  <h4 style="margin-top:0">At a glance</h4>
+  <dl class="kv">
+    <dt>Branch</dt><dd><code>autonomous/2026-09-04-daily</code>, <strong>36 commits</strong> ahead of <code>master</code>, 49 files, +10,066 / −439. <strong>Unmerged, third day.</strong></dd>
+    <dt>Merge gate</dt><dd>Did not open. Dormant on condition zero, and it would have failed condition&nbsp;3 as well. <a href="#s1">§1</a></dd>
+    <dt>Night built</dt><dd>One 20-line guard (<code>3142a91</code>, F126). Driven 13/13 — by the process that wrote it. <a href="#s2">§2</a></dd>
+    <dt>Day drove</dt><dd>That guard, independently. <strong>Two new findings</strong>, each reproduced twice on two fresh databases. <a href="#s3">§3</a></dd>
+    <dt>Day specced</dt><dd><code>2026-09-06-an-unread-editor-cannot-overwrite</code> — F271 (A). 24 tasks. <a href="#s4">§4</a></dd>
+    <dt>Your questions</dt><dd>Three open: <a href="#day1">DAY-1</a> (the merge gate), <a href="#day2">DAY-2</a> (F292), <a href="#day3">DAY-3</a> (confirm before blanking).</dd>
+    <dt>Nothing implemented</dt><dd>This window fills. No <code>hub/hub/</code> or <code>src/agentweave/</code> code was touched today.</dd>
+  </dl>
+</div>
+
+<h2 id="s1"><span class="num">1</span>The branch has not landed in three days, and this is the part not to skim</h2>
+
+<p>
+  <code>autonomous/2026-09-04-daily</code> now carries <strong>36 commits over 49 files</strong>
+  (+10,066 / −439 against <code>master</code>), from <code>18ba8ba</code> at 2026-09-04&nbsp;22:55 to
+  <code>cbbd50c</code> at 2026-09-06&nbsp;09:52. Three calendar days of night-window implementation
+  and day-window specification, none of it on <code>master</code>. Every commit is pushed.
+</p>
+
+<h3>The gate did not open, and it could not have</h3>
+
+<p>
+  The morning merge gate was evaluated at compose time and failed <strong>twice over</strong>:
+</p>
+
+<ul>
+  <li>
+    <strong>Condition zero — the seeded limit.</strong> <code>STATE-day.json</code>'s
+    <code>limits[0]</code> reads <em>"No commits, merges or rebases onto master. Never auto-merge."</em>
+    That line outranks the playbook, and it is written by
+    <code>.claude/loops/arm-cycle.ps1</code>, so it is <strong>re-seeded on every cycle</strong>.
+    The gate cannot open itself, today or on any future morning, until that line changes.
+  </li>
+  <li>
+    <strong>Condition 3 — a green CI at HEAD.</strong> At 09:00 the run for <code>f819dc6</code> was
+    still <code>in_progress</code>, and the branch's two most recent <em>completed</em> runs
+    (<code>3a96ddb</code>, <code>2da52ce</code>) had both failed <code>hub-test</code> on
+    <span class="fid">F292</span>. Even with the seeded line relaxed, the gate would have stopped
+    here.
+  </li>
+</ul>
+
+<div class="ask" id="day1">
+  <h4>DAY-1 — do you want the gate to be able to execute?</h4>
+  <p>
+    The gate is written, has four conditions, and is dormant because a line seeded into its own state
+    file forbids the action it exists to take. Relax that line so it can land under its conditions, or
+    keep the landing as your own awake decision? Nothing has touched <code>master</code> either way.
+  </p>
+</div>
+
+<h3>What changed today, and it cuts both ways</h3>
+
+<p>
+  Eight CI runs were queued on this branch between 07:55 and 08:52 UTC. By 10:00 local, six had
+  completed: <strong>one failed, five passed.</strong>
+</p>
+
+<table>
+  <thead><tr><th>Run</th><th>sha</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>34020422896</td><td><code>f819dc6</code></td><td><span class="pill ok">success</span></td></tr>
+    <tr><td>34020850782</td><td><code>b49f80a</code></td><td><span class="pill ok">success</span></td></tr>
+    <tr><td>34021133812</td><td><code>8902e53</code></td><td><span class="sev b">F292</span> <strong>failure</strong> — <code>hub-test</code>, every other job green</td></tr>
+    <tr><td>34021749795</td><td><code>6f58c27</code></td><td><span class="pill ok">success</span></td></tr>
+    <tr><td>34021772159</td><td><code>cf9045e</code></td><td><span class="pill ok">success</span></td></tr>
+    <tr><td>34022198666</td><td><code>5891d5a</code></td><td><span class="pill ok">success</span></td></tr>
+    <tr><td>34022656334</td><td><code>89361fb</code></td><td><span class="measured">in progress</span></td></tr>
+    <tr><td>34023082503</td><td><code>cbbd50c</code> (HEAD)</td><td><span class="measured">in progress</span></td></tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>The good half:</strong> the three completed runs immediately after the failure were all
+  green, so condition&nbsp;3 is <em>satisfiable</em> — this morning's "two most recent completed runs
+  both failed" was a run of bad luck, not a permanent state. On today's sample the gate has roughly a
+  five-in-six chance of finding a green run at any given HEAD.
+</p>
+
+<p>
+  <strong>The bad half, and it is the reason DAY-2 exists:</strong> <code>34021133812</code> is the
+  <strong>sixth</strong> recorded occurrence of F292 and the <strong>first inside a day window</strong>
+  — <code>3966 passed, 18 skipped, 1 error in 870.39s</code>,
+  <code>ERROR at setup of test_reviewer_is_not_the_author.py::test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted</code>,
+  <code>sqlite3.OperationalError: database is locked</code>. Read first-hand with
+  <code>gh run view 34021133812 --log-failed</code>, and recorded in the ledger this iteration.
+  <strong>No run on this branch has ever failed in any other way.</strong>
+</p>
+
+<div class="note">
+  <strong>The gate cannot tell a red run from a regression.</strong>
+  Every failure on this branch has been F292 and every one has been the only error in its run — so
+  the honest reading is that a red <code>hub-test</code> here is noise. But nothing automates that
+  reading. A gate that re-runs on red would have landed this branch on any of three separate
+  mornings; a gate that trusts red would eventually land a real regression. That trade is DAY-2.
+</div>
+
+<h3>F292's diagnostic printed a third identical negative</h3>
+
+<p>
+  The night window instrumented this (<code>6693d1d</code>, 180 lines of failure-path diagnostic in
+  <code>hub/tests/conftest.py</code>; no fixture behaviour changed). It has now fired in CI three
+  times, and all three printouts are <strong>character-for-character identical</strong> apart from
+  timestamps:
+</p>
+
+<pre><code>F292 DIAGNOSTIC: the schema reset failed. Who was holding the database:
+  [before dispose] registry: no connection checked out
+  [before drop_all] registry: no connection checked out
+  [at failure] registry: no connection checked out</code></pre>
+
+<p>
+  That is a <strong>result, not a miss</strong> — N-1 proved the instrument names its culprit on a
+  forced reproduction, printing the test, the asyncio task, the source line and
+  <code>IN TRANSACTION</code>. So the holder is <em>not</em> a connection checked out from
+  <code>hub.db.engine.engine</code>, which falsifies both the standing hypothesis
+  (<em>"a session that wrote and did not commit, held across the test boundary"</em>) and
+  <code>conftest.py</code>'s own comment, which blames a live <code>JobScheduler</code>.
+</p>
+
+<p>
+  D-1 then killed a second candidate <strong>by measurement</strong>: APScheduler's separate sync
+  engine (<code>scheduler.py:2367</code>) is documented at <code>api/v1/jobs.py:497-517</code> as a
+  real cause of this exact error in the product — but it is <strong>never started in tests</strong>.
+  <span class="measured">One surviving lead, labelled hypothesis:</span> alembic's own async engine
+  (<code>migrations/env.py:51</code>), driven from a default-executor worker thread by
+  <code>_run_alembic_upgrade</code> (<code>db/engine.py:54-107</code>). The <code>app</code> fixture
+  no-ops it per test, and <code>test_migrations.py::test_init_db_runs_alembic_for_file_db</code> runs
+  the real thing.
+</p>
+
+<div class="ask" id="day2">
+  <h4>DAY-2 — is F292 worth a night-window slot?</h4>
+  <p>
+    It blocks the merge gate in practice and is <strong>not caused by anything the loop changed</strong>
+    — it is residue from the F285 fix you made on 2026-09-04, which was right and is not in question.
+    Two hypotheses are now dead by measurement and one concrete lead survives, so the job is smaller
+    than it was yesterday but still night-sized. Chase it to a root cause, or have the gate tolerate a
+    re-run?
+  </p>
+  <p class="small">
+    The adjacent question is still open in <code>STATE-night.json</code> as DEC-1: <em>may the night
+    window take a second guess at <code>hub/tests/conftest.py</code>'s behaviour?</em> The last change
+    made to that file on this evidence (<code>be6a70d</code>) did not hold. A
+    <code>DIRECTION.md</code> line is the cheapest way to steer it.
+  </p>
+</div>
+
+<h2 id="s2"><span class="num">2</span>What the night built, and which of it was driven</h2>
+
+<p>
+  Six commits. <strong>One carries product code.</strong>
+</p>
+
+<h3><code>3142a91</code> — a spent checkpoint refuses its second cutover <span class="fid">(F126)</span></h3>
+
+<p>
+  Roughly twenty lines in <code>hub/hub/checkpoint_cutover.py</code>. <code>cut_over</code> now
+  refuses when <code>predecessor.lifecycle == "archived"</code>, which is what makes a cutover happen
+  at most once per conversation. Before it, a second press minted a second successor with the same
+  title and the same lineage, delivered it the same checkpoint, and burned a whole billed turn
+  rediscovering that its work was done.
+</p>
+
+<p>
+  Two things the night was honest about, and both matter to §3:
+</p>
+
+<ul>
+  <li>
+    <strong>It is not the shape the finding recommended.</strong> F126 asked for shape (2), a
+    <code>cut_over_to_conversation_id</code> column. That needs a migration, which the no-spec repair
+    carve-out does not permit — and shape (1) as worded is not implementable without shape (2),
+    because nothing durably links a queue entry to a checkpoint. So the guard is a
+    <strong>proxy</strong> for <em>"this checkpoint is spent"</em>, and a <strong>superset</strong> of
+    the reported defect: it also refuses a cutover from a conversation archived by hand. Recorded as
+    a widening, not as an equivalent.
+  </li>
+  <li>
+    <strong>It was driven 13/13 — by the process that wrote it.</strong> Mutation-checked (delete the
+    guard and exactly two named tests fail, the other 39 pass), and the duplicate was printed directly
+    from the guardless tree. Good work, and still self-verified. That is why D-2 re-drove it today
+    from a fresh Hub, a fresh database and a throwaway project.
+  </li>
+</ul>
+
+<h3>The rest of the night, which shipped no code and was right not to</h3>
+
+<table>
+  <thead><tr><th>Item</th><th>Outcome</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>N-1 / N-1b</strong><br><span class="small">instrument F292</span></td>
+      <td>
+        Found the measurement the finding asked for was <strong>structurally blind</strong>:
+        <code>AsyncEngine.dispose()</code> <em>replaces</em> the pool, so <code>pool.checkedout()</code>
+        is 0 in exactly the situation being diagnosed. Built a checkout registry on engine-level events
+        instead. Test infrastructure only; no fixture behaviour changed.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>N-2</strong><br><span class="small">reconcile the open-severity-A index</span></td>
+      <td>
+        <strong>The item's own premise fell first.</strong> The index does not still say "one — F271";
+        that line was superseded twice. The real defect was a <strong>missing definition</strong>, not
+        a count: six severity-A sections say they are open (F271, F274, F140, F142, F154, F155) while
+        the index counted two, because four sit in a "third state" whose banner reads <em>"stays open
+        until somebody re-drives it"</em>. CLAUDE.md decides it: <strong>the list is six.</strong>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>N-4</strong><br><span class="small">F3, <code>contact_mode</code> default</span></td>
+      <td>
+        Ran the no-spec-repair carve-out gate and <strong>failed it</strong>. Nothing implemented, and
+        that is the correct outcome — the playbook says discovering a change wants a spec is a good
+        result. The gate's answers are written down: the honest fix is a <em>removal</em>, it makes a
+        shipped scenario in <code>runner-registry/spec.md:186-201</code> unreachable, and you already
+        decided this class on 2026-08-29 under F111.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="s3"><span class="num">3</span>What today's drive found</h2>
+
+<p>
+  D-2 drove the night's guard on a <strong>fresh Hub on port 8011</strong>, from source, with a fresh
+  database and a throwaway project (<code>proj-d2drive</code>). Staleness check empty on both
+  launches; no runner bound, no turn spent, no job created, Hub stopped afterwards. New fixtures are
+  tracked at <code>scripts/drive/setup_d2_cutover.py</code> and
+  <code>scripts/drive/t_d2_cutover_guard.py</code>.
+</p>
+
+<p>
+  <strong>Twelve of twenty verdicts held. The eight that did not are these two findings.</strong>
+  The night's 13/13 reproduces exactly and nothing it claimed is retracted — F126's Status is amended
+  in place to <em>"narrowed, not closed"</em>. A negative was recorded too: the guard does
+  <strong>not</strong> over-refuse a legitimate two-hop chain.
+</p>
+
+<h3><span class="sev b">B</span> <span class="fid">F293</span> — following the refusal's own advice mints the duplicate it was built to prevent</h3>
+
+<p>
+  The guard reads only <code>predecessor.lifecycle</code>
+  (<code>checkpoint_cutover.py:97</code>), and the refusal it raises ends with:
+</p>
+
+<blockquote style="margin:.6rem 0 .6rem 1rem; padding-left:.9rem; border-left:3px solid var(--rule-strong); color:var(--ink-dim);">
+  …if this one was cut over already, its successor holds the work, and if it was archived by hand,
+  <strong>unarchive it first</strong>.
+</blockquote>
+
+<p>
+  <code>POST …/conversations/{c}/unarchive</code> (<code>agent_chat.py:549</code>) is documented as
+  <em>"Never refused — reopening obstructs nothing."</em> It sets <code>lifecycle = "open"</code> and
+  nothing else. So an operator who reads the 409, <strong>does what it says</strong>, and presses
+  again gets F126 back in full.
+</p>
+
+<pre><code>POST .../checkpoints/ckpt-9476f5dc1d25/cutover                 200  successor conv-d4609d88f98f
+POST .../checkpoints/ckpt-9476f5dc1d25/cutover                 409  "...unarchive it first."
+POST .../agent/delta/conversations/conv-d2-unarchive/unarchive 200  lifecycle: open
+POST .../checkpoints/ckpt-9476f5dc1d25/cutover                 200  successor conv-7b9118e2c2f7</code></pre>
+
+<p class="measured">Reproduced twice, on two separate fresh databases. Two successors of one predecessor; two undelivered checkpoint entries.</p>
+
+<p>
+  The refusal cannot tell the two cases apart because <strong>nothing in the schema records that this
+  checkpoint was already handed over</strong> — which is precisely the column F126 recommended and the
+  night deferred. The guard that shipped is a proxy, and the proxy is <strong>erasable by a route
+  documented as never refusing</strong>.
+</p>
+
+<h3><span class="sev b">B</span> <span class="fid">F294</span> — two simultaneous presses both return 200</h3>
+
+<p>
+  This is <strong>the case F126 itself named</strong> as how the defect reaches an operator in the
+  wild — <em>"a second browser tab, a reload between the 201 and the cutover, a retried request after
+  a network timeout, or any non-UI client"</em> — and it is the one the guard does not close, because
+  every one of those is <strong>concurrent</strong>, not sequential.
+</p>
+
+<p>
+  <code>cut_over</code> reads <code>predecessor.lifecycle</code> at <code>:97</code> and writes it at
+  <code>:144</code>, committing at <code>:145</code>. Between the two it awaits
+  <code>archivable</code>, creates the successor and builds the queue entry. Two requests inside that
+  window each get their own <code>AsyncSession</code>, each read <code>open</code>, and each mint a
+  successor. There is no row claim — unlike <code>take_checkpoint</code>, which holds
+  <code>_checkpoint_claims</code> three files away for the <em>cheaper</em> half of the same pair — no
+  <code>SELECT … FOR UPDATE</code>, and no uniqueness constraint a second insert could violate.
+</p>
+
+<pre><code>press 0  200  successor conv-52fc8929e0fd  entry-21a198de0def
+press 1  200  successor conv-f29dbde784d8  entry-0865f3946f88</code></pre>
+
+<p>
+  Two 200s, no 409, no 500. The predecessor is archived twice, which is harmless because
+  <code>archive()</code> is idempotent in effect — so nothing downstream errors and nothing surfaces.
+  <strong>The duplicate is silent</strong>, and the second delivery is a billed turn whenever the
+  agent next runs.
+</p>
+
+<div class="note">
+  <strong>Note what F294 does not say.</strong> Shape (2) alone does not fix it either. A
+  <code>cut_over_to_conversation_id</code> column read at <code>:97</code> and written at
+  <code>:145</code> races in exactly the same window. <strong>The fix has to be a claim or a
+  constraint, not another field to read.</strong>
+</div>
+
+<p>
+  <strong>These two are the strongest candidates for the next spec loop, and one change answers
+  both</strong> — F126's deferred shape-(2) column, <em>plus</em> a claim or a uniqueness constraint
+  over it. F293 needs the durable record so the refusal can tell "already handed over" from "archived
+  by hand"; F294 needs the database or an in-process claim to serialise the window. Neither is
+  specced yet, so neither is work the night window can pick up on its own.
+</p>
+
+<h2 id="s4"><span class="num">4</span>What was specced</h2>
+
+<div class="card">
+  <h3 style="margin-top:0"><code>2026-09-06-an-unread-editor-cannot-overwrite</code></h3>
+  <dl class="kv">
+    <dt>Finding</dt><dd><span class="sev a">A</span> <span class="fid">F271</span> — driven live 2026-09-02 against the served bundle, 19 assertions</dd>
+    <dt>Capability</dt><dd><code>project-instructions</code> — 1 MODIFIED requirement, 2 ADDED</dd>
+    <dt>Tasks</dt><dd>0/19 → 0/21 → <strong>0/24</strong> across the three rounds</dd>
+    <dt>Validation</dt><dd><code>openspec validate --strict</code> passes</dd>
+    <dt>Migration</dt><dd>None. UI-only change — the committed bundle must be rebuilt and <code>make ui</code> run.</dd>
+  </dl>
+</div>
+
+<h3>The defect, in one line</h3>
+
+<p>
+  When the GET that loads a project's instructions fails, the Instructions page renders exactly what
+  it renders for a project that has never had any: an <strong>empty textarea with an enabled Save
+  button</strong>. One click, with nothing typed, replaces the project's instructions with the empty
+  string. Nothing on screen says a load failed, before, during or after.
+</p>
+
+<pre><code>stored before Save: 'ALPHA PROJECT RULES\n\n- Never force-push.\n- Every PR needs a test.\n'
+stored after  Save: ''</code></pre>
+
+<p>
+  <strong>Why severity A rather than B.</strong> Project instructions are prepended to every agent's
+  canonical turn context and to every charter the Hub serves, and <strong>both consumers gate on the
+  content being non-empty</strong> — <code>agents.py:1529-1533</code> emits
+  <code>## Project Instructions</code> only <code>if project_instructions:</code>, and
+  <code>get_charter_context</code> prepends only <code>if instructions_row and
+  instructions_row.content</code> (<code>:2119-2121</code>). So blanking the row does not
+  <em>degrade</em> the context, it <strong>removes the section entirely</strong>, and every charter
+  silently reverts to its unprepended text. No history, no undo, no confirmation.
+</p>
+
+<h3>The gate is <code>data</code> present, not <code>isError</code> — and that is a decision, not a detail</h3>
+
+<p>
+  R1 built a four-state table from the <strong>installed</strong> query-core
+  (<code>isLoading = isPending &amp;&amp; isFetching</code>, <code>queryObserver.js:310</code>;
+  <code>@tanstack/react-query</code> 5.90.21 bundled, <code>^5.62.16</code> being the declared floor)
+  and found <strong>two</strong> states fall through to the editor today, not one: error, <em>and</em>
+  a disabled query. Gating on "not errored" would fix one of them.
+</p>
+
+<p>
+  <strong>Ordering is load-bearing and is its own scenario.</strong> <code>data</code> is checked
+  <em>before</em> <code>isError</code>, so a background refetch failure cannot take a loaded editor
+  away from an operator mid-edit. query-core ships R1's ordering as two named flags —
+  <code>isLoadingError = isError &amp;&amp; !hasData</code> and <code>isRefetchError</code> — which is
+  corroboration, not the source.
+</p>
+
+<h3>Neither review round was a no-op, and this is the sixth consecutive outing</h3>
+
+<p>
+  The round discipline costs three passes before a line is implemented. It has now found a real defect
+  on six consecutive changes. Here is what each round paid for.
+</p>
+
+<h4>Round 2 — the gate does not reach the button it needs to gate</h4>
+
+<p>
+  R2 re-derived R1's argument from the cited files before reading its prose. Every citation checked
+  out and the central claim survived. Then:
+</p>
+
+<p>
+  <strong>Save is not inside any of the branches R1 was rewriting.</strong> The button is passed to
+  <code>SettingsSection</code> as its <code>actions</code> prop
+  (<code>InstructionsPage.tsx:36-43</code>) and rendered in the section <em>heading</em>
+  (<code>SettingsSection.tsx:58</code>) — a <strong>sibling</strong> of <code>{children}</code>
+  (<code>:60</code>), where the <code>:45</code> branch lives. Two consequences:
+</p>
+
+<ul>
+  <li>R1's three-branch rewrite <strong>does not reach Save</strong>; task 1.4's "not rendering Save in the failure block" was <strong>not implementable as written</strong>.</li>
+  <li>
+    <strong>The loading state is a second live one-click blanking path, today, independent of the
+    error state.</strong> While the skeleton is on screen, Save is rendered and enabled
+    (<code>disabled</code> is <code>saveMutation.isPending</code> alone) and <code>content</code> is
+    still <code>''</code>. On a fast failure that window is short (<code>retry: 1</code>); against a
+    request that <em>hangs</em>, <code>isPending &amp;&amp; isFetching</code> stays true and the window
+    is <strong>unbounded</strong>.
+  </li>
+</ul>
+
+<p class="small">
+  The requirement text needed no change — its wording already forbade this. R2 added a scenario
+  (<em>A read still in flight issues no write</em>), unit test 2.3, and drive column 4.1b.
+</p>
+
+<h4>Round 3 — the delta required the disclaimer in the state the change removes it from</h4>
+
+<p>
+  R3 read the component, <code>SettingsSection</code>, the hook, the client, the route, the store and
+  the navigation hook <strong>before</strong> opening R1's or R2's prose. Four things came out of it,
+  and the first is the defect.
+</p>
+
+<p>
+  <strong>(1) The change promised two contradictory things.</strong> R1 conditionalised two of the
+  shipped requirement's three scenarios on the read succeeding, and left the third —
+  <em>Disclaimer shown</em> — with an unconditional trigger, <em>"WHEN Instructions screen is
+  displayed"</em>. But the session disclaimer is rendered <strong>inside</strong> the block the change
+  replaces (<code>InstructionsPage.tsx:63-74</code>), and the requirement's own rewritten text already
+  conditions it on the read. <strong>A conforming implementation had to both show and not show
+  it.</strong> R2 re-derived the whole delta and did not catch it.
+</p>
+
+<div class="note">
+  <strong>That is the 2026-08-28 shape exactly: not a wrong outcome, a wrong <em>argument</em>.</strong>
+  Two rounds checked what the delta promised; neither checked whether it promised two different things.
+  A review that only checks outcomes cannot find this — only a round that re-derives the argument can.
+</div>
+
+<p>
+  <strong>(2) R2's evidence for the scope rejection was false.</strong> R2 reported <em>zero of the
+  eight</em> environment pages reads a read query's error state, from a grep for
+  <code>isError</code>. <code>WorktreesPanel.tsx:21</code> binds <code>error</code> from
+  <code>useWorktrees()</code> and <code>:44-50</code> renders <code>role="alert"</code> —
+  <em>"Could not read this project's checkouts."</em> The count is <strong>one of eight</strong>. The
+  rejection stands (seven pages are still unmeasured) and the sentence is corrected.
+</p>
+
+<p>
+  <strong>(3) That page is prior art, and this is the bigger half.</strong> Same
+  <code>SettingsSection</code> family, same environment tab, <strong>the same three branches this
+  change proposes</strong> (<code>:44</code>, <code>:56</code>, <code>:64</code>) — and its comment at
+  <code>:52-55</code> had already decided the disabled-query question R1 called "derived, not driven"
+  and R2 spent its open section on:
+</p>
+
+<blockquote style="margin:.6rem 0 .6rem 1rem; padding-left:.9rem; border-left:3px solid var(--rule-strong); color:var(--ink-dim);">
+  <code>!data</code> covers more than the fetch in flight: with no project selected the query is
+  disabled and never resolves, so there is no answer rather than an empty one. Both are "nothing to
+  say yet", and neither is a failure — reporting either as an error would be the same lie in the other
+  direction.
+</blockquote>
+
+<p>
+  So the <code>data</code>-present gate is <strong>the convention the codebase already holds</strong>,
+  not this change's taste, and <code>InstructionsPage</code> is the page that departs from it. Task
+  1.2 now names the file to copy, with the one deliberate divergence stated: WorktreesPanel tests
+  <code>error</code> first, this page tests <code>data</code> first, because a worktrees list is
+  read-only and an instructions textarea is typed into.
+</p>
+
+<p class="small">
+  Worth knowing for the follow-up: <strong>no requirement in any of the 30 shipped specs states what a
+  section owes on a failed read</strong>, so WorktreesPanel is unspecced code precedent and can regress
+  without breaching anything. A capability-wide requirement should codify the shape that exists rather
+  than invent one — but it was <strong>rejected on the record</strong> in this change's
+  <code>design.md</code>, because it would promise behaviour on eight pages of which one has been
+  measured.
+</p>
+
+<p>
+  <strong>(4) A narrowing neither earlier round asked for: the disabled row cannot destroy.</strong>
+  <code>enabled</code> is <code>isConfigured &amp;&amp; !!projectId</code>, and
+  <code>useSaveInstructions</code> builds its URL <em>and</em> its credential from the same two values
+  — so no <code>projectId</code> PUTs to a path <code>get_project</code> 404s on
+  (<code>auth.py:156-158</code>), and no <code>apiKey</code> PUTs with no bearer token it 401s on
+  (<code>:144-148</code>). Read from the route. <strong>Two live destruction paths, not three</strong>
+  — the third is misinformation only. No requirement moves (the gate covers all three; an empty editor
+  over content nobody read is a lie whether or not the Save lands), but the proposal no longer claims
+  the larger number.
+</p>
+
+<h4>And reading both specs end to end found a shipped requirement the component breaches today</h4>
+
+<p>
+  <code>project-environment-settings</code> — <em>Saving reports its outcome</em> — requires a failed
+  save to <em>"state why in the section rather than only in a log"</em>. <code>InstructionsPage</code>
+  never reads <code>saveMutation.isError</code> or <code>.error</code>: <code>:20-26</code> binds
+  <code>isSuccess</code> alone. <strong>A rejected PUT re-enables the button, renders nothing, and
+  leaves the operator believing the save landed.</strong>
+</p>
+
+<p>
+  Folded into this change as tasks 1.6 and 2.8 rather than filed separately, on three recorded
+  grounds: it is measured on one page, it is the <em>same defect class in the same component</em> —
+  the page saying something untrue about its own state — and it needs <strong>no delta</strong>, since
+  the requirement already binds. A page that starts announcing read failures while still swallowing
+  save failures is less coherent than one that announced neither.
+</p>
+
+<p class="small">
+  The other direction is clean. <em>A configuration section states what it governs</em> survives the
+  new failure state, because <code>SettingsSection</code> renders title and description in the heading
+  (<code>:45-57</code>), outside the <code>{children}</code> the branch replaces — <strong>but only if
+  the implementation replaces the branch rather than the whole section.</strong> That is an easy and
+  invisible way to breach it, so it is now task 1.5.
+</p>
+
+<div class="ask" id="day3">
+  <h4>DAY-3 — should a save that blanks non-empty instructions confirm first?</h4>
+  <p>
+    This change deliberately leaves that alone. The empty string is a value the route accepts
+    <em>on purpose</em> — <code>InstructionsUpdate</code>'s docstring records that the field was named
+    precisely so no mis-shaped body could blank the row — and <em>"clear my instructions"</em> is a
+    legitimate ask. Whether the product should nonetheless confirm before a destructive overwrite is
+    yours, not the loop's.
+  </p>
+  <p class="small">
+    Recorded in <code>design.md</code> as an explicitly rejected alternative, with the note that it
+    would <strong>not be sufficient on its own</strong>: it does nothing about the misleading empty
+    editor, and a client that cannot tell "not loaded" from "empty" would still be lying to you with
+    the confirmation dialog on screen. Nothing in the change depends on the answer either way.
+  </p>
+</div>
+
+<h2 id="s5"><span class="num">5</span>What tonight does if you approve nothing</h2>
+
+<p>
+  Nothing breaks and nothing stalls. Under <code>.claude/loops/night-window.md</code>, an
+  <code>APPROVALS.md</code> section with no <code>APPROVED</code> row is <strong>normal</strong> — the
+  whole window falls to the backlog, in this order:
+</p>
+
+<ol>
+  <li>
+    <strong>Unarchived changes that are implemented and only need archiving.</strong>
+    <span class="pill">empty tonight</span> Both open changes are unimplemented —
+    <code>2026-09-05-the-conversation-carries-its-own-run-facts</code> at 0/44 and today's at 0/24.
+  </li>
+  <li>
+    <strong>Open findings from the ledger, severity A before B before C</strong> — but
+    <em>"a finding with no proposal needs the day window first."</em> The open-A list is
+    <strong>six</strong> after last night's N-2 (F271, F274, F140, F142, F154, F155); F271 and F274
+    now have proposals, and the other four are the "needs a re-drive" state. So this step lands on
+    B-severity findings with no proposal, which by the same rule become notes to tomorrow rather than
+    work — or on F292, if DAY-2 says so.
+  </li>
+  <li><strong><code>APPROVED</code> rows</strong> — none, in this branch of the decision.</li>
+</ol>
+
+<div class="note">
+  <strong>The honest reading of that list: a second quiet night is likely.</strong> Step 1 is empty,
+  step 3 is empty by construction, and step 2's own rule pushes most of what is left back to the day
+  window. The two things that would give tonight real work are an <code>APPROVED</code> row on the
+  change in §4, or a <code>DIRECTION.md</code> / <code>APPROVALS.md</code> line answering DAY-2.
+  Either one is a single line.
+</div>
+
+<p>
+  Writing <code>NOTHING TONIGHT</code> is also a valid answer, and a cheaper one than silence: the
+  window logs it, sets <code>next_action</code> to null and exits without spending a model invocation.
+</p>
+
+<h2 id="s6"><span class="num">6</span>Research — three candidates, ranked</h2>
+
+<p class="small">
+  Full evidence in <code>spec-queue/research/2026-09-06.md</code>. Read last and briefly: none of this
+  is proposed, and none of it competes with §4 for tonight.
+</p>
+
+<p>
+  <strong>The framework surface was genuinely quiet, and that is a measurement.</strong> Across twelve
+  watched repositories, exactly one release published in 24 hours — Claude Code v2.1.263, whose entire
+  body is <em>"Bug fixes and reliability improvements"</em>. So every candidate below comes from one
+  vendor engineering post, two papers, and AgentWeave's own code.
+</p>
+
+<table>
+  <thead><tr><th>#</th><th>Candidate</th><th>Cost</th><th>What it means for AgentWeave</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>1</strong></td>
+      <td>Make a review verdict say <strong>which tree it was produced against</strong> — record the review checkout's dirtiness at the moment the verdict is recorded</td>
+      <td>S/M</td>
+      <td>
+        GitHub's HydraFusion (2026-09-04) ships <em>"isolated review: run review steps in isolated,
+        tool-less contexts"</em> as an operating principle. AgentWeave's <code>review_turn.py:15-17</code>
+        names the identical failure — <em>"a reviewer that is not told it is reviewing will helpfully
+        fix the bug itself and report the work as verified"</em> — and answers it with a sentence,
+        conceding one line later that <em>"the boundary can only enforce where the agent may act, never
+        what it thinks it is doing"</em>. <strong>F143 is open</strong>: a flow's review firing composes
+        the <em>implementation</em> briefing verbatim, and the agent's own transcript says
+        <em>"This is confusing."</em> The gap is narrower than "the reviewer can write" — D2 makes a
+        reviewer's edit harmless to the <em>repository</em>, not to the <em>verdict</em>. The cheap fix
+        is one recorded fact, in the product's own <em>record-and-surface</em> idiom, not a refusal.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>2</strong></td>
+      <td>Let the project token budget <strong>bound the turn that exceeds it</strong></td>
+      <td>S</td>
+      <td>
+        The budget is real and shipped, and it is a gate evaluated <strong>once, before dispatch</strong>,
+        for autonomous turns only (<code>turn_scheduler.py:310-312</code>); usage is written once, at run
+        end. <strong>The live figure already exists in memory</strong> at
+        <code>agent_trigger.py:2124-2129</code> and is read by nothing. Two products a day apart — one
+        enterprise, one a Show HN — treat a per-run ceiling as table stakes rather than a refinement.
+        Distinct from F240, which is about spend that reaches no total at all.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>3</strong></td>
+      <td>Give the Hub a way to <strong>survive a reboot</strong></td>
+      <td>M</td>
+      <td>
+        Moadim (Show HN 2026-09-05) is AgentWeave's loops capability as a standalone daemon and makes
+        <code>moadim install</code> — launchd/systemd registration — a headline feature. Grepped across
+        all 43 shipped capabilities for <code>systemd</code>, <code>launchd</code>,
+        <code>autostart</code>, <code>Scheduled Task</code> and "survives a reboot": <strong>zero
+        matches</strong>. The only two files in this repository that know how to do it are the
+        project's own <em>harness</em>, not its product. <strong>Ordering caveat, and it is the
+        research's own:</strong> a Hub that starts itself starts its loops, so this must not ship
+        before candidate 2 — and if only one is built, build 2.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="small">
+  One line more, because it is a retraction rather than a proposal: yesterday's candidate 2 (review
+  independence compared by agent name, while two agents may share one runner) is <strong>not
+  re-proposed</strong>, and one of the three reasons is that its own stated objection has expired —
+  <code>TurnUsage</code> already carries <code>runner</code> and <code>model</code> as resolved at the
+  turn, so the ancestry is a join, not two new columns.
+</p>
+
+<footer class="page">
+  <p>
+    Written by the FILL window on <code>autonomous/2026-09-04-daily</code>, 2026-09-06.
+    Every number on this page is measured from the repository, the ledger, or <code>gh run view</code>
+    at the time of writing; anything inferred is labelled. The two CI runs marked
+    <em>in progress</em> were still running when this was written and may have concluded since.
+  </p>
+  <p>
+    Approvals: <code>spec-queue/APPROVALS.md</code> ·
+    Findings: <code>scripts/drive/FINDINGS.md</code> ·
+    Research: <code>spec-queue/research/2026-09-06.md</code> ·
+    Change: <code>openspec/changes/2026-09-06-an-unread-editor-cannot-overwrite/</code>
+  </p>
+</footer>
+
+</div>
+</body>
+</html>

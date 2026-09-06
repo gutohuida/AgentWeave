@@ -16,6 +16,74 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-06
+
+Review page: `review/review-2026-09-06.html`. **One change proposed, taken through all three
+rounds.** Neither review round changed nothing, for the **sixth consecutive outing**. Round 2 found
+that the change's own gate could not reach the button it needed to gate -- `Save` is rendered in
+`SettingsSection`'s heading, a sibling of the `{children}` the rewritten branch lives in -- which
+made task 1.4 unimplementable as written and exposed the **loading** state as a second live
+one-click blanking path, unbounded against a request that hangs. Round 3 found the delta required
+the session disclaimer in the very state the change removes it from, so a conforming implementation
+had to both show and not show it; that is the 2026-08-28 shape, a wrong *argument* rather than a
+wrong outcome, and round 2 had re-derived the whole delta without catching it.
+
+**Written by the day window, which does not fill in its own verdict.** The row below carries no
+status token. Write `APPROVED`, `REVISING` or `REJECTED` in front of the change name.
+
+-           2026-09-06-an-unread-editor-cannot-overwrite   F271 (A). 24 tasks. UI-only, no migration. A failed instructions GET renders the same empty textarea and enabled Save as a project with no instructions, so one click blanks the row -- and both consumers gate on non-empty, so it removes the section from every turn's context and un-prepends every charter. The gate is `data` present rather than `isError`, checked *before* the error state so a background refetch failure cannot take a loaded editor from you mid-edit. Round 3 found `WorktreesPanel` already ships this exact three-branch shape one page over, which makes it the codebase's convention rather than this change's taste. UI change means the committed bundle must be rebuilt and `make ui` run.
+
+**Two things round 3 folded in that are worth knowing before you decide.** The change now also fixes
+a **shipped requirement the component breaches today**: `project-environment-settings`' *Saving
+reports its outcome* requires a failed save to state why in the section, and `InstructionsPage` never
+reads `saveMutation.isError` -- a rejected PUT re-enables the button and renders nothing. No delta
+needed, since the requirement already binds. And the scope was **narrowed against the proposal's own
+interest**: of the three states that render an empty editor over unread content, only two can
+actually destroy -- the disabled-query row sends its PUT to a path the route 404s or 401s on, so it
+is misinformation, not data loss. The gate is unchanged; the claim is smaller.
+
+**Read section 1 of the page before deciding anything.** The branch is 36 commits deep, spans three
+days, and is unmerged. The merge gate did not open: dormant under this window's seeded limit
+(`limits[0]`, re-seeded every cycle from `arm-cycle.ps1`), and it would have failed condition 3
+regardless. **DAY-1** asks whether you want that seeded line relaxed.
+
+**F292 is the reason condition 3 keeps failing, and today added a measurement in both directions.**
+CI run `34021133812` (`8902e53`) is the **sixth** occurrence and the first inside a day window --
+same signature, `hub-test` on Linux, sole error in the run. But the three completed runs immediately
+after it were all green, so condition 3 is *satisfiable*, just not reliable: one failure in six
+completed runs today. The N-1 diagnostic printed a **third character-identical negative**, which
+falsifies the standing mechanism at n=3 rather than n=2; D-1 additionally killed APScheduler's sync
+engine by measurement, leaving alembic's worker-thread engine as the one surviving lead. **DAY-2**
+asks whether chasing it is worth a night slot or whether the gate should tolerate a re-run. The
+night's own **DEC-1** -- may the window take a second guess at `hub/tests/conftest.py` -- is still
+open and is the adjacent question.
+
+**The strongest candidates for the next spec loop are today's two drive findings, and one change
+answers both.** D-2 re-drove the night's F126 guard independently on a fresh Hub and found **F293**
+(following the refusal's own *"unarchive it first"* mints the duplicate successor the guard exists to
+prevent, because `unarchive` is documented as never refused) and **F294** (two simultaneous presses
+both return 200, because the guard reads the lifecycle at `:97` and writes it at `:144` with nothing
+serialising the window -- exactly the retry/second-tab case F126 named). Each reproduced twice on two
+separate fresh databases. Both are answered by F126's deferred shape-(2) column **plus a claim or a
+uniqueness constraint**; the column alone races identically. Neither is specced, so the night window
+cannot pick either up on its own.
+
+**DAY-3 is the one product question this change deliberately did not answer.** Should a PUT that
+would replace non-empty stored instructions with the empty string confirm first? The empty string is
+a value the route accepts on purpose, and *"clear my instructions"* is a legitimate ask. Recorded in
+`design.md` as an explicitly rejected alternative, with the note that it would not be sufficient
+alone -- a client that cannot tell "not loaded" from "empty" is still lying to you with the dialog on
+screen. Nothing in the change depends on the answer.
+
+**If you approve nothing, tonight is probably quiet, and that is a real outcome rather than a
+failure.** The night playbook's backlog is: unarchived-but-implemented changes (none -- both open
+changes are at 0/44 and 0/24), then open findings severity A first (but *"a finding with no proposal
+needs the day window first"*, and the four remaining open As are the needs-a-re-drive state), then
+`APPROVED` rows (none). An `APPROVED` row above, or a `DIRECTION.md` line answering DAY-2, is a
+single line either way. `NOTHING TONIGHT` is also valid and cheaper than silence.
+
+---
+
 ## 2026-09-05
 
 Review page: `review/review-2026-09-05.html`. **One change proposed, taken through all three

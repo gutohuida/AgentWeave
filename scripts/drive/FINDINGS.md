@@ -20817,6 +20817,40 @@ Not a D-6 repair. The carve-out requires a fix smaller than the argument for it,
 argument is unfinished: the mechanism is not established, and the last change made to this file on
 this evidence did not work.
 
+**A sixth occurrence, 2026-09-06 09:10-09:25 (day D-6, while the review page was being written), and
+it is the first one inside a day window.** CI run `34021133812`, sha `8902e53`, `hub-test` on Linux,
+every other job green, the only error in the suite: `3966 passed, 18 skipped, 228 warnings, 1 error
+in 870.39s`, `ERROR at setup of
+test_reviewer_is_not_the_author.py::test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted`.
+Read first-hand with `gh run view 34021133812 --log-failed`.
+
+Three things it adds, and one it does not:
+
+- **The N-1 diagnostic printed a third identical negative.** All six registry lines match the two
+  overnight printouts character for character -- `no connection checked out` at every probe point,
+  the same `Current Overflow: -5` before and `-4` at failure. So the falsification recorded above is
+  now n=3, not n=2, and it is not an artefact of the overnight environment.
+- **The errored test is a repeat, not a new one.** It is the same test as `33998598976` (`3a96ddb`),
+  in the same module, at the same 66% progress marker as `33998517779`'s different test. Three
+  occurrences, two distinct tests, one module. D-1's reading -- *a sliding timing window, not a
+  particular test's leak* -- survives, and the repeat is what you expect from a window that lands in
+  the same place twice, not evidence for that test in particular.
+- **The run was the slowest of the three** (870.39s against 741.71s and 488.37s), all three of them
+  failures. The five completed runs on this branch today that *passed* are not directly comparable
+  from this data alone -- their durations were not read -- so this is an observation, not a
+  correlation. Named so a later run can test it cheaply.
+
+What it does **not** add: it does not change the surviving lead (alembic's own async engine, driven
+from a default-executor worker thread), and it does not make this a D-6 repair -- the paragraph above
+still holds.
+
+**The rate today, measured, because it is what the merge gate turns on.** Eight CI runs were queued on
+this branch between 07:55 and 08:52 UTC; six had completed by 10:00 local. **One failed, five passed**
+-- and the three completed runs immediately after the failure (`6f58c27`, `cf9045e`, `5891d5a`) were
+all green. So condition 3 is *satisfiable*, just not reliably: on today's sample the gate has roughly
+a five-in-six chance of finding a green run at any given HEAD, and no way to distinguish a red one
+from a real regression without reading the log.
+
 ---
 
 ## F293 (B) — the F126 guard is on the predecessor's lifecycle, so following the refusal's own advice mints the duplicate successor it was built to prevent
