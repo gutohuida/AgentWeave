@@ -8,18 +8,18 @@
     "parent_branch": "master",
     "parent_sha": "9fd9853",
     "stop_at": "2026-09-07T17:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-07-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-6",
-    "next_action": "D-6: spec loop ROUND 1 for the second change DIRECTION.md's 2026-09-07 section names -- confirm before a Save blanks non-empty project instructions. Explore the codebase FIRST, then write openspec/changes/<name>/ with proposal.md, design.md, tasks.md and the specs/<capability>/spec.md delta; `openspec validate --strict <name>` must pass before the round is done. `openspec new change` refuses a name starting with a digit, and --strict reads only a requirement's FIRST PHYSICAL LINE for the modal, so SHALL goes on line 1. Scope, from DIRECTION.md verbatim: an operator who has actually seen real content in the editor and clears it on purpose and hits Save should be asked to confirm. This is NEW SCOPE, not a correction to 2026-09-06-an-unread-editor-cannot-overwrite -- that change is already APPROVED and archived, and it fixes the misleading-empty-editor paths, not this honest-intentional-clear path. Two things DIRECTION.md tells the round to read before starting: (1) the API accepting an empty string as a real value is DELIBERATE (InstructionsUpdate's docstring says the field was named precisely so no malformed request could blank the row by accident) and is NOT in scope to change -- the confirmation is about the destructive-if-wrong UI action; (2) F271 HAS now shipped (c7e615c, archived 2026-09-06), so the round MUST confirm which of the component's new disabled/error/loading states 'non-empty' is measured against, so the confirmation cannot fire over a state that was never really loaded. CHECK FOR AN EXISTING CONFIRMATION PRIMITIVE in hub/ui/src before inventing one -- grep for existing confirm dialogs/modals; R3 on the last change found WorktreesPanel already shipped the exact shape that change was inventing, one page over. The change is UI-only in all likelihood, which means whoever implements it must rebuild the committed bundle and run `make ui` -- say so in tasks.md.",
+    "current": "D-7",
+    "next_action": "D-7: spec loop ROUND 2 for openspec/changes/2026-09-07-clearing-instructions-asks-first. This is NOT a re-read of R1's reasoning -- it is an independent comparison against what the code actually does. Open hub/ui/src/components/instructions/InstructionsPage.tsx, components/spec/ArchiveConfirmDialog.tsx, hooks/useDialogFocus.ts, components/environment/SettingsSection.tsx, api/instructions.ts, hub/hub/api/v1/instructions.py and hub/hub/db/models.py FIRST, then check every claim R1 made about them. Re-run R1's measurements rather than quoting them: the three-lines-of-grep claim about models.py, the actions={data ? ... : undefined} gate at :62 and SettingsSection.tsx:58/:60 rendering it outside {children}, the four confirmation shapes and their line numbers, and the byte-identity of the MODIFIED requirement header against openspec/specs/project-instructions/spec.md. THREE THINGS R1 EXPLICITLY DID NOT DO and R2 must not assume were done: (1) nothing was driven in a browser -- R1 read source only; (2) R1's belief that React Query structural sharing keeps `data` identity stable across a refetch returning unchanged content, so the useEffect at :40-44 does not clobber an in-progress edit, is UNMEASURED -- if it is false it is a pre-existing defect to FILE, not to absorb into this change; (3) trim() on the STORED side of the predicate is a judgement, not a measurement. R2's own most valuable target is probably the predicate and the MODIFIED requirement's wording -- check that qualifying the save scenario with 'and the edit does not replace non-empty stored instructions with nothing' does not accidentally exempt some other save from being required to persist. Fix the proposal where the code disagrees. Record explicitly what R2 did NOT do, so R3 does not assume it. `openspec validate 2026-09-07-clearing-instructions-asks-first --strict` must still pass at the end.",
     "queue": [
         {
             "id": "D-6",
-            "status": "open",
-            "title": "Spec loop R1 — confirm before blanking non-empty project instructions",
-            "detail": "See next_action for the full brief. Explore and propose. Do NOT collapse this into one item with R2/R3 -- the round discipline is expensive by design and the queue is deliberately expanded."
+            "status": "closed",
+            "title": "Spec loop R1 — CLOSED: 2026-09-07-clearing-instructions-asks-first, validates --strict",
+            "detail": "Closed at iteration 7. proposal.md, design.md, tasks.md (24 tasks) and the specs/project-instructions/ delta (one ADDED requirement with 6 scenarios, one MODIFIED). Measured, not assumed: the store is one row upserted in place with no history table, so the loss is unrecoverable; the confirmation's baseline is data.content and F271's actions gate already makes it structurally unreachable in the two unloaded states; four confirmation primitives already ship and none was invented. R1 found the change contradicts *Hub UI provides instructions editor*, archived one day earlier, and the delta MODIFIES it rather than shipping the contradiction."
         },
         {
             "id": "D-7",
@@ -63,6 +63,7 @@
         "This window does NOT implement. If you are editing hub/hub/ or src/agentweave/, stop -- the one exception is a drive harness fixture under scripts/drive/.",
         "A drive that reverts the served bundle to mutation-check MUST restore it and confirm `git status` is clean for hub/hub/static/ui before committing -- `git checkout <sha> -- <path>` stages the old files and leaves later assets behind as untracked additions. Iteration 2 hit this and cleaned it up.",
         "A probe that can hang gets an external timeout. probe_guard1.py with either argument, probe_r3_exhaust.py, and probe_r3_dispose_hang.py in `bare` mode all hang by design.",
-        "A line number quoted from spec-queue/APPROVALS.md goes stale the moment a section is inserted above it. Re-measure with grep -n before writing one down. Iteration 6 moved F274's row from :99 to :158."
+        "A line number quoted from spec-queue/APPROVALS.md goes stale the moment a section is inserted above it. Re-measure with grep -n before writing one down. Iteration 6 moved F274's row from :99 to :158.",
+        "R1 of 2026-09-07-clearing-instructions-asks-first drove nothing. Any later round quoting its component claims must re-measure them, and the round that drives is the one that closes the argument."
     ]
 }
