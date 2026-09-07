@@ -8,11 +8,11 @@
     "worktree": "C:\\Users\\huida\\Documents\\projects\\AgentWeave-sidequest",
     "parent_branch": "autonomous/2026-09-07-daily",
     "stop_at": "2026-09-07T22:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-07-overseer-log.md",
     "review_page": ".claude/autonomous/2026-09-07-sidequest-review.html",
     "current": null,
-    "next_action": "T-4",
+    "next_action": "T-5",
     "queue": [
         {
             "id": "T-1",
@@ -37,9 +37,10 @@
         },
         {
             "id": "T-4",
-            "status": "pending",
+            "status": "done",
             "title": "Append an overseer section to the existing review page",
-            "detail": "The operator reads ONE page. Append to .claude/autonomous/2026-09-07-sidequest-review.html rather than writing a second one, and while you are in there fix the header, which still says 'six iterations' and 'Eleven decisions' after S-10 made it eight and twelve. Same rules as before: self-contained, theme-aware, no external references, full wrapper kept. Say what each round CHANGED about the one before it; if a round changed nothing, say so. State plainly what could not be established without the open web or a running harness. Add the new decisions to the SQ series, continuing the numbering. Run scripts/drive/check_review_page.py and read its output rather than trusting its exit code."
+            "detail": "The operator reads ONE page. Append to .claude/autonomous/2026-09-07-sidequest-review.html rather than writing a second one, and while you are in there fix the header, which still says 'six iterations' and 'Eleven decisions' after S-10 made it eight and twelve. Same rules as before: self-contained, theme-aware, no external references, full wrapper kept. Say what each round CHANGED about the one before it; if a round changed nothing, say so. State plainly what could not be established without the open web or a running harness. Add the new decisions to the SQ series, continuing the numbering. Run scripts/drive/check_review_page.py and read its output rather than trusting its exit code.",
+            "result": "Appended as SECTION 7 to the existing page (49,524 -> 68,386 bytes); no second page written. check_review_page.py read rather than trusted: 10 checks all ok. Its 'findings on the page: 0' is NOT a regression -- the same script over `git show HEAD:` of the page printed 0 before this iteration, because that check greps section 3's fid markup and this page's section 4 uses a different one; recorded, not fixed. FOUR stale wrapper claims fixed, not the two the queue named: 'six iterations' -> eight sidequest + four overseer; 'Eleven decisions' -> eighteen (twelve in §6, six in §7.4); and two the queue did not name -- 'two spec loops / one new sibling repository' -> three and two, and 'nothing implemented in AgentWeave and nothing driven', which CONTRADICTED the page's own S-10 addendum describing a prototype that was driven. Also scoped the lede ('three proposals and two new local repositories') and §5's 'Two changes' -> 'Two changes from loops 1 and 2', pointing at §7's own table. §7 carries: the three separation measurements as a table; a per-round what-it-changed table in §2's markup, with an explicit note that no round changed nothing and that R2 and R3 each corrected a number the previous round had stated as a measurement; the spec table (17 reqs / 43 scenarios, 2 of 45 tasks done and both phase-0 round-discipline tasks); a could-not-establish list split by cause (open web / running harness / retention policy / no stranger has read it); and SQ-13..SQ-18, each tagged with its OV-n id so page and state file match. Witness read but not modified: still e2bb331, clean, no remote; openspec validate --changes --strict re-run -> 1 passed, 0 failed. SQ ids counted by script: 18 distinct, no gaps, no duplicate definitions."
         },
         {
             "id": "T-5",

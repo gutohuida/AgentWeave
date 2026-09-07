@@ -135,19 +135,21 @@
   <h1>Sidequest review — 2026-09-07</h1>
   <div class="sub">
     Branch <code>autonomous/2026-09-07-sidequest</code> · worktree
-    <code>…\AgentWeave-sidequest</code> · six iterations ·
-    <strong>two spec loops, both complete</strong> · one new sibling repository
-    (<code>continuity-kit</code>) · <strong>nothing implemented in AgentWeave and nothing driven</strong>
+    <code>…\AgentWeave-sidequest</code> · eight sidequest iterations + four overseer iterations ·
+    <strong>three spec loops, all complete</strong> · two new sibling repositories
+    (<code>continuity-kit</code>, <code>witness</code>) ·
+    <strong>nothing implemented in AgentWeave</strong>; one prototype built and driven, outside it
   </div>
 </header>
 
 <p class="lede">
   This run is <em>outside</em> the daily FILL/DECIDE/FIX cycle — separate worktree, separate branch,
   separate state file, separate scheduled task — so nothing here touches tonight's arming or
-  <code>spec-queue/</code>. It produced two proposals and one new local repository. It wrote no
-  product code, started no Hub, ran no agent turn and browsed no web, all by its own limits.
-  <strong>Eleven decisions are waiting for you in §6</strong>, and the first one is a security matter
-  unrelated to either loop.
+  <code>spec-queue/</code>. It produced <strong>three proposals and two new local repositories</strong>.
+  It wrote no AgentWeave product code, started no Hub, ran no agent turn and browsed no web, all by its
+  own limits.
+  <strong>Eighteen decisions are waiting for you</strong> — twelve in §6, six more in §7.4 — and the
+  first one is a security matter unrelated to any of the three loops.
 </p>
 
 <div class="note">
@@ -564,8 +566,9 @@
 <h2><span class="num">5</span>What was specced</h2>
 
 <p>
-  Two changes, both validating strictly, <strong>zero tasks implemented</strong> — this window
-  proposes and does not build, and it touched no AgentWeave product code at any point.
+  Two changes from loops 1 and 2, both validating strictly, <strong>zero tasks implemented</strong> —
+  this window proposes and does not build, and it touched no AgentWeave product code at any point. The
+  third loop's change is tabled separately in §7, under <em>What loop 3 specced</em>.
 </p>
 
 <table>
@@ -623,9 +626,9 @@
 <h2><span class="num">6</span>Decisions waiting for you</h2>
 
 <p class="small">
-  Eleven, in the order they arose. <strong>SQ-1 is the only one that is urgent</strong> and it is
-  unrelated to either loop. SQ-6 is carried from the daily cycle and is repeated here only because it
-  blocks the one change already ready to build; this run is forbidden to write to
+  Twelve here, in the order they arose, and <strong>six more in §7.4</strong> from the third loop.
+  <strong>SQ-1 is the only one that is urgent</strong> and it is unrelated to any of them.
+  SQ-6 is carried from the daily cycle and is repeated here only because it blocks the one change already ready to build; this run is forbidden to write to
   <code>spec-queue/</code> and did not.
 </p>
 
@@ -800,12 +803,285 @@ byte-identity acceptance tests were never attempted. And the open question worth
 firing on every handoff, and a tool whose first real run prints 308 lines can be right and still be
 switched off.</p>
 
+<h2><span class="num">7</span>Loop 3 — an overseer for harnesses AgentWeave did not spawn</h2>
+
+<p class="lede">
+  A third spec loop, asked for after the first two finished, seeded by
+  <code>openspec/explorations/2026-09-07-an-overseer-for-any-harness.md</code>: a system that connects to
+  any AI harness, records what the agents are doing, and offers metrics and governance over them. Three
+  rounds ran, each re-deriving against the code rather than re-reading the round before it. The output is
+  a <strong>second new sibling repository</strong> — <code>witness</code>, local, no remote, three commits
+  — holding one change that validates strictly with <strong>zero implementation tasks done</strong>.
+  <strong>Its own recommendation is propose-then-shelve</strong>, because every requirement in it is
+  downstream of data-policy questions only you can answer. Six of those are in §7.4.
+</p>
+
+<h3>The question the loop existed to settle, and the answer that replaced the seed's</h3>
+
+<p>
+  The seed asked: <em>is this a new product, or AgentWeave's Hub with the orchestration removed?</em> It
+  offered a distinction to test — <em>AgentWeave governs agents it spawns; an overseer governs agents it
+  does not control</em> — and R1 was told to test it, not inherit it. Tested: <strong>true, but a
+  restatement rather than evidence.</strong> It names the difference; it does not show the difference is
+  load-bearing. Three measurements do, and R2 re-derived all three independently and
+  <strong>confirmed all three</strong>:
+</p>
+
+<table>
+  <thead><tr><th style="width:34%">Measured</th><th>What it means</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>hub/hub/api/v1/agent_actions.py</code> mounts <strong>32 routes; all 32</strong> depend on
+        <code>get_agent_actor</code><br><span class="measured">R1 by reading, R2 by parsing</span></td>
+      <td>That dependency (<code>agent_auth.py:40-79</code>) resolves an <code>aw_run_</code> bearer against
+        <code>Run.capability_token_hash</code> where the run is <em>running</em> and its
+        <code>instance_id</code> is this process; the plaintext exists only in run memory. A harness the
+        Hub did not spawn cannot obtain one — not by policy, by construction.</td>
+    </tr>
+    <tr>
+      <td><code>TurnUsage.run_id</code> is a <strong>non-null unique FK</strong> to <code>runs.id</code>
+        (<code>models.py:1193-1195</code>), with <strong>no HTTP writer</strong> — 6 call sites in 2
+        non-route modules</td>
+      <td>AgentWeave can record a foreign agent's <em>text</em> but not its <em>tokens</em>. Cost is
+        structurally unreachable without first spawning.</td>
+    </tr>
+    <tr>
+      <td>The self-report ingestion routes sit under <code>prefix="/projects/{project_id}"</code> and depend
+        on <code>get_project</code> (<code>auth.py:134-159</code>)</td>
+      <td>They require the <strong>instance-operator</strong> credential, not a per-project ingestion key.
+        Letting a foreign harness self-report today means handing it every project on the instance.
+        <strong>The seed was wrong on both the paths and the auth model</strong>, and that error was the
+        whole of this row.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <strong>The framing was settled against the seed's reason and for a stronger one.</strong>
+  CLAUDE.md states the Hub's security property as <em>identity is never accepted from a request body or
+  header</em>. An overseer's core operation is to <strong>accept a record about an actor it never
+  authenticated</strong> — that is, to relax exactly that property. Building it inside the Hub means
+  adding a second, weaker identity tier to the system whose strength is having one. That is a security
+  argument, and it survives where the seed's taxonomy argument does not.
+</div>
+
+<h3>What each round changed about the one before it</h3>
+
+<table>
+  <thead><tr><th style="width:10%">Round</th><th>What it changed</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>R1</strong><br><span class="measured">wrote it</span></td>
+      <td>
+        Settled the framing above, then made <strong>two corrections and two additions to the seed</strong>.
+        Corrections: the ingestion paths and their auth model (row 3 above). Additions:
+        <strong>normalisation is not the gap</strong> — <code>hub/hub/runner_parsing.py</code> already
+        normalises three harnesses into one event model with secret redaction and UTF-8-safe truncation, so
+        it is a reference implementation to borrow rather than a hole to fill; and there is a
+        <strong>fourth capture surface the seed's table omits</strong>, the harness's own on-disk session
+        transcript, which needs no configuration, no administrator and no consent dialog, and is the only
+        surface that is <em>retroactive</em>. Precedent in-repo: <code>read_codex_rollout_accounting</code>
+        already reads Codex's own rollout file because stdout could not give a clean turn boundary — the
+        proposal is that technique with the spawn removed. Committed the product to the
+        <strong>passive lever only</strong> and to <strong>no scoring</strong>, and named it so the name
+        carries the commitment.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>R2</strong><br><span class="measured">specs changed</span></td>
+      <td>
+        Ran <code>parse_claude_line</code> <em>unmodified</em> over a real 2,070-line transcript rather than
+        reading it. It maps <strong>2 of the file's 16 record types</strong>; 859 lines produce an event;
+        <strong>0</strong> accounting samples; the session id lands on <strong>1,337 of 2,070</strong>
+        because the file writes <code>sessionId</code> and the parser reads <code>session_id</code>; and the
+        user branch emits only tool results, so <strong>the operator's prompt produces nothing</strong> — 6
+        genuine prose prompts dropped. <em>The event vocabulary transfers; the parser does not; and what
+        transfers cleanly is what Witness needs least.</em>
+        <strong>Three spec defects fixed.</strong> (1) The capability matrix was keyed per <em>surface</em>,
+        but reasoning text is present for Haiku and absent for Opus 5 and Sonnet 5 — by
+        <strong>model, within one harness, on one surface</strong>, across two file sets with zero overlap —
+        so entries became always/never/conditional, resolved per record. (2) <strong>No transcript carries a
+        <code>result</code> record and <code>total_cost_usd</code> appears in 0 files</strong>, so cost is
+        unobservable on the only implemented surface while tokens are on every sampled assistant message; a
+        fourth provenance state <code>derived</code> was added, with its inputs required to be measured.
+        (3) A new requirement that the record carries the instruction.
+        <strong>Two R1 claims falsified.</strong> “The content is already there, complete and unredacted” is
+        false for the two models you actually use — a completeness claim falsified by measurement
+        <em>inside the document proposing the completeness fix</em>, which is the strongest available
+        argument for building it. And “nothing in AgentWeave targets Copilot” is wrong: commit
+        <code>1c6970d</code> (2026-07-29) live-probed Copilot CLI 1.0.75, and its file exporter writes only
+        when <code>COPILOT_OTEL_FILE_EXPORTER_PATH</code> is set <strong>before spawn</strong> — so
+        Copilot's file surface is <strong>neither passive nor retroactive</strong>. Surfaces now declare
+        both properties.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>R3</strong><br><span class="measured">design changed</span></td>
+      <td>
+        Given the enforcement question — gateway, tool-boundary hook, or after-the-fact report — and found
+        that answering it needed a <em>new</em> decision, because “after the fact” was covering two
+        products: the transcript is a <strong>live append log</strong>, a record readable on disk
+        <strong>0.114 s and 0.202 s after its own timestamp</strong>, by the very command it describes. New
+        <strong>D8</strong>: the first cut is a batch reader the operator runs, <em>not</em> a resident
+        tailer. Cost stated rather than hidden — <strong>no record outlives the harness's deletion window
+        without something resident</strong>, so D8 and the retention question are one decision (SQ-18).
+        Then tested the no-judging rule <em>as written</em> and found it was intention rather than fence,
+        <strong>twice</strong>: the completeness report permitted a <em>per-agent</em> completeness
+        percentage, which over 14,701 assistant messages is 100% on every field and model except reasoning
+        text — so that figure ranks model choice on a page forbidding ranking (now per surface and per
+        model, never per agent); and “the operator writes the rules” had no requirement behind it while the
+        surface supplies <strong>1,535 model-authored <code>ai-title</code> records</strong> to republish in
+        Witness's own voice (now an <em>author</em> axis on every field, model-authored values counted apart
+        and never reported, rules operator-only and none model-evaluated).
+        <strong>Two measurement corrections.</strong> Retroactivity has a floor and it is the harness's:
+        <strong>2,084 files, 1.09 GB, 2026-08-09 to today — 29 days</strong>, 44 files on the oldest day and
+        <em>zero before it</em>, while at least <strong>51 earlier sessions</strong> are evidenced by
+        committed handoffs whose transcripts are gone. And <strong>169 delegated-agent transcripts</strong>
+        sit one directory deeper at <code>&lt;session&gt;/subagents/</code> carrying the
+        <em>parent's</em> <code>sessionId</code> — driven, not argued: keying on <code>sessionId</code>
+        gives <strong>1 actor with 545 turns</strong>, keying on the acting agent gives
+        <strong>9 actors, of which 370 turns (68%) are delegated</strong>. The existing requirement did not
+        fail to prevent that misattribution — <strong>it prescribed it.</strong> R3 made the
+        one-level-glob error itself first (1,915 against a true 2,084) and left that recorded.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <strong>No round changed nothing.</strong> Each of the three moved the specs, and two moved the design.
+  R2 and R3 each also corrected a number the round before had stated as a measurement — one-level globs
+  and stale counts, twice — which is the argument for a third round rather than two.
+</div>
+
+<h3>What loop 3 specced</h3>
+
+<table>
+  <thead><tr><th>Change</th><th>Repository</th><th>Reqs / scenarios</th><th>Tasks</th><th>Strict</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>2026-09-07-what-witness-records-and-what-it-refuses-to-judge</code><br>
+        <span class="loc">turn-record 6·17 · capture-surfaces 5·14 · completeness-report 6·12 · design D1–D8</span></td>
+      <td><code>witness</code><br><span class="loc">new, local, no remote</span></td>
+      <td>17 / 43</td>
+      <td>2 / 45<br><span class="loc">both round-discipline tasks in phase 0; 0 implementation</span></td>
+      <td><span class="pill ok">valid</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="small">
+  Re-validated while writing this page: <code>openspec validate --changes --strict</code> →
+  <code>1 passed, 0 failed</code>. <code>witness</code> holds three commits
+  (<code>6b0a135</code> R1, <code>3d75aaa</code> R2, <code>e2bb331</code> R3);
+  <code>git remote -v</code> is empty, checked before each. <code>corpus/</code>,
+  <code>*.transcript.jsonl</code> and <code>drive-output/</code> were in its <code>.gitignore</code> from
+  commit one, because the material this product reads is the most sensitive on the machine.
+</p>
+
+<h4>What loop 3 could not establish</h4>
+<ul>
+  <li><strong>Anything requiring the open web.</strong> The seed carried harness-telemetry facts gathered by
+    a session that could browse; this window could not, so each is either re-confirmed offline against this
+    repository or carried forward labelled unverified. Whether the name <code>witness</code> collides with an
+    existing project is in that second category.</li>
+  <li><strong>The harness's retention policy.</strong> The 29-day span and the hard cliff are measured; no
+    retention setting appears in any file this session can read, so the policy behind the span is unverified
+    and was not rounded to “30 days”.</li>
+  <li><strong>Anything requiring a running harness.</strong> No Hub was started and no agent turn was run, so
+    a live tailer's robustness is untested — write latency was measured, the difficulty of following the file
+    was not. Whether <code>ai-title</code> and <code>classifierMetaLines</code> are produced locally or
+    server-side is likewise unsettled; either way they are model-authored, which is all the new requirement
+    needs.</li>
+  <li><strong>That anyone but its author understands it.</strong> The same gap the continuity kit has:
+    nothing here has been read by a stranger.</li>
+</ul>
+
+<div class="note">
+  <strong>One fact worth carrying, because it is about the subject itself.</strong> The corpus is live and
+  it observes the observer: 2,069 files / 985 MB when R1 measured it this morning, 2,095 / 1.1 GB at R2 this
+  evening, 2,084 / 1.09 GB when R3 counted it recursively — part of that growth being these rounds' own
+  sessions, and one file in R2's sample no longer existed by the time the sampler opened it, minutes after
+  the listing that named it. <strong>Any corpus size in a spec is the output of a measurement, never a
+  fixture.</strong>
+</div>
+
+<h3>§7.4 — Six more decisions, and they are policy rather than engineering</h3>
+
+<p class="small">
+  These continue the SQ series and sit here rather than in §6 only because they all belong to loop 3.
+  Unlike the twelve above, none is a question about the code: <strong>what data may be recorded is a policy
+  question</strong>, and the loop deliberately did not guess. <strong>SQ-13 blocks every phase of the change
+  except phase 0</strong> — nothing is buildable until it has an answer.
+</p>
+
+<div class="ask">
+  <h4>SQ-13 (OV-1) — May Witness read the local Claude Code transcript corpus at all?</h4>
+  <p><code>~/.claude/projects/**/*.jsonl</code> is <strong>2,084 files and 1.09 GB</strong> of your real
+  sessions: prompts, source code, tool arguments and plausibly credentials. Unlike every OTel surface —
+  where content is off until several flags are set — nothing is withheld by default; it is already on disk
+  in full. It is also the <em>only</em> retroactive surface. Two things you would not otherwise be told:
+  the scope silently includes <strong>169 delegated-agent transcripts</strong> under
+  <code>&lt;session&gt;/subagents/</code> that “my sessions” does not bring to mind, and the question is
+  <strong>time-sensitive</strong> — the corpus deletes on a rolling window, the oldest survivor is
+  2026-08-09 and at least 51 earlier sessions are already gone, so <em>“yes, later” is not the same answer
+  as “yes”</em>. <strong>There is no partial answer that keeps the retroactive property.</strong></p>
+</div>
+
+<div class="ask">
+  <h4>SQ-14 (OV-2) — Redaction: at read, at write, or not at all?</h4>
+  <p>At read loses fidelity permanently and makes the record less useful for the incident it exists for. At
+  write leaves a window. Not at all makes the Witness store the most sensitive file on the machine.
+  AgentWeave's <code>redact_secrets</code> (<code>runner_events.py:63</code>) is a working starting point
+  either way. <strong>Evidence that this cannot rest on the reader's discipline:</strong> R2 quoted eleven
+  words of a real operator prompt into its own write-up to prove the prompts were genuine — breaking a rule
+  written three files away, in a file it had read that hour. Removed, and left recorded.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-15 (OV-3) — How long is the record kept?</h4>
+  <p>A record that answers “what did the agents do last quarter” must be kept for a quarter, which is a
+  different risk profile from a debugging aid kept for a week. This is no longer only a risk question: a
+  batch reader <em>cannot</em> keep a record past the harness's own deletion window, so keeping more
+  requires copying transcripts before deletion, which requires a resident process. <strong>See SQ-18 — this
+  and that are one decision.</strong></p>
+</div>
+
+<div class="ask">
+  <h4>SQ-16 (OV-4) — Who may read the record: you only, or anyone else?</h4>
+  <p>Single-operator local is the first cut's assumption and it is written into the specs as one. The moment
+  a second reader exists this becomes an access-control product and the scope roughly triples.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-17 (OV-5) — Does the name <code>witness</code> survive?</h4>
+  <p>Chosen because it commits the product to the passive posture: a witness testifies to what it saw and is
+  expected to say what it did not see. <strong>If a later round decides the product must enforce, the name
+  has to change with it.</strong> Whether it collides with an existing project could not be checked
+  offline.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-18 (OV-6) — Do you want a live mode, and would you run something resident to get it?</h4>
+  <p>Measured this round: the transcript is written live — a record was readable <strong>0.114 s</strong>
+  after its own timestamp. A tailer is therefore buildable, and design <strong>D8 deliberately does not
+  build one</strong>, because a process reading your transcripts unattended is a materially larger
+  disclosure than SQ-13 asks about, and a resident reader's crash is silence indistinguishable from
+  inactivity. It is also the only way to keep records past the harness's deletion window. <strong>“Nothing
+  resident” and “records older than 29 days” cannot both be had</strong> — this and SQ-15 are one decision
+  wearing two hats. <span class="loc">Blocks D8, and every task downstream of it if the answer is yes.</span></p>
+</div>
+
+
 <footer class="page">
-  Sidequest run, 2026-09-07 · eight iterations on <code>autonomous/2026-09-07-sidequest</code> ·
-  worktree <code>…\AgentWeave-sidequest</code>, never the main checkout ·
-  no Hub started, no agent turn, no web, no product code &middot; S-10 added a runnable prototype in a sibling repository ·
-  full prose log at <code>.claude/autonomous/2026-09-07-sidequest-log.md</code>,
-  position at <code>.claude/autonomous/STATE-sidequest.json</code>.
+  Two runs on <code>autonomous/2026-09-07-sidequest</code>, worktree
+  <code>…\AgentWeave-sidequest</code>, never the main checkout · eight sidequest iterations (§1–§6 and the
+  S-10 addendum) then four overseer iterations (§7) ·
+  no Hub started, no agent turn, no web, no AgentWeave product code &middot; two sibling repositories,
+  <code>continuity-kit</code> (driven) and <code>witness</code> (proposed only), both local with no remote ·
+  logs at <code>.claude/autonomous/2026-09-07-sidequest-log.md</code> and
+  <code>.claude/autonomous/2026-09-07-overseer-log.md</code>, positions at
+  <code>STATE-sidequest.json</code> and <code>STATE-overseer.json</code>.
 </footer>
 
 </div>

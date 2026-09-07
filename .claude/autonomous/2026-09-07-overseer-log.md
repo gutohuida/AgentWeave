@@ -428,3 +428,85 @@ later" is not the same answer as "yes".
 ### Repository state
 
 `C:\Users\huida\Documents\projects\witness` at `e2bb331`, 13 files, no remote, clean tree.
+
+---
+
+## Iteration 4 — T-4, the overseer section on the review page
+
+### What was done
+
+Appended §7 to the existing `.claude/autonomous/2026-09-07-sidequest-review.html` rather than writing
+a second page, per the queue item: the operator reads one page. 49,524 bytes → 68,386. No second file
+was created; `_ov_section.html` was a scratch file spliced in and deleted in the same iteration.
+
+### The four stale claims in the wrapper, and what they were replaced with
+
+The queue named two; there were four, and the extra two were found by reading the header and lede as
+a stranger would rather than by searching for the two strings the queue quoted.
+
+| Was | Now | Why it was wrong |
+|---|---|---|
+| `six iterations` | `eight sidequest iterations + four overseer iterations` | The sidequest run ended at iteration 8 (`STATE-sidequest.json`); this is the overseer run's 4th. |
+| `Eleven decisions … in §6` | `Eighteen decisions — twelve in §6, six more in §7.4` | S-10 added SQ-12; loop 3 adds SQ-13…SQ-18. |
+| `two spec loops` / `one new sibling repository (continuity-kit)` | `three spec loops, all complete` / `two new sibling repositories (continuity-kit, witness)` | **Not in the queue item.** The header described the page before loop 3 existed. |
+| `nothing implemented in AgentWeave and nothing driven` | `nothing implemented in AgentWeave; one prototype built and driven, outside it` | **Not in the queue item, and it contradicted the page's own S-10 addendum**, which is 60 lines about a prototype that was driven against a real clone. The header said the opposite of a section already on the page. |
+
+Also corrected: the lede's *"two proposals and one new local repository"* (three and two), and §5's
+opening *"Two changes"*, which is now scoped — *"Two changes from loops 1 and 2"* — with a pointer to
+§7's own table, so the section is not read as the page's complete spec inventory.
+
+### What §7 says
+
+Six blocks, following §2's shape so the page reads as one document:
+
+- **The question the loop existed to settle**, with the three separation measurements as a table
+  (32/32 routes on `get_agent_actor`; `TurnUsage.run_id` a non-null unique FK with no HTTP writer; the
+  ingestion routes on the instance-operator credential) and the framing stated as what it is — settled
+  *against* the seed's taxonomy reason and *for* the identity-model one.
+- **What each round changed about the one before it**, R1/R2/R3, in the same table markup §2 uses.
+  Each row is what that round *moved*, not what it read. The queue asked that a round which changed
+  nothing be said to have changed nothing; none did, so a note says that explicitly and names the
+  reason a third round earned its cost — **R2 and R3 each corrected a number the previous round had
+  stated as a measurement.**
+- **What loop 3 specced** — one change, 17 requirements / 43 scenarios across three capabilities,
+  2 of 45 tasks done and both of them round-discipline tasks in phase 0, so the "0 implementation"
+  claim is on the page rather than implied by a ratio.
+- **What could not be established**, split by cause as the queue asked: the open web (the seed's
+  telemetry facts, the name collision), a running harness (tailer robustness, whether `ai-title` is
+  local or server-side), the retention *policy* behind the measured 29-day span, and the one that
+  applies to both sibling repositories — nobody but the author has read either.
+- **The corpus observes the observer** — 2,069 / 2,095 / 2,084 across the three rounds, part of the
+  growth being these rounds' own sessions.
+- **SQ-13…SQ-18**, continuing the series, each carrying its `OV-n` id from `STATE-overseer.json` so
+  the page and the state file can be matched. SQ-13 is marked as blocking every phase but phase 0;
+  SQ-15 and SQ-18 are marked as one decision wearing two hats.
+
+### Verification
+
+- `py -3.11 scripts/drive/check_review_page.py .claude/autonomous/2026-09-07-sidequest-review.html`
+  read rather than trusted for exit code: **10 checks, all ok** — no stray CR, full wrapper, bare
+  `:root`, dark scheme, body background, zero external references, tag-balance walk clean, nothing
+  left unclosed.
+- `findings on the page: 0` is **not a regression.** Checked by running the same script over
+  `git show HEAD:` of the page: it printed `0` before this iteration too. That check greps
+  `class="fid">F\d+<` inside section 3's slice, and this page's §4 uses different markup for its
+  finding rows. Recorded rather than fixed — the checker is scoped for the daily loop's pages.
+- The script slices between `"What today's drive found"` and the **first** `"What was specced"`
+  occurrence, so the new section's own heading was deliberately titled *What loop 3 specced* to avoid
+  ever becoming that first occurrence if the sections are reordered.
+- SQ ids counted by script: 18 distinct, SQ-1…SQ-18, no gaps and no duplicate `<h4>` definitions —
+  the repeated counts are cross-references (SQ-1 ×3, SQ-13 ×3, SQ-18 ×3).
+- Every number in §7 is copied from a round that produced it by running code; nothing was re-derived
+  from prose. The witness change was re-validated while writing:
+  `openspec validate --changes --strict` → `1 passed, 0 failed`.
+
+### What this iteration did not do
+
+No AgentWeave product code, no Hub, no agent turn, no web, nothing under `spec-queue/`, and no write
+to `STATE-sidequest.json` or `STATE-day.json`/`STATE-night.json`. The witness repository was read
+(commit ids, spec counts, validation) and not modified; it stays at `e2bb331`, clean, no remote.
+
+### Repository state
+
+Worktree `AgentWeave-sidequest` on `autonomous/2026-09-07-sidequest`, clean after commit. Review page
+68,386 bytes, one file, self-contained.
