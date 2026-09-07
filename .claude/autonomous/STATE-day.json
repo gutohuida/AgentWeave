@@ -1,75 +1,64 @@
 {
-    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook":  ".claude/loops/day-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-04-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "ab60cf3",
-    "stop_at":  "2026-09-07T17:00:00+01:00",
-    "iteration":  2,
-    "log_file":  ".claude/autonomous/2026-09-07-day-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "D-0 then D-2",
-    "next_action":  "TWO items, in this order, in one firing. FIRST run D-0, the merge gate -- it is two commands and must not eat the iteration. `gh run list --branch autonomous/2026-09-04-daily --limit 5 --json headSha,conclusion,status,workflowName`. At iteration 2 CI reached `success` for 3728796, but the gate did not open because by then D-1's work was uncommitted and the tree-clean condition had failed; that work is now committed, so this firing opens with a clean tree and a HEAD that CI has had a head start on. If CI reports `success` for the sha that is HEAD at that moment, AND `git rev-list --count HEAD..master` is 0, AND the tree is clean with HEAD == @{u}, AND there is no line-initial `HOLD MERGE` in DIRECTION.md's 2026-09-07 section, then fast-forward master with `git merge --ff-only`, push master, create `autonomous/2026-09-07-daily` from the new master, check it out, push with -u, and update this file's `branch` field and the log. Do NOT improvise a partial merge to a sha inside the branch -- iteration 2 considered and rejected that, and the reasoning is in the log. If any condition fails, name it in the log, leave D-0 at the end of the queue, and continue. THEN, in the same firing, do D-2: spec loop R1 for F295.",
-    "queue":  [
-                  {
-                      "id":  "D-2",
-                      "status":  "open",
-                      "title":  "Spec loop R1 -- explore and propose the fix for F295",
-                      "detail":  "DIRECTION.md 2026-09-07 names this the day's first spec loop and says to take it first if there is room for only one: it is Hub run-execution core, higher blast radius than the UI work also named there. F295 is at scripts/drive/FINDINGS.md:11311 -- agent_trigger.py:1190's un-awaited `_execute_run` background task can leave a permanently dead aiosqlite worker thread on cancellation, and any later reuse of that connection hangs forever with no timeout. R1 explores the code and writes openspec/changes/<name>/ -- proposal.md, design.md, tasks.md, and the specs/<capability>/spec.md deltas. `openspec new change` refuses a name starting with a digit; `openspec validate --strict <name>` must pass; SHALL goes on a requirement's FIRST physical line. Do NOT conflate this with F292 (still open, a test-flake symptom of the same class, unresolved) and do NOT fold in the instructions-editor confirmation change."
-                  },
-                  {
-                      "id":  "D-3",
-                      "status":  "open",
-                      "title":  "Spec loop R2 -- independently re-derive R1's argument against the code",
-                      "detail":  "NOT a re-read of R1's reasoning. A fresh comparison against what the code actually does: open agent_trigger.py, the aiosqlite/SQLAlchemy engine setup, and the cancellation path, and re-derive from them whether the proposal's claims hold. Fix the proposal where the code disagrees. If the round changes nothing, say so explicitly -- a round that finds nothing is a real outcome and hiding it makes the next one look cheaper than it is. Re-run `openspec validate --strict`."
-                  },
-                  {
-                      "id":  "D-4",
-                      "status":  "open",
-                      "title":  "Spec loop R3 -- re-derive again, independently of R1 and R2",
-                      "detail":  "Same instruction as D-3, performed without leaning on D-3's conclusions. On 2026-08-28 round 3 caught rounds 1 and 2 both breaching a requirement that had shipped four days earlier. Ask what the HTTP route RETURNS, not only what the function does -- the 2026-08-28 lesson is that three rounds all read the code and none asked that. A second lesson from iteration 2, fresh and directly on point: ask whether each piece of EVIDENCE the argument leans on could have come out any other way. F296 was a drive assertion that could only ever return 0, repeated as fact by two windows. Re-run `openspec validate --strict`."
-                  },
-                  {
-                      "id":  "D-5",
-                      "status":  "open",
-                      "title":  "Write the review page and append to APPROVALS.md",
-                      "detail":  "spec-queue/review/review-2026-09-07.html, self-contained (no external stylesheets, scripts or fonts -- the Artifact runtime blocks them), full DOCTYPE/html/head/body wrapper, theme-aware via bare :root plus a prefers-color-scheme: dark override and an explicit body background. Six sections in the playbook's order: the branch and what the merge gate did (first, and unskimmable if the cycle is still unmerged); what the night built and which of it was DRIVEN rather than only tested; what today's drive found; what was specced with R2's and R3's actual deltas and the cost; what the night will do if the operator approves nothing; the research last and briefly. The drive section must carry iteration 2's result: the night's product claims reproduce independently (31/0 on a fresh Hub and database), column C is now closed BY MEASUREMENT at 20/0 rather than by construction, and F296 records that the night's stated ground for it was an instrument artefact -- with the named condition under which column C would reopen (a switcher that preserved the current tab). Carry forward the decisions the night window left: F274's missing verdict token at APPROVALS.md:99, and DAY-2 unanswered from 2026-09-06. Then append today's section to spec-queue/APPROVALS.md with a row per specced change and NO status token."
-                  },
-                  {
-                      "id":  "D-0",
-                      "status":  "deferred",
-                      "title":  "Merge gate -- land the 2026-09-04 cycle if CI is green for HEAD",
-                      "detail":  "Deferred TWICE, on a different failed condition each time, and it is cheap: run it FIRST next firing, then carry on in the same iteration. Iteration 1: CI in_progress. Iteration 2: CI in_progress at the start, `success` for 3728796 by the end -- but D-1's work was uncommitted by then, so tree-clean failed. Four conditions, all four required, re-measured at the moment of the check. `--ff-only` is not optional and a partial merge to a sha inside the branch is NOT authorised (considered and rejected at iteration 2; the limits say 'fast-forward master to this branch'). Condition zero is MET: the operator relaxed the seeded no-merge line on 2026-09-06 and this file's `limits` array authorises this one step. If the gate does not open, name the failed condition in the log and on the review page and carry on -- a missed landing costs a day, a wrong one costs trust. The branch is 14 commits ahead of master and dated 2026-09-06/07 only; `git reflog show master` records a fast-forward of this branch on 2026-09-06, so its first three days have already landed. Do not repeat the stale '42 commits, four days, still unmerged' figure."
-                  },
-                  {
-                      "id":  "D-6",
-                      "status":  "open",
-                      "title":  "If the day has room: spec loop R1 for the confirm-before-blanking-instructions change",
-                      "detail":  "The SECOND change DIRECTION.md 2026-09-07 names, deliberately queued after the review page because a half-written proposal is worse than no proposal and the review page must not describe work that does not exist. Take it ONLY if everything above is closed and there is time for all three rounds before 17:00; otherwise close it as `carried` and say so in the log so tomorrow's window inherits it. Scope: confirm before a Save blanks non-empty project instructions -- an operator who has actually seen real content and clears it on purpose. NOT a correction to 2026-09-06-an-unread-editor-cannot-overwrite (already APPROVED; it fixes the misleading-empty-editor paths, not this honest-intentional-clear path). Check for an existing confirmation primitive in the codebase before inventing one. The API accepting an empty string as a real value is deliberate (InstructionsUpdate's docstring) and is not in scope to change."
-                  }
-              ],
-    "decisions_for_user":  [
-                              "Carried from the 2026-09-06 night window, unanswered: `2026-09-05-the-conversation-carries-its-own-run-facts` (F274) sits at spec-queue/APPROVALS.md:99 with NO verdict token. It is the only unarchived change and the one change already ready to build; no night window may build it until it reads APPROVED, REVISING or REJECTED.",
-                              "Carried from 2026-09-06, unanswered: DAY-2 -- spend a night slot on F292, or let the CI gate tolerate a re-run. F292 is still open and is a test-flake symptom of the same bug class as F295; the F295 spec loop queued today does NOT resolve it.",
-                              "NEW from iteration 2, and small: F296's fix is one word in scripts/drive/t_d4_instructions_failed_load.py:316 (role `button` -> `combobox`) plus deleting the now-false `NOT DRIVEN` print beside it. It is harness-only, touches no product code, and would normally not need a decision -- raised only because this window does not implement and no queue item owns it. A night window can take it in minutes.",
-                              "DAY-1 (relax the seeded no-merge line) is ANSWERED and needs no further decision -- the operator relaxed it on 2026-09-06 and this file's limits array carries the relaxed text. Recorded here only so the next window does not re-raise it."
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
-                   "This window does NOT implement. If you are editing hub/hub/ or src/agentweave/, stop -- the one exception is a drive harness fixture under scripts/drive/.",
-                   "A drive that reverts the served bundle to mutation-check MUST restore it and confirm `git status` is clean for hub/hub/static/ui before committing -- `git checkout <sha> -- <path>` stages the old files and leaves later assets behind as untracked additions. Iteration 2 hit this and cleaned it up."
-               ]
+    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+    "playbook": ".claude/loops/day-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-07-daily",
+    "parent_branch": "master",
+    "parent_sha": "9fd9853",
+    "stop_at": "2026-09-07T17:00:00+01:00",
+    "iteration": 3,
+    "log_file": ".claude/autonomous/2026-09-07-day-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "D-3",
+    "next_action": "D-3: spec loop R2 for openspec/changes/2026-09-07-a-dead-connection-is-never-handed-back-out. NOT a re-read of R1's reasoning -- a fresh comparison against what the code actually does. Open hub/hub/db/engine.py (the module-level engine at :33, no pool events), hub/hub/main.py's lifespan teardown (:356-358), hub/hub/api/v1/agent_trigger.py (the un-awaited create_task at :1190, the CancelledError branch at ~:2371, terminate_all_active_runs at :1601), hub/tests/conftest.py:293-371, and aiosqlite/core.py in the INSTALLED copy (0.22.1, at C:/Users/huida/AppData/Roaming/Python/Python311/site-packages/aiosqlite/core.py) -- and re-derive from them whether the proposal's claims hold. R1's measurement scripts are in testbed/scratch/f295/ (uncommitted, still on disk): probe_cancel.py, probe_pool.py, probe_guard_lib.py + probe_guard1.py, probe_guard2.py. Re-run them rather than trusting the numbers quoted in the proposal; probe_guard1.py 0 <url> HANGS by design, so give it an external timeout. THE ONE CLAIM TO ATTACK HARDEST, named by R1 itself as the load-bearing negative: that no production path closes an event loop while the Hub keeps running. R1 found only alembic's (disposed in a finally at migrations/env.py:73) and ruled it out. If that negative is wrong, F295 is an A and the proposal's severity paragraph must be rewritten. Second: R1 asserts a timeout does not rescue the hang, on ONE measurement that ran to an external kill -- confirm the stated reason (cleanup needs the dead thread) rather than the symptom. If the round changes nothing, say so explicitly. Re-run `openspec validate --strict 2026-09-07-a-dead-connection-is-never-handed-back-out`.",
+    "queue": [
+        {
+            "id": "D-3",
+            "status": "open",
+            "title": "Spec loop R2 -- independently re-derive R1's argument against the code",
+            "detail": "NOT a re-read of R1's reasoning. A fresh comparison against what the code actually does -- see next_action for the exact file list and the two claims to attack hardest. R1's own design.md has a 'What R1 did not establish' section; start there, not with what it did establish. Fix the proposal where the code disagrees. If the round changes nothing, say so explicitly -- a round that finds nothing is a real outcome and hiding it makes the next one look cheaper than it is. Re-run `openspec validate --strict`."
+        },
+        {
+            "id": "D-4",
+            "status": "open",
+            "title": "Spec loop R3 -- re-derive again, independently of R1 and R2",
+            "detail": "Same instruction as D-3, performed without leaning on D-3's conclusions. On 2026-08-28 round 3 caught rounds 1 and 2 both breaching a requirement that had shipped four days earlier. Ask what the surface RETURNS, not only what the function does. A second lesson, from iteration 2: ask whether each piece of EVIDENCE the argument leans on could have come out any other way -- F296 was a drive assertion that could only ever return 0, repeated as fact by two windows. For this change specifically: R1's proposal rests on four standalone probe scripts, none of which ran against the Hub. Ask what a claim measured on a bare create_async_engine does NOT establish about hub/hub/db/engine.py's engine, and whether the checkout guard survives the pragma listener and engine-replacement games hub/tests/conftest.py plays (:84, :228-242, :117-121). Also check the delta's two ADDED requirements against the SHIPPED app-lifecycle spec for a requirement they contradict. Re-run `openspec validate --strict`."
+        },
+        {
+            "id": "D-5",
+            "status": "open",
+            "title": "Write the review page and append to APPROVALS.md",
+            "detail": "spec-queue/review/review-2026-09-07.html, self-contained (no external stylesheets, scripts or fonts -- the Artifact runtime blocks them), full DOCTYPE/html/head/body wrapper, theme-aware via bare :root plus a prefers-color-scheme: dark override and an explicit body background. Six sections in the playbook's order. SECTION ONE HAS CHANGED and is now good news: the merge gate OPENED at iteration 3 -- master fast-forwarded ab60cf3..9fd9853, the 2026-09-04 cycle is fully landed, and the cycle branch is now autonomous/2026-09-07-daily. Say how it opened (R1's output was moved out of the tree so all four conditions could be measured true at one moment, then moved back) and say the structural thing the log records: CI takes 10-16 minutes on this branch, so a firing that commits before checking fails the CI condition and one that checks late fails the tree-clean condition -- the two chase each other, and the gate needs rewording before it defers a fourth time. Then: what the night built and which of it was DRIVEN rather than only tested; what today's drive found -- iteration 2's result, that the night's product claims reproduce independently (31/0 on a fresh Hub and database), that column C is now closed BY MEASUREMENT at 20/0 rather than by construction, and F296 recording that the night's stated ground for it was an instrument artefact, with the named condition under which column C would reopen (a switcher that preserved the current tab); what was specced, with R2's and R3's actual deltas and the cost -- and for F295 the review page MUST carry R1's correction, that the finding's title names the wrong trigger (cancellation with a live loop is benign; loop closure is the precondition) and that the production blast radius F295 claims is NOT established, which puts its severity-A rating in front of the operator as a question; what the night will do if the operator approves nothing; the research last and briefly. Carry forward the decisions the night window left: F274's missing verdict token at APPROVALS.md:99, and DAY-2 unanswered from 2026-09-06. Then append today's section to spec-queue/APPROVALS.md with a row per specced change and NO status token."
+        },
+        {
+            "id": "D-6",
+            "status": "open",
+            "title": "If the day has room: spec loop R1 for the confirm-before-blanking-instructions change",
+            "detail": "The SECOND change DIRECTION.md 2026-09-07 names, deliberately queued after the review page because a half-written proposal is worse than no proposal and the review page must not describe work that does not exist. Take it ONLY if everything above is closed and there is time for all three rounds before 17:00; otherwise close it as `carried` and say so in the log so tomorrow's window inherits it. Scope: confirm before a Save blanks non-empty project instructions -- an operator who has actually seen real content and clears it on purpose. NOT a correction to 2026-09-06-an-unread-editor-cannot-overwrite (already APPROVED; it fixes the misleading-empty-editor paths, not this honest-intentional-clear path). Check for an existing confirmation primitive in the codebase before inventing one. The API accepting an empty string as a real value is deliberate (InstructionsUpdate's docstring) and is not in scope to change."
+        }
+    ],
+    "decisions_for_user": [
+        "Carried from the 2026-09-06 night window, still unanswered: 2026-09-05-the-conversation-carries-its-own-run-facts (F274) sits at spec-queue/APPROVALS.md:99 with NO verdict token. It is the only other unarchived change and the one change already ready to build; no night window may build it until it reads APPROVED, REVISING or REJECTED.",
+        "Carried from 2026-09-06, still unanswered: DAY-2 -- spend a night slot on F292, or let the CI gate tolerate a re-run. F292 is still open. Today's F295 spec loop deliberately does NOT claim to resolve it.",
+        "Carried from iteration 2, small and still unowned: F296's fix is one word in scripts/drive/t_d4_instructions_failed_load.py:316 (role `button` -> `combobox`) plus deleting the now-false `NOT DRIVEN` print beside it. Harness-only, no product code. A night window can take it in minutes.",
+        "NEW from iteration 3: F295 is filed severity A on a production claim R1 could not establish by measurement -- the Hub's only in-process event-loop closure is process exit, so the severe half (a later reuse hanging forever) needs a path R1 looked for and did not find. R2 and R3 are queued to attack that negative. If they agree with R1, F295's severity should be restated, and the operator may want to say whether the change is still worth a night slot on the test-suite damage alone. The proposal argues yes; the fix is the same either way.",
+        "ANSWERED, recorded so it is not re-raised: DAY-1 (relax the seeded no-merge line). The operator relaxed it on 2026-09-06, the limits array carries the relaxed text, and iteration 3 used it -- master is at 9fd9853 and the 2026-09-04 cycle has landed."
+    ],
+    "limits": [
+        "Stay on the cycle branch, now autonomous/2026-09-07-daily. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06, used once at iteration 3 on 2026-09-07 to land the 2026-09-04 cycle. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
+        "This window does NOT implement. If you are editing hub/hub/ or src/agentweave/, stop -- the one exception is a drive harness fixture under scripts/drive/.",
+        "A drive that reverts the served bundle to mutation-check MUST restore it and confirm `git status` is clean for hub/hub/static/ui before committing -- `git checkout <sha> -- <path>` stages the old files and leaves later assets behind as untracked additions. Iteration 2 hit this and cleaned it up."
+    ]
 }
