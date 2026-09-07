@@ -1,0 +1,101 @@
+{
+    "purpose": "SIDEQUEST. Two spec loops the operator asked for on 2026-09-07, run apart from the daily FILL/DECIDE/FIX cycle in a dedicated worktree so neither can touch the other. (1) AgentWeave where MCP is blocked and GitHub Copilot is the house CLI. (2) What is actually separable from this repo into standalone projects, with a folder per surviving candidate in the parent directory and a spec loop inside each. This window writes proposals and, only at the very end and only if time remains, one prototype skeleton. It does NOT implement anything in AgentWeave.",
+    "playbook": "none -- this is a one-off run, not a recurring window. The queue below is the whole instruction. Round discipline is CLAUDE.md's.",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-07-sidequest",
+    "worktree": "C:\\Users\\huida\\Documents\\projects\\AgentWeave-sidequest",
+    "parent_branch": "autonomous/2026-09-07-daily",
+    "parent_sha": "8ee61b1",
+    "stop_at": "2026-09-07T22:00:00+01:00",
+    "iteration": 0,
+    "log_file": ".claude/autonomous/2026-09-07-sidequest-log.md",
+    "review_page": ".claude/autonomous/2026-09-07-sidequest-review.html",
+    "current": null,
+    "next_action": "S-1",
+    "queue": [
+        {
+            "id": "S-1",
+            "status": "pending",
+            "title": "Spec loop R1 -- AgentWeave reachable where MCP is blocked",
+            "detail": "Read openspec/explorations/2026-09-07-agentweave-without-mcp-and-with-copilot.md FIRST. It is a seed, not a proposal: it carries measurements to re-check and a list of questions you must ANSWER rather than inherit, and it contains one deliberately-flagged false claim to remind you the base rate is not zero. Answer its question 1 before writing anything -- is this one change or two? The default assumption is two, HTTP path first, because the HTTP path is what makes a Copilot runner worth having and because the non-MCP branch telling an agent it has no tools (launchability.py:325-330) is a live defect for ANY harness without MCP. Write the proposal into openspec/changes/<name>/ with proposal.md, design.md, tasks.md and the specs/<capability>/ delta. `openspec validate --strict <name>` must pass; SHALL goes on line 1 of a requirement. Note that agent-capability-plane/spec.md:107-118 already REQUIRES this parity and names the forbidden-MCP case -- so check whether this is a new requirement or an unbuilt shipped one, because that changes whether the delta is ADDED or MODIFIED."
+        },
+        {
+            "id": "S-2",
+            "status": "pending",
+            "title": "Spec loop R2 -- re-derive S-1's argument against the code, independently",
+            "detail": "Not a re-read of R1's reasoning. A fresh comparison against what the code actually does. Re-measure every citation R1 leaned on; R2 has found citations wrong on this repo's last three outings. Check the claim that is easiest to get wrong: the 26-tool HTTP mapping is a claim about ROUTES, not about whether a route behaves identically when reached without a run credential. Start with ask_user -- a blocking call is the one whose HTTP form is least likely to be equivalent. Fix the proposal where the code disagrees; if R1's argument survives unchanged, say so plainly, because a round that finds nothing is a real outcome."
+        },
+        {
+            "id": "S-3",
+            "status": "pending",
+            "title": "Spec loop R3 -- re-derive again, independently, and measure what can be measured",
+            "detail": "Third independent pass. This repo's rounds check the argument; only a drive checks the product -- and this window may not start a Hub (see limits), so say plainly what is unmeasurable here rather than asserting it. The two things most likely to be wrong and cheapest to establish without a Hub: (a) whether every mutating agent-facing route really depends on the run-credential dependency rather than the older project-key one, and (b) what happens to the permission boundary in mcp_server._decide (:901-953) for an agent with no MCP -- if it simply vanishes, the proposal must say so in design.md rather than shipping a silently weaker adapter."
+        },
+        {
+            "id": "S-4",
+            "status": "pending",
+            "title": "Decide the candidate set, then create the sibling folders",
+            "detail": "Read openspec/explorations/2026-09-07-what-is-actually-separable.md. It records seven falsified claims from the 2026-09-06 exploration and a measured separability ranking. Decide which candidates get a folder -- the seed recommends P1 (the continuity kit: handoff + resume + DEAD-ENDS.md, rank 1 on separability with 111 handoffs of production evidence) and P2 (the governed loop, reframed as its file contract plus a thin cross-platform scheduler, NOT the 879 lines of Windows PowerShell), and recommends AGAINST the checkpoint engine (13% portable, 11 tables, and its probe cannot survive extraction). You may overturn this but must state why. Answer the seed's question 1 first: are P1 and P2 one project or two? Then create one folder per surviving candidate under C:\\Users\\huida\\Documents\\projects\\, `git init` each LOCALLY with no remote, and scaffold an openspec structure inside. Write a README in each stating what it is, what it was lifted from, and that it is an unvalidated prototype."
+        },
+        {
+            "id": "S-5",
+            "status": "pending",
+            "title": "Spec loop R1 -- project P1, inside its own folder",
+            "detail": "The prototype's spec, written in P1's own repo, not this one. Answer the seed's questions 2 and 3 explicitly: the smallest honest scope (CLI and file contract first -- say what a UI would add and when, do not silently drop it and do not build it merely because it was named), and the concrete harness integration surface. The operator's criterion is 'a tool that harnesses can use' and the measured answer for this candidate is a file contract, which is also the surface least likely to be blocked by a company policy that blocks MCP. Also answer question 4: is this an extraction or a fork, and if a fork, which copy does AgentWeave then consume?"
+        },
+        {
+            "id": "S-6",
+            "status": "pending",
+            "title": "Spec loop R2 -- project P1, independently",
+            "detail": "Two rounds, not three, for a greenfield project -- the deviation and its reasoning are in the seed's Part 3, and R2's job here is the same as always: compare the proposal against what actually exists, which for an extraction means THE SOURCE REPO the capability is being lifted out of. Re-read the real handoff/resume/DEAD-ENDS files and check that the proposal describes what they actually do, not an idealised version. Anything proposed against AgentWeave's own code keeps all three rounds."
+        },
+        {
+            "id": "S-7",
+            "status": "pending",
+            "title": "Spec loop R1 -- project P2, inside its own folder",
+            "detail": "Skip and record as skipped if S-4 decided P1 and P2 are one project. Otherwise as S-5, for the governed loop. The hard part is honest scoping: the measured finding is that this candidate's value is 1,047 lines of markdown playbook against 879 lines of PowerShell that is a rewrite rather than a port, and that nothing in any script enforces the FILL/FIX asymmetry that makes the loop work. A proposal that presents the scheduler as the product would be repeating the 2026-09-06 exploration's mistake."
+        },
+        {
+            "id": "S-8",
+            "status": "pending",
+            "title": "Spec loop R2 -- project P2, independently",
+            "detail": "As S-6. Skip and record as skipped if P2 was folded into P1."
+        },
+        {
+            "id": "S-9",
+            "status": "pending",
+            "title": "Write the review page the operator reads tonight",
+            "detail": "Self-contained HTML at the path in review_page -- no external stylesheets, scripts or fonts, full DOCTYPE/html/head/body wrapper, theme-aware (light on bare :root, redefined under prefers-color-scheme: dark, explicit body background). It must answer without the reader opening anything else: what the two spec loops proposed and what each round CHANGED about the previous one (if a round changed nothing, say so); which extraction candidates were kept, which were dropped and on what measurement; what was NOT measured and why; and every decision waiting for the operator, in decisions_for_user, each phrased as a question with the evidence beside it. State prominently that the exploration this run was asked to validate was found wrong on seven claims, and list them. Run scripts/drive/check_review_page.py against it -- but note its finding-id check has been reporting a FALSE red since 2026-09-05 and is a known pre-existing defect, so read its output rather than trusting the exit code."
+        },
+        {
+            "id": "S-10",
+            "status": "pending",
+            "title": "OPTIONAL -- the smallest runnable P1 prototype skeleton",
+            "detail": "Only if S-9 is finished and more than 60 minutes remain before stop_at. The operator asked for a prototype and this is the one candidate cheap and low-risk enough to skeleton unattended: it is a file contract plus a thin CLI, with no server, no database and no network. Build only what its own S-5/S-6 spec describes, inside P1's folder, committed locally. Do NOT build P2's, and do NOT touch AgentWeave's product code. If S-9 is not done, this item does not happen -- a review page the operator can read is worth more than a skeleton they cannot."
+        }
+    ],
+    "decisions_for_user": [
+        "URGENT, and not part of either spec loop: scripts/drive/aw.py:15 carried a live `aw_live_58ab...` Hub key as a hardcoded default in a TRACKED file, and `gh repo view` reports gutohuida/AgentWeave PUBLIC. The default was removed on autonomous/2026-09-07-daily at 2d4131b, but removal does not unpublish it -- the value is in git history. The key should be treated as disclosed and rotated. Precedent: .claude/handoffs/ was untracked wholesale on 2026-09-04 because two aw_live_ keys had been committed there; this one survived that sweep.",
+        "The 2026-09-06 standalone-tool exploration was validated against the code on 2026-09-07 and seven of its claims are wrong, including both halves of its central recommendation. Does the operator want it superseded, annotated, or left as-is with the correction living only in the new seed? A wrong exploration that stays readable is how a future round inherits a falsified argument.",
+        "Whether the sibling prototype repos should ever get a remote. This run creates them with `git init` and NO remote, deliberately -- nothing outward-facing is in its limits. Publishing them is the operator's call and has a business-case question attached that nobody has answered (the 2026-09-06 exploration's own open question 3).",
+        "Carried from the daily cycle and untouched by this run: 2026-09-05-the-conversation-carries-its-own-run-facts (F274) still has NO verdict token in spec-queue/APPROVALS.md, and it is the one change already ready to build."
+    ],
+    "limits": [
+        "STAY IN THIS WORKTREE: C:\\Users\\huida\\Documents\\projects\\AgentWeave-sidequest, on branch autonomous/2026-09-07-sidequest. NEVER cd to C:\\Users\\huida\\Documents\\projects\\AgentWeave -- that checkout belongs to the daily cycle and its night window arms onto it at 22:55. Never commit, merge, rebase or push onto master or onto autonomous/2026-09-07-daily.",
+        "DO NOT WRITE ANYTHING UNDER spec-queue/. That directory is the daily loop's operator IPC and this run is deliberately outside that cycle. Do not touch .claude/autonomous/STATE-day.json or STATE-night.json either; this run's state file is STATE-sidequest.json and nothing else.",
+        "Do not start a Hub on any port. No drives, no browser, no agent turns. Port 8000 is the operator's real usage, 8010 and 8011 are trial Hubs, and none of them is needed to write a proposal. If a claim can only be settled by driving, label it unverified and say so on the review page.",
+        "Do not browse the open web. That means GitHub Copilot's actual CLI output format cannot be established here -- scope the proposal to what can be settled and say plainly that parsing is unresolved. Do not invent a parser against an imagined format.",
+        "This window does NOT implement anything in AgentWeave. If you are editing hub/hub/ or src/agentweave/, stop. The single exception in the whole queue is S-10, which builds only inside a new sibling project folder and only if S-9 is already finished.",
+        "The new sibling folders get `git init` and NO remote. Nothing outward-facing: no publish, no release, no PR, no issue, no force-push, no history rewriting. Push this worktree's own branch every iteration -- that is what makes the work durable.",
+        "Every claim is measured or labelled unverified. Both seed explorations contain a spot-checked FALSE claim, flagged as such, precisely so no round treats a seed as settled.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never `git add -A`. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under `py -3.11`, never bare `python`. black needs --target-version py311. ruff/black/mypy paths are the ones CI uses: `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`.",
+        "BEFORE STARTING ANY ITEM: if less than 75 minutes remain before stop_at, abandon the queue order and go straight to S-9, the review page. A finished review page is the deliverable; a half-written eighth proposal is not.",
+        "A multi-line commit message goes through a heredoc in the Bash tool, or through the PowerShell tool if @'...'@ is wanted. Mixing the two shells' quoting is silent: it once turned a commit subject into a literal @ and git reported nothing wrong.",
+        "Appending long prose to a file with a bash heredoc fails on quoting. Write the body with the Write tool and append it with a short python one-liner instead.",
+        "openspec: `openspec new change` refuses a name starting with a digit; `openspec validate --strict` reads only a requirement's FIRST PHYSICAL LINE for the modal, so SHALL goes on line 1."
+    ]
+}
