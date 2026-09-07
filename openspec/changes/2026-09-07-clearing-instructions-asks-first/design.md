@@ -20,6 +20,15 @@ destroys the instructions just as completely as an empty one does. A predicate t
 On the *stored* side it is a smaller judgement: instructions consisting only of whitespace are not
 content anyone loses. Overwriting them is not destructive, so it is not worth an interruption.
 
+**The requirement wording had lost this, and R2 put it back.** The predicate above trims both sides
+and always did; the delta's own English did not. The MODIFIED save scenario said *"does not replace
+non-empty stored instructions with nothing"*, which is a different rule — under it a save writing a
+single newline over four hundred lines is required to persist, while the added requirement requires
+it to be confirmed first. Both requirements now spell out *"containing more than whitespace"* and
+*"empty or only whitespace"* in their own words, because a requirement is read on its own and cannot
+borrow a definition from its neighbour. Nothing in this design changed; what changed is that the
+spec now says it.
+
 What is **not** trimmed is what gets written. The confirmed save sends `content` exactly as typed,
 unchanged, as every other save does. This change interposes a question; it does not edit the
 operator's text.
@@ -100,18 +109,46 @@ click asks first instead.
   one word, but it is a separate, unowned item and folding it in silently would misreport what this
   change cost.
 
-## Open for R2 and R3
+## R2's results — what was re-derived, and what it changed
 
-1. **Drive the control before trusting this document.** Every claim above about the shipped
-   component is read out of source at the line numbers given; none of it was driven in a browser
-   this round. The specific thing to operate is the clearing path as it exists *today* — select all,
-   delete, Save — and to watch the wire for the PUT.
-2. **The `useEffect` at `:40-44` re-seeds `content` from `data` on every `data` change.** R1 believes
-   React Query's structural sharing keeps `data`'s identity stable when a refetch returns unchanged
-   content, so a background refetch does not clobber an in-progress edit — but R1 did not measure
-   this, and it is exactly the kind of belief this repository's round discipline exists to falsify.
-   If it is wrong, it is a pre-existing defect rather than one this change introduces, and it should
-   be filed rather than absorbed.
-3. **Whether `trim()` on the stored side is right.** D1 argues whitespace-only stored content is not
-   worth protecting. That is a judgement, not a measurement, and it is the smallest thing in this
-   design.
+R2 read the component, the route, the model and the four confirmation shapes *before* the proposal,
+and re-ran every measurement R1 quoted rather than carrying it forward. The argument survived. Four
+things were wrong or unmeasured.
+
+1. **The predicate's whitespace term was missing from the spec** — the finding above, folded into
+   D1 and into both requirements. This is the only one that changed what the change *requires*.
+2. **`grep -n instructions hub/hub/db/models.py` returns two lines, not three** (`:1061`, `:1065`);
+   three needs `-i`. The count was the smaller problem: a single file's grep cannot establish "no
+   history table" at all. `proposal.md` now carries the repository-wide measurement instead —
+   `project_instructions` is referenced in exactly four places, none of them a second table or a
+   foreign key, and no migration names it.
+3. **The PUT's line range was wrong.** `row.content = content` is at
+   `hub/hub/api/v1/instructions.py:61`; `:66` is the commit. The cited `:66-67` was the commit and
+   the return, and contained neither of the two statements it was quoted for. Corrected.
+4. **R1's unmeasured React Query belief is now measured, and it holds.** `@tanstack/react-query`
+   `5.90.21`: `query-core/src/utils.ts:386-402` applies `replaceEqualDeep(prevData, data)` unless
+   `structuralSharing` is `false`, and that returns the *previous* reference when the two are deeply
+   equal — so a refetch returning unchanged content leaves `data` identity stable, the `[data]`
+   effect does not re-run, and an in-progress edit is not clobbered. **No defect to file.** The
+   adjacent hazard — a refetch returning content that genuinely *changed* would clobber an edit —
+   was chased and is not reachable spontaneously either: `main.tsx:11` sets
+   `refetchOnWindowFocus: false` for every query, so nothing refetches this key but mount, reconnect
+   and the save's own invalidation. Also checked and unchanged: D5's double-confirm edge is real for
+   the reason it gives, `useDialogFocus.ts:20-47` is the effect it is cited as, `JobCard.tsx:498-506`
+   and `TaskDetailDrawer.tsx:22-33` are exact, the `actions` gate and `SettingsSection.tsx:58`/`:60`
+   are as described, and the MODIFIED requirement's header and SHALL line are byte-identical to
+   `openspec/specs/project-instructions/spec.md:34-35`.
+
+## What R2 did not do, so R3 does not assume it
+
+- **R2 drove nothing either.** No browser was opened, no Hub started, no PUT watched on a wire. Every
+  claim in this document remains a source reading. The react-query result in particular is measured
+  in the library's own source, not observed in the running page. **Driving is still owed, and it is
+  R3's to take** — the clearing path as it exists today, select all, delete, Save, watching the wire.
+- **R2 did not check the delta against every shipped requirement in the corpus.** It re-checked the
+  two `project-instructions` neighbours R1 named and stopped there. The sweep across
+  `project-environment-settings` that R1 claims to have done was not independently repeated.
+- **The stored-side trim is still a judgement, not a measurement.** R2 made it *legible* — it is now
+  stated in both requirements and pinned by a scenario clause rather than living in prose — but
+  whether whitespace-only stored content deserves no interruption is still an unmeasured call, and
+  it is still the smallest thing in this design.

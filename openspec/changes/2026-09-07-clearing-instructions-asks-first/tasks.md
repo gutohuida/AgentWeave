@@ -66,7 +66,10 @@ only measurement showed which.
   assertion `content === ''` would fail.
 - [ ] 4.5 A non-empty save → no dialog, one PUT, unchanged behaviour.
 - [ ] 4.6 An empty editor over **already-empty** stored content → no dialog, one PUT. The
-  confirmation is about loss, and there is none.
+  confirmation is about loss, and there is none. Assert the same for stored content that is **only
+  whitespace**: the predicate trims the stored side too, and until R2 that half lived only in prose —
+  it is now a clause in *A save that blanks nothing is not interrupted* and needs a test that would
+  fail against a predicate testing `data.content !== ''`.
 - [ ] 4.7 Successful read, then a failing background refetch, then clear and Save → the dialog is
   still asked, measured against the content that was read. This is the scenario that would fail
   against an implementation deriving its baseline from anything but the last successful `data`, and

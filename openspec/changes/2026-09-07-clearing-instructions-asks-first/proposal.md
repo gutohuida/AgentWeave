@@ -5,11 +5,16 @@ Save loses them. There is no confirmation, no undo, and no copy kept anywhere in
 
 The store is one row, replaced in place. `hub/hub/db/models.py:1058-1071` declares
 `ProjectInstructions` with `project_id` as the primary key, a `content` column and an `updated_at`;
-there is no second table, no revision column and no soft delete — `grep -n instructions
-hub/hub/db/models.py` returns three lines, all inside that one class. The PUT handler at
-`hub/hub/api/v1/instructions.py:66-67` is `row.content = content` followed by a commit. **The
-previous text is not written anywhere before it is overwritten.** Nothing in AgentWeave can return
-it.
+there is no second table, no revision column and no soft delete. The measurement is
+repository-wide rather than one file's grep: `grep -rn project_instructions hub/hub/` returns **four**
+lines — the `__tablename__` at `models.py:1065`, and three in `api/v1/agents.py` (`:1130`, `:1529`,
+`:1532`) that read the row into turn context. Nothing references it as a foreign key, and no
+migration names it at all — `Base.metadata.create_all` (`db/engine.py:230`) is what creates it. The
+schema is not short of the pattern, either: it carries `spec_requirement_revisions`
+(`models.py:2160`) for a concept whose history was judged worth keeping. Instructions were not given
+one. The PUT handler assigns `row.content = content` at `hub/hub/api/v1/instructions.py:61` and
+commits at `:66`. **The previous text is not written anywhere before it is overwritten.** Nothing in
+AgentWeave can return it.
 
 The client offers no recovery either. `InstructionsPage.tsx:40-44` resets the textarea from `data`
 whenever `data` changes, and `useSaveInstructions` invalidates the query on success
