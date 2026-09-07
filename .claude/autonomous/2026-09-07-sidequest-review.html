@@ -810,10 +810,13 @@ switched off.</p>
   <code>openspec/explorations/2026-09-07-an-overseer-for-any-harness.md</code>: a system that connects to
   any AI harness, records what the agents are doing, and offers metrics and governance over them. Three
   rounds ran, each re-deriving against the code rather than re-reading the round before it. The output is
-  a <strong>second new sibling repository</strong> — <code>witness</code>, local, no remote, three commits
-  — holding one change that validates strictly with <strong>zero implementation tasks done</strong>.
-  <strong>Its own recommendation is propose-then-shelve</strong>, because every requirement in it is
-  downstream of data-policy questions only you can answer. Six of those are in §7.4.
+  a <strong>second new sibling repository</strong> — <code>witness</code>, local, no remote, four commits.
+  <strong>&sect;8 supersedes the rest of this paragraph.</strong> When &sect;7 was written the repository held
+  a proposal and no code, and its own recommendation was propose-then-shelve because every requirement was
+  downstream of data-policy questions only you can answer. A fifth iteration then found that the reading was
+  too broad, built a skeleton against a surface that needs none of those answers, and drove it — so the
+  repository now also carries a running cut 0 and eight findings from driving it. Six questions are still
+  yours to answer, in &sect;7.4.
 </p>
 
 <h3>The question the loop existed to settle, and the answer that replaced the seed's</h3>
@@ -1073,12 +1076,138 @@ switched off.</p>
 </div>
 
 
+<h2><span class="num">8</span>What driving the skeleton found</h2>
+
+<p class="lede">
+  &sect;7 ended with a proposal and no code. This section is the fifth overseer iteration, which built the
+  smallest thing that could be pointed at real data and run, and ran it: <strong>44 tests, and one drive
+  over 2,829 real commits</strong>. It produced <strong>eight findings, five of which are defects in the
+  specs &sect;7 describes</strong> rather than in the code. That ratio is the argument for driving, restated
+  on a second project in one day.
+</p>
+
+<h3>Why there was anything to build, when &sect;7 said shelve</h3>
+
+<p>
+  <code>tasks.md</code> said <em>&ldquo;every phase is blocked on 0.3&rdquo;</em>, and 0.3 is your permission
+  to read <strong>your own sessions</strong>. The tasks file had generalised that into permission to read
+  <strong>anything</strong> &mdash; which shelves work that discloses nothing. <strong>A repository&rsquo;s own
+  commit history is data you have already published</strong>, and it is still a record of turns performed by
+  agents Witness did not spawn, which is the product&rsquo;s entire subject. So the gate belongs to the
+  surface, not to the product. Everything below follows from acting on that; nothing below read a single
+  transcript, and the build <strong>compiles no reader for that surface at all</strong> &mdash; the block is
+  an absence, not a flag that could be flipped.
+</p>
+
+<h3>The eight</h3>
+
+<table>
+  <tr><th>&nbsp;</th><th>What driving it found</th><th>Where the defect is</th></tr>
+  <tr>
+    <td><strong>W-1</strong></td>
+    <td>The rule that protects the report <strong>makes the actor unprintable.</strong> The only agent
+      identity a commit carries is the <code>Co-Authored-By</code> trailer &mdash; 1,699 of 2,829 commits,
+      five distinct values &mdash; and <em>the model wrote it</em>. R3&rsquo;s rule that a model-authored
+      value never appears in a report then suppresses the actor and the model, so the per-model breakdown
+      comes out as five buckets named <code>model-authored-value-&lt;hash&gt;</code>. The axis conflates a
+      model&rsquo;s <em>characterisation</em> of a turn with a model&rsquo;s <em>signature</em> on it. R3
+      could not have found it: on the transcript surface the model field is instrumented, so the two never
+      collide.</td>
+    <td>spec</td>
+  </tr>
+  <tr>
+    <td><strong>W-2</strong></td>
+    <td>The per-model completeness figure <strong>partly restates its own grouping key</strong> &mdash; 0.4
+      on all five model buckets, identically, and 0.2 on the <code>model-unavailable</code> one, which
+      differs <em>because</em> the model is unavailable. R3 replaced a per-agent figure with this one
+      without checking it for the same class of defect.</td>
+    <td>spec</td>
+  </tr>
+  <tr>
+    <td><strong>W-3</strong></td>
+    <td><code>measured</code> does not mean trustworthy. Provenance says how Witness got a value; author
+      says who wrote it; <strong>neither says whether the observed party could choose it.</strong>
+      <code>GIT_AUTHOR_DATE</code> sets the one field this surface fills on every record, and the
+      skeleton&rsquo;s own regression test forges two timestamps to build its fixture. For a product founded
+      on accepting records about actors it never authenticated, that is a missing axis.</td>
+    <td>spec</td>
+  </tr>
+  <tr>
+    <td><strong>W-4</strong></td>
+    <td>The report <strong>claimed to be derived from records <em>plus matrices</em> and was a function of
+      records alone.</strong> Caught by the second half of a requirement&rsquo;s own test: changing a matrix
+      entry&rsquo;s reason produced a byte-identical report. <strong>Fixed</strong> &mdash; and the fix
+      produced a check nobody had reasoned their way to: the report now compares each surface&rsquo;s
+      declaration against what its records actually contain, and says so when they disagree. Zero
+      disagreements over the real corpus, which is the answer that check should give on a healthy read.</td>
+    <td>code, then spec</td>
+  </tr>
+  <tr>
+    <td><strong>W-5</strong></td>
+    <td>The oldest-observable timestamp &mdash; the entire content of the requirement that stops a report
+      presenting an unobserved range as empty &mdash; was computed by <strong>string comparison across mixed
+      UTC offsets</strong> (2,761 commits at <code>+01:00</code>, 68 at <code>Z</code>). Measured to give the
+      same answer on this corpus: latent, not live. <strong>Fixed anyway.</strong></td>
+    <td>code</td>
+  </tr>
+  <tr>
+    <td><strong>W-6</strong></td>
+    <td><strong>A commit is not a turn, and the capability matrix has no slot in which to say so.</strong>
+      The record type is defined as one record per turn; this surface emits one per commit. It passes every
+      structural check while counting the wrong noun, so every completeness ratio it produces has an
+      unvalidated denominator.</td>
+    <td>spec</td>
+  </tr>
+  <tr>
+    <td><strong>W-7</strong></td>
+    <td>The data-policy gate was <strong>written per product where it belongs per surface</strong> &mdash;
+      the finding above, and the reason this iteration existed at all.</td>
+    <td>spec</td>
+  </tr>
+  <tr>
+    <td><strong>W-8</strong></td>
+    <td>The reader reported <code>unmapped_types: 0</code> where the truth was <em>not applicable</em>
+      &mdash; the exact <em>&ldquo;found none must be distinguishable from did not look&rdquo;</em> error a
+      task written three hours earlier forbids, <strong>committed by the session that wrote that
+      task</strong>, in the first surface it built. Now <code>null</code>, with a test asserting the null
+      rather than the explanatory note. Recorded because it is evidence about the rounds, not about the
+      code: the rule was known, written down, and did not prevent the instance.</td>
+    <td>code</td>
+  </tr>
+</table>
+
+<h3>What the drive did <em>not</em> falsify</h3>
+
+<p>
+  Said explicitly, because a drive that falsifies nothing was not looked at hard enough and this one is
+  allowed to name what held. <strong>The four provenance states held</strong> &mdash; every one exercised,
+  and no path found that produced a value a record claimed not to have. <strong><code>derived</code> earned
+  its place on first contact</strong>: <code>cost_usd</code> ran its derivation, found its inputs unmeasured,
+  and returned unavailable naming the missing input on all 2,829 records, never partially derived.
+  <strong>The closed surface list held</strong> &mdash; unknown, absent and known-but-no-reader all exit
+  non-zero naming what the build knows, and the no-surface case was checked on both halves, the exit code
+  <em>and</em> the file that must not be created. <strong><code>conditional</code> was the right
+  call</strong>: 1,699 records resolved one way and 1,130 the other, within one surface, in one repository
+  &mdash; the same shape R2 measured across models, reached from a different direction.
+</p>
+
+<h3>What this does not change</h3>
+
+<p>
+  <strong>Nothing in &sect;7.4 is answered by this.</strong> The six decisions are still yours, the
+  transcript surface still has no reader, and no line of this skeleton read a session file. What changed is
+  that <em>propose-then-shelve</em> was too blunt: one surface could move without you, it moved, and it
+  found five things three careful rounds did not. Whether <code>git-commit</code> should survive as a
+  surface at all is itself open &mdash; W-6 is a real argument that it should not, and it was chosen because
+  it was drivable without a decision from you, not because anyone decided the product wants it.
+</p>
+
 <footer class="page">
   Two runs on <code>autonomous/2026-09-07-sidequest</code>, worktree
   <code>…\AgentWeave-sidequest</code>, never the main checkout · eight sidequest iterations (§1–§6 and the
-  S-10 addendum) then four overseer iterations (§7) ·
+  S-10 addendum) then five overseer iterations (§7–§8) ·
   no Hub started, no agent turn, no web, no AgentWeave product code &middot; two sibling repositories,
-  <code>continuity-kit</code> (driven) and <code>witness</code> (proposed only), both local with no remote ·
+  <code>continuity-kit</code> and <code>witness</code>, both driven, both local with no remote ·
   logs at <code>.claude/autonomous/2026-09-07-sidequest-log.md</code> and
   <code>.claude/autonomous/2026-09-07-overseer-log.md</code>, positions at
   <code>STATE-sidequest.json</code> and <code>STATE-overseer.json</code>.

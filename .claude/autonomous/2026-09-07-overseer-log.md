@@ -510,3 +510,135 @@ to `STATE-sidequest.json` or `STATE-day.json`/`STATE-night.json`. The witness re
 
 Worktree `AgentWeave-sidequest` on `autonomous/2026-09-07-sidequest`, clean after commit. Review page
 68,386 bytes, one file, self-contained.
+
+---
+
+## Iteration 5 — T-5: the skeleton runs, and the rule that protects the report makes the actor unprintable
+
+**2026-09-07, ~20:04–21:55 +01:00.** Branch `autonomous/2026-09-07-sidequest`, worktree
+`AgentWeave-sidequest`. State verified against `git log` before starting: `4a7cd93` matched
+`iteration: 4`, `next_action: T-5`. Nothing to reconcile.
+
+T-5 was conditional on more than 60 minutes remaining before `stop_at`. 116 remained, so it ran.
+
+### The gate that would have made this a no-op — and why it was wrong
+
+`witness/openspec/changes/.../tasks.md` said, in R1's words and unamended by R2 or R3:
+**"Every phase below is blocked on 0.3."** 0.3 is the operator's permission to read
+`~/.claude/projects/**/*.jsonl`. Taken literally, T-5 had nothing to build.
+
+**That gate is too coarse, and it is finding W-7.** 0.3 asks *may Witness read your sessions?* and
+the tasks file generalised the answer to *may Witness read anything?* A repository's own commit
+history is data the operator has already published — reading it discloses nothing that was not
+already pushed — and it is nonetheless a record of turns performed by **agents Witness did not
+spawn**, which is the product's entire subject. The block belongs to the **surface**, not the
+product. The queue item had already pointed at this corpus ("git history"); the finding is that the
+specs could not say why that was allowed.
+
+Acted on it. `tasks.md` now marks per-item `[gated: claude-transcript]` where 0.3 genuinely blocks,
+and the old sentence is replaced with the reason it was wrong.
+
+### What was built — `witness` at `c09dd08`
+
+`src/witness/`, stdlib only, ~700 lines: `provenance.py` (four states, construction-time checks,
+`derive()`), `record.py` (ten fields, mapping identifiers, JSONL round trip), `matrix.py`
+(always/never/conditional, per-record resolution, load-time completeness), `surfaces.py` (the
+closed list), `surface_git.py` (the one reader), `report.py`, `__main__.py`. 44 tests, each named
+for the `tasks.md` item it closes, `py -3.11 -m unittest tests.test_witness`.
+
+Stdlib is not a decision about the stack — task 0.4 is undecided and zero dependencies is the only
+choice that pre-commits nothing.
+
+**The transcript surface has no reader compiled in at all.** `witness report --surface
+claude-transcript` exits 2 naming decision 0.3. The block is an absence, not a flag.
+
+### The drive
+
+`witness report --surface git-commit` over this worktree's real history — **2,829 commits,
+2026-03-07 to 2026-09-07** — plus the witness repo's own three commits as a contrast case.
+Full write-up in `witness/DRIVE.md`; new phase 6 in `tasks.md` carries the nine follow-ups.
+
+**Eight findings. Five are defects in the specs R1–R3 wrote, not in the code.**
+
+- **W-1, the one that matters.** The only agent identity a commit carries is the `Co-Authored-By`
+  trailer — **1,699 of 2,829, five distinct values** — and *the model wrote it*. Declared honestly,
+  `actor` and `model` are model-authored, and R3's rule that a model-authored value **"SHALL NOT
+  appear in any emitted report"** then makes both unprintable: the per-model breakdown comes out as
+  five buckets named `model-authored-value-<hash>`. Implemented that way deliberately so the
+  collision shows in the output rather than in a comment. **The axis conflates a model's
+  *characterisation* of a turn (`ai-title`, a commit subject — must not be republished) with a
+  model's *self-identification* (a trailer naming the actor — is the record's subject).** R3 could
+  not have found it: on the transcript surface the `model` field is instrumented, so the two jobs
+  never collide there.
+- **W-2.** `measured_fraction` came out **0.4 on all five model buckets, identically**, and 0.2 on
+  `model-unavailable` — which differs *because* the model is unavailable, so the figure partly
+  restates its own grouping key. R3 forbade a per-agent figure for ranking model choice and replaced
+  it with one it did not check for the same class of defect.
+- **W-3.** `measured` does not mean trustworthy. Provenance says how Witness got a value, author says
+  who wrote it, **neither says whether the observed party could choose it.** `GIT_AUTHOR_DATE` sets
+  `started_at` to anything — and the proof is that this repository's own regression test forges two
+  timestamps to build its fixture. Not fixed: a third axis on the record type is a spec decision.
+- **W-4.** Found by the *second half* of requirement 4.1's test: changing a matrix entry's reason and
+  nothing else produced a **byte-identical report**. The report read `entry.capability` and nothing
+  else from the matrix; every reason in the output came from records built under the old matrix. A
+  report claiming to derive from "records plus matrices" that was a function of records alone — this
+  repo's dominant failure mode in miniature. **Fixed**, and the fix produced `matrix_disagreement`,
+  a check no round reasoned its way to: the report now states where a surface's own declaration and
+  its records disagree. **Zero disagreements over the real corpus**, which is the right answer.
+- **W-5.** `oldest_observable` — the whole content of requirement 2.9 — used `min()` over ISO-8601
+  **strings**, and the corpus carries **two offsets in one history (2,761 at `+01:00`, 68 at `Z`)**.
+  Measured: lexical and temporal answers agree here. Latent, not live. **Fixed anyway**, with a
+  regression test built from a two-commit history git itself normalises into mixed offsets.
+- **W-6.** **A commit is not a turn**, and the capability matrix has no slot in which to say so. The
+  surface passes every structural check while counting the wrong noun; every completeness ratio has
+  an unvalidated denominator.
+- **W-7.** Above.
+- **W-8, self-inflicted and recorded as evidence about the rounds.** The reader's first draft emitted
+  `"unmapped_types": 0` where the truth is *not applicable* — the exact "found none vs did not look"
+  error task 3.9 forbids, **committed by the session that wrote task 3.9, three hours later, in the
+  first surface it built.** Now `null`, with a test asserting the null rather than the note.
+
+**What the drive did not falsify**, stated because a drive that falsifies nothing was not looked at
+hard enough: the four provenance states held; `derived` earned its place on first contact
+(`cost_usd` ran, found inputs unmeasured, returned unavailable naming the input on all 2,829
+records, never partially derived); the closed surface list held on all three negative paths, with
+the no-surface case checked on **both** halves — non-zero exit *and* the output file not created;
+and `conditional` was right — 1,699 one way, 1,130 the other, in one surface in one repository.
+
+### Verification
+
+- `py -3.11 -m unittest tests.test_witness` → **44 tests, OK**. Two failures were hit and fixed
+  during the run, not worked around: W-4 (caught by its own test) and the W-5 test's expectation,
+  where git normalises the `+00:00` it was given back out as `Z` — the mixed-offset history the test
+  exists for, produced by git itself.
+- `openspec validate --changes --strict` in witness → **1 passed, 0 failed**, after the tasks.md
+  amendment.
+- Drive re-run after both fixes: 2,829 records, 0 unparseable, 0 matrix disagreements,
+  `oldest_observable` 2026-03-07T18:05:04Z.
+- Task 5.4's check, run: `git log --stat -1` on the witness commit contains no path under
+  `corpus/`, `drive-output/` or `*.transcript.jsonl`. `drive-output/` holds the run's records and
+  stays gitignored.
+- `scripts/drive/check_review_page.py` **read, not trusted**: 10 checks all ok. `findings on the
+  page: 0` remains the known non-regression recorded in iteration 4 — it greps §3's markup.
+
+### The review page
+
+**Section 8 appended to the same page** (68,386 → 76,340 bytes); no second page. §7's lede is
+corrected rather than left standing: it said *"three commits"* and *"zero implementation tasks
+done"* and *"propose-then-shelve"*, all three of which this iteration falsified, so it now points
+forward to §8 and says what changed. The footer's *"four overseer iterations"* → five, and
+*"`witness` (proposed only)"* → both siblings driven.
+
+### What this iteration did not do
+
+No AgentWeave product code, no Hub, no agent turn, no web, nothing under `spec-queue/`, no write to
+`STATE-sidequest.json` / `STATE-day.json` / `STATE-night.json`, and **no transcript read by any code
+in the skeleton**. The witness repository still has no remote.
+
+**Nothing in `decisions_for_user` is answered by this**, and none was added — the six OV questions
+stand exactly as R3 left them.
+
+### Queue state
+
+**T-5 was the last item. The queue is finished and `next_action` is `null`**, which unregisters the
+driver rather than spending a model invocation per firing to rediscover there is nothing to do.
