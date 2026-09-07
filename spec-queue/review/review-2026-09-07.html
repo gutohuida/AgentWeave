@@ -135,7 +135,7 @@
   <h1>Daily review — 2026-09-07</h1>
   <div class="sub">
     Branch <code>autonomous/2026-09-07-daily</code> · cut from <code>master</code> this morning ·
-    <strong>the previous cycle landed this morning</strong> · one change specced through all three rounds ·
+    <strong>the previous cycle landed this morning</strong> · two changes specced through all three rounds ·
     two new findings (<span class="fid">F296</span>, <span class="fid">F297</span>) plus four
     corrections to <span class="fid">F271</span>
   </div>
@@ -388,7 +388,13 @@ INFO:     127.0.0.1:55203 - "GET /health HTTP/1.1" 200 OK</code></pre>
 </p>
 
 <!-- ============================== 4 ============================== -->
-<h2 id="s4"><span class="num">4</span>What was specced — one change, three rounds</h2>
+<h2 id="s4"><span class="num">4</span>What was specced — two changes, three rounds each</h2>
+
+<p class="lede">
+  Two independent spec loops ran today, six rounds in all, and <strong>not one of the six was a
+  no-op</strong>. The first is read first because it is the one whose <em>fix moved</em> in round 3.
+  The second — the confirmation you asked for in <code>DIRECTION.md</code> — begins after DAY-3.
+</p>
 
 <div class="card">
   <h3 style="margin-top:0"><code>2026-09-07-a-dead-connection-is-never-handed-back-out</code></h3>
@@ -610,6 +616,216 @@ dispose returned in 0.00s</code></pre>
   </p>
 </div>
 
+<h3>The second change — the one you asked for</h3>
+
+<p>
+  DAY-1, DAY-2 and DAY-3 above all belong to the first change. This one is separate, and it is
+  the change <code>DIRECTION.md</code> queued on your instruction. <strong>It carries no question</strong>
+  — only a verdict token, in <code>APPROVALS.md</code>.
+</p>
+
+<div class="card">
+  <h3 style="margin-top:0"><code>2026-09-07-clearing-instructions-asks-first</code></h3>
+  <dl class="kv">
+    <dt>Origin</dt><dd><strong>Your own answer</strong> — <code>DIRECTION.md</code>'s 2026-09-07 section, replying to 2026-09-06's <strong>DAY-3</strong>: <em>yes, add a confirmation.</em> No finding sits behind it; this is queued scope, not a defect report.</dd>
+    <dt>Cost</dt><dd>24 tasks in 6 phases. <strong>No migration, no server code, no change to what the route accepts.</strong> One new component (<code>instructions/ClearInstructionsDialog.tsx</code>) reusing <code>hooks/useDialogFocus.ts</code>, a gate in <code>InstructionsPage.tsx</code>, a unit file, a post-change drive harness — and the committed bundle rebuilt, so <code>make ui</code> is part of the work.</dd>
+    <dt>Delta</dt><dd>One <code>ADDED</code> requirement with six scenarios, plus <strong>two</strong> <code>MODIFIED</code> requirements in <code>project-instructions</code>. <code>openspec validate --strict</code> passes.</dd>
+    <dt>Rounds</dt><dd><strong>None of the three was a no-op</strong>, and round 3 also <em>drove the product</em> — <strong>27 passed / 0 failed</strong>. Eighth consecutive outing.</dd>
+  </dl>
+</div>
+
+<h3>The problem — measured in a browser, not read out of the source</h3>
+
+<p>
+  An operator with the project's instructions in front of them selects all, deletes, clicks Save, and
+  loses them. Rounds 1 and 2 argued that from the source and both recorded that they had driven
+  nothing. <strong>Round 3 operated it</strong>, in Chromium against the served bundle
+  (<code>src_commit</code> <code>eb1d1d7</code>, the post-F271 build) on a throwaway Hub on
+  <code>:8011</code> over a fresh database, against a throwaway project deleted afterwards and
+  confirmed absent.
+</p>
+
+<table>
+  <thead><tr><th>what was watched</th><th>what happened</th></tr></thead>
+  <tbody>
+    <tr><td>requests leaving the page</td><td><strong>exactly one PUT</strong>, carrying <code>{"content": ""}</code></td></tr>
+    <tr><td>dialogs on screen at any point</td><td><strong>zero</strong> — nothing asked</td></tr>
+    <tr><td>the row, read back over the API</td><td><code>''</code></td></tr>
+    <tr><td>what the screen reported</td><td>an <strong>ordinary success</strong> — the same green badge any save shows</td></tr>
+    <tr><td>undo / restore / revert / recover / history, anywhere on the rendered page</td><td><strong>none</strong>; <code>GET /project/instructions/history</code> is <strong>404</strong></td></tr>
+  </tbody>
+</table>
+
+<p>
+  So the absence of recovery is measured <em>at the product's surface</em>, not merely inferred from
+  the schema — and the schema agrees: <code>ProjectInstructions</code> is one row keyed by project,
+  upserted in place, with no revision column, no soft delete and no second table. The most destructive
+  act available on that screen is also the one costing the fewest keystrokes, and the product cannot
+  tell it from an ordinary save.
+</p>
+
+<div class="note">
+  <strong>This run also discharges the change's own instrument check, in advance.</strong>
+  <code>tasks.md</code> 5.2 is the one task in the file ticked before implementation, deliberately: it
+  measures the <em>pre-change</em> product, which stops being observable the moment the fix lands.
+  Every assertion in that harness is expected to invert. Having watched it see the write whose absence
+  the post-change harness will assert, a later green run is evidence rather than an assumption.
+</div>
+
+<h3>Round 1 — the change contradicted a requirement one day old</h3>
+
+<p>
+  R1 wrote the proposal and, reading the shipped spec rather than only the code, found that
+  <em>Hub UI provides instructions editor</em> — archived <strong>the previous day</strong> — carries
+  <em>"WHEN … the user edits the textarea and clicks Save THEN content is persisted via PUT"</em>.
+  Read literally, a confirmation step breaks that for the clearing case. The delta
+  <strong><code>MODIFIED</code>s it</strong> so its save scenario governs saves that do not blank
+  stored content, rather than shipping the contradiction.
+</p>
+
+<p>Three other things R1 settled by measurement rather than assertion:</p>
+
+<ul>
+  <li><strong>The confirmation cannot fire over a state that was never loaded</strong> — the question
+  <code>DIRECTION.md</code> told the round to answer. <code>InstructionsPage.tsx:62</code> passes
+  <code>actions</code> as <code>data ? (…) : undefined</code>, and <code>SettingsSection</code> renders
+  <code>actions</code> in its heading, outside the branch bodies. In the <code>isError</code> and
+  in-flight states there is <strong>no Save control at all</strong> — F271 chose absence over an inert
+  button, so the write is impossible rather than refused. The baseline is <code>data.content</code>,
+  the content actually read.</li>
+  <li><strong>Nothing was invented.</strong> Four confirmation shapes already ship and they form a
+  ladder: type-to-confirm (<code>DeleteProjectDialog</code>), named-target modal
+  (<code>ArchiveConfirmDialog</code>), inline two-button swap (<code>JobCard</code>), and a
+  pre-emptive note that is <em>deliberately not a dialog</em> (<code>TaskDetailDrawer</code>). The
+  middle one is proposed, and the last one's objection — <em>"a confirmation step would teach the
+  operator to dismiss it"</em> — is answered rather than ranked: this confirms <strong>only the
+  clearing path</strong>, which an operator meets perhaps twice in the product's life.</li>
+  <li><strong>It is not a second attempt at F271</strong>, and it depends on F271 having shipped:
+  without that gate, "non-empty stored content" would have no reliable baseline.</li>
+</ul>
+
+<h3>Round 2 — the design trims both sides, and the delta's English did not say so</h3>
+
+<div class="note">
+  <strong>The two requirements in the same delta contradicted each other over a single newline.</strong>
+  <code>design.md</code> D1's predicate trims whitespace on both sides and always did. The requirement
+  text did not carry that, so a save leaving <em>one newline</em> behind was required to persist
+  untouched by the <code>MODIFIED</code> requirement and to be confirmed by the <code>ADDED</code> one
+  — and a save blanking stored content that is <em>itself</em> only whitespace was required by
+  neither.
+</div>
+
+<p>
+  <strong>Nothing about the design changed.</strong> The fix is in the English: both entries now say
+  <em>"containing more than whitespace"</em> and <em>"empty or only whitespace"</em>, and
+  <code>tasks.md</code> 4.6 gains the stored-whitespace assertion. This is the shape CLAUDE.md names —
+  the conclusion was right while the argument stating it was not — and it is exactly what a round that
+  only re-checked outcomes would have passed over. The near-miss it protects is real: R3 later drove
+  the single-newline gesture and it <strong>destroys the forty stored lines identically</strong>, which
+  is the case a predicate testing <code>content === ''</code> lets through.
+</p>
+
+<p>R2 also re-measured what R1 had cited, and two citations did not survive:</p>
+
+<ul>
+  <li>R1's <code>models.py</code> grep <strong>returns two lines, not three</strong> — and could not
+  have established the negative it was quoted for anyway. Replaced with a repository-wide measurement
+  (<code>grep -rn project_instructions hub/hub/</code> → four lines, none a foreign key, no migration
+  naming the table), which is strictly stronger.</li>
+  <li><code>instructions.py:66-67</code> contained <strong>neither</strong> statement attributed to it:
+  the assignment is at <code>:61</code>, the commit at <code>:66</code>.</li>
+  <li>R1's <em>unmeasured</em> react-query belief was <strong>measured and holds</strong>
+  (<code>query-core</code> <code>utils.ts:386-402</code>, <code>replaceEqualDeep</code>), and the
+  adjacent clobber hazard is ruled out by <code>main.tsx:11</code>'s
+  <code>refetchOnWindowFocus: false</code>. <strong>A finding filed one measurement earlier would have
+  been false</strong> — the second time this cycle.</li>
+</ul>
+
+<h3>Round 3 — the drive, and the requirement two rounds had cleared by name</h3>
+
+<div class="note">
+  <strong><code>proposal.md</code> cleared the wrong requirement, in writing.</strong> It said:
+  <em>"Checked and found <strong>not</strong> in tension: Save cannot write instructions that were
+  never read."</em> R2 did not repeat the sweep. Both rounds stopped at that requirement's
+  <code>SHALL NOT</code> line — but its <em>fourth</em> scenario is the positive complement, and it
+  states the lift <strong>unqualified</strong>: <em>"WHEN the read succeeds … and the operator edits
+  and saves THEN the edited content is written."</em> Emptying the editor is an edit.
+</div>
+
+<p>
+  So on <code>read succeeds → clear → Save → decline</code>, that scenario requires the content to have
+  been written and the new requirement requires it not to have been: <strong>a contradiction on one
+  concrete sequence</strong>, in the same file, against a requirement that shipped one day earlier —
+  the same defect R1 caught this change committing against its <em>neighbour</em>, sitting one
+  requirement further down and missed twice.
+</p>
+
+<p>
+  Remedy: a <strong>second <code>MODIFIED</code> entry</strong> carrying the same condition
+  <em>word for word</em> — differing words are what R2 found breaking the delta from the inside.
+  Header and <code>SHALL</code> line verified byte-identical to the shipped file, and the three
+  untouched scenarios byte-identical too, so the eventual sync has one clause to reconcile and nothing
+  else.
+</p>
+
+<h4>The sweep, reported including its nulls</h4>
+
+<p>
+  Four other <code>project-instructions</code> requirements and all six of
+  <code>project-environment-settings</code> — <strong>re-derived, not carried forward from R1</strong>
+  — are <strong>null</strong>. So is every other spec: the 18 files mentioning "instruction" outside
+  this capability all mean charter context or a message to an agent, and neither other open change
+  touches this capability. <strong>No further delta is owed.</strong>
+</p>
+
+<h4>The change's own last step, checked for the failure it is fixing</h4>
+
+<p>
+  The same check that moved yesterday's fix, applied to task 6.2 — sync into the shipped spec, then
+  archive. <strong>Found:</strong> <code>openspec-sync-specs</code> is agent-driven, so the merge is
+  unguarded judgement, while <code>openspec archive</code> separately advertises that it updates main
+  specs, with a <code>--skip-specs</code> opt-out. Running the bare CLI after a hand-sync puts a
+  mechanical update on top of a file whose whole value is judgement. <strong>Whether it overwrites,
+  double-applies or no-ops is unverified and labelled so</strong> — measuring it would have meant
+  archiving a live change. 6.2 now names the skill path or <code>--skip-specs</code>.
+</p>
+
+<p>
+  <strong>And the honest null is the interesting half:</strong> the failure this change exists to
+  prevent — an unrecoverable overwrite with no copy kept — does <em>not</em> recur in its own last
+  step. <code>openspec/specs/</code> is git-tracked and the archive keeps the delta, so the destroyed
+  text survives in two independent places. <strong>Git is exactly the history table
+  <code>ProjectInstructions</code> lacks</strong>, which sharpens the change's argument rather than
+  undermining it.
+</p>
+
+<h4>One instrument fact, because it silently fakes a product failure</h4>
+
+<p>
+  The harness's first run reported the success acknowledgement <em>missing</em> against a page
+  behaving perfectly. The badge is cleared by a 2000 ms timer
+  (<code>InstructionsPage.tsx:46-52</code>) and the harness observed at 2.5 s. Measured: present at
+  0.7 s, gone by 3.3 s; both edges are now asserted, and <code>tasks.md</code> 4.3 records it, because
+  a post-change test asserting "the outcome is reported as for any other save" fails the same way.
+  <strong>The red was checked before it was believed</strong> — the third time this cycle a
+  measurement one step further on inverted the conclusion.
+</p>
+
+<h3>What this change does <em>not</em> claim</h3>
+
+<ul>
+  <li><strong>Nothing post-change is driven or tested yet.</strong> Only the pre-change run exists;
+  the harness of 5.1 and the unit file of §4 are the work, not evidence for it.</li>
+  <li><strong>The whitespace judgement stays a judgement.</strong> Whether blanking whitespace-only
+  stored content deserves no interruption is a call, not a measurement, and three rounds have left it
+  standing. If you disagree, it is a one-line edit to the predicate and two scenarios.</li>
+  <li><strong>It does not confirm a replacement.</strong> Overwriting instructions with <em>different</em>
+  instructions is out of scope: the operator's new text is on screen and the act announces itself.</li>
+  <li><strong>No generic <code>ConfirmDialog</code> is proposed.</strong> Unifying the four shapes would
+  touch three shipped surfaces, each with a docstring explaining why it is not the others, for a change
+  that needs one of them.</li>
+</ul>
+
 <h3>Carried, unanswered, and each is one line</h3>
 
 <div class="card">
@@ -617,7 +833,7 @@ dispose returned in 0.00s</code></pre>
     <li>
       <strong><code>2026-09-05-the-conversation-carries-its-own-run-facts</code>
       (<span class="fid">F274</span>) still has no verdict token.</strong> It sits at
-      <code>spec-queue/APPROVALS.md:158</code> with nothing in front of it. It is 44 tasks, fully specced,
+      <code>spec-queue/APPROVALS.md:203</code> with nothing in front of it. It is 44 tasks, fully specced,
       and <strong>the one change in the repository that is ready to build</strong> — and no night window
       may touch it until it reads <code>APPROVED</code>, <code>REVISING</code> or <code>REJECTED</code>.
       Carried from 2026-09-06.
@@ -649,8 +865,9 @@ dispose returned in 0.00s</code></pre>
 <ol>
   <li>
     <strong>Unarchived changes that are implemented and only need archiving.</strong>
-    <span class="pill">empty tonight</span> Both open changes are unimplemented —
-    <code>2026-09-05-the-conversation-carries-its-own-run-facts</code> at 0/44 and today's at 0/23.
+    <span class="pill">empty tonight</span> All three open changes are unimplemented —
+    <code>2026-09-05-the-conversation-carries-its-own-run-facts</code> at 0/44 and today's two at 0/23
+    and 0/24.
   </li>
   <li>
     <strong>Open findings, severity A before B before C</strong> — under the rule <em>"a finding with no
@@ -670,9 +887,9 @@ dispose returned in 0.00s</code></pre>
 <div class="note">
   <strong>The honest reading: tonight has one real item and it is a re-drive.</strong> Step 1 is empty,
   step 3 is empty by construction, and step 2's own rule pushes the B-severity work back to the day
-  window. <strong>Three single lines would each change that</strong>: a verdict on
-  <span class="fid">F274</span> (44 tasks, ready now), a verdict on today's change (23 tasks), or a line
-  answering 2026-09-06's DAY-2. <span class="fid">F296</span>'s one-word harness fix is available as
+  window. <strong>Four single lines would each change that</strong>: a verdict on
+  <span class="fid">F274</span> (44 tasks, ready now), a verdict on either of today's two changes (23
+  tasks and 24 tasks), or a line answering 2026-09-06's DAY-2. <span class="fid">F296</span>'s one-word harness fix is available as
   filler under the no-spec carve-out and does not need approving.
 </div>
 

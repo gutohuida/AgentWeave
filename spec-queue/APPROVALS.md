@@ -18,8 +18,9 @@ Newest day first. Days below the newest are history and are not read.
 
 ## 2026-09-07
 
-Review page: `review/review-2026-09-07.html`. **One change proposed, taken through all three rounds.
-No round was a no-op — the seventh consecutive outing.** Round 3 is the one to read: it did not
+Review page: `review/review-2026-09-07.html`. **Two changes proposed, each taken through all three
+rounds. Not one of the six rounds was a no-op** — the seventh and eighth consecutive outings. The
+second change is at the bottom of this section, with its own verdict row. Round 3 is the one to read: it did not
 merely confirm the change, it **moved the fix**, on a measurement neither earlier round made.
 `await engine.dispose()` -- task 2.3, the last thing the change's own new shutdown does -- was
 measured to **hang forever** on the very connection the change is about (40-second external kill;
@@ -61,7 +62,7 @@ fix as originally specced would itself have hung the shutdown.
 - **F297 (B)** -- `src/agentweave/cli.py:528-545`. `agentweave stop` on Windows runs `taskkill /PID <pid> /F` with no signal first, so the Hub's ASGI lifespan shutdown never runs and `terminate_all_active_runs()` is skipped, against the shipped `app-lifecycle` scenario's own clause *"active runs across projects are terminated through normal shutdown"*. Measured, not reasoned. It was deliberately kept **out** of the F295 change -- it is CLI work against a different shipped requirement. **DAY-3** asks whether it gets its own spec loop and in what order. They interact: a graceful Windows stop would start *running* the shutdown sequence F295's change is adding, so landing F295 first is the safer order.
 
 **Still unanswered from earlier pages, and each is one line.**
-`2026-09-05-the-conversation-carries-its-own-run-facts` (F274) sits at line 158 of this file **with no
+`2026-09-05-the-conversation-carries-its-own-run-facts` (F274) sits at line 203 of this file **with no
 verdict token** -- 44 tasks, fully specced, and the one change in the repository that is ready to
 build; no night window may touch it until it reads `APPROVED`, `REVISING` or `REJECTED`. And
 2026-09-06's DAY-2 -- spend a night slot on F292, or let the CI gate tolerate a re-run -- is still
@@ -72,6 +73,50 @@ on F140/F142/F154/F155, which each have an archived, never-driven change. Step 1
 empty -- both open changes are unimplemented, 0/44 and 0/23 -- and the B-severity findings have no
 proposals, so the backlog rule sends them back to tomorrow's day window rather than tonight.
 `NOTHING TONIGHT` is a valid answer and cheaper than silence.
+
+**A second change was specced after the section above was first written, and it too had all three
+rounds plus a drive.** It is the confirmation you asked for in `DIRECTION.md`'s 2026-09-07 section,
+answering 2026-09-06's DAY-3. It carries **no question** -- only a verdict token.
+
+- 2026-09-07-clearing-instructions-asks-first   Your own queued scope, no finding behind it. 24 tasks in 6 phases. No migration, no server code, no change to what the route accepts. An operator who has the project's instructions on screen, selects all, deletes and clicks Save loses them: **measured in a browser**, not read out of the source -- exactly one PUT carrying `{"content": ""}`, **zero dialogs** at any point, the row read back as `''`, the ordinary green success badge, and nothing anywhere on the rendered page saying undo, restore, revert, recover or history (`/project/instructions/history` is 404). The store is one row upserted in place with no revision column and no second table, so the loss is unrecoverable. One `ADDED` requirement with six scenarios plus **two** `MODIFIED` requirements in `project-instructions`. Adds `hub/ui/src/components/instructions/ClearInstructionsDialog.tsx` (the `ArchiveConfirmDialog` shape, reusing `hooks/useDialogFocus.ts`) and a gate in `InstructionsPage.tsx`; the committed bundle must be rebuilt, so `make ui` is part of the work. `openspec validate --strict` passes.
+
+**Each round found something, and the third one drove it.**
+
+- **R1** found the change contradicted *Hub UI provides instructions editor* -- archived **the day
+  before** -- whose save scenario requires the click to persist. The delta `MODIFIED`s it rather than
+  shipping the contradiction. R1 also answered the question DIRECTION.md set it: the confirmation
+  **cannot** fire over a state that was never loaded, because F271's `actions={data ? … : undefined}`
+  gate means there is no Save control at all in the error and in-flight states. Four confirmation
+  primitives already ship and none was invented.
+- **R2** found the delta's own two requirements contradicting each other **over a single newline**.
+  `design.md` D1's predicate trims both sides and always did; the requirement text did not carry it,
+  so a save leaving one newline behind was required to persist by one requirement and to be confirmed
+  by the other, and a save blanking whitespace-only stored content was required by neither. Both now
+  say "containing more than whitespace" / "empty or only whitespace". **Nothing about the design
+  changed** -- the conclusion was right while the argument stating it was not. R2 also found two of
+  R1's citations wrong (the `models.py` grep returns two lines not three, and could not establish its
+  negative anyway; `instructions.py:66-67` contained neither statement quoted from it) and *measured*
+  R1's one unmeasured belief, which held.
+- **R3 drove the pre-change product**: `scripts/drive/t_d8_clearing_instructions_prechange.py`,
+  Chromium against the served bundle on a throwaway Hub, **27 passed / 0 failed**. That is the table
+  above, and it discharges `tasks.md` 5.2 in advance -- the one task ticked before implementation,
+  because it measures behaviour that stops being observable once the fix lands. R3 then found a
+  **second** shipped requirement in tension, one `proposal.md` had cleared **by name** and R2 had not
+  re-checked: *Save cannot write instructions that were never read*, whose fourth scenario is the
+  positive complement and requires an unqualified write once the read succeeds. On
+  `read -> clear -> Save -> decline` the two requirements contradict. Fixed with a second `MODIFIED`
+  entry using the same words, header and `SHALL` byte-identical.
+
+**Two things about this change are labelled rather than claimed.** Whether a bare `openspec archive`
+overwrites the hand-merged sync in its own task 6.2 is **unverified** -- measuring it would have meant
+archiving a live change -- so 6.2 names the skill path or `--skip-specs` instead. And whether
+blanking whitespace-only stored content deserves no interruption is a **judgement**, not a
+measurement; three rounds left it standing, and reversing it is a one-line edit to the predicate and
+two scenarios.
+
+**The night's picture changes if you approve either change**, and the paragraph above about "one real
+item" was written when only the first existed. There are now **three** open changes, all
+unimplemented -- 0/44, 0/23 and 0/24 -- and any one verdict token gives the night real work.
 
 ---
 

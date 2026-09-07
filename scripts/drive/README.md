@@ -217,3 +217,28 @@ One thing it cost time to learn, and it fakes a product failure. The success ack
 an empty `role="status"` and reported the acknowledgement missing against a page behaving perfectly.
 Measured: present at 0.7 s, gone by 3.3 s. `ack_window()` now samples both edges, so the expiry is an
 assertion rather than a trap.
+
+## The review page itself — two checkers, and they check different things
+
+Neither needs a Hub, a project or a browser profile; both take a path and run against `file://`.
+
+- `check_review_page.py` — the file **parses** and is **self-contained**: no stray ``, a full
+  document wrapper, a bare `:root` plus a `prefers-color-scheme: dark` override, an explicit `body`
+  background, zero external stylesheets/scripts/fonts, and a tag-balance walk with `html.parser`.
+- `render_review_page.py` — the file **reads**. Chromium, both colour schemes, viewport 1100 px:
+  computed background and ink, page height, horizontal overflow on `<html>`, any `pre`/`table`/`code`
+  overflowing its own box, console errors and `pageerror`. It also prints the `h2`s, the `.ask`
+  headings and the change-card names, which is the cheapest way to see that a section you just added
+  is actually in the document. `--shots DIR` writes top and bottom screenshots per scheme.
+  Written at D-9 on 2026-09-07 after the same Playwright snippet had been retyped by hand for three
+  consecutive pages; the checks are the ones the D-5 log entry recorded, so pages stay comparable.
+
+**A known false red in `check_review_page.py`, unfixed and recorded rather than believed.** Its
+finding-id check asserts no `class="fid"` value repeats inside section 3. The docstring says the
+check was scoped to section 3 because cross-references in *later* sections were being miscounted —
+but a cross-reference *within* section 3 hits the same bug. `review-2026-09-07.html` names `F271`
+twice there (a corrections heading and a cross-reference in prose) and `F190` once, so the check
+reports `FAILED` on a page with three real finding items and nothing duplicated. It has been red on
+that page since the page was written at D-5. **The other eight checks pass**, and this one says
+nothing about the page. Same class as F296: an assertion that cannot mean what it is read to mean.
+Fixing it is counting `<h3>` finding headings rather than every `.fid` in the slice.
