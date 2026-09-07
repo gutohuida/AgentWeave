@@ -38,7 +38,7 @@ Nothing below this line can move until these are done, and item 1 expires in the
 
 | # | Action | File |
 |---|---|---|
-| **0.1** | **Write a `## 2026-09-08` section redirecting the day window off the spec loop.** Point D-2/D-3/D-4 at verification and drive work instead of `explore and propose`. Without this the backlog grows tomorrow. | `spec-queue/DIRECTION.md` |
+| **0.1** | ~~Write a `## 2026-09-08` section redirecting the day window off the spec loop.~~ **DONE 2026-09-08 00:35.** The section is written: no spec loop, D-1/D-2 take F292, D-3 takes hygiene. Confirmed the night of 2026-09-07 built nothing — `AgentWeaveArmNight` was disabled and there is no `2026-09-07-night-log.md` — so there was nothing to drive either. | `spec-queue/DIRECTION.md` |
 | **0.2** | **Write four verdict tokens.** `APPROVED` / `REVISING` / `REJECTED` in front of each change name. `NOTHING TONIGHT` is valid but leaves the FIX window idle. | `spec-queue/APPROVALS.md` |
 | **0.3** | **Write the `ORDER:` line.** Three of the four touch `hub/ui` and the committed bundle, so they cannot run beside each other. Only one is bundle-free. | `spec-queue/APPROVALS.md` |
 | **0.4** | **Decide the night arm.** `Enable-ScheduledTask -TaskName AgentWeaveArmNight` (fires 22:55) or leave it off. With tokens written, an enabled arm builds tonight. | Task Scheduler |
@@ -87,29 +87,32 @@ committed beside `hub/ui/src`.
 
 ---
 
-## Stage 3 — R-1, the decision that resizes the rest (operator, one sitting)
+## Stage 3 — ~~R-1~~ **DECIDED 2026-09-08.** R-2 and R-3 remain
 
-**R-1 is a multiplier, not a backlog item.** It absorbs D-2, D-3, D-4, D-6(b), and behind them ten
-raw entries plus **F169 F173 F178 F179 F180 F187 F190 F195 F197 F201**.
+**R-1 is settled: enforce, as a ratchet.** Decided by the operator in session, 2026-09-08 00:30;
+written up in `DECISIONS.md`. The repo writes a check, and the check freezes today's count as a
+ceiling that may shrink and may never grow — existing instances are **not** repaired before the
+check may pass.
 
-The question in one line: *when the repo learns a rule, does it write a check that enforces it, or
-does it fix the instance and rely on remembering?*
+Three checks authorised, all promoting scripts that already exist and both of which reproduced their
+2026-09-02 figures exactly when re-run on 2026-09-08:
 
-**Its answer changes the size of everything left by an order of magnitude:**
+| Check | From | Frozen ceiling |
+|---|---|---|
+| route reachability | `scripts/drive/n10_route_reachability.py` | **35** routes with no client |
+| query error surface | `scripts/drive/n11_query_error_surface.py` | **51** operator-reachable MISREPORT sites |
+| dependency ceilings agree | new, small | the three `fastmcp>=2.0,<4` declarations, `starlette<2.0` |
 
-- **"Enforce"** → those ~20 findings collapse into roughly three convention checks. Weeks of work
-  become nights.
-- **"Repair"** → they stay ~20 separate changes. At one change per night that is ~20 nights,
-  and the plan below has to be re-costed.
+**This is why the total below resolves to three-to-four weeks rather than eight-to-ten.** ~20
+findings stop being backlog and become bounded. The cost taken knowingly: those 35 routes and 51
+misreports stay wrong, with a passing test blessing them, until something touches them on its own
+merits.
 
-**No further measurement is needed.** The evidence is already gathered and written down: the
-35-route reachability table (measured 2026-09-02, reproducible with
-`py -3.11 scripts/drive/n10_route_reachability.py`), the `ChartersPage.tsx:191` missing `onError`,
-and the two defensive version ceilings that are a standing rule no file states. This needs an hour
-of attention, not a window.
+**The three checks are Stage 6 work, not Stage 3 work** — they sit behind the four approved changes
+and the F292 repair. Building them first would be starting something new.
 
-Then **R-2** (should `openspec archive` refuse a colliding delta — a tooling call) and **R-3** (four
-small product calls). Both are small and both have sat a week.
+Still open, both small, both a week old: **R-2** (should `openspec archive` refuse a colliding
+delta — a tooling call) and **R-3** (four small product calls, each closable in a sentence).
 
 ---
 

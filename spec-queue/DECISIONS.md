@@ -60,9 +60,76 @@ Nothing is lost: every original entry number is still named by whichever row now
 
 ### R-1 — Does this repo enforce conventions, or repair instances?
 
-**OPEN. The one decision that manufactures the answers to most of the others.** Absorbs D-2, D-3,
-D-4, D-6(b), and behind them entries 3, 5, 8, 10, 11, 13, 15, 16, 20, 27, plus F169, F173, F178,
-F179, F180, F187, F190, F195, F197, F201.
+**DECIDED 2026-09-08 00:30 — ENFORCE, AS A RATCHET. By the operator, in session.** Absorbs D-2,
+D-3, D-4, D-6(b), and behind them entries 3, 5, 8, 10, 11, 13, 15, 16, 20, 27, plus F169, F173,
+F178, F179, F180, F187, F190, F195, F197, F201.
+
+**The decision.** When this repo learns a rule it **writes a check** — and the check freezes today's
+count as a ceiling that may shrink and may never grow. It does **not** repair every existing
+instance before the check may go green.
+
+**Why the question sat a week: both readings of it cost about twenty nights.** Repairing 35 routes
+and 51 misreports one at a time is more than twenty. Enforcing *as a sweep* — write the check, then
+fix everything it flags before it can pass — is the same cost arriving all at once. Neither fits a
+one-person, nights-only operation, so neither got taken.
+
+**The reframe that resolved it: the repo already does all three things, and the third is a ratchet.**
+
+- It already **enforces**, thirteen times: `test_tool_surface_matches_server.py`,
+  `test_fastmcp_api_contract.py`, `test_mcp_server_stdio_surface.py`, `test_mcp_body_contract.py`,
+  `test_ui_build_stamp.py`, `test_ui_staleness.py`, `test_requirement_drift.py`,
+  `test_conversation_contract.py`, `test_briefing_names_its_contract.py`,
+  `test_timestamp_serialization.py`, `test_evidence_restamp.py`,
+  `test_agent_tool_surface_phase7.py`, `test_session_sync.py`. So "does this repo enforce?" was
+  never the open question — it enforces, and has for weeks.
+- It already **ratchets**: `.claude/autonomous/mypy-baseline.txt` is 172 lines of frozen known
+  failures that must not grow, and `test_ui_build_stamp.py` gates its stricter
+  bundle-matches-source assertion behind `AW_CHECK_UI_BUNDLE=1` for the same reason.
+
+A ratchet is therefore this codebase's convention rather than this decision's taste — the same
+argument round 3 used to approve `2026-09-06-an-unread-editor-cannot-overwrite`.
+
+**What this buys.** ~20 findings stop being backlog and become *bounded and non-growing*. You do not
+finish 51 misreports; you stop the 52nd and pay the rest down as you touch the files.
+
+**What it costs, stated plainly.** The 35 client-less routes and the 51 operator-reachable
+misreports **stay wrong, indefinitely, with a passing test blessing them.** That is the trade and it
+was taken knowingly. Any single one of them that is a real operator-facing defect comes *out* of the
+allowlist and gets fixed on its own merits — that is a per-instance call and R-1 does not pre-empt
+it.
+
+**The three checks this authorises**, sized against the tree at `a6f67af` and re-measured
+2026-09-08 00:20 (both scripts reproduce their 2026-09-02 figures exactly):
+
+| Check | Promote from | Frozen ceiling | Covers |
+|---|---|---|---|
+| route reachability | `scripts/drive/n10_route_reachability.py` | **35** routes with no client (33 distinct paths); 6 more whose hook nothing renders | F169, F187, F260 |
+| query error surface | `scripts/drive/n11_query_error_surface.py` | **51** MISREPORT sites an operator can reach, of 107 call sites, 7 of which bind the error | F173, F178, F179, F180, F195, F197, F201 |
+| dependency ceilings agree | new, small | the three `fastmcp>=2.0,<4` declarations in `pyproject.toml`, and `starlette<2.0` | old D-2, entry 31 |
+
+**Both measurement scripts already exist and both ran clean.** The work is promoting them from
+`scripts/drive/` into `hub/tests/` with a frozen baseline, which is why this is one window and not
+twenty. **It is Stage 6 of `ROADMAP.md`, not the next thing built** — the four approved changes and
+the F292 instrument repair come first.
+
+**Consequences elsewhere, settled by this and needing no further decision:** the old **D-2**
+(FastAPI's own major) is an instance of the ceiling rule and is covered by check 3. **D-6(b)** —
+may a task tick on backend evidence alone? — is answered *no*: a rule that cannot be checked is not
+enforced, so a requirement with an unbuilt UI half does not tick. Three of D-4's four sweeps were
+already measured at 2–9 sites and drop into the queue as ordinary instances.
+
+**Not settled by this:** F190's payload-ordering rule. CLAUDE.md records that only the instance it
+was learned from is checked and no sweep has been run over the other payload-shaped consumers.
+Whether that rule gets a fourth ratchet is a separate, later call — it needs a way to enumerate
+payload-shaped consumers first, and nothing does that today.
+
+---
+
+#### The evidence this was decided on, retained in full
+
+Everything from here to `### R-2` is the case as it stood while R-1 was OPEN. It is kept because it
+is the justification for the ceilings above, and because the two scripts it names are the ones being
+promoted to tests. **Read it as the basis for a decision already taken, not as an open question.**
 
 The question in one line: **when the repo learns a rule, does it write a check that enforces it, or
 does it fix the instance and rely on remembering?**
@@ -492,6 +559,22 @@ serving four-day-old code.
 ---
 
 ## Decided
+
+### R-1 — Enforce, as a ratchet
+
+**DECIDED 2026-09-08 00:30, by the operator, in session.** Written up in full at `### R-1` above,
+which stays where it is because its evidence is the justification for the three frozen ceilings.
+
+In one line: **the repo writes a check, and the check freezes today's count as a ceiling that may
+shrink and may never grow.** Existing instances are not repaired before the check may pass. Three
+checks authorised — route reachability (ceiling 35), query error surface (ceiling 51), dependency
+ceilings agree — all three promoting scripts that already exist. Scheduled as Stage 6 of
+`ROADMAP.md`, behind the four approved changes and the F292 instrument repair.
+
+Settles the old **D-2** and answers **D-6(b)** *no*. Does **not** settle F190's payload-ordering
+rule; that needs a way to enumerate payload-shaped consumers, and nothing does that today.
+
+---
 
 ### D-1 — Ratify or widen the `fastmcp <4` bound
 

@@ -25,6 +25,100 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ---
 
+## 2026-09-08
+
+Written by a DECIDE session, 2026-09-08 00:30, on the operator's behalf. It implements Stage 0.1 and
+Stage 1 of `spec-queue/ROADMAP.md`, which was written the same session and should be read first.
+
+### Do not run the spec loop today. There is no D-2/D-3/D-4.
+
+**This section replaces the default queue shape entirely.** The standing default is
+`D-2/D-3/D-4 = spec R1/R2/R3`, which produces one new proposal per day. That is exactly what today
+must not do.
+
+**Why, in one line: FILL produces one change a day and FIX consumes one per one-to-two nights.**
+Four changes are already fully specced — three rounds each, not one round a no-op on the last six
+outings — and **not one carries an approval token.** 127 tasks, 2 ticked, neither an implementation.
+A fifth proposal makes the gap worse, and no amount of care closes a rate mismatch.
+
+This is not a judgement that proposing is low value. It is arithmetic, and it is temporary: the
+instruction holds until `ROADMAP.md`'s Stage 2 has drained.
+
+### There is nothing to drive, either — check before assuming otherwise
+
+`AgentWeaveArmNight` was **disabled** on 2026-09-07 and 22:55 passed with it off, so **the night of
+2026-09-07 built nothing.** D-1's usual content — drive what the night built — does not exist today.
+
+Verify this rather than believing it: `.claude/autonomous/2026-09-07-night-log.md` and
+`STATE-night.json`. If a night window did somehow run, driving what it built takes priority over
+everything below, and the rest of this section moves to tomorrow.
+
+### The queue
+
+```
+D-1  repair    F292 -- the CI flake, before anything is verified through the suite
+D-2  measure   did the F292 repair hold? re-run, do not assume
+D-3  hygiene   ROADMAP.md Stage 6, items 6.1 through 6.4
+D-4  read      ROADMAP.md and DECISIONS.md R-1, and reconcile the day's log to them
+D-5  review    the review page, as usual
+```
+
+### D-1 / D-2 — F292, and why it comes before everything
+
+**`sqlite3.OperationalError: database is locked`.** It **failed CI on `master` at `15ce482` on
+2026-09-07 at 22:03**, in the `hub-test` job, and the very next commit `af329f5` — the same tree plus
+one markdown file — passed. Run `gh run view 34164645184 --log-failed` for the trace;
+`tests/test_flow_fires_a_review_turn.py` is the ERROR that surfaced it.
+
+Everything Stage 2 builds will be verified by this suite. **Repairing the instrument precedes using
+it**, which is the whole reason this holds today's first slot instead of a build.
+
+Read F292's own ledger section before starting: it is *"the fix for F285 traded a deterministic
+rollback for an intermittent lock, and the mitigation written for it did not hold"* — so the
+mitigation that exists is known to be insufficient, and a repair that only strengthens it repeats a
+move already measured to fail. **F279** (the two "a stopped run" tests failing about half the time
+on an unmodified tree) is probably the same class; check whether one repair covers both, and say so
+either way.
+
+**Do not conflate this with F295.** The 2026-09-07 section below says it, and it still holds: the
+`a-dead-connection-is-never-handed-back-out` change may or may not resolve the flake. Treat *"did
+F295's fix also fix F292?"* as a measurement to make **after** that change is built — not as an
+outcome to expect, and not as a reason to skip D-1.
+
+**D-2 is not optional.** An intermittent failure is not shown fixed by one green run. Re-run the
+affected tests enough times to say something honest about the rate, and write the number down. If
+the repair does not hold, that is the finding — record it and stop, rather than reaching for a
+second attempt at the end of the window.
+
+### D-3 — hygiene, all four small
+
+`ROADMAP.md` Stage 6 has the detail. In short: run `scripts/sync_skills.py` and add the check that
+gates it (`handoff`, `resume` and `daily-review` have been stale in `.agents/skills/` and
+`~/.codex/skills/` since the ledger shipped); `scripts/drive/aw.py:16` promises a loud failure on an
+unset `AW_KEY` that does not exist; the disclosed `aw_live_` key still needs rotating; and
+`.claude/handoffs/LATEST.md` names the wrong handoff.
+
+**Do not start the three ratchet checks R-1 authorised.** They are Stage 6 of the roadmap by
+*number* but they sit behind Stage 2 by *order*, and the day window is not where they belong.
+
+### What this window may not do
+
+- **May not propose a new change.** No R1, no R2, no R3, no exploration that is a proposal wearing
+  another name.
+- **May not write an approval token or mark a decision.** `APPROVALS.md` and `DECISIONS.md` remain
+  the operator's, and absence is not consent.
+- **May not spec anything it finds.** Driving still files findings — that is correct and expected —
+  but a finding filed today waits for the queue to drain before it is specced. File it; leave it.
+
+### If the window finishes early
+
+Re-read `ROADMAP.md` Stage 2 against the four changes' `tasks.md` files and report, per change, what
+would block a build starting tonight — a stale line reference, a task that names a file that has
+moved, a phase whose predecessor was archived. **That is verification of work already specced, not
+new scope**, and it is the cheapest thing that makes tonight's FIX window faster.
+
+---
+
 ## 2026-09-07
 
 Written by the operator in a DECIDE session, 2026-09-06, answering **DAY-3** from
