@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave sidequest review — 2026-09-07</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --panel-2: #f4f4f2;
+    --ink: #1c1c1a;
+    --ink-dim: #5c5c56;
+    --ink-faint: #85857d;
+    --rule: #e0e0da;
+    --rule-strong: #c9c9c1;
+    --accent: #6b4fbb;
+    --sev-a: #b3261e;
+    --sev-a-bg: #fbe9e7;
+    --sev-b: #a8590a;
+    --sev-b-bg: #fdf0e0;
+    --sev-c: #4d6a1f;
+    --sev-c-bg: #eef4e2;
+    --sev-d: #4a5568;
+    --sev-d-bg: #eceef2;
+    --ok: #2f6b3a;
+    --ok-bg: #e8f3ea;
+    --warn-bg: #fdf6e0;
+    --warn-rule: #d9b84a;
+    --code-bg: #f2f2ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --panel: #1e1e23;
+      --panel-2: #26262c;
+      --ink: #e9e9e6;
+      --ink-dim: #b0b0a8;
+      --ink-faint: #86867e;
+      --rule: #33333a;
+      --rule-strong: #4a4a52;
+      --accent: #b09aec;
+      --sev-a: #ff9c92;
+      --sev-a-bg: #3a1f1d;
+      --sev-b: #f0b878;
+      --sev-b-bg: #392a17;
+      --sev-c: #b3d67a;
+      --sev-c-bg: #26301a;
+      --sev-d: #b4c0d4;
+      --sev-d-bg: #24282f;
+      --ok: #8fd39c;
+      --ok-bg: #1c2c20;
+      --warn-bg: #322a14;
+      --warn-rule: #8a7527;
+      --code-bg: #24242a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    padding: 2.2rem 1.25rem 5rem;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  header.page { border-bottom: 2px solid var(--rule-strong); padding-bottom: 1.1rem; margin-bottom: 1.6rem; }
+  header.page h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -0.015em; }
+  header.page .sub { color: var(--ink-dim); font-size: .95rem; }
+  h2 {
+    font-size: 1.22rem; letter-spacing: -0.01em;
+    margin: 2.6rem 0 .5rem; padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: .5rem; }
+  h3 { font-size: 1.02rem; margin: 1.5rem 0 .4rem; }
+  h4 { font-size: .93rem; margin: 1.1rem 0 .3rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .8rem; padding-left: 1.35rem; }
+  li { margin: .3rem 0; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .875em;
+  }
+  code { background: var(--code-bg); padding: .1em .34em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule);
+    border-radius: 6px; padding: .75rem .9rem; overflow-x: auto; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0 1rem; font-size: .93rem; }
+  th, td { text-align: left; padding: .48rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); border-bottom: 1px solid var(--rule-strong); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0; }
+  .note { border-left: 3px solid var(--warn-rule); background: var(--warn-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .note strong:first-child { display: block; margin-bottom: .2rem; }
+  .sev { display: inline-block; min-width: 1.35rem; text-align: center; font-weight: 700; font-size: .78rem; padding: .1rem .38rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+  .sev.a { color: var(--sev-a); background: var(--sev-a-bg); }
+  .sev.b { color: var(--sev-b); background: var(--sev-b-bg); }
+  .sev.c { color: var(--sev-c); background: var(--sev-c-bg); }
+  .sev.d { color: var(--sev-d); background: var(--sev-d-bg); }
+  .pill { display: inline-block; font-size: .76rem; font-weight: 600; letter-spacing: .03em; padding: .12rem .5rem; border-radius: 999px; border: 1px solid var(--rule-strong); color: var(--ink-dim); }
+  .pill.ok, .pill.driven { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .pill.tested { color: var(--sev-b); background: var(--sev-b-bg); border-color: transparent; }
+  .fid { font-family: ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
+  .loc { font-family: ui-monospace, monospace; font-size: .82em; color: var(--ink-faint); white-space: nowrap; }
+  .lede { font-size: 1.02rem; color: var(--ink-dim); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .28rem 1rem; font-size: .93rem; margin: .6rem 0; }
+  .kv dt { color: var(--ink-faint); }
+  .kv dd { margin: 0; }
+  .ask { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1.1rem; margin: 1rem 0; background: var(--panel); }
+  .ask h4 { color: var(--accent); margin-top: 0; }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  a:visited { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  footer.page { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .85rem; }
+  .small { font-size: .88rem; color: var(--ink-dim); }
+  .measured { color: var(--ink-faint); font-size: .82rem; font-style: italic; }
+  @media (max-width: 34rem) {
+    body { padding: 1.4rem .8rem 3rem; font-size: 15px; }
+    table { font-size: .86rem; }
+    .kv { grid-template-columns: 1fr; gap: .1rem .5rem; }
+    .kv dd { margin-bottom: .45rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>Sidequest review — 2026-09-07</h1>
+  <div class="sub">
+    Branch <code>autonomous/2026-09-07-sidequest</code> · worktree
+    <code>…\AgentWeave-sidequest</code> · eight sidequest iterations + four overseer iterations ·
+    <strong>three spec loops, all complete</strong> · two new sibling repositories
+    (<code>continuity-kit</code>, <code>witness</code>) ·
+    <strong>nothing implemented in AgentWeave</strong>; one prototype built and driven, outside it
+  </div>
+</header>
+
+<p class="lede">
+  This run is <em>outside</em> the daily FILL/DECIDE/FIX cycle — separate worktree, separate branch,
+  separate state file, separate scheduled task — so nothing here touches tonight's arming or
+  <code>spec-queue/</code>. It produced <strong>three proposals and two new local repositories</strong>.
+  It wrote no AgentWeave product code, started no Hub, ran no agent turn and browsed no web, all by its
+  own limits.
+  <strong>Eighteen decisions are waiting for you</strong> — twelve in §6, six more in §7.4 — and the
+  first one is a security matter unrelated to any of the three loops.
+</p>
+
+<div class="note">
+  <strong>SQ-1 — urgent, and not part of either spec loop.</strong>
+  <code>scripts/drive/aw.py:15</code> carried a live <code>aw_live_58ab…</code> Hub key as a hardcoded
+  default in a <strong>tracked</strong> file, and <code>gh repo view</code> reports
+  <code>gutohuida/AgentWeave</code> <strong>public</strong>. The default was removed on
+  <code>autonomous/2026-09-07-daily</code> at <code>2d4131b</code>, but removal does not unpublish it —
+  the value is in git history and should be treated as disclosed. Precedent:
+  <code>.claude/handoffs/</code> was untracked wholesale on 2026-09-04 because two <code>aw_live_</code>
+  keys had been committed there; <strong>this one survived that sweep.</strong>
+  The question in §6 is whether to rotate it now.
+</div>
+
+<h2><span class="num">1</span>The exploration you asked us to validate is wrong on seven claims</h2>
+
+<p>
+  The run's first instruction was to review <code>openspec/explorations/2026-09-06-what-could-leave-agentweave-and-become-its-own-tool.md</code>
+  and validate it. A verification pass read the named modules in full on 2026-09-07.
+  <strong>Seven of its claims are wrong, including both halves of its central recommendation.</strong>
+  It was written by a session that delegated its surveys and did not independently re-verify them,
+  and it said so in its own handoff.
+</p>
+
+<table>
+  <thead><tr><th style="width:44%">Claim in the 2026-09-06 exploration</th><th>Verdict, measured 2026-09-07</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>“neither needs the runner/agent/charter machinery to exist”</td>
+      <td><strong>Falsified</strong> for the checkpoint engine. <code>checkpoint_trigger.py:139-153</code>
+      resolves the generating CLI from <code>Project.checkpoint_runner_id</code> → a <code>Runner</code>
+      row and refuses to generate without one (<code>:293-300</code>);
+      <code>checkpoint_access.py:35-62</code> reads <code>can_read_checkpoints</code>/<code>can_recall</code>
+      off the <code>Agent</code> row. Only <em>charter</em> is genuinely absent.</td>
+    </tr>
+    <tr>
+      <td>“checkpointing is an MCP server”</td>
+      <td><strong>Misleading.</strong> The MCP tools are ~50-line HTTP delegates
+      (<code>mcp_server.py:519-569</code>). The engine is Hub-side across <strong>11 of the 44 tables</strong>
+      in <code>db/models.py</code>.</td>
+    </tr>
+    <tr>
+      <td>“the loop wraps any CLI agent”</td>
+      <td><strong>Falsified as shipped.</strong> <code>run-iteration.ps1:23-24</code> is
+      <code>[ValidateSet("claude","codex")]</code>; <code>:245-259</code> hardcodes both flag strings.
+      Fixable in a line, untrue today.</td>
+    </tr>
+    <tr>
+      <td>the review-page <em>generator</em></td>
+      <td><strong>Falsified — there is none.</strong> The page is hand-written by the agent each day
+      (<code>day-window.md:202</code>). What exists are two <em>checkers</em>, 199 lines.</td>
+    </tr>
+    <tr>
+      <td>the threshold trigger's mechanism</td>
+      <td><strong>Never traced.</strong> The percentage is the Hub's own arithmetic
+      (<code>output_recording.py:127-152</code>) over a token count parsed from the runner's stdout
+      (<code>runner_parsing.py:199-226</code>) — not a number the runner reports.</td>
+    </tr>
+    <tr>
+      <td>the probe's dependence on Hub tables</td>
+      <td><strong>Unmentioned, and it is the hardest extraction problem.</strong>
+      <code>checkpoint_generation.py:11-14</code> states the design: the Hub grades a checkpoint against
+      <code>files_changed</code>, <code>tasks</code> and <code>open_questions</code> <em>sitting in a
+      table</em>, which is why it needs no LLM judge. Strip those and it degenerates into exactly the
+      LLM-judge design its own docstring calls inferior.</td>
+    </tr>
+    <tr>
+      <td>“the loop's value is software”</td>
+      <td><strong>Falsified by measurement.</strong> 877 lines of PowerShell against ~1,010 lines of
+      markdown playbook, and every behavioural rule lives in the markdown. Nothing in any script
+      enforces “this window does not implement”.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>The single sharpest consequence:</strong> that document recommended extracting the two
+  mechanisms with the <em>least</em> production evidence, and recommended against the one with the
+  <em>most</em> — and the reason it gave for declining that one was a <em>market</em> argument
+  (“three comparable tools found in one search”), not a <em>separability</em> argument. You asked
+  about separability. This is CLAUDE.md's sharper variant of the round discipline in its purest form:
+  <em>an argument can be wrong while everything it argues about is right.</em>
+</p>
+
+<p class="small">
+  Both seeds written for this run also carried one <strong>deliberately planted, labelled false
+  claim</strong> — that a Windows-path backslash had corrupted a route string in <code>aw.py</code>
+  (line 576 reads <code>"/agents/request"</code> correctly) — so that no round could treat a seed as
+  settled. Both rounds that met it treated it correctly.
+</p>
+
+<h2><span class="num">2</span>Loop 1 — AgentWeave where MCP is blocked, and Copilot is the house CLI</h2>
+
+<p>
+  Three rounds, per CLAUDE.md. Result:
+  <code>openspec/changes/2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing/</code> —
+  proposal, design, tasks, and a delta on <code>agent-capability-plane</code>.
+  <code>openspec validate --strict</code> passes. <strong>Every round changed the change.</strong>
+</p>
+
+<h3>What is being proposed</h3>
+
+<p>
+  The Hub already puts a run's credential (<code>AW_RUN_TOKEN</code>) and the Hub's address
+  (<code>HUB_URL</code>) into the spawned process's environment
+  (<code>agent_trigger.py:1071</code>, <code>:1090-1114</code>) — and then, on the non-MCP branch,
+  tells that same run it has <em>no tool surface at all</em>
+  (<code>launchability.py:325-330</code>). The proposal is that a run without MCP is told how to
+  reach the capability plane over HTTP, and that a run is told the access path it <em>actually</em>
+  has. The credential is <strong>named, never valued</strong> — interpolating it would put a live
+  credential into a durable turn prompt.
+</p>
+
+<p>
+  The seed's question 1 — one change or two — is answered <strong>two, HTTP first</strong>. A Copilot
+  runner is blocked at four layers and the fourth, the output parser, cannot be settled without
+  Copilot's real output, which this window was forbidden to go and find. The HTTP half needs nothing
+  from Copilot and is a live defect for <em>any</em> harness without MCP.
+</p>
+
+<div class="card">
+  <h4>The proposal's own premise, in one line</h4>
+  <p style="margin-bottom:0">
+    <code>_hub_request</code> (<code>mcp_server.py:151-183</code>), the single helper every MCP tool
+    goes through, authenticates with <code>os.environ["AW_RUN_TOKEN"]</code> against
+    <code>os.environ["HUB_URL"] + "/api/v1/agent-actions"</code>.
+    <strong>The MCP adapter is literally a wrapper around the two environment variables the notice
+    tells the agent it has nothing to do with.</strong>
+  </p>
+</div>
+
+<h3>What each round changed about the one before it</h3>
+
+<table>
+  <thead><tr><th style="width:10%">Round</th><th>What it changed</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>R1</strong><br><span class="measured">wrote it</span></td>
+      <td>
+        Found the delta is <strong>MODIFIED, not just ADDED</strong>: <code>openspec/specs/agent-capability-plane/spec.md:107</code>
+        already requires HTTP/MCP parity and already names this deployment — so the company constraint
+        is a <em>shipped requirement whose agent-facing half was never built</em>. Two findings not in
+        the seed: <em>route parity is not behaviour parity</em>, with two named instances; and
+        <strong>the <code>archive_job</code> rule is written down twice in opposite directions with one
+        side green</strong> (<code>mcp_server.py:815</code> always asks the operator;
+        <code>POST …/jobs/{id}/archive</code> asks nothing; <code>test_agent_actions_governed.py:137-140</code>
+        asserts the unconfirmed <code>200</code> under a comment stating the opposite rule). Moved
+        <code>_decide</code>'s workspace boundary <em>out</em> of the change — it explicitly allows
+        <code>mcp__agentweave__*</code> outright and is not a plane boundary.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>R2</strong><br><span class="measured">scope changed</span></td>
+      <td>
+        <strong>Corrected R1:</strong> the <code>ask_user</code> defect was overstated — the deadline
+        stamp, the task park, ordering and decline-versus-expiry all live in the routes
+        (<code>agent_actions.py:440-529</code>), and an unreported wait is swept at the run boundary.
+        The real gap is narrower and sharper: there is no way to <em>wait</em>, and
+        <code>wait_expires_at</code> (<code>:496</code>) is on <strong>no response schema</strong> — the
+        Hub judges a caller against a deadline it never disclosed.
+        <strong>And the defect faces the other way too.</strong> <code>d279d22</code> replaced
+        <code>resolve_access_path</code>'s probe with an unconditional <code>return "mcp"</code>, so a
+        harness with MCP blocked <em>by policy</em> is told the MCP tools <em>are</em> available —
+        meaning correcting the <code>cli</code> branch never touches your actual deployment.
+        <strong>Measured</strong>, by importing <code>hub.launchability</code> and patching the probe
+        exactly as <code>conftest.py:496-507</code> does: <code>mcp / mcp / cli</code> for
+        <code>None / "mcp" / "cli"</code>. That also proves conftest's docstring false and
+        <code>test_agent_trigger.py:793-830</code> vacuous — an <code>F190</code>-shaped test.
+        Also: <code>src/agentweave/config.py:714</code> recommends <code>hub_client: cli</code> for
+        <em>exactly</em> your case, under a <code>runner: copilot</code> value <code>RUNNER_CLIS</code>
+        cannot hold.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>R3</strong><br><span class="measured">design changed</span></td>
+      <td>
+        Target (a) <strong>confirmed and sharpened</strong>: <code>get_agent_actor</code>
+        (<code>agent_auth.py:40-80</code>) accepts only an <code>aw_run_</code> credential hashing to a
+        <em>running</em> Run — an operator <code>aw_live_</code> key fails on the prefix. All 32
+        agent-action routes carry it (parsed, 0 without); no mutating route under
+        <code>hub/hub/api/v1/</code> lacks an auth dependency.
+        Target (b) <strong>did not hold, and it changed the design</strong>: <code>mcp_command</code> is
+        set <em>iff</em> <code>access_path == "mcp"</code> and the approver is itself an MCP tool, so
+        <strong>the access path decides the run's permission posture as well as its notice.</strong>
+        Measured through <code>build_command</code> (a pure function): <code>"mcp"</code> yields
+        <code>--permission-prompt-tool</code> plus <code>--permission-mode manual</code>;
+        <code>"cli"</code> yields no approver and <code>--permission-mode acceptEdits</code>, which the
+        repo's own comment (<code>runner_commands.py:66-67</code>) calls <em>wider</em> than workspace.
+        So design D1's claim that the notice and the boundary are unrelated is wrong — they share a
+        variable. The delta gained a scenario, <em>a truer description does not silently widen
+        permission</em>.
+        <strong>Two corrections to R2:</strong> restoring the probe is self-defeating (it shells a
+        <em>separate</em> <code>&lt;cli&gt; mcp list</code> with no <code>--mcp-config</code>, so it
+        cannot see a per-invocation injected server and would answer <code>False</code> for essentially
+        every Hub-injected run, removing the injection it was asked about); and there are
+        <strong>three</strong> stale test files, not two — <code>test_launchability.py:390-429</code>
+        holds two more tests that pass identically with the probe patched either way.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <strong>The finding that may be bigger than the change.</strong> In your deployment —
+  <code>claude</code>, MCP blocked by policy, <code>hub_client</code> unset — the path resolves to
+  <code>"mcp"</code>, so the Hub emits <code>--permission-prompt-tool mcp__agentweave__approve_tool_call</code>
+  naming a tool that harness will not provide. <code>runner_commands.py:245-248</code> predicts the
+  consequence in its own words: <em>“naming an approver that will not be there makes every tool call
+  fail, which the model reports as a broken approval system.”</em> If that comment is right, your
+  deployment does not produce a misinformed agent — it produces <strong>a run that cannot edit a file
+  or run a command.</strong> <strong>This has never been driven</strong>, this window may not drive,
+  and it is carried into the implementing window as task 6.5. It is one run away from settled.
+</div>
+
+<h2><span class="num">3</span>Loop 2 — what is actually separable, and the kit that came out of it</h2>
+
+<h3>The candidate set: one folder, not the three the operator's framing allowed for</h3>
+
+<table>
+  <thead><tr><th style="width:26%">Candidate</th><th style="width:12%">Verdict</th><th>The measurement that decided it</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>handoff</code> + <code>resume</code> + <code>DEAD-ENDS.md</code></td>
+      <td><span class="pill ok">kept</span></td>
+      <td>728 lines of markdown, <strong>zero inbound importers</strong> — no product code reads them, because they are read by the <em>agent</em>, not by the program. Rank 1 on separability and the strongest production evidence in the repository.</td>
+    </tr>
+    <tr>
+      <td>The governed autonomous loop (P2)</td>
+      <td><span class="pill">folded in</span></td>
+      <td><code>run-iteration.ps1</code> reads <strong>6 of the 18</strong> fields its arming script writes, splitting 3 continuity (<code>branch :124</code>, <code>next_action :132</code>, <code>log_file :114</code>) / 3 launch configuration (<code>runner :104</code>, <code>permission_mode :105</code>, <code>model :110</code>). The continuity three are a machine-form <em>subset</em> of what a handoff already carries in prose: one artifact split by reader, not two products. <strong>This narrows what you asked for — see SQ-2.</strong></td>
+    </tr>
+    <tr>
+      <td>The checkpoint engine</td>
+      <td><span class="pill">dropped</span></td>
+      <td>2,596 lines across <code>hub/hub/checkpoint*.py</code>, 11 of 44 tables, and <code>checkpoint_generation.py:11-14</code> saying in its own docstring that the probe works <em>because</em> those tables exist. It cannot survive extraction as the thing that makes it good.</td>
+    </tr>
+    <tr>
+      <td><code>hub/hub/spec_lifecycle.py</code></td>
+      <td><span class="pill">dropped</span></td>
+      <td><strong>17 inbound importers</strong> under <code>hub/hub/</code> alone. It ranked <em>fourth-most separable</em> on the outbound axis and is near-unextractable on the inbound one — extracting it would make AgentWeave a consumer of an external package for the thing AgentWeave is <em>for</em>.</td>
+    </tr>
+    <tr>
+      <td>The review-page checkers</td>
+      <td><span class="pill">dropped</span></td>
+      <td>199 lines confirmed, but they check <em>this</em> repo's conventions, one needs Playwright, and one has emitted a known false red since 2026-09-05. A script, not a product.</td>
+    </tr>
+    <tr>
+      <td><code>src/agentweave/tool_surface.py</code></td>
+      <td><span class="pill">noted</span></td>
+      <td>Zero importers anywhere; the Hub keeps its own mirror and says so at <code>launchability.py:194</code>. Not an extraction candidate — a <em>deletion</em> candidate.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>The axis nobody had measured</strong> is <em>inbound</em> coupling. Both prior explorations
+  ranked candidates by what a candidate would drag <em>with</em> it. The other half of an extraction
+  is how many call sites in AgentWeave would afterwards depend on an external package — and on that
+  axis the ranking inverts for two of the three candidates that had been recommended.
+</p>
+
+<h4>Seed numbers, re-run</h4>
+<p class="small">
+  Reproduced exactly: 728 lines of continuity markdown; 199 lines of checkers; 6-of-18 state keys.
+  Did not reproduce: 879 → <strong>877</strong> PowerShell lines; 1,047 → <strong>1,010</strong> playbook
+  lines; a “4,567-line checkpoint stack” → <strong>2,596</strong> across the <code>checkpoint*</code>
+  files. The qualitative points stand; the citations moved, which is the reason for re-running them.
+</p>
+
+<h3>The finding that decided the shape, and it was in neither seed</h3>
+
+<div class="card">
+  <p>
+    <strong>The capability this run was asked to extract is already forked, inside AgentWeave, by
+    hand, with nothing keeping the copies in sync.</strong>
+  </p>
+  <table style="margin-bottom:.3rem">
+    <thead><tr><th>Copy</th><th>Path</th><th>Lines</th></tr></thead>
+    <tbody>
+      <tr><td>in use</td><td><code>.claude/skills/handoff/SKILL.md</code></td><td>341</td></tr>
+      <tr><td>shipped</td><td><code>src/agentweave/templates/skills/handoff.md</code></td><td>336 — <strong>11 lines differ</strong></td></tr>
+      <tr><td>in use</td><td><code>.claude/skills/resume/SKILL.md</code></td><td>127</td></tr>
+      <tr><td>shipped</td><td><code>src/agentweave/templates/skills/resume.md</code></td><td>127 — byte-identical</td></tr>
+      <tr><td>in use</td><td><code>.claude/handoffs/DEAD-ENDS.md</code></td><td>260 — <strong>not shipped at all</strong></td></tr>
+    </tbody>
+  </table>
+  <p class="small" style="margin-bottom:0">
+    Every one of the 11 differing lines strips a reference to the repo-local
+    <code>/review-iteration</code> skill, so the divergence is deliberate and hand-maintained.
+    <code>tests/test_handoff_resume_templates.py</code> guards the shipped copies with substring
+    assertions and <strong>never asserts that the two copies agree</strong>. So AgentWeave ships two
+    thirds of a contract whose own text argues hardest for the missing third. That answers the seed's
+    “extraction or fork?” empirically: <strong>the fork already happened</strong>, and a third
+    hand-maintained copy in a sibling repository was the default outcome of this queue item unless
+    something prevented it. Re-verified for this page: 341 / 336 / 127 / 127 / 260, 11 differing
+    lines, <code>resume</code> copies identical.
+  </p>
+</div>
+
+<h3>The kit's own spec loop — two rounds, and what R2 changed</h3>
+
+<p>
+  Written <em>inside</em> <code>C:\Users\huida\Documents\projects\continuity-kit</code> (git init,
+  <strong>no remote</strong>), not in AgentWeave. Two rounds rather than three: the deviation and its
+  reasoning are recorded in the seed — there is no shipped code for a third round to compare against,
+  and R2's job for a greenfield project is to compare the proposal against <em>the source repository
+  the capability is being lifted out of</em>.
+</p>
+
+<table>
+  <thead><tr><th style="width:10%">Round</th><th>What it changed</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>R1</strong></td>
+      <td>
+        Narrowed the argument to <strong>the one thing that is measured rather than asserted</strong>:
+        the three failure modes the source documents record <em>about themselves</em> —
+        <code>## Corrections</code> present in 5 handoffs, <code>Model:</code> filled 7 times, and a
+        chain tracked through <code>0073</code> and ignored from <code>0074</code> whose clone silently
+        resumed from month-old state — are <em>every one of them decidable by a program with no model
+        in it</em>, and nothing checks any of them. It states plainly that the case does <strong>not</strong>
+        rest on anyone else wanting the tool, which was not measured and which the run was forbidden
+        to check.
+        <strong>A fourth failure mode, measured this round:</strong> the ledger instructs “date every
+        entry” and <strong>22 of its 79 entries carry any date at all</strong>. That set a severity
+        decision (D7): dating ships as a <em>warning</em> for entries predating adoption, because a v1
+        that fails its own reference implementation 57 times gets switched off in its first hour.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>R2</strong></td>
+      <td>
+        <strong>Confirmed R1's self-named weakest link by building it.</strong> R1 assumed the four
+        diff regions were expressible as two profiles and never checked. R2 rendered both profiles and
+        reproduced <strong>both files byte-for-byte</strong> (19,459 and 19,048 bytes). It works for a
+        reason worth keeping because it is not general: the fourth region is the <em>last item of a
+        numbered list</em>, so its empty alternative renumbers nothing. Item 3 of 7 would have needed a
+        fifth region.
+        <strong>Two defects fixed.</strong> (1) D5 anchored every history-dependent rule to the commit
+        range a handoff records — measured across the 76 handoffs readable from git history,
+        <strong>11 of 76 record one</strong>, and 10 of the 71 written after the instruction shipped.
+        Range <em>reading</em> became range <em>resolution</em> (recorded / inferred / not-evaluable),
+        with the contradiction stated rather than left to be discovered: the contract blesses “ignored
+        uniformly”, inference needs the chain tracked, so ignoring a chain switches off the checks —
+        including R1's cheapest win. (2) The provenance stamp and the byte-identity acceptance test
+        were <strong>mutually unsatisfiable</strong>: neither existing copy carries a stamp, a hash
+        inside the bytes it hashes does not close, and a front-matter stamp breaks
+        <code>tests/test_handoff_resume_templates.py:15</code>. The stamp moved to a manifest beside
+        the renders (D11).
+        <strong>Corrected R1</strong> on a claim R1 made twice: the real chain is <em>not</em>
+        unreadable here — <code>0001</code>–<code>0075</code> are recoverable from git history, which
+        makes two tasks cheap rather than blocked. R1's three quoted counts are now measured
+        (<code>## Corrections</code> exactly 5, <code>Model:</code> 7, <code>Agent:</code> 76 of 76).
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="small">
+  Three facts neither seed nor R1 had: a <strong>duplicate handoff number</strong> exists in the real
+  chain (<code>0049</code>, added twice under different slugs), so the anti-duplicate rule has an
+  observed violation; <code>## Environment left running</code> appears in <strong>0 of 76</strong>
+  handoffs (explained — it entered the skill 2026-09-04); and the shipped template has
+  <strong>no live consumer</strong> — <code>get_skill_template</code> is called only by the test suite.
+  Also found by doing rather than reading: <code>core.autocrlf</code> is <code>true</code> on this
+  machine and the new repo had no <code>.gitattributes</code>, which would have failed the
+  byte-for-byte acceptance test on every line for a reason having nothing to do with the mechanism.
+  Fixed as task 1.6, ordered before any source document lands.
+</p>
+
+<h2><span class="num">4</span>What today's drive found</h2>
+
+<p>
+  <strong>Nothing, because nothing was driven.</strong> This run's limits forbade starting a Hub on any
+  port, running any agent turn, and browsing the web — deliberately, so it could not collide with your
+  real usage on 8000, the trial Hubs on 8010/8011, or tonight's arming. Every claim on this page is
+  either a source reading with a citation, a measurement executed against the source tree under
+  <code>py -3.11</code>, or labelled below as unverified. That is a real limitation of the work and it
+  is stated rather than papered over: <em>rounds check the argument; only a drive checks the product.</em>
+</p>
+
+<h4>What that leaves unverified, and why</h4>
+
+<table>
+  <thead><tr><th style="width:40%">Not established</th><th>Why, and what would settle it</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Whether your MCP-blocked deployment produces a <em>misinformed agent</em> or a <em>run that cannot act</em></td>
+      <td>The repository's own comment (<code>runner_commands.py:245-248</code>) predicts the second and has never been driven. <strong>One run of one agent with MCP blocked settles it</strong>, reading the run's tool calls and not only its prose. It decides whether the mirror defect is a wording fix or a run-breaking one.</td>
+    </tr>
+    <tr>
+      <td>GitHub Copilot's real CLI output format</td>
+      <td>Requires the open web, which this run may not browse. The parser layer is therefore <strong>deliberately unresolved</strong> in the proposal rather than written against an imagined format — which is why Copilot is a second change and not this one.</td>
+    </tr>
+    <tr>
+      <td>What <code>claude mcp list</code> reports on a policy-blocked harness</td>
+      <td>Needs the harness. R3 established the more useful half from source anyway: the probe shells a <em>separate</em> process never given the injected config, so it asks the wrong question even on a permitted harness.</td>
+    </tr>
+    <tr>
+      <td>Handoffs <code>0076</code> onward</td>
+      <td>Never committed anywhere; <code>.claude/handoffs/</code> has been ignored wholesale since 2026-09-04. Two-thirds of the chain is measured, the recent third is measured by nobody. The ledger also contradicts itself about the chain's length (<code>DEAD-ENDS.md:12</code> says 108, <code>:25</code> says 193, thirteen lines apart); 76 is what git holds and settles neither.</td>
+    </tr>
+    <tr>
+      <td>Whether anyone other than you would use the continuity kit</td>
+      <td>No market check — the run was forbidden to browse, and the proposal's case is built so that it does not depend on one. It is an open question, not an answered one.</td>
+    </tr>
+    <tr>
+      <td>That the continuity checker works</td>
+      <td>It does not exist. Nothing in that proposal has been executed except the render experiment, which was run in a scratch script that was not kept — task 3.1 is still the real test.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2><span class="num">5</span>What was specced</h2>
+
+<p>
+  Two changes from loops 1 and 2, both validating strictly, <strong>zero tasks implemented</strong> —
+  this window proposes and does not build, and it touched no AgentWeave product code at any point. The
+  third loop's change is tabled separately in §7, under <em>What loop 3 specced</em>.
+</p>
+
+<table>
+  <thead><tr><th>Change</th><th>Repository</th><th>Reqs / scenarios</th><th>Tasks</th><th>Strict</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing</code><br>
+        <span class="loc">specs/agent-capability-plane — 2 ADDED, 1 MODIFIED</span></td>
+      <td>AgentWeave<br><span class="loc">this branch</span></td>
+      <td>3 / 14</td>
+      <td>0 / 35</td>
+      <td><span class="pill ok">valid</span></td>
+    </tr>
+    <tr>
+      <td><code>2026-09-07-the-contract-and-a-checker-that-can-falsify-it</code><br>
+        <span class="loc">specs/continuity-contract 9·21, specs/continuity-checker 8·15</span></td>
+      <td><code>continuity-kit</code><br><span class="loc">new, local, no remote</span></td>
+      <td>17 / 36</td>
+      <td>0 / 35</td>
+      <td><span class="pill ok">valid</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="small">
+  Both re-validated while writing this page. <code>SHALL</code> sits on the first physical line of
+  every requirement body in both changes, asserted by script rather than by eye, because
+  <code>--strict</code> reads no further than that line.
+  <code>continuity-kit</code> holds four local commits (<code>0eb373d</code> scaffold,
+  <code>a1e6946</code> R1, <code>6d5599d</code> R2, <code>ded3880</code> line endings) and
+  <code>git remote -v</code> is empty, checked before each.
+</p>
+
+<h4>The continuity kit's scope, decided rather than assumed</h4>
+<ul>
+  <li><strong>File contract plus a stdlib-only CLI.</strong> The <strong>exit code is the integration
+    contract</strong> (0 conforms, 1 mechanical violation, 2 bad invocation) plus <code>--json</code>.
+    A harness that cannot run a subprocess still gets the contract by reading the files — which is the
+    cheapest possible harness surface and the one least likely to be blocked by a policy that blocks MCP.
+    MCP and HTTP are named as later adapters and <em>forbidden as second sources of truth</em>, as a
+    requirement, since “pluggable” in a design document has never stopped one appearing.</li>
+  <li><strong>The UI is deferred with a stated trigger, not dropped.</strong> You asked for CLI and UI.
+    The UI's value is chain review, it is a consumer of <code>check --json</code>, and building a
+    consumer before its producer's output is stable is how the output stops being able to change.
+    Trigger: <code>--json</code> findings stable across two repositories.</li>
+  <li><strong>The checker decides only what is mechanical.</strong> All 14 items of the handoff
+    checklist plus 8 further rules are classified mechanical / heuristic / judgement; the checker never
+    emits judgement as a finding, and <strong>every run reports how many rules it did not evaluate</strong>,
+    so a green exit code cannot be read as a verdict on quality.</li>
+  <li><strong>AgentWeave becomes a consumer, not a third copy.</strong> The two existing copies become
+    <em>renders</em> of one upstream source under profiles <code>local</code> and <code>distributed</code>,
+    with byte-for-byte reproduction as the acceptance test — already demonstrated in R2.</li>
+</ul>
+
+<h2><span class="num">6</span>Decisions waiting for you</h2>
+
+<p class="small">
+  Twelve here, in the order they arose, and <strong>six more in §7.4</strong> from the third loop.
+  <strong>SQ-1 is the only one that is urgent</strong> and it is unrelated to any of them.
+  SQ-6 is carried from the daily cycle and is repeated here only because it blocks the one change already ready to build; this run is forbidden to write to
+  <code>spec-queue/</code> and did not.
+</p>
+
+<div class="ask">
+  <h4>SQ-1 — Should the disclosed Hub key be rotated now?</h4>
+  <p><code>scripts/drive/aw.py:15</code> carried a live <code>aw_live_58ab…</code> key as a hardcoded
+  default in a tracked file, in a repository <code>gh repo view</code> reports public. Removed at
+  <code>2d4131b</code> on the daily branch — but removal does not unpublish it. The 2026-09-04 sweep
+  that untracked <code>.claude/handoffs/</code> for exactly this reason did not catch this one.
+  <strong>Recommendation: treat as disclosed and rotate.</strong></p>
+</div>
+
+<div class="ask">
+  <h4>SQ-2 — Do you want the scheduler, or the operator-approval protocol, as a second repository?</h4>
+  <p>S-4 folded P2 into P1, and that is a real narrowing of what you asked for. What it leaves unbuilt
+  and unplanned: <strong>(a) the scheduler</strong> — 877 lines of Windows PowerShell against ~1,010
+  lines of markdown holding all the actual behaviour, with <code>Unregister-ScheduledTask</code>
+  (<code>run-iteration.ps1:75,96,134</code>) as a structurally Windows-bound stop mechanism called from
+  inside the iteration body; and <strong>(b) the operator-approval protocol</strong> in
+  <code>spec-queue/</code>, which is a good file contract but a <em>different</em> one — a person
+  negotiating with a process, not a session handing to its successor. Either is a candidate for its own
+  project later.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-3 — Should the handoff-skill divergence be mechanised, or is hand-maintaining it intended?</h4>
+  <p>Two hand-diverged copies exist today with nothing keeping them in sync (341 vs 336 lines, 11
+  differing lines, all stripping <code>/review-iteration</code>), <code>resume</code> is byte-identical
+  by luck rather than by test, and <code>DEAD-ENDS.md</code> is not packaged at all.
+  <code>tests/test_handoff_resume_templates.py</code> asserts substrings and never that the copies
+  agree. This is true today and independent of the extraction question — and either way it constrains
+  the new repository, which must not become a third copy.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-4 — Superseded, annotated, or left as-is: the 2026-09-06 exploration?</h4>
+  <p>Seven of its claims are wrong (§1), including both halves of its central recommendation. Today the
+  correction lives only in the new seed. <strong>A wrong exploration that stays readable is how a
+  future round inherits a falsified argument.</strong></p>
+</div>
+
+<div class="ask">
+  <h4>SQ-5 — Should the sibling prototype repositories ever get a remote?</h4>
+  <p>This run created <code>continuity-kit</code> with <code>git init</code> and <strong>no remote</strong>,
+  deliberately — nothing outward-facing is within its limits. Publishing is your call and has an
+  unanswered business-case question attached (the 2026-09-06 exploration's own open question 3, which
+  this run was forbidden to research).</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-6 — Carried: <code>2026-09-05-the-conversation-carries-its-own-run-facts</code> still has no verdict</h4>
+  <p>No verdict token in <code>spec-queue/APPROVALS.md</code>, and it is the one change already ready to
+  build. Untouched by this run by design.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-7 — Does archiving a scheduled job require your direction <em>every time</em>, or is it governed by the standing allowance?</h4>
+  <p>Both are written down, in opposite directions. <code>mcp_server.archive_job:815</code> always asks,
+  citing design D18. <code>POST /api/v1/agent-actions/jobs/{id}/archive</code> asks nothing, and
+  <code>hub/tests/test_agent_actions_governed.py:137-140</code> asserts that unconfirmed
+  <code>200</code> <strong>green</strong>, under a comment stating the opposite rule. Today, which rule
+  an agent meets depends only on whether it came through MCP or HTTP. The proposal takes D18 as the
+  rule but does not decide it. <strong>Either answer is a coherent product; the current state is not</strong> —
+  and choosing the standing allowance instead makes that half of the change a two-line deletion.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-8 — Should <code>openspec/specs/agent-capability-plane/spec.md:140-185</code> be deleted?</h4>
+  <p>It states two requirements for the unasked-question backstop, which was retired 2026-08-20 at your
+  request; migration <code>0082</code> drops its table and CLAUDE.md forbids reintroducing it, while
+  <code>openspec/changes/2026-08-07-unasked-question-backstop</code> is still unarchived. So the
+  current-behaviour corpus documents a feature the product was deliberately made to stop having — in
+  the same file this change edits. R2 found it and left it alone on purpose.
+  <strong>Recommendation: archive that change as retired-not-shipped and sync the removal</strong>, so a
+  later round cannot inherit the requirement as evidence.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-9 — One change or two: the notice defect and its mirror?</h4>
+  <p>R2 found that the mirror is <em>likelier to be met</em> than the defect the change was written
+  about — <code>d279d22</code> removed the probe, so every <code>claude</code>/<code>codex</code> run is
+  told the MCP tools are available whether or not its harness honours the injected server (measured).
+  They were folded into one change: the delta carries a second requirement and tasks a section 4. The
+  alternative is a third change and a proposal that cannot fix the deployment it names. Note that
+  choosing the operator-visible <code>hub_client</code> mechanism (design D7) would also make this the
+  first UI change in an otherwise Hub-Python-only change.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-10 — Should <code>hub_client: cli</code> keep meaning <code>acceptEdits</code>?</h4>
+  <p>Measured in R3: <code>build_command</code> yields <code>--permission-mode manual</code> plus
+  <code>--permission-prompt-tool mcp__agentweave__approve_tool_call</code> on the <code>mcp</code> path,
+  and a bare <code>--permission-mode acceptEdits</code> on <code>cli</code> — which
+  <code>runner_commands.py:66-67</code> itself describes as <em>wider</em> than workspace, “which
+  accepted every edit with no path check at all”. So the product's own advice for your exact case
+  (<code>config.py:714</code>, “uncomment if MCP is blocked by company policy”) lands an operator on a
+  path with <strong>no workspace check, and nothing tells them.</strong> The fallback is deliberate and
+  argued (an approver nothing can answer refuses everything), so the question is not whether it was a
+  mistake but whether a harness without MCP should get some other answerer — or at least be told.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-11 — Will you authorise one drive to settle whether the MCP-blocked run can act at all?</h4>
+  <p>Unverified and cheap: one <code>claude</code> run with MCP blocked, reading its <em>tool calls</em>
+  and not only its prose. If <code>runner_commands.py:245-248</code> is right, the deployment this whole
+  loop exists for cannot edit a file or run a command, which changes the change's severity and its
+  shape. This window was forbidden to drive.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-12 — Does the <code>Agent</code> header rule get an adoption boundary, like the other two?</h4>
+  <p>Found by building the checker, not by reading the proposal. <code>handoff.agent-header-shape</code>
+  fires on <strong>73 of 73</strong> reference handoffs: the <code>·</code>-separated three-fact
+  convention post-dates that whole era, which writes <code>Claude Opus 5 (1M context) (Claude Code)</code>
+  and eleven variants and never uses the separator. The commit-range rule (D4 item 4) and ledger dating
+  (D7) each got an adoption boundary for exactly this reason — D7 says in as many words that a v1 which
+  fails its own reference implementation is switched off in its first hour. The change applies that
+  reasoning twice and misses the third place it applies. Implemented as written and recorded rather than
+  fixed, because changing a rule's severity is a spec change.</p>
+</div>
+
+<h2>What S-10 built after this page was written</h2>
+
+<p>The queue's optional last item ran. A runnable skeleton of the continuity kit now exists at
+<code>C:\Users\huida\Documents\projects\continuity-kit</code> — three commits, still no remote, no
+AgentWeave product code touched. It is <strong>phases 1, 2, 4 and 5</strong> of that change in outline:
+a stdlib-only <code>continuity check</code> and <code>continuity latest</code>, 28 tests, every fixture a
+real git repository because half the rules are decided from history.</p>
+
+<p><strong>Phase 3 is untouched</strong> — the single-source render, the two profiles, the provenance
+manifest. That is the anti-fork mechanism, so the fork this project exists to stop is still unstopped,
+and the kit is currently a fourth place the ideas live rather than the one source.</p>
+
+<p>It was driven against the real artifact, not only its own tests: AgentWeave cloned and checked out at
+<code>a38caee^</code>, the last commit where its handoff chain was tracked — 73 handoffs with real
+history, needing nobody's checkout. <strong>308 violations, 76 warnings, 73 not-evaluable.</strong>
+Three numbers reproduce, by program, what the rounds measured by hand:</p>
+
+<table>
+<thead><tr><th>Measured by hand in a round</th><th>Measured by the checker</th></tr></thead>
+<tbody>
+<tr><td>D5: 10 post-instruction handoffs record a <code>&lt;base&gt;..&lt;head&gt;</code> range</td>
+    <td>ranges resolved <strong>10 recorded / 63 inferred / 0 unresolved</strong> — task 2.4 predicted
+    the fallback would fire about six times in seven, and it fired 63 in 73</td></tr>
+<tr><td><code>SKILL.md</code>: <code>## Corrections</code> survived in 5 handoffs of 108</td>
+    <td>missing from <strong>70 of 73</strong></td></tr>
+<tr><td>D7: 79 ledger entries, 22 carrying a date</td>
+    <td><strong>79 / 22 dated / 57 undated</strong>, exact</td></tr>
+</tbody>
+</table>
+
+<p>The best result is not a number. <code>LATEST.md</code> in that clone names
+<code>handoff-0108-…</code>, <strong>a file the clone does not contain</strong>, while
+<code>continuity latest</code> correctly returns <code>0073</code> and reports the disagreement. The
+failure mode the entire contract was written from has now been <em>reproduced</em> against the real
+artifact instead of quoted from a document.</p>
+
+<p>A <strong>sixth measured failure mode</strong>, in none of the seeds and none of the rounds:
+<code>## Environment left running</code> is missing from <strong>73 of 73</strong>. Not rare — absent.
+Its sibling section has been quoted at 5-of-108 through five rounds and nobody had counted this one.</p>
+
+<p>The kit adopted its own contract from the first file and <code>check</code> against its own chain is
+<strong>clean — 0 violations, 0 warnings, exit 0</strong> — with the range <em>recorded</em> rather than
+inferred, because the work was committed first and the handoff written against that range. That is the
+first portability evidence the contract has: it was extracted from a repository with Windows, a Hub and
+a scheduled driver, and it holds in one with none of those.</p>
+
+<p><strong>Not verified.</strong> Nobody but its author has run it, so nothing shows the messages or the
+invocation make sense to a stranger. No heuristic has a deliberate false-positive test. Phase 3's
+byte-identity acceptance tests were never attempted. And the open question worth your judgement: whether
+<strong>308 violations is a useful first result or an unusable one</strong> — most of it is two rules
+firing on every handoff, and a tool whose first real run prints 308 lines can be right and still be
+switched off.</p>
+
+<h2><span class="num">7</span>Loop 3 — an overseer for harnesses AgentWeave did not spawn</h2>
+
+<p class="lede">
+  A third spec loop, asked for after the first two finished, seeded by
+  <code>openspec/explorations/2026-09-07-an-overseer-for-any-harness.md</code>: a system that connects to
+  any AI harness, records what the agents are doing, and offers metrics and governance over them. Three
+  rounds ran, each re-deriving against the code rather than re-reading the round before it. The output is
+  a <strong>second new sibling repository</strong> — <code>witness</code>, local, no remote, four commits.
+  <strong>&sect;8 supersedes the rest of this paragraph.</strong> When &sect;7 was written the repository held
+  a proposal and no code, and its own recommendation was propose-then-shelve because every requirement was
+  downstream of data-policy questions only you can answer. A fifth iteration then found that the reading was
+  too broad, built a skeleton against a surface that needs none of those answers, and drove it — so the
+  repository now also carries a running cut 0 and eight findings from driving it. Six questions are still
+  yours to answer, in &sect;7.4.
+</p>
+
+<h3>The question the loop existed to settle, and the answer that replaced the seed's</h3>
+
+<p>
+  The seed asked: <em>is this a new product, or AgentWeave's Hub with the orchestration removed?</em> It
+  offered a distinction to test — <em>AgentWeave governs agents it spawns; an overseer governs agents it
+  does not control</em> — and R1 was told to test it, not inherit it. Tested: <strong>true, but a
+  restatement rather than evidence.</strong> It names the difference; it does not show the difference is
+  load-bearing. Three measurements do, and R2 re-derived all three independently and
+  <strong>confirmed all three</strong>:
+</p>
+
+<table>
+  <thead><tr><th style="width:34%">Measured</th><th>What it means</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>hub/hub/api/v1/agent_actions.py</code> mounts <strong>32 routes; all 32</strong> depend on
+        <code>get_agent_actor</code><br><span class="measured">R1 by reading, R2 by parsing</span></td>
+      <td>That dependency (<code>agent_auth.py:40-79</code>) resolves an <code>aw_run_</code> bearer against
+        <code>Run.capability_token_hash</code> where the run is <em>running</em> and its
+        <code>instance_id</code> is this process; the plaintext exists only in run memory. A harness the
+        Hub did not spawn cannot obtain one — not by policy, by construction.</td>
+    </tr>
+    <tr>
+      <td><code>TurnUsage.run_id</code> is a <strong>non-null unique FK</strong> to <code>runs.id</code>
+        (<code>models.py:1193-1195</code>), with <strong>no HTTP writer</strong> — 6 call sites in 2
+        non-route modules</td>
+      <td>AgentWeave can record a foreign agent's <em>text</em> but not its <em>tokens</em>. Cost is
+        structurally unreachable without first spawning.</td>
+    </tr>
+    <tr>
+      <td>The self-report ingestion routes sit under <code>prefix="/projects/{project_id}"</code> and depend
+        on <code>get_project</code> (<code>auth.py:134-159</code>)</td>
+      <td>They require the <strong>instance-operator</strong> credential, not a per-project ingestion key.
+        Letting a foreign harness self-report today means handing it every project on the instance.
+        <strong>The seed was wrong on both the paths and the auth model</strong>, and that error was the
+        whole of this row.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <strong>The framing was settled against the seed's reason and for a stronger one.</strong>
+  CLAUDE.md states the Hub's security property as <em>identity is never accepted from a request body or
+  header</em>. An overseer's core operation is to <strong>accept a record about an actor it never
+  authenticated</strong> — that is, to relax exactly that property. Building it inside the Hub means
+  adding a second, weaker identity tier to the system whose strength is having one. That is a security
+  argument, and it survives where the seed's taxonomy argument does not.
+</div>
+
+<h3>What each round changed about the one before it</h3>
+
+<table>
+  <thead><tr><th style="width:10%">Round</th><th>What it changed</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>R1</strong><br><span class="measured">wrote it</span></td>
+      <td>
+        Settled the framing above, then made <strong>two corrections and two additions to the seed</strong>.
+        Corrections: the ingestion paths and their auth model (row 3 above). Additions:
+        <strong>normalisation is not the gap</strong> — <code>hub/hub/runner_parsing.py</code> already
+        normalises three harnesses into one event model with secret redaction and UTF-8-safe truncation, so
+        it is a reference implementation to borrow rather than a hole to fill; and there is a
+        <strong>fourth capture surface the seed's table omits</strong>, the harness's own on-disk session
+        transcript, which needs no configuration, no administrator and no consent dialog, and is the only
+        surface that is <em>retroactive</em>. Precedent in-repo: <code>read_codex_rollout_accounting</code>
+        already reads Codex's own rollout file because stdout could not give a clean turn boundary — the
+        proposal is that technique with the spawn removed. Committed the product to the
+        <strong>passive lever only</strong> and to <strong>no scoring</strong>, and named it so the name
+        carries the commitment.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>R2</strong><br><span class="measured">specs changed</span></td>
+      <td>
+        Ran <code>parse_claude_line</code> <em>unmodified</em> over a real 2,070-line transcript rather than
+        reading it. It maps <strong>2 of the file's 16 record types</strong>; 859 lines produce an event;
+        <strong>0</strong> accounting samples; the session id lands on <strong>1,337 of 2,070</strong>
+        because the file writes <code>sessionId</code> and the parser reads <code>session_id</code>; and the
+        user branch emits only tool results, so <strong>the operator's prompt produces nothing</strong> — 6
+        genuine prose prompts dropped. <em>The event vocabulary transfers; the parser does not; and what
+        transfers cleanly is what Witness needs least.</em>
+        <strong>Three spec defects fixed.</strong> (1) The capability matrix was keyed per <em>surface</em>,
+        but reasoning text is present for Haiku and absent for Opus 5 and Sonnet 5 — by
+        <strong>model, within one harness, on one surface</strong>, across two file sets with zero overlap —
+        so entries became always/never/conditional, resolved per record. (2) <strong>No transcript carries a
+        <code>result</code> record and <code>total_cost_usd</code> appears in 0 files</strong>, so cost is
+        unobservable on the only implemented surface while tokens are on every sampled assistant message; a
+        fourth provenance state <code>derived</code> was added, with its inputs required to be measured.
+        (3) A new requirement that the record carries the instruction.
+        <strong>Two R1 claims falsified.</strong> “The content is already there, complete and unredacted” is
+        false for the two models you actually use — a completeness claim falsified by measurement
+        <em>inside the document proposing the completeness fix</em>, which is the strongest available
+        argument for building it. And “nothing in AgentWeave targets Copilot” is wrong: commit
+        <code>1c6970d</code> (2026-07-29) live-probed Copilot CLI 1.0.75, and its file exporter writes only
+        when <code>COPILOT_OTEL_FILE_EXPORTER_PATH</code> is set <strong>before spawn</strong> — so
+        Copilot's file surface is <strong>neither passive nor retroactive</strong>. Surfaces now declare
+        both properties.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>R3</strong><br><span class="measured">design changed</span></td>
+      <td>
+        Given the enforcement question — gateway, tool-boundary hook, or after-the-fact report — and found
+        that answering it needed a <em>new</em> decision, because “after the fact” was covering two
+        products: the transcript is a <strong>live append log</strong>, a record readable on disk
+        <strong>0.114 s and 0.202 s after its own timestamp</strong>, by the very command it describes. New
+        <strong>D8</strong>: the first cut is a batch reader the operator runs, <em>not</em> a resident
+        tailer. Cost stated rather than hidden — <strong>no record outlives the harness's deletion window
+        without something resident</strong>, so D8 and the retention question are one decision (SQ-18).
+        Then tested the no-judging rule <em>as written</em> and found it was intention rather than fence,
+        <strong>twice</strong>: the completeness report permitted a <em>per-agent</em> completeness
+        percentage, which over 14,701 assistant messages is 100% on every field and model except reasoning
+        text — so that figure ranks model choice on a page forbidding ranking (now per surface and per
+        model, never per agent); and “the operator writes the rules” had no requirement behind it while the
+        surface supplies <strong>1,535 model-authored <code>ai-title</code> records</strong> to republish in
+        Witness's own voice (now an <em>author</em> axis on every field, model-authored values counted apart
+        and never reported, rules operator-only and none model-evaluated).
+        <strong>Two measurement corrections.</strong> Retroactivity has a floor and it is the harness's:
+        <strong>2,084 files, 1.09 GB, 2026-08-09 to today — 29 days</strong>, 44 files on the oldest day and
+        <em>zero before it</em>, while at least <strong>51 earlier sessions</strong> are evidenced by
+        committed handoffs whose transcripts are gone. And <strong>169 delegated-agent transcripts</strong>
+        sit one directory deeper at <code>&lt;session&gt;/subagents/</code> carrying the
+        <em>parent's</em> <code>sessionId</code> — driven, not argued: keying on <code>sessionId</code>
+        gives <strong>1 actor with 545 turns</strong>, keying on the acting agent gives
+        <strong>9 actors, of which 370 turns (68%) are delegated</strong>. The existing requirement did not
+        fail to prevent that misattribution — <strong>it prescribed it.</strong> R3 made the
+        one-level-glob error itself first (1,915 against a true 2,084) and left that recorded.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <strong>No round changed nothing.</strong> Each of the three moved the specs, and two moved the design.
+  R2 and R3 each also corrected a number the round before had stated as a measurement — one-level globs
+  and stale counts, twice — which is the argument for a third round rather than two.
+</div>
+
+<h3>What loop 3 specced</h3>
+
+<table>
+  <thead><tr><th>Change</th><th>Repository</th><th>Reqs / scenarios</th><th>Tasks</th><th>Strict</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>2026-09-07-what-witness-records-and-what-it-refuses-to-judge</code><br>
+        <span class="loc">turn-record 6·17 · capture-surfaces 5·14 · completeness-report 6·12 · design D1–D8</span></td>
+      <td><code>witness</code><br><span class="loc">new, local, no remote</span></td>
+      <td>17 / 43</td>
+      <td>2 / 45<br><span class="loc">both round-discipline tasks in phase 0; 0 implementation</span></td>
+      <td><span class="pill ok">valid</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="small">
+  Re-validated while writing this page: <code>openspec validate --changes --strict</code> →
+  <code>1 passed, 0 failed</code>. <code>witness</code> holds three commits
+  (<code>6b0a135</code> R1, <code>3d75aaa</code> R2, <code>e2bb331</code> R3);
+  <code>git remote -v</code> is empty, checked before each. <code>corpus/</code>,
+  <code>*.transcript.jsonl</code> and <code>drive-output/</code> were in its <code>.gitignore</code> from
+  commit one, because the material this product reads is the most sensitive on the machine.
+</p>
+
+<h4>What loop 3 could not establish</h4>
+<ul>
+  <li><strong>Anything requiring the open web.</strong> The seed carried harness-telemetry facts gathered by
+    a session that could browse; this window could not, so each is either re-confirmed offline against this
+    repository or carried forward labelled unverified. Whether the name <code>witness</code> collides with an
+    existing project is in that second category.</li>
+  <li><strong>The harness's retention policy.</strong> The 29-day span and the hard cliff are measured; no
+    retention setting appears in any file this session can read, so the policy behind the span is unverified
+    and was not rounded to “30 days”.</li>
+  <li><strong>Anything requiring a running harness.</strong> No Hub was started and no agent turn was run, so
+    a live tailer's robustness is untested — write latency was measured, the difficulty of following the file
+    was not. Whether <code>ai-title</code> and <code>classifierMetaLines</code> are produced locally or
+    server-side is likewise unsettled; either way they are model-authored, which is all the new requirement
+    needs.</li>
+  <li><strong>That anyone but its author understands it.</strong> The same gap the continuity kit has:
+    nothing here has been read by a stranger.</li>
+</ul>
+
+<div class="note">
+  <strong>One fact worth carrying, because it is about the subject itself.</strong> The corpus is live and
+  it observes the observer: 2,069 files / 985 MB when R1 measured it this morning, 2,095 / 1.1 GB at R2 this
+  evening, 2,084 / 1.09 GB when R3 counted it recursively — part of that growth being these rounds' own
+  sessions, and one file in R2's sample no longer existed by the time the sampler opened it, minutes after
+  the listing that named it. <strong>Any corpus size in a spec is the output of a measurement, never a
+  fixture.</strong>
+</div>
+
+<h3>§7.4 — Six more decisions, and they are policy rather than engineering</h3>
+
+<p class="small">
+  These continue the SQ series and sit here rather than in §6 only because they all belong to loop 3.
+  Unlike the twelve above, none is a question about the code: <strong>what data may be recorded is a policy
+  question</strong>, and the loop deliberately did not guess. <strong>SQ-13 blocks every phase of the change
+  except phase 0</strong> — nothing is buildable until it has an answer.
+</p>
+
+<div class="ask">
+  <h4>SQ-13 (OV-1) — May Witness read the local Claude Code transcript corpus at all?</h4>
+  <p><code>~/.claude/projects/**/*.jsonl</code> is <strong>2,084 files and 1.09 GB</strong> of your real
+  sessions: prompts, source code, tool arguments and plausibly credentials. Unlike every OTel surface —
+  where content is off until several flags are set — nothing is withheld by default; it is already on disk
+  in full. It is also the <em>only</em> retroactive surface. Two things you would not otherwise be told:
+  the scope silently includes <strong>169 delegated-agent transcripts</strong> under
+  <code>&lt;session&gt;/subagents/</code> that “my sessions” does not bring to mind, and the question is
+  <strong>time-sensitive</strong> — the corpus deletes on a rolling window, the oldest survivor is
+  2026-08-09 and at least 51 earlier sessions are already gone, so <em>“yes, later” is not the same answer
+  as “yes”</em>. <strong>There is no partial answer that keeps the retroactive property.</strong></p>
+</div>
+
+<div class="ask">
+  <h4>SQ-14 (OV-2) — Redaction: at read, at write, or not at all?</h4>
+  <p>At read loses fidelity permanently and makes the record less useful for the incident it exists for. At
+  write leaves a window. Not at all makes the Witness store the most sensitive file on the machine.
+  AgentWeave's <code>redact_secrets</code> (<code>runner_events.py:63</code>) is a working starting point
+  either way. <strong>Evidence that this cannot rest on the reader's discipline:</strong> R2 quoted eleven
+  words of a real operator prompt into its own write-up to prove the prompts were genuine — breaking a rule
+  written three files away, in a file it had read that hour. Removed, and left recorded.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-15 (OV-3) — How long is the record kept?</h4>
+  <p>A record that answers “what did the agents do last quarter” must be kept for a quarter, which is a
+  different risk profile from a debugging aid kept for a week. This is no longer only a risk question: a
+  batch reader <em>cannot</em> keep a record past the harness's own deletion window, so keeping more
+  requires copying transcripts before deletion, which requires a resident process. <strong>See SQ-18 — this
+  and that are one decision.</strong></p>
+</div>
+
+<div class="ask">
+  <h4>SQ-16 (OV-4) — Who may read the record: you only, or anyone else?</h4>
+  <p>Single-operator local is the first cut's assumption and it is written into the specs as one. The moment
+  a second reader exists this becomes an access-control product and the scope roughly triples.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-17 (OV-5) — Does the name <code>witness</code> survive?</h4>
+  <p>Chosen because it commits the product to the passive posture: a witness testifies to what it saw and is
+  expected to say what it did not see. <strong>If a later round decides the product must enforce, the name
+  has to change with it.</strong> Whether it collides with an existing project could not be checked
+  offline.</p>
+</div>
+
+<div class="ask">
+  <h4>SQ-18 (OV-6) — Do you want a live mode, and would you run something resident to get it?</h4>
+  <p>Measured this round: the transcript is written live — a record was readable <strong>0.114 s</strong>
+  after its own timestamp. A tailer is therefore buildable, and design <strong>D8 deliberately does not
+  build one</strong>, because a process reading your transcripts unattended is a materially larger
+  disclosure than SQ-13 asks about, and a resident reader's crash is silence indistinguishable from
+  inactivity. It is also the only way to keep records past the harness's deletion window. <strong>“Nothing
+  resident” and “records older than 29 days” cannot both be had</strong> — this and SQ-15 are one decision
+  wearing two hats. <span class="loc">Blocks D8, and every task downstream of it if the answer is yes.</span></p>
+</div>
+
+
+<h2><span class="num">8</span>What driving the skeleton found</h2>
+
+<p class="lede">
+  &sect;7 ended with a proposal and no code. This section is the fifth overseer iteration, which built the
+  smallest thing that could be pointed at real data and run, and ran it: <strong>44 tests, and one drive
+  over 2,829 real commits</strong>. It produced <strong>eight findings, five of which are defects in the
+  specs &sect;7 describes</strong> rather than in the code. That ratio is the argument for driving, restated
+  on a second project in one day.
+</p>
+
+<h3>Why there was anything to build, when &sect;7 said shelve</h3>
+
+<p>
+  <code>tasks.md</code> said <em>&ldquo;every phase is blocked on 0.3&rdquo;</em>, and 0.3 is your permission
+  to read <strong>your own sessions</strong>. The tasks file had generalised that into permission to read
+  <strong>anything</strong> &mdash; which shelves work that discloses nothing. <strong>A repository&rsquo;s own
+  commit history is data you have already published</strong>, and it is still a record of turns performed by
+  agents Witness did not spawn, which is the product&rsquo;s entire subject. So the gate belongs to the
+  surface, not to the product. Everything below follows from acting on that; nothing below read a single
+  transcript, and the build <strong>compiles no reader for that surface at all</strong> &mdash; the block is
+  an absence, not a flag that could be flipped.
+</p>
+
+<h3>The eight</h3>
+
+<table>
+  <tr><th>&nbsp;</th><th>What driving it found</th><th>Where the defect is</th></tr>
+  <tr>
+    <td><strong>W-1</strong></td>
+    <td>The rule that protects the report <strong>makes the actor unprintable.</strong> The only agent
+      identity a commit carries is the <code>Co-Authored-By</code> trailer &mdash; 1,699 of 2,829 commits,
+      five distinct values &mdash; and <em>the model wrote it</em>. R3&rsquo;s rule that a model-authored
+      value never appears in a report then suppresses the actor and the model, so the per-model breakdown
+      comes out as five buckets named <code>model-authored-value-&lt;hash&gt;</code>. The axis conflates a
+      model&rsquo;s <em>characterisation</em> of a turn with a model&rsquo;s <em>signature</em> on it. R3
+      could not have found it: on the transcript surface the model field is instrumented, so the two never
+      collide.</td>
+    <td>spec</td>
+  </tr>
+  <tr>
+    <td><strong>W-2</strong></td>
+    <td>The per-model completeness figure <strong>partly restates its own grouping key</strong> &mdash; 0.4
+      on all five model buckets, identically, and 0.2 on the <code>model-unavailable</code> one, which
+      differs <em>because</em> the model is unavailable. R3 replaced a per-agent figure with this one
+      without checking it for the same class of defect.</td>
+    <td>spec</td>
+  </tr>
+  <tr>
+    <td><strong>W-3</strong></td>
+    <td><code>measured</code> does not mean trustworthy. Provenance says how Witness got a value; author
+      says who wrote it; <strong>neither says whether the observed party could choose it.</strong>
+      <code>GIT_AUTHOR_DATE</code> sets the one field this surface fills on every record, and the
+      skeleton&rsquo;s own regression test forges two timestamps to build its fixture. For a product founded
+      on accepting records about actors it never authenticated, that is a missing axis.</td>
+    <td>spec</td>
+  </tr>
+  <tr>
+    <td><strong>W-4</strong></td>
+    <td>The report <strong>claimed to be derived from records <em>plus matrices</em> and was a function of
+      records alone.</strong> Caught by the second half of a requirement&rsquo;s own test: changing a matrix
+      entry&rsquo;s reason produced a byte-identical report. <strong>Fixed</strong> &mdash; and the fix
+      produced a check nobody had reasoned their way to: the report now compares each surface&rsquo;s
+      declaration against what its records actually contain, and says so when they disagree. Zero
+      disagreements over the real corpus, which is the answer that check should give on a healthy read.</td>
+    <td>code, then spec</td>
+  </tr>
+  <tr>
+    <td><strong>W-5</strong></td>
+    <td>The oldest-observable timestamp &mdash; the entire content of the requirement that stops a report
+      presenting an unobserved range as empty &mdash; was computed by <strong>string comparison across mixed
+      UTC offsets</strong> (2,761 commits at <code>+01:00</code>, 68 at <code>Z</code>). Measured to give the
+      same answer on this corpus: latent, not live. <strong>Fixed anyway.</strong></td>
+    <td>code</td>
+  </tr>
+  <tr>
+    <td><strong>W-6</strong></td>
+    <td><strong>A commit is not a turn, and the capability matrix has no slot in which to say so.</strong>
+      The record type is defined as one record per turn; this surface emits one per commit. It passes every
+      structural check while counting the wrong noun, so every completeness ratio it produces has an
+      unvalidated denominator.</td>
+    <td>spec</td>
+  </tr>
+  <tr>
+    <td><strong>W-7</strong></td>
+    <td>The data-policy gate was <strong>written per product where it belongs per surface</strong> &mdash;
+      the finding above, and the reason this iteration existed at all.</td>
+    <td>spec</td>
+  </tr>
+  <tr>
+    <td><strong>W-8</strong></td>
+    <td>The reader reported <code>unmapped_types: 0</code> where the truth was <em>not applicable</em>
+      &mdash; the exact <em>&ldquo;found none must be distinguishable from did not look&rdquo;</em> error a
+      task written three hours earlier forbids, <strong>committed by the session that wrote that
+      task</strong>, in the first surface it built. Now <code>null</code>, with a test asserting the null
+      rather than the explanatory note. Recorded because it is evidence about the rounds, not about the
+      code: the rule was known, written down, and did not prevent the instance.</td>
+    <td>code</td>
+  </tr>
+</table>
+
+<h3>What the drive did <em>not</em> falsify</h3>
+
+<p>
+  Said explicitly, because a drive that falsifies nothing was not looked at hard enough and this one is
+  allowed to name what held. <strong>The four provenance states held</strong> &mdash; every one exercised,
+  and no path found that produced a value a record claimed not to have. <strong><code>derived</code> earned
+  its place on first contact</strong>: <code>cost_usd</code> ran its derivation, found its inputs unmeasured,
+  and returned unavailable naming the missing input on all 2,829 records, never partially derived.
+  <strong>The closed surface list held</strong> &mdash; unknown, absent and known-but-no-reader all exit
+  non-zero naming what the build knows, and the no-surface case was checked on both halves, the exit code
+  <em>and</em> the file that must not be created. <strong><code>conditional</code> was the right
+  call</strong>: 1,699 records resolved one way and 1,130 the other, within one surface, in one repository
+  &mdash; the same shape R2 measured across models, reached from a different direction.
+</p>
+
+<h3>What this does not change</h3>
+
+<p>
+  <strong>Nothing in &sect;7.4 is answered by this.</strong> The six decisions are still yours, the
+  transcript surface still has no reader, and no line of this skeleton read a session file. What changed is
+  that <em>propose-then-shelve</em> was too blunt: one surface could move without you, it moved, and it
+  found five things three careful rounds did not. Whether <code>git-commit</code> should survive as a
+  surface at all is itself open &mdash; W-6 is a real argument that it should not, and it was chosen because
+  it was drivable without a decision from you, not because anyone decided the product wants it.
+</p>
+
+<footer class="page">
+  Two runs on <code>autonomous/2026-09-07-sidequest</code>, worktree
+  <code>…\AgentWeave-sidequest</code>, never the main checkout · eight sidequest iterations (§1–§6 and the
+  S-10 addendum) then five overseer iterations (§7–§8) ·
+  no Hub started, no agent turn, no web, no AgentWeave product code &middot; two sibling repositories,
+  <code>continuity-kit</code> and <code>witness</code>, both driven, both local with no remote ·
+  logs at <code>.claude/autonomous/2026-09-07-sidequest-log.md</code> and
+  <code>.claude/autonomous/2026-09-07-overseer-log.md</code>, positions at
+  <code>STATE-sidequest.json</code> and <code>STATE-overseer.json</code>.
+</footer>
+
+</div>
+</body>
+</html>
