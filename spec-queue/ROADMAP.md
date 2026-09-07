@@ -40,7 +40,7 @@ Nothing below this line can move until these are done, and item 1 expires in the
 |---|---|---|
 | **0.1** | ~~Write a `## 2026-09-08` section redirecting the day window off the spec loop.~~ **DONE 2026-09-08 00:35.** The section is written: no spec loop, D-1/D-2 take F292, D-3 takes hygiene. Confirmed the night of 2026-09-07 built nothing — `AgentWeaveArmNight` was disabled and there is no `2026-09-07-night-log.md` — so there was nothing to drive either. | `spec-queue/DIRECTION.md` |
 | **0.2** | **Write four verdict tokens.** `APPROVED` / `REVISING` / `REJECTED` in front of each change name. `NOTHING TONIGHT` is valid but leaves the FIX window idle. | `spec-queue/APPROVALS.md` |
-| **0.3** | **Write the `ORDER:` line.** Three of the four touch `hub/ui` and the committed bundle, so they cannot run beside each other. Only one is bundle-free. | `spec-queue/APPROVALS.md` |
+| **0.3** | **Write the `ORDER:` line.** ~~Three of the four touch `hub/ui` and the committed bundle… Only one is bundle-free.~~ **Corrected by the second review, 2026-09-08: two are bundle-free, not one.** `an-agent-without-mcp` names no `hub/ui` file anywhere and declares its own exemption at its `tasks.md:7`; `a-dead-connection` is Python-only. Only the two UI changes touch the bundle, and they share **no source file** — their sole collision is the generated `hub/hub/static/ui`. | `spec-queue/APPROVALS.md` |
 | **0.4** | **Decide the night arm.** `Enable-ScheduledTask -TaskName AgentWeaveArmNight` (fires 22:55) or leave it off. With tokens written, an enabled arm builds tonight. | Task Scheduler |
 
 ### The four changes awaiting a token
@@ -50,11 +50,13 @@ Nothing below this line can move until these are done, and item 1 expires in the
 | `2026-09-07-a-dead-connection-is-never-handed-back-out` | **F295 (A)** | 24 (1 ticked) | **No** — Python only |
 | `2026-09-05-the-conversation-carries-its-own-run-facts` | **F274 (A)** | 44 | Yes |
 | `2026-09-07-clearing-instructions-asks-first` | DAY-3 | 24 (1 ticked) | Yes |
-| `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing` | sidequest | 35 | Yes |
+| `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing` | sidequest | 35 | **No** — corrected 2026-09-08 |
 
 **127 tasks, 2 ticked, neither an implementation.** Suggested `ORDER:` — `a-dead-connection` first
-(highest severity, no bundle, so it can land beside anything and cannot conflict), then the three UI
-changes strictly one per night.
+(highest severity, no bundle, so it can land beside anything and cannot conflict), then
+`an-agent-without-mcp` (also bundle-free), then the **two** UI changes strictly one per night. All
+four now have an `APPROVALS.md` row; the fourth got one on 2026-09-08, which is what makes it
+approvable at all.
 
 ---
 

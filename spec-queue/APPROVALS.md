@@ -16,6 +16,38 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-08
+
+**Written by a second review session, not by a window.** This section exists for one reason: to give
+`2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing` a row it never had. It came off the
+sidequest branch and merged straight to `master` at `2b4dce4`, so it never entered the DECIDE flow
+and **appears on no review page.** Without a row it cannot take a verdict, and approving it would
+have meant approving something the operator has never been shown. **No status token is written
+here** — that is the operator's, as always.
+
+The other three changes already have rows under `## 2026-09-07`, `## 2026-09-06` and `## 2026-09-05`
+and still carry no verdict; those rows stand and are not restated.
+
+- 2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing   sidequest, no finding number. 35 tasks in 6 phases. **No migration, no UI, no bundle rebuild** — `tasks.md:7` says so itself; Python and docs only. A run whose harness cannot use MCP is handed a working credential (`AW_RUN_TOKEN`) and the Hub's own address (`HUB_URL`) in its environment, and is then told in the first line of its prompt that it has no way to reach AgentWeave at all (`launchability.py:325-330`, prepended at `agent_trigger.py:1006-1007`). Both halves verified against the code. The branch was emptied rather than repointed when `2026-08-03-single-runtime` cut the CLI to five commands; the HTTP plane those commands wrapped did not go anywhere. Four parts: the notice tells the truth; a discovery surface describes the operations as requests rather than tool calls; the two adapter-only rules (`archive_job`'s confirmation, `ask_user`'s wait) move into the contract; and a run is told the access path it actually has instead of having the tool-protocol path asserted for it. Two ADDED requirements plus one MODIFIED in `agent-capability-plane` — the MODIFIED is *HTTP and MCP access have equal capability* (shipped at `:107`), which **already names this exact deployment**: *"some environments forbid MCP servers while still allowing ordinary local API calls."* `openspec validate --strict` passes.
+
+**Read this before approving it.** The change is not filed against a numbered finding — it is filed
+against a shipped requirement whose agent-facing half was never built, which is a weaker trigger
+than F274's or F295's and a stronger one than a preference. It also found, and deliberately did
+**not** fix, that `openspec/specs/agent-capability-plane/spec.md:140-185` still states two
+requirements for the unasked-question backstop **retired on 2026-08-20 at the operator's request**
+and dropped by migration `0082`. Confirmed present in the shipped spec by this review. That is a
+false current-behaviour requirement sitting thirty lines from the one this change edits, and it
+belongs to retiring `openspec/changes/2026-08-07-unasked-question-backstop`, not here — but it is
+how a later round inherits a retired feature as evidence, so it is put to the operator now.
+
+**One correction to `ROADMAP.md`, which bears on the `ORDER:` line.** Stage 0.3 says *"Three of the
+four touch `hub/ui` and the committed bundle... Only one is bundle-free."* That is wrong: **two are
+bundle-free.** This change names no `hub/ui` file anywhere and declares its own bundle exemption at
+`tasks.md:7`, and `a-dead-connection` is Python-only. Only `the-conversation-carries-its-own-run-facts`
+and `clearing-instructions-asks-first` touch the bundle, and those two share **no source file** —
+their only collision is the generated `hub/hub/static/ui`. So the ordering constraint is narrower
+than the roadmap states.
+
 ## 2026-09-07
 
 Review page: `review/review-2026-09-07.html`. **Two changes proposed, each taken through all three

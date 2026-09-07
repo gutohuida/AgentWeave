@@ -63,10 +63,10 @@ being discarded, and closing goes through the dead thread.
 
 ### 3. Neutralise, then raise — the one that recovered
 
-`aiosqlite.Connection.close()` opens with `if self._connection is None: return` (`core.py:199-201`),
+`aiosqlite.Connection.close()` opens with `if self._connection is None: return` (`core.py:202-203`),
 so a connection whose `_connection` has been cleared closes instantly and without touching its
 thread. Setting `_running = False` alongside it makes any further `_execute` raise
-`ValueError("Connection closed")` (`core.py:151-152`) rather than queue work that will never be
+`ValueError("Connection closed")` (`core.py:152-153`) rather than queue work that will never be
 answered — a loud failure instead of a silent hang, for anything still holding a reference.
 
 With both set before the `DisconnectionError` is raised:

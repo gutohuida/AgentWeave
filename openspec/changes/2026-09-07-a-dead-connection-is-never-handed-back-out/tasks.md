@@ -5,7 +5,14 @@ only verified implementation closes a task. Written by R1, revised by R2 (2.1 an
 2.4 answered, 3.7 and 3.8 added and the mutation-check renumbered to 3.9), revised again by R3
 (**1.2 replaced** — the neutralisation moves off the checkout listener onto the `close` pool event;
 1.5 added; 2.3 gains its reason; 3.3 rewritten; 3.10 and 3.11 added; mutation-check renumbered to
-3.12).
+3.12). There is no 3.9 — R2's mutation-check held that number and R3 moved it to 3.12; no task was
+lost, and the file holds 24.
+
+**Every `testbed/scratch/f295/probe_*.py` named below was deleted on 2026-09-07** when the testbed
+was cleared, which task 4.3 had anticipated. They are quoted as the record of a measurement, per
+4.3, and nothing here requires reading one — 3.1 now states its kill mechanism inline rather than
+pointing at `probe_guard_lib.py`, and 1.1's attribute path was re-confirmed on 2026-09-08 by reading
+the installed library. Repaired by the second review, 2026-09-08.
 
 ## 1. The checkout guard
 
@@ -13,7 +20,9 @@ only verified implementation closes a task. Written by R1, revised by R2 (2.1 an
   `create_async_engine(...)` call at `:34`. Reach the driver connection as
   `dbapi_connection._connection` and its thread as `._thread` — both were confirmed reachable from
   a `checkout` listener against `AsyncAdaptedQueuePool` and `AsyncAdapt_aiosqlite_connection`
-  (`testbed/scratch/f295/probe_pool.py`). Use `getattr` with a `None` default for both, and return
+  (measured by `probe_pool.py`, deleted with the testbed on 2026-09-07; **re-confirmed 2026-09-08 by
+  reading the installed aiosqlite 0.22.1** — `_thread` is assigned at `core.py:90`, `_running` at
+  `:85`). Use `getattr` with a `None` default for both, and return
   without doing anything if either is absent, so a non-aiosqlite driver is untouched.
 - [ ] 1.2 **The checkout listener only detects. It raises `sqlalchemy.exc.DisconnectionError` and
   does nothing else.** R1 and R2 had it neutralise the connection inline first, on the measurement
@@ -25,8 +34,8 @@ only verified implementation closes a task. Written by R1, revised by R2 (2.1 an
   `RESULT after 0.00s: RECOVERED, select 2 -> 2`.
 - [ ] 1.3 Comment both listeners with the aiosqlite version they were measured against (0.22.1), the
   two private attributes they depend on, and the two-line justification for each — `close()` returns
-  immediately when `_connection is None` (`aiosqlite/core.py:199-201`), and `_execute` raises
-  `ValueError("Connection closed")` when `_running` is false (`:151-152`), which turns any remaining
+  immediately when `_connection is None` (`aiosqlite/core.py:202-203`), and `_execute` raises
+  `ValueError("Connection closed")` when `_running` is false (`:152-153`), which turns any remaining
   holder's silent hang into a loud failure. Say in the `close` listener's comment *why it is on
   `close` and not inline in the checkout listener*, naming `dispose()`, or it will be moved back.
 - [ ] 1.4 Log the discard at WARNING with enough to act on: that a connection's driver worker had
@@ -77,10 +86,14 @@ only verified implementation closes a task. Written by R1, revised by R2 (2.1 an
 ## 3. Tests
 
 - [ ] 3.1 A test for the guard that kills a worker thread by the **real mechanism** rather than by
-  monkeypatching `is_alive` — queue a `(future, function)` pair whose future belongs to a closed
-  loop, which is what `testbed/scratch/f295/probe_guard_lib.py:kill_worker` does, then join the
-  thread. A test that fakes the thread's deadness proves the listener reads a boolean, not that the
-  recovery works.
+  monkeypatching `is_alive`. The mechanism is stated here in full because
+  `testbed/scratch/f295/probe_guard_lib.py`, which the earlier rounds pointed at for it, was deleted
+  with the testbed on 2026-09-07: open a second event loop, create a future on it, close that loop,
+  then `put` a `(future, function)` pair onto the connection's `_tx` queue. The worker runs
+  `function()`, tries to report the result with `future.get_loop().call_soon_threadsafe(...)` on the
+  closed loop, raises `RuntimeError: Event loop is closed`, raises again reporting *that* the same
+  way, and its `while True` ends (`aiosqlite/core.py:47-75`). Join the thread to confirm. A test that
+  fakes the thread's deadness proves the listener reads a boolean, not that the recovery works.
 - [ ] 3.2 The same test asserts the *recovery*, not just the raise: a statement issued after the
   kill returns a value from a new connection. Give it a real timeout, because the failure mode is a
   hang and an unbounded test hang in CI is the very thing `F292` costs hours to.

@@ -5,9 +5,17 @@ across six conversations, because those runs were short and the cap is on events
 So the first thing to establish is that the defect is still live on this checkout, at a volume you
 choose deliberately. **If phase 0 has not been recorded, do phase 0 and stop.**
 
-- [ ] 0.1 Trial Hub on **8011** — never `proj-5e960453` or `proj-18e5d4e0`, never port 8000 — from
-      `hub/` with uvicorn from source, against a fresh fixture project. Every real agent turn binds
-      `claude-haiku-4-5`. Confirm no `.py` under `hub/hub` or `src` is newer than the process start.
+- [ ] 0.1 A Hub on **a spare port** — never port 8000, and leave `:8010` alone — from `hub/` with
+      uvicorn from source, against a fresh fixture project deleted afterwards. Every real agent turn
+      binds `claude-haiku-4-5`. Confirm no `.py` under `hub/hub` or `src` is newer than the process
+      start.
+
+      *Reworded by the second review, 2026-09-08.* This task said "trial Hub on 8011, never
+      `proj-5e960453` or `proj-18e5d4e0`", written 2026-09-05 and overtaken by the 2026-09-07 clean
+      slate: `proj-5e960453` and the `drive8011` profile were deleted, and the trial Hub is now
+      `:8010` serving `~/.agentweave/hub/profiles/trial/agentweave.db` with this repo registered as
+      `proj-d85a82bf4216`. Naming a spare port and a throwaway project survives the next profile
+      churn; naming a specific one did not survive two days.
 - [ ] 0.2 **The headline, cross-conversation.** In conversation A, run a turn and stop it; confirm
       `GET /agents/{a}/timeline` has its run in `runs` and the served bundle shows the terminal
       label and the "Worked for Ns" line. Then drive turns in **other** conversations on the same
