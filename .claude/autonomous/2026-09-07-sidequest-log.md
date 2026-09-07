@@ -979,3 +979,143 @@ continuity kit, inside its own folder, built only from what its own S-5/S-6 spec
 precondition is met — S-9 is finished and more than sixty minutes remain before `stop_at`. It touches
 no AgentWeave product code and commits locally to a repository with no remote. If it is not reached,
 nothing is lost: the review page was the deliverable and it is done.
+
+---
+
+## Iteration 8 — S-10, the optional prototype: the checker runs, and the reference chain fails it 308 times
+
+**Position on entry.** `next_action` `S-10`, iteration 7, branch `autonomous/2026-09-07-sidequest`
+at `b9e62ea`. Verified against `git log`: matches, tree clean. S-9's precondition for this item —
+finished review page, more than sixty minutes before `stop_at` — held with about five hours to
+spare.
+
+**What this was.** The optional item: the smallest runnable skeleton of the continuity kit, built
+only from what its own S-5/S-6 spec describes, inside `C:\Users\huida\Documents\projects\continuity-kit`,
+committed locally to a repository that still has no remote. No AgentWeave product code was touched;
+the only files changed in this worktree are this log, the state file and the review page.
+
+### What was built
+
+A stdlib-only Python package, `continuity`, with two read-only commands:
+
+```
+py -3.11 -m continuity check .    # 0 clean, 1 mechanical violation, 2 bad invocation
+py -3.11 -m continuity latest .   # newest handoff, by number, never by mtime
+```
+
+Seven modules — the rule registry and the three categories, the handoff parser, chain discovery,
+the git layer, the rules and range resolver, the CLI. 28 tests, each fixture a real git repository,
+because half the rules are decided from history and a directory of files cannot exercise them.
+
+That covers phases 1, 2, 4 and 5 of `tasks.md` in outline. **Phase 3 is untouched** — the
+single-source render, the two profiles, the provenance manifest, `render`, `check --rendered`. It is
+the anti-fork mechanism, and until it exists the fork this project was created to stop is still
+unstopped and this repository is a fourth place the ideas live. That is stated in the README, in
+`tasks.md` and in the handoff rather than left to be discovered.
+
+**No task box was ticked.** A status table at the top of `tasks.md` says what exists instead. A tick
+that means "partly" and a tick that means "done" cannot be told apart three weeks later, and this
+repository's own rule is that only verified implementation closes a task.
+
+### The drive — the reference chain, reconstructed, and it is the point of the whole item
+
+A passing suite is not evidence, so the checker was driven against the real artifact. AgentWeave was
+cloned into a throwaway directory and checked out at `a38caee^` — the last commit at which its
+handoff chain was still tracked. That yields **73 numbered handoffs with real git history**, needing
+nobody's checkout and no live machine. Round 1 of the S-5 loop had claimed the reference chain was
+unavailable; round 2 said it was; this is the round that used it.
+
+`continuity check .` there: **308 violations, 76 warnings, 73 not-evaluable**, exit 1.
+
+Three of its numbers are independent reproductions of measurements the spec rounds made by hand, and
+this is what makes the drive worth more than the suite:
+
+| The rounds measured, by hand | The checker measured, by program |
+|---|---|
+| D5: 10 of the post-instruction handoffs record a `<base>..<head>` range | commit ranges resolved **10 recorded / 63 inferred / 0 unresolved** |
+| `SKILL.md`: `## Corrections to the previous handoff` survived in 5 handoffs of 108 | missing from **70 of 73** — so present in 3 of the tracked 73 |
+| D7: 79 top-level ledger entries, 22 carrying any date | the entry parser reads **79 / 22 dated / 57 undated** |
+
+The range figure is the one that matters most: task 2.4 predicted the inference fallback would fire
+"about six times in seven" on a tracked chain, and it fired 63 times in 73. The mechanism D5 was
+built around is load-bearing exactly as much as D5 said it was.
+
+**And the single best result is not a number.** `LATEST.md` in that clone names
+`handoff-0108-2026-09-04-2145-…`, a file the clone does not contain. `continuity latest` correctly
+returns `handoff-0073`, and `chain.pointer-agrees` reports the disagreement. That is the exact
+failure mode the contract was written from — *"a tracked pointer file naming a handoff no clone
+contained"* — **reproduced against the real artifact for the first time**, rather than described.
+Every round so far carried it as a claim quoted from a document; it is now a reproduction.
+
+### A sixth measured failure mode, in none of the seeds or rounds
+
+`## Environment left running` is missing from **73 of 73** reference handoffs. Not rare — absent.
+The `## Corrections` failure mode has been quoted through five rounds at 5-of-108; its sibling
+section has never been written by anybody, and nobody had counted it.
+
+### The defect the implementation found in the spec
+
+**`handoff.agent-header-shape` fires on 73 of 73 reference handoffs.** The `·`-separated
+three-fact convention post-dates the entire era: that chain writes
+`Claude Opus 5 (1M context) (Claude Code)` and eleven variants of it, and not one uses the
+separator. The rule as specified has **no adoption boundary**, while the commit-range rule (D4 item
+4) and ledger dating (D7) both have one — and D7's stated reasoning is precisely that *"a v1 that
+fails its own reference implementation on 57 entries gets switched off in its first hour."* The
+change applies that reasoning twice and misses the third place it applies.
+
+This was implemented **as written** and recorded rather than fixed. Changing a rule's severity is a
+spec change and belongs to a round, per this repository's own discipline. It is `SQ-12` on the
+review page and question 1 of the handoff.
+
+### This repository adopted its own contract
+
+`.handoffs/handoff-0001-…`, `DEAD-ENDS.md`, `continuity.json` recording the adoption date, and
+`.gitignore` recording — with the reason — that the chain is **tracked** uniformly. The reason is
+measurable rather than aesthetic: ignoring the chain removes the only fallback that can recover a
+commit range, and in the reference chain that fallback carried 63 of 73 handoffs.
+
+`check` against its own chain: **0 violations, 0 warnings, 1 not-evaluable**, exit 0, and the range
+resolved as **recorded** rather than inferred — because the work was committed first and the handoff
+written against that range, which is the discipline the contract implies and had never been
+demonstrated. Task 6.1's portability evidence exists: the contract was extracted from a repository
+with Windows, a Hub and a scheduled driver, and it holds in one with none of those.
+
+`--at-write-time` was then driven for the first time and confirmed all 20 paths the handoff lists
+under `## Files touched` and `## Read on resume`. That makes one sentence of handoff 0001 wrong —
+it says the mode had never been driven. **It was not edited.** The chain is append-only by the rule
+this session implemented, so the correction went into `tasks.md` and into this entry, which is
+exactly where the contract says a correction goes.
+
+### Verification
+
+- `py -3.11 -m unittest discover -s tests -t .` — **28 tests, green.** One fixture per rule,
+  including the pair that differ only in whether the chain is tracked, which is what decides whether
+  a range can be inferred at all.
+- Asserted by test rather than promised: the package imports nothing outside the stdlib; no
+  judgement-class rule is ever emitted as a finding; `check` and `latest` modify nothing (git status
+  and the directory listing are identical before and after); exit `2` for a path with no chain, so a
+  consumer cannot read a broken invocation as a pass.
+- The reference drive above, and the self-check above.
+- `git remote -v` empty, checked before every commit. Three commits in `continuity-kit`: `608d4cf`,
+  `349406b`, `f2b310e`.
+
+**Not verified, and it matters:** nobody but the author has run it (task 6.3), so nothing here is
+evidence that the messages or the invocation make sense to a stranger. No heuristic has a deliberate
+false-positive test (task 4.1). Phase 3 does not exist, so none of its byte-identity acceptance
+tests were attempted. Nothing ran on any OS but this one. And the honest open question is whether
+**308 violations is a useful first result or an unusable one** — most of it is two rules firing on
+every handoff, and a tool whose first real run prints 308 lines can be right and still be switched
+off.
+
+### Dead ends paid for, and where they went
+
+Three cost a second attempt and all three are now in the kit's own `DEAD-ENDS.md` — its first real
+use as the thing being extracted: a heredoc past roughly 150 lines fails silently through the Bash
+tool and writes nothing (it ate a 450-line `rules.py`, and then this log entry); Git Bash's `/tmp` is
+invisible to a Windows `py -3.11`, so a file the shell just created cannot be opened; and
+`git blame` dates must be read from `committer-time`, not `author-time`.
+
+### Next
+
+The queue is finished. `next_action` is `null` and the driver should unregister itself. The review
+page carries an S-10 addendum and a twelfth ask.

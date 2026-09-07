@@ -735,10 +735,75 @@
   shape. This window was forbidden to drive.</p>
 </div>
 
+<div class="ask">
+  <h4>SQ-12 — Does the <code>Agent</code> header rule get an adoption boundary, like the other two?</h4>
+  <p>Found by building the checker, not by reading the proposal. <code>handoff.agent-header-shape</code>
+  fires on <strong>73 of 73</strong> reference handoffs: the <code>·</code>-separated three-fact
+  convention post-dates that whole era, which writes <code>Claude Opus 5 (1M context) (Claude Code)</code>
+  and eleven variants and never uses the separator. The commit-range rule (D4 item 4) and ledger dating
+  (D7) each got an adoption boundary for exactly this reason — D7 says in as many words that a v1 which
+  fails its own reference implementation is switched off in its first hour. The change applies that
+  reasoning twice and misses the third place it applies. Implemented as written and recorded rather than
+  fixed, because changing a rule's severity is a spec change.</p>
+</div>
+
+<h2>What S-10 built after this page was written</h2>
+
+<p>The queue's optional last item ran. A runnable skeleton of the continuity kit now exists at
+<code>C:\Users\huida\Documents\projects\continuity-kit</code> — three commits, still no remote, no
+AgentWeave product code touched. It is <strong>phases 1, 2, 4 and 5</strong> of that change in outline:
+a stdlib-only <code>continuity check</code> and <code>continuity latest</code>, 28 tests, every fixture a
+real git repository because half the rules are decided from history.</p>
+
+<p><strong>Phase 3 is untouched</strong> — the single-source render, the two profiles, the provenance
+manifest. That is the anti-fork mechanism, so the fork this project exists to stop is still unstopped,
+and the kit is currently a fourth place the ideas live rather than the one source.</p>
+
+<p>It was driven against the real artifact, not only its own tests: AgentWeave cloned and checked out at
+<code>a38caee^</code>, the last commit where its handoff chain was tracked — 73 handoffs with real
+history, needing nobody's checkout. <strong>308 violations, 76 warnings, 73 not-evaluable.</strong>
+Three numbers reproduce, by program, what the rounds measured by hand:</p>
+
+<table>
+<thead><tr><th>Measured by hand in a round</th><th>Measured by the checker</th></tr></thead>
+<tbody>
+<tr><td>D5: 10 post-instruction handoffs record a <code>&lt;base&gt;..&lt;head&gt;</code> range</td>
+    <td>ranges resolved <strong>10 recorded / 63 inferred / 0 unresolved</strong> — task 2.4 predicted
+    the fallback would fire about six times in seven, and it fired 63 in 73</td></tr>
+<tr><td><code>SKILL.md</code>: <code>## Corrections</code> survived in 5 handoffs of 108</td>
+    <td>missing from <strong>70 of 73</strong></td></tr>
+<tr><td>D7: 79 ledger entries, 22 carrying a date</td>
+    <td><strong>79 / 22 dated / 57 undated</strong>, exact</td></tr>
+</tbody>
+</table>
+
+<p>The best result is not a number. <code>LATEST.md</code> in that clone names
+<code>handoff-0108-…</code>, <strong>a file the clone does not contain</strong>, while
+<code>continuity latest</code> correctly returns <code>0073</code> and reports the disagreement. The
+failure mode the entire contract was written from has now been <em>reproduced</em> against the real
+artifact instead of quoted from a document.</p>
+
+<p>A <strong>sixth measured failure mode</strong>, in none of the seeds and none of the rounds:
+<code>## Environment left running</code> is missing from <strong>73 of 73</strong>. Not rare — absent.
+Its sibling section has been quoted at 5-of-108 through five rounds and nobody had counted this one.</p>
+
+<p>The kit adopted its own contract from the first file and <code>check</code> against its own chain is
+<strong>clean — 0 violations, 0 warnings, exit 0</strong> — with the range <em>recorded</em> rather than
+inferred, because the work was committed first and the handoff written against that range. That is the
+first portability evidence the contract has: it was extracted from a repository with Windows, a Hub and
+a scheduled driver, and it holds in one with none of those.</p>
+
+<p><strong>Not verified.</strong> Nobody but its author has run it, so nothing shows the messages or the
+invocation make sense to a stranger. No heuristic has a deliberate false-positive test. Phase 3's
+byte-identity acceptance tests were never attempted. And the open question worth your judgement: whether
+<strong>308 violations is a useful first result or an unusable one</strong> — most of it is two rules
+firing on every handoff, and a tool whose first real run prints 308 lines can be right and still be
+switched off.</p>
+
 <footer class="page">
-  Sidequest run, 2026-09-07 · six iterations on <code>autonomous/2026-09-07-sidequest</code> ·
+  Sidequest run, 2026-09-07 · eight iterations on <code>autonomous/2026-09-07-sidequest</code> ·
   worktree <code>…\AgentWeave-sidequest</code>, never the main checkout ·
-  no Hub started, no agent turn, no web, no product code ·
+  no Hub started, no agent turn, no web, no product code &middot; S-10 added a runnable prototype in a sibling repository ·
   full prose log at <code>.claude/autonomous/2026-09-07-sidequest-log.md</code>,
   position at <code>.claude/autonomous/STATE-sidequest.json</code>.
 </footer>
