@@ -754,3 +754,142 @@ against the real `handoff` / `resume` / `DEAD-ENDS.md` files rather than against
 sharpest thing for R2 to attack is D1's acceptance test: R1 measured that the difference is 4
 regions but never checked that those regions are expressible as two profiles, and if they are not,
 the whole anti-fork mechanism changes shape.
+
+---
+
+## Iteration 6 — S-6: spec loop R2 for the continuity kit, independent
+
+**2026-09-07 · Claude Opus 5 (Claude Code, unattended scheduled driver) · branch
+`autonomous/2026-09-07-sidequest` · worktree `AgentWeave-sidequest`**
+
+R2's job is to compare the proposal against what actually exists, not to re-read R1. For an
+extraction, "what exists" is the source repository, so every measurement below was re-derived from
+the source files in this worktree at `824d930`. Two rounds, not three, for a greenfield project —
+the deviation is the seed's Part 3; anything proposed against AgentWeave's own code keeps all three.
+
+### Target 1 — D1's acceptance test, which R1 named as its own weakest link. It holds.
+
+R1 measured that the two handoff copies differ in four regions and never checked that four regions
+express as two profiles. R2 built the mechanism instead of arguing about it: a table mapping four
+line positions to two alternatives, one of them empty. Rendering `local` reproduced
+`.claude/skills/handoff/SKILL.md` at **19,459 bytes** and `distributed` reproduced
+`src/agentweave/templates/skills/handoff.md` at **19,048 bytes**, **both byte-for-byte exact**.
+
+The reason it works is worth keeping, because it is not general: the fourth region (`331,335d330`)
+is the **last item of a numbered list**, so its empty alternative renumbers nothing. Item 3 of 7
+would have needed a fifth region. Both files are LF-only with a trailing newline, so there is no
+whitespace difference outside the four. Task 3.1 moves from "this can fail" to "this is expected to
+pass, and still says stop if it does not".
+
+### Target 2 — the field D5 anchors everything to is filled one time in seven.
+
+R1 could not check whether real handoffs record a `<base>..<head>` range, and said so honestly. R2
+could, because **R1 was wrong about why it could not**: `.claude/handoffs/` is untracked in the
+working tree, but `0001`-`0075` were tracked until 2026-09-04 and **all 76 blobs are readable from
+git history in this worktree.** R2 read every one.
+
+- **11 of 76** handoffs record a range in `## Git state`; **18** mention one anywhere in the file.
+- The instruction entered the skill on **2026-08-04**; **71** handoffs were written on or after
+  2026-08-05. Of those, **10** record a range in `## Git state`, **16** anywhere.
+
+D5 anchored the entire history-dependent half of the checker — D4 items 4, 6 and 9, including item 9
+which R1 held up as the cheap fully-mechanical win nothing checks today — to a field the sessions
+being told to fill it filled about one time in seven. R1's stated exception (an iteration left
+uncommitted) accounts for almost none of the 61 misses; the dominant cause is that the writer simply
+did not record one, on committed work.
+
+**Three consequences, all now in the change.** (1) Range *resolution* replaces range *reading*:
+recorded, else inferred from the commits that added the handoff and its predecessor where the chain
+is tracked, else not-evaluable — and every anchored finding names which source it used, because an
+inferred range brackets when the handoff was committed, not the iteration. (2) Item 4's severity is
+set by **D7's reasoning applied a second time**: that a range is named ships as a warning with the
+same adoption boundary, because shipping it mechanical fails 61 of 71 reference artifacts on the
+first run — exactly what D7 exists to prevent, a principle R1 stated and did not apply here because
+it had not measured the number. (3) **Two requirements in this change pull against each other**: the
+contract blesses "ignored uniformly" as often right, the source repository chose exactly that on
+2026-09-04, and inference needs the chain tracked. Choosing to ignore the chain is choosing to check
+less. D5 now states that rather than leaving it to be discovered.
+
+### The defect R2 was not sent to find — an internal contradiction
+
+D1 required every rendered copy to **carry** a provenance stamp. The `continuity-contract` delta
+required a render to be **byte-identical** to the variant its profile describes. **Neither existing
+copy carries a stamp** — the string `provenance` occurs in neither file. No implementation could
+have satisfied both. Two further reasons the stamp could never have gone inside: a hash written into
+the bytes it hashes does not close, and a stamp in the front matter breaks
+`tests/test_handoff_resume_templates.py:15`, which asserts the shipped template *begins* with its
+exact `name:` line — turning a documentation change into a failing suite in a repository this change
+is forbidden to modify. Fixed as **D11**: the stamp is a manifest stored beside the renders. The
+byte-identity test survives, because it is the only thing standing between this change and a third
+hand-maintained copy.
+
+This is CLAUDE.md's sharper variant exactly: **the argument was wrong while everything it argued
+about was right.** Every measurement underneath it was correct.
+
+### Found by doing rather than reading
+
+Committing R2's own work printed `LF will be replaced by CRLF the next time Git touches it`.
+`core.autocrlf` is `true` on this machine and **continuity-kit has no `.gitattributes`**, while
+AgentWeave pins `* text=auto eol=lf` — which is why its files measure LF-only under the same
+setting. A source document checked out there as CRLF renders CRLF and fails the byte-for-byte
+acceptance test on **every line**, for a reason having nothing to do with the mechanism. Added as
+task 1.6, ordered before any source document lands, and committed separately.
+
+### Everything re-measured
+
+| Claim | Result |
+|---|---|
+| 341 / 336 / 127 / 127 / 260 lines, 728 total | exact |
+| `resume` copies byte-identical | exact, `diff -q` silent |
+| 11 differing lines in 4 hunks, all about `/review-iteration` | exact |
+| **Both profiles render byte-for-byte** | **verified — untested in R1** |
+| `test_handoff_resume_templates.py` never compares the copies | exact — but **6** assertions per template, not 4 |
+| Step 5 checklist is 14 items at `288-310` | exact, and D4's table follows the real order |
+| driver reads 6 of 18 state keys at `104,105,110,114,124,132` | exact, all six lines |
+| 79 ledger entries, 22 dated | exact; the "7 Confirmed" figure needed its predicate stated (8 contain the word, one is the rule) |
+| 72 handoff names on real branches | exact; 76 filenames over 75 numbers under `--all` |
+| `## Corrections` present in 5 (quoted by R1) | **measured: exactly 5 of 76** |
+| `Model:` 7, `Agent:` always (quoted by R1) | **measured: 7 and 76 of 76** |
+| tracked through `0073` (quoted by R1) | **measured: recoverable through `0075`** |
+| 877 lines of PowerShell | exact, across four named scripts |
+| ~1,010 lines of markdown playbook | **not reproducible** — files unnamed; the two skills are 472 |
+| zero inbound code coupling | **imprecise** — no product code, but a public exported API and one test |
+
+### New facts neither seed nor R1 had
+
+- **A duplicate handoff number exists in the real chain**: `0049`, added twice under different
+  slugs. The anti-duplicate rule now has an observed violation, and 2.1 gains a fixture for it.
+- **`## Environment left running` appears in 0 of 76 handoffs** — explained (it entered the skill
+  2026-09-04, after `0075`), and recorded because twelve of the thirteen required sections are
+  demonstrated by real artifacts and this one is not.
+- **The shipped template has no live consumer**: `get_skill_template` is exported in `__all__` and
+  called only by the test suite.
+
+### Verification
+
+- `openspec validate --strict 2026-09-07-the-contract-and-a-checker-that-can-falsify-it` →
+  "is valid", exit 0, run twice (after the main edit and after the `.gitattributes` task).
+- Structural script over both deltas: **17 requirements, 36 scenarios** (was 32), SHALL on the first
+  physical line of every requirement body — asserted by script, since `--strict` reads no further.
+- `openspec list` → `0/34 tasks` (was 33).
+- The byte-for-byte render was **executed**, not reasoned about: both renders matched their targets.
+- The 76-handoff measurements were run over blobs read with `git show`, in this worktree. The main
+  checkout was never entered.
+- Commits `6d5599d` and `ded3880` in `continuity-kit`; `git remote -v` empty, checked before each.
+- **No AgentWeave product code was written.** Only `.claude/autonomous/` changes in this worktree,
+  so no lint or test set applies here.
+- Nothing driven: no Hub, no agent turn, no web.
+
+### Not verified
+
+- Handoffs `0076` onward — never committed anywhere. Two-thirds of the chain is measured; the recent
+  third is not, by anyone.
+- The ledger's self-contradiction about chain length (`DEAD-ENDS.md:12` says 108, `:25` says 193)
+  stands untouched. 76 is what git holds and settles neither.
+- That the render mechanism works as an *implementation* — R2 built it in a scratch script that was
+  not kept. Task 3.1 is still the real test.
+
+### Next
+
+`next_action` is `S-9` — the review page the operator reads tonight. S-7 and S-8 were skipped by
+S-4 (one project, not two). S-10, the optional prototype skeleton, stays optional and last.
