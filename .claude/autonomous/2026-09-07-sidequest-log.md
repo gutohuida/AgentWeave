@@ -431,3 +431,176 @@ question 1 (are P1 and P2 one project or two), and create the sibling folders un
 One new item for the operator: whether `hub_client: cli` should keep meaning `acceptEdits`. Today
 the product's own advice for "MCP is blocked by company policy" (`config.py:714`) lands an operator
 on a path with no workspace check, and nothing tells them.
+
+## Iteration 4 — S-4, the candidate set: one project, because the fork already happened
+
+**Item:** S-4 — decide which extraction candidates get a folder, answer the seed's question 1, and
+create the sibling repositories.
+
+**Outcome:** one folder, not two. `C:\Users\huida\Documents\projects\continuity-kit`, `git init`,
+no remote, openspec scaffolded and validated, first commit `0eb373d`. P2 folded into it. S-7 and
+S-8 are therefore skipped, exactly as the queue anticipated.
+
+### The finding that decided it, and it was not in either seed
+
+**The capability this run was asked to extract is already forked, inside AgentWeave, by hand, with
+nothing keeping the copies in sync.**
+
+AgentWeave both *uses* the continuity kit and *ships* it:
+
+| Copy | Path | Lines |
+|---|---|---|
+| in use | `.claude/skills/handoff/SKILL.md` | 341 |
+| shipped | `src/agentweave/templates/skills/handoff.md` | 336 |
+| in use | `.claude/skills/resume/SKILL.md` | 127 |
+| shipped | `src/agentweave/templates/skills/resume.md` | 127 — byte-identical |
+| in use | `.claude/handoffs/DEAD-ENDS.md` | 260 — **not shipped at all** |
+
+`handoff.md` differs from the live `SKILL.md` on **11 lines** (`diff | grep -c '^[<>]'`). Every one
+of them strips a reference to `/review-iteration`, a repo-local skill not shipped to users — so the
+divergence is deliberate and hand-maintained. `tests/test_handoff_resume_templates.py` guards the
+shipped copies with substring assertions (`"handoff-NNNN"`, `"DEAD-ENDS.md"`, `"Git state"`,
+`"Pairs with /resume"`) and **never asserts that the two copies agree** about anything else.
+
+That answers the seed's question 4 — *"is this an extraction or a fork?"* — empirically rather than
+by argument: the fork already happened. A third hand-maintained copy in a sibling repository was
+the default outcome of this queue item unless something prevented it, and now the new repo's own
+seed requires R1 to name the upstream copy and the reconciliation mechanism before proposing
+anything.
+
+Second consequence, and a good first requirement for P1: **`DEAD-ENDS.md` is the one third of the
+contract AgentWeave's users never receive**, and it is the third the skill argues hardest for in
+its own text — *"individual facts were dropped and re-learned between three and seven times each,
+with gaps of up to 46 handoffs."*
+
+### The axis nobody had measured: inbound coupling
+
+Both prior explorations ranked candidates by **outbound** dependency footprint — what a candidate
+would drag with it. That is half an extraction. The other half is **inbound**: how many call sites
+in AgentWeave would afterwards depend on an external package. Measured by `grep -rln` over
+`hub/hub` and `src`:
+
+| Candidate | Inbound importers | Verdict |
+|---|---|---|
+| `handoff` + `resume` + `DEAD-ENDS.md` | **0** — no product code reads them | extract |
+| `hub/hub/checkpoint_policy.py` | 5 non-test modules | leave |
+| `hub/hub/spec_lifecycle.py` | **17** modules under `hub/hub/` alone | leave |
+
+`spec_lifecycle.py` ranked *fourth-most separable* on the outbound axis (390 lines, two tables) and
+is close to unextractable on the inbound one — reached from `agents.py`, `agent_actions.py`,
+`agent_trigger.py`, `loops.py`, `spec.py`, `tasks.py`, `db/models.py`, migration `0074`, and eight
+`spec_*` modules. Extracting it would make AgentWeave a consumer of an external package for the
+thing AgentWeave is *for*. The continuity documents are the mirror image, and for a structural
+reason: they are read by the **agent**, not by the program. The only references anywhere in the
+tree are a comment at `hub/tests/browser/conftest.py:58` and the distribution test above.
+
+### Question 1 answered: one project
+
+The deciding measurement is in `run-iteration.ps1`. It reads exactly **six** of the eighteen fields
+its arming script writes, and the six split cleanly in half:
+
+| Field | Line | Kind |
+|---|---|---|
+| `branch` | `:124` | continuity — used for precisely what `resume`'s Step 2 does by hand: check the stored position still describes the tree |
+| `next_action` | `:132` | continuity — what the handoff template's `## Next steps` §1 already requires |
+| `log_file` | `:114` | continuity — it names the per-iteration prose log, which *is* a handoff chain |
+| `runner` | `:104` | launch configuration |
+| `permission_mode` | `:105` | launch configuration |
+| `model` | `:110` | launch configuration |
+
+So the loop's machine contract is three continuity fields plus three fields telling a driver how to
+spawn a process. The continuity three are a **strict subset, in machine form, of what the handoff
+file already carries in prose**. There is one artifact here — a durable file a successor reads —
+split by reader, not two products. Two repositories would mean two definitions of `next_action`
+drifting apart: the fork failure measured above, reproduced deliberately.
+
+The counter-argument, weighed rather than skipped: P1 serves an interactive session and P2 an
+unattended one, and their failure modes differ. It loses because the driver already treats them
+identically — re-verifying `branch` against reality every firing is the interactive `resume` ritual
+executed by a machine.
+
+### What folding costs, and it is a real narrowing
+
+Two things the seed listed as P2's value are **not** in the new repository and are not planned:
+
+- **The scheduler** — 877 lines of Windows PowerShell (`arm-cycle.ps1` 243, `install-tasks.ps1` 138,
+  `install-driver.ps1` 230, `run-iteration.ps1` 266) against ~1,010 lines of markdown playbook. All
+  behaviour lives in the markdown; `Unregister-ScheduledTask` at `run-iteration.ps1:75,96,134` is
+  the stop mechanism, called from inside the iteration body, and is structurally Windows-bound.
+- **The operator-approval protocol** (`spec-queue/`: the five-row who-writes-what table, the status
+  token that is the authority with deliberately no checkbox, `ORDER`/`NOTHING TONIGHT`). A good
+  file contract and a *different* one — a person negotiating with a process, not a session handing
+  to its successor. A candidate for its own project later.
+
+This narrows what the operator asked for and it is theirs to overturn; it is in `decisions_for_user`.
+
+### Rejected, each on a measurement
+
+- **The checkpoint engine.** 2,596 lines across `hub/hub/checkpoint*.py`, 11 of the 44
+  `__tablename__` declarations in `db/models.py` (44 confirmed by count), and the decisive point
+  read in full at `checkpoint_generation.py:11-14`: the probe works *because* it can compare a
+  checkpoint against `files_changed`, `tasks` and `open_questions` sitting in a table — *"Factory
+  needed an LLM judge because they had nothing to compare against."* Strip the tables and it
+  degenerates into the design its own docstring calls inferior.
+- **`spec_lifecycle.py`** — 17 inbound importers.
+- **The review-page checkers** — 199 lines confirmed (94 + 105), but they check *this* repo's
+  conventions, one needs Playwright, and one has emitted a known false red since 2026-09-05. A
+  script, not a product.
+
+### Seed numbers that did not reproduce
+
+Reported because the point of re-measuring is that citations move. Exact: 728 lines of continuity
+markdown; 199 lines of review-page checkers; six of eighteen `STATE.json` keys. Off: 879 → **877**
+PowerShell lines, 1,047 → **1,010** playbook lines, a "4,567-line checkpoint stack" → **2,596**
+across the `checkpoint*`-prefixed files (upstream evidently counted unprefixed files too; the
+qualitative point stands). One claim I corrected in my own draft after checking: the handoff
+skill's Step 5 checklist is **14** items, not thirteen.
+
+**Not measurable here:** the live handoff chain. `.claude/handoffs/` is untracked since 2026-09-04,
+so the working copies exist only in the main checkout, which this run may not enter. Git history
+shows **72 distinct numbered handoff files** ever tracked and 162 distinct paths ever added under
+that directory. The seed's "111 handoffs" is therefore carried as a claim, not a measurement.
+
+### What was created
+
+`C:\Users\huida\Documents\projects\continuity-kit\` — `git init`, **no remote**, branch `master`,
+commit `0eb373d`:
+
+- `README.md` — what it is, what it was lifted from with commit and line counts, the scope decision,
+  and a status table saying plainly that there are no specs, no code, no tests and no governance.
+- `openspec/config.yaml` — project context and authoring rules, including the standing requirement
+  that any proposal name which `handoff.md` is upstream.
+- `openspec/explorations/2026-09-07-what-was-measured-before-this-repo-existed.md` — the full seed
+  for R1: the measurements above, the five questions R1 must answer rather than inherit, and a
+  section on what was not measured.
+- `openspec/specs/`, `openspec/changes/archive/` — empty, from `openspec init --tools none`.
+
+Question 4 for R1 was sharpened beyond the seed's version, because the fork finding gave it teeth,
+and a fifth question was added that neither seed asked: **what in this contract is mechanically
+checkable and what is irreducibly the model's judgement?** The kit's own recorded failure modes are
+all in the checkable half — `## Corrections to the previous handoff` present in 5 handoffs out of
+108, `Model:` filled 7 out of 108, and a chain tracked through `0073` and ignored from `0074` whose
+clone silently resumed from month-old state. A checker with no model in it would have caught all
+three, and that is the strongest available argument that this is a *product* and not just a
+document.
+
+### Verification
+
+- `openspec init --tools none` in the new repo, then `openspec list` (clean) and a throwaway
+  `tmp-probe` change carrying one `SHALL` requirement: **`openspec validate --strict tmp-probe`
+  returned "Change 'tmp-probe' is valid", exit 0**, proving the hand-written `config.yaml` does not
+  break validation before S-5 relies on it. Probe deleted; `git status` clean.
+- `git remote -v` in the new repo returns nothing. Confirmed twice.
+- Every line count, importer count and line citation above was run in this session against the
+  worktree at `903ad6b`. Four claims carried from the seed were re-checked before being repeated
+  (`checkpoint_generation`'s docstring, the 44 tables, `Unregister-ScheduledTask`'s three call
+  sites, the Step 5 checklist length) and one of them was wrong.
+- **No AgentWeave product code was touched.** `git status` in this worktree shows only
+  `.claude/autonomous/` files, so no lint or test set applies.
+- Nothing driven: no Hub, no agent turn, no web, per this run's limits.
+
+### Next
+
+`next_action` is `S-5` — spec loop R1 for the continuity kit, written **inside**
+`C:\Users\huida\Documents\projects\continuity-kit`, not here. S-7 and S-8 are marked `skipped`
+because P2 folded in.
