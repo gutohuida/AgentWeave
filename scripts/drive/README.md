@@ -191,3 +191,29 @@ status write at `:2235`, starts 8011 with `AW_F286_INJECT=1`, and `git checkout`
 afterwards. That edit is never committed. A raise on `record_agent_output` or
 `_broadcast_run_lifecycle` without the predicate fires at `:2014`/`:1939`, before the window, and
 shows the case that already works.
+
+## The 2026-09-07 fixture — D-8, the clearing path before it is guarded
+
+`drive-0907-d8` at `C:\Users\huida\Documents\drive-0907-d8`, a one-file git repo. The **project** is
+created and deleted by the harness on every run, so only the directory persists. It ran against a
+throwaway Hub on **8011** over a fresh database
+(`sqlite+aiosqlite:///C:/Users/huida/AppData/Local/Temp/aw0907r3/aw0907r3.db`), started from source
+from `hub/`. No agent, no runner, no job — nothing here triggers a turn or binds a model.
+
+- `t_d8_clearing_instructions_prechange.py` — round 3 of the spec loop for
+  `2026-09-07-clearing-instructions-asks-first`, paying the drive debt rounds 1 and 2 both recorded.
+  Select all, delete, Save, watched on the wire: **one PUT carrying `{"content": ""}`, zero dialogs,
+  the row `''`**, no undo/restore/history anywhere on the page and `/instructions/history` 404. Three
+  further legs pin the edges — the single-newline near-miss that `content === ''` would let through,
+  a whitespace-only *stored* value that must stay uninterrupted, and an ordinary save.
+
+  **It asserts the pre-change behaviour on purpose** and is expected to go red once the change lands.
+  That is `tasks.md` 5.2: the instrument is only trustworthy once it has been seen to observe the
+  write whose absence the post-change harness will assert. **27 passed / 0 failed** against bundle
+  `eb1d1d7`.
+
+One thing it cost time to learn, and it fakes a product failure. The success acknowledgement is a
+**2000 ms flash** (`InstructionsPage.tsx:46-52`). The first run observed 2.5 s after the click, saw
+an empty `role="status"` and reported the acknowledgement missing against a page behaving perfectly.
+Measured: present at 0.7 s, gone by 3.3 s. `ack_window()` now samples both edges, so the expiry is an
+assertion rather than a trap.

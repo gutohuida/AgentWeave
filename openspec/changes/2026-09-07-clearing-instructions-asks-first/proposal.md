@@ -25,6 +25,44 @@ controlled `<textarea>` is not reachable after that.
 So the single most destructive act available on this screen is also the one that costs the fewest
 keystrokes, and it is indistinguishable to the product from an ordinary save.
 
+## Driven, not only read — the pre-change measurement
+
+Rounds 1 and 2 recorded that they drove nothing, and every claim above was a source reading. Round 3
+operated the clearing path as an operator does, in Chromium against the served bundle
+(`ui-build-stamp.json` `src_commit` `eb1d1d7`, the post-F271 bundle) on a throwaway Hub started from
+source on `:8011` over a fresh database, against a throwaway project deleted afterwards and confirmed
+absent. `scripts/drive/t_d8_clearing_instructions_prechange.py`, **27 passed / 0 failed**.
+
+With forty lines of rules stored and on screen: click into the editor, `Ctrl+A`, `Delete`, click
+Save. Watched on the wire, not in the DOM:
+
+- **exactly one PUT** left the page, carrying `{"content": ""}`;
+- **zero dialogs** were on screen at any point — nothing asked;
+- the row read back over the API as `''`;
+- the screen reported it as an **ordinary success** — the same green "Saved" badge an ordinary save
+  shows, with no acknowledgement that anything was lost;
+- nothing on the whole rendered page contains the words undo, restore, revert, recover or history,
+  and `GET /project/instructions/history` is **404**. The absence of recovery is measured at the
+  product's surface, not only inferred from the schema.
+
+Three legs confirm the design's edges rather than the defect. The near-miss `design.md` D1 exists for
+— the same gesture leaving **a single newline** behind — issues one PUT carrying `"
+"` and destroys
+the forty lines identically, which is the case a predicate testing `content === ''` would let
+through. Blanking stored content that is *itself* only whitespace behaves the same today, and must
+keep behaving the same after the change. An ordinary non-empty save is one uninterrupted PUT.
+
+So the pre-change behaviour is exactly what the change describes. That also discharges `tasks.md`
+5.2's instrument check **in advance**: this harness has been seen to observe the write whose absence
+the post-change harness will assert, so a later green run is evidence rather than an assumption.
+
+One instrument fact came out of it, and it is the kind that silently fakes a failure. The success
+acknowledgement is cleared by a 2000 ms timer (`InstructionsPage.tsx:46-52`). The harness's first
+run observed 2.5 s after the click, saw an empty `role="status"`, and reported the acknowledgement
+missing against a page that was behaving correctly. Measured: present at 0.7 s, gone by 3.3 s. Any
+assertion that the confirmed save "reports its outcome as any other save" must observe inside that
+window.
+
 ## What this change is, and what it is not
 
 **It is:** a confirmation step in the Instructions screen, on exactly one path — a save that would
@@ -126,13 +164,37 @@ requirement is MODIFIED so its save scenario governs saves that do not blank sto
 new requirement owns the clearing path. Without that edit the change would ship contradicting a
 requirement that shipped one day earlier.
 
-Checked and found **not** in tension: *Save cannot write instructions that were never read* (this
-change adds a gate strictly downstream of that one, and cannot weaken it); *Saving reports its
+**A second requirement in the same file is in tension, and round 3 found it after two rounds had
+recorded it as clear.** *Save cannot write instructions that were never read* — shipped by the same
+change, one day earlier — closes with:
+
+> **WHEN** the read succeeds, whether on first attempt or after a retry, and the operator edits and
+> saves
+> **THEN** the edited content is written and the outcome is reported as it is for any other save
+
+Rounds 1 and 2 dismissed this requirement on its SHALL NOT, which says the screen must not write for
+a project it has not read: this change adds a gate strictly downstream of that one and genuinely
+cannot weaken it. **The scenario is not the SHALL NOT.** It is the positive complement — the
+statement that the ban lifts once the read succeeds — and it states the lift without qualification.
+Emptying the editor is an edit. So on the sequence *read succeeds → clear → Save → decline*, this
+scenario requires the content to have been written and the new requirement requires it not to have
+been: a contradiction on a concrete case, not a difference of emphasis.
+
+It is the identical defect to the one this change already owns above, in the identical file, and it
+gets the identical remedy — a second MODIFIED entry adding the same condition **in the same words**.
+Different words are what round 2 found breaking this delta from the inside.
+
+Checked and found genuinely **not** in tension, independently in round 3: *Hub stores project
+instructions per project* and *Hub prepends instructions to charter content* (both about the store
+and the route, which this change does not touch — the confirmation is client-side and the empty
+string stays legitimate on the wire); the presentation scenarios of *An unread instructions editor is
+not presented as the project's instructions*, none of which concern a write; *Saving reports its
 outcome* in `project-environment-settings:70` (a declined confirmation is not a save, so there is no
 outcome to report — and the operator's typed state is preserved, which that requirement's second
-scenario asks for anyway); *Settings may be changed one at a time* in the same spec, whose
+scenario asks for anyway); and *Settings may be changed one at a time* in the same spec, whose
 "SHALL remain distinguishable from clearing it deliberately" this change reinforces rather than
-contradicts.
+contradicts. `project-environment-settings` needs no delta — round 1 said so, round 3 re-derived it
+rather than carrying it forward, and it holds.
 
 ## Impact
 

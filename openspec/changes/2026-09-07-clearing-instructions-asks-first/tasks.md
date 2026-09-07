@@ -61,7 +61,10 @@ only measurement showed which.
   appears passes against a page that renders it *and* fires the write.
 - [ ] 4.2 Cancel → still no PUT, and the textarea still holds what the operator typed.
 - [ ] 4.3 Confirm → exactly one PUT carrying the empty string, and the success acknowledgement is
-  shown as for any other save.
+  shown as for any other save. **The acknowledgement is a 2000 ms flash** (`InstructionsPage.tsx:46-52`)
+  — measured by round 3's drive, present at 0.7 s and gone by 3.3 s. Assert inside that window, in
+  jsdom and in the browser alike; an observer that arrives late reports a correct page as broken,
+  which is exactly what happened on the drive harness's first run.
 - [ ] 4.4 Whitespace-only editor over non-empty stored content → the dialog is asked. This is the
   assertion `content === ''` would fail.
 - [ ] 4.5 A non-empty save → no dialog, one PUT, unchanged behaviour.
@@ -83,10 +86,19 @@ only measurement showed which.
   assert **zero PUTs on the wire** while the dialog is open, then read the row back over the API and
   assert it is byte-identical; (b) Cancel, read back again, still byte-identical; (c) Confirm, and
   only now does the row become `''`. Read the wire, not the DOM's `disabled` attributes.
-- [ ] 5.2 **Run it once against the pre-change bundle**, before the fix, so the instrument is known to
+- [x] 5.2 **Run it once against the pre-change bundle**, before the fix, so the instrument is known to
   be able to see the write it is asserting the absence of. The pre-change run must show one PUT and
   the row going to `''` on the first Save click. A drive that has only ever seen the passing state
   has proved nothing.
+
+  **Done in advance by round 3, 2026-09-07** —
+  `scripts/drive/t_d8_clearing_instructions_prechange.py`, 27 passed / 0 failed against bundle
+  `eb1d1d7` on a throwaway `:8011` Hub. One PUT carrying `{"content": ""}`, zero dialogs, the row
+  `''`, no undo anywhere on the page and `/instructions/history` 404. Its legs D, E and F pin the
+  three cases the change must **not** interrupt or must interrupt for the trim's sake. This is the
+  only task in this file closed before implementation, and it is closed because it is a measurement
+  of the *pre-change* product: it is the one thing that stops being observable once §2 lands. §5.1's
+  post-change harness is still owed and is not this file.
 - [ ] 5.3 Fresh Hub on a spare port started from source from `hub/`, throwaway project, deleted
   afterwards and confirmed absent. Never `proj-5e960453` or `proj-18e5d4e0`; never `:8000`; leave
   `:8010` alone. No agent turn is needed, so nothing binds a model.
@@ -102,7 +114,36 @@ only measurement showed which.
 
 - [ ] 6.1 `cd hub/ui && npm run lint` and `tsc --noEmit`. State explicitly that `ruff`/`black`/`mypy`
   were not required because no file they cover is modified — do not skip them silently.
-- [ ] 6.2 `openspec-sync-specs` into `openspec/specs/project-instructions/spec.md`, dropping the
-  delta's change-relative narration and keeping its durable rationale, then archive. Check whether
-  any *other* spec needs syncing and record the answer either way — the sibling change checked
-  `project-environment-settings` and correctly concluded it needed no edit.
+- [ ] 6.2 `openspec-sync-specs` into `openspec/specs/project-instructions/spec.md`, then archive.
+  **The delta carries two MODIFIED requirements, not one** — *Hub UI provides instructions editor*
+  and *Save cannot write instructions that were never read*, the second added by round 3. Both
+  scenarios gain the **same sentence, word for word**; a sync that lands one and not the other
+  reinstates precisely the contradiction the second entry exists to remove, and the shipped file
+  would then hold one conditioned and one unconditioned statement of the same rule.
+
+  Drop the change-relative narration and keep the durable rationale. Concretely, three paragraphs are
+  narration about *this* change and do not belong in a current-behaviour spec: *"The save scenario
+  gains a second condition in this change"*, *"The condition names whitespace explicitly…"* (keep its
+  **conclusion** — that the two requirements must use identical words — and drop the account of how
+  the round found it), and *"Only the last scenario changes in this change…"*. And restore the
+  sentence the delta reworded: the shipped file says the two requirements are *"below"*, which is
+  true in the shipped file and locally checkable; the delta names
+  `2026-09-06-an-unread-editor-cannot-overwrite` because in a delta they are not below. Sync back to
+  *"below"*.
+
+  **Archive through the `openspec-archive-change` skill, or with `--skip-specs`.** Round 3 checked
+  this step for the failure mode the change itself is about, and found one. `openspec-sync-specs` is
+  **agent-driven** — its own SKILL.md says so — so the hand-merge above is unguarded prose, and the
+  bare CLI `openspec archive <name>` separately advertises "archive a completed change **and update
+  main specs**" with a `--skip-specs` opt-out. Running the bare command after hand-syncing therefore
+  puts a mechanical spec update on top of a hand-merged file whose whole value is the judgement in
+  it: the narration dropped, the "below" restored, both MODIFIED entries reconciled. Whether it
+  overwrites, double-applies or no-ops is **unverified** — measuring it would have meant archiving a
+  live change. The skill path asks first (it treats "already synced" as its own case), which is the
+  point. The exposure is bounded in the way the instructions row's is not: `openspec/specs/` is
+  git-tracked and the archived delta is kept, so this is recoverable and the change's subject is not.
+
+  Check whether any *other* spec needs syncing and record the answer either way. **Already
+  measured, twice, independently:** `project-environment-settings` needs no edit — rounds 1 and 3
+  both derived that, round 3 without carrying round 1's answer forward — and neither does any other
+  spec mentioning instructions, all of which concern charter context rather than the editor.

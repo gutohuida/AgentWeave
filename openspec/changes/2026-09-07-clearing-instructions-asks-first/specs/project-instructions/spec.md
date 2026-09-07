@@ -109,3 +109,53 @@ to persist at all. Both disappear when the two requirements use the same words.
 #### Scenario: Existing instructions loaded on open
 - **WHEN** user navigates to the Instructions screen and the stored instructions are read successfully
 - **THEN** the textarea is pre-filled with the current saved content
+
+### Requirement: Save cannot write instructions that were never read
+The Instructions screen SHALL NOT issue a write of instruction content for a project whose stored instructions have not been read successfully.
+
+The route accepts the empty string on purpose — clearing a project's instructions is a legitimate
+thing for an operator to ask for — so the store cannot distinguish an intended clear from a client
+sending state it never loaded. The client is therefore the only place the distinction exists, and it
+is the client that must not send the second.
+
+This is stated as an outcome rather than as a property of a control. A screen that renders no Save
+control while the read has not succeeded satisfies it, and so does one that renders an inert control;
+what neither may do is let a write leave.
+
+**Only the last scenario changes in this change, and it changes for the same reason the other
+modified requirement's save scenario does.** That scenario is the positive complement of this
+prohibition — it says the ban lifts once the read succeeds — and it stated the lift without
+qualification: the edited content *is* written. An edit that empties the editor is an edit, so on the
+plain reading a save that blanks stored instructions is required here to be written on the click and
+required by *A save that would blank stored instructions is confirmed first* not to be. Declining the
+confirmation makes the two demonstrably incompatible on one concrete sequence rather than merely
+awkward together.
+
+The condition is the same sentence, word for word, as the one added to *Hub UI provides instructions
+editor*. That is deliberate and it is the whole lesson of the round before this one: two requirements
+that mean the same thing in different words disagree the moment either is read on its own.
+
+#### Scenario: The failed-read surface issues no write
+
+- **WHEN** the read of a project's instructions has failed and the operator interacts with the
+  screen
+- **THEN** no request that writes instruction content is issued for that project
+
+#### Scenario: A read still in flight issues no write
+
+- **WHEN** the read of a project's instructions has not settled — whether on first attempt or
+  during a retry — and the operator interacts with the screen
+- **THEN** no request that writes instruction content is issued for that project
+
+#### Scenario: Stored instructions survive the failed read
+
+- **WHEN** the read fails, the operator interacts with the screen, and the stored instructions are
+  read afterwards by any means
+- **THEN** their content is what it was before the failure
+
+#### Scenario: Saving works again once the read succeeds
+
+- **WHEN** the read succeeds, whether on first attempt or after a retry, and the operator edits and
+  saves, and the edit does not replace stored instructions containing more than whitespace with
+  content that is empty or only whitespace
+- **THEN** the edited content is written and the outcome is reported as it is for any other save
