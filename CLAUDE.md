@@ -36,45 +36,46 @@ expect them to move.
 | Delegate this repo's work through AgentWeave messaging | Do the work directly, or use Claude Code subagents. Roster delegation is not part of this stage. |
 | Move `openspec/specs/` into `spec/` | See "Specifications" below — AgentWeave can now hold a current-behaviour document, but migrating the accumulated 30-document corpus is the operator's call, not yet made. |
 
-### The trial Hub — fixed 2026-08-16, database corrected 2026-08-18
+### The trial Hub — rebuilt 2026-09-07 on a clean database
 
 | | |
 |---|---|
 | **Port** | `8010` |
-| **Database** | `~/.agentweave/hub/profiles/beta/agentweave.db` — **measured 2026-08-21**, not assumed (see below) |
-| **PID file** | `~/.agentweave/hub/hub-trial-8010.pid` (per-launch-script; `hub-8010.pid` and `hub.pid` are from other launches and may be stale — check `Get-Process -Id <pid>` before trusting any of them) |
-| **This repo registered as** | `proj-5e960453`, working directory the repo root |
+| **Database** | `~/.agentweave/hub/profiles/trial/agentweave.db` — created fresh 2026-09-07, migrated to head `0101` |
+| **PID file** | `~/.agentweave/hub/hub-trial-8010.pid` (per-launch-script; any other `hub-*.pid` may be stale — check `Get-Process -Id <pid>` before trusting one) |
+| **This repo registered as** | `proj-d85a82bf4216`, working directory the repo root |
+| **Bootstrap key** | `~/.agentweave/hub/profiles/trial/bootstrap-key.txt`, sent as `Authorization: Bearer <key>` (not `X-API-Key`) |
 
-**This row was wrong until 2026-08-21, and this paragraph is why it is now right.** It used to name
-`<repo>/hub/data/agentweave.db`, and said the profile databases were "earlier or divergent copies,
-not the live one". The opposite is true. Measured by calling `GET /api/v1/projects` against the
-running instance and watching which file's mtime moved: **beta was written within the same second;
-`<repo>/hub/data/agentweave.db` had not been touched for a day.** `profiles/trial/` is older still
-(2026-08-17) and `profiles/dev/` does not exist.
+**Everything this section used to name was deleted on 2026-09-07**, at the operator's instruction,
+to get a clean slate: the `beta`, `trial`, `dev` and `drive8011` profiles, their seven `.bak` files,
+and `<repo>/hub/data/agentweave.db`. The old registration `proj-5e960453` went with them. Earlier
+revisions of this file argued at length about which of those databases port 8010 really served; the
+question is now moot, and the paragraphs making the argument are gone with the files.
 
-So keep doing what the next sentence says, including against this row. Confirm which database a
-running instance actually serves before trusting any doc, this one included — these paths have moved
-before and will again, and this doc has been wrong about them for at least a day at a time. The
-cheap check is the one above: hit the API, then compare mtimes across the candidates.
+Confirm which database a running instance actually serves before trusting any doc, this one
+included — these paths have moved before and will again, and this file has been wrong about them for
+a day at a time. The cheap check: hit the API, then compare mtimes across the candidates.
 
-`<repo>/hub/data/agentweave.db` is therefore **not** the live trial database. It is still not stray
-test output and still should not be deleted — it is a real earlier database — but nothing serves it
-today.
+There is also a **separate clean instance on port 8000** — the operator's real usage, installed from
+PyPI into `C:\Users\huida\agentweave-live` with its own `live` profile. It is not this Hub and shares
+no database with it. Drive it with `C:\Users\huida\agentweave-live\hub.ps1`, never with a bare
+`agentweave` (both `--profile live` and `--port 8000` are required or the CLI assumes Docker). **No
+window may point that instance at this checkout.**
 
-Start it — **from `hub/`, not the repo root** (see the trap below), **from source, not the console
-script**:
+Start the trial Hub — **from `hub/`, not the repo root** (see the trap below), **from source, not the
+console script**:
 
 ```bash
 cd hub
-DATABASE_URL="sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db"   py -3.11 -m uvicorn hub.main:app --port 8010 --host 127.0.0.1
+DATABASE_URL="sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/trial/agentweave.db"   py -3.11 -m uvicorn hub.main:app --port 8010 --host 127.0.0.1
 ```
 
 **Do not use `agentweave --port 8010` here.** The console script is the *installed* `agentweave-hub`,
 whose bundled migrations lag this checkout, so on any branch past the installed head it dies with
 `Migration failed: Can't locate revision identified by '00NN'`. This cost two sessions on
-2026-08-24 before it was written down. Note also that the `DATABASE_URL` above names the **beta
-profile**, which is what 8010 actually serves — not `<repo>/hub/data/agentweave.db`, which an
-earlier version of this command wrongly pointed at (see the two paragraphs above).
+2026-08-24 before it was written down. The gap is now large: the installed build is PyPI **1.1.0**
+at migration head `0081`, while this checkout is at `0101` and roughly 1,400 commits past the
+`Release 1.1.0` commit — both still calling themselves `1.1.0`.
 
 Point the Vite dev server at it with `AW_DEV_HUB=http://127.0.0.1:8010 npm run dev`, and
 `scripts/uishot.py --url http://127.0.0.1:8010` for screenshots.
@@ -89,11 +90,11 @@ spawned server fails, 60 seconds later, with its output already sent to `DEVNULL
 that one if it appears. This only bites a repository that contains a top-level `hub/` directory,
 which is to say: this one, the one being dogfooded.
 
-`hub/data/agentweave.db`, gitignored and untracked, started life as the pre-migration original,
-created by a bare `uvicorn` launch from `hub/` landing on `config.py`'s relative default. This
-paragraph used to claim it was "what port 8010 actually serves today"; **measurement on 2026-08-21
-disproved that** — see the table above. Keep it, since it is a real earlier database rather than
-stray test output, but do not reason from it: nothing serves it.
+`hub/data/agentweave.db` no longer exists — **deleted 2026-09-07** with the other stale databases.
+It was the pre-migration original, created by a bare `uvicorn` launch from `hub/` landing on
+`config.py`'s relative default, and nothing had served it for weeks. If a `hub/data/` directory
+reappears, a launch has fallen through to that relative default instead of naming a profile: treat
+it as a symptom, not as a database to preserve.
 
 ## Specifications — openspec owns the corpus, AgentWeave takes new work
 
