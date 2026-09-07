@@ -177,6 +177,13 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 - **`openspec validate` with no target exits "Nothing to validate"** rather than failing. Pass
   `--all --strict` or a named change.
 - **There is no `openspec sync` command** — the skill applies deltas by hand.
+- **Clearing `testbed/` deletes evidence that live openspec changes cite.** *(2026-09-08.)* The
+  2026-09-07 clean slate emptied `testbed/` to its two tracked files; the still-unapproved change
+  `2026-09-07-a-dead-connection-is-never-handed-back-out` cites
+  `testbed/scratch/f295/probe_pool.py` in `tasks.md:16` as the measurement that established which
+  attributes its guard reads. The probe is gone and the citation is dead. **Before clearing the
+  testbed, grep `openspec/changes/` for `testbed/`** — or accept that a proposal's evidence becomes
+  unreproducible. (The specific probe was re-derived on 2026-09-08; see the SQLAlchemy section.)
 
 ## Node and the Hub UI
 
@@ -229,6 +236,20 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 - **The `app` fixture is an httpx client with no `.routes`.**
 - **`run.task_id` is NULL on most runs** — 154 of 202 measured. Read the transition table instead.
 - **`run_job` returns 503 in tests** unless `get_scheduler()` is patched.
+- **The aiosqlite connection internals the F295 guard reads ARE reachable from a pool listener,
+  and the `close` pool event does fire.** *(Re-derived 2026-09-08 against SQLAlchemy 2.0.50 /
+  aiosqlite 0.22.1, replacing the deleted `testbed/scratch/f295/probe_pool.py`.)* From a
+  `checkout` or `close` listener on `engine.sync_engine`:
+  `dbapi_connection` is `AsyncAdapt_aiosqlite_connection` → `._connection` is `aiosqlite.Connection`
+  → `._thread` is a `Thread` with a working `.is_alive()`, and `._running` is present. Use
+  `getattr(..., None)` for each — the guard is written to no-op when the shape is absent rather
+  than crash a healthy checkout.
+- **aiosqlite's own guards are two lines later than the change documents cite.** *(2026-09-08,
+  aiosqlite 0.22.1.)* `close()`'s `if self._connection is None: return` is at `core.py:202-203`
+  (cited as `199-201`, which is the `def` and docstring); `_execute`'s
+  `raise ValueError("Connection closed")` is at `core.py:152-153` (cited as `151-152`) and its
+  predicate is `not self._running or not self._connection` — **two** conditions, not one. The
+  mechanism and the exception text in the citations are right; only the line numbers drift.
 - **A payload-shaped model function must be tested against real route ordering.** A fixture in an
   order the route never emits is not evidence (F190: ascending lifecycle events fed to a route
   that returns newest-first, green for a month while the behaviour could not fire).
@@ -268,6 +289,22 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   minting a Hub bootstrap key; caught only because the output was printed.)*
 
 ---
+
+## Skills, and the copies of them other agents read
+
+- **`.claude/skills/` is the source; `.agents/skills/` and `~/.codex/skills/` are hand-run
+  copies that go stale silently.** *(2026-09-08.)* `scripts/sync_skills.py` mirrors every
+  non-`aw-*` skill to both destinations with `rmtree` + `copytree`, and its own docstring says
+  *"Re-run it after editing anything under `.claude/skills/`"*. **Nothing checks that you did.**
+  It was last run immediately before `a38caee` — the 2026-09-04 commit that introduced
+  `DEAD-ENDS.md` — so the one commit that most needed propagating is the only one that did not.
+  Measured stale: `handoff` (341 → 268 lines), `resume` (127 → 118), `daily-review` (absent), and
+  **both stale copies mention `DEAD-ENDS.md` zero times.** A Codex or Kimi session therefore runs
+  a `/resume` that has never heard of this file and a `/handoff` that will not append to it.
+  Fix: `py -3.11 scripts/sync_skills.py`. Check drift with
+  `diff .claude/skills/<name>/SKILL.md .agents/skills/<name>/SKILL.md`.
+- **`.agents/` is gitignored** (`.gitignore:129`), so the drift is invisible to `git status` and to
+  every review that reads the diff.
 
 ## Claude Code harness — subagents and background tasks
 
