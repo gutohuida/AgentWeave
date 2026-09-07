@@ -8,17 +8,18 @@
     "worktree": "C:\\Users\\huida\\Documents\\projects\\AgentWeave-sidequest",
     "parent_branch": "autonomous/2026-09-07-daily",
     "stop_at": "2026-09-07T22:00:00+01:00",
-    "iteration": 0,
+    "iteration": 1,
     "log_file": ".claude/autonomous/2026-09-07-overseer-log.md",
     "review_page": ".claude/autonomous/2026-09-07-sidequest-review.html",
     "current": null,
-    "next_action": "T-1",
+    "next_action": "T-2",
     "queue": [
         {
             "id": "T-1",
-            "status": "pending",
+            "status": "done",
             "title": "Spec loop R1 -- the overseer, in a new sibling folder",
-            "detail": "Read openspec/explorations/2026-09-07-an-overseer-for-any-harness.md FIRST. It is a seed: measurements to re-check, an honest assessment of the idea's risks, and questions you must ANSWER rather than inherit. Its central question is the one to settle before writing anything: is this a new product, or is it AgentWeave's Hub with the orchestration removed? The seed argues there IS a real distinction -- AgentWeave governs agents it spawns; an overseer governs agents it does not control -- but you must test that against the code rather than accept it. Your FIRST job is an inventory: what does AgentWeave already record, through what tables and what ingestion paths, and which of those are already reachable by a harness the Hub did not spawn. Then create the folder under C:\\Users\\huida\\Documents\\projects\\, `git init` LOCALLY with no remote, scaffold openspec inside, and write the proposal there -- not in AgentWeave. Name the project yourself; 'overseer' is a working title, not a decision."
+            "detail": "Read openspec/explorations/2026-09-07-an-overseer-for-any-harness.md FIRST. It is a seed: measurements to re-check, an honest assessment of the idea's risks, and questions you must ANSWER rather than inherit. Its central question is the one to settle before writing anything: is this a new product, or is it AgentWeave's Hub with the orchestration removed? The seed argues there IS a real distinction -- AgentWeave governs agents it spawns; an overseer governs agents it does not control -- but you must test that against the code rather than accept it. Your FIRST job is an inventory: what does AgentWeave already record, through what tables and what ingestion paths, and which of those are already reachable by a harness the Hub did not spawn. Then create the folder under C:\\Users\\huida\\Documents\\projects\\, `git init` LOCALLY with no remote, scaffold openspec inside, and write the proposal there -- not in AgentWeave. Name the project yourself; 'overseer' is a working title, not a decision.",
+            "result": "witness created at C:/Users/huida/Documents/projects/witness (git init, no remote, commit 6b0a135). Inventory + proposal + design + tasks + 3 spec deltas; openspec validate --changes --strict passes. Framing settled AGAINST the seed's reason and FOR a stronger one: AgentWeave's security property is that identity is never accepted from a request, and an overseer's core operation is to accept a record about an actor it never authenticated. Measured: all 32 agent_actions routes gated on a run credential defined as a pointer into a runs row the Hub created; TurnUsage.run_id is a non-null unique FK with no HTTP writer, so cost is unreachable without a spawn; the 4 open ingestion routes require the INSTANCE-OPERATOR credential, not a project key (seed was wrong on both the paths and the auth model). Two seed corrections and two additions recorded: normalisation is NOT the gap (runner_parsing.py already does 3 harnesses), and the richest capture surface is the harness's own on-disk transcript, omitted from the seed's table -- 2,069 files / 985 MB on this machine, 17 record types, retroactive. Product commits to the passive lever and to no scoring; name carries the commitment. R1's own recommendation is propose-then-shelve pending 4 operator data-policy decisions."
         },
         {
             "id": "T-2",
@@ -45,7 +46,34 @@
             "detail": "Only if T-4 is finished and more than 60 minutes remain before stop_at. The bar set by the continuity kit is the bar here: a skeleton that was DRIVEN against real data beat one that merely existed, because driving it produced a sixth failure mode and a spec defect nobody had reasoned their way to. So build only what can be pointed at something real and run -- this machine has a genuine corpus of agent activity in .claude/autonomous/*-log.md, driver logs, git history and scripts/drive/FINDINGS.md. Do NOT start a Hub, do NOT run an agent turn, do NOT touch AgentWeave product code. If nothing can be driven within the time, skip this item and say why rather than shipping an undriven skeleton."
         }
     ],
-    "decisions_for_user": [],
+    "decisions_for_user": [
+        {
+            "id": "OV-1",
+            "question": "May Witness read the local Claude Code transcript corpus at all?",
+            "evidence": "~/.claude/projects/**/*.jsonl is 2,069 files and 985 MB of your real sessions, containing prompts, source code, tool arguments and plausibly credentials, complete and unredacted. Unlike every OTel surface (where content is off until five flags are set), there is no vendor-side default withholding anything. It is also the ONLY surface that is retroactive -- it covers sessions that ran before the tool existed, which is all 2,069 of them. There is no partial answer that keeps the retroactive property.",
+            "blocks": "Every phase of tasks.md except phase 0."
+        },
+        {
+            "id": "OV-2",
+            "question": "Redaction posture: at read, at write, or not at all?",
+            "evidence": "At read loses fidelity permanently and makes the record less useful for the incident it was built for. At write leaves a window. Not at all makes the Witness store the most sensitive file on the machine. AgentWeave's redact_secrets (runner_events.py:63) is a working starting point either way."
+        },
+        {
+            "id": "OV-3",
+            "question": "Retention period for the record store.",
+            "evidence": "A record that answers 'what did the agents do last quarter' must be kept for a quarter. That is a different risk profile from a debugging aid kept for a week."
+        },
+        {
+            "id": "OV-4",
+            "question": "Who may read the record -- you only, or anyone else?",
+            "evidence": "Single-operator local is the first cut's assumption. The moment a second reader exists this becomes an access-control product and the scope roughly triples."
+        },
+        {
+            "id": "OV-5",
+            "question": "Does the name 'witness' survive?",
+            "evidence": "Chosen because it commits the product to the passive posture -- a witness testifies to what it saw and is expected to say what it did not see. If a later round decides the product must enforce, the name must change too. Whether it collides with an existing project could not be checked offline."
+        }
+    ],
     "limits": [
         "STAY IN THIS WORKTREE: C:\\Users\\huida\\Documents\\projects\\AgentWeave-sidequest, on branch autonomous/2026-09-07-sidequest. NEVER cd to C:\\Users\\huida\\Documents\\projects\\AgentWeave -- that checkout belongs to the daily cycle and its night window arms onto it at 22:55. Never commit, merge, rebase or push onto master or onto autonomous/2026-09-07-daily.",
         "DO NOT WRITE ANYTHING UNDER spec-queue/. That is the daily loop's operator IPC and this run is outside that cycle. Do not touch STATE-day.json, STATE-night.json, or STATE-sidequest.json -- that last one is the completed run's record and overwriting it destroys it. This run's state file is STATE-overseer.json.",
