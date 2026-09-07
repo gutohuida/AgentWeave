@@ -195,7 +195,7 @@ same six. F271 leaves it and F295 joins it: F274, F140, F142, F154, F155, F295.*
 `f664f45`. It leaves under the *stricter* of the two definitions above, not the looser one: a change
 was built **and** a drive against the served bundle observed the defect gone (31 passed / 0 failed),
 with the same inverted harness re-run against the pre-change bundle giving 19 passed / 12 failed and
-the baseline column identical in both. Its cross-project variant is closed by construction rather
+the baseline column identical in both. Its cross-project variant was closed by construction rather
 than by measurement — see F271's own section, which says so rather than folding it into the 31/0.
 
 **F295 was filed earlier today** (split out of F292) and postdates the 2026-09-04 recount, so it has
@@ -18547,7 +18547,7 @@ which is worth separating rather than reporting as one number:
 |---|---|
 | **B1 / B2** — the failed load (dropped connection, and a 500) | **By measurement.** The harness's expectations were inverted to the requirement and it observes no editor, **Save gone rather than merely inert**, the failure stated in a `role="alert"` with a Retry beside it, **0 PUTs**, and the stored row byte-identical. |
 | **D** — the read still in flight, the wider door of the two | **By measurement, against an expectation written before the fix existed.** Column D passes *unmodified*: the three assertions that failed on 2026-09-06 pre-fix now pass with their text untouched. |
-| **C** — the cross-project variant | **By construction, not by measurement**, and this is the one caveat on the row above. It is still not drivable: this page offers no in-page project switcher (`'Switch project' controls on screen: 0`, unchanged since 2026-09-02), so no browser has been made to perform the switch. What closes it instead is the shape of the data: `data` is per query key (`['project', projectId, 'instructions']`), so a newly selected project's key has no data of its own and the editor branch is unreachable holding the previous project's text. Unit test 2.6 asserts that shape; **an argument plus a unit test is weaker evidence than the other two rows have**, and it is recorded as such rather than folded into the 31/0. |
+| **C** — the cross-project variant | **By measurement, since 2026-09-07 — and the ground this row used to give was wrong.** It said *"this page offers no in-page project switcher (`'Switch project' controls on screen: 0`)"*. There is one; the harness asked for role `button` and it is a `<select>`, so that 0 measured the instrument (**F296**). Driven properly by `scripts/drive/t_d1_0907_cross_project_switch.py`, **20 passed / 0 failed**, mutation-checked at 17/3 against the pre-fix bundle. What actually closes the column is **navigation**: `App.tsx:602` sends the switch to `projectDestination(id)`, whose default tab is `'overview'`, so InstructionsPage unmounts — measured, `?project=B&tab=overview`, no textarea. A change that made the switcher preserve the current tab would put this column back in play. |
 
 The measurement is mutation-checked, which is what makes it mean anything: the *same* inverted
 harness re-run against the pre-change bundle (`git checkout 676eba4^ -- hub/hub/static/ui`, served
@@ -18623,7 +18623,7 @@ having written.
 (`charters = []` on failure), so a failed load leaves nothing editable rather than something
 destructive.
 
-**Not driven: the cross-project variant.** The sharper shape — component stays mounted, selected
+**Not driven at the time — driven 2026-09-07, see F296; the paragraph below is left as written so the wrong ground stays visible. The cross-project variant.** The sharper shape — component stays mounted, selected
 project changes, the *new* project's load fails, and `content` still holds the previous project's
 text, so Save writes A's instructions into B — could not be reached from this page: the
 environment tab renders no `ProjectHeader`, so there are **zero** "Switch project" controls on
@@ -18781,6 +18781,8 @@ the task that closes this column.
 **Column C is still not driven**, unchanged from 2026-09-02: `'Switch project' controls on screen: 0`
 from this page, so the cross-project variant remains recorded rather than asserted. The change's
 task 2.6 covers that shape at the unit level.
+*(Superseded 2026-09-07 — that `0` is the harness asking for the wrong ARIA role, and column C is
+now driven at 20/0. See **F296**. Left standing here because the wrong reading is the finding.)*
 
 **One piece of instrument noise, so nobody chases it.** Playwright prints an
 `asyncio.exceptions.CancelledError` traceback on stderr when the parked route is torn down at page
@@ -21367,3 +21369,119 @@ underlying thread on cancellation rather than only the coroutine, or (b) run on 
 worker-thread lifetime is decoupled from any single caller's event loop. Queued in
 `spec-queue/DIRECTION.md` for the day window's spec loop rather than repaired ad hoc.
 
+
+## F296 (C, harness) - a drive assertion that can never be non-zero was reported as evidence about the product
+
+**Status:** open
+
+`t_d4_instructions_failed_load.py:316` counts F271's cross-project switcher with
+
+```python
+switch = page.get_by_role("button", name="Switch project")
+```
+
+`ProjectHeader.tsx:48` renders it as `<select aria-label="Switch project">`, whose implicit ARIA
+role is **`combobox`**. The locator therefore returns 0 whatever the page renders. The repo already
+knew the right role: `App-mount.test.tsx:214` reaches the same control with
+`getByRole('combobox', { name: 'Switch project' })`.
+
+That 0 was not treated as an instrument reading. It was carried into `FINDINGS.md` twice as a
+statement about the product - *"this page offers no in-page project switcher (`'Switch project'
+controls on screen: 0`, unchanged since 2026-09-02)"* - and used as the ground for closing F271's
+column C **by construction** rather than driving it. Two windows (2026-09-02 day, 2026-09-06 night)
+repeated the number without ever asking whether the locator could return anything else.
+
+**Measured 2026-09-07 (day, D-1)** by `scripts/drive/t_d1_0907_cross_project_switch.py`, on a fresh
+Hub on `:8011` from this branch's code, fresh database, two fixture projects, both deleted:
+
+```
+role=button:'Switch project'   -> 0     <- the night's locator, reproduced
+role=combobox:'Switch project' -> 1     <- the same control, its real role
+[data-testid=project-switcher-select] -> 1
+options: ['d1-0907-bravo', 'd1-0907-alpha']
+```
+
+The switcher **is on screen on the Instructions page**, offering both projects. F190's lesson in a
+drive harness rather than a unit test: an assertion that cannot fail is not evidence.
+
+**Not a product defect.** The severity is C because nothing a user does is broken by it; what was
+damaged is the record. It is filed so the next window does not inherit "0 controls on screen" as a
+fact about the page.
+
+**Reproduce:**
+
+```
+AW_HUB=http://127.0.0.1:8011 AW_KEY=<operator key> \
+  py -3.11 scripts/drive/t_d1_0907_cross_project_switch.py
+```
+
+**The fix is one word** in `t_d4_instructions_failed_load.py:316` (`"button"` -> `"combobox"`), and
+it is deliberately **not applied here** - the day window does not implement, and column C's own
+conclusion now rests on a measurement rather than on that line, so changing it repairs the record's
+future rather than its past. Whoever next touches that harness should also delete the surrounding
+`NOT DRIVEN` print, which is now false.
+
+### What the corrected drive found - F271's column C, closed by measurement
+
+The conclusion the wrong locator was propping up **survives**, for a different reason, and the
+difference matters because it is the reason a future change could break it:
+
+| | the night's ground | what is measured |
+|---|---|---|
+| why column C is unreachable | "no in-page project switcher exists" | **false** - one exists, role `combobox` |
+| what actually closes it | - | `App.tsx:602` wires `onSelectProject` to `navigateTo(projectDestination(id))`, and `projectDestination`'s default tab is `'overview'` (`lib/navigation.ts:55`), so **the switch navigates away from `tab=environment` and InstructionsPage unmounts** |
+
+Driven, not argued (`?project=A&tab=environment&section=instructions` -> select B in the switcher):
+
+```
+after the switch: ?project=proj-2865656a8676&tab=overview   textarea on screen: false
+```
+
+So a change that made the project switcher preserve the current tab - a perfectly reasonable UX
+improvement - would put column C back in play. That is a fact worth having written down, and the
+"no switcher exists" version of the record would have hidden it completely.
+
+The hazard itself was then driven as far as it is reachable: A loaded with its own text, switch to
+B, navigate back to B's Instructions with B's GET aborted on the wire. **20 passed / 0 failed.** No
+editor is offered under B's failed load, the failure is stated in a `role="alert"`, interacting with
+everything on screen issues **0 PUTs**, and both projects' stored rows are byte-identical afterwards.
+
+**Mutation-checked**, which is what makes those numbers mean anything - the same harness re-run with
+the served bundle reverted to pre-fix (`git checkout 676eba4^ -- hub/hub/static/ui`, served JS
+confirmed back to `index-BXA4wQsi.js` on the wire) gives **17 passed / 3 failed**, and the three
+name themselves:
+
+```
+FAILED: in fact no editor is offered at all under B's failed load
+FAILED: the failure is stated instead (0 alert(s))
+FAILED: no PUT was issued by any interaction (1)
+```
+
+Pre-fix the drive's own typing reached the wire as a real PUT, so the instrument can see a write
+when there is one. **One honest caveat on that run:** the two "stored content is byte-identical"
+assertions passed in *both* runs, because this harness aborts PUTs at the route rather than letting
+them land - so those two rows are not evidence of the fix. The **PUT counter** is.
+
+**A correction to column C's own claim, incidentally.** F271 stated the cross-project hazard as
+*"Save writes A's instructions into B"*. Pre-fix, on the reachable path, it does not: the editor
+under B holds `''`, not A's text, because reaching B's Instructions page remounts the component and
+`content` returns to its `useState('')` initial. The pre-fix hazard under B is the **blanking** one
+that column B already covers, arriving by a second route. The text-carry variant needs the component
+to stay mounted across the project change, and nothing in the current app does that.
+
+### F271's unit tests - the night's "6 of 8 mutation-checked", closed
+
+Re-measured 2026-09-07. Against the pre-fix component (`git show c7e615c^`), the eight tests in
+`instructionsUnreadEditor.test.tsx` give **6 failed / 2 passed** - the night's figure, reproduced
+exactly. The two that pass were left unexplained, and they are not the same kind of thing:
+
+| test | passes pre-fix because |
+|---|---|
+| `still loads, edits, saves and confirms on the success path` | it is the **baseline**. It must pass in both, by design; a baseline that flipped would mean something other than this fix moved. |
+| `keeps a loaded editor and its edits when a background refetch fails` | it guards the **branch order**, not the branch. The old page always rendered an editor, so the pre-fix component satisfies it accidentally. |
+
+The second was checked against the mutation it actually guards - `data`-first swapped to
+`isError`-first in the `{children}` chain, the exact inversion the component's doc comment warns
+about - and it **fails**: 4 passed / 4 failed. So the honest statement is **7 of 8 are
+mutation-checked** (six against the pre-fix component, one against the branch-order inversion) and
+the eighth is a baseline that must pass in both. Restored, the file is 8/8 green.
