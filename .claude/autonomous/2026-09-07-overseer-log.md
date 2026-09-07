@@ -155,3 +155,144 @@ displaces" section rather than leaving it to be noticed.
 ### Repository state
 
 `C:\Users\huida\Documents\projects\witness` at `6b0a135`, 11 files, no remote, clean tree.
+
+---
+
+## Iteration 2 — T-2, spec loop R2
+
+**Done:** an independent re-derivation of the Witness proposal against AgentWeave's real recording
+layer and against the real transcript corpus. Not a re-read of R1. Committed to
+`C:\Users\huida\Documents\projects\witness` at `3d75aaa` (no remote, clean tree); findings in
+`openspec/explorations/2026-09-07-r2-what-the-transcript-actually-contains.md`.
+
+### R1's separation argument: re-derived, and it holds
+
+All three measurements were re-taken against the checkout rather than copied. 32 route decorators in
+`agent_actions.py`, 32 `Depends(get_agent_actor)`, no third dependency but `get_session`.
+`TurnUsage.run_id` is `ForeignKey("runs.id"), unique=True, nullable=False` with 6 call sites in 2
+modules, none of them a route. `post_agent_output` and `post_context_usage` both take
+`Depends(get_project)` under a `/projects/{project_id}` prefix. **D1 survives R2 intact.** The value
+of this round is everywhere else.
+
+### The assignment R1 set for R2, answered by running the code
+
+R1 wrote its own weak point into design.md: *the transcript file and `--output-format stream-json`
+are not the same format, and R1 did not verify how different they are.* R2 ran `parse_claude_line`
+unmodified over a real 2,070-line transcript instead of reading it.
+
+- 859 of 2,070 lines produced an event; 636 usage samples; **0 accounting samples**.
+- Session id resolved on 1,337 of 2,070 lines: the file writes `sessionId` (2,022 lines), the parser
+  reads `session_id` (1,337). Eleven record types carry the camelCase key alone.
+- It maps **2 of the file's 16 record types**. The other 14 are 1,050 lines, 51% of the file, and
+  include `permission-mode` (89) and `file-history-delta`/`-snapshot` (48) — governance evidence by
+  any reading.
+- Its `user` branch emits events only for `tool_result` blocks, so **the operator's prompt produces
+  nothing**: 24 event-less `user` records, of which 14 meta, 4 command wrappers and **6 genuine
+  operator prose prompts**.
+
+The verdict is "half". The event vocabulary transfers; the parser does not — and the parts that
+transfer cleanly are the parts Witness needs least. For a Hub-spawned run the prompt is redundant
+because the Hub sent it. Witness never sent it, and the transcript is its only source.
+
+### Three defects, two of them spec-level
+
+1. **The capability matrix's key was wrong.** Every `thinking` block on disk is
+   `{type, thinking, signature}`, and the text is present for `claude-haiku-4-5` (398 of 421 blocks)
+   and absent for `claude-opus-5` (0 of 1,987) and `claude-sonnet-5` (0 of 848). Corpus-wide the
+   split is per-session and clean: 625 files with non-empty thinking, 1,302 with empty, **0 in
+   both**. Version and entrypoint do not separate the groups; the model does. A per-surface matrix
+   has one answer and **both answers are wrong for most of the corpus** — and since the completeness
+   report is *derived* from the matrix, that is a false completeness statement produced by the
+   mechanism built to prevent them. Entries are now `always` / `never` / `conditional`, resolved per
+   record, yielding `unavailable` rather than a guess when the condition cannot be read.
+2. **The provenance state set could not express a computed value.** No transcript in the 2,095-file
+   corpus contains a `result` record, and `total_cost_usd` appears as a JSON key in **0 files**
+   (both re-checked with whitespace-tolerant patterns). Cost is unobservable on the only implemented
+   surface. It is computable: `usage.input_tokens` is present on **11,581 of 11,581** assistant
+   messages across a 150-file sample. With three states the design could only report nothing about
+   spend or store a computed figure as `measured` and lie — and AgentWeave takes the second path in
+   `output_recording.resolve_usage_limit`, which fills `percent` from a catalog into the same field
+   shape a runner's self-report uses, indistinguishable downstream. Added `derived`: measured-only
+   inputs, names its rule, counted separately everywhere, refused on derived-on-derived.
+3. **The record did not require the instruction.** New requirement, with the reason it is easy to
+   miss written into it.
+
+### Two claims falsified, one of them the proposal's strongest sentence
+
+**"On disk the content is already there, complete and unredacted."** False for the reasoning of the
+two models the operator actually uses. Two consequences: OV-1 is a decision about a *smaller*
+disclosure than R1 described, and the operator is entitled to decide against the true description;
+and the proposal made a completeness claim about its own corpus that measurement falsified, inside
+the document arguing that you cannot do that. That is the strongest available evidence *for*
+building it.
+
+**"Copilot CLI, entirely. Nothing in AgentWeave targets it."** Wrong, and correctable offline.
+`COPILOT_OTEL_DIR` still sits in `src/agentweave/constants.py:29`; `git log -S` finds commit
+`1c6970d` (2026-07-29), a live-probed Copilot OTel collector against CLI 1.0.75, deleted with the
+watchdog. From it: Copilot's stdout carries no usage field at all; its OTel file exporter writes only
+when `COPILOT_OTEL_FILE_EXPORTER_PATH` is set **before spawn**; it emits `gen_ai.usage.input_tokens`
+(so D5's mapping is confirmed in practice for a second harness); content is gated by
+`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT`, pinned off by the collector; the root
+`invoke_agent` span aggregates every call, so summing chat spans double-counts.
+
+The consequence that matters is the one that looks like a footnote: **Copilot's file surface is
+neither passive nor retroactive.** A passive overseer gets nothing from it for any session already
+run. Surfaces now declare both properties, and the report must state them.
+
+### The question T-2 asked plainly
+
+*How much of the proposed overseer is AgentWeave already?* **Most of it.** `agent_outputs`,
+`event_logs`, `turn_usage`, `permission_requests`, `questions`, `runs` and `conversations` already
+store text, tool calls and results, context readings, tokens, cost, permission decisions with the
+tool input and who decided, operator Q&A, turn boundaries and thread identity. Witness's data model
+is those tables with the foreign keys to `runs` removed. That is a finding, not a failure, and it
+narrows what is genuinely novel to two things: the inverted identity requirement (D1), and the
+completeness statement, which AgentWeave has for one field group and nowhere else. Written into the
+proposal in those words.
+
+### R2 broke the proposal's own corpus rule, and left the evidence in
+
+The first draft of §2.2 quoted eleven words of a real operator prompt to prove the prompts were
+genuine. The proposal three files away says a drive may report counts and *"may not paste a line."*
+The round that drove the corpus broke the corpus rule in its own write-up, on its first attempt,
+with the rule in a file it had read that hour. Removed and recorded rather than quietly fixed: it is
+the cheapest available argument that OV-2's redaction posture cannot rest on the reader's
+discipline.
+
+### Corrections R2 made to its own numbers before committing
+
+Two figures were wrong in draft and were re-measured rather than shipped. "11,583 of 11,583
+assistant messages carry usage" had a filtered denominator — only lines already containing `"usage"`
+were counted, which made it near-tautological; re-run over every assistant message it is 11,581 of
+11,581. And "the other 14 types are 1,211 lines, 58%" conflated two different counts: the 14 types
+are 1,050 lines (51%), while 1,211 lines (58%) produce no event once the 137 empty-thinking
+assistant records and 24 prompt-carrying user records are added.
+
+### Verification
+
+- `openspec validate --changes --strict` → `1 passed, 0 failed`, run after every edit round.
+- Every number above came from code run this iteration, not from R1's document.
+- The corpus greps were repeated with whitespace-tolerant patterns so the zero results do not rest
+  on the corpus happening to be written compactly.
+- `git status` clean in both repositories; `git remote -v` still empty in witness.
+
+### What R2 could not establish
+
+- Whether Opus/Sonnet thinking is empty because the API returns it encrypted or because Claude Code
+  declines to persist it. The signature is present, the text is not; both fit. It does not change
+  the matrix — unavailable either way — but it changes whether the gap could ever close.
+- Whether any field other than reasoning varies by model. Only `thinking` was measured that way.
+- Anything about Copilot after 1.0.75 / 2026-07-29, or about Gemini CLI and Cursor at all.
+- Whether the 14 unmapped record types are stable across Claude Code versions. `atis-latch`,
+  `bridge-session` and `frame-link` are undocumented.
+
+### One thing worth carrying to T-4
+
+The corpus is live and it observes the observer: 2,069 files / 985 MB at R1 this morning, 2,095 /
+1.1 GB at R2 this evening, part of the growth being these rounds' own sessions — and one file in
+R2's own sample no longer existed by the time the sampler opened it, minutes after the listing that
+named it. Any corpus size in a task or a spec is an output of a measurement, never a fixture.
+
+### Repository state
+
+`C:\Users\huida\Documents\projects\witness` at `3d75aaa`, 12 files, no remote, clean tree.
