@@ -16,6 +16,65 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-07
+
+Review page: `review/review-2026-09-07.html`. **One change proposed, taken through all three rounds.
+No round was a no-op — the seventh consecutive outing.** Round 3 is the one to read: it did not
+merely confirm the change, it **moved the fix**, on a measurement neither earlier round made.
+`await engine.dispose()` -- task 2.3, the last thing the change's own new shutdown does -- was
+measured to **hang forever** on the very connection the change is about (40-second external kill;
+the same dispose returns in **0.00s** once the neutralisation moves to the `close` pool event). As
+rounds 1 and 2 wrote it, this change could have turned *a traceback on a process that is leaving
+anyway* into *a Hub that will not exit* -- strictly worse than the defect. The neutralisation is now
+sited on `close`, which every close of a pooled connection passes through, so one listener covers
+four paths with no ordering hazard.
+
+**The merge gate opened this morning.** `master` fast-forwarded `ab60cf3..9fd9853`, 26 files; the
+2026-09-04 cycle is fully landed and the cycle branch is now `autonomous/2026-09-07-daily`. It
+deferred twice first, on a different failed condition each time, and **DAY-1** on the page asks
+whether the gate needs rewording -- CI takes 10-16 minutes on this branch, so a firing that commits
+before checking fails the CI condition and one that checks late fails the tree-clean condition. The
+two chase each other, and today it opened only because a manoeuvre was improvised on the spot.
+
+**Written by the day window, which does not fill in its own verdict.** The row below carries no
+status token. Write `APPROVED`, `REVISING` or `REJECTED` in front of the change name.
+
+- 2026-09-07-a-dead-connection-is-never-handed-back-out   F295 (A). 23 tasks in 4 phases. No migration, no API shape change, no UI. A pooled database connection can outlive the event loop that last queued work on it; the aiosqlite worker thread dies trying to report a result to a closed loop, the connection stays in the pool looking healthy, and any later use of it hangs forever with no timeout that can rescue it. Two ADDED requirements in `app-lifecycle`: shutting the instance down settles its background runs and disposes its engine *while the loop still runs*, and a connection whose driver worker is gone is replaced rather than reused or disposed of. Touches `hub/hub/db/engine.py`, `lifespan` in `hub/hub/main.py`, `hub/tests/conftest.py`, plus tests. `openspec validate --strict` passes.
+
+**Read DAY-2 before approving this one.** The change is filed against a severity-A finding whose
+**production blast radius no round could establish by measurement**, and all three rounds narrowed
+it further rather than widening it. R1 found the Hub's only in-process loop closure is process exit.
+R2 re-derived that negative independently -- it held -- and established that the worker threads are
+daemon *because SQLAlchemy makes them so*, so the process really does leave. R3 measured that
+`agentweave stop` on Windows force-kills and runs no shutdown sequence at all, so the production
+occurrence is narrower again, and it measured one of R2's two test-suite paths **false** (a disposed
+engine calls `pool.recreate()`, so the connection belongs to a pool the engine no longer references
+-- a file-handle leak, F292's subject, not a reusable dead connection). The test-suite half is now
+**one** unrun path, not two. So the questions are: does F295 keep its **A**, and is the change worth
+a night slot on shutdown-hygiene and test-harness value alone? The proposal argues yes, and R3 gave
+it a second reason: the reading was worth doing whatever the severity turns out to be, because the
+fix as originally specced would itself have hung the shutdown.
+
+**Two new findings, and one of them is a candidate for tomorrow's spec loop.**
+
+- **F296 (C, harness)** -- `scripts/drive/t_d4_instructions_failed_load.py:316` asks for role `button` on a control that is a `<select>`, so its `0` could never have been anything else, and two windows quoted that `0` as evidence about the product. Column C of F271 is now closed **by measurement** (20/0, mutation-checked at 17/3) rather than by construction, and the real reason is navigation: the switcher sends you to `tab=overview` and the page unmounts. **A change that made the switcher preserve the current tab would put column C back in play.** The fix is one word plus deleting a now-false print -- harness-only, no product code, available to a night window under the no-spec carve-out without any approval.
+- **F297 (B)** -- `src/agentweave/cli.py:528-545`. `agentweave stop` on Windows runs `taskkill /PID <pid> /F` with no signal first, so the Hub's ASGI lifespan shutdown never runs and `terminate_all_active_runs()` is skipped, against the shipped `app-lifecycle` scenario's own clause *"active runs across projects are terminated through normal shutdown"*. Measured, not reasoned. It was deliberately kept **out** of the F295 change -- it is CLI work against a different shipped requirement. **DAY-3** asks whether it gets its own spec loop and in what order. They interact: a graceful Windows stop would start *running* the shutdown sequence F295's change is adding, so landing F295 first is the safer order.
+
+**Still unanswered from earlier pages, and each is one line.**
+`2026-09-05-the-conversation-carries-its-own-run-facts` (F274) sits at line 158 of this file **with no
+verdict token** -- 44 tasks, fully specced, and the one change in the repository that is ready to
+build; no night window may touch it until it reads `APPROVED`, `REVISING` or `REJECTED`. And
+2026-09-06's DAY-2 -- spend a night slot on F292, or let the CI gate tolerate a re-run -- is still
+open; today's spec loop deliberately does **not** claim to resolve F292.
+
+**If you approve nothing**, tonight falls to the backlog and has one real item: the re-drive banners
+on F140/F142/F154/F155, which each have an archived, never-driven change. Step 1 (archiving) is
+empty -- both open changes are unimplemented, 0/44 and 0/23 -- and the B-severity findings have no
+proposals, so the backlog rule sends them back to tomorrow's day window rather than tonight.
+`NOTHING TONIGHT` is a valid answer and cheaper than silence.
+
+---
+
 ## 2026-09-06
 
 Review page: `review/review-2026-09-06.html`. **One change proposed, taken through all three
