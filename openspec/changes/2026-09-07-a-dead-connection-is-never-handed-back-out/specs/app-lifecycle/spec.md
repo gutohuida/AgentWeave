@@ -9,6 +9,11 @@ finishes; settling the runs after the connections are gone is the same mistake i
 direction. Terminating the run *processes*, which shutdown already does first, does not settle the
 in-process tasks that were driving them.
 
+The instance SHALL also stop admitting new scheduled work before it settles, so that the settle is
+not racing a scheduler that can still start a run. Stopping the scheduler does not wait for a job
+already in flight, and such a job can start a run of its own, so a settle performed first is
+settling a set that can be refilled behind it.
+
 Settling SHALL tolerate a run that schedules a successor while it is being settled — releasing a
 run's input can legitimately schedule the same agent again — and SHALL be bounded, so that a
 repeatedly rescheduling agent cannot hold the instance open. Reaching that bound is a reportable
@@ -20,6 +25,12 @@ condition, not a fatal one: an instance that has been asked to stop SHALL stop.
 - **THEN** the run task is settled and every database connection is released before the event loop
   closes
 - **AND** the shutdown produces no uncaught error from a database driver's worker thread
+
+#### Scenario: A scheduled job fires as the instance is stopping
+
+- **WHEN** the instance is shut down while a scheduled job is in flight
+- **THEN** the scheduler stops admitting work before the background run tasks are settled
+- **AND** any run that job started is settled with the rest
 
 #### Scenario: A run reschedules while shutdown is settling it
 

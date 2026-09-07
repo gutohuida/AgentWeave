@@ -39,8 +39,20 @@ c.execute(...)` did not return. The measurement ran to an external 2-minute kill
 outer task unwinds into SQLAlchemy's connection teardown, which needs the dead thread to close the
 connection, so the escape path blocks on the thing it is escaping.
 
+**R2 re-measured this one apart from its symptom** (`testbed/scratch/f295/probe_timeout_reason.py`),
+because "it did not return" is equally consistent with the timer being broken, and that would have
+made a different repair look promising. It is not the timer. With the statement `shield`ed,
+`TimeoutError` fires at 4.0s exactly as asked, with the task still pending; an explicit
+`task.cancel()` issued afterwards had **not completed six seconds later**, and `task.get_stack()`
+returned an empty list — the task is parked inside SQLAlchemy's greenlet, not at any awaitable the
+loop can see. So what never returns is `wait_for`'s await of its own cancellation.
+
 This matters beyond rejecting the option: it means **any** repair that works by giving up on a
-statement is unsound here. The connection has to be made unreachable, not merely abandoned.
+statement is unsound here. `asyncio.timeout()` and a smaller bound fail identically, because neither
+changes what the cancellation waits for. The single construction that *does* return control is
+`shield` plus abandoning the task — and that leaves the pool record checked out forever, converting
+an unbounded hang into an unbounded leak that exhausts the pool after `pool_size + max_overflow`
+occurrences. The connection has to be made unreachable, not merely abandoned.
 
 ### 2. A `checkout` guard that raises `DisconnectionError` — necessary, not sufficient
 
@@ -97,8 +109,21 @@ may have already been closed"* and which cannot close the sqlite3 handle.
 Order matters and is stated in the requirement rather than left to the implementer:
 
 1. terminate the run processes (what `lifespan` already does first),
-2. settle the background run tasks, so nothing is mid-write when the connections go,
-3. dispose the engine.
+2. stop the scheduler, so nothing new can be scheduled into the set about to be settled,
+3. settle the background run tasks, so nothing is mid-write when the connections go,
+4. dispose the engine.
+
+**Step 2 is R2's, and it is not cosmetic.** R1 left it open as `tasks.md` 2.4. The scheduler can put
+a run into `_background_runs`: an APScheduler job runs `_scheduled_job_runner` -> `_fire_job_by_id`
+-> `_do_fire_job` -> `turn_scheduler.schedule_agent` -> `agent_trigger.trigger_agent_directly`,
+which is the `create_task` at `agent_trigger.py:1190` registered at `:1230`. And
+`JobScheduler.shutdown` stops it with `shutdown(wait=False)` (`hub/hub/scheduler.py:2372`), which in
+APScheduler 3.11.2 cancels the executor's pending job futures and does not await them —
+`AsyncIOExecutor.shutdown` carries the comment *"There is no way to honor wait=True without
+converting this method into a coroutine method"*. Two consequences that point the same way: settling
+before the scheduler is stopped settles a set that can be refilled behind the settle, and the
+cancellations the scheduler just issued only land at the settle's first `await`, which is exactly
+where you want them.
 
 Doing 3 before 2 is the mistake `conftest.py:317-330` documents having already made once — disposing
 underneath an in-flight run takes away the connection it needs to finish, so it never finishes.
@@ -129,6 +154,14 @@ read than two short loops. Recorded so the decision is visible rather than accid
   own engine in a `finally`. Absence of a path found is not absence of a path. R2 and R3 should
   attack this directly — it is the load-bearing claim behind the severity paragraph in
   `proposal.md`, and it is the kind of negative that is easy to assert and hard to earn.
+
+  **R2 attacked it and it held.** Re-derived from the code without leaning on R1's list:
+  `asyncio.run` occurs in `hub/hub/` once outside comments (`migrations/env.py:78`);
+  `new_event_loop`, `set_event_loop` and `run_until_complete` occur nowhere in the package; there is
+  no `anyio` and no `trio`; every `run_in_executor` / `asyncio.to_thread` target is a synchronous
+  callable rather than a loop-opener; and `init_db()` — the only thing that drives alembic's loop —
+  is called once, from `main.py:348`. R3 should still not take this as settled: it is a negative,
+  and two rounds finding nothing is weaker evidence than one round finding something.
 - **That this removes `F292`.** Plausible, unmeasured, and deliberately not claimed.
 - **What the guard costs on a healthy checkout.** It is two `getattr`s and an `is_alive()` per
   checkout; `Thread.is_alive()` is a lock-free flag read. Not benchmarked. If it ever shows up, the
@@ -137,3 +170,32 @@ read than two short loops. Recorded so the decision is visible rather than accid
 - **Behaviour on any driver but aiosqlite.** The guard is written to no-op when the connection does
   not present aiosqlite's shape, so a Postgres deployment is unaffected; that is by construction and
   has not been run.
+
+## What R2 established, and what it still did not
+
+Established, by measurement:
+
+- The worker threads are daemon threads **because SQLAlchemy sets them so**
+  (`sqlalchemy/dialects/sqlite/aiosqlite.py:412`), not because aiosqlite does — raw aiosqlite gives
+  `daemon=False` (`aiosqlite/core.py:90`). An engine of `hub/hub/db/engine.py`'s exact shape, never
+  disposed, exits in 0.35s. This is why the production consequence really is "a traceback on a
+  process that is leaving anyway", and it is the fact that would have decided it either way.
+- The forced reconnect **re-fires the `connect` listener**, so a replacement connection is
+  configured rather than bare: through a listener of `hub/tests/conftest.py:84`'s shape the
+  replacement came back reporting `busy_timeout = 30000` (`probe_guard3.py`). Nobody had asked; had
+  it come out the other way the guard would have silently downgraded the suite's busy timeout to
+  SQLite's 5s default, which is the asymmetry `F292` has already cost a day to.
+- The scheduler ordering question (`tasks.md` 2.4) — answered above.
+
+Still not established, and R3 should treat these as open:
+
+- **That the guard fires anywhere the suite would notice.** `hub/tests/conftest.py`'s teardown
+  disposes the engine after every test, so a pooled connection does not normally reach a second loop
+  at all. R2 found one code path that gets past it — the settle's pass cap raises at `:364-368`
+  *before* the `dispose()` at `:369` — but did not run it. Whether the guard is load-bearing for the
+  suite or only a backstop is unmeasured, and the proposal's "where the damage is demonstrated"
+  paragraph rests on it.
+- **What happens if the replacement connection is also dead.** SQLAlchemy retries a
+  `DisconnectionError`ed checkout and the retry is bounded, but R2 did not construct the case.
+- **Anything about the Hub under load.** Every measurement in this document is a standalone script.
+  Not one of them ran against a Hub process — the same gap `F296` came out of.
