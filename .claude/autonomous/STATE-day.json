@@ -8,33 +8,73 @@
     "parent_branch":  "master",
     "parent_sha":  "ab60cf3",
     "stop_at":  "2026-09-07T17:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
     "log_file":  ".claude/autonomous/2026-09-07-day-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "current":  "D-0",
+    "next_action":  "D-0, the merge gate. Re-check CI for the exact HEAD sha with `gh run list --branch autonomous/2026-09-04-daily --limit 20 --json headSha,conclusion,status,workflowName`. At iteration 1 the CI run for 7d57a7a was still `in_progress`, which is NOT a pass -- three of the four gate conditions held (HEAD..master == 0, tree clean and HEAD == @{u}, no line-initial HOLD MERGE in DIRECTION.md's 2026-09-07 section) and only the CI verdict was missing. If CI now reports `success` for the sha that is HEAD at that moment, and the other three still hold, fast-forward master to the branch with `git merge --ff-only`, push master, then create `autonomous/2026-09-07-daily` from the new master, check it out, push it with -u, and update this file's `branch` field and the log. If CI is still in_progress or the branch has moved, mark D-0 status `deferred`, move it to the END of the queue, and go straight to D-1 in the SAME firing -- this item is cheap and must not eat a whole iteration on its own.",
     "queue":  [
                   {
-                      "id":  "compose",
+                      "id":  "D-0",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "Merge gate -- land the 2026-09-04 cycle if CI is green for HEAD",
+                      "detail":  "Condition zero is MET: the operator relaxed the seeded no-merge line on 2026-09-06 and this file's `limits` array now authorises this one step. Four conditions, all four required, re-measured at the moment of the check. `--ff-only` is not optional. If the gate does not open, name the failed condition in the log and on the review page and carry on -- a missed landing costs a day, a wrong one costs trust. MEASURED at iteration 1 and contradicting the night window's closing note: the branch is only 13 commits ahead of master, dated 2026-09-06 and 2026-09-07 only, because `git reflog show master` records `master@{0}: merge autonomous/2026-09-04-daily: Fast-forward` on 2026-09-06. The branch keeps its 2026-09-04 name but its first three days have already landed. Do not repeat the stale '42 commits, four days, still unmerged' figure."
+                  },
+                  {
+                      "id":  "D-1",
+                      "status":  "open",
+                      "title":  "Drive what the night window built -- F271's instructions editor, end to end",
+                      "detail":  "Scoped drive, not a full sweep. Use the `e2e-loop` skill. The night built c7e615c/eb1d1d7/676eba4/f664f45: an InstructionsPage that can no longer overwrite non-empty project instructions from an unread editor, plus a Retry path it claims survives a real restart. It left path C (the cross-project variant) closed BY CONSTRUCTION and never driven, and left the 8-unit-test claim as 6-of-8 mutation-checked. Drive Hub on 8011, started from `hub/` with uvicorn from source, restarted from this branch's code; confirm no .py under hub/hub or src is newer than the process start. Fresh project -- NEVER proj-5e960453 or proj-18e5d4e0, never port 8000. Every agent turn binds claude-haiku-4-5. Never leave a job enabled. New findings append to scripts/drive/FINDINGS.md with severity, file:line, a reproduction, and `**Status:** open` as the FIRST line of the body.",
+                      "hint":  "The night window's own advice: accept a claim only where it names which artefact failed when the fix was reverted."
+                  },
+                  {
+                      "id":  "D-2",
+                      "status":  "open",
+                      "title":  "Spec loop R1 -- explore and propose the fix for F295",
+                      "detail":  "DIRECTION.md 2026-09-07 names this the day's first spec loop and says to take it first if there is room for only one: it is Hub run-execution core, higher blast radius than the UI work also named there. F295 is at scripts/drive/FINDINGS.md:11311 -- agent_trigger.py:1190's un-awaited `_execute_run` background task can leave a permanently dead aiosqlite worker thread on cancellation, and any later reuse of that connection hangs forever with no timeout. R1 explores the code and writes openspec/changes/<name>/ -- proposal.md, design.md, tasks.md, and the specs/<capability>/spec.md deltas. `openspec new change` refuses a name starting with a digit; `openspec validate --strict <name>` must pass; SHALL goes on a requirement's FIRST physical line. Do NOT conflate this with F292 (still open, a test-flake symptom of the same class, unresolved) and do NOT fold in the instructions-editor confirmation change."
+                  },
+                  {
+                      "id":  "D-3",
+                      "status":  "open",
+                      "title":  "Spec loop R2 -- independently re-derive R1's argument against the code",
+                      "detail":  "NOT a re-read of R1's reasoning. A fresh comparison against what the code actually does: open agent_trigger.py, the aiosqlite/SQLAlchemy engine setup, and the cancellation path, and re-derive from them whether the proposal's claims hold. Fix the proposal where the code disagrees. If the round changes nothing, say so explicitly -- a round that finds nothing is a real outcome and hiding it makes the next one look cheaper than it is. Re-run `openspec validate --strict`."
+                  },
+                  {
+                      "id":  "D-4",
+                      "status":  "open",
+                      "title":  "Spec loop R3 -- re-derive again, independently of R1 and R2",
+                      "detail":  "Same instruction as D-3, performed without leaning on D-3's conclusions. On 2026-08-28 round 3 caught rounds 1 and 2 both breaching a requirement that had shipped four days earlier. Ask what the HTTP route RETURNS, not only what the function does -- the 2026-08-28 lesson is that three rounds all read the code and none asked that. Re-run `openspec validate --strict`."
+                  },
+                  {
+                      "id":  "D-5",
+                      "status":  "open",
+                      "title":  "Write the review page and append to APPROVALS.md",
+                      "detail":  "spec-queue/review/review-2026-09-07.html, self-contained (no external stylesheets, scripts or fonts -- the Artifact runtime blocks them), full DOCTYPE/html/head/body wrapper, theme-aware via bare :root plus a prefers-color-scheme: dark override and an explicit body background. Six sections in the playbook's order: the branch and what the merge gate did (first, and unskimmable if the cycle is still unmerged); what the night built and which of it was DRIVEN rather than only tested; what today's drive found; what was specced with R2's and R3's actual deltas and the cost; what the night will do if the operator approves nothing; the research last and briefly. Carry forward the decisions the night window left: F274's missing verdict token at APPROVALS.md:99, and DAY-2 unanswered from 2026-09-06. Then append today's section to spec-queue/APPROVALS.md with a row per specced change and NO status token."
+                  },
+                  {
+                      "id":  "D-6",
+                      "status":  "open",
+                      "title":  "If the day has room: spec loop R1 for the confirm-before-blanking-instructions change",
+                      "detail":  "The SECOND change DIRECTION.md 2026-09-07 names, deliberately queued after the review page because a half-written proposal is worse than no proposal and the review page must not describe work that does not exist. Take it ONLY if D-0..D-5 are closed and there is time for all three rounds before 17:00; otherwise close it as `carried` and say so in the log so tomorrow's window inherits it. Scope: confirm before a Save blanks non-empty project instructions -- an operator who has actually seen real content and clears it on purpose. NOT a correction to 2026-09-06-an-unread-editor-cannot-overwrite (already APPROVED; it fixes the misleading-empty-editor paths, not this honest-intentional-clear path). Check for an existing confirmation primitive in the codebase before inventing one. The API accepting an empty string as a real value is deliberate (InstructionsUpdate's docstring) and is not in scope to change."
                   }
               ],
     "decisions_for_user":  [
-
+                              "Carried from the 2026-09-06 night window, unanswered: `2026-09-05-the-conversation-carries-its-own-run-facts` (F274) sits at spec-queue/APPROVALS.md:99 with NO verdict token. It is the only unarchived change and the one change already ready to build; no night window may build it until it reads APPROVED, REVISING or REJECTED.",
+                              "Carried from 2026-09-06, unanswered: DAY-2 -- spend a night slot on F292, or let the CI gate tolerate a re-run. F292 is still open and is a test-flake symptom of the same bug class as F295; the F295 spec loop queued today does NOT resolve it.",
+                              "DAY-1 (relax the seeded no-merge line) is ANSWERED and needs no further decision -- the operator relaxed it on 2026-09-06 and this file's limits array carries the relaxed text. Recorded here only so the next window does not re-raise it."
                            ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
+                   "This window does NOT implement. If you are editing hub/hub/ or src/agentweave/, stop -- the one exception is a drive harness fixture under scripts/drive/."
                ]
 }
