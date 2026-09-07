@@ -92,6 +92,14 @@ The alternative — vendoring a corrected `_connection_worker_thread` — was co
 it would put a fork of a dependency's core loop in product code, and it would not help a connection
 whose thread died before the fork was installed.
 
+**Superseded in part by R3, and the difference matters.** The neutralisation is right; *where it is
+performed* was wrong. Doing it inline in the checkout listener protects only the connection that
+listener was handed, and leaves `engine.dispose()` — the change's own final shutdown step — able to
+hang on a dead connection it never sees. R3 moved it to the `close` pool event, which SQLAlchemy
+dispatches before every close of a connection record, and measured that the checkout listener can
+then go back to raising alone. See "What R3 established" at the end of this document; `tasks.md`
+carries the arrangement that is actually to be implemented.
+
 ## Why the shutdown ordering is worth doing anyway
 
 The guard alone would leave production creating a dead thread on every shutdown that catches a run
@@ -199,3 +207,181 @@ Still not established, and R3 should treat these as open:
   `DisconnectionError`ed checkout and the retry is bounded, but R2 did not construct the case.
 - **Anything about the Hub under load.** Every measurement in this document is a standalone script.
   Not one of them ran against a Hub process — the same gap `F296` came out of.
+
+## What R3 established, and what it changed
+
+R3 read the code before the proposal and re-ran the probes rather than quoting them. It did not
+overturn the change. It moved the fix, on a measurement neither earlier round made.
+
+### The guard was sited where it does not protect the change's own shutdown step
+
+`await engine.dispose()` — task 2.3, the last thing the new shutdown does — **hangs forever on a
+dead-worker connection sitting idle in the pool.** Measured
+(`testbed/scratch/f295/probe_r3_dispose_hang.py`): with no listener the process ran to a 40-second
+external kill; with the neutralisation moved to a `close` pool-event listener the same dispose
+returned in **0.00s**.
+
+`dispose()` never dispatches `checkout`, so a checkout-only guard cannot see the connection it is
+about to close. The path is `QueuePool.dispose()` -> `_ConnectionRecord.close()` -> `__close()` ->
+`Pool._close_connection()` -> the aiosqlite dialect's `close()`, which is
+`self.await_(self._connection.close())` — an await on the thread that ended.
+
+This is the interaction R1 and R2 both missed, and it is not academic: it means the change as
+written could convert *a traceback on a process that is leaving anyway* into *a Hub that will not
+exit*, which is strictly worse than the defect. It also means `hub/tests/conftest.py`'s per-test
+`await _REAL_ENGINE.dispose()` has the same exposure today.
+
+### So the neutralisation moves to the `close` pool event, and the checkout listener only detects
+
+`_ConnectionRecord.invalidate()` dispatches `invalidate`, then calls `__close()`, which dispatches
+**`close`** before `Pool._close_connection()` does the closing (SQLAlchemy 2.0.50,
+`pool/base.py`). Every path that closes a pooled connection goes through that one event: a
+checkout listener's invalidation, `engine.dispose()`, a checkin-time close, and the retry-exhausted
+abandon below. One listener there covers all of them.
+
+Measured (`testbed/scratch/f295/probe_r3_close_listener.py`, case A): a checkout listener that
+**raises only** — the arrangement `probe_guard1.py` measured as hanging, and which `tasks.md` 1.2
+told the implementer never to write — recovers in 0.00s once the `close` listener exists:
+
+```
+  checkout: raising DisconnectionError (NO inline neutralise)
+  close-event: neutralised a dead-worker connection
+RESULT after 0.00s: RECOVERED, select 2 -> 2
+```
+
+This is the cleaner arrangement on the repository's own standard, not merely an equivalent one.
+The neutralise-then-raise ordering was a fragile pair of adjacent lines with a comment begging not
+to reorder them; siting the neutralisation at the event that precedes *every* close removes the
+ordering hazard entirely and protects three more paths at the same time.
+
+### R2's open question — "what if the replacement is also dead" — answered
+
+`_ConnectionFairy._checkout` retries a `DisconnectionError`ed checkout with `attempts = 2`, and on
+exhaustion calls `fairy.invalidate()` and raises `InvalidRequestError("This connection is closed")`.
+That final `invalidate()` closes the connection it is giving up on — a connection the *checkout*
+listener never saw, and therefore never neutralised.
+
+Measured (`probe_r3_exhaust.py`, forcing every newly created connection to be born dead): the guard
+fires twice, two replacements are created, and then the process **hangs** — it ran to a 45-second
+external kill, and a `faulthandler` dump at 15s found the main thread parked in the loop with the
+task inside SQLAlchemy's greenlet, exactly where R2's empty `get_stack()` put it. With the `close`
+listener in place the same case returns `sqlalchemy.exc.InvalidRequestError: This connection is
+closed` **in 0.00s** (`probe_r3_close_listener.py`, case B).
+
+**Reachability, stated so the severity is not inflated:** it is not reachable. The replacement comes
+from `_ConnectionRecord.get_connection()` -> `__connect()`, which *creates* a connection; it is
+never another connection drawn from the pool, so it cannot be an old dead one, and a freshly
+created connection's worker thread has just started. The reason to fix it is not that it happens —
+it is that the escape hatch from an unbounded wait must not itself contain one.
+
+### What the surface returns, which nobody had asked
+
+Two answers, both now established rather than assumed:
+
+- **Normal case: nothing.** The recovery is transparent — the statement completes on a fresh
+  connection, so an HTTP route returns its normal response and the only trace is the WARNING task
+  1.4 asks for.
+- **Exhausted case: a 500.** `InvalidRequestError` is a plain exception out of the session; the Hub
+  registers exception handlers for `TransitionRefusedError` and `TaskBindingError` only
+  (`hub/hub/main.py:406,418`), so nothing catches it and Starlette's default handler answers 500.
+  That is the right shape for an unreachable internal failure and needs no route-level work — but
+  it is a **500, not a hang**, only once the `close` listener exists. Without it the request never
+  answers at all.
+
+### The test-suite half, narrowed again — one of R2's two paths is measured false
+
+R2 named two paths past `conftest.py`'s teardown to a carried-over pool. The second one —
+*`dispose()` does not close a checked-out connection* — is true and is **not** a route to the reuse
+hazard. `Engine.dispose()` ends with `self.pool = self.pool.recreate()`, so a connection checked
+out at that moment belongs to a pool the engine no longer references and can never be handed out by
+the engine again. Measured (`probe_r3_dispose_pool.py`): pool replaced `True`, the connection still
+open with a live worker, and after three subsequent checkouts `old connection reappeared from the
+engine's pool: False`.
+
+That path leaks a file handle, which is `F292`'s subject, not this change's. The suite's only route
+to the reuse hazard is the one R2 found first: the settle's pass cap raising at `:364-368` before
+the `dispose()` at `:369`. **One path, not two.** It is still unrun — running it needs an edit to
+`hub/tests/conftest.py`, which the day window may not make.
+
+The fact was already in this repository: `conftest.py:138-146` records the pool *replacement*,
+measured 2026-09-05, as the reason `pool.checkedout()` cannot see a leaked connection. R2 read the
+opposite consequence out of the same behaviour.
+
+### A dead worker is the whole hazard — carrying a connection across loops is not
+
+Measured (`probe_r3_idle_carryover.py`), and neither earlier round asked: a connection left **idle**
+in the pool while its creating loop is closed, then used from a second loop, **completes normally**
+— `loop2 select -> 2`, guard fired 0 times, worker alive.
+
+The reason is in the driver: `aiosqlite.Connection._execute` builds its future with
+`asyncio.get_event_loop().create_future()` — the *calling* loop's — and `self._tx` is a
+`queue.SimpleQueue`, which is loop-independent (`aiosqlite/core.py`, 0.22.1). Nothing in a
+connection is bound to the loop that created it except a call that is in flight.
+
+Two consequences:
+
+- The guard's condition is **necessary and sufficient**, which is a better position than the change
+  claimed for it. "A connection outlived its event loop" is survivable; "its worker thread ended" is
+  not, and that is exactly what is tested.
+- `conftest.py:293`'s docstring gives the mechanism as *"a pooled connection checked out by the next
+  test is bound to a loop that no longer exists"*. As stated that is not sufficient to fail. The 62
+  failures it records are real and are not re-explained here — R3 did not measure what caused them,
+  and this change does not need to know. Recorded as an open question, not a correction.
+
+### Nothing had ever run against the product's own engine object; now it has
+
+`probe_r3_hub_engine.py` imports `hub.db.engine` with `DATABASE_URL` pointed at a throwaway file,
+attaches a pragma listener of `conftest.py:84`'s shape and the F292 checkout/checkin registry
+listeners in conftest's order, then the detector and the `close` neutraliser, and kills a pooled
+worker:
+
+```
+pool class: AsyncAdaptedQueuePool
+checkout connection type: AsyncAdapt_aiosqlite_connection -> inner: Connection -> thread: Thread-1 (_connection_worker_thread)
+worker alive after kill: False
+RECOVERED in 0.01s, select 2 -> 2
+replacement busy_timeout: 30000
+listener fires: {'checkout': 1, 'close': 1} | f292 registry entries left: 0
+dispose returned in 0.00s
+```
+
+So on the engine product code actually builds: the pool class, the attribute path 1.1 depends on,
+the recovery, R2's `busy_timeout` result, and — new — that the F292 registry is left consistent by
+a checkout that raises (the aborted attempt never reaches conftest's listener, because engine.py's
+listener is registered first and raises first; the successful retry records normally).
+
+**This is still not a running Hub.** It is the product's engine in a bare process, with no requests,
+no scheduler and no background runs. The gap `F296` came out of is narrowed, not closed.
+
+### The shipped `app-lifecycle` spec, checked in full
+
+All six shipped requirements read against the two ADDED ones. **No contradiction.** The nearest
+neighbour is *Status, stop, and reset act on the local instance*, and it agrees. Recorded as a
+finding of nothing, which is a real outcome.
+
+What the reading did surface is a **reachability gap, not a contradiction**, and it is about the
+surface rather than the spec. `agentweave stop` on Windows runs `taskkill /PID <pid> /F`
+(`src/agentweave/cli.py:534-535`) with no signal first, despite the function's docstring saying
+"graceful SIGTERM, then forced" — the POSIX branch does send SIGTERM, the win32 branch does not.
+Measured with a uvicorn app whose lifespan writes a marker on teardown
+(`probe_r3_taskkill_app.py`): after `taskkill /F` the marker is absent and the log has no
+"Shutting down" line. So on the operator's own platform the new shutdown sequence never runs on the
+product's own stop path; it is reachable via `docker compose down`, `--no-detach` plus Ctrl+C, and
+a reload.
+
+Two things follow. The requirement now says so — it governs a shutdown that runs at all — and
+making `agentweave stop` graceful is **out of scope here**, filed separately as `F297`, because it
+is a CLI defect against a shipped requirement (*"active runs across projects are terminated through
+normal shutdown"*) and not part of this change.
+
+### What R3 did not do
+
+- Did not run `conftest.py`'s cap-skips-dispose path. It needs an edit to the test harness that this
+  window may not make. It remains the one unmeasured link under the proposal's "where the damage is
+  demonstrated" paragraph.
+- Did not run anything against a live Hub process. See above for how far the gap was narrowed.
+- Did not re-measure `probe_guard1.py`'s hang. It is superseded: the arrangement it condemns is now
+  measured to *work* when the `close` listener exists, which is a stronger statement than repeating
+  that it fails without one.
+- Did not investigate what actually caused the 62 failures behind `conftest.py:293`. Named as an
+  open question above.

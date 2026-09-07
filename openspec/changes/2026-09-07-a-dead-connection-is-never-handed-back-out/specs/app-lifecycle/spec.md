@@ -19,6 +19,16 @@ run's input can legitimately schedule the same agent again — and SHALL be boun
 repeatedly rescheduling agent cannot hold the instance open. Reaching that bound is a reportable
 condition, not a fatal one: an instance that has been asked to stop SHALL stop.
 
+Releasing the connections SHALL itself be incapable of blocking indefinitely. This is not a
+restatement of the bound above: the release is what closes each connection, and closing a
+connection whose driver worker has ended is unbounded work on a thread that is gone. An instance
+that has been asked to stop SHALL stop applies to this step as much as to the settle, and it is the
+next requirement that makes it true.
+
+This requirement governs a shutdown that runs at all. A forced termination of the instance's
+process — one that delivers no signal the process can act on — runs no shutdown sequence, and this
+requirement makes no claim about it.
+
 #### Scenario: A run still writing when the instance is asked to stop
 
 - **WHEN** the instance is shut down while a background run task is in flight
@@ -42,8 +52,15 @@ condition, not a fatal one: an instance that has been asked to stop SHALL stop.
 - **WHEN** background run tasks are still being registered after the bounded number of passes
 - **THEN** the instance records how many remain and completes its shutdown anyway
 
+#### Scenario: A connection whose driver worker is already gone is held at shutdown
+
+- **WHEN** the instance releases its database connections and one of them can no longer complete
+  work
+- **THEN** the release does not wait on it
+- **AND** the shutdown completes
+
 ### Requirement: A database connection whose driver worker is gone SHALL be replaced, never reused
-The instance SHALL NOT hand out a pooled database connection that can no longer complete work, and SHALL replace it with a new connection instead.
+The instance SHALL NOT hand out a pooled database connection that can no longer complete work, SHALL replace it with a new connection instead, and SHALL NOT wait on such a connection when disposing of it.
 
 An asynchronous SQLite connection carries out every statement on one dedicated worker thread. If
 that thread has ended, the connection is not slow and is not merely in an error state: it accepts
@@ -55,6 +72,14 @@ Detection therefore SHALL happen before the connection is handed out rather than
 has already been issued on it, and discarding such a connection SHALL NOT require the connection to
 answer — it is put beyond use first, then discarded, so that the instance's own cleanup cannot block
 on it.
+
+Putting it beyond use SHALL cover every path that closes such a connection, not only the one that
+detected it. Handing out is one of several things an instance does with a pooled connection:
+it also releases the whole pool at shutdown, and it disposes of a connection it has given up on
+after replacement was attempted and did not succeed. Each of those closes the connection, and each
+therefore has the same unbounded wait available to it. A detection sited only where connections are
+handed out leaves the release path unprotected, which is the path the previous requirement depends
+on.
 
 Replacement SHALL be transparent to the caller: work issued after a dead connection is discarded
 completes against a fresh connection rather than failing.
@@ -73,6 +98,19 @@ been shut down, and it applies to a connection whose worker was lost for any rea
 
 - **WHEN** such a connection is discarded
 - **THEN** neither the discard nor any cleanup it triggers waits on the ended worker thread
+
+#### Scenario: Releasing the pool does not wait on the dead connection
+
+- **WHEN** the instance releases every connection it holds and one of them has an ended worker
+  thread
+- **THEN** the release completes without waiting on that thread
+- **AND** it is not necessary for that connection to have been handed out first for this to hold
+
+#### Scenario: A connection given up on after replacement is not waited on either
+
+- **WHEN** replacement is attempted the bounded number of times and the checkout is abandoned
+- **THEN** disposing of the connection it was abandoned on does not wait on an ended worker thread
+- **AND** the caller receives an error rather than an unbounded wait
 
 #### Scenario: A healthy connection is unaffected
 

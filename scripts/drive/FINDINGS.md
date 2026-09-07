@@ -21485,3 +21485,97 @@ The second was checked against the mutation it actually guards - `data`-first sw
 about - and it **fails**: 4 passed / 4 failed. So the honest statement is **7 of 8 are
 mutation-checked** (six against the pre-fix component, one against the branch-order inversion) and
 the eighth is a baseline that must pass in both. Restored, the file is 8/8 green.
+
+---
+
+## F297 (B) — `agentweave stop` on Windows force-kills the Hub, so nothing the shutdown sequence does ever runs
+
+**Status:** open
+
+`src/agentweave/cli.py:528-545`, `_hub_kill_pid`, the one thing `cmd_stop` calls once it has
+confirmed a native Hub is serving the recorded port:
+
+```python
+def _hub_kill_pid(pid: int) -> None:
+    """Terminate a native Hub process by PID (graceful SIGTERM, then forced)."""
+    ...
+    if sys.platform == "win32":
+        _sp.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=15)
+    else:
+        os.kill(pid, 15)  # SIGTERM
+        ... wait up to 10s ...
+        os.kill(pid, 9)   # SIGKILL fallback
+```
+
+The POSIX branch does what the docstring says. **The win32 branch goes straight to `/F`** —
+`TerminateProcess`, which no process can intercept. There is no `taskkill` without `/F` first, no
+`CTRL_BREAK_EVENT`, and no wait.
+
+**Measured 2026-09-07 (day, D-4)**, on this machine, with a uvicorn app whose lifespan writes a
+marker file on teardown (`testbed/scratch/f295/probe_r3_taskkill_app.py`):
+
+```
+uvicorn pid from lifespan: 3028
+{"ok":true}                                     <- served a request, so the app was fully up
+SUCCESS: The process with PID 3028 has been terminated.
+marker exists after taskkill /F: NO
+---log tail---
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8099 (Press CTRL+C to quit)
+INFO:     127.0.0.1:55203 - "GET /health HTTP/1.1" 200 OK
+```
+
+No marker, and no `Shutting down` line in uvicorn's own log. **The ASGI lifespan shutdown does not
+run.**
+
+### Why this is a B rather than a nit
+
+`hub/hub/main.py`'s `lifespan` teardown is `await terminate_all_active_runs()` then
+`await shutdown_scheduler()`. Neither executes on this path. The shipped `app-lifecycle`
+requirement *Status, stop, and reset act on the local instance* says, in its own scenario:
+
+> **WHEN** the user runs `agentweave stop`
+> **THEN** active runs across projects are terminated through normal shutdown
+> **AND** the one runtime process stops
+
+The second clause holds. **The first cannot**, on Windows, because the function that terminates
+active runs is never called. What happens to the run processes themselves after their parent is
+terminated is **not measured here** — Windows does not kill a process tree with the parent, and
+whether the Hub's spawns are in a job object was not checked. That is the open question this
+finding leaves for whoever fixes it; the measured part is that the Hub's own termination path is
+skipped.
+
+### Where it was found
+
+Not by a drive. By `D-4`, the third spec-loop round on
+`openspec/changes/2026-09-07-a-dead-connection-is-never-handed-back-out`, asking the round's
+assigned question — *what does the surface actually do?* — of a change whose first requirement is
+about what an instance does **while shutting down**. The answer on the operator's own platform is
+that the product's own stop command gives it no shutting-down to do.
+
+That change now scopes its requirement to a shutdown that runs at all, and explicitly does **not**
+take this on: making `agentweave stop` graceful is CLI work against a different, already-shipped
+requirement, and folding it in would have made a self-contained change into two.
+
+### Reproduce
+
+```
+cd testbed/scratch/f295
+PROBE_MARK=tk.marker py -3.11 -m uvicorn probe_r3_taskkill_app:app --port 8099 --host 127.0.0.1 &
+# wait for tk.marker.started, then
+taskkill /PID <pid from tk.marker.started> /F
+# tk.marker is absent
+```
+
+### What a fix has to be careful about
+
+- Windows has no SIGTERM. The graceful equivalent for a *detached* uvicorn is
+  `GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid)`, which requires the child to have been created
+  with `CREATE_NEW_PROCESS_GROUP` — so the fix touches `_hub_native_start` as well as
+  `_hub_kill_pid`, and a Hub already running was not started that way.
+- A graceful stop has to stay bounded. The POSIX branch waits 10 seconds and then `SIGKILL`s; the
+  Windows one needs the same backstop, and — see the change above — the shutdown sequence it would
+  now be running contains a dispose that can itself block if `F295`'s guard is not in place. The
+  two are worth landing in that order.
+- The docstring is currently false on Windows and should stop claiming a SIGTERM that is not sent,
+  whatever else is done.

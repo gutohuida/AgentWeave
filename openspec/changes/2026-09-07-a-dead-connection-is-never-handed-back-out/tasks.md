@@ -2,8 +2,10 @@
 
 Implementation is a night window's. Nothing here is complete on the strength of this plan existing;
 only verified implementation closes a task. Written by R1, revised by R2 (2.1 and 2.4 reordered,
-2.4 answered, 3.7 and 3.8 added and the mutation-check renumbered to 3.9); R3 has not reviewed
-it yet.
+2.4 answered, 3.7 and 3.8 added and the mutation-check renumbered to 3.9), revised again by R3
+(**1.2 replaced** — the neutralisation moves off the checkout listener onto the `close` pool event;
+1.5 added; 2.3 gains its reason; 3.3 rewritten; 3.10 and 3.11 added; mutation-check renumbered to
+3.12).
 
 ## 1. The checkout guard
 
@@ -13,20 +15,38 @@ it yet.
   a `checkout` listener against `AsyncAdaptedQueuePool` and `AsyncAdapt_aiosqlite_connection`
   (`testbed/scratch/f295/probe_pool.py`). Use `getattr` with a `None` default for both, and return
   without doing anything if either is absent, so a non-aiosqlite driver is untouched.
-- [ ] 1.2 **Neutralise before raising, and do not reorder these two lines.** Set the driver
-  connection's `_running = False` and `_connection = None`, *then* raise
-  `sqlalchemy.exc.DisconnectionError`. Raising alone hangs: SQLAlchemy's invalidation path closes
-  the connection it is discarding, and closing queues work for the thread that has already died.
-  Measured both ways in `testbed/scratch/f295/probe_guard_lib.py` (hangs) and `probe_guard2.py`
-  (`RECOVERED, select 2 -> 2`). A test has to pin this ordering or it will be "simplified" back.
-- [ ] 1.3 Comment the listener with the aiosqlite version it was measured against (0.22.1), the two
-  private attributes it depends on, and the two-line justification for each — `close()` returns
+- [ ] 1.2 **The checkout listener only detects. It raises `sqlalchemy.exc.DisconnectionError` and
+  does nothing else.** R1 and R2 had it neutralise the connection inline first, on the measurement
+  that raising alone hangs (`probe_guard_lib.py`) — true, and the wrong conclusion. Raising alone
+  hangs *because nothing neutralises the connection on the way to its close*, and the checkout
+  listener is only one of the four places that close happens. Put the neutralisation at 1.5 instead
+  and this listener becomes a short predicate with no ordering to get wrong. Measured:
+  `probe_r3_close_listener.py` case A, raise-only checkout plus the 1.5 listener,
+  `RESULT after 0.00s: RECOVERED, select 2 -> 2`.
+- [ ] 1.3 Comment both listeners with the aiosqlite version they were measured against (0.22.1), the
+  two private attributes they depend on, and the two-line justification for each — `close()` returns
   immediately when `_connection is None` (`aiosqlite/core.py:199-201`), and `_execute` raises
   `ValueError("Connection closed")` when `_running` is false (`:151-152`), which turns any remaining
-  holder's silent hang into a loud failure.
+  holder's silent hang into a loud failure. Say in the `close` listener's comment *why it is on
+  `close` and not inline in the checkout listener*, naming `dispose()`, or it will be moved back.
 - [ ] 1.4 Log the discard at WARNING with enough to act on: that a connection's driver worker had
   ended and a fresh connection was opened. This is the only place the condition is ever observable,
   and a silent transparent recovery would hide a live defect somewhere else.
+- [ ] 1.5 **Neutralise on the `close` pool event, which is the one place every close passes
+  through.** Add a second listener, `@event.listens_for(engine.sync_engine, "close")`, that applies
+  the same dead-worker test as 1.1 and, when it holds, sets `_running = False` and
+  `_connection = None` before returning. SQLAlchemy dispatches `close` from
+  `_ConnectionRecord.__close()` — reached by `invalidate()` (what 1.2's raise triggers), by
+  `QueuePool.dispose()` (**what task 2.3 calls at shutdown**), by a checkin-time close, and by the
+  abandon at the end of `_ConnectionFairy._checkout`. A checkout-only guard covers exactly the first
+  of those. Measured, all in `testbed/scratch/f295/`:
+  - `probe_r3_dispose_hang.py bare` — `await engine.dispose()` on a dead-worker connection idle in
+    the pool **never returns** (40-second external kill); `probe_r3_dispose_hang.py close` — the
+    same dispose returns in **0.00s**. Without this listener, task 2.3 can hang the shutdown it is
+    part of, which is worse than the defect this change fixes.
+  - `probe_r3_close_listener.py B` — with the retries exhausted, `fairy.invalidate()` closes a
+    connection the checkout listener never saw. Without this listener that hangs (45-second kill);
+    with it the caller gets `InvalidRequestError: This connection is closed` in 0.00s.
 
 ## 2. Shutdown ordering
 
@@ -41,7 +61,8 @@ it yet.
   continue to 2.3.
 - [ ] 2.3 `await engine.dispose()` after the settle, while the loop is still running. Disposing
   before the settle is the failure `conftest.py:317-330` documents having already made — it takes
-  the connection away from a run that is still using it.
+  the connection away from a run that is still using it. **This step depends on 1.5**: measured, a
+  dispose with a dead-worker connection in the pool never returns. Do not ship 2.3 without 1.5.
 - [x] 2.4 **Answered by R2 — it can, so 2.1's settle goes after it.** The scheduler reaches
   `_background_runs` by a real path: `_scheduled_job_runner` (`hub/hub/scheduler.py:2307`) ->
   `_fire_job_by_id` -> `_do_fire_job` -> `turn_scheduler.schedule_agent` ->
@@ -63,9 +84,10 @@ it yet.
 - [ ] 3.2 The same test asserts the *recovery*, not just the raise: a statement issued after the
   kill returns a value from a new connection. Give it a real timeout, because the failure mode is a
   hang and an unbounded test hang in CI is the very thing `F292` costs hours to.
-- [ ] 3.3 A test that pins 1.2's ordering — with the neutralisation removed, the guarded checkout
-  hangs. Write it as a bounded wait that must **not** time out, and confirm it fails when the two
-  lines are removed. Do not leave a hanging variant enabled in the suite.
+- [ ] 3.3 A test that pins 1.5 — with the `close` listener removed, the guarded checkout does not
+  recover. Write it as a bounded wait that must **not** time out, and confirm it fails when 1.5 is
+  removed while 1.2 stays. Do not leave a hanging variant enabled in the suite. (This replaces R1's
+  ordering test, which pinned an arrangement that no longer exists.)
 - [ ] 3.4 A test that a healthy checkout is untouched: no reconnection, no WARNING.
 - [ ] 3.5 A test that shutdown settles a background run before disposing. Assert the ordering
   directly — a run task registered in `_background_runs` is not pending when `dispose` is called —
@@ -85,7 +107,18 @@ it yet.
   connection outliving its loop stops doing so exactly when something has already gone wrong. Found
   by R2 reading the fixture, **not run**. This is a test-harness change and is **not** a claim to
   resolve `F292`; see `proposal.md`'s "What this deliberately does not change".
-- [ ] 3.9 **Mutation-check every one of these before believing them.** The night of 2026-09-06 shipped
+- [ ] 3.10 **A test that `engine.dispose()` returns when a pooled connection's worker is dead.**
+  This is the one that would have caught R1's and R2's siting mistake, and it is about the shutdown
+  half as much as the guard half: kill the worker of a connection sitting idle in the pool by the
+  real mechanism (3.1's), then `await engine.dispose()` under a bounded wait that must not time out.
+  Confirm it hangs with 1.5 removed — `probe_r3_dispose_hang.py` is the reproduction in miniature.
+- [ ] 3.11 A test that the exhausted-retry path raises rather than hangs: force every replacement to
+  be born dead (a `connect` listener that kills the new worker), assert
+  `sqlalchemy.exc.InvalidRequestError` under a bounded wait. Mark it in a comment as covering an
+  unreachable state deliberately — the replacement is always `__connect()`-fresh in reality — so
+  that a later reader does not delete it as dead weight or, worse, treat it as evidence the state
+  occurs.
+- [ ] 3.12 **Mutation-check every one of these before believing them.** The night of 2026-09-06 shipped
   eight unit tests of which the day could only account for seven; the standard this repository now
   holds is that a test names which artefact failed when the fix is reverted. Record the count in the
   night's log the way `n3-units` did.
@@ -96,8 +129,12 @@ it yet.
   `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`,
   `mypy src/`, `pytest hub/tests/ -v` under `py -3.11`.
 - [ ] 4.2 Amend `F295` in `scripts/drive/FINDINGS.md` with R1's correction to its trigger — that
-  cancellation with a live loop is benign and loop closure is the precondition — and with whatever
-  R2/R3 conclude about its severity. R2 reproduced R1's mechanism independently and did not overturn
+  cancellation with a live loop is benign and loop closure is the precondition — and with what R2
+  and R3 concluded about its severity. R3's two additions to that account: the production
+  consequence is narrower again, because `agentweave stop` on Windows force-kills and runs no
+  lifespan teardown at all (filed separately as `F297`); and the hazard is *the dead worker thread*
+  rather than *the outlived loop*, since an idle pooled connection carried into a second loop was
+  measured to work normally. R2 reproduced R1's mechanism independently and did not overturn
   the severity question; it narrowed the test-suite half (the teardown fixture disposes every test,
   so the hazard is reachable there only where that fixture does not complete) and confirmed the
   production half is bounded by process exit, on a measurement R1 did not have — SQLAlchemy, not
