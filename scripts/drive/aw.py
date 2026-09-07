@@ -12,7 +12,10 @@ import urllib.error
 import urllib.request
 
 HUB = os.environ.get("AW_HUB", "http://127.0.0.1:8010")
-KEY = os.environ.get("AW_KEY", "aw_live_58ab7d84a1bf7b34eb2d1b424875bacd")
+# No default. This file is tracked in a public repository, so a key written here is a published
+# key -- and one was, from the first commit of this file until 2026-09-07. Set AW_KEY in the
+# environment instead; an unset key fails loudly below, which is the correct outcome.
+KEY = os.environ.get("AW_KEY", "")
 P = os.environ.get("AW_PROJECT", "")
 
 _ctx = ssl.create_default_context()
