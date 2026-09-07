@@ -244,6 +244,54 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   source material was actually compromised — and don't discard a real finding just because it
   tripped this scanner.
 
+## The installed CLI (`agentweave` from PyPI, outside this repo)
+
+Facts about driving a *real* AgentWeave instance, learned setting one up at
+`C:\Users\huida\agentweave-live` on 2026-09-07. These are about the shipped product, not this
+checkout — the dev-repo traps are in "The Hub at runtime" above and still apply there.
+
+- **Every `agentweave` subcommand needs BOTH `--profile` and `--port` when the instance uses a
+  named profile** *(measured 2026-09-07)*. Omit them and the CLI looks for the `default` profile,
+  finds no native pid file, and **falls back to assuming Docker**. Two concrete consequences on a
+  natively-started Hub: `agentweave status` prints `Status: running (docker)` — on a machine where
+  the Docker daemon is not even running — and `agentweave stop` fails with
+  `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`, stopping
+  nothing and leaving the port bound. With the flags, both are correct (`running (native)` with a
+  PID; stop kills the process pair and frees the port). **The failure mode is a misleading
+  diagnostic**: it blames Docker when the real problem is a profile mismatch, which cost this
+  session a nearly-filed false bug report. Wrapper at `C:\Users\huida\agentweave-live\hub.ps1`
+  exists so the flags are never forgotten.
+- **`agentweave doctor` lists runner CLIs it merely *detected on PATH*, not ones it can use**
+  *(measured 2026-09-07)*. On this machine it reports `claude, codex, copilot, kimi, opencode` as
+  an `[OK]` line. Only **claude** and **codex** can actually be bound to a Runner and spawned —
+  `RUNNER_CLIS = ("claude","codex")` in `hub/hub/db/models.py:300`, and the spawn path 501s for
+  anything else. Detection is not support, and nothing on the `doctor` output says so.
+- **The pid the CLI reports at start is not the process holding the port** *(observed
+  2026-09-07)*. Native start logs e.g. `Starting Hub (native, PID 17544)` and writes that pid to
+  `~/.agentweave/hub/hub-<profile>-<port>.pid`, while a second python process (17208) is the one
+  listening. `stop` handles this correctly and kills both — do not "fix" it by killing the
+  recorded pid by hand.
+
+## Unattended runs — failure modes the driver does not detect
+
+- **A Claude usage limit turns an autonomous run into a silent no-op loop** *(measured
+  2026-09-07)*. The headless CLI printed `You've hit your session limit · resets 7:10pm
+  (Europe/Lisbon)` and exited 1. `run-iteration.ps1` logs the child's exit code and exits with it;
+  **nothing counts consecutive failures**, so the Scheduled Task kept firing every 5 minutes and
+  produced **24 consecutive 2–3 second no-op iterations over ~2 hours** before the limit reset.
+  The task stays `Ready`, the state file never changes, and the driver log looks like a run that
+  is simply between iterations. Its only self-stopping conditions are a null `next_action` and
+  passing `StopAt`; neither covers "the child keeps failing". **Diagnose by comparing
+  `iteration start`/`iteration end` timestamps — a healthy iteration takes minutes, a dead one
+  takes seconds.**
+- **A watcher must grep for the failure signatures, not only the success ones** *(learned the hard
+  way, 2026-09-07)*. A background watcher armed for that run filtered on review-page mtime, task
+  existence, and a guessed error alternation (`Stopping\.|did not parse|Refusing|not found`). A
+  usage-limit death matched **none** of them, so it would have run its full five hours and
+  reported "expired" after the run's own stop time — while the operator had been told progress
+  would be reported. Silence read as success. Watch for **forward progress** (iteration counter or
+  commit count advancing within a bound) rather than for the absence of known errors.
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly
