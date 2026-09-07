@@ -893,3 +893,89 @@ task 1.6, ordered before any source document lands, and committed separately.
 
 `next_action` is `S-9` — the review page the operator reads tonight. S-7 and S-8 were skipped by
 S-4 (one project, not two). S-10, the optional prototype skeleton, stays optional and last.
+
+---
+
+## Iteration 7 — S-9, the review page: what two loops proposed, and eleven things only the operator can decide
+
+State verified before starting: branch `autonomous/2026-09-07-sidequest`, head `e00e1ce`, parent
+`8ee61b1`, clean tree. All match `STATE-sidequest.json`. Nothing to reconcile.
+
+**Written:** `.claude/autonomous/2026-09-07-sidequest-review.html`, 44,886 bytes, self-contained.
+No product code, no openspec change, nothing driven.
+
+### What the page has to do, and how each requirement was met
+
+The queue asked for a page that answers without the reader opening anything else. Six sections, in
+the order a reader needs them rather than the order the work happened:
+
+- **The security matter first**, above §1, because it is urgent and belongs to neither loop: the
+  `aw_live_` key that was tracked in a public repository and is still in git history.
+- **§1 — the seven falsified claims**, stated prominently as the queue required, as a two-column
+  table of claim against measured verdict, with the sharpest consequence spelled out: the 2026-09-06
+  exploration recommended extracting the two mechanisms with the least production evidence and
+  against the one with the most, and declined that one on a *market* argument when the operator had
+  asked about *separability*.
+- **§2 and §3 — one section per loop**, each carrying a round-by-round table of **what that round
+  changed about the one before it**. No round changed nothing, so the "if a round changed nothing,
+  say so" clause did not fire; the page says instead that every round changed the change, which is
+  the honest form of the same disclosure.
+- **§4 — what was not measured.** Titled "What today's drive found" and answering *nothing, because
+  nothing was driven*, then a table of six unverified things with what would settle each.
+- **§5 — the artifact index**: two changes, both strict-valid, 0 of 35 and 0 of 35 tasks, requirement
+  and scenario counts, and the four `continuity-kit` commits.
+- **§6 — eleven asks**, `SQ-1` to `SQ-11`, each phrased as a question with its evidence beside it.
+  Ask ids are scoped to this page, matching the daily pages' convention.
+
+### Verified rather than transcribed
+
+Every headline number on the page was re-run against the tree at `e00e1ce` rather than copied out of
+the log, because the point of the discipline is that citations move:
+
+| Claim on the page | Re-measured |
+|---|---|
+| 341 / 336 / 127 / 127 / 260 lines, 11 differing lines, `resume` copies identical | exact |
+| AgentWeave delta is 2 ADDED + 1 MODIFIED, 3 requirements, 14 scenarios | exact, parsed by section |
+| `continuity-contract` 9 reqs / 21 scenarios, `continuity-checker` 8 / 15 | exact — 17 and 36 in total, matching R2's report |
+| both changes `0/35` tasks | exact, `openspec list` in each repository |
+| `openspec validate --strict` on both | both "is valid", exit 0, run today |
+| `continuity-kit` has four commits and no remote | exact — `0eb373d`, `a1e6946`, `6d5599d`, `ded3880`; `git remote -v` empty |
+
+One number on the page differs from an earlier log entry and the page is right: iteration 6 recorded
+the kit's change at 34 tasks, and `openspec list` now reports **35**. The task added by R2's
+`.gitattributes` finding was counted before it landed in a second commit.
+
+### The checker passed, and the known false red did not fire
+
+`py -3.11 scripts/drive/check_review_page.py .claude/autonomous/2026-09-07-sidequest-review.html`
+→ **ALL CHECKS PASSED**, exit 0. No stray CR, full wrapper, bare `:root`, dark scheme, explicit body
+background, zero external references, tag-balance walk clean, nothing unclosed.
+
+The finding-id check that has been reporting a false red since 2026-09-05 reports `0 -> []` here and
+passes, and it is worth being exact about why rather than claiming the defect is gone: that check
+slices the page between the literal headings `What today's drive found` and `What was specced` and
+counts `class="fid"` spans, and its false red comes from **cross-references** to earlier findings
+being counted as duplicate rows. This page carries no finding rows at all — the run produced no
+numbered findings, since the F-series belongs to the daily cycle — and it refers to `F190` and
+`F274` in `<code>` rather than `<span class="fid">`. So the check is vacuous here rather than fixed.
+The defect stands.
+
+The head of the file (DOCTYPE, meta, and the full stylesheet) was **copied from
+`spec-queue/review/review-2026-09-07.html` by script** and re-titled, rather than retyped, so the two
+pages are the same document to a reader and no CSS typo could sneak in. `spec-queue/` was read and
+never written — the limits forbid writing there and nothing did.
+
+### Not verified
+
+The page was not opened in a browser: this run's limits forbid one, along with any Hub, agent turn or
+web access. What that leaves unchecked is *visual* rendering only — structure, self-containment,
+theme variables and tag balance are all asserted by the checker, and the stylesheet is byte-identical
+to a page the operator has already read on this machine.
+
+### Next
+
+`next_action` is `S-10`, the optional one: the smallest runnable prototype skeleton for the
+continuity kit, inside its own folder, built only from what its own S-5/S-6 spec describes. Its
+precondition is met — S-9 is finished and more than sixty minutes remain before `stop_at`. It touches
+no AgentWeave product code and commits locally to a repository with no remote. If it is not reached,
+nothing is lost: the review page was the deliverable and it is done.

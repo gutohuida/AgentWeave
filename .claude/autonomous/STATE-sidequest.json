@@ -9,11 +9,11 @@
     "parent_branch": "autonomous/2026-09-07-daily",
     "parent_sha": "8ee61b1",
     "stop_at": "2026-09-07T22:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-07-sidequest-log.md",
     "review_page": ".claude/autonomous/2026-09-07-sidequest-review.html",
     "current": null,
-    "next_action": "S-9",
+    "next_action": "S-10",
     "queue": [
         {
             "id": "S-1",
@@ -73,9 +73,10 @@
         },
         {
             "id": "S-9",
-            "status": "pending",
+            "status": "done",
             "title": "Write the review page the operator reads tonight",
-            "detail": "Self-contained HTML at the path in review_page -- no external stylesheets, scripts or fonts, full DOCTYPE/html/head/body wrapper, theme-aware (light on bare :root, redefined under prefers-color-scheme: dark, explicit body background). It must answer without the reader opening anything else: what the two spec loops proposed and what each round CHANGED about the previous one (if a round changed nothing, say so); which extraction candidates were kept, which were dropped and on what measurement; what was NOT measured and why; and every decision waiting for the operator, in decisions_for_user, each phrased as a question with the evidence beside it. State prominently that the exploration this run was asked to validate was found wrong on seven claims, and list them. Run scripts/drive/check_review_page.py against it -- but note its finding-id check has been reporting a FALSE red since 2026-09-05 and is a known pre-existing defect, so read its output rather than trusting the exit code."
+            "detail": "Self-contained HTML at the path in review_page -- no external stylesheets, scripts or fonts, full DOCTYPE/html/head/body wrapper, theme-aware (light on bare :root, redefined under prefers-color-scheme: dark, explicit body background). It must answer without the reader opening anything else: what the two spec loops proposed and what each round CHANGED about the previous one (if a round changed nothing, say so); which extraction candidates were kept, which were dropped and on what measurement; what was NOT measured and why; and every decision waiting for the operator, in decisions_for_user, each phrased as a question with the evidence beside it. State prominently that the exploration this run was asked to validate was found wrong on seven claims, and list them. Run scripts/drive/check_review_page.py against it -- but note its finding-id check has been reporting a FALSE red since 2026-09-05 and is a known pre-existing defect, so read its output rather than trusting the exit code.",
+            "result": "Wrote .claude/autonomous/2026-09-07-sidequest-review.html, 44,886 bytes, self-contained: six sections plus an urgent pre-section for the disclosed aw_live_ key. Covers what both loops proposed, a round-by-round table of WHAT EACH ROUND CHANGED about the previous one (no round changed nothing, so the page says every round changed the change), the seven falsified claims of the 2026-09-06 exploration stated prominently in section 1, the kept/dropped extraction candidates each with the measurement that decided it, a six-row table of what was NOT measured and what would settle each, an artifact index (both changes strict-valid, 0/35 and 0/35 tasks), and eleven asks SQ-1..SQ-11 each phrased as a question with evidence. check_review_page.py: ALL CHECKS PASSED, exit 0 -- and the known false-red finding-id check reports 0 findings because this page carries no finding rows (F-numbers belong to the daily cycle and are referenced in <code>, not class=fid), so the check is vacuous here rather than fixed; the defect stands. The stylesheet and head were copied by script from spec-queue/review/review-2026-09-07.html and re-titled, so no CSS typo is possible and the two pages read as one document; spec-queue/ was read and never written. Every headline number re-measured against the tree at e00e1ce rather than transcribed: 341/336/127/127/260 and 11 differing lines exact; delta 2 ADDED + 1 MODIFIED, 3 requirements / 14 scenarios; kit 17 requirements / 36 scenarios; both changes 0/35 tasks -- the kit is 35 not the 34 iteration 6 recorded, because R2 added a task in a second commit. Not verified: the page was not opened in a browser (limits forbid one); structure, self-containment, theme and tag balance are asserted by the checker, visual rendering is not."
         },
         {
             "id": "S-10",
