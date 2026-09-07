@@ -7,7 +7,7 @@ only verified implementation closes a task.
 `hub/hub/static/ui` is not rebuilt and the TypeScript lint set is not required — say so in the log
 rather than passing over it in silence.
 
-**Two decisions in §2 and §3 are deliberately open** (`design.md` D5). The delta requires the rule,
+**Three decisions — in §2, §3 and §4 — are deliberately open** (`design.md` D5, D7). The delta requires the rule,
 not the mechanism. Choose the mechanism against a running Hub and record which and why; do not
 treat the open choice as permission to skip the requirement.
 
@@ -66,20 +66,30 @@ treat the open choice as permission to skip the requirement.
 - [ ] 3.4 Preserve the loop refusal — a job with a loop is archived by the operator only, never an
   agent. It is stated in `archive_job`'s docstring; confirm where it is actually enforced before
   assuming the route already has it.
-- [ ] 3.5 **Waiting.** The contract must give an HTTP caller what `ask_user`
-  (`hub/hub/mcp_server.py:306-472`) gives an MCP caller: a way to wait, answers in the order asked,
-  *declined* distinguished from *expired*, and a way to report the wait ended. Mechanism open
-  (`design.md` D5) — a long-held request, or a documented poll-and-report protocol that §2's HTTP
-  rendering states explicitly and that `ask_user` is then re-expressed over.
-- [ ] 3.6 The wait-ended report is load-bearing and is the easiest of the four to drop: without it a
-  parked task goes on claiming somebody is waiting. `hub/hub/mcp_server.py` sends it for expired
-  questions only, deliberately — a decline is a decision the operator handed back, not silence.
-  Keep that distinction wherever the rule lands.
-- [ ] 3.7 Tests that reach the routes **directly**, without the adapter, and assert both rules hold.
+- [ ] 3.5 **Waiting — and read `design.md` D6 before starting, because round 2 cut this task
+  down.** Ordering, the decline/expiry distinction, the deadline stamp and the task park are already
+  the routes' (`hub/hub/api/v1/agent_actions.py:440-529`, `hub/hub/schemas/questions.py:65-77`), and
+  an unreported wait is swept at the run boundary (`hub/hub/run_divergence.py:644`). Do **not**
+  reimplement any of that. What is missing is two things: the contract offers no way to wait, and it
+  never discloses the deadline it stamps. Mechanism open (`design.md` D5) — a long-held request, or
+  a documented poll-and-report protocol that §2's HTTP rendering states explicitly and that
+  `ask_user` is then re-expressed over.
+- [ ] 3.6 **Disclose `wait_expires_at`.** It is written at `hub/hub/api/v1/agent_actions.py:496`
+  and is on no response schema, so the caller is judged against a deadline it was never shown
+  (`hub/hub/run_task_binding.py:817` is the judgement). Put it on the question response. Then
+  consider whether `mcp_server.QUESTION_ANSWER_TIMEOUT` (`:891`) should read the Hub's stamp instead
+  of recomputing its own copy of `QUESTION_WAIT_DEFAULT` (`agent_trigger.py:501`) — two literals
+  reading `240` in two modules that may not import each other is the same duplication this change is
+  about, one layer down. Not required by the delta; note the decision either way.
+- [ ] 3.7 The wait-ended report is load-bearing: without it a parked task goes on claiming somebody
+  is waiting until the run ends. `hub/hub/mcp_server.py` sends it for expired questions only,
+  deliberately — a decline is a decision the operator handed back, not silence. Keep that
+  distinction wherever the rule lands.
+- [ ] 3.8 Tests that reach the routes **directly**, without the adapter, and assert both rules hold.
   A test that exercises the MCP tool proves nothing here — the defect is that the tool is where the
   rule lives. `hub/tests/test_agent_actions_governed.py` already reaches them this way with a bearer
   run token; extend it rather than starting a new file.
-- [ ] 3.8 **`test_agent_actions_governed.py:137-140` has to change, and read why before changing
+- [ ] 3.9 **`test_agent_actions_governed.py:137-140` has to change, and read why before changing
   it.** It archives over HTTP with only the standing allowance and asserts `200`, under a comment
   stating that archiving is governed by the same allowance as every other job mutation — the exact
   opposite of what `archive_job`'s docstring and design D18 say. It is not a stale assertion; it is
@@ -89,22 +99,51 @@ treat the open choice as permission to skip the requirement.
   operator's answer is the allowance, this task and §3.1–§3.4 collapse into deleting
   `mcp_server.py:815` instead.
 
-## 4. Docs
+## 4. The access path a run is told about is one it actually has
 
-- [ ] 4.1 `docs/architecture/overview.md:18-19` claims three adapters (HTTP, MCP, agent CLI). Two
+Added by round 2 (`design.md` D7). Without this section the change corrects a notice on the one
+path the operator's own deployment never takes.
+
+- [ ] 4.1 `resolve_access_path` (`hub/hub/launchability.py:237-245`) returns `"mcp"` unconditionally
+  for every runner in `MCP_INJECTABLE_RUNNERS`. Give it grounds. Three mechanisms are laid out in
+  `design.md` D7 — re-aim the probe, make `hub_client` operator-visible and authoritative, or
+  describe both paths — and the delta requires the property, not the mechanism. Choose against a
+  running Hub and record why.
+- [ ] 4.2 If the probe is chosen, `probe_mcp_registered` (`:207-234`) is still there and still
+  unused. It shells `<cli> mcp list`; **verify what that actually reports on a harness whose MCP is
+  disabled by policy before relying on it** — a probe that reports "registered" for a server the
+  harness will refuse to start is the current bug with a subprocess in front of it.
+- [ ] 4.3 Whatever is chosen must keep an explicit operator statement authoritative: an operator who
+  says `cli` gets `cli` without being probed out of it.
+- [ ] 4.4 **`hub/tests/conftest.py:496-507`.** Its autouse fixture patches `probe_mcp_registered`
+  to `False` under a docstring claiming every test therefore gets the `cli` access path. That has
+  been false since `d279d22`. Correct the docstring, and check whether any test was written
+  believing it — a test that meant to exercise the `cli` path has been exercising `mcp` instead.
+- [ ] 4.5 **`hub/tests/test_agent_trigger.py:793-830`.** It patches the probe to raise and asserts
+  an explicit `hub_client: "mcp"` yields the MCP notice. Nothing probes, so the raise cannot fire,
+  and with no override the outcome is identical — the assertion cannot distinguish the branch it
+  names. Either make it distinguish (assert the *absence* of the MCP notice for a run with no
+  grounds) or delete it, and say which in the log. Do not leave it green and meaningless; that is
+  `F190` again.
+- [ ] 4.6 A test that a run with no grounds for MCP is told the HTTP form — the mirror of §1.5, and
+  the one that actually covers the operator's deployment.
+
+## 5. Docs
+
+- [ ] 5.1 `docs/architecture/overview.md:18-19` claims three adapters (HTTP, MCP, agent CLI). Two
   exist. Correct it to two and, since HTTP is now genuinely agent-reachable, elaborate the HTTP half
   — it is currently true and explained nowhere.
-- [ ] 4.2 Do **not** touch `.claude/skills/copilot-test-setup/SKILL.md` in this change. It describes
+- [ ] 5.2 Do **not** touch `.claude/skills/copilot-test-setup/SKILL.md` in this change. It describes
   a watchdog architecture deleted on 2026-08-03 and needs deleting or rewriting, but it belongs to
   the Copilot change; doing it here would mix the two changes this proposal separated on purpose.
 
-## 5. Verification — including the two things no round could check
+## 6. Verification — including the two things no round could check
 
-- [ ] 5.1 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
+- [ ] 6.1 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
   hub/tests/ tests/`, `mypy src/`. Tests under `py -3.11`, never bare `python`. Say in the log that
   the TypeScript set was not required and why (no UI file changed).
-- [ ] 5.2 `pytest hub/tests/ -v`.
-- [ ] 5.3 **Drive it.** `proposal.md` names two claims that are source readings and nothing more,
+- [ ] 6.2 `pytest hub/tests/ -v`.
+- [ ] 6.3 **Drive it.** `proposal.md` names two claims that are source readings and nothing more,
   because this window could not start a Hub. First: that a request to `/api/v1/agent-actions/*`
   carrying `AW_RUN_TOKEN` as a bearer token succeeds **from inside a spawned run's own environment**
   — a real child process, over a real socket, with the `HUB_URL` the Hub computed for it at
@@ -114,11 +153,16 @@ treat the open choice as permission to skip the requirement.
   covered and this task is not re-proving it. What no test covers is the two things only a spawn
   exercises: that `HUB_URL` names an address the child can actually reach, and that the token in the
   child's environment is the one whose digest the run row holds.
-- [ ] 5.4 Then drive the product, not the argument: start a real run on the `cli` access path
+- [ ] 6.4 Then drive the product, not the argument: start a real run on the `cli` access path
   (`hub_client: "cli"` — per `proposal.md` that is the only way to reach this branch today), give it
   work that needs the plane, and read what it does. The question is not whether the notice renders.
   It is whether a model that reads it goes on to make a successful request. Cheap models are the
   standing rule for drives.
-- [ ] 5.5 Record the drive as a finding in `scripts/drive/FINDINGS.md` whether it worked or not. A
+- [ ] 6.5 **Drive the mirror too** (§4). The check that matters for the deployment this change was
+  written for is a run whose harness will not honour the injected MCP config: it must be told the
+  HTTP form, not told to call tools that are not there. If that harness cannot be produced on this
+  machine, say so in the log and record what was substituted — a `claude` run launched with the
+  injected server config removed is the nearest honest approximation, and it is not the same thing.
+- [ ] 6.6 Record the drive as a finding in `scripts/drive/FINDINGS.md` whether it worked or not. A
   drive that confirms the change is as much evidence as one that breaks it, and this repository's
   dominant failure mode is a change that passes its tests and cannot fire in production.

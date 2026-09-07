@@ -185,3 +185,123 @@ can answer into the implementing window rather than leaving them as assumptions.
 
 `next_action` is `S-2` — R2, an independent re-derivation against the code. Its first job is the one
 this round could not do for itself: re-measure the citations above.
+
+---
+
+## Iteration 2 — S-2, spec loop R2: the notice is wrong in both directions
+
+State verified before starting: branch `autonomous/2026-09-07-sidequest`, head `8155735`, parent
+`8ee61b1`, clean tree. All match `STATE-sidequest.json`. Nothing to reconcile.
+
+**Changed:** `proposal.md`, `design.md`, `tasks.md` and the `agent-capability-plane` delta of
+`openspec/changes/2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing/`.
+`openspec validate --strict` passes. No product code touched.
+
+### Every citation R1 leaned on was re-measured. Most held.
+
+Confirmed at the stated lines: the credential and address in the spawned environment
+(`agent_trigger.py:1061`, `:1071`, `:1090-1114`); the notice's injection point (`:1006-1007`); the
+non-MCP branch and its comment (`launchability.py:321-330`); 26 `@mcp.tool()` functions and 32
+`agent-actions` routes, **all 32 behind `Depends(get_agent_actor)`**; `_job_effect` (`:580-582`) as
+a two-line pass-through; `_decide` (`:901-953`) allowing `mcp__agentweave__*` outright;
+`_tool_surface_lines` (`agents.py:884`) injected at `:1543` and gated by `UNDESCRIBED_TOOLS`;
+`src/agentweave/tool_surface.py` with zero importers; `RUNNER_CLIS` (`models.py:300`) and
+`RunnerCli` (`runners.ts:5`); `SUPPORTED_RUNNERS` (`runner_commands.py:52`, gate at
+`agent_trigger.py:654`); the parser dispatch at `:2043`/`:2061`. The `MODIFIED` block reproduces all
+four scenarios of the requirement it replaces — none was silently dropped.
+
+Every `archive_job` claim held exactly, including the sharpest one: `mcp_server.py:815` always asks,
+`agent_actions.py:764-777` never does, and `test_agent_actions_governed.py:137-140` asserts the
+`200` under a comment stating the opposite rule. R1's best finding survives untouched.
+
+### What R2 changed
+
+**1. The proposal was wrong about `ask_user`, and the truth is a better defect.** R1 wrote that
+blocking, ordering, decline-versus-expiry and the wait-ended report all live in the adapter and that
+"an HTTP caller of those three routes gets none of it". Measured, three of the four are in the
+contract: `_record_the_wait_and_park` (`agent_actions.py:440-529`) is called *by the routes* at
+`:553` and `:595` and both stamps the deadline and parks the run's task; `declined`/`declined_at`
+and `batch_index`/`batch_size` are persisted columns on `QuestionResponse`
+(`schemas/questions.py:65-77`); and an unreported wait is swept at the run boundary by
+`run_divergence.evaluate_run_end` (`:644`), which the park's own docstring names as that fallback.
+
+What is genuinely missing is smaller and sharper: the contract offers no way to wait, and
+**`wait_expires_at` is written at `agent_actions.py:496` and appears on no response schema** — so
+the Hub judges a caller's `wait-ended` report against a deadline (`run_task_binding.py:817`) it
+never disclosed. The adapter does not read it either; it recomputes the number from
+`AW_QUESTION_TIMEOUT` (`mcp_server.py:891`, default `240`), which is `QUESTION_WAIT_DEFAULT`
+(`agent_trigger.py:501`, also `240`) restated in the module that may not import the Hub. Two
+literals, one number, and an HTTP caller holding neither. `tasks.md` §3.5 now forbids reimplementing
+what already exists and §3.6 asks for the disclosure instead.
+
+**2. The defect faces the other way too, and that changed the change's scope.** R1's reachability
+section — the `cli` branch is reached today only by an explicit `hub_client: "cli"` — is correct and
+incomplete. `resolve_access_path` used to probe; `d279d22` ("Phase 7: unify governed agent tool
+surface") replaced the probe with an unconditional `return "mcp"` because the Hub now injects its own
+MCP server into the spawn (`runner_commands.py:231-243`, `:298-310`). Injection makes the server
+configured, not honoured — and a harness with MCP disabled by policy is exactly where those come
+apart. So in the deployment this change exists for, the resolved path is `"mcp"` and the agent is
+told the MCP tools *are* available. Correcting the `cli` branch never touches that run.
+
+**Measured, not read.** Importing `hub.launchability`, patching `probe_mcp_registered` to `False`
+exactly as `conftest.py:496-507` does, and calling `resolve_access_path('claude','claude',override)`
+returns `mcp` / `mcp` / `cli` for `None` / `'mcp'` / `'cli'`. Three consequences, all from one import
+and three calls, no Hub and no network:
+
+- the autouse fixture's docstring — "every test gets the `cli` access path" — has been false since
+  `d279d22`; every `claude` test gets `mcp`;
+- `test_agent_trigger.py:793-830` patches the probe to *raise* and asserts an explicit
+  `hub_client: "mcp"` yields the MCP notice. Nothing probes, so the raise cannot fire, and `None`
+  and `'mcp'` give identical output — the assertion cannot distinguish the branch it names. `F190`
+  again;
+- `access_path_notice` on the unconfigured result begins "the `agentweave` MCP tools are available".
+
+This is the one round-2 finding that changed scope rather than wording. The delta gains a second
+ADDED requirement — *a run is told the access path it actually has* — stated as a property with
+three mechanisms laid out in `design.md` D7 (re-aim the probe; make `hub_client` operator-visible and
+authoritative, noting it appears in no `.ts`/`.tsx` file today; or describe both paths). `tasks.md`
+gains §4, six tasks including fixing both stale tests.
+
+**3. The product's own config recommends the broken setting for this exact case.**
+`src/agentweave/config.py:714` reads `# hub_client: cli   # uncomment if MCP is blocked by company
+policy`, four lines under `runner: copilot`. Both halves are stale on their own terms —
+`generate_agentweave_yml` has no caller outside `tests/`, and `copilot` is not a value `RUNNER_CLIS`
+accepts — but the setting is live through session sync (`launchability.py:387-390`). An operator
+following the product's advice about a policy that forbids MCP lands on the branch that tells their
+agent it can do nothing.
+
+**4. Two retired requirements sit thirty lines below the one this delta edits.**
+`openspec/specs/agent-capability-plane/spec.md:140-185` still states the unasked-question backstop
+and its operator conversion. That feature was retired 2026-08-20 at the operator's request, its
+table is dropped by migration `0082_drop_unasked_questions.py`, `CLAUDE.md` forbids reintroducing
+it, and `openspec/changes/2026-08-07-unasked-question-backstop` is still unarchived. Found while
+checking that the `MODIFIED` block reproduced its requirement faithfully. **Deliberately not folded
+in** — removing them belongs to retiring that change — but recorded in `proposal.md`, `design.md`
+D8, and put to the operator.
+
+### Housekeeping this round did
+
+`tasks.md`'s round-2 section was appended as §6 and sat between §3 and §4; renumbered so the file
+reads in order (§4 access path, §5 docs, §6 verification), with every cross-reference updated.
+`design.md`'s new sections were appended ahead of its closer; renumbered D6–D8 with D9 last. Four
+line ranges R2 cited from memory were corrected against the files after writing
+(`agent_trigger.py:1087`, `agent_actions.py:440-529`, `conftest.py:496-507`).
+
+### Verification
+
+`openspec validate --strict` passes. The `resolve_access_path` measurement above was executed. No
+product code changed, so no suite run and no lint set applies — `ruff`/`black`/`mypy` cover `src/`,
+`hub/` and `tests/`, none of which this iteration touched. Nothing was driven: no Hub was started, no
+agent turn was run, no web was browsed, all per this run's limits.
+
+### Next
+
+`next_action` is `S-3` — R3, a third independent pass. Its assigned targets are (a) whether every
+mutating agent-facing route depends on the run credential rather than the older project key, and (b)
+what happens to `mcp_server._decide`'s permission boundary for an agent with no MCP. On (a) this
+round measured the cheap half — all 32 `agent-actions` routes take `Depends(get_agent_actor)` — and
+left the real question open: whether `get_agent_actor` can be satisfied by anything other than a
+live run's credential, and whether any *other* router exposes a mutating agent-facing route outside
+that prefix. R3 should also check the two things R2 asserted and did not prove: that
+`probe_mcp_registered`'s `<cli> mcp list` would in fact report a policy-blocked server as absent,
+and that no test outside the two named ones was written believing conftest's false docstring.

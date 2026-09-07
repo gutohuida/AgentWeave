@@ -43,6 +43,30 @@ operation added to the plane cannot be described to one kind of caller and hidde
 - **THEN** a run on an access path with MCP and a run on an access path without MCP are each told
   that operation is available, in the form their access path uses
 
+### Requirement: A run is told the access path it actually has
+The system SHALL NOT tell a run that a tool-protocol surface is available unless it has grounds to believe the run's harness will honour the surface it was given, and SHALL describe the plane's direct HTTP form instead when it has no such grounds.
+
+Providing a harness with a tool-protocol server is not the same as that harness offering it. A
+deployment may forbid tool-protocol servers by policy while permitting ordinary local API calls; a
+run there receives the configuration, cannot use it, and is told in its first line to call tools
+that are not present. That is the same defect as telling a run it has no capability when it does,
+and it is the more likely of the two to be met, because it is what an unconfigured run gets.
+
+An explicit statement by the operator about a run's access path remains authoritative. This
+requirement governs what the system asserts on its own, not what it is told.
+
+#### Scenario: No grounds means no assertion
+
+- **WHEN** a turn begins and the system has no grounds to believe the run's harness will offer the
+  tool-protocol surface it was configured with
+- **THEN** the text delivered ahead of the operator's message describes reaching the plane over HTTP
+- **AND** it does not state that tool-protocol tools are available
+
+#### Scenario: The operator's own statement is honoured
+
+- **WHEN** the operator has stated which access path a run uses
+- **THEN** that statement decides the access path
+
 ## MODIFIED Requirements
 
 ### Requirement: HTTP and MCP access have equal capability
@@ -53,14 +77,21 @@ environments forbid MCP servers while still allowing ordinary local API calls. T
 interface is **not** one of them: it manages the local application instance and carries no agent
 capabilities.
 
-Equal capability is a property of behaviour, not of the route list. Two rules currently live in one
-adapter and not in the contract, and both are invisible to a comparison of persisted effects:
-archiving scheduled work always puts that exact request to the operator regardless of the run's
-permission posture, and asking the operator is a call that waits — returning answers in the order
-asked, distinguishing an answer the operator declined to give from one that never arrived, and
-reporting the wait's end so that parked work stops claiming somebody is still waiting. A caller that
-reaches the same routes directly is subject to neither. The difference is not in what is persisted;
-it is in what the caller is required to do first, and in what happens in the gap afterwards.
+Equal capability is a property of behaviour, not of the route list, and two things currently break
+it in ways a comparison of persisted effects cannot see.
+
+A governance rule lives in one adapter and not in the contract: archiving scheduled work always puts
+that exact request to the operator, regardless of the run's permission posture, when it is reached
+through the adapter and never when it is reached directly. The difference is not in what is
+persisted; it is in what the caller is required to do first.
+
+And asking the operator is a call that waits, while the contract offers no way to wait and does not
+disclose the deadline it itself stamps on the wait. Everything else that wait depends on is already
+the contract's — the answers' order, the distinction between an answer the operator declined to give
+and one that never arrived, the parking of the asking run's work, and the report that the wait has
+ended — so what is missing is not the semantics but the two facts a direct caller needs to
+participate in them. A deadline the system enforces against a caller is a deadline that caller is
+entitled to know.
 
 So a rule that governs one adapter's callers governs the contract's callers. Where a rule cannot be
 moved, the adapter holding it is not thin and the capability is not equal, and that is a defect
@@ -96,6 +127,12 @@ rather than a division of labour.
   order asked, to tell an answer the operator declined to give from one that never arrived, and to
   report that it has stopped waiting
 - **AND** none of these depends on which access path the run used
+
+#### Scenario: The caller is told the deadline it is held to
+
+- **WHEN** a run starts a wait by asking the operator, and the system records when that wait expires
+- **AND** the system later judges that run's report of the wait ending against that expiry
+- **THEN** the expiry is disclosed to the run that started the wait
 
 #### Scenario: The CLI offers no agent capability
 

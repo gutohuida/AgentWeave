@@ -44,8 +44,11 @@ exists **only** in the adapter and not in the contract at all.
 
 - `archive_job` (`hub/hub/mcp_server.py:801-824`) always asks the operator. `POST
   /jobs/{job_id}/archive` (`hub/hub/api/v1/agent_actions.py:764-777`) never does.
-- `ask_user` (`hub/hub/mcp_server.py:306-472`) blocks, orders, distinguishes decline from expiry,
-  and reports the wait's end. Its three routes do none of that between them.
+- `ask_user` (`hub/hub/mcp_server.py:306-472`) blocks, and the contract gives a direct caller no
+  way to. **This bullet said much more than that until round 2 measured it** — see D6, which is
+  where the corrected version lives; the short form is that ordering, the decline/expiry
+  distinction, the deadline stamp and the task park are all already the contract's, and what is
+  missing is the wait itself and the disclosure of the deadline.
 
 The requirement's existing scenarios could not catch either, and it is worth being precise about
 why rather than calling it an oversight. "One operation has one persisted result" compares the
@@ -61,7 +64,7 @@ over HTTP under the standing allowance, with a comment saying archiving is gover
 allowance like every other job mutation; `mcp_server.archive_job`'s docstring says the allowance
 supplies capability and not direction, cites D18, and always asks. So the implementing window is not
 adding a missing check to an indifferent route. It is resolving a disagreement, and one side of it
-is currently green. `proposal.md` puts the choice to the operator and `tasks.md` §3.8 forbids
+is currently green. `proposal.md` puts the choice to the operator and `tasks.md` §3.9 forbids
 flipping the assertion quietly, because a test changed without its comment is how the losing side of
 an argument disappears without anyone deciding it.
 
@@ -122,9 +125,9 @@ how to authenticate" would not catch it in review.
 
 ## D5. What is deliberately left open for the implementing window
 
-Two decisions are stated as properties in the delta rather than mechanisms, because both have more
-than one defensible implementation and neither can be chosen well without a running Hub — which
-this window may not start.
+Three decisions are stated as properties in the delta rather than mechanisms, because each has more
+than one defensible implementation and none can be chosen well without a running Hub — which this
+window may not start. The third was added by round 2.
 
 **`archive_job`'s confirmation, moved server-side.** The rule must hold for every caller. Whether
 the route blocks on `_ask_operator`'s equivalent, or returns a typed "confirmation required"
@@ -138,15 +141,99 @@ request against a route, versus a documented poll-and-report protocol that the H
 makes explicit and that `ask_user` is then re-expressed in terms of. The second is likely right —
 it is what the adapter already does, so it is proven — but it means the *specification* carries the
 protocol, including the wait-ended report, rather than a helpful adapter carrying it for one kind
-of caller. Either way the decline/expiry distinction and the wait-ended report are load-bearing and
-the delta names them: they are what a naive HTTP caller loses silently today.
+of caller. Round 2 cut this one down — most of what the paragraph above assumed was missing turns
+out to be in the contract already (D6), so the open question is narrower than it reads: how a caller
+is offered a wait, and how the deadline the Hub already stamps is disclosed to it.
 
-## D6. What would make this change wrong
+**How the system establishes which access path a run really has.** Added by round 2; three
+mechanisms, laid out in D7, and the same reason for leaving it open — the choice needs a harness
+whose MCP is actually blocked, which this window cannot produce.
+
+## D6. What round 2 re-measured — the ask_user claim, cut down
+
+Round 1 wrote that `ask_user`'s three routes carry none of what the tool provides. Four routes, and
+three of the four properties are in the contract:
+
+| Property | Where it actually lives |
+|---|---|
+| The task is parked while the run waits | `_record_the_wait_and_park`, `hub/hub/api/v1/agent_actions.py:440-529` — the **route**, called at `:553` and `:595` |
+| The wait has a deadline | same function, `:492-496`, stamped from the Hub's own `effective_question_wait` |
+| Answers in the order asked | `batch_index` / `batch_size` on `QuestionResponse`, `hub/hub/schemas/questions.py:65-67` |
+| *Declined* is not *expired* | `declined` / `declined_at` columns on the same response, `:74-77` |
+| The wait ended | `POST /questions/wait-ended` is a route with its own server-side refusals; `run_divergence.evaluate_run_end` (`hub/hub/run_divergence.py:644`) sweeps whatever the caller never reported |
+| **Waiting itself** | **the adapter only** — `hub/hub/mcp_server.py:367`'s poll loop |
+| **Knowing the deadline** | **nowhere the caller can see it** — `wait_expires_at` is written at `agent_actions.py:496` and is on no response schema |
+
+The second of those two is the better defect, and it was invisible while the first was overstated.
+The Hub stamps a deadline, judges the caller's `wait-ended` report against it (`run_task_binding.py:817`),
+and never tells the caller what it is. The adapter compensates by computing its own copy from
+`AW_QUESTION_TIMEOUT` (`mcp_server.py:891`, default `240`), which is `QUESTION_WAIT_DEFAULT`
+(`agent_trigger.py:501`) restated in the module that may not import the Hub — a duplication that is
+correct today only because both literals read `240`, and that an HTTP caller has neither copy of.
+
+So the delta requires disclosure, not reimplementation: give the caller the deadline the Hub already
+holds, and a stated way to wait. That is a smaller change than round 1 described and a more
+defensible requirement, because it asks the contract for something it already knows.
+
+## D7. The mirror defect, and why it is in scope
+
+Round 1 established that the `cli` access path is reached today only by an explicit
+`hub_client: "cli"`. True. What it did not ask is what the *other* branch asserts, and the answer
+changes what this change has to cover.
+
+`resolve_access_path` stopped probing in `d279d22` and now returns `"mcp"` unconditionally for any
+runner in `MCP_INJECTABLE_RUNNERS`. The commit's reasoning is in the docstring it wrote — "now that
+the Hub injects its canonical server" — and against 2026-08 that was sound: the Hub adds
+`--mcp-config` (Claude, `runner_commands.py:231-243`) or `-c mcp_servers.agentweave...` (Codex,
+`:298-310`) itself, so probing whether the operator had registered the server by hand answered a
+question nobody was asking anymore.
+
+The assumption underneath it is that a configured server is an available one. **The operator's
+constraint is the case that breaks it.** A harness with MCP disabled by policy takes the injected
+config and does nothing with it, and the run is told, in its first line, to call tools that are not
+there.
+
+That is not a separate change. It is the same requirement — what a run is told about its access path
+must be true — and a change that fixed only the `cli` branch would ship a correct notice on the one
+path the operator's deployment never takes. The delta therefore states the property and leaves the
+mechanism open, because there are at least three and the choice needs a running Hub:
+
+- **restore the probe**, now behind the injected config rather than a hand-registered one. It costs
+  a subprocess per cache miss (`_PROBE_TTL_SECONDS = 300`) and is the only option that needs nothing
+  from the operator. `probe_mcp_registered` still exists, unused, and would need re-aiming: `<cli>
+  mcp list` on a policy-blocked harness is the thing to check it actually reports.
+- **make `hub_client` an operator-visible setting** and treat it as authoritative. Cheapest, and
+  honest about being a declaration rather than a measurement — but it is invisible in the UI today,
+  so this is a UI change, and this change is otherwise Hub-Python-only.
+- **describe both paths** and let the agent use whichever works. Wasteful in context, and the two
+  descriptions can disagree about which is real, which is the failure this change exists to stop.
+
+Whichever is chosen, the property is the same and the delta states it that way: do not assert a
+surface the system has no grounds to believe is there.
+
+## D8. Two retired requirements in the file this delta edits
+
+`openspec/specs/agent-capability-plane/spec.md:140-185` still carries "A turn that ends on an unasked
+question is surfaced to the operator" and "The operator can convert an unasked question into a real
+one". The feature was retired on 2026-08-20 at the operator's request; migration
+`0082_drop_unasked_questions.py` drops the table; `CLAUDE.md` states plainly that it must not be
+reintroduced; and `openspec/changes/2026-08-07-unasked-question-backstop` is still in `changes/`
+rather than `changes/archive/`.
+
+Found while checking that this delta's `MODIFIED` block reproduced the requirement above them
+faithfully — which it does. Deliberately **not** folded in: removing them is part of retiring that
+change, and mixing a two-requirement deletion into a delta about reachability would make both harder
+to review. It is in `proposal.md` under what this change does not do, and it goes to the operator.
+
+## D9. What would make this change wrong
 
 - Rendering an HTTP capability description that drifts from the tools. Mitigated by putting it
   behind `test_tool_surface_matches_server.py` rather than beside it (D3).
 - Declaring parity on the strength of route parity again. That is the mistake this round was sent
   to check for, and it was present (D2).
 - Shipping the corrected notice and never running an agent against it. This window cannot drive;
-  `tasks.md` §5 makes the drive a task rather than a hope, and `proposal.md` says plainly which two
+  `tasks.md` §6 makes the drive a task rather than a hope, and `proposal.md` says plainly which two
   claims are unverified source readings.
+- Fixing the `cli` branch alone and calling the operator's deployment served. That branch is not the
+  one their runs take (D7). Round 2 added the mirror for this reason, and it is the finding most
+  likely to be lost if a later window trims scope.
