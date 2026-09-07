@@ -604,3 +604,153 @@ document.
 `next_action` is `S-5` — spec loop R1 for the continuity kit, written **inside**
 `C:\Users\huida\Documents\projects\continuity-kit`, not here. S-7 and S-8 are marked `skipped`
 because P2 folded in.
+
+---
+
+## Iteration 5 — S-5, spec loop R1 for the continuity kit: the failures are all in the half a program can decide
+
+**Item:** S-5 — the prototype's own spec, written inside
+`C:\Users\huida\Documents\projects\continuity-kit`, not in this repository. Answer the seed's five
+questions rather than inherit them.
+
+**Outcome:** `openspec/changes/2026-09-07-the-contract-and-a-checker-that-can-falsify-it/` in that
+repository — proposal, design (D1–D10), tasks (33 across 6 phases), and two capability deltas:
+`continuity-contract` (9 requirements, 19 scenarios) and `continuity-checker` (8 requirements, 13
+scenarios). `openspec validate --strict` returns valid, exit 0. Committed locally as `a1e6946`;
+still no remote, confirmed before committing.
+
+### The argument, and it is narrower than the seed's
+
+The seed offered several reasons this could be a product. R1 keeps exactly one, because it is the
+only one that is measured rather than asserted: **the three failure modes the source documents
+record about themselves are every one of them decidable by a program with no model in it, and
+nothing checks any of them.**
+
+- `## Corrections to the previous handoff` present in 5 handoffs of 108 while corrections were
+  written under `## Files touched` instead (`.claude/skills/handoff/SKILL.md:297-301`).
+- `Model:` filled 7 times of 108 against `Agent:` filled 108 times, which is why the two fields were
+  merged (`:271-275`).
+- A chain tracked through `0073` and ignored from `0074`, with a tracked `LATEST.md` naming a file
+  no clone contained (`:150-153`).
+
+Heading present, field holds three facts, every file in a directory shares one tracked/ignored
+status. No judgement in any of them. The proposal says plainly that this case does **not** rest on
+anyone else wanting the tool, which was not measured and which the run was forbidden to check.
+
+### A fourth failure mode, measured this round, in neither seed
+
+The ledger instructs *"Date every entry with when you last confirmed it. An inherited stale fact is
+worse than no fact, because it is believed"* (`SKILL.md:113-114`). Measured against
+`.claude/handoffs/DEAD-ENDS.md` by grouping top-level bullet blocks: **22 of 79 entries contain any
+date at all, and 7 say "Confirmed".** The reference implementation of the rule honours it in a
+minority of cases.
+
+This set a design decision rather than just a finding (D7): dating ships as a **warning** for
+entries predating a repository's adoption of the contract and a failure for entries added after,
+because a v1 that fails its own reference implementation 57 times gets switched off in its first
+hour, and a tool nobody runs checks nothing. It is the one place where evidence changed a rule's
+severity rather than its content, and D7 says so, so a later round can disagree with the reasoning
+instead of rediscovering the number.
+
+### The five questions, answered
+
+1. **Extraction or fork.** This repository becomes upstream; the two existing copies become
+   *renders* of one source under named profiles, each carrying a provenance stamp (source version,
+   profile, content hash) so "has this drifted?" is a hash comparison rather than an investigation.
+   The acceptance test is exact and can fail: rendering `local` must reproduce
+   `.claude/skills/handoff/SKILL.md` byte-for-byte and `distributed` must reproduce
+   `src/agentweave/templates/skills/handoff.md` byte-for-byte. Task 3.1 says that if the four
+   regions do not express as two profiles, the implementer **says so and stops** — the target files
+   are evidence, not something to adjust to fit the mechanism.
+2. **Smallest honest scope.** File contract and CLI. The UI is deferred **with a stated trigger**
+   rather than dropped: its value is chain review (what a session claimed against what it did, which
+   facts were re-learned how many times — the analysis that produced `DEAD-ENDS.md` by hand), it is
+   a consumer of `check --json`, and building a consumer before its producer's output is stable is
+   how the output stops being able to change. Trigger: `--json` findings stable across two
+   repositories.
+3. **Harness surface, concretely.** Markdown files in one conventional directory; a stdlib-only
+   package invoked as `python -m continuity`; **the exit code is the integration contract** (0
+   conforms, 1 mechanical violation, 2 bad invocation) plus `--json`. A harness that cannot run a
+   subprocess still gets the contract by reading the files. MCP and HTTP are named as possible later
+   adapters and forbidden as second sources of truth — as a requirement, since "pluggable" in a
+   design document has never stopped one appearing.
+4. **Checkable versus judgement.** The source's Step 5 checklist is 14 items
+   (`SKILL.md:288-310`, count confirmed). D4 classifies all 14 plus 8 rules the checklist does not
+   contain into `mechanical` / `heuristic` / `judgement`. The checker decides only the first, warns
+   on the second, and **never emits the third as a finding**. Item 9 — durable dead ends reached the
+   ledger — turns out fully mechanical and unchecked anywhere today: if `## Dead ends` is not
+   `None.` then `DEAD-ENDS.md` must appear in the commit range the handoff itself names. And a
+   requirement makes the blind spot loud: every run reports how many rules went unevaluated, so a
+   green exit code cannot be read as a verdict on quality.
+5. **Governance.** An ungoverned prototype that adopts its own contract from task 1 — its own
+   `.handoffs/` chain, its own `DEAD-ENDS.md`, its own checker run against both. No CI, no remote,
+   no reviewer but the operator, said plainly in the proposal and in D10. Dogfooding is not
+   governance; it is the only portability evidence available without a second user.
+
+### Two decisions the seed did not ask for
+
+- **D5 — a handoff is checked against the commit range it names, not against a working tree.** The
+  tree state at write time is unrecoverable, so anchoring to the range the handoff already records
+  (`SKILL.md:240-243`) is what makes a check re-runnable by someone who was not there. Consequence
+  stated rather than discovered later: a handoff whose iteration was left uncommitted has no range,
+  so those rules are **not-evaluable**, a first-class result distinct from pass. `--at-write-time`
+  exists for the session actually writing.
+- **D9 — the position file covers three fields and declines three.** The driver reads 6 of 18 keys
+  (`run-iteration.ps1:104,105,110,114,124,132`; 18 keys confirmed against a live state file). Three
+  are continuity, three are launch configuration, and the contract takes only the first three so a
+  later change cannot drift the kit into being a process launcher. Extra fields are permitted and
+  unchecked, because the real file carries `queue`, `purpose` and `limits` and a contract that
+  called those non-conforming would be wrong about a file that works.
+
+### Re-measured, and what moved
+
+Every seed figure this round leaned on was re-run against this worktree at `36fcff8`:
+
+| Claim | Result |
+|---|---|
+| `SKILL.md` 341 / `handoff.md` 336, 11 differing lines | exact — and now located: 4 `diff` hunks, `3c3`, `62c62`, `280c280`, `331,335d330` |
+| `resume` copies byte-identical | exact — `diff -q` silent, 127/127 |
+| `DEAD-ENDS.md` 260 lines, not shipped | exact |
+| `test_handoff_resume_templates.py` asserts substrings only | exact — 31 lines, four assertions per template, never compares the copies |
+| Step 5 checklist is 14 items | exact |
+| driver reads 6 of 18 `STATE.json` keys | exact |
+| 72 numbered handoff names ever tracked | **reproduces only under the narrower query.** `--all` gives 75; three of those appear only under `refs/t3/checkpoints/*`, a tool's checkpoint refs rather than branch history. `--branches --tags --remotes` gives exactly 72. |
+
+Two citations in my own draft were wrong and were corrected before commit: the split-directory rule
+is `resume/SKILL.md:39-40` and the numbering-gap rule `:41-43`, not `:39-41` and `:42-43`.
+
+### Not measured, and the proposal says so
+
+- The live chain: `.claude/handoffs/` is untracked as a whole (`.gitignore:182-183`), so only
+  `DEAD-ENDS.md` exists here.
+- **The ledger disagrees with itself about the chain's length** — `DEAD-ENDS.md:12` says "the
+  108-handoff chain", `:25` says "1,387 dead-end bullets across 193 handoffs", thirteen lines apart.
+  Neither is verifiable from here, so the three failure-mode counts are quoted **as the source
+  states them** and labelled as quotations, not re-measurements.
+- Whether the four diff regions actually express as two profiles — measured only that there are four
+  regions. Task 3.1 is written to fail loudly rather than fudge it.
+- Whether anyone else would use it. No market check; the run was forbidden to browse.
+- Anything needing a running process. Nothing was started.
+
+### Verification
+
+- `openspec validate --strict 2026-09-07-the-contract-and-a-checker-that-can-falsify-it` →
+  "Change ... is valid", exit 0, run in the new repository.
+- `openspec list` → the change, `0/33 tasks`.
+- Structural check run over both deltas: 17 requirements, 32 scenarios, and **SHALL on the first
+  physical line of every requirement body** — asserted by script, not by eye, because `--strict`
+  reads no further than that line.
+- `git remote -v` in `continuity-kit` → empty, checked before committing. Commit `a1e6946`,
+  `git status` clean.
+- **No AgentWeave product code was written in this iteration.** Only `.claude/autonomous/` files
+  change in this worktree, so no lint or test set applies here.
+- Nothing driven: no Hub, no agent turn, no web, per this run's limits. The checker described in
+  this proposal does not exist yet — nothing in it has been executed, and the proposal says so.
+
+### Next
+
+`next_action` is `S-6` — spec loop R2 for the continuity kit, independent, comparing the proposal
+against the real `handoff` / `resume` / `DEAD-ENDS.md` files rather than against R1's reasoning. The
+sharpest thing for R2 to attack is D1's acceptance test: R1 measured that the difference is 4
+regions but never checked that those regions are expressible as two profiles, and if they are not,
+the whole anti-fork mechanism changes shape.
