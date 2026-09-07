@@ -236,3 +236,104 @@ one change a night. **Every option in this document except (2) adds to the propo
 - `C:\Users\huida\Documents\projects\continuity-kit` — the P1 prototype, 7 commits, no remote.
 - `C:\Users\huida\Documents\projects\witness` — the overseer loop's product, 4 commits, no remote,
   six operator decisions outstanding.
+
+---
+
+# Correction pass — 2026-09-07, later the same evening
+
+A verification round re-derived every code-checkable claim above against the tree at `15ce482`.
+The market half of Part 1 is still unverified and this pass did not touch it — only the claims
+that name a file, a line, or a count in this repository.
+
+## What held
+
+`run-iteration.ps1:23-24` is the `ValidateSet`, exactly. `grade_probe` is at
+`checkpoint_generation.py:376-403`, exactly. The "LLM judge" attribution is real
+(`checkpoint_generation.py:12`). 44 tables. `checkpoint_policy.py` 242 lines, `spec_lifecycle.py`
+390, the two checkers 94 + 105 = 199. The 728-line figure decomposes correctly as 341 + 127 + 260
+and was right when measured — it is 824 today, because `DEAD-ENDS.md` grew to 356 in the session
+that wrote this document.
+
+## What was wrong
+
+- **"Three unarchived changes totalling ~91 tasks with zero implemented" — it is four changes and
+  127 tasks.** The missed one is `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`, 35
+  tasks, which merged to master at `2b4dce4` *in this same session, before this document was
+  committed at `35bffdc`*. Two boxes are ticked and neither is implementation (an R2 answer; a
+  pre-change baseline measurement). **The objection this document calls decisive was understated.**
+- **"`DEAD-ENDS.md` at 1,241 unique facts" — the file holds 91 bullets under 15 topic headings.**
+  1,241 is the count of deduped bullets *harvested from handoffs as input*, stated in DEAD-ENDS.md's
+  own header. Part 4 recommendation #5 restates the input volume as the artifact's size, overstating
+  the crown asset by 13×.
+- **"112 handoffs" and "193 handoffs" both appear here.** 113 exist on disk; 76 were ever tracked in
+  git. 193 is not reproducible and most likely counted across the seven worktrees since deleted.
+- **"Failed it 308 times" is pinned to a superseded commit.** That number is continuity-kit
+  `608d4cf`, whose own message says exactly 308. Two later commits added rules; the same reference
+  chain now yields **499 findings across 8 rules**. The conclusion — the checker works — is
+  unaffected.
+- "879 lines of PowerShell" is 877 across the four `.ps1` files.
+
+## What was missed
+
+### C1 — the loop-dashboard verdict was drawn against the wrong artifact
+
+Part 3 compares AgentLoop's dashboard to `.claude/loops/`, the *scripts*, and concludes "do not
+build it." But the Hub **already ships one**: `hub/hub/api/v1/loops.py` (list / detail / archive /
+`control`), a `LoopSummary` carrying label, agent, purpose, stop condition, ending state, queue
+counts, stop reason, open questions and firing history, and on the front end `api/loops.ts`,
+`LoopsIndexTab.tsx`, `LoopFiringGroup.tsx`, `loopCounts.ts`, plus `AccountingPanel` for cost and
+`QualityHealthPanel`.
+
+**Recommendation #4 therefore answers a question nobody was going to act on.** The live question is
+the delta between what already ships and what AgentLoop describes — and this document never asks it.
+
+### C2 — the agent-agnosticism test has already run in this repo, and failed
+
+`.agents/skills/` is a second, non-Claude skill tree of 37 skills. Of every skill present in both
+trees, **exactly two have drifted: `handoff` (173 differing lines) and `resume` (107)** — precisely
+the two nominated here as the most portable, zero-dependency, ship-as-is artifact. Every other
+shared skill is byte-identical.
+
+Those copies are 268/118 lines against 341/127, they are gitignored (`.gitignore:129`), and they
+contain **zero mentions of `DEAD-ENDS.md`** — they predate the 2026-09-04 ledger entirely. On the
+one non-Claude surface this repository maintains, the ledger does not exist.
+
+continuity-kit's README documents the *shipped-template* fork (336 vs 341, 11 lines) and misses this
+one, which is 15× larger and drops the ledger.
+`what-is-actually-separable.md:135` says a port "would be a good first test of whether the contract
+is really portable" — that test has been running in-tree since 2026-09-04 and its result was on disk
+the whole time. The shipped templates themselves are healthy: `resume.md` is byte-identical to the
+live skill, `handoff.md` differs on 11 lines and does carry the ledger.
+
+This is the finding that bites recommendation #2. It does not overturn "ship continuity-kit" — it
+prices it.
+
+### C3 — the `ValidateSet` is not the binding constraint
+
+`run-iteration.ps1` also accepts `-AgentExecutable`, which bypasses the PATH lookup entirely
+(lines 50-55). What actually pins the loop to two agents is the hardcoded two-branch invocation at
+**lines 245-258**: `claude` gets `-p … --permission-mode bypassPermissions`, `codex` gets
+`exec --ephemeral --cd … --sandbox`. Relaxing the `ValidateSet` — the obvious reading of the
+citation above — yields a run that invokes a third agent with Claude's flags. Cite 245-258.
+
+### C4 — `grade_probe`'s degeneration is mis-described, and is worse than described
+
+Stripping the Hub tables does not make it "compare empty set to empty set and pass everything."
+`expected` goes empty; `reported` does not. A reader that correctly names files lands entirely in
+`invented` (line 399) and the probe returns `failed`. The degenerate grader **passes only a reader
+that reports nothing and fails every reader that works** — an inversion, not a no-op — and it does
+not become an LLM judge, it becomes a vacuous one. The conclusion (unextractable) survives; the
+stated mechanism does not.
+
+## Net effect on Part 4
+
+| # | Recommendation | After this pass |
+|---|---|---|
+| 1 | Retire the harness ambition | Unchanged |
+| 2 | Ship `continuity-kit` as-is, no database | Stands, but C2 prices it — one drifted port already exists in-tree |
+| 3 | Hold `witness` pending `OV-1` | Unchanged |
+| 4 | Do not build the loop dashboard | **Rewrite.** C1: it is already built. The question is the delta, not the build |
+| 5 | The failure record is the uncopyable asset | Stands; the headline number is 13× too large |
+
+The overriding objection — oversupplied at the proposing end, starved at the building end — is
+**confirmed and stronger**: four changes, 127 tasks, two ticked, neither an implementation.
