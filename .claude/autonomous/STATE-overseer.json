@@ -8,11 +8,11 @@
     "worktree": "C:\\Users\\huida\\Documents\\projects\\AgentWeave-sidequest",
     "parent_branch": "autonomous/2026-09-07-daily",
     "stop_at": "2026-09-07T22:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-09-07-overseer-log.md",
     "review_page": ".claude/autonomous/2026-09-07-sidequest-review.html",
     "current": null,
-    "next_action": "T-3",
+    "next_action": "T-4",
     "queue": [
         {
             "id": "T-1",
@@ -30,9 +30,10 @@
         },
         {
             "id": "T-3",
-            "status": "pending",
+            "status": "done",
             "title": "Spec loop R3 -- re-derive again, and confront the enforcement question",
-            "detail": "Third pass, because unlike the continuity kit this proposal has a large body of existing code to be wrong about. Its specific job: the seed's hardest question, which R1 and R2 will both be tempted to defer. Recording is passive; GOVERNING is active, and on a harness you do not control the only levers are a gateway that can refuse, a tool-boundary hook that can refuse, or an after-the-fact report. Those are three different products with three different deployment stories. Establish which one the proposal actually commits to and make it say so in design.md. Also test the proposal against this repository's own stated principle -- the unasked-question backstop was retired 2026-08-20 because guessing intent from prose is a judgement the product should not make on the operator's behalf. An overseer that scores or judges agent behaviour runs straight into it."
+            "detail": "Third pass, because unlike the continuity kit this proposal has a large body of existing code to be wrong about. Its specific job: the seed's hardest question, which R1 and R2 will both be tempted to defer. Recording is passive; GOVERNING is active, and on a harness you do not control the only levers are a gateway that can refuse, a tool-boundary hook that can refuse, or an after-the-fact report. Those are three different products with three different deployment stories. Establish which one the proposal actually commits to and make it say so in design.md. Also test the proposal against this repository's own stated principle -- the unasked-question backstop was retired 2026-08-20 because guessing intent from prose is a judgement the product should not make on the operator's behalf. An overseer that scores or judges agent behaviour runs straight into it.",
+            "result": "witness at e2bb331. Assigned question settled and it needed a new decision: D3's 'after the fact' was covering two products, because the transcript is a LIVE append log -- a tool_use record readable on disk 0.114s and 0.202s after its own timestamp, by the command it describes. New D8: the first cut is a batch reader the operator runs, not a resident tailer; OV-1 does not authorise an unattended standing read, a forward-only tailer is the collector design D2 rejected, and the resident version's crash is silence indistinguishable from inactivity. Cost stated: no record outlives the harness's deletion window without something resident, so D8 and OV-3 are one decision (new OV-6). D4 tested AS WRITTEN and found to be intention rather than fence, twice: (1) completeness-report PERMITTED a per-agent completeness percentage -- over 14,701 assistant messages every fillable field is 100% on every model except reasoning text (haiku 407/1,022, opus 0/8,572, sonnet 0/5,094), so that figure ranks model choice on a page forbidding ranking; now per surface and per model, never per agent; (2) the 'operator writes the rules' sentence had no requirement behind it while the surface supplies 1,535 model-authored ai-title records to republish -- new author axis on every field, model-authored values counted apart and never reported, rules operator-only with none shipped and none model-evaluated. TWO MEASUREMENT CORRECTIONS: retroactivity has a floor -- 2,084 files/1.09GB spanning 2026-08-09 to today, 29 days, a cliff with zero files before it while >=51 earlier sessions are evidenced by committed handoffs, so 'retroactive' means to the HARNESS'S RETENTION WINDOW; and 169 delegated-agent transcripts sit at <session>/subagents/ carrying the PARENT's sessionId -- driven, keying on sessionId gives 1 actor with 545 turns, keying on the acting agent gives 9 with 370 turns (68%) delegated, so the requirement did not fail to prevent the misattribution, it prescribed it. R3 made the one-level-glob error itself first (1,915 vs 2,084). openspec validate --changes --strict passes."
         },
         {
             "id": "T-4",
@@ -51,7 +52,7 @@
         {
             "id": "OV-1",
             "question": "May Witness read the local Claude Code transcript corpus at all?",
-            "evidence": "~/.claude/projects/**/*.jsonl is 2,069 files and 985 MB of your real sessions, containing prompts, source code, tool arguments and plausibly credentials, complete and unredacted. Unlike every OTel surface (where content is off until five flags are set), there is no vendor-side default withholding anything. It is also the ONLY surface that is retroactive -- it covers sessions that ran before the tool existed, which is all 2,069 of them. There is no partial answer that keeps the retroactive property.",
+            "evidence": "~/.claude/projects/**/*.jsonl is 2,069 files and 985 MB of your real sessions, containing prompts, source code, tool arguments and plausibly credentials, complete and unredacted. Unlike every OTel surface (where content is off until five flags are set), there is no vendor-side default withholding anything. It is also the ONLY surface that is retroactive -- it covers sessions that ran before the tool existed, which is all 2,069 of them. There is no partial answer that keeps the retroactive property. [R3] Two corrections to what is being asked: the corpus is 2,084 files / 1.09 GB counted recursively (R1's 2,069 and R2's 2,095 were one-level counts) and INCLUDES 169 delegated-agent transcripts under <session>/subagents/ that an operator picturing 'my sessions' would not picture; and the question is TIME-SENSITIVE, because the corpus deletes on a rolling window (oldest surviving file 2026-08-09, at least 51 earlier sessions already gone), so 'yes, later' is not the same answer as 'yes'.",
             "blocks": "Every phase of tasks.md except phase 0."
         },
         {
@@ -62,7 +63,7 @@
         {
             "id": "OV-3",
             "question": "Retention period for the record store.",
-            "evidence": "A record that answers 'what did the agents do last quarter' must be kept for a quarter. That is a different risk profile from a debugging aid kept for a week."
+            "evidence": "A record that answers 'what did the agents do last quarter' must be kept for a quarter. That is a different risk profile from a debugging aid kept for a week. [R3] This is no longer only a risk-profile question: it determines the product's shape. A batch reader cannot keep a record past the harness's own deletion window; keeping more requires copying transcripts before deletion, which is a resident process. See OV-6."
         },
         {
             "id": "OV-4",
@@ -73,6 +74,12 @@
             "id": "OV-5",
             "question": "Does the name 'witness' survive?",
             "evidence": "Chosen because it commits the product to the passive posture -- a witness testifies to what it saw and is expected to say what it did not see. If a later round decides the product must enforce, the name must change too. Whether it collides with an existing project could not be checked offline."
+        },
+        {
+            "id": "OV-6",
+            "question": "Do you want a live mode, and would you run something resident to get it?",
+            "evidence": "Measured this round: the Claude transcript is written live -- a record was readable on disk 0.114s and 0.202s after its own timestamp. A tailer is therefore buildable and design D8 deliberately does not build it, because a process reading your transcripts unattended is a larger disclosure than OV-1 asks about. It is also the ONLY way to keep records past the harness's deletion window (measured at 29 days with a hard cliff), so this and OV-3 are one decision wearing two hats: 'nothing resident' and 'records older than the window' cannot both be had.",
+            "blocks": "design D8, and every task downstream of it if the answer is yes."
         }
     ],
     "limits": [

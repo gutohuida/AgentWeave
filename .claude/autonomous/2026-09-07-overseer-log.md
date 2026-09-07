@@ -296,3 +296,135 @@ named it. Any corpus size in a task or a spec is an output of a measurement, nev
 ### Repository state
 
 `C:\Users\huida\Documents\projects\witness` at `3d75aaa`, 12 files, no remote, clean tree.
+
+
+## Iteration 3 — T-3, spec loop R3
+
+**Started 19:34, finished 19:52.** Branch `autonomous/2026-09-07-sidequest` at `91eefd6` on entry,
+matching STATE. Witness at `3d75aaa`, clean. R3's assigned job: settle the enforcement question and
+test D3/D4 against the requirements *as written*.
+
+### The assigned question, and the measurement that reframed it
+
+R3 was told to establish which of three levers the proposal commits to — a gateway that can refuse, a
+tool-boundary hook that can refuse, or an after-the-fact report — and make `design.md` say so.
+
+D3 already said "after the fact, exclusively". The finding is that **the phrase was covering two
+different products**, and the measurement that shows it took two commands. The transcript is not a
+retrospective artefact: on R3's own live session file, a `tool_use` record was readable on disk
+**0.114 s** after its own timestamp, by the very Bash command that record describes, before that
+command produced output; repeated one call later, **0.202 s**, with the preceding `thinking` and
+`tool_result` records already present. The surface is a live append log.
+
+So "after the fact" spans a batch reader the operator runs and a resident tailer that watches, and
+those differ in deployment, in what they can see, in latency, and in disclosure. **New decision D8:
+the first cut is a command, not a daemon.** Three reasons, strongest first: OV-1 asks permission to
+read the corpus *when the operator runs it* and would be answered by a process reading it unattended
+— using a consent answer for a larger action than it described is exactly the failure this product
+exists to prevent; a forward-only tailer is the collector-shaped design D2 already rejected, coming
+back through another door; and the resident version has failure modes the batch one lacks entirely,
+including a crash whose silence is indistinguishable from inactivity.
+
+The cost is written next to the decision rather than left implied: **a batch reader cannot keep a
+record past the harness's deletion window**, so D8 and OV-3 are one decision wearing two hats. That
+is now a fifth item in `decisions_for_user`.
+
+One thing the latency measurement takes away: Witness can no longer say it is passive because it
+arrives too late to intervene. At 0.2 s it arrives in time. It is passive because the seam is
+deliberately not built — a position, now stated as one.
+
+### D4 tested as written, and it was intention rather than fence — twice
+
+**The report permitted the number D4 forbids.** `completeness-report` said a report MAY state each
+agent's *completeness percentage* while forbidding any ranking. Measured over a 220-file random
+sample, 14,701 assistant messages: every field the surface can fill is filled on **100%** of messages
+for every model — tokens, cache fields, service tier, session, cwd, branch, version, stop reason —
+with exactly one exception, reasoning text: **407 of 1,022 blocks on haiku-4.5, 0 of 8,572 on
+opus-5, 0 of 5,094 on sonnet-5**. The only field that varies, varies by model. A per-agent
+completeness percentage is therefore a ranking of model choice, handed to the reader by the page that
+forbids ranking. Completeness is now a property of a surface and a record, reported per surface and
+per model, and may not be attached to an agent identity.
+
+**D4's rules sentence had no requirement behind it, and the surface supplies a ready-made verdict.**
+Nothing said rules are operator-authored, that Witness ships none, or that a rule may not be
+evaluated by asking a model — so a default set named `unsafe-tool-use` would have violated nothing,
+which is AgentWeave's retired unasked-question backstop with a config file in front of it.
+Separately, a 250-file sample (37,837 records, 17 types) carries **1,535 `ai-title` records** and 44
+`classifierMetaLines` annotations: model-authored characterisations of a session that a reader would
+store as `measured` — the strongest claim this product can make — and a report would republish in
+Witness's own voice. The fix is not a provenance state, because the value genuinely was measured; it
+is a new **author** axis on every field, with model-authored values counted apart and never reported.
+
+### Two measurement corrections, one of which R3 committed itself first
+
+**Retroactivity has a floor, and it is the harness's.** R1: *"it covers sessions that ran before
+Witness existed — on this machine that is all 2,069 of them."* Measured: **2,084 files, 1.09 GB,
+spanning 2026-08-09 to today — 29 days**, 44 files on the oldest day and **zero before it**, a cliff
+with no taper, while at least **51 sessions ran earlier** (handoff files committed 2026-07-28 to
+08-07, one session minimum each, none of their transcripts surviving). Retroactive means *to the
+harness's retention window*. Neither settings file names a retention period, so the span is measured
+and the policy behind it is unverified — stated that way rather than rounded to "30 days".
+
+**169 delegated-agent transcripts sit one directory deeper, wearing the parent's name.**
+`<project>/<session>/subagents/agent-*.jsonl`: 5 project directories, 42 parent sessions, 13,632
+lines, 8,073 assistant messages, 2.77M output tokens — duplicated into the session file nowhere (0
+`isSidechain`-true records across a 23,433-line sample). R3's own first glob was one level deep and
+returned **1,915** files against a true 2,084: an 8% undercount that looked exactly like a
+measurement, caught only because the number was checked against a recursive count.
+
+The serious half is identity. A subagent record carries the **parent's** `sessionId`, so the existing
+requirement — *store that value as the session identifier* — is satisfied exactly while crediting the
+work to the wrong actor. Driven rather than argued, over one real session and its 8 delegated
+transcripts: keying on `sessionId` gives **1 actor holding 545 turns**; keying on the acting agent
+gives **9 actors**, of which **370 turns (68%) belong to delegated agents**. The requirement did not
+fail to prevent that failure — it prescribed it.
+
+### What changed in the change
+
+- `design.md`: new **D8**; `[R3]` amendments inside D2 (the floor), D3 (the two products), D4 (both
+  holes) and D6 (discovery depth); the closing section rewritten to record what each round attacked
+  and what a fourth should attack first.
+- `turn-record`: new requirement *a value a model authored is never stored as an observation*; new
+  scenario for delegated-agent records; the stale `11,583` figure replaced with R3's own
+  re-measurement (14,701 of 14,701).
+- `capture-surfaces`: new scenario for reporting past a surface's oldest observable record; new
+  scenario for enumeration depth, requiring per-depth counts so "found none" differs from "did not
+  look".
+- `completeness-report`: per-agent completeness forbidden, per-surface-per-model required; new
+  requirement *rules are the operator's, and no rule is evaluated by a model*.
+- `tasks.md`: 0.2 closed; eight tasks added (1.11, 1.12, 2.8, 2.9, 3.9, 4.5, 4.6, 5.5), 0.3 widened
+  to five decisions, 3.4 rewritten for enumeration depth, and "no resident process" added to the
+  non-goals.
+
+### R3's answer to the question R2 left it
+
+OV-1 and OV-2 remain the right questions and remain one question each: "everything except the
+frontier models' reasoning" is still every prompt, every tool argument and every file the agents
+read, so the corrected shape does not split them. Two things did change around OV-1 — its scope
+silently includes 169 delegated-agent transcripts an operator picturing "my sessions" would not
+picture, and it is now **time-sensitive**, because the corpus deletes on a rolling window and "yes,
+later" is not the same answer as "yes".
+
+### Verification
+
+- `openspec validate --changes --strict` → `1 passed, 0 failed`, run after the spec edits and again
+  after the last amendment.
+- Every number in this entry was produced by code run this iteration. R2's model split was re-derived
+  independently at corpus scale **and** observed live: this session (Opus 5) wrote 9 `thinking`
+  blocks, all `{signature, thinking, type}` with zero-length text.
+- The misattribution finding was driven, not reasoned: both keying strategies were run over real
+  files and the numbers above are that run's output.
+- Both repositories clean; `git remote -v` still empty in witness.
+
+### What R3 could not establish
+
+- The retention policy value. The 29-day span and the cliff are measured; no `cleanupPeriodDays`
+  appears in either settings file this session can read, and the default is not verifiable offline.
+- Whether `ai-title` and `classifierMetaLines` are produced locally or server-side. Either way they
+  are model-authored, which is all the requirement needs.
+- A live tailer's robustness in practice. F3 measured write latency, not the difficulty of following
+  the file; that is deferred with the resident mode D8 declines.
+
+### Repository state
+
+`C:\Users\huida\Documents\projects\witness` at `e2bb331`, 13 files, no remote, clean tree.
