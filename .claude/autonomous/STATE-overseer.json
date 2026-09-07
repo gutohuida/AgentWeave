@@ -1,0 +1,65 @@
+{
+    "purpose": "OVERSEER. A third spec loop the operator asked for on 2026-09-07, after the first two completed: a system that connects to any AI harness, records what the agents are doing, and provides metrics and governance over them. New sibling project folder, spec loop inside it. This window proposes; it implements only the optional final skeleton, and only inside the new folder.",
+    "playbook": "none -- one-off run. The queue below is the whole instruction. Round discipline is CLAUDE.md's.",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-07-sidequest",
+    "worktree": "C:\\Users\\huida\\Documents\\projects\\AgentWeave-sidequest",
+    "parent_branch": "autonomous/2026-09-07-daily",
+    "stop_at": "2026-09-07T22:00:00+01:00",
+    "iteration": 0,
+    "log_file": ".claude/autonomous/2026-09-07-overseer-log.md",
+    "review_page": ".claude/autonomous/2026-09-07-sidequest-review.html",
+    "current": null,
+    "next_action": "T-1",
+    "queue": [
+        {
+            "id": "T-1",
+            "status": "pending",
+            "title": "Spec loop R1 -- the overseer, in a new sibling folder",
+            "detail": "Read openspec/explorations/2026-09-07-an-overseer-for-any-harness.md FIRST. It is a seed: measurements to re-check, an honest assessment of the idea's risks, and questions you must ANSWER rather than inherit. Its central question is the one to settle before writing anything: is this a new product, or is it AgentWeave's Hub with the orchestration removed? The seed argues there IS a real distinction -- AgentWeave governs agents it spawns; an overseer governs agents it does not control -- but you must test that against the code rather than accept it. Your FIRST job is an inventory: what does AgentWeave already record, through what tables and what ingestion paths, and which of those are already reachable by a harness the Hub did not spawn. Then create the folder under C:\\Users\\huida\\Documents\\projects\\, `git init` LOCALLY with no remote, scaffold openspec inside, and write the proposal there -- not in AgentWeave. Name the project yourself; 'overseer' is a working title, not a decision."
+        },
+        {
+            "id": "T-2",
+            "status": "pending",
+            "title": "Spec loop R2 -- re-derive independently against AgentWeave's real recording layer",
+            "detail": "Not a re-read of R1. A fresh comparison against the code. For an extraction-adjacent proposal, R2's job is to compare it against THE THING IT DIFFERENTIATES FROM: read hub/hub/output_recording.py, the EventLog rows, the agent_outputs/runs/permission_requests/questions tables and the two compatibility self-report endpoints, and establish concretely how much of the proposed overseer AgentWeave already is. If the honest answer is 'most of it', say so -- that is a finding, not a failure, and it changes the proposal from a new product to a boundary question. Also check the seed's harness-capability table against anything in this repository that already parses or ingests a harness's output."
+        },
+        {
+            "id": "T-3",
+            "status": "pending",
+            "title": "Spec loop R3 -- re-derive again, and confront the enforcement question",
+            "detail": "Third pass, because unlike the continuity kit this proposal has a large body of existing code to be wrong about. Its specific job: the seed's hardest question, which R1 and R2 will both be tempted to defer. Recording is passive; GOVERNING is active, and on a harness you do not control the only levers are a gateway that can refuse, a tool-boundary hook that can refuse, or an after-the-fact report. Those are three different products with three different deployment stories. Establish which one the proposal actually commits to and make it say so in design.md. Also test the proposal against this repository's own stated principle -- the unasked-question backstop was retired 2026-08-20 because guessing intent from prose is a judgement the product should not make on the operator's behalf. An overseer that scores or judges agent behaviour runs straight into it."
+        },
+        {
+            "id": "T-4",
+            "status": "pending",
+            "title": "Append an overseer section to the existing review page",
+            "detail": "The operator reads ONE page. Append to .claude/autonomous/2026-09-07-sidequest-review.html rather than writing a second one, and while you are in there fix the header, which still says 'six iterations' and 'Eleven decisions' after S-10 made it eight and twelve. Same rules as before: self-contained, theme-aware, no external references, full wrapper kept. Say what each round CHANGED about the one before it; if a round changed nothing, say so. State plainly what could not be established without the open web or a running harness. Add the new decisions to the SQ series, continuing the numbering. Run scripts/drive/check_review_page.py and read its output rather than trusting its exit code."
+        },
+        {
+            "id": "T-5",
+            "status": "pending",
+            "title": "OPTIONAL -- the smallest runnable skeleton, and only if it can be driven",
+            "detail": "Only if T-4 is finished and more than 60 minutes remain before stop_at. The bar set by the continuity kit is the bar here: a skeleton that was DRIVEN against real data beat one that merely existed, because driving it produced a sixth failure mode and a spec defect nobody had reasoned their way to. So build only what can be pointed at something real and run -- this machine has a genuine corpus of agent activity in .claude/autonomous/*-log.md, driver logs, git history and scripts/drive/FINDINGS.md. Do NOT start a Hub, do NOT run an agent turn, do NOT touch AgentWeave product code. If nothing can be driven within the time, skip this item and say why rather than shipping an undriven skeleton."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "STAY IN THIS WORKTREE: C:\\Users\\huida\\Documents\\projects\\AgentWeave-sidequest, on branch autonomous/2026-09-07-sidequest. NEVER cd to C:\\Users\\huida\\Documents\\projects\\AgentWeave -- that checkout belongs to the daily cycle and its night window arms onto it at 22:55. Never commit, merge, rebase or push onto master or onto autonomous/2026-09-07-daily.",
+        "DO NOT WRITE ANYTHING UNDER spec-queue/. That is the daily loop's operator IPC and this run is outside that cycle. Do not touch STATE-day.json, STATE-night.json, or STATE-sidequest.json -- that last one is the completed run's record and overwriting it destroys it. This run's state file is STATE-overseer.json.",
+        "Do not start a Hub on any port. No drives against a Hub, no agent turns. Port 8000 is the operator's real usage; 8010 and 8011 are trial Hubs. T-5 drives a new local tool against files on disk, which is a different thing and is allowed.",
+        "Do not browse the open web. The seed carries harness-telemetry facts gathered by a session that COULD browse; treat them as data with citations to re-read only if you can do so offline, and label anything you cannot confirm as unverified rather than asserting it.",
+        "This window does NOT implement anything in AgentWeave. If you are editing hub/hub/ or src/agentweave/, stop. T-5 builds only inside the new sibling folder.",
+        "The new sibling folder gets `git init` and NO remote. Nothing outward-facing: no publish, no release, no PR, no issue, no force-push, no history rewriting. Push this worktree's own branch every iteration.",
+        "Every claim is measured or labelled unverified. The seed names its own weakest points; do not launder them into confidence.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed. This subject has more of them than either previous loop -- what data may be recorded is a policy question, not an engineering one.",
+        "Stage explicit paths, never `git add -A`. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under `py -3.11`, never bare `python`. black needs --target-version py311.",
+        "BEFORE STARTING ANY ITEM: if less than 60 minutes remain before stop_at, abandon the queue order and go straight to T-4, the review page. A page the operator can read is the deliverable.",
+        "A multi-line commit message goes through a heredoc in the Bash tool, or the PowerShell tool if @'...'@ is wanted. Mixing the two shells' quoting is silent.",
+        "core.autocrlf is true on this machine. A new repository needs a .gitattributes before any byte-comparison test, as the continuity kit found the hard way.",
+        "openspec: `openspec new change` refuses a name starting with a digit; `openspec validate --strict` reads only a requirement's FIRST PHYSICAL LINE for the modal, so SHALL goes on line 1."
+    ]
+}
