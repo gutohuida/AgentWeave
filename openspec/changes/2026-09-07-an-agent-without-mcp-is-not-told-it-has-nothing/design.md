@@ -29,6 +29,13 @@ reaching the plane over HTTP is no less constrained than one reaching it over MC
 constrained by `_decide` for that traffic. Moving the plane's front door does not move this
 boundary, weaken it, or bypass it.
 
+**Round 3 qualified the last sentence, and D9 is where the qualification lives.** All of the above
+is true about the *plane's* traffic. It is not true about the *run*: `_decide` is only consulted at
+all when the Hub injects its MCP server, and the Hub injects it only when the access path is
+`"mcp"` — the same variable this change is about. A run on the `cli` path has no `_decide` for
+anything, because it is launched under `acceptEdits` instead. Measured, in D9. So the boundary and
+the notice are not independent after all, and a reader who stops here would conclude they are.
+
 What *is* true, and belongs to the Copilot change as a stated obligation rather than a discovery:
 a harness with no `--permission-prompt-tool` analogue has **no** workspace boundary, because the
 boundary was never server-side. `_decide` is consulted voluntarily by a harness that chooses to
@@ -225,7 +232,124 @@ faithfully — which it does. Deliberately **not** folded in: removing them is p
 change, and mixing a two-requirement deletion into a delta about reachability would make both harder
 to review. It is in `proposal.md` under what this change does not do, and it goes to the operator.
 
-## D9. What would make this change wrong
+## D9. The access path also decides the run's permission posture — measured, and it changes D1
+
+Round 3 was sent to establish what happens to `mcp_server._decide`'s boundary for an agent with no
+MCP, and told that if the boundary simply vanishes the proposal must say so rather than ship a
+silently weaker adapter. It does not vanish silently. It is traded, deliberately, in a place neither
+earlier round looked — and the trade runs through the same variable this change is about.
+
+`access_path` is not only what the run is *told*. It decides whether the Hub injects its MCP server
+at all: `mcp_command` is set if and only if `access_path == "mcp"`
+(`hub/hub/api/v1/agent_trigger.py:1025-1028`). And `_build_claude_command` reads `mcp_command` to
+decide the run's permission posture, because the approver *is* an MCP tool
+(`hub/hub/runner_commands.py:219-222`, `:244-254`).
+
+**Measured** by calling `build_command` twice — a pure function, no Hub, no spawn:
+
+| | `access_path == "mcp"` | `access_path == "cli"` |
+|---|---|---|
+| `--mcp-config` | present | absent |
+| `--allowedTools` | `mcp__agentweave__*` | absent |
+| `--permission-prompt-tool` | `mcp__agentweave__approve_tool_call` | **absent** |
+| `--permission-mode` | `manual` (this repo's `workspace`) | **`acceptEdits`** |
+
+`workspace` is `manual` plus the Hub answering each request against `AW_WORKSPACE_DIR` in `_decide`.
+`acceptEdits` has no path check at all, and the repository's own comment says so in as many words:
+`workspace` "is *narrower* than `acceptEdits`, which accepted every edit with no path check at all"
+(`hub/hub/runner_commands.py:66-67`). The fallback is not an oversight — `runner_commands.py:69-73`
+argues for it explicitly, on the ground that naming an approver nothing can answer refuses
+everything, which is the failure `acceptEdits` was introduced to end. It is a considered trade.
+
+**What it changes here.** `D1` states that "an agent reaching the plane over HTTP is no less
+constrained than one reaching it over MCP: neither is constrained by `_decide` for that traffic."
+That sentence is true about *plane traffic* and misleading about the *run*. `_decide` never guarded
+the plane; but a run on the `cli` access path has no `_decide` at all, for anything — its file and
+shell tools are unchecked. So this change's §1 makes an agent able to mutate shared state through
+the plane precisely on the path where its own filesystem is least contained. That is not an argument
+against §1: the agent already holds the credential, so §1 discloses capability rather than granting
+it, and the posture is decided by a different mechanism that §1 does not touch. But it must be
+*said*, because a reviewer reading D1 alone would conclude the two are unrelated, and they share a
+variable.
+
+**And it makes the mirror worse than a wording defect.** In the deployment this change exists for —
+runner `claude`, MCP blocked by company policy, `hub_client` unset — `resolve_access_path` returns
+`"mcp"`, so the Hub emits `--permission-prompt-tool mcp__agentweave__approve_tool_call` naming a tool
+that harness will not provide. The consequence is not this round's inference; it is the code's own,
+written at `hub/hub/runner_commands.py:245-248`: "naming an approver that will not be there makes
+every tool call fail, which the model reports as a broken approval system." If that comment is
+right, such a run is not merely misinformed about its tools — it may be unable to edit a file or run
+a command at all, and the operator sees an agent complaining about a broken approval system.
+
+That is measured only as far as source can carry it: the flag is emitted, and the repository states
+what emitting it without an answerer does. **Whether Claude in fact refuses every call when its
+`--permission-prompt-tool` names an absent MCP tool is a drive question, and this window may not
+drive.** `tasks.md` §6.5 carries it. It is recorded here because it changes what the mirror is: not
+a false sentence in a prompt, but plausibly a run that cannot work, on the only configuration the
+operator's constraint produces.
+
+**And it puts a condition on D7's mechanisms.** Each of the three changes the posture as a side
+effect, and none of them says so:
+
+- restoring the probe would flip runs to `cli`, which removes `--mcp-config`, the approver, and the
+  workspace check together;
+- making `hub_client` an operator-visible setting means an operator ticking "my harness has no MCP"
+  also widens their agents' filesystem permissions, from a control that says nothing about
+  permissions;
+- describing both paths leaves the posture where it is and is the only one that does not move it.
+
+So the requirement gains a scenario: what a run is *told* may change without silently changing what
+it is *permitted to do*. The delta states it; the mechanism still belongs to the implementing
+window, but it can no longer be chosen without noticing this.
+
+## D10. Two things round 2 asserted, checked — one holds, one does not
+
+**Round 2's central measurement reproduces exactly.** Importing `hub.launchability`, patching
+`probe_mcp_registered` to `False` as `conftest.py` does, and calling `resolve_access_path` returns
+`mcp` / `mcp` / `cli` / `mcp` for `hub_client` of `None` / `'mcp'` / `'cli'` / `'auto'`, and `mcp`
+for a `codex` runner. The `cli` notice reads exactly as `proposal.md` quotes it. Round 3 re-ran it
+rather than believing it, and it holds.
+
+**Restoring the probe is self-defeating, and D7 offered it first.** `probe_mcp_registered`
+(`hub/hub/launchability.py:207-234`) shells a *separate* invocation, `[cli, "mcp", "list"]`, with no
+`--mcp-config`, and asks whether the string `agentweave` appears in its output. The server this
+change cares about is injected by the Hub **on the turn's own command line**
+(`runner_commands.py:231-241`), per invocation. A separate `mcp list` process cannot see it: it can
+only report servers the operator registered by hand. So a restored probe would report `False` for
+essentially every Hub-injected run, resolve the path to `cli`, and thereby stop the injection it was
+asked about — the probe would make its own answer true, and every `claude` run would lose the
+workspace posture (D9) as well.
+
+`tasks.md` §4.2 already says to verify what `mcp list` reports on a policy-blocked harness before
+relying on it. That is necessary and not sufficient: even on a *permitted* harness the probe answers
+the wrong question. The question is not "is a server registered" but "will this harness honour the
+server we are about to inject", and `mcp list` does not answer it on either kind of machine. Whether
+`claude mcp list` reports a `--mcp-config` server at all cannot be settled here — no drive, no web —
+but it does not need to be: the probe runs a process that was never given the config.
+
+**Round 2 undercounted the tests shaped by the removed probe.** It wrote that "the only references
+left are two tests". There are three files. The third is `hub/tests/test_launchability.py:390-429`,
+a whole `TestAccessPath` class under a docstring stating that the access path "is probed per runner
+rather than assumed — `hub_client` becomes the operator's explicit override, honored ahead of any
+probe". Nothing is probed. Two of its tests are the same `F190` shape as the one round 2 named:
+
+- `test_explicit_override_wins_without_probing` (`:406-413`) patches the probe to raise and asserts
+  an override is honoured. Nothing calls the probe under *any* input, so "without probing" is
+  trivially true whether or not an override is given — the guard cannot fail.
+- `test_auto_override_is_treated_as_unset_and_probes` (`:421-423`) says "and probes" in its name,
+  patches the probe to `True`, and asserts `mcp`. Patching it to `False` would pass identically.
+
+One test in the class is honest and worth keeping: `test_injectable_runner_needs_no_global_registration`
+(`:424-429`) patches the probe to `False` and asserts `mcp` anyway, which is exactly the
+post-`d279d22` behaviour and the only place it is pinned. And the two `probe_mcp_registered` unit
+tests below it test a function with no production caller — correct about the function, evidence
+about nothing that runs.
+
+`tasks.md` §4.4 and §4.5 named `conftest.py` and `test_agent_trigger.py`; §4.7 now names this class
+too, and §4.4's instruction to check whether any test was written believing conftest's docstring has
+its first answer.
+
+## D11. What would make this change wrong
 
 - Rendering an HTTP capability description that drifts from the tools. Mitigated by putting it
   behind `test_tool_surface_matches_server.py` rather than beside it (D3).
@@ -237,3 +361,10 @@ to review. It is in `proposal.md` under what this change does not do, and it goe
 - Fixing the `cli` branch alone and calling the operator's deployment served. That branch is not the
   one their runs take (D7). Round 2 added the mirror for this reason, and it is the finding most
   likely to be lost if a later window trims scope.
+- Choosing a §4 mechanism as a notice-wording decision. Each of the three moves the run's permission
+  posture as a side effect, because the approver is itself an MCP tool (D9). A change that made the
+  notice truthful and quietly swapped `workspace` for `acceptEdits` on every `claude` run would be a
+  net loss, and nothing in the delta before round 3 would have caught it.
+- Restoring the probe because D7 listed it first. It answers "is a server registered", and the
+  server in question is injected on the command line of the very invocation being launched (D10).
+  It cannot see it, and acting on its answer removes the injection.

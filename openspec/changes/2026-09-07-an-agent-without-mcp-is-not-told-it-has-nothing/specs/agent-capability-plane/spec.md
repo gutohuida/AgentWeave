@@ -55,6 +55,20 @@ and it is the more likely of the two to be met, because it is what an unconfigur
 An explicit statement by the operator about a run's access path remains authoritative. This
 requirement governs what the system asserts on its own, not what it is told.
 
+Correcting what a run is told must not quietly change what that run may do. The access path decides
+more than the wording of a notice today: it decides whether the tool-protocol server is provided at
+all, and therefore whether the run's file and shell requests are checked against its workspace or
+accepted without a path check. A run moved from one description to a truer one, and thereby from a
+checked posture to an unchecked one, has been made less safe by a change about honesty. The
+containment a run gets is the operator's to decide, and it is decided separately from what the run
+is told.
+
+#### Scenario: A truer description does not silently widen permission
+
+- **WHEN** the system changes which access path it attributes to a run
+- **THEN** the containment applied to that run's own file and shell actions is not changed as an
+  undeclared consequence of that attribution
+
 #### Scenario: No grounds means no assertion
 
 - **WHEN** a turn begins and the system has no grounds to believe the run's harness will offer the

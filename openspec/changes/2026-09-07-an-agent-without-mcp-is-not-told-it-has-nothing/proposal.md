@@ -228,8 +228,8 @@ same defect as being told you lack one you do, and correcting the `cli` branch d
 documented remedy is reachable only by editing session-sync JSON.
 
 `probe_mcp_registered` (`hub/hub/launchability.py:207-234`) survived that removal with **no
-production caller**. The only references left are two tests, and both are now shaped by a fact that
-is no longer true:
+production caller**. The references left are three test files — round 2 said two and round 3 found
+the third — and they are shaped by a fact that is no longer true:
 
 - `hub/tests/conftest.py:496-507`, an autouse fixture that patches the probe to `False` under a
   docstring stating this gives "every test ... the `cli` access path unless it explicitly overrides
@@ -240,6 +240,10 @@ is no longer true:
   fixture defaults the probe to False". Nothing probes, so the raise cannot fire; and with no
   override the result would be identical, so the assertion cannot distinguish the branch it names.
   It passes for reasons its own docstring denies.
+- `hub/tests/test_launchability.py:390-429`, found by round 3. A whole `TestAccessPath` class under
+  a docstring stating the path "is probed per runner rather than assumed", holding two more tests of
+  the same shape: one guards against a probe call that cannot happen for any input, the other has
+  "and probes" in its name and passes identically with the probe patched either way.
 
 That is the shape `CLAUDE.md` records as `F190`: a green test covering behaviour that can no longer
 fire.
@@ -292,6 +296,90 @@ the wording.
 
 **Noted and left out of scope.** The two retired requirements still in the capability's own
 current-behaviour document.
+
+## What round 3 changed
+
+Round 3 compared the argument against the code a third time, independently, and was sent at two
+targets: whether every mutating agent-facing route really depends on the run credential, and what
+becomes of the permission boundary in `mcp_server._decide` for an agent with no MCP.
+
+**The first target held, and strengthens the premise.** `get_agent_actor`
+(`hub/hub/agent_auth.py:40-80`) accepts nothing but a credential beginning `aw_run_` that hashes to
+the `capability_token_hash` of a `Run` whose status is `running` and whose recorded instance is this
+Hub. An operator's `aw_live_` key cannot satisfy it — it fails on the prefix, before any lookup. All
+32 routes in `hub/hub/api/v1/agent_actions.py` take that dependency, no other module imports it, and
+a scan of every `POST`/`PUT`/`PATCH`/`DELETE` under `hub/hub/api/v1/` found no mutating route
+without an authentication dependency. The plane has one door and one key.
+
+And the key is the one the agent already holds. `_hub_request`
+(`hub/hub/mcp_server.py:151-183`) — the single helper every MCP tool goes through — authenticates
+with `os.environ["AW_RUN_TOKEN"]` (via `_bound_token`, `:69-77`) against
+`os.environ["HUB_URL"] + "/api/v1/agent-actions"`. So the adapter is, literally, a wrapper around
+the two environment variables the notice tells the agent it has nothing to do with. Neither earlier
+round stated this, and it is the shortest proof of this change's premise: the MCP path's own
+implementation is the HTTP path.
+
+**The second target did not hold, and it changed the design.** `_decide` does not vanish silently
+for a run without MCP. It is traded — and the trade runs through the same variable this change is
+about, which both earlier rounds treated as independent of it.
+
+`mcp_command` is set **if and only if** the access path is `"mcp"`
+(`hub/hub/api/v1/agent_trigger.py:1025-1028`), and the approver is itself an MCP tool, so
+`_build_claude_command` reads `mcp_command` to choose the run's permission posture
+(`hub/hub/runner_commands.py:219-222`, `:244-254`). Measured by calling `build_command` twice, a
+pure function with no Hub and no spawn: the `"mcp"` path yields `--mcp-config`, `--allowedTools
+mcp__agentweave__*`, `--permission-prompt-tool mcp__agentweave__approve_tool_call` and
+`--permission-mode manual`; the `"cli"` path yields **no approver at all** and
+`--permission-mode acceptEdits`.
+
+So a run on the `cli` access path has no `_decide` for anything — not merely for plane traffic. The
+repository's own comment says what that costs: `workspace` "is *narrower* than `acceptEdits`, which
+accepted every edit with no path check at all" (`hub/hub/runner_commands.py:66-67`). The fallback is
+deliberate and argued (`:69-73`), not an oversight. But it means this change's §1 makes an agent
+able to mutate shared state through the plane on exactly the path where its own filesystem is least
+contained, and it means the mechanism chosen in §4 moves a run's containment as a side effect of
+deciding what the run is told. `design.md` D9 records it; the delta gains one scenario — a truer
+description does not silently widen permission — and `tasks.md` gains §4.8.
+
+**And the mirror may be worse than a false sentence.** In the deployment this change exists for —
+`claude`, MCP blocked by policy, `hub_client` unset — the path resolves to `"mcp"`, so the Hub emits
+`--permission-prompt-tool mcp__agentweave__approve_tool_call` into a harness that will not provide
+that tool. `hub/hub/runner_commands.py:245-248` states the consequence in its own words: "naming an
+approver that will not be there makes every tool call fail, which the model reports as a broken
+approval system." If that comment is right, such a run cannot edit a file or run a command. **This
+is the repository's own prediction and it has never been driven** — `tasks.md` §6.5 makes reading
+the run's tool calls, not only its prose, part of the drive.
+
+**Two corrections to round 2.**
+
+*The probe cannot be restored as it stands, and `design.md` D7 listed that first.*
+`probe_mcp_registered` shells a **separate** `[cli, "mcp", "list"]` process with no `--mcp-config`.
+The server this change is about is injected on the turn's own command line, per invocation. A
+separate process cannot see it. A restored probe would therefore answer `False` for essentially
+every Hub-injected run, resolve the path to `cli`, and thereby remove the injection it was asked
+about — making its own answer true, and taking the workspace posture with it. `tasks.md` §4.2 said
+to check what `mcp list` reports on a policy-blocked harness; that is still worth doing and is not
+enough, because the probe asks the wrong question on a permitted harness too. What is unverifiable
+here is only the exact output of `claude mcp list`; that the probe runs a process never given the
+config is a source reading.
+
+*There are three files shaped by the removed probe, not two.* Round 2 wrote that the only remaining
+references were `conftest.py` and `test_agent_trigger.py`. `hub/tests/test_launchability.py:390-429`
+is a third: a `TestAccessPath` class whose docstring states the path "is probed per runner rather
+than assumed", containing two more tests of the `F190` shape —
+`test_explicit_override_wins_without_probing` (`:406-413`) guards against a call that cannot happen
+for any input, and `test_auto_override_is_treated_as_unset_and_probes` (`:421-423`) passes
+identically with the probe patched either way. One test in the class is honest and load-bearing:
+`test_injectable_runner_needs_no_global_registration` (`:424-429`) is the only place the current
+unconditional behaviour is pinned. `tasks.md` §4.7 names them.
+
+**Re-measured and unchanged.** Round 2's central measurement reproduces exactly:
+`resolve_access_path` returns `mcp` / `mcp` / `cli` / `mcp` for `hub_client` of `None` / `'mcp'` /
+`'cli'` / `'auto'`, and `mcp` for `codex`, with the probe patched `False` as `conftest.py` patches
+it; the `cli` notice is word for word as quoted above. `_decide`'s first branch does allow
+`mcp__agentweave__*` outright (`hub/hub/mcp_server.py:908-909`), so round 1's decision to move it to
+the Copilot change stands on its own terms — with D9's qualification that the *run's* boundary and
+the notice share a variable even though the *plane's* does not.
 
 ## Not verified here
 

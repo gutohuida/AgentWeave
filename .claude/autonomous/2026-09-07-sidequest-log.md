@@ -305,3 +305,129 @@ live run's credential, and whether any *other* router exposes a mutating agent-f
 that prefix. R3 should also check the two things R2 asserted and did not prove: that
 `probe_mcp_registered`'s `<cli> mcp list` would in fact report a policy-blocked server as absent,
 and that no test outside the two named ones was written believing conftest's false docstring.
+
+---
+
+## Iteration 3 — S-3, spec loop R3: the access path decides the posture, not just the notice
+
+State verified before starting: branch `autonomous/2026-09-07-sidequest`, head `e1bf932`, parent
+`8ee61b1`, clean tree. All match `STATE-sidequest.json`. Nothing to reconcile.
+
+**Changed:** `proposal.md`, `design.md`, `tasks.md` and the `agent-capability-plane` delta of
+`openspec/changes/2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`.
+`openspec validate --strict` passes. No product code touched.
+
+### Target (a) — the run credential is the plane's only key. Confirmed, and it sharpens the premise.
+
+`get_agent_actor` (`hub/hub/agent_auth.py:40-80`) accepts nothing but a credential prefixed
+`aw_run_` that hashes to the `capability_token_hash` of a `Run` with `status == "running"` and a
+matching instance id. An operator `aw_live_` key fails on the prefix before any lookup. Measured
+three ways: all 32 `agent_actions` routes carry `Depends(get_agent_actor)` (parsed, not eyeballed —
+0 without); no module outside `agent_actions.py` imports it; and a scan of every
+`POST`/`PUT`/`PATCH`/`DELETE` decorator under `hub/hub/api/v1/` found no mutating route lacking an
+auth dependency (four apparent hits were my scanner mis-parsing multi-line decorators — each was
+read and each has `get_project` or `get_agent_actor`).
+
+The part neither earlier round said: `_hub_request` (`hub/hub/mcp_server.py:151-183`), the one
+helper every MCP tool goes through, authenticates with `os.environ["AW_RUN_TOKEN"]` against
+`os.environ["HUB_URL"] + "/api/v1/agent-actions"`. **The adapter is literally a wrapper around the
+two environment variables the notice tells the agent it has nothing to do with.** That is the
+shortest proof of this change's premise available, and it is one import away.
+
+### Target (b) — the boundary does not vanish. It is traded, through this change's own variable.
+
+R3 was told that if `_decide`'s boundary simply disappears for a no-MCP agent, the proposal must say
+so rather than ship a silently weaker adapter. It does not disappear. What it does is worse for the
+argument: **`design.md` D1's claim that the notice and the boundary are unrelated is wrong, because
+they share a variable.**
+
+`mcp_command` is set **iff** `access_path == "mcp"` (`agent_trigger.py:1025-1028`). The approver is
+itself an MCP tool, so `_build_claude_command` reads `mcp_command` to pick the posture
+(`runner_commands.py:219-222`, `:244-254`). **Measured** by calling `build_command` twice — a pure
+function, no Hub, no spawn:
+
+| | `"mcp"` | `"cli"` |
+|---|---|---|
+| `--mcp-config` | present | absent |
+| `--allowedTools` | `mcp__agentweave__*` | absent |
+| `--permission-prompt-tool` | `mcp__agentweave__approve_tool_call` | **absent** |
+| `--permission-mode` | `manual` (this repo's `workspace`) | **`acceptEdits`** |
+
+So a run on the `cli` path has no `_decide` at all — not merely none for plane traffic. The repo's
+own comment prices it: `workspace` "is *narrower* than `acceptEdits`, which accepted every edit with
+no path check at all" (`runner_commands.py:66-67`). The fallback is deliberate and argued
+(`:69-73`), so this is a considered trade, not a bug — but §1 of this change makes an agent able to
+mutate shared state through the plane on exactly the path where its filesystem is least contained,
+and each of D7's three mechanisms moves a run's containment as a side effect of deciding what the
+run is *told*. An operator ticking "my harness has no MCP" would widen their agents' file
+permissions from a control that says nothing about permissions.
+
+**The delta therefore gains one scenario** — *a truer description does not silently widen
+permission* — stated as a property about containment not changing as an undeclared consequence of
+attribution. `design.md` D9 carries the measurement; `tasks.md` §4.8 carries the obligation.
+
+### And the mirror may not be a wording defect at all
+
+In the deployment this change exists for — `claude`, MCP blocked by policy, `hub_client` unset — the
+path resolves to `"mcp"`, so the Hub emits `--permission-prompt-tool
+mcp__agentweave__approve_tool_call` into a harness that will not provide that tool.
+`runner_commands.py:245-248` states the consequence in its own words: *"naming an approver that will
+not be there makes every tool call fail, which the model reports as a broken approval system."*
+
+If that comment is right, such a run cannot edit a file or run a command — it is not an agent
+misinformed about its tools, it is a run that cannot act. **That is the repository's own prediction
+and it has never been driven.** Labelled unverified; `tasks.md` §6.5 now says to read the run's tool
+calls, not only its prose, and §4.9 says to establish it before choosing a mechanism.
+
+### Two corrections to round 2
+
+**1. Restoring the probe is self-defeating, and D7 listed it first.** `probe_mcp_registered` shells
+a **separate** `[cli, "mcp", "list"]` process with no `--mcp-config`. The server in question is
+injected on the turn's own command line, per invocation. A separate process cannot see it. So a
+restored probe answers `False` for essentially every Hub-injected run, resolves the path to `cli`,
+and thereby removes the injection it was asked about — making its own answer true, and taking the
+workspace posture with it (D9). §4.2 previously said to check what `mcp list` reports on a
+policy-blocked harness; still worth doing, still not enough, because the probe asks the wrong
+question on a *permitted* harness too. Only the exact output of `claude mcp list` is unverifiable
+here; that the probe runs a process never given the config is a source reading.
+
+**2. Three test files, not two.** R2 wrote that the probe's only remaining references were
+`conftest.py` and `test_agent_trigger.py`. `hub/tests/test_launchability.py:390-429` is a third — a
+`TestAccessPath` class whose docstring says the path "is probed per runner rather than assumed",
+holding two more `F190`-shaped tests: `test_explicit_override_wins_without_probing` (`:406-413`)
+guards against a probe call that cannot happen for *any* input, and
+`test_auto_override_is_treated_as_unset_and_probes` (`:421-423`) has "and probes" in its name and
+passes identically with the probe patched `True` or `False`. One test in the class is honest and
+load-bearing — `test_injectable_runner_needs_no_global_registration` (`:424-429`) is the only place
+the current unconditional behaviour is pinned, and §4.1's mechanism must update it deliberately.
+`tasks.md` §4.7 names all of them. This is also the first answer to §4.4's standing question of
+whether any test was written believing conftest's false docstring: yes, in a different file.
+
+### Re-measured and held
+
+R2's central measurement reproduces exactly: with the probe patched `False` as `conftest.py` patches
+it, `resolve_access_path('claude','claude',…)` returns `mcp` / `mcp` / `cli` / `mcp` for `None` /
+`'mcp'` / `'cli'` / `'auto'`, and `mcp` for `codex`; `access_path_notice('cli')` is word for word as
+the proposal quotes it. `_decide`'s first branch allows `mcp__agentweave__*` outright
+(`mcp_server.py:908-909`), so R1's decision to move it to the Copilot change stands — with D9's
+qualification attached.
+
+### Verification
+
+`openspec validate --strict` passes. Two measurements executed under `py -3.11` against the source
+tree: `resolve_access_path` / `access_path_notice`, and `build_command` for both access paths. No
+product code changed — `git status` shows four openspec markdown files and nothing else — so no
+suite run and no lint set applies (`ruff`/`black`/`mypy` cover `src/`, `hub/`, `tests/`; the
+TypeScript set covers `hub/ui`, untouched). Nothing was driven: no Hub started, no agent turn, no
+web, per this run's limits.
+
+### Next
+
+The first spec loop is complete at three rounds. `next_action` is `S-4` — decide the extraction
+candidate set from `openspec/explorations/2026-09-07-what-is-actually-separable.md`, answer its
+question 1 (are P1 and P2 one project or two), and create the sibling folders under
+`C:\Users\huida\Documents\projects\` with `git init` and no remote.
+
+One new item for the operator: whether `hub_client: cli` should keep meaning `acceptEdits`. Today
+the product's own advice for "MCP is blocked by company policy" (`config.py:714`) lands an operator
+on a path with no workspace check, and nothing tells them.
