@@ -20845,6 +20845,14 @@ failures in 54 completed `ci.yml` runs across all branches, 2026-09-07T00:00Z ->
 = 20.4%, and every one of those 11 is this defect -- CI redness currently has exactly one cause.
 The occurrence count is corrected from 8 to at least 22, earliest 2026-09-04T22:02Z. Method,
 denominators and the per-run classification are in the final section.**
+**The instrument fired 2026-09-08 (occurrence #9, run `34205295463`, sha `66861a4`) and both new
+halves came back negative: `sqlalchemy.pool` logged no error all session, and the single connection
+still holding an open sqlite3 handle at failure was the one that had just attempted the DROP -- the
+victim, not the holder. That kills d1a's silent-discard hypothesis. It does NOT establish that no
+suite connection held the file, because `_f292_ever_seen()` is sampled once at report time, thirty
+seconds (a whole `busy_timeout`) after the DROP began; the holder had that long to close and be
+collected. Read the last two sections: the next step is to sample ever-seen at every stage, not to
+conclude from this one.**
 
 **Narrowed 2026-09-05 (day D-6), by a control run for a different finding.** Still open, still not
 reproduced from the suite itself, but the space of mechanisms is smaller than it was this morning.
@@ -21591,6 +21599,98 @@ occurrences.**
 this iteration CI for `66861a4` was still `in_progress`, and the two commits after it had not
 started. The first instrumented occurrence is still ahead, and reading it outranks re-deriving this
 rate.
+
+### Ninth occurrence — the instrument fired, and it named the victim rather than the holder
+
+`34205295463` / job `101993257049`, sha `66861a4` (the instrument's own commit), branch
+`autonomous/2026-09-08-daily`, 2026-09-08T08:50:07Z. `hub-test` the only failing job; same test
+(`test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn`), same statement
+(`DROP TABLE requirement_drift`), same `sqlite3.OperationalError: database is locked`. **The report
+printed, in full, and both new halves came back negative.** Verbatim:
+
+```
+  [before dispose] pool.status()='Pool size: 5  Connections in pool: 0 Current Overflow: -5 Current Checked out connections: 0'
+  [before dispose] registry: no connection checked out
+  [before drop_all] pool.status()='Pool size: 5  Connections in pool: 0 Current Overflow: -5 Current Checked out connections: 0'
+  [before drop_all] registry: no connection checked out
+  [at failure] pool.status()='Pool size: 5  Connections in pool: 1 Current Overflow: -4 Current Checked out connections: 0'
+  [at failure] registry: no connection checked out
+  pool log: `sqlalchemy.pool` logged NO error this session.
+  ever-seen: 506 connection(s) recorded, 495 already collected, 1 with an OPEN sqlite3 handle
+  ever-seen: last checked out by tests/test_flow_fires_a_review_turn.py::test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn [task: Task-24988 running _wrap_asyncgen_fixture.<locals>._asyncgen_fixture_wrapper.<locals>.setup]
+  ever-seen:     sqlite3 handle OPEN, idle, worker thread alive, _running=True
+```
+
+**The single open connection is the one that attempted the DROP — the victim, not the holder.**
+Three lines agree on this and none of them needed to be assumed: `pool.status()` at failure counts
+one connection *in* the pool and none checked out; the registry is empty; and the label names the
+current test's own fixture setup. The `except` block sits outside `async with engine.begin()`, so by
+the time the report is written the failed transaction has rolled back and its connection has been
+checked back in — open, idle, healthy. Nothing else this process opened still held the file.
+
+**What that legitimately rules out.** The `sqlalchemy.pool` negative is *not* the structural kind
+that narrowed the registry claim on 2026-09-08 (d1a). `_PoolErrorRecorder` records continuously from
+import, keeps records across tests, and prints them only on the failure path — so "logged NO error
+this session" rules out every path where SQLAlchemy gave up on a connection and left its SQLite
+handle open: `_close_connection` (`pool/base.py:377`), `_finalize_fairy` (`:1008`, `:1031`). Nothing
+else writes there. **d1a's hypothesis — the silent discard through aiosqlite's `has_terminate`
+`stop()` — predicted an error on that logger or a `_running=False, _connection is not None`
+signature, and neither appeared.** The 495-of-506 collected count says the pool's connections are in
+fact being closed, and the closed ones are being reclaimed.
+
+**One candidate eliminated by reading, cheaply.** `hub/hub/scheduler.py:2367` `_get_sync_engine()`
+builds a **second, synchronous** engine (`sqlite://`, plain `sqlite3` driver) on the *same file* for
+APScheduler's `SQLAlchemyJobStore` — a connection from it would be structurally invisible to this
+instrument, which listens on `engine.sync_engine` only. (Checked rather than assumed: APScheduler
+3.11.2's `SQLAlchemyJobStore.shutdown()` *is* `self.engine.dispose()`, and `BaseScheduler.shutdown()`
+reaches it, so the engine is disposed on an orderly shutdown. An earlier draft of this paragraph
+claimed it was never disposed; that was wrong.) It is not F292's holder in CI: nothing in `hub/tests/` calls `JobScheduler.start()` (the two
+F292 files call `_fire_job_internal` directly), and `create_engine` opens nothing until used.
+`ASGITransport` does not run the lifespan, so app startup does not reach it either. **It remains a
+production concern and is filed as one; it is not this.**
+
+### The limitation that blunts this negative — and this is the second time
+
+`_f292_ever_seen()` is computed **once, at report time**. `_f292_snapshot()` carries only
+`pool.status()` and the checked-out registry, so the `[before dispose]` and `[before drop_all]`
+lines say nothing about connections that are no longer checked out. The report is written *after*
+`PRAGMA busy_timeout=30000` has expired — so **the holder had a full 30 seconds to close its handle
+and be garbage-collected before the only sampling that could have seen it.** A suite-engine
+connection that held the file when the DROP began and closed during the wait produces exactly the
+output above, indistinguishably from no holder at all.
+
+So the honest statement of occurrence #9 is **"no holder thirty seconds after the fact"**, not "no
+holder". The pool-log half is unaffected (it is continuous); the ever-seen half is sampled late.
+This is the same shape of error as the one d1a found in the registry claim — an instrument's silence
+read as a fact about the world when it was a fact about when the instrument looked — and it is worth
+saying plainly that this entry has now made that mistake twice with two different instruments.
+
+**The fix is small and is the next step: build the ever-seen line at every stage**, i.e. append
+`_f292_ever_seen()` inside `_f292_snapshot()` (or take a second ever-seen string at `before dispose`
+and `before drop_all` and print all three). Cost on the green path is unchanged — snapshots are
+built only inside the `app` fixture's reset, and the report is written only on the failure path. It
+must be mutation-checked like the first half was: a deliberately-held connection released during the
+wait must be visible in the early stage and absent from the late one, or the new sampling proves
+nothing.
+
+**If the early sampling also comes back empty, that is the strong result**, and it points where the
+conftest comment already said it would: outside SQLAlchemy's bookkeeping altogether. The candidate
+class to look at first is **a child process**. `hub/tests/conftest.py` *assigns*
+`os.environ["DATABASE_URL"] = TEST_DATABASE_URL` at import — into the real process environment, which
+every subprocess inherits — and 45 files under `hub/tests/` mention `subprocess`. A child that opened
+that database and outlived its test would hold the file, log nothing to `sqlalchemy.pool`, and never
+appear in `_EVER_SEEN`. Nothing here shows one does; it is named as the next place to look, not as a
+mechanism.
+
+**Two smaller holes, recorded so they are not re-derived.** `_EVER_SEEN` is keyed by
+`id(connection_record)`, and CPython reuses ids after collection — with 495 of 506 entries collected,
+an aliased id would silently overwrite an older entry. And an `aiosqlite.Connection` that was itself
+collected leaves no trace, which the entry's own comment argues is safe (its `sqlite3.Connection`
+goes with it, and that object's finaliser closes the file) — true unless something else still
+references the `sqlite3.Connection`, e.g. a closure sitting in a stalled worker thread's queue.
+
+**Count.** This is occurrence **#9** by reading and takes the classified total to **at least 23**.
+The rate measured earlier today (20.4 % all-branch over 54 runs) is not re-derived here.
 
 ---
 
