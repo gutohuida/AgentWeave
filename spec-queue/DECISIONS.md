@@ -437,7 +437,10 @@ see *The axis that actually predicts it* below.
 
 ### R-2 — Should `openspec archive` refuse a colliding delta?
 
-**OPEN.** Was D-6(a). Absorbs entry 18. A tooling call, unrelated to R-1.
+**DECIDED 2026-09-08 — a repo script. By the operator, in session.** The full verdict, its rejected
+alternatives and its stated weakness are under `## Decided` below (*"R-2 — a repo script"*). This
+copy is kept for the question it states; **it is not the authority and no longer says OPEN.** Was
+D-6(a). Absorbs entry 18. A tooling call, unrelated to R-1.
 
 Applying a delta against the current corpus warns about nothing when two changes both carry a
 `## MODIFIED` block for the same requirement. Archiving the second **reverted the first**, dropping
@@ -452,7 +455,13 @@ Should archiving be gated on a collision check, and does that belong in a repo s
 
 ### R-3 — Four small product calls
 
-**OPEN, but each is one question with two defensible answers and closable in a sentence.** These are
+**DECIDED 2026-09-08 — all four answered. By the operator, in session.** The verdicts are under
+`## Decided` below (*"R-3 — the four small product calls, all four answered"*): thread F209's
+`reason` through; **remove** `PATCH /queue/settings`; a bare `uvicorn hub.main:app` from `hub/` must
+**refuse to start**; check the model catalog with a `scripts/` tool, not a CI-skipped test. This copy
+is kept for the four questions it states; **it is not the authority and no longer says OPEN.**
+
+Each was one question with two defensible answers and closable in a sentence. These are
 what is left of D-7 once the additive work and the already-answered rows are removed. Absorbs
 entries 1, 6, 19, 21.
 

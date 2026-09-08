@@ -41,7 +41,7 @@ Nothing below this line can move until these are done, and item 1 expires in the
 | **0.1** | ~~Write a `## 2026-09-08` section redirecting the day window off the spec loop.~~ **DONE 2026-09-08 00:35.** The section is written: no spec loop, D-1/D-2 take F292, D-3 takes hygiene. Confirmed the night of 2026-09-07 built nothing — `AgentWeaveArmNight` was disabled and there is no `2026-09-07-night-log.md` — so there was nothing to drive either. **Superseded 2026-09-08 01:40 by a standing gate** — the dated section covers one day and expired at midnight; `.claude/loops/day-window.md` step 6 now counts unbuilt specced changes and runs no spec loop at 2 or more. | `spec-queue/DIRECTION.md`, `.claude/loops/day-window.md` |
 | **0.2** | ~~Write four verdict tokens.~~ **DONE 2026-09-08 — all four APPROVED** by the operator in session, after three review rounds. All four rows are restated under `## 2026-09-08` because only the newest dated section is read. | `spec-queue/APPROVALS.md` |
 | **0.3** | **Write the `ORDER:` line.** ~~Three of the four touch `hub/ui` and the committed bundle… Only one is bundle-free.~~ **Corrected by the second review, 2026-09-08: two are bundle-free, not one.** `an-agent-without-mcp` names no `hub/ui` file anywhere and declares its own exemption at its `tasks.md:7`; `a-dead-connection` is Python-only. Only the two UI changes touch the bundle, and they share **no source file** — their sole collision is the generated `hub/hub/static/ui`. | `spec-queue/APPROVALS.md` |
-| **0.4** | **Decide the night arm — STILL OPEN, and it is now the only thing between the approvals and a build.** `Enable-ScheduledTask -TaskName AgentWeaveArmNight` (fires 22:55) or leave it off. It is **DISABLED**, so as things stand the four approved changes sit unbuilt. | Task Scheduler |
+| **0.4** | ~~Decide the night arm — the only thing between the approvals and a build.~~ **RESOLVED — measured 2026-09-08 10:05: `AgentWeaveArmNight` is `Ready`, not disabled**, `LastTaskResult=0`, last fired 2026-09-06 22:55, **next 2026-09-08 22:55.** So Stage 0 is closed in all four rows and **tonight is the first build night** the four approvals have ever had. The roadmap carried this as the single blocker for a day after it had stopped being one. | Task Scheduler |
 
 ### The four changes awaiting a token
 
@@ -114,8 +114,23 @@ merits.
 **The three checks are Stage 6 work, not Stage 3 work** — they sit behind the four approved changes
 and the F292 repair. Building them first would be starting something new.
 
-Still open, both small, both a week old: **R-2** (should `openspec archive` refuse a colliding
-delta — a tooling call) and **R-3** (four small product calls, each closable in a sentence).
+~~Still open, both small, both a week old: **R-2** … and **R-3** ….~~ **Both DECIDED 2026-09-08**,
+in the same session as R-1 (`DECISIONS.md`, `## Decided`). R-2: **a repo script**, with its weakness
+recorded — a script only fires if whoever archives remembers to run it. R-3: **all four answered** —
+thread F209's `reason` through; **remove** `PATCH /queue/settings`; a bare `uvicorn hub.main:app`
+from `hub/` must **refuse to start**; check the model catalog with a `scripts/` tool, not a
+CI-skipped test.
+
+**So Stage 3 has no open decision left — but it has gained work nothing schedules.** R-2's script and
+R-3's four are **verdicts, not implementations**, and no stage in this plan owns them. See the
+completeness audit at the foot of this file.
+
+**A trap this file helped create, found and fixed 2026-09-08.** `DECISIONS.md` carried **two copies
+each** of R-1, R-2 and R-3 — one above `## Decided` and one below it. R-1's upper copy had been
+rewritten to say DECIDED; **R-2's and R-3's still read `**OPEN.**`**, 108 and 123 lines above their
+own verdicts. A window reading that file top-down, exactly as its contract says to (*"the status
+token is the authority"*), would have found both open. Both upper copies now carry the verdict and
+point down. This is the same defect class as an approval row that looks right and does nothing.
 
 ---
 
@@ -171,11 +186,29 @@ agents in sync needs a check nobody wrote. See Stage 6.1.
 (`DECISIONS.md`). It is no longer blocked, and OV-2…OV-6 — downstream of it, and moot had the answer
 been no — are now live decisions. Its phase 6 (W-2, W-3, W-6) is real work and may start.
 
-**The deadline is closed; the loss is not.** Permission was the blocker, and capture is a separate
-thing that does not exist yet — so the corpus keeps rolling off on its measured ~29-day window with
-a hard cliff (2,084 files, oldest 2026-08-09; ≥51 earlier sessions evidenced by committed handoffs
-already gone) at exactly the previous rate until something is built or a snapshot is taken. A
-snapshot-first framing was offered and declined; recorded in `DECISIONS.md` and cheap to reverse.
+~~**The deadline is closed; the loss is not.** … the corpus keeps rolling off … until something is
+built or a snapshot is taken. A snapshot-first framing was offered and declined.~~
+
+**Superseded 2026-09-08 — the snapshot was built the same day, and the roll-off has stopped.**
+`scripts/snapshot-corpus.ps1` plus a `ClaudeCorpusSnapshot` scheduled task, daily 12:30, verified
+from the scheduler (`LastTaskResult=0`) and not only by hand. The full path-by-path
+`Compare-Object` matched **2,598 = 2,598 files, identical total bytes, zero missing.** So the ~29-day
+cliff is no longer live: what has already been lost (≥51 sessions evidenced by committed handoffs)
+stays lost, but nothing new rolls off. This came out of **OV-6 + OV-3**, which split retention *out*
+of Witness rather than choosing between two shapes of it.
+
+**And every OV is now decided** (`DECISIONS.md`, 2026-09-08): OV-1 yes, OV-2 redact at write, OV-4
+the operator only, OV-6+OV-3 split. **OV-5 — does the name `witness` survive a collision check? — is
+the only one still open**, and it is blocked on a web search nobody has run, not on a judgement.
+
+**What this stage still owes.** OV-2's *redact at write* and OV-6's *batch reader* are verdicts with
+no implementation, and no stage schedules them either. Witness phase 6 (W-2, W-3, W-6) is real work
+and may start; it has not.
+
+**Two signals to watch on the snapshot, both currently expected-but-unproven.**
+`kept_beyond_source` is **0** and will stay 0 until the corpus ages past the window — correct today,
+a **failure signal** later. And **the restore path has never been exercised**: copying was verified,
+reading a transcript back out of the archive was not.
 
 ---
 
@@ -186,7 +219,7 @@ snapshot-first framing was offered and declined; recorded in `DECISIONS.md` and 
 | **6.1** | **Run `scripts/sync_skills.py`, then gate it.** Last run immediately before `a38caee` — the commit that introduced the ledger. Stale: `handoff` (341→268), `resume` (127→118), `daily-review` (absent). It is a hand-run mirror with no check; a ~15-line test diffing the trees would have caught this on 2026-09-04. |
 | **6.2** | **`scripts/drive/aw.py:16` promises a guard that does not exist.** The comment says *"an unset key fails loudly below"*. It does not — `KEY` is empty-string-defaulted and used directly as `"Bearer " + KEY`, which yields a 401 from the Hub, not a local failure. Add the check or fix the comment. |
 | **6.3** | ~~Rotate the disclosed `aw_live_` key.~~ **DONE — the operator rotated it, stated in session 2026-09-08 09:20.** Closes the day window's `day1` question (*"may the loop rotate keys itself?"*), which is now moot for this key and was never answered in the general case. **Residual, not a reopening:** 18 real-shaped 32-character `aw_live_` literals remain in **16 tracked files** — `hub/.env.example`, `hub/hub/db/engine.py`, two `hub/tests/`, eight `scripts/drive/`, and four documents. All are dead against a rotated key. What is not dead is the practice that produced them; a rotation is final only if nothing commits a live key again. Classified by shape without printing any value. |
-| **6.4** | **`.claude/handoffs/LATEST.md` names the wrong handoff** — it does not point at `handoff-0113`. Found by continuity-kit's own checker. |
+| **6.4** | ~~`.claude/handoffs/LATEST.md` names the wrong handoff.~~ **DONE — verified 2026-09-08 10:10.** It names `handoff-0116-…`, which is the highest-numbered file on disk. Whatever fixed it did not record itself here. |
 
 The 35 client-less routes are **not** listed here on purpose: they are R-1's evidence, and picking
 them off one at a time is exactly the behaviour R-1 exists to decide about.
@@ -227,3 +260,102 @@ only and expired at midnight; the gate is what carries it from 2026-09-09 on.
 - **No new findings hunted.** Driving still happens in Stage 2 — a change is not finished until it
   has been driven — but a drive that files something new adds to the half that is already
   oversupplied. File it; do not spec it until this plan is drained.
+
+---
+
+## Completeness audit — 2026-09-08, at the operator's question *"is the roadmap complete?"*
+
+Measured against the code and the files, stage by stage, not re-read. **The honest answer is: this
+plan is accurate about what it covers, and it is not a plan to a fully functioning AgentWeave.**
+Those are different claims and the file did not previously distinguish them.
+
+### 1. What was stale — five rows, all in the direction that hides progress
+
+| Row | Said | Measured 2026-09-08 |
+|---|---|---|
+| **0.4** | night arm **DISABLED**, *"the only thing between the approvals and a build"* | **`Ready`.** Last fired 2026-09-06 with result 0; next **tonight 22:55**. Stage 0 is fully closed. |
+| **3** | R-2 and R-3 *"still open, both small, both a week old"* | **Both DECIDED 2026-09-08**, in the same session as R-1 |
+| **5** | *"a snapshot-first framing was offered and declined"*; corpus rolling off | **Snapshot built, scheduled, and verified from the scheduler.** Roll-off stopped |
+| **6.4** | `LATEST.md` names the wrong handoff | **Correct** — it names `handoff-0116`, the newest on disk |
+| **4** | (corrected earlier today) six open severity-A | **Three**, then **one** after Stage 2 lands |
+
+Every one of these was stale *pessimistically*. The pattern is now three-for-three across this file
+and `FINDINGS.md`: **the documents lag the evidence, and always in the direction that makes the
+project look more blocked than it is.** Nothing found today was a nasty surprise; everything found
+today was progress nobody had written down.
+
+**Still genuinely open in Stage 6, re-verified in the code, not assumed:** **6.1** — the skill mirror
+is stale by exactly the amounts recorded (`handoff` 341→268, `resume` 127→118, `daily-review`
+absent), and **6.2** — `scripts/drive/aw.py:16` still promises *"an unset key fails loudly below"*
+above a `KEY = os.environ.get("AW_KEY", "")` that does no such thing.
+
+### 2. What the plan does not schedule — decided work with no owner
+
+This is the real gap, and it is new since the plan was written. **2026-09-08 produced eleven verdicts
+and no stage owns their implementation.**
+
+| Work | From | Status |
+|---|---|---|
+| Thread F209's `reason` through, or delete the field | R-3 | decided, unqueued |
+| **Remove** `PATCH /queue/settings` | R-3 | decided, unqueued |
+| A bare `uvicorn hub.main:app` from `hub/` must refuse to start | R-3 | decided, unqueued |
+| Model-catalog check as a `scripts/` tool | R-3 | decided, unqueued |
+| Archive-collision check as a repo script | R-2 | decided, unqueued |
+| Redact-at-write | OV-2 | decided, unqueued |
+| Witness as a batch reader (phase 6: W-2, W-3, W-6) | OV-6 + OV-3 | decided, unqueued |
+| The three R-1 ratchet checks | R-1 | decided, named Stage 6 work, unqueued |
+
+**A verdict is not an implementation, and this plan has no stage between the two.** That is the
+structural hole the audit found. Entry 19 in particular changes whether a command works and needs the
+scripts relying on the relative-default database found *before* it is built.
+
+### 3. What the plan excludes on purpose — and what that costs
+
+The plan covers **severity A** plus hygiene. `scripts/drive/FINDINGS.md` holds **271 findings**: 41
+A, 107 B, 90 C, 20 D. Classified mechanically by their own status lines — with the negation guard the
+2026-09-06 recount learned the hard way, since a substring test for `fixed` reads *"not fixed"* as
+fixed — **roughly 147 sections below severity A carry no resolution marker at all.**
+
+**Four were sampled at random to find out what that population actually is, because a count of
+unclassified rows is not a count of open defects.** All four were real, unfixed, and none is anywhere
+in this plan:
+
+- **F237 (B)** — two controls write `Project.token_budget` through different routes and emit
+  different events; the one in Settings leaves every surface displaying it stale.
+- **F281 (B)** — a shell command's writes are never recorded in any posture; `written_paths` reads
+  declared path arguments and a `Bash` call declares none.
+- **F222 (B)** — an archived job can be switched back on with one PATCH, and an archived loop then
+  works a real task — the state its own docstring calls *"the exact governance failure loops exist to
+  make impossible"*.
+- **F215 (B)** — the operator's screen says evidence is waiting and gives them nothing to press;
+  every route in that row is absent from the served bundle, measured against the bytes.
+
+**So: 4 for 4 real on a random sample of the excluded population.** That does not make all ~147 real
+— many will be moot, duplicated, or already fixed without a status line — but it does mean the
+excluded set cannot be treated as noise, and **nobody has ever classified it.**
+
+### 4. The answer
+
+**Is the roadmap complete?** As a plan to *drain what is approved and decided*, yes, once §2's
+missing stage is added — and Stage 0 being closed means it can start tonight without anything
+further from the operator.
+
+**As a plan to a fully functioning AgentWeave, no**, and the gap is §3. Every severity-A defect being
+gone is a real milestone and is close: after Stage 2 and one drive, it is **zero**. But a product
+whose A-list is empty while ~147 unclassified B/C/D findings sit behind it — four of four sampled
+being genuine, including a governance hole and two operator-facing dead ends — is not the same thing
+as a product that works.
+
+**The cheapest next move is not to build any of them.** It is to run the classification that has
+never been run: bound each of the ~147 sections and record a status line, exactly as the 41
+severity-A sections were bounded and scanned on 2026-09-04 and 2026-09-06. That is one window's work,
+it is mechanical, and today has already shown three times over what it finds — **F140, F154 and F155
+were retired with no code written, because somebody finally looked.** Until that scan exists, the
+size of the remaining work is genuinely unknown, and this plan's totals silently assume it is zero.
+
+**One caveat on this audit, stated because an unstated one is how this file went wrong before.** The
+147 figure comes from a classifier this session wrote, not from reading 147 sections. It bounds each
+section by the next finding heading and reads only the banner region, so a finding whose resolution
+is buried in prose reads as unresolved — **which is exactly the error that hid F140's, F154's and
+F155's drives.** Treat 147 as an upper bound on unclassified rows, not as a count of open defects.
+Sampling says the lower bound is not small; nothing here says where between them the truth sits.
