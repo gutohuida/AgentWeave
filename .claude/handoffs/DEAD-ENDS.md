@@ -426,6 +426,46 @@ checkout — the dev-repo traps are in "The Hub at runtime" above and still appl
   reported "expired" after the run's own stop time — while the operator had been told progress
   would be reported. Silence read as success. Watch for **forward progress** (iteration counter or
   commit count advancing within a bound) rather than for the absence of known errors.
+- **The morning merge gate is read at ~09:00 and will essentially always find CI mid-run**
+  *(2026-09-08, found by the day window itself and confirmed here)*. `AgentWeaveArmDay` fires at
+  08:55, the window composes and reads the gate within a few minutes, and the CI suite takes 15–25
+  minutes — so the gate's *"CI concluded `success` for this exact commit"* condition is unmet at the
+  only moment it is checked. It correctly refuses a stale green from an earlier commit, so the
+  landing is deferred to a `gate-retry` item that may or may not get a firing. **A cycle that
+  "never lands" is more likely this than a real gate failure** — check `gh run list --branch <cycle>`
+  for a *later* success before diagnosing anything else.
+- **CI red on `master` usually means `hub-test` alone, and usually means the F292 flake — not your
+  change** *(measured 2026-09-08: 4 failures in the last 20 `ci.yml` runs, ~22%, worse than the
+  "~1 in 6" previously recorded)*. Confirm before assuming a regression:
+  `gh run view <id> --json jobs --jq '.jobs[] | "\(.conclusion)  \(.name)"'`. On 2026-09-08 two
+  docs-only commits failed this way while the two around them passed. **The consequence that bites:
+  a red `master` keeps the merge gate shut**, so an unrelated flake blocks the cycle from landing.
+
+## Working in this checkout while an unattended window is running in it
+
+*Added 2026-09-08. The day and night windows commit into the same working tree an interactive
+session is sitting in, on a cycle branch, every few minutes.*
+
+- **Check `git branch --show-current` before doing anything.** After `AgentWeaveArmDay` fires at
+  08:55 the checkout is on `autonomous/<date>-daily`, not `master`. Work committed there is fine —
+  it reaches `master` through the merge gate — but a session that believes it is on `master` will
+  describe its own commits wrongly in a handoff.
+- **A dirty tree you did not create is the window mid-iteration, not a problem.** Do not clean it,
+  stash it, or commit it. Stage **only** your own explicit paths (the repo rule anyway), commit
+  promptly, and push — the exposure window matters, because the playbook tells the window never to
+  end an iteration with a dirty tree and unexpected modified files can confuse it.
+- **Do not leave your own edits uncommitted while a window runs**, and do not leave them uncommitted
+  going into 22:55 — `arm-cycle.ps1` refuses on a dirty tree and the whole night is lost.
+- Concurrent commits interleave without incident: the window's next commit simply takes yours as
+  parent. Observed working on 2026-09-08 09:20, with `e964226` landing between the window's
+  `101f836` and its following iteration.
+
+- **`git commit -F -` with a heredoc inside an `&&` chain failed once with
+  `warning: here-document at line 1 delimited by end-of-file` and `Aborting commit due to empty
+  commit message`** *(2026-09-08)*. It had worked several times in the same session, so it is
+  intermittent rather than categorical. **The reliable form for a long message: write it to a file
+  in the scratchpad with the Write tool, then `git commit -F <that path>`.** Costs one extra tool
+  call and never loses a composed message.
 
 ## RESOLVED
 
