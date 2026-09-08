@@ -287,6 +287,70 @@ their own merits and no search retires them. **F165 (B) and F166 (C), filed out 
 remain open and unqueued**; retiring F155 retires the refusal's wording, not the `_branch_at`
 equivalence class underneath it.
 
+**Revised 2026-09-08, third pass (RESUME session): the whole file classified for the first time,
+with `scripts/classify_findings.py`.** Every previous census on this page counted the **41 severity-A
+sections only**. This one bounds and classifies all **271**. The instrument is committed so the
+number can be re-derived rather than believed, and **its own error rates are printed above its
+results** — the point of the exercise was never the count.
+
+| Verdict | N | Trust |
+|---|---|---|
+| `RESOLVED`, strong marker (`Status: FIXED`, `RETIRED`, `RETRACTED`, `SUPERSEDED`, `WITHDRAWN`) | **97** | 9 of 9 sampled correct — these are `**Status:** fixed <sha>` lines under the heading |
+| `RESOLVED`, weak marker (`NOT A DEFECT` prose) | **17** | **≥1 known wrong** (F187) — needs a human |
+| `RESOLVED_ELSEWHERE` (resolved in another section) | **5** | **3 of 5 hand-checked FALSE** — a lead, never a verdict |
+| `CONFLICT` (open marker *and* an external resolution) | **5** | F52, F274, F295 (A); F273, F292 (B) |
+| `OPEN` (explicit open marker) | **36** | F142 (A); 18 B; 17 C |
+| `UNCLASSIFIED` (no resolution language anywhere) | **111** | 41 B, 56 C, 14 D — **the real unknown** |
+
+**The severity-A tail is confirmed independently.** The classifier had no knowledge of this
+morning's work and reproduced it: `F142` open, `F52`/`F274`/`F295` in conflict (all three are known
+— F52 is bookkeeping nobody retired, F274 and F295 are specced *and approved* but not built), and
+every other A resolved. **That agreement is the reason the instrument was then attacked rather than
+trusted.**
+
+### Three defects the instrument had, each found by measurement and not by review
+
+1. **The heading regex demanded exactly `(A)`…`(D)`, so 13 sections were invisible** — `F9 (A-)`,
+   `F104 (—)`, `F115 (B?)`, `F123 (C, open)`, `F165 (new, severity **B**)`, `F167 (B, new)`,
+   `F266 (C, was B)`, `F290 (RETRACTED, was B)`, `F296 (C, harness)` and four more. Found by a count
+   mismatch — 271 by `grep`, 258 by the script — not by reading the code. **A first pass reported 147
+   unclassified on the broken regex; the real figure is 111.**
+2. **The cross-section arm could not fire.** It reused `Status:`-anchored patterns, but a drive
+   record elsewhere says *"F154 stays **FIXED**"*, never *"Status: FIXED"*. So the arm built
+   specifically to catch the F140/F154/F155 failure reported **0**, which read as a result and was an
+   artefact of its own pattern.
+3. **Quoted history was read as current status.** A section that withdraws its own banner *quotes*
+   it — *"…so this entry stays open until somebody re-drives it."* — and the classifier matched
+   `stays open` inside the quotation. **Every section that narrates its own correction was at risk of
+   reading OPEN.** This is the banner disease in software form: believing a sentence without asking
+   whether it is being asserted or withdrawn. Fixed by blanking quoted, blockquoted and
+   struck-through spans before matching.
+
+**Defect 3 was found because a mutation test failed.** Stripping F154's in-section resolution should
+have made it `RESOLVED_ELSEWHERE`; it returned `OPEN` instead, from the quoted banner. Had the
+mutation passed, the instrument would have shipped with an inflated open count and nothing would have
+contradicted it. **A fourth mutation — injecting `Status: not fixed` — confirmed the negation guard
+holds**, which is the trap the 2026-09-06 recount hit.
+
+**The single failure mode behind every error found, in all three defects and in all four hand-checked
+false positives: a sentence that mentions finding X while resolving finding Y.** F32's match was
+*"rather than fixed alongside F32"*; F108's was *"the drive that closed this also **opened** one"*;
+F272's was a *note* being superseded; F187's was *"(F185 is the archived case … not a defect in this
+one.)"*. **Prose is not a status field**, and no regex over this file will ever fully be one.
+
+### What this changes
+
+**The excluded population is 111, not ~147, and it is genuinely unread.** Four were sampled at
+random earlier today — F215, F222, F237, F281 — and **four of four were real, unfixed defects absent
+from `ROADMAP.md`**, including one (F222) whose own docstring calls its state *"the exact governance
+failure loops exist to make impossible"*. That sample is small and was not re-drawn; it establishes
+that the population is not noise, and nothing more.
+
+**Re-run it with `py -3.11 scripts/classify_findings.py`.** It writes no files and takes about a
+second. The three arms are not equally good and the script says so before it says anything else —
+use `RESOLVED`-strong as fact, `OPEN` and `UNCLASSIFIED` as a worklist, and `RESOLVED_ELSEWHERE` and
+`NOT A DEFECT` as leads that need a human.
+
 **And one observation that outranks any single row of that table.** F88, F89 and F90 were found in
 one iteration, in three unrelated subsystems, and every one of them was a mechanism this repository
 tests *thoroughly* — against a state the product never produces. F88's access tests pass a

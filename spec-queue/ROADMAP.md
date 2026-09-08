@@ -357,9 +357,53 @@ it is mechanical, and today has already shown three times over what it finds —
 were retired with no code written, because somebody finally looked.** Until that scan exists, the
 size of the remaining work is genuinely unknown, and this plan's totals silently assume it is zero.
 
-**One caveat on this audit, stated because an unstated one is how this file went wrong before.** The
-147 figure comes from a classifier this session wrote, not from reading 147 sections. It bounds each
-section by the next finding heading and reads only the banner region, so a finding whose resolution
-is buried in prose reads as unresolved — **which is exactly the error that hid F140's, F154's and
-F155's drives.** Treat 147 as an upper bound on unclassified rows, not as a count of open defects.
-Sampling says the lower bound is not small; nothing here says where between them the truth sits.
+~~**One caveat on this audit** … treat 147 as an upper bound …~~ **The caveat was justified and the
+classification has now been run. 147 was wrong; the figure is 111.** See below.
+
+---
+
+## The classification, run 2026-09-08 — `scripts/classify_findings.py`
+
+The operator's instruction was *"confirm everything that it needs, double check things."* The
+instrument was therefore built, then **attacked until it failed**, then fixed. Full method and error
+rates are in `FINDINGS.md`'s third 2026-09-08 revision; this is the result.
+
+| Verdict | N | Trust |
+|---|---|---|
+| `RESOLVED`, strong marker | **97** | 9 of 9 sampled correct |
+| `RESOLVED`, `NOT A DEFECT` prose | **17** | **≥1 known wrong** (F187) |
+| `RESOLVED_ELSEWHERE` | **5** | **3 of 5 hand-checked FALSE** — a lead only |
+| `CONFLICT` | **5** | F52, F274, F295 (A); F273, F292 (B) |
+| `OPEN` | **36** | F142 (A); 18 B; 17 C |
+| `UNCLASSIFIED` | **111** | 41 B, 56 C, 14 D — **the real unknown** |
+| | **271** | |
+
+**Three defects in the instrument, each found by measurement, not review.** Its heading regex
+demanded exactly `(A)`…`(D)` and hid **13 sections** — that is the whole 147→111 correction, and it
+was found by a count mismatch against `grep`, not by reading the code. Its cross-section arm reused
+`Status:`-anchored patterns and so **could not fire at all**, reporting a 0 that read as a result.
+And it **read quoted history as current status** — a section withdrawing its own banner *quotes*
+that banner, and `stays open` inside the quotation was matched as an assertion.
+
+**The third was found only because a mutation test failed.** Had it passed, the instrument would
+have shipped with an inflated open count and nothing would have contradicted it.
+
+**Every error, in all three defects and all four hand-checked false positives, is one failure mode:
+a sentence that mentions finding X while resolving finding Y.** Prose is not a status field.
+
+### What it means for this plan
+
+- **The severity-A tail is confirmed by an instrument that did not know today's answer.** F142 open;
+  F52/F274/F295 in conflict, all three known and all three accounted for by Stage 0 and Stage 2.
+- **111 findings have no resolution language anywhere** and have never been read by anybody. Four
+  sampled at random were four-for-four real. That is not a projection onto 111; it is a statement
+  that the population cannot be assumed empty.
+- **17 more rest on `NOT A DEFECT` prose and 5 on a cross-reference**, and both arms are measurably
+  unreliable. Roughly **22 findings currently counted as resolved are not confirmed resolved.**
+
+### The next move, priced
+
+Reading 111 sections is a window's work and needs no decision. It is mechanical, it changes no code,
+and today has shown four times over what it produces — F140, F154, F155 retired and 13 sections found
+that no census had ever seen. **Until it is done this plan's totals silently assume 111 zeroes**, and
+the four that were sampled say that assumption is false.
