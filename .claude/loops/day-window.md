@@ -29,13 +29,14 @@ Only the first firing of the window does this. It ends by writing a full `queue`
    by anything except the loop running CI's own commands on a single Windows machine. Both halves
    are now repaired: `ci.yml` builds `autonomous/**`, and this step reads its verdict.
 
-   **Condition zero, and it is currently unmet.** `STATE-day.json`'s `limits` array is seeded by
-   `.claude/loops/arm-cycle.ps1` and still reads *"No commits, merges or rebases onto master. Never
-   auto-merge."* A limit in the state file outranks this playbook — that is the whole point of
-   limits. **So until the operator changes that seeded line, this gate is dormant: check the four
-   conditions below, write the verdict into the log and onto the review page, and stop there.**
-   Reporting "this would have landed, and here is the evidence" every morning is worth having on its
-   own; it is also the record the operator needs before deciding whether to hand the step over.
+   **Condition zero is met — the gate is LIVE.** It was dormant until 2026-09-06, when the operator
+   relaxed the seeded limit; `arm-cycle.ps1:198` and `STATE-day.json` now both read *"The day
+   window's merge gate … may fast-forward master to this branch with `git merge --ff-only` when all
+   four gate conditions hold."* It has been **used once**, at iteration 3 on 2026-09-07, to land the
+   2026-09-04 cycle. A limit in the state file outranks this playbook — that is the whole point of
+   limits — so **read the live limit rather than this paragraph** if the two ever disagree again.
+   (They did, from 2026-09-06 to 2026-09-08: this text still said "dormant, stop at reporting" for
+   two days after the relaxation, which would have cost a window a landing.)
 
    Proceed **only if every one of these holds.** Any single failure means skip it, name the failed
    condition in the log, and carry on with the day. A missed landing costs a day; a wrong one costs
