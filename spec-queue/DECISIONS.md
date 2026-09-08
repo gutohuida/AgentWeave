@@ -595,6 +595,58 @@ none was taken.
 
 ---
 
+### R-3 — the four small product calls, all four answered
+
+**DECIDED 2026-09-08 02:15, by the operator, in session.** Each was one question with two defensible
+answers, open since 2026-09-01. **None is implemented** — these are verdicts, and the work is
+ordinary product work that still has to be queued.
+
+- **F209 — thread the `reason` through.** `accept` declares a 2000-character `reason` and stores
+  nothing while `reject`, three functions away, keeps it. Storing it makes the pair symmetric, and
+  an accepted-with-reasons record is what an operator wants when re-reading why evidence was let
+  through. Rejected: deleting the field, which would leave `accept` the only decision in the pair
+  with no recorded rationale.
+- **F196 + F198 — remove `PATCH /queue/settings`.** It writes four columns
+  `PUT /projects/{id}/settings` already owns, with a weaker contract on both ends, and the UI never
+  calls it. One owner for those columns. **Check for external callers before deleting** — the UI
+  not calling it is not the same as nothing calling it.
+- **Entry 19 — a bare `uvicorn hub.main:app` from `hub/` must refuse to start.** No `DATABASE_URL`
+  and no named profile currently falls through to `config.py`'s relative default and silently opens
+  a second database beside the one everything else uses; it has cost time twice, and `hub/data/`
+  reappearing is the documented symptom. Exit with a message naming the candidates instead.
+  Rejected: warn-and-start, which leaves the divergence possible.
+- **Entry 21 — a `scripts/` tool, not a test.** `model_catalog.py` names
+  `~/.codex/models_cache.json` as its source of truth, nothing re-checks it, and it has drifted. A
+  command that diffs catalog against cache has nothing to skip in CI and is the shape that actually
+  gets run when someone suspects the catalog is wrong. Rejected: a skip-if-missing test, which is
+  invisible in CI — exactly where a green suite would most misleadingly bless a drifted catalog.
+
+**Note the shape of entry 19's answer against `R-1`.** Refusing to start is an *enforcement* call,
+consistent with R-1's ratchet decision of the same week, and it is the only one of these four that
+changes whether a command works. It is also the one whose blast radius is any script relying on the
+default — find those before building it.
+
+---
+
+### R-2 — a repo script
+
+**DECIDED 2026-09-08 02:15, by the operator, in session.** Open since 2026-09-01. A collision check
+under `scripts/`, run before archiving: applying a delta warns about nothing when two changes both
+carry a `## MODIFIED` block for the same requirement, and archiving the second **reverted the
+first**, dropping a qualification that had just landed. One collision in a batch of seven, and two
+changes in flight against one requirement is not rare here.
+
+**The known weakness of this answer, recorded because it will be the next finding if it bites.** A
+script only fires if whoever archives remembers to run it — which is the same weakness the missing
+check already had. Rejected alternatives that do not share it: the `openspec-archive-change` skill
+(fires for every window and session following the documented path, but does nothing for a bare
+`openspec archive`) and upstream openspec (the correct home, since the tool applying the delta is
+the only thing that sees both blocks, but on someone else's release cycle). **If the script is
+written and then not run, that is evidence for moving it into the skill, not for writing a second
+script.**
+
+---
+
 ### OV-6 + OV-3 — a batch reader, plus a dumb snapshot that is not part of Witness
 
 **DECIDED 2026-09-08 02:05, by the operator, in session.** The overseer put these as *"one decision
@@ -616,9 +668,35 @@ objection to a tailer was never that a process runs; it was that a process *read
 transcripts with nobody watching. A copy that never opens a record makes no judgement, produces no
 output to be wrong, and its failure mode is a missing file rather than a silent misreading.
 
-**Not settled here:** where the snapshot lives, how much disk it takes (the corpus was 1.09 GB and
-growing measurably within a single day), how far back it is pruned, or whether it is built at all
-yet. **Nothing has been built** — the loss continues at the previous rate until it is.
+**BUILT the same session, 2026-09-08 02:07, on the operator's instruction (*"Build it now"*).**
+`scripts/snapshot-corpus.ps1`, and a `ClaudeCorpusSnapshot` scheduled task, daily at 12:30,
+`StartWhenAvailable` so a machine that was off catches up.
+
+- **Destination `~/claude-corpus-archive/projects`** — outside both this repository and `~/.claude`,
+  so nothing that cleans either can reach it and nothing is ever committed.
+- **`robocopy /E /XO`, and deliberately never `/MIR` or `/PURGE`.** Deleting from the destination is
+  the one thing it must not do: the source deletes on its own schedule and the archive exists to
+  outlive it. That is written into the script's header for whoever edits the robocopy line next.
+- **Measured before and after.** Corpus at build time: **2,091 `.jsonl` files, 0.97 GB**, oldest
+  last written **2026-08-09** — the ~29-day cliff, confirmed independently of the overseer's
+  figure — plus 507 sidecar files (`.txt`, `.json`, `.md`, `.pdf`) the jsonl-only count misses and
+  the copy keeps. First run: **2,598 files, 1.03 GB, 11.6 s, zero missing** on a full path-by-path
+  comparison. 349 GB free on `C:`.
+- **Driven, not merely written.** The scheduled task was started by hand and ran end to end from the
+  scheduler — `LastTaskResult=0`, stamp file rewritten. A script that works interactively and not
+  under Task Scheduler is a known shape here; this one was checked both ways.
+- **`snapshot-stamp.json` carries `kept_beyond_source`** — files the archive holds that the harness
+  has already deleted. It should only ever grow, and **if it is still 0 once the corpus has aged
+  past the window, the copy is not running**, whatever the exit code says. That is the number to
+  read, not the exit code.
+
+**Still not settled:** how far back the archive is pruned, if ever, and its disk budget. It grows
+without bound today. Revisit before it matters, not urgently — 1 GB against 349 GB free.
+
+**Known limitation, stated rather than papered over:** one copy per path, not versions. A source
+file rewritten *smaller* would overwrite a larger archived copy. Transcripts are append-only in
+practice, so it has not been observed; a falling `archived_bytes` in the stamp is what would show
+it.
 
 ---
 
