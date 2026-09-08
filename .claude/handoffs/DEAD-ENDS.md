@@ -374,6 +374,23 @@ checkout — the dev-repo traps are in "The Hub at runtime" above and still appl
 - **`<change-name>` in a row is the directory name under `openspec/changes/` exactly.** Cheap to
   verify (`test -d openspec/changes/<name>`) and worth doing, because a typo is a row the window
   silently cannot match.
+- **Writing *tomorrow's* `DIRECTION.md` section before today's window has fired cancels today's**
+  *(2026-09-08)*. Both files read **only the newest dated section**, and `day-window.md` step 5 then
+  asks whether that section is dated **today** — so a `## 2026-09-09` heading added on 2026-09-08
+  makes the `## 2026-09-08` section below it history, and the 08:55 window takes the *default* queue
+  instead of the instruction sitting right there in the file. The symptom is a window that quietly
+  does the ordinary thing on a day it was told not to. **Write the section on the morning it
+  applies, or after that day's window has fired.** The same shape as the `APPROVALS.md` entry two
+  bullets up, in the opposite direction: there, writing under an *older* heading is invisible; here,
+  writing under a *newer* one is destructive.
+- **A finding's banner saying "no drive exists" is a claim, not a fact — grep the finding's own
+  number first** *(2026-09-08)*. The 2026-09-03 banners reopened four severity-A findings on the
+  reasoning that an archived openspec change is *"a plan marked done, not a drive of the built
+  product"*. Correct reasoning; wrong for **F140**, whose drive was already recorded in
+  `FINDINGS.md` twelve thousand lines above, two days before the banner. It cost F140 five days and
+  a place on the operator's blocked list. Searching `openspec/changes/archive/` is not the same
+  search as searching `FINDINGS.md`. **F154 and F155 still carry that banner and have not had this
+  check.**
 
 ## Unattended runs — failure modes the driver does not detect
 
