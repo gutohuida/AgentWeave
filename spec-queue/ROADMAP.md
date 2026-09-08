@@ -38,7 +38,7 @@ Nothing below this line can move until these are done, and item 1 expires in the
 
 | # | Action | File |
 |---|---|---|
-| **0.1** | ~~Write a `## 2026-09-08` section redirecting the day window off the spec loop.~~ **DONE 2026-09-08 00:35.** The section is written: no spec loop, D-1/D-2 take F292, D-3 takes hygiene. Confirmed the night of 2026-09-07 built nothing — `AgentWeaveArmNight` was disabled and there is no `2026-09-07-night-log.md` — so there was nothing to drive either. | `spec-queue/DIRECTION.md` |
+| **0.1** | ~~Write a `## 2026-09-08` section redirecting the day window off the spec loop.~~ **DONE 2026-09-08 00:35.** The section is written: no spec loop, D-1/D-2 take F292, D-3 takes hygiene. Confirmed the night of 2026-09-07 built nothing — `AgentWeaveArmNight` was disabled and there is no `2026-09-07-night-log.md` — so there was nothing to drive either. **Superseded 2026-09-08 01:40 by a standing gate** — the dated section covers one day and expired at midnight; `.claude/loops/day-window.md` step 6 now counts unbuilt specced changes and runs no spec loop at 2 or more. | `spec-queue/DIRECTION.md`, `.claude/loops/day-window.md` |
 | **0.2** | ~~Write four verdict tokens.~~ **DONE 2026-09-08 — all four APPROVED** by the operator in session, after three review rounds. All four rows are restated under `## 2026-09-08` because only the newest dated section is read. | `spec-queue/APPROVALS.md` |
 | **0.3** | **Write the `ORDER:` line.** ~~Three of the four touch `hub/ui` and the committed bundle… Only one is bundle-free.~~ **Corrected by the second review, 2026-09-08: two are bundle-free, not one.** `an-agent-without-mcp` names no `hub/ui` file anywhere and declares its own exemption at its `tasks.md:7`; `a-dead-connection` is Python-only. Only the two UI changes touch the bundle, and they share **no source file** — their sole collision is the generated `hub/hub/static/ui`. | `spec-queue/APPROVALS.md` |
 | **0.4** | **Decide the night arm — STILL OPEN, and it is now the only thing between the approvals and a build.** `Enable-ScheduledTask -TaskName AgentWeaveArmNight` (fires 22:55) or leave it off. It is **DISABLED**, so as things stand the four approved changes sit unbuilt. | Task Scheduler |
@@ -146,14 +146,15 @@ behind and mention `DEAD-ENDS.md` **zero** times — they predate the ledger ent
 ship is "a file contract two agents can read", and the evidence on this disk is that keeping two
 agents in sync needs a check nobody wrote. See Stage 6.1.
 
-**`witness`** — 4 commits, blocked entirely on **OV-1** (*may Witness read the local Claude Code
-transcript corpus at all?*). OV-2…OV-6 are all downstream of it; if OV-1 is "no", the other five are
-moot.
+**`witness`** — 4 commits. **OV-1 is DECIDED: yes, 2026-09-08, operator in session**
+(`DECISIONS.md`). It is no longer blocked, and OV-2…OV-6 — downstream of it, and moot had the answer
+been no — are now live decisions. Its phase 6 (W-2, W-3, W-6) is real work and may start.
 
-**This one is time-sensitive.** The corpus rolls off on a measured ~29-day window with a hard cliff
-— 2,084 files, oldest 2026-08-09 — while ≥51 earlier sessions are evidenced by committed handoffs
-and already gone. **Answer OV-1 this week or shelve `witness` explicitly.** Carrying it open costs
-data every day. Its phase 6 (W-2, W-3, W-6) is real work but none of it starts before OV-1.
+**The deadline is closed; the loss is not.** Permission was the blocker, and capture is a separate
+thing that does not exist yet — so the corpus keeps rolling off on its measured ~29-day window with
+a hard cliff (2,084 files, oldest 2026-08-09; ≥51 earlier sessions evidenced by committed handoffs
+already gone) at exactly the previous rate until something is built or a snapshot is taken. A
+snapshot-first framing was offered and declined; recorded in `DECISIONS.md` and cheap to reverse.
 
 ---
 
@@ -175,19 +176,22 @@ them off one at a time is exactly the behaviour R-1 exists to decide about.
 
 | Stage | Whose time | Cost |
 |---|---|---|
-| 0 | Operator | ~40 min, **expires 08:55 tomorrow** |
+| 0 | Operator | **done 2026-09-08 01:30** |
 | 1 | One night | 1 window |
 | 2 | Nights | 5–6 windows |
 | 3 | Operator | ~1 hour, resizes everything after it |
 | 4 | Operator + nights | 1 decision + ~2 changes |
-| 5 | Operator | ~15 min (`continuity-kit`) + 1 decision (`OV-1`, **this week**) |
+| 5 | Operator | ~15 min (`continuity-kit`); **`OV-1` decided 2026-09-08**, `OV-2`…`OV-6` now live |
 | 6 | One window | 1 window |
 
-**Total, if R-1 answers "enforce": roughly three to four weeks of nights.**
-**If R-1 answers "repair": roughly eight to ten.**
+**Total, if R-1 answers "enforce": roughly three to four weeks of nights.** R-1 answered *enforce*
+(2026-09-08 00:30), so this is the live number.
 
-Both numbers assume the day window stops producing new changes. **If it does not, the backlog grows
-faster than it drains and neither number is real** — that is Stage 0.1, and it is why 0.1 is first.
+Both numbers assume the day window stops producing new changes. **That assumption is now enforced by
+the playbook rather than by an operator remembering**: `.claude/loops/day-window.md` step 6 counts
+unbuilt specced changes and runs no spec loop at 2 or more, releasing itself when the nights catch
+up (decided 2026-09-08, `DECISIONS.md`). Stage 0.1's dated `DIRECTION.md` section covered 2026-09-08
+only and expired at midnight; the gate is what carries it from 2026-09-09 on.
 
 ---
 

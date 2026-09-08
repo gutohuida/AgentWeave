@@ -560,6 +560,54 @@ serving four-day-old code.
 
 ## Decided
 
+### OV-1 — Witness may read the local Claude Code transcript corpus
+
+**DECIDED 2026-09-08 01:40, by the operator, in session.** The answer is **yes**. Unblocks the
+`witness` repository (`C:\Users\huida\Documents\projects\witness`, 4 commits, no remote) and makes
+`OV-2`…`OV-6` live decisions rather than moot ones. Carried open since 2026-09-07 20:24; the
+`ROADMAP.md` Stage 5 line naming it as the week's deadline is now closed.
+
+**Two things the operator should know about what they said yes to**, both surfaced by the overseer's
+R3 and neither a reason to revisit the answer:
+
+- The corpus's scope is wider than "my sessions". It **includes 169 delegated-agent transcripts** —
+  subagent runs an operator picturing their own conversations would not picture. `OV-2`'s redaction
+  posture is the place that has to account for them.
+- **Yes does not stop the loss.** The corpus rolls off on a measured ~29-day window with a hard
+  cliff — 2,084 files, oldest 2026-08-09, while ≥51 earlier sessions evidenced by committed handoffs
+  are already gone. Permission was the blocker; **capture is a separate thing that does not exist
+  yet**, so the daily loss continues at exactly the previous rate until something is built or a
+  snapshot is taken. The operator declined a snapshot-first framing when it was offered; recorded as
+  their call, and it stays cheap to reverse.
+
+**Does not settle** `OV-2` (redaction posture), `OV-3` (retention past the harness's deletion
+window, which the overseer notes is `D8` wearing a second hat), or `OV-4`…`OV-6`.
+
+---
+
+### The day window stops proposing while the night is behind — a self-releasing gate
+
+**DECIDED 2026-09-08 01:40, by the operator, in session.** Changes a **standing default**, not one
+day's queue: `.claude/loops/day-window.md` step 6 now counts unbuilt specced changes before it
+composes anything, and at **2 or more there is no spec loop** — no D-2/D-3/D-4, no new proposal.
+At 0 or 1 the spec loop runs as it always has.
+
+**The arithmetic it exists for.** FILL writes one change a day; FIX builds one per one-to-two
+nights. Those rates diverge, and by 2026-09-08 the divergence was four fully specced changes, three
+rounds each, **129 tasks with two ticked, neither an implementation.** Stage 0.1 of `ROADMAP.md`
+cancelled the mismatch for 2026-09-08 with a dated `DIRECTION.md` section; that fix expired at
+midnight and reverted the window to proposing.
+
+**Rejected alternative: date a `DIRECTION.md` section per day through the drain.** It keeps the
+default intact and is reversible per day, but every day nobody remembers to write one silently
+reverts to proposing — the failure mode is invisible and the cost is a day. The gate needs no
+operator action in either direction and releases itself when the nights catch up.
+
+A dated `DIRECTION.md` section still overrides the gate **both ways**; that file outranks the
+playbook, as it always has.
+
+---
+
 ### R-1 — Enforce, as a ratchet
 
 **DECIDED 2026-09-08 00:30, by the operator, in session.** Written up in full at `### R-1` above,

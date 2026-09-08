@@ -93,18 +93,44 @@ Only the first firing of the window does this. It ends by writing a full `queue`
    queue as usual -- absence is not an instruction. It may never approve a change or decide a
    `DECISIONS.md` row; those tokens stay the authority.
 
-6. **Write the queue.** Sized so each item finishes inside one firing. A realistic day is one drive
-   plus one change through three rounds — the round discipline is expensive by design and must not
-   be collapsed to fit more in. Typical shape:
+6. **Write the queue.** Sized so each item finishes inside one firing. The round discipline is
+   expensive by design and must not be collapsed to fit more in.
+
+   **First count the drain — this decides the day's shape.** FILL writes one change a day; FIX
+   builds one per one-to-two nights. Left alone those two rates diverge and the backlog grows
+   forever. That is not hypothetical: by 2026-09-08 four changes were fully specced, three rounds
+   each, **129 tasks with two ticked, neither of them an implementation.**
+
+   ```bash
+   # unbuilt specced changes — a change directory with at least one unticked task
+   for d in openspec/changes/*/; do case "$d" in *archive*) continue;; esac; \
+     grep -q '^\s*- \[ \]' "$d/tasks.md" 2>/dev/null && basename "$d"; done | wc -l
+   ```
+
+   - **2 or more → there is no spec loop today.** No D-2/D-3/D-4, no new proposal. The day's slots
+     go to the draining column below.
+   - **0 or 1 → the spec loop runs**, exactly as it always has.
+
+   **The gate releases itself.** Nobody has to remember to turn proposing back on when the nights
+   catch up, and nobody has to remember to turn it off when they fall behind — which is the whole
+   reason it lives here rather than in a dated `DIRECTION.md` section. A dated section still
+   overrides it in **either** direction; that file outranks this playbook, as it always has.
 
    ```
-   D-1  drive        e2e, scoped to what the night window built
-   D-2  spec R1      explore and propose <change>
-   D-3  spec R2      re-derive R1's argument against the code
-   D-4  spec R3      re-derive again, independently
-   D-5  review       write the review page
-   D-6  repairs      the no-spec carve-out below, if the day has room
+                          draining (2+)                        clear (0-1)
+   D-1  drive     e2e, scoped to what the night built    drive    same
+   D-2  drive     full-surface sweep, if 7 days stale    spec R1  explore and propose
+   D-3  repairs   the no-spec carve-out below            spec R2  re-derive against the code
+   D-4  repairs   another, or a FINDINGS status sweep    spec R3  re-derive again, independently
+   D-5  review    write the review page                  review   same
+   D-6  repairs   if the day has room                    repairs  same
    ```
+
+   **The draining column is not filler.** A drive finds in one request what three rounds of reading
+   miss, the full-surface sweep is the only thing that ever covers a feature nobody touched, and
+   `FINDINGS.md` carries 145 entries with no status at all — so the ledger's own summary of what is
+   open has twice been measurably wrong. None of that work needs a spec, and all of it is what the
+   nights build from.
 
 7. **When the queue is done, set `next_action` to `null`.** Not a sentence saying the window is
    finished — the literal JSON `null`. The driver unregisters itself on a null `next_action`
@@ -167,6 +193,11 @@ reading missed.
 ---
 
 ## D-2 / D-3 / D-4 — the spec loop
+
+**These items exist only when step 6's drain count is 0 or 1.** At 2 or more there is no spec loop
+and this whole section is dormant for the day — read the draining column instead. Standing default
+since 2026-09-08, operator's decision; it replaced a hand-dated `DIRECTION.md` section per day,
+which reverts to proposing on any day nobody remembers to write one.
 
 **Three rounds before a line is implemented. Do not collapse them.** This is the operator's term:
 "do a spec loop" means exactly this and nothing needs clarifying.
