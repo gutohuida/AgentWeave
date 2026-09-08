@@ -389,8 +389,14 @@ checkout — the dev-repo traps are in "The Hub at runtime" above and still appl
   product"*. Correct reasoning; wrong for **F140**, whose drive was already recorded in
   `FINDINGS.md` twelve thousand lines above, two days before the banner. It cost F140 five days and
   a place on the operator's blocked list. Searching `openspec/changes/archive/` is not the same
-  search as searching `FINDINGS.md`. **F154 and F155 still carry that banner and have not had this
-  check.**
+  search as searching `FINDINGS.md`. ~~**F154 and F155 still carry that banner and have not had this
+  check.**~~ **Checked the same day, and both were the same error**: F154 fixed `001a07d` and driven
+  18/18 by `t_f154_wedged_review.py`; F155 fixed `0373867` and driven 23/23 by
+  `t_f155_conflict_remedy.py` — both on 2026-08-31, both recorded in `FINDINGS.md`, both banners
+  written three days *after* the drive they said was missing. **Three of the four the banner reopened
+  were already driven.** The severity-A count went six → five → three in one day with no product code
+  written. This is no longer one anecdote about F140: the grep is a standing precondition for
+  believing any "not driven" claim on this page, and it costs about ten seconds.
 
 ## Unattended runs — failure modes the driver does not detect
 
