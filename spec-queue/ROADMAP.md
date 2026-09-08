@@ -180,7 +180,8 @@ the whole inventory with no downside. Give it a remote and push it.
 `.agents/skills/` and `~/.codex/skills/` carry `handoff` and `resume` copies that are 73 and 9 lines
 behind and mention `DEAD-ENDS.md` **zero** times — they predate the ledger entirely. The claim to
 ship is "a file contract two agents can read", and the evidence on this disk is that keeping two
-agents in sync needs a check nobody wrote. See Stage 6.1.
+agents in sync needs a check nobody wrote — **written 2026-09-08**, `tests/test_skill_sync.py`;
+see Stage 6.1, and note it found three more drifted skills than this paragraph names.
 
 **`witness`** — 4 commits. **OV-1 is DECIDED: yes, 2026-09-08, operator in session**
 (`DECISIONS.md`). It is no longer blocked, and OV-2…OV-6 — downstream of it, and moot had the answer
@@ -216,7 +217,7 @@ reading a transcript back out of the archive was not.
 
 | # | Item | Detail |
 |---|---|---|
-| **6.1** | **Run `scripts/sync_skills.py`, then gate it.** Last run immediately before `a38caee` — the commit that introduced the ledger. Stale: `handoff` (341→268), `resume` (127→118), `daily-review` (absent). It is a hand-run mirror with no check; a ~15-line test diffing the trees would have caught this on 2026-09-04. |
+| **6.1** | ~~Run `scripts/sync_skills.py`, then gate it.~~ **DONE — 2026-09-08, day window iteration 7.** Synced; gated by `tests/test_skill_sync.py`, mutation-checked against four deliberately-stale shapes. **The staleness was wider than this row said:** five skills differed, not two — `autonomous-prep`, `autonomous-session` and `e2e-loop` (`install-driver.ps1` 230→182, `run-iteration.ps1` 266→181, `e2e.py` 411→385) drifted alongside `handoff` and `resume`, and the two `.ps1` files are the autonomous driver itself. The row's own numbers were right; its *inventory* was not, because it was assembled from what a reader noticed rather than from a diff. The gate now does the diffing. Two sub-findings: the sync copied `__pycache__` (fixed, `IGNORED` in the script), and the gate **skips** a destination it cannot find — both trees are untracked and absent on a CI runner, so it ratchets developer machines, not CI. |
 | **6.2** | **`scripts/drive/aw.py:16` promises a guard that does not exist.** The comment says *"an unset key fails loudly below"*. It does not — `KEY` is empty-string-defaulted and used directly as `"Bearer " + KEY`, which yields a 401 from the Hub, not a local failure. Add the check or fix the comment. |
 | **6.3** | ~~Rotate the disclosed `aw_live_` key.~~ **DONE — the operator rotated it, stated in session 2026-09-08 09:20.** Closes the day window's `day1` question (*"may the loop rotate keys itself?"*), which is now moot for this key and was never answered in the general case. **Residual, not a reopening:** 18 real-shaped 32-character `aw_live_` literals remain in **16 tracked files** — `hub/.env.example`, `hub/hub/db/engine.py`, two `hub/tests/`, eight `scripts/drive/`, and four documents. All are dead against a rotated key. What is not dead is the practice that produced them; a rotation is final only if nothing commits a live key again. Classified by shape without printing any value. |
 | **6.4** | ~~`.claude/handoffs/LATEST.md` names the wrong handoff.~~ **DONE — verified 2026-09-08 10:10.** It names `handoff-0116-…`, which is the highest-numbered file on disk. Whatever fixed it did not record itself here. |
@@ -284,10 +285,13 @@ and `FINDINGS.md`: **the documents lag the evidence, and always in the direction
 project look more blocked than it is.** Nothing found today was a nasty surprise; everything found
 today was progress nobody had written down.
 
-**Still genuinely open in Stage 6, re-verified in the code, not assumed:** **6.1** — the skill mirror
-is stale by exactly the amounts recorded (`handoff` 341→268, `resume` 127→118, `daily-review`
-absent), and **6.2** — `scripts/drive/aw.py:16` still promises *"an unset key fails loudly below"*
-above a `KEY = os.environ.get("AW_KEY", "")` that does no such thing.
+**Still genuinely open in Stage 6, re-verified in the code, not assumed:** **6.2** —
+`scripts/drive/aw.py:16` still promises *"an unset key fails loudly below"* above a
+`KEY = os.environ.get("AW_KEY", "")` that does no such thing. **6.1 closed 2026-09-08** — and it
+closed with a correction: the mirror was stale in **five** skills, not the two this section
+re-verified. Re-verifying the recorded numbers confirmed they were right and did not ask whether the
+list was complete; it was not. A diff would have said so in one second, which is the whole argument
+for gating it.
 
 ### 2. What the plan does not schedule — decided work with no owner
 

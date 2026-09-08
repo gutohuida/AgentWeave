@@ -30,6 +30,28 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE = REPO_ROOT / ".claude" / "skills"
 
+# Kimi reads the project tree; OpenCode reads it too (and `.claude/skills/` directly).
+KIMI_DEST = REPO_ROOT / ".agents" / "skills"
+# The only place Codex looks. `~/.codex` existing is how we detect Codex is installed at all.
+CODEX_HOME = Path.home() / ".codex"
+CODEX_DEST = CODEX_HOME / "skills"
+
+# Byte-compiled leftovers are not skill content. `e2e-loop` acquires a `__pycache__` the moment
+# anything imports `e2e.py`, and copying it makes every destination differ from the source again
+# the next time a `.pyc` is regenerated -- which would make the gate in tests/test_skill_sync.py
+# flap rather than catch anything.
+IGNORED = ("__pycache__", "*.pyc")
+
+
+def destinations() -> list[tuple[str, Path]]:
+    """Every tree this script mirrors into, as (label, path).
+
+    `tests/test_skill_sync.py` reads this so the gate cannot drift from the sync. Both paths are
+    untracked and machine-local -- neither exists on a CI runner, which is why the test skips a
+    destination it cannot find rather than failing on it.
+    """
+    return [("Kimi + OpenCode (project)", KIMI_DEST), ("Codex (user-level)", CODEX_DEST)]
+
 
 def find_skills(source: Path, include_generated: bool) -> list[Path]:
     """Return the skill directories to mirror, newest-convention first."""
@@ -55,7 +77,7 @@ def sync_to(skills: list[Path], dest: Path, label: str, dry_run: bool) -> int:
             continue
         if target.exists():
             shutil.rmtree(target)
-        shutil.copytree(skill, target)
+        shutil.copytree(skill, target, ignore=shutil.ignore_patterns(*IGNORED))
 
     if not dry_run:
         print(f"  OK {label} -> {dest} ({len(skills)} skills)")
@@ -86,15 +108,11 @@ def main() -> int:
         print(f"  - {skill.name}")
     print()
 
-    # Project-level: Kimi reads this; OpenCode reads it too (and .claude/skills directly).
-    sync_to(skills, REPO_ROOT / ".agents" / "skills", "Kimi + OpenCode (project)", args.dry_run)
-
-    # User-level: the only place Codex looks.
-    codex_home = Path.home() / ".codex"
-    if codex_home.is_dir():
-        sync_to(skills, codex_home / "skills", "Codex (user-level)", args.dry_run)
-    else:
-        print(f"  -- Codex not detected ({codex_home} missing) -- skipped")
+    for label, dest in destinations():
+        if dest == CODEX_DEST and not CODEX_HOME.is_dir():
+            print(f"  -- Codex not detected ({CODEX_HOME} missing) -- skipped")
+            continue
+        sync_to(skills, dest, label, args.dry_run)
 
     print("\nDone. Start a new agent session to pick the skills up.")
     return 0
