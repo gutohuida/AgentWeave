@@ -1,5 +1,5 @@
 {
-    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement. NOTE 2026-09-08: spec-queue/DIRECTION.md's 2026-09-08 section overrides that shape entirely -- no spec loop today, and the queue below is the operator's, not the playbook's default.",
     "playbook":  ".claude/loops/day-window.md",
     "runner":  "claude",
     "model":  "opus",
@@ -8,33 +8,94 @@
     "parent_branch":  "master",
     "parent_sha":  "9fb0809",
     "stop_at":  "2026-09-08T17:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
     "log_file":  ".claude/autonomous/2026-09-08-day-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "current":  "d1a-f292-diagnose",
+    "next_action":  "d1a. Read scripts/drive/FINDINGS.md's F292 entry WHOLE (from its heading at line 20734 to the F295 heading around 21410) plus F279, and DIRECTION.md's 2026-09-08 D-1/D-2 paragraphs. Then pull the real CI trace with `gh run view 34164645184 --log-failed`. Produce a written diagnosis in the day log: what holds the lock, why the existing mitigation did not hold, and whether F279 is the same class -- answer that either way, explicitly. The ledger already records that it does NOT reproduce locally from the two CI files alone, so do not spend the firing re-proving that. NO FIX THIS ITERATION -- d1b applies it.",
     "queue":  [
                   {
                       "id":  "compose",
+                      "status":  "done",
+                      "title":  "Compose this window's queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none.",
+                      "result":  "Done, iteration 1. Merge gate: three of the four conditions held (branch is not master; `git rev-list --count HEAD..master` == 0; tree clean and HEAD == @{u}; no line-initial HOLD MERGE in DIRECTION.md). Condition three FAILED: CI for HEAD 8c01b50 was still in_progress at 09:01, and a stale green from an earlier commit is explicitly not a pass. Gate did not open; retried by queue item gate-retry. Night of 2026-09-07 confirmed to have built nothing -- STATE-night.json still points at 2026-09-06-night-log.md with next_action null, and no 2026-09-07-night-log.md exists -- so DIRECTION's claim is verified and D-1's usual 'drive what the night built' has no content. Research delivered to spec-queue/research/2026-09-08.md (536 lines). Drain count = 4 unbuilt specced changes, so the playbook's own 2-or-more gate would independently have suppressed the spec loop. Queue below is DIRECTION.md's 2026-09-08 section, expanded so each item fits one firing."
+                  },
+                  {
+                      "id":  "d1a-f292-diagnose",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "F292 -- diagnose before repairing",
+                      "detail":  "Read the F292 ledger entry whole; it already contains several rounds of diagnosis and at least one negative result (does not reproduce locally from the two CI files). Do not repeat measurements it already records. The named trap, in the finding's own title: 'the mitigation written for it did not hold' -- so a repair that merely strengthens the existing mitigation repeats a move already measured to fail. Also decide whether F279 (two 'a stopped run' tests failing about half the time on an unmodified tree) is the same class, and say so either way. Output is a diagnosis written into the day log. No code change."
+                  },
+                  {
+                      "id":  "d1b-f292-repair",
+                      "status":  "open",
+                      "title":  "F292 -- apply the repair d1a argued for",
+                      "detail":  "Scope guard: this window does not implement. A fixture- or harness-level repair (hub/tests/, conftest, scripts/drive/) is in scope as D-6-style ordinary work, with D-6's rules in full -- drive it, run the lint set CI runs, mutation-check any test added, set the finding's Status line. If d1a concludes the real fix is in hub/hub/ production code, STOP: file it as a change for tomorrow's spec loop and say so in the log; do not implement it here. DIRECTION is explicit that F295's a-dead-connection change may or may not resolve this and must not be conflated with it."
+                  },
+                  {
+                      "id":  "d2-f292-measure",
+                      "status":  "open",
+                      "title":  "Did the F292 repair hold? Re-run; do not assume",
+                      "detail":  "One green run does not close an intermittent failure. Re-run the affected tests enough times to state an honest rate and write the number down. If the repair did not hold, that IS the finding -- record it and stop, rather than starting a second attempt at the end of the window. If d1b concluded the fix is out of this window's scope, this item measures the current failure rate on the unmodified tree instead, which is still a number the ledger lacks."
+                  },
+                  {
+                      "id":  "d3a-hygiene-6-1",
+                      "status":  "open",
+                      "title":  "ROADMAP 6.1 -- run scripts/sync_skills.py, then gate it",
+                      "detail":  "Skills have been stale in .agents/skills/ and ~/.codex/skills/ since a38caee: handoff (341 lines -> 268), resume (127 -> 118), daily-review absent. Run the sync, then add the ~15-line test that diffs the trees so it cannot silently rot again. Mutation-check the test: it must fail against a deliberately stale copy, or it is not evidence."
+                  },
+                  {
+                      "id":  "d3b-hygiene-6-2-6-4",
+                      "status":  "open",
+                      "title":  "ROADMAP 6.2 and 6.4 -- the comment that lies, and LATEST.md",
+                      "detail":  "6.2: scripts/drive/aw.py:16 says an unset AW_KEY 'fails loudly below'; it does not -- KEY is empty-string-defaulted and concatenated into 'Bearer ', which yields a 401 from the Hub, not a local failure. Add the guard rather than weakening the comment (cleanest solution wins). 6.4: .claude/handoffs/LATEST.md names the wrong handoff; verify the real newest on disk before writing it rather than trusting the roadmap's 0113. 6.3, the aw_live_ key rotation, is deliberately NOT in this item -- see decisions_for_user."
+                  },
+                  {
+                      "id":  "d4-reconcile",
+                      "status":  "open",
+                      "title":  "Read ROADMAP.md and DECISIONS.md R-1, reconcile the day log to them",
+                      "detail":  "DIRECTION's D-4. Read both whole; check this window's account of itself against what the roadmap says the stages are, and correct the log where they disagree. Do NOT start R-1's three ratchet checks: they are Stage 6 by number but sit behind Stage 2 by order, and DIRECTION says explicitly they are not the day window's."
+                  },
+                  {
+                      "id":  "d5-review",
+                      "status":  "open",
+                      "title":  "Write spec-queue/review/review-2026-09-08.html and append to APPROVALS.md",
+                      "detail":  "Six sections in the playbook's order. Sections 2 and 4 are unusual today and must say so plainly rather than being left blank: the night built NOTHING (AgentWeaveArmNight disabled 2026-09-07) and NOTHING was specced (DIRECTION suppressed the spec loop). Section 1 leads with the merge gate's verdict and with the fact that four specced changes carry no approval token. Self-contained HTML, theme-aware, no external assets. Append today's APPROVALS.md section with no status tokens -- those are the operator's."
+                  },
+                  {
+                      "id":  "d6-stage2-readiness",
+                      "status":  "open",
+                      "title":  "If the window has room: what would block a build starting tonight?",
+                      "detail":  "DIRECTION's 'if the window finishes early' item. Re-read ROADMAP Stage 2 against the four unbuilt changes' tasks.md files -- 2026-09-05-the-conversation-carries-its-own-run-facts, 2026-09-07-a-dead-connection-is-never-handed-back-out, 2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing, 2026-09-07-clearing-instructions-asks-first -- and report per change what would stall a build: a stale line reference, a task naming a file that has moved, a phase whose predecessor was archived. This is verification of work already specced, not new scope."
+                  },
+                  {
+                      "id":  "gate-retry",
+                      "status":  "open",
+                      "title":  "Retry the morning merge gate once CI concludes",
+                      "detail":  "Only condition three failed at 09:01 (CI in_progress for 8c01b50). Re-check with `gh run list --branch autonomous/2026-09-08-daily --limit 20 --json headSha,conclusion,workflowName`; require conclusion == success for the CI workflow at the CURRENT HEAD sha, not at 8c01b50 if the branch has moved since -- which it will have, since every iteration commits. All four conditions must be re-checked, not only this one. If the gate opens, fast-forward master with `git merge --ff-only` and push it; the flag is not optional."
                   }
               ],
     "decisions_for_user":  [
-
+                               {
+                                   "id":  "day1",
+                                   "question":  "ROADMAP 6.3 -- rotate the disclosed aw_live_ Hub key, in public git history and carried unaddressed across several handoffs. Should an unattended window do this at all? Rotating a credential invalidates whatever still holds the old one, and the instance most likely to hold it is the operator's live 8000, which this window is forbidden to touch. Left undone today. Say whether the loop may rotate trial-profile keys itself, or whether every rotation is yours.",
+                                   "raised":  "2026-09-08 iteration 1"
+                               }
                            ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
+                   "TODAY ONLY, from DIRECTION.md's 2026-09-08 section: may not propose a new change (no R1/R2/R3, and no exploration that is a proposal wearing another name); may not write an approval token or mark a decision; may not spec anything it finds -- file the finding, leave it.",
+                   "The hub suite runs whole in 15-25 minutes and exceeds the 600s command cap. Run it in file chunks, and do not run it whole unless something done here could plausibly have broken it."
                ]
 }
