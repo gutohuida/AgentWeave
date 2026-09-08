@@ -124,7 +124,7 @@ the census, and any later reading of an F292 CI negative, must know it.
 
 ## 3. Tests
 
-- [ ] 3.1 A test for the guard that kills a worker thread by the **real mechanism** rather than by
+- [x] 3.1 A test for the guard that kills a worker thread by the **real mechanism** rather than by
   monkeypatching `is_alive`. The mechanism is stated here in full because
   `testbed/scratch/f295/probe_guard_lib.py`, which the earlier rounds pointed at for it, was deleted
   with the testbed on 2026-09-07: open a second event loop, create a future on it, close that loop,
@@ -133,20 +133,20 @@ the census, and any later reading of an F292 CI negative, must know it.
   closed loop, raises `RuntimeError: Event loop is closed`, raises again reporting *that* the same
   way, and its `while True` ends (`aiosqlite/core.py:47-75`). Join the thread to confirm. A test that
   fakes the thread's deadness proves the listener reads a boolean, not that the recovery works.
-- [ ] 3.2 The same test asserts the *recovery*, not just the raise: a statement issued after the
+- [x] 3.2 The same test asserts the *recovery*, not just the raise: a statement issued after the
   kill returns a value from a new connection. Give it a real timeout, because the failure mode is a
   hang and an unbounded test hang in CI is the very thing `F292` costs hours to.
-- [ ] 3.3 A test that pins 1.5 — with the `close` listener removed, the guarded checkout does not
+- [x] 3.3 A test that pins 1.5 — with the `close` listener removed, the guarded checkout does not
   recover. Write it as a bounded wait that must **not** time out, and confirm it fails when 1.5 is
   removed while 1.2 stays. Do not leave a hanging variant enabled in the suite. (This replaces R1's
   ordering test, which pinned an arrangement that no longer exists.)
-- [ ] 3.4 A test that a healthy checkout is untouched: no reconnection, no WARNING.
+- [x] 3.4 A test that a healthy checkout is untouched: no reconnection, no WARNING.
 - [ ] 3.5 A test that shutdown settles a background run before disposing. Assert the ordering
   directly — a run task registered in `_background_runs` is not pending when `dispose` is called —
   rather than asserting only that shutdown completed, which is true with the bug.
 - [ ] 3.6 A test that the settle's bound logs and completes rather than raising, driven by a task
   that re-registers a successor every pass.
-- [ ] 3.7 A test that the replacement connection is **configured, not bare** — that the forced
+- [x] 3.7 A test that the replacement connection is **configured, not bare** — that the forced
   reconnect re-fires the engine's `connect` listeners. R2 measured this holds
   (`testbed/scratch/f295/probe_guard3.py`: `busy_timeout = 30000` on the replacement, through a
   listener of `hub/tests/conftest.py:86`'s shape), and it is worth a test precisely because the
