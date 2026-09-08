@@ -20840,7 +20840,11 @@ with a product-engine connection SQLAlchemy silently gave up on, so it discrimin
 not at all. **A second instrument shipped 2026-09-08 (day d1b)** to close that blind spot; see the
 section at the end of this entry. It is an instrument, **not a fix**, and the finding stays open. Read the sections in order -- each narrowing is
 superseded by the one that follows it, and the most recent section supersedes the "no hangs" framing
-of everything before it.
+of everything before it. **Measured 2026-09-08 (day `d2`), the number this entry never had: 11
+failures in 54 completed `ci.yml` runs across all branches, 2026-09-07T00:00Z -> 2026-09-08T08:26Z
+= 20.4%, and every one of those 11 is this defect -- CI redness currently has exactly one cause.
+The occurrence count is corrected from 8 to at least 22, earliest 2026-09-04T22:02Z. Method,
+denominators and the per-run classification are in the final section.**
 
 **Narrowed 2026-09-05 (day D-6), by a control run for a different finding.** Still open, still not
 reproduced from the suite itself, but the space of mechanisms is smaller than it was this morning.
@@ -21505,6 +21509,88 @@ the four files that create their own engines -- 109 passed, 1 skipped. The
 `test_flow_fires_a_review_turn.py` emits locally was **confirmed to pre-date this change** by
 re-running the file with the diff stashed (12 matching lines either way); it is F295's signature, not
 a regression from the instrument.
+
+
+### Measured 2026-09-08 (day `d2`): the rate, its denominator, its window and its method
+
+The entry has carried occurrence *anecdotes* since it was filed and has never carried a **rate**.
+This section is that number, derived independently rather than copied from
+`.claude/handoffs/DEAD-ENDS.md`'s 2026-09-08 line.
+
+**Method.** `gh run list --workflow ci.yml --limit 300 --json headSha,conclusion,createdAt,status,databaseId,headBranch`
+(297 completed runs, 2026-08-19 → 2026-09-08T08:26Z), then, for **every** failure in the windows
+below, `gh run view <id> --json jobs` to confirm `hub-test` was the only failing job, and
+`gh run view <id> --log-failed` to confirm the error is this defect —
+`sqlite3.OperationalError: database is locked` on `DROP TABLE requirement_drift` at
+`conftest.py:473` — and not something else. No failure is counted as F292 on the strength of being
+red.
+
+**The headline rate, with its denominator:**
+
+| Population | Runs | Failures | Rate |
+|---|---|---|---|
+| All branches, 2026-09-07T00:00Z → 2026-09-08T08:26Z | 54 | **11, every one F292** | **20.4 %** |
+| `master` only, since 2026-09-06T00:00Z | 20 | 5, every one F292 | 25.0 % |
+| `master` only, whole 119-run sample since 2026-08-19 | 119 | 16, of which 5 F292 | 13.4 % overall, **4.2 % F292** |
+
+The third row is the one that dates the defect: over the full three-week sample F292 accounts for
+5 of 16 `master` failures, and **all five are after 2026-09-06T15:35Z**. The other eleven are real
+test failures and two `test (ubuntu-latest, 3.11)` failures from 2026-08-25. F292 is recent and
+concentrated, not chronic — which is why any rate quoted over a long window understates it.
+
+**The sharpest single fact, and it is new:** in the 54-run window since 2026-09-07T00:00Z,
+**every red CI run is F292 — 11 of 11, zero other causes.** CI redness on this project currently has
+exactly one cause, and it is this finding. The merge gate is being held shut by one defect.
+
+**Occurrence count corrected: at least 22, not 8.** The entry's count is 8 because it counted the
+occurrences somebody happened to read. Every failure in 2026-09-04T22:02Z → 2026-09-08T07:55Z was
+classified by log signature this iteration, and **22** carry it:
+
+- `autonomous/2026-09-04-daily` (10): `33923797344` `33953849160` `33955870588` `33997304616`
+  `33998517779` `33998598976` `34021133812` `34029310406` `34062482611` `34062963728`
+- `master` (5): `34042787904` `34164645184` `34171697507` `34174610762` `34175711842`
+- `autonomous/2026-09-07-daily` (2): `34106986818` `34111041237`
+- `autonomous/2026-09-07-sidequest` (4): `34137445128` `34140570366` `34141780252` `34153909037`
+- `autonomous/2026-09-08-daily` (1): `34201752603`
+
+Earliest confirmed is `33923797344`, 2026-09-04T22:02Z — one day *before* the entry was filed, so
+the defect predates its own discovery, as expected. 22 is a floor, not a ceiling: runs before
+2026-09-04T22:02Z were not classified, and the 2026-09-03/04 failure spike (36 failures on
+`autonomous/2026-09-03-daily`) is a separately-broken tree that was deliberately excluded rather
+than swept in — `33808108594` from it was checked and is **F279's** signature
+(`test_a_stopped_run_persists_it`), not this one.
+
+**Three tests, two files, and one run that errored at two of them.** Across the 22:
+`test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn` (7 of the 16 logs still
+retained), `test_a_wedged_review_is_restaffed_to_a_real_reviewer` (6),
+`test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted` (4) — in
+`hub/tests/test_flow_fires_a_review_turn.py` and `hub/tests/test_reviewer_is_not_the_author.py`,
+which confirms the entry's "the two test files F292 has always failed in" against a 22-run sample
+rather than against the handful read so far. Run `34140570366` errored at setup of **two** of them
+in one run, which no prior occurrence had shown.
+
+**Agreement with `DEAD-ENDS.md`, and the caveat that matters.** That file records *"4 failures in
+the last 20 `ci.yml` runs, ~22%"*. This measurement gives 5/20 = 25 % on the nearest comparable cut
+(`master`, last 20) and 20.4 % all-branch. **The two agree** — same magnitude, same direction, and
+both are materially worse than the "~1 in 6" (16.7 %) previously on record. They cannot be
+reconciled run-by-run because the DEAD-ENDS line records a rate without its population or its date
+range; 4/20 is 20 %, not 22 %, so its denominator was probably not 20 either. **Lesson, and it is
+the reusable one: a flake rate without its denominator, its window and its classification method is
+not a measurement.** That is why this section states all three.
+
+**A methodological hole this count does *not* close.** A rate keyed on "`hub-test` was the only
+failing job" cannot see a *hang*. Run `34041037112` (2026-09-06T15:02Z) is the proof: its `hub-test`
+job ran 15:02:24 → 21:02:40 — **exactly six hours, GitHub's job ceiling** — and was `cancelled`,
+while the run's `failure` conclusion came from `test (ubuntu-latest, 3.11)`. Classified strictly it
+is *not* an F292 failure, and it is excluded from the 22 above; but the entry's own "hung for 3.5
+hours instead of failing" section says this mode exists. **Any future rate for this finding must
+count cancelled-after-timeout `hub-test` jobs separately, or it will undercount the worst
+occurrences.**
+
+**Not measured, and deliberately.** Whether the instrument shipped at `66861a4` has fired: as of
+this iteration CI for `66861a4` was still `in_progress`, and the two commits after it had not
+started. The first instrumented occurrence is still ahead, and reading it outranks re-deriving this
+rate.
 
 ---
 
