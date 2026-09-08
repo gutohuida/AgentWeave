@@ -595,6 +595,87 @@ none was taken.
 
 ---
 
+### OV-6 + OV-3 — a batch reader, plus a dumb snapshot that is not part of Witness
+
+**DECIDED 2026-09-08 02:05, by the operator, in session.** The overseer put these as *"one decision
+wearing two hats"*: a batch reader cannot keep a record past the harness's own deletion window
+(measured ~29 days, hard cliff), and keeping more requires copying transcripts before deletion,
+which is a resident process. **The decision splits the hats instead of choosing one.**
+
+- **Design D8 stands: Witness is a command, not a daemon.** All three of the overseer's reasons
+  survive — OV-1 asked permission for a corpus read *the operator runs*, and using that consent for
+  an unattended reader is the failure this product exists to prevent; a forward-only tailer is the
+  collector-shaped D2 design returning through another door; and a resident version has failure
+  modes the batch one lacks, including a crash whose silence is indistinguishable from inactivity.
+- **Retention is solved outside Witness, by a plain scheduled copy of the corpus.** No reading, no
+  parsing, no analysis — a file copy. It stops the daily loss without creating an unattended
+  *reader*, which is the thing OV-1's answer did not cover.
+
+**This is not "resident after all" by another name, and the distinction is the whole decision.** The
+objection to a tailer was never that a process runs; it was that a process *reads and interprets*
+transcripts with nobody watching. A copy that never opens a record makes no judgement, produces no
+output to be wrong, and its failure mode is a missing file rather than a silent misreading.
+
+**Not settled here:** where the snapshot lives, how much disk it takes (the corpus was 1.09 GB and
+growing measurably within a single day), how far back it is pruned, or whether it is built at all
+yet. **Nothing has been built** — the loss continues at the previous rate until it is.
+
+---
+
+### OV-2 — redact at write
+
+**DECIDED 2026-09-08 02:10, by the operator, in session**, after the question was re-put with the
+snapshot decision in hand. Witness reads raw, redacts, and **only the redacted record lands durably
+in its own store.**
+
+**The snapshot changed this answer's cost, which is why it was re-asked.** The overseer's framing —
+*at read loses fidelity permanently; at write leaves a window; not at all makes the store the most
+sensitive file on the machine* — assumed Witness's store was the only copy. With OV-6's raw snapshot
+retained, **fidelity is recoverable from the snapshot**, so the usual objection to redacting early
+does not apply: the queryable store can be safe without the record becoming useless for the incident
+it was built for.
+
+**Residual risk, stated rather than designed away:** the in-flight window. Witness holds raw text
+between read and write, so a crash or an error log can still spill unredacted content. Whatever
+implements this must not log what it is about to redact.
+
+**And a warning this repository paid for twice: over-matching is the failure mode, not
+under-matching.** `redact_secrets` (`hub/hub/runner_events.py:63`) has been wrong in that direction
+on both outings — **F31**'s `[A-Za-z0-9_=-]{32,}` catch-all redacted the Hub's own vocabulary
+(`mcp__agentweave__record_evidence` 32 times, document slugs the Hub minted itself), and **F118**
+stored every task id as `ta<redacted>` because `task-` ends in the literal `sk-`. Both destroyed the
+**join keys** — the identifiers connecting a transcript to the board, which is the thing the reading
+exists to recover. A redactor for Witness inherits that lesson or repeats it.
+
+---
+
+### OV-4 — the operator only
+
+**DECIDED 2026-09-08 02:10, by the operator, in session.** Single-operator local, which was the
+first cut's existing assumption — so this confirms a default rather than changing one, and no
+access-control work is authorised. The overseer's estimate for the alternative stands as the reason:
+a second reader turns this into an access-control product and roughly triples the scope.
+
+**Consistent with OV-2's answer but not made redundant by it.** Redaction at write is what makes the
+store safe to back up or eventually give a remote; "you only" is what makes it safe today. Either
+alone would be thinner than both.
+
+---
+
+### F295 task 1.6 — left to the night window, deliberately
+
+**DECIDED 2026-09-08 02:05, by the operator, in session: no override.** The `close_detached` gap —
+write the two-line listener so the delta's *"every path"* is literally true, or narrow the
+requirement to the paths the pool dispatches `close` for — was offered and declined in favour of
+letting tonight's FIX window choose. The task states both options with the measurement attached
+(`grep -rn "\.detach()" hub/hub/` returns nothing; a probe's `close_detached` counter fired zero
+times), and `APPROVALS.md` records that either satisfies the approval.
+
+**Recorded so tomorrow reads this as a choice, not an oversight.** Check what the window picked; if
+it wrote the listener, confirm it carried the deliberately-unreachable comment task 1.6 asks for.
+
+---
+
 ### OV-1 — Witness may read the local Claude Code transcript corpus
 
 **DECIDED 2026-09-08 01:40, by the operator, in session.** The answer is **yes**. Unblocks the
