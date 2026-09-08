@@ -40,6 +40,19 @@ false current-behaviour requirement sitting thirty lines from the one this chang
 belongs to retiring `openspec/changes/2026-08-07-unasked-question-backstop`, not here — but it is
 how a later round inherits a retired feature as evidence, so it is put to the operator now.
 
+**A third review ran after this section was written** —
+`review/third-review-2026-09-08.md`, an Opus subagent briefed to work blind and reconcile only at
+the end. **It agrees none of the four needs another round**, and it is the first round to *measure*
+the F295 arrangement rather than read it (raise-only checkout plus the `close` listener recovers in
+0.00s; without the listener the same checkout survived a 20-second timeout and ran seven minutes to
+a manual kill). It found **one thing that blocked implementation**: change 4's task 2.2 had its
+ordering backwards — the context materialisation at `agent_trigger.py:960` happens 46 lines *before*
+`resolve_access_path` at `:1006`, so the value it told the implementer to pass through does not
+exist yet. Repaired, along with six editorial findings. Two are left for you: **F295's new task 1.6**
+(the delta says "every path" and the tasks build four of five; the fifth, `close_detached`, is
+measured unreachable today — write the two lines or narrow the requirement) and **R-7**, an
+unmeasured widening of the working indicator that task 6.7's drive should watch for.
+
 **One correction to `ROADMAP.md`, which bears on the `ORDER:` line.** Stage 0.3 says *"Three of the
 four touch `hub/ui` and the committed bundle... Only one is bundle-free."* That is wrong: **two are
 bundle-free.** This change names no `hub/ui` file anywhere and declares its own bundle exemption at

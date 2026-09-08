@@ -44,7 +44,12 @@ the installed library. Repaired by the second review, 2026-09-08.
 - [ ] 1.5 **Neutralise on the `close` pool event, which is the one place every close passes
   through.** Add a second listener, `@event.listens_for(engine.sync_engine, "close")`, that applies
   the same dead-worker test as 1.1 and, when it holds, sets `_running = False` and
-  `_connection = None` before returning. SQLAlchemy dispatches `close` from
+  `_connection = None` **on the inner `aiosqlite.Connection`** — that is
+  `dbapi_connection._connection._running` and `._connection._connection`, the object 1.1's path
+  reaches and the one `design.md`'s two quotations are of — before returning. (Named explicitly by
+  the third review: the bare attributes read as if they belonged to the adapter. Setting them there
+  would fail loudly rather than silently — `AsyncAdapt_aiosqlite_connection.__slots__` does not carry
+  them — but the task should not require an implementer to discover that.) SQLAlchemy dispatches `close` from
   `_ConnectionRecord.__close()` — reached by `invalidate()` (what 1.2's raise triggers), by
   `QueuePool.dispose()` (**what task 2.3 calls at shutdown**), by a checkin-time close, and by the
   abandon at the end of `_ConnectionFairy._checkout`. A checkout-only guard covers exactly the first
@@ -56,6 +61,23 @@ the installed library. Repaired by the second review, 2026-09-08.
   - `probe_r3_close_listener.py B` — with the retries exhausted, `fairy.invalidate()` closes a
     connection the checkout listener never saw. Without this listener that hangs (45-second kill);
     with it the caller gets `InvalidRequestError: This connection is closed` in 0.00s.
+
+- [ ] 1.6 **The same predicate on the `close_detached` pool event — added by the third review, and
+  the operator may drop it.** The second ADDED requirement says the neutralisation *"SHALL cover
+  every path that closes such a connection"*; 1.5 enumerates four, and all four are downstream of
+  `_ConnectionRecord.__close()`, which dispatches `close` (SQLAlchemy 2.0.50,
+  `pool/base.py:880-881`). There is a **fifth**: `_finalize_fairy` closes a *detached* connection
+  through `pool/base.py:999-1000`, which dispatches **`close_detached`**, not `close`, so a
+  `close`-only listener never sees it. Two lines, identical predicate, and it makes "every path"
+  literally true rather than nearly true.
+
+  **Measured not reachable in the Hub today** — `grep -rn "\.detach()" hub/hub/ --include=*.py`
+  returns nothing, and a probe's `close_detached` counter fired zero times across both checkout
+  invalidation and dispose. So this is a requirement that currently overstates what tasks 1.1-1.5
+  build, and there are two honest ways to close the gap: write the two lines, or narrow the
+  requirement to the paths the pool dispatches `close` for. **If it is written, comment it as
+  covering an unreachable state deliberately**, the way 3.11 does, so a later reader neither deletes
+  it as dead weight nor cites it as evidence the state occurs.
 
 ## 2. Shutdown ordering
 

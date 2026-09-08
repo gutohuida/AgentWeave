@@ -51,7 +51,9 @@ choose deliberately. **If phase 0 has not been recorded, do phase 0 and stop.**
       collects `entry.run_id` over the entries handed to it, returns `{}` on an empty set, and
       otherwise runs `select(Run).where(Run.project_id == project_id, Run.id.in_(run_ids))` with no
       `ORDER BY` and no `LIMIT`. Carry the `project_id` predicate and the comment saying it is
-      enforcement rather than inference (design D2).
+      enforcement rather than inference (design D2). **`Run` is not imported in `agent_chat.py`** —
+      its `from ...db.models import (...)` block at `:36-47` does not name it, so add it there.
+      (Noted by the third review; every other symbol this change touches was already named.)
 - [ ] 1.3 `get_chat_history` (`:567`) calls it on the **final** `entries` list — after the sort and
       after `_queued_entries_for` extends it (`:633-635`) — and returns the map.
 - [ ] 1.4 `get_recent_chat` (`:646`) calls it on **its** final list — after `entries[-limit:]`
@@ -59,8 +61,13 @@ choose deliberately. **If phase 0 has not been recorded, do phase 0 and stop.**
       not what it read (design D3).
 - [ ] 1.5 The status rename is the boundary's, once: `RunFacts` is constructed exactly as
       `agents.py:830-841` does, `running` spelled `started`, `outside_workspace_writes` passed
-      through with no default. If both routes now build `RunFacts` the same way, factor the
-      construction rather than copying it — one boundary rename, one place.
+      through with no default. Both chat routes go through 1.2's single helper, so there is one
+      construction in `agent_chat.py` and nothing to factor — **do not** factor it together with
+      `agents.py:830-841`, which would contradict this proposal's Impact line (*"No server code
+      outside `agent_chat.py`"*). The duplication across the two modules is accepted deliberately;
+      task 4.6's BOLA test is what keeps the `project_id` half honest. (Clarified by the third
+      review, which read the original clause both ways and found one of them vacuous and the other
+      contradicting the proposal.)
 
 ## 2. The client reads the facts from the response that carries the turns
 

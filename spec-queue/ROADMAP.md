@@ -47,12 +47,13 @@ Nothing below this line can move until these are done, and item 1 expires in the
 
 | Change | Finding | Tasks | Touches UI / bundle |
 |---|---|---|---|
-| `2026-09-07-a-dead-connection-is-never-handed-back-out` | **F295 (A)** | 24 (1 ticked) | **No** — Python only |
+| `2026-09-07-a-dead-connection-is-never-handed-back-out` | **F295 (A)** | 25 (1 ticked) | **No** — Python only |
 | `2026-09-05-the-conversation-carries-its-own-run-facts` | **F274 (A)** | 44 | Yes |
-| `2026-09-07-clearing-instructions-asks-first` | DAY-3 | 24 (1 ticked) | Yes |
+| `2026-09-07-clearing-instructions-asks-first` | DAY-3 | 25 (1 ticked) | Yes |
 | `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing` | sidequest | 35 | **No** — corrected 2026-09-08 |
 
-**127 tasks, 2 ticked, neither an implementation.** Suggested `ORDER:` — `a-dead-connection` first
+**129 tasks, 2 ticked, neither an implementation.** (Was 127; the third review added F295's 1.6 and
+clearing-instructions' 1.4 — see `review/third-review-2026-09-08.md`.) Suggested `ORDER:` — `a-dead-connection` first
 (highest severity, no bundle, so it can land beside anything and cannot conflict), then
 `an-agent-without-mcp` (also bundle-free), then the **two** UI changes strictly one per night. All
 four now have an `APPROVALS.md` row; the fourth got one on 2026-09-08, which is what makes it

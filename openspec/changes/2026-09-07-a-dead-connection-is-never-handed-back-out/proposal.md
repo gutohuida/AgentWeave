@@ -62,7 +62,7 @@ Measured at the SQLAlchemy layer, not just the driver (`testbed/scratch/f295/pro
    queueing work for the dead thread.
 3. **The guard works when it neutralises the connection before raising.** Setting the aiosqlite
    `Connection`'s `_running = False` and `_connection = None` makes `close()` a documented no-op
-   (`aiosqlite/core.py:199-201`), so invalidation cannot touch the thread. Then:
+   (`aiosqlite/core.py:202-203`), so invalidation cannot touch the thread. Then:
 
    ```
    worker alive after kill: False

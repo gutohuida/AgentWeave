@@ -21,6 +21,13 @@ lint set is not required — say so in the log rather than passing over it in si
   it is measured in `proposal.md`, one row upserted in place, no history table.
 - [ ] 1.3 Cancel, Escape and a scrim click all do the same nothing: no write, no change to the
   editor's content. Do not restore the old text on Cancel — the operator typed the empty editor.
+- [ ] 1.4 **Mount it inside the `data` branch of `{children}`** (`InstructionsPage.tsx:71`), or wrap
+  the component's return in a fragment. Named by the third review because no task said where the
+  dialog goes: `InstructionsPage` returns a single `<SettingsSection>`, Save lives in the `actions`
+  prop (`:62-69`) which renders in the section's heading, and `{children}` (`:71-152`) is a sibling
+  of it — so the dialog cannot simply go "next to Save", and 2.3 forbids moving Save. This also
+  decides `useDialogFocus`'s focus restoration, which returns focus to a control in the other
+  subtree.
 
 ## 2. The gate
 

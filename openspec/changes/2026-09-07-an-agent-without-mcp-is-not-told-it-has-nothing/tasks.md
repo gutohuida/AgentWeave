@@ -37,10 +37,27 @@ treat the open choice as permission to skip the requirement.
   path, defaulting to the MCP rendering so no existing call site changes meaning. One source, two
   renderings (`design.md` D3) — do **not** write a second list, and do not reuse
   `src/agentweave/tool_surface.py`, which has zero importers and lives in the other package.
-- [ ] 2.2 Pass the run's access path through at the injection site,
-  `hub/hub/api/v1/agents.py:1543`. The path is already resolved for the run at
-  `agent_trigger.py:1006`; the context materialisation must receive it rather than re-derive it, or
-  the notice and the description can disagree about the same turn.
+- [ ] 2.2 Pass the run's access path into the render, so the notice and the description cannot
+  disagree about the same turn. **Rewritten by the third review, 2026-09-08: this task had the
+  ordering backwards.** It said the path *"is already resolved for the run at
+  `agent_trigger.py:1006`"* and that the materialisation *"must receive it"* — but the
+  materialisation happens **46 lines earlier**, at `agent_trigger.py:960`
+  (`rendered_context = await _render_hub_agent_context(...)`), and `resolve_access_path` is not
+  called until `:1006`. There is nothing to receive at `:960`; the value does not exist yet. What
+  to do instead:
+  - **Hoist `resolve_access_path` above the materialisation.** Its three arguments are all bound far
+    earlier — `config` at `agent_trigger.py:640`, `probe` at `:647`, `runner` at `:648` — so the call
+    can move above `:960` and its single value be reused at `:1006`. Nothing reads `access_path`
+    before `:1006` today, so the hoist is safe; verify that on the checkout rather than trusting it.
+  - **Give `_render_hub_agent_context` (`agents.py:1073`) an `access_path` parameter defaulting to
+    the MCP rendering**, exactly as 2.1 does for `_tool_surface_lines`, and thread it to the
+    injection site at `agents.py:1543` (`lines.extend(_tool_surface_lines(...))`).
+  - **Say what the other two production callers pass.** `_render_hub_agent_context` has three, not
+    one: `agents.py:1769`, `agents.py:2143` and `agent_trigger.py:960`. 2.1 protects its call sites
+    with a default and this task said nothing equivalent. A `GET .../context` route left rendering
+    MCP wording for an agent whose next run takes the HTTP path reintroduces precisely the
+    disagreement this task exists to prevent — decide whether those two resolve the path themselves
+    or deliberately keep the default, and write the reason down.
 - [ ] 2.3 Extend `test_tool_surface_matches_server.py` to run its existing agreement check against
   **both** renderings. This is the whole reason `_tool_surface_lines` was chosen as the home; a
   rendering not covered by that test drifts the first time a tool is added, silently.

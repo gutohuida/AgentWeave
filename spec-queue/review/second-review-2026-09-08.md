@@ -130,10 +130,16 @@ mutation checks. **No residue of the inline arrangement survives anywhere in the
 `_thread` is created at `core.py:90` (`Thread(target=_connection_worker_thread, …)`); `_running` at
 `:85`; `_execute`'s guard tests **both** `_running` and `_connection`, which is what makes setting
 both necessary; `close()` returns early on `_connection is None`. One thing no round stated and this
-one checked: `_conn` is a property returning `self._connection` (`:133-137`), so clearing
-`_connection` drops the last reference to the underlying `sqlite3.Connection` and refcounting closes
-it. The neutralisation leaks no file handle — worth knowing precisely because `F292` is a locking
-finding.
+one checked: `_conn` is a property returning `self._connection` (`:133-137`).
+
+> **Corrected by the third review, 2026-09-08.** This paragraph went on to conclude that clearing
+> `_connection` *"drops the last reference to the underlying `sqlite3.Connection` and refcounting
+> closes it. The neutralisation leaks no file handle."* **The conclusion is right — the third round
+> measured it, and `os.remove` on the database file succeeds after the neutralisation and dispose —
+> but reading a property definition does not establish it.** `_tx` can still hold `partial`s bound
+> to the same `sqlite3.Connection`; whether the whole graph becomes garbage is a refcount question.
+> It was this review's only measured-sounding claim that was reasoned. Left in place with the
+> correction attached rather than rewritten, because the method error is the useful part.
 
 **F295's product citations resolve verbatim.** `main.py`'s lifespan is `yield` at `:356`,
 `terminate_all_active_runs()` `:357`, `shutdown_scheduler()` `:358`, **no `engine.dispose()`** — the
