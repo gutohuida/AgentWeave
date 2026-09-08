@@ -14,7 +14,7 @@ import urllib.request
 HUB = os.environ.get("AW_HUB", "http://127.0.0.1:8010")
 # No default. This file is tracked in a public repository, so a key written here is a published
 # key -- and one was, from the first commit of this file until 2026-09-07. Set AW_KEY in the
-# environment instead; an unset key fails loudly below, which is the correct outcome.
+# environment instead; `require_key()` below refuses to build a request without one.
 KEY = os.environ.get("AW_KEY", "")
 P = os.environ.get("AW_PROJECT", "")
 
@@ -23,12 +23,34 @@ _ctx.check_hostname = False
 _ctx.verify_mode = ssl.CERT_NONE
 
 
+def require_key():
+    """Fail here, locally, rather than at the Hub with a 401. Returns the key.
+
+    Raises `SystemExit` deliberately, not `RuntimeError`: this directory is full of scripts that
+    wrap calls in a bare `except Exception`, and a configuration error that one of those can
+    swallow is not the loud failure the comment above promises. `SystemExit` is a BaseException,
+    so it survives them, and it prints its message without a traceback.
+    """
+    if not KEY:
+        raise SystemExit(
+            "AW_KEY is not set. Export the Hub's key before running a drive script:\n"
+            "  export AW_KEY=$(cat ~/.agentweave/hub/profiles/trial/bootstrap-key.txt)\n"
+            "Nothing is defaulted -- this file is tracked in a public repository."
+        )
+    return KEY
+
+
 def api(method, path, body=None, raw=False, timeout=60):
-    """Call the Hub. Returns (status, parsed_or_text). Never raises on HTTP error."""
+    """Call the Hub. Returns (status, parsed_or_text). Never raises on HTTP error.
+
+    An unset AW_KEY is not an HTTP error: `require_key()` stops the call before the request is
+    built, so it never reaches the network.
+    """
+    key = require_key()
     url = HUB + ("/api/v1" + path if path.startswith("/") else path)
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
-    req.add_header("Authorization", "Bearer " + KEY)
+    req.add_header("Authorization", "Bearer " + key)
     if data:
         req.add_header("Content-Type", "application/json")
     try:

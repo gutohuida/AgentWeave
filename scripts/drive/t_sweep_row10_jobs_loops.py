@@ -38,14 +38,16 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 import pathlib  # noqa: E402
 
-from aw import api  # noqa: E402
+from aw import api, require_key  # noqa: E402
 
 P = os.environ.get("AW_PROJECT", "")
 if P in ("proj-5e960453", "proj-18e5d4e0") or not P:
     print("REFUSING TO RUN: set AW_PROJECT to a drive project.")
     sys.exit(1)
 HUB = os.environ.get("AW_HUB", "http://127.0.0.1:8011")
-KEY = os.environ.get("AW_KEY", "aw_live_58ab7d84a1bf7b34eb2d1b424875bacd")
+# No default: this file is tracked in a public repository. The literal removed here was the
+# key `aw.py` carried until 2026-09-07, missed by that sweep.
+KEY = require_key()
 AGENT = os.environ.get("AGENT_A", "")
 TAG = os.environ.get("AW_RUN_TAG") or time.strftime("%H%M%S")
 REPO = pathlib.Path(__file__).resolve().parents[2]

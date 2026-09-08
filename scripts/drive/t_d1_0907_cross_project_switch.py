@@ -45,9 +45,13 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
+from aw import require_key  # noqa: E402
+
 HUB = os.environ.get("AW_HUB", "http://127.0.0.1:8011")
 UI = os.environ.get("AW_UI", HUB)
-KEY = os.environ.get("AW_KEY", "aw_live_d0907aaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+# No default: this file is tracked in a public repository. The literal removed here was the
+# key `aw.py` carried until 2026-09-07, missed by that sweep.
+KEY = require_key()
 if HUB.endswith(":8000") or UI.endswith(":8000"):
     print("REFUSING TO RUN: 8000 is the operator's real usage.")
     sys.exit(1)

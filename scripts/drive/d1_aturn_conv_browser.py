@@ -12,10 +12,14 @@ import os
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
+from aw import require_key  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 HUB = os.environ.get("AW_HUB", "http://127.0.0.1:8011")
-KEY = os.environ.get("AW_KEY", "aw_live_58ab7d84a1bf7b34eb2d1b424875bacd")
+# No default: this file is tracked in a public repository. The literal that used to sit here was
+# the same key `aw.py` carried until 2026-09-07, and it survived that sweep because the sweep was
+# assembled from what a reader noticed rather than from a grep.
+KEY = require_key()
 PROJ = os.environ["AW_PROJECT"]
 AGENT, NEEDLE = sys.argv[1], sys.argv[2]
 SHOT = os.environ.get("SHOT")

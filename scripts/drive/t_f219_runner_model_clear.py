@@ -21,8 +21,12 @@ import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8")
 
+from aw import require_key  # noqa: E402
+
 HUB = os.environ.get("AW_HUB", "http://127.0.0.1:8011")
-KEY = os.environ.get("AW_KEY", "aw_live_58ab7d84a1bf7b34eb2d1b424875bacd")
+# No default: this file is tracked in a public repository. The literal removed here was the
+# key `aw.py` carried until 2026-09-07, missed by that sweep.
+KEY = require_key()
 if HUB.endswith(":8000"):
     print("REFUSING TO RUN: 8000 is the operator's real usage.")
     sys.exit(1)
