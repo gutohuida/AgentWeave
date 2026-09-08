@@ -39,9 +39,9 @@ Nothing below this line can move until these are done, and item 1 expires in the
 | # | Action | File |
 |---|---|---|
 | **0.1** | ~~Write a `## 2026-09-08` section redirecting the day window off the spec loop.~~ **DONE 2026-09-08 00:35.** The section is written: no spec loop, D-1/D-2 take F292, D-3 takes hygiene. Confirmed the night of 2026-09-07 built nothing — `AgentWeaveArmNight` was disabled and there is no `2026-09-07-night-log.md` — so there was nothing to drive either. | `spec-queue/DIRECTION.md` |
-| **0.2** | **Write four verdict tokens.** `APPROVED` / `REVISING` / `REJECTED` in front of each change name. `NOTHING TONIGHT` is valid but leaves the FIX window idle. | `spec-queue/APPROVALS.md` |
+| **0.2** | ~~Write four verdict tokens.~~ **DONE 2026-09-08 — all four APPROVED** by the operator in session, after three review rounds. All four rows are restated under `## 2026-09-08` because only the newest dated section is read. | `spec-queue/APPROVALS.md` |
 | **0.3** | **Write the `ORDER:` line.** ~~Three of the four touch `hub/ui` and the committed bundle… Only one is bundle-free.~~ **Corrected by the second review, 2026-09-08: two are bundle-free, not one.** `an-agent-without-mcp` names no `hub/ui` file anywhere and declares its own exemption at its `tasks.md:7`; `a-dead-connection` is Python-only. Only the two UI changes touch the bundle, and they share **no source file** — their sole collision is the generated `hub/hub/static/ui`. | `spec-queue/APPROVALS.md` |
-| **0.4** | **Decide the night arm.** `Enable-ScheduledTask -TaskName AgentWeaveArmNight` (fires 22:55) or leave it off. With tokens written, an enabled arm builds tonight. | Task Scheduler |
+| **0.4** | **Decide the night arm — STILL OPEN, and it is now the only thing between the approvals and a build.** `Enable-ScheduledTask -TaskName AgentWeaveArmNight` (fires 22:55) or leave it off. It is **DISABLED**, so as things stand the four approved changes sit unbuilt. | Task Scheduler |
 
 ### The four changes awaiting a token
 

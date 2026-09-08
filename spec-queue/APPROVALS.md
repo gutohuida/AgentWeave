@@ -18,15 +18,43 @@ Newest day first. Days below the newest are history and are not read.
 
 ## 2026-09-08
 
-**Written by a second review session, not by a window.** This section exists for one reason: to give
-`2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing` a row it never had. It came off the
-sidequest branch and merged straight to `master` at `2b4dce4`, so it never entered the DECIDE flow
-and **appears on no review page.** Without a row it cannot take a verdict, and approving it would
-have meant approving something the operator has never been shown. **No status token is written
-here** — that is the operator's, as always.
+## ALL FOUR APPROVED — the operator, in session, 2026-09-08
 
-The other three changes already have rows under `## 2026-09-07`, `## 2026-09-06` and `## 2026-09-05`
-and still carry no verdict; those rows stand and are not restated.
+**Verdict given after three review rounds**, the third of which measured the F295 arrangement rather
+than reading it. The four rows below are the authority; everything after them on this page is the
+reasoning.
+
+- APPROVED  2026-09-07-a-dead-connection-is-never-handed-back-out   F295 (A). 25 tasks, 1 ticked (2.4, a question not a step). Python only — no migration, no UI, no bundle. **Task 1.6 carries an open choice**: the delta says the neutralisation SHALL cover *"every path"* and tasks 1.1-1.5 build four of five; the fifth (`close_detached`, via `_finalize_fairy`) is measured unreachable today. Write the two lines or narrow the requirement — the task states both and either satisfies the approval.
+- APPROVED  2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing   sidequest, no finding number. 35 tasks. Python and docs only — no UI, no bundle. **Task 2.2 was rewritten by the third review** after it was found unfollowable (the ordering was backwards); build from the rewritten text, not from any earlier copy.
+- APPROVED  2026-09-05-the-conversation-carries-its-own-run-facts   F274 (A). 44 tasks. **Touches the bundle.** Phase 0 is a hard gate — *"if phase 0 has not been recorded, do phase 0 and stop"* — and its port instruction was reworded on 2026-09-08 after the clean slate invalidated the old one. Likely two nights.
+- APPROVED  2026-09-07-clearing-instructions-asks-first   DAY-3. 25 tasks, 1 ticked (5.2, the pre-change drive, closed on real evidence committed at `3078843`). **Touches the bundle.**
+
+ORDER: 2026-09-07-a-dead-connection-is-never-handed-back-out, 2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing, 2026-09-05-the-conversation-carries-its-own-run-facts, 2026-09-07-clearing-instructions-asks-first
+
+**Why an `ORDER:` line at all, and why this one.** Without it the default queue is **backlog first**
+(`README.md`, decided 2026-09-01) — unarchived changes, then findings, and `APPROVED` rows only
+third. Four freshly approved changes would sit behind that. The sequence is the two **bundle-free**
+changes first, because they can land beside anything and cannot conflict, highest severity leading;
+then the two that rebuild `hub/hub/static/ui`, **strictly one per night**. Those two share no source
+file — their only collision is the generated artefact — so the constraint is on the bundle, not on
+the code.
+
+**One change per night. `ORDER` is that night's only**, so it needs rewriting each evening with what
+remains.
+
+---
+
+### The row that made this section necessary
+
+**Written by a second review session, not by a window.** This section originally existed for one
+reason: to give `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing` a row it never had. It
+came off the sidequest branch and merged straight to `master` at `2b4dce4`, so it never entered the
+DECIDE flow and **appears on no review page.** Without a row it could not take a verdict, and
+approving it would have meant approving something the operator had never been shown.
+
+The other three changes have descriptive rows under `## 2026-09-07`, `## 2026-09-06` and
+`## 2026-09-05`. Those sections are **history and are not read** by the FIX window, which is why all
+four verdict rows are restated above rather than left in place.
 
 - 2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing   sidequest, no finding number. 35 tasks in 6 phases. **No migration, no UI, no bundle rebuild** — `tasks.md:7` says so itself; Python and docs only. A run whose harness cannot use MCP is handed a working credential (`AW_RUN_TOKEN`) and the Hub's own address (`HUB_URL`) in its environment, and is then told in the first line of its prompt that it has no way to reach AgentWeave at all (`launchability.py:325-330`, prepended at `agent_trigger.py:1006-1007`). Both halves verified against the code. The branch was emptied rather than repointed when `2026-08-03-single-runtime` cut the CLI to five commands; the HTTP plane those commands wrapped did not go anywhere. Four parts: the notice tells the truth; a discovery surface describes the operations as requests rather than tool calls; the two adapter-only rules (`archive_job`'s confirmation, `ask_user`'s wait) move into the contract; and a run is told the access path it actually has instead of having the tool-protocol path asserted for it. Two ADDED requirements plus one MODIFIED in `agent-capability-plane` — the MODIFIED is *HTTP and MCP access have equal capability* (shipped at `:107`), which **already names this exact deployment**: *"some environments forbid MCP servers while still allowing ordinary local API calls."* `openspec validate --strict` passes.
 
