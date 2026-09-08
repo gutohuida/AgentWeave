@@ -12,8 +12,8 @@
     "log_file": ".claude/autonomous/2026-09-08-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "gate-retry",
-    "next_action": "gate-retry ONLY, and it is the last item. Re-check ALL FOUR gate conditions (day-window.md Iteration 1 step 1) against the sha whose CI has actually CONCLUDED -- not a stale green from an earlier commit, and not a sha with a run still in_progress. Note the structural trap this window hit twice: every iteration commits and pushes, so HEAD always has a run in flight by the time the gate is read; the resolution is to wait for the concluded sha and fast-forward master to THAT sha with `git merge --ff-only <sha>`, which is still a fast-forward and still incapable of inventing a merge commit. If the gate opens, record exactly what landed. If it does not, name the failed condition. EITHER WAY, set next_action to null afterwards: the queue is then empty and the driver must unregister.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -87,9 +87,10 @@
         },
         {
             "id": "gate-retry",
-            "status": "open",
+            "status": "done",
             "title": "Retry the morning merge gate once CI concludes",
-            "detail": "Only condition three failed at 09:01 (CI in_progress for 8c01b50). Re-check with `gh run list --branch autonomous/2026-09-08-daily --limit 20 --json headSha,conclusion,workflowName`; require conclusion == success for the CI workflow at the CURRENT HEAD sha, not at 8c01b50 if the branch has moved since -- which it will have, since every iteration commits. All four conditions must be re-checked, not only this one. If the gate opens, fast-forward master with `git merge --ff-only` and push it; the flag is not optional. UPDATE iteration 3: HEAD is no longer 8c01b50 or 101f836 -- the operator's interactive session committed e964226 and c7778a8 into this same checkout at 09:21 and 09:26, and this window has committed since. Re-read HEAD at the moment of the check. DEAD-ENDS now records that a red master is usually the F292 flake rather than a regression, which is a reason to check WHICH job failed before concluding the gate must stay shut -- but the gate's condition is unchanged and is not to be relaxed on that basis."
+            "detail": "Only condition three failed at 09:01 (CI in_progress for 8c01b50). Re-check with `gh run list --branch autonomous/2026-09-08-daily --limit 20 --json headSha,conclusion,workflowName`; require conclusion == success for the CI workflow at the CURRENT HEAD sha, not at 8c01b50 if the branch has moved since -- which it will have, since every iteration commits. All four conditions must be re-checked, not only this one. If the gate opens, fast-forward master with `git merge --ff-only` and push it; the flag is not optional. UPDATE iteration 3: HEAD is no longer 8c01b50 or 101f836 -- the operator's interactive session committed e964226 and c7778a8 into this same checkout at 09:21 and 09:26, and this window has committed since. Re-read HEAD at the moment of the check. DEAD-ENDS now records that a red master is usually the F292 flake rather than a regression, which is a reason to check WHICH job failed before concluding the gate must stay shut -- but the gate's condition is unchanged and is not to be relaxed on that basis.",
+            "result": "OPENED, iteration 11, 11:20. All four conditions measured fresh: branch not master and HEAD..master==0; tree clean and HEAD==@{u}; CI concluded SUCCESS for the exact sha 755bdad at 11:19:40; no line-initial HOLD MERGE anywhere in DIRECTION.md. `git merge --ff-only 755bdad` fast-forwarded master 9fb0809..755bdad, 26 files, +4547/-255, pushed. THE WHOLE DAY LANDED, not just yesterday's cycle. Why it failed at 09:01 and passes now is STRUCTURAL and worth carrying: every iteration commits and pushes before reading the gate, so HEAD always has a run in flight; the gate was unopenable by the routine containing it. Resolution: commit the iteration's work first, then WAIT for CI on the resulting HEAD to conclude (13 min here) and gate on that sha. No stale green was accepted. Good consequence: tonight's arm-cycle cuts from a master that now contains this morning's tasks.md corrections."
         }
     ],
     "decisions_for_user": [
