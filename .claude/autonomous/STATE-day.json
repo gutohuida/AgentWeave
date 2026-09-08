@@ -1,73 +1,40 @@
 {
-    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook": ".claude/loops/day-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-07-daily",
-    "parent_branch": "master",
-    "parent_sha": "9fd9853",
-    "stop_at": "2026-09-07T17:00:00+01:00",
-    "iteration": 10,
-    "log_file": ".claude/autonomous/2026-09-07-day-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "D-6",
-            "status": "closed",
-            "title": "Spec loop R1 — CLOSED: 2026-09-07-clearing-instructions-asks-first, validates --strict",
-            "detail": "Closed at iteration 7. proposal.md, design.md, tasks.md (24 tasks) and the specs/project-instructions/ delta (one ADDED requirement with 6 scenarios, one MODIFIED). Measured, not assumed: the store is one row upserted in place with no history table, so the loss is unrecoverable; the confirmation's baseline is data.content and F271's actions gate already makes it structurally unreachable in the two unloaded states; four confirmation primitives already ship and none was invented. R1 found the change contradicts *Hub UI provides instructions editor*, archived one day earlier, and the delta MODIFIES it rather than shipping the contradiction."
-        },
-        {
-            "id": "D-7",
-            "status": "closed",
-            "title": "Spec loop R2 — CLOSED: argument survives, one spec defect, two citations, one belief measured",
-            "detail": "Closed at iteration 8, still valid --strict. THE DEFECT: design.md D1's predicate trims both sides and always did; the delta's English did not carry it, so the ADDED and MODIFIED requirements contradicted each other over a save writing a single newline (required to persist by one, to be confirmed by the other) and left a save blanking whitespace-only stored content required by neither. Both now say 'containing more than whitespace' / 'empty or only whitespace'; tasks.md 4.6 gains the stored-whitespace assertion. Nothing about the DESIGN changed. Citations corrected: the models.py grep returns two lines not three and could not establish the negative anyway (replaced with a repository-wide measurement that is stronger), and instructions.py:66-67 contained neither statement it was quoted for (:61 assign, :66 commit). R1's unmeasured react-query belief MEASURED AND HOLDS (query-core utils.ts:386-402 replaceEqualDeep), and the adjacent clobber hazard is ruled out by main.tsx:11 refetchOnWindowFocus:false -- a finding filed one measurement earlier would have been false. R2 drove nothing and did not repeat R1's project-environment-settings sweep."
-        },
-        {
-            "id": "D-8",
-            "status": "closed",
-            "title": "Spec loop R3 — CLOSED: drove it 27/0, and found the requirement two rounds cleared by name",
-            "detail": "Closed at iteration 9, still valid --strict. THE DRIVE, which R1 and R2 both owed: scripts/drive/t_d8_clearing_instructions_prechange.py, Chromium against the served bundle eb1d1d7 on a throwaway :8011 Hub over a fresh database, throwaway project deleted and confirmed absent. 27 passed / 0 failed. Select all, delete, Save = exactly ONE PUT carrying {\"content\": \"\"}, ZERO dialogs, the row '', an ordinary success badge, no undo/restore/history anywhere on the page and /instructions/history 404. The single-newline near-miss destroys identically; whitespace-only stored content and an ordinary save are the two legs that must stay uninterrupted. This discharges tasks.md 5.2 IN ADVANCE and is the only task in the file checked before implementation -- it measures the pre-change product, which stops being observable once the fix lands, and every check is expected to invert. THE DEFECT: proposal.md cleared 'Save cannot write instructions that were never read' by name; its fourth scenario is the positive complement, not the prohibition, and requires an unqualified write on read-success -- so on read/clear/Save/decline it and the new requirement contradict on one concrete sequence. Fixed with a second MODIFIED entry using the SAME words, header and SHALL byte-identical. SWEEP: null everywhere else -- four other project-instructions requirements, all six of project-environment-settings (R1's answer, re-derived not carried), and no other spec. LAST STEP: openspec-sync-specs is agent-driven and bare `openspec archive` also updates main specs; 6.2 now names the skill path or --skip-specs. Whether the bare CLI overwrites a hand-merge is UNVERIFIED and labelled so. The change's own failure mode does NOT recur there -- git is the history table ProjectInstructions lacks. INSTRUMENT FACT: the 'Saved' badge is a 2000ms flash; the harness's first run reported it missing against a correct page. Present at 0.7s, gone by 3.3s, now asserted at both edges and recorded in tasks.md 4.3."
-        },
-        {
-            "id": "D-9",
-            "status": "closed",
-            "title": "Review page amended — CLOSED: both changes on the page and in APPROVALS, rendered in both schemes",
-            "detail": "Closed at iteration 10. review-2026-09-07.html 45kB -> 59kB: SS4 retitled 'two changes, three rounds each' with a lede and a boundary signpost saying DAY-1/2/3 belong to the FIRST change and this one carries no question; a change card (origin = the operator's own DIRECTION.md answer, no finding behind it; 24 tasks/6 phases; one ADDED + two MODIFIED; --strict passes; 27/0 driven); the problem as a watched/happened table measured in a browser; one h3 per round; a 'what this does not claim' list. SS5 corrected to three open changes (0/44, 0/23, 0/24) and four single lines. APPROVALS: opening line now 'two changes... seventh and eighth consecutive outings', second verdict-less row at :81 with a round-by-round paragraph and the two labelled-not-claimed items. F274's reference re-measured :158 -> :203 and fixed in BOTH files; row confirmed still verdict-less. Rendered in Chromium both schemes: 14035px both, zero horizontal overflow, nothing overflowing its box, no console errors, 0 replacement chars, both change cards in the DOM. New harness scripts/drive/render_review_page.py does that check in one command. PRE-EXISTING RED, not caused here and proved so against HEAD: check_review_page.py's finding-id check miscounts cross-references INSIDE section 3 (F271 twice, F190 once) and has reported FAILED on this page since D-5; the other eight checks pass. Recorded in scripts/drive/README.md with its one-line fix, not filed as a finding because it would change the 'two new findings' count the page states."
-        }
-    ],
-    "decisions_for_user": [
-        "ON THE REVIEW PAGE as DAY-1 (new, iteration 6): the merge gate's two hardest conditions chase each other and it needs rewording. CI is 10-16 minutes on this branch, so a firing that commits before checking fails the CI condition and one that checks late fails the tree-clean condition. It opened at iteration 3 only because a manoeuvre was improvised on the spot (R1's untracked output moved to %TEMP%). The page proposes letting the gate fast-forward to the newest CI-GREEN commit on the branch rather than requiring that commit to be HEAD, and states that iteration 2 considered exactly this and refused it correctly -- the limits authorise a fast-forward to the branch, not to a sha chosen inside it. Answer in DIRECTION.md.",
-        "ON THE REVIEW PAGE as DAY-2 (carried, narrowed a third time): F295 is filed severity A on a production claim no round could establish by measurement, and all three rounds narrowed it rather than widening it. R1 found no in-process loop close outside process exit; R2 re-derived that negative independently and it held, and established the worker threads are daemon because SQLAlchemy makes them so; R3 measured that `agentweave stop` on Windows force-kills and runs no shutdown at all, and measured one of R2's two test-suite paths FALSE (dispose calls pool.recreate(), so it is a file-handle leak -- F292's subject -- not a reuse path). The test-suite half is now ONE unrun path. So: does F295 keep its A, and is the change worth a night slot on shutdown-hygiene and test-harness value alone? R3 gave a second reason: the fix as originally specced would itself have hung the shutdown.",
-        "ON THE REVIEW PAGE as DAY-3 (new, iteration 5, now on the page): F297 (B) -- `agentweave stop` on Windows runs `taskkill /PID <pid> /F` with no signal first, so the Hub's lifespan shutdown never runs and `terminate_all_active_runs()` is skipped, against the shipped app-lifecycle scenario. Measured, not reasoned. Deliberately kept OUT of the F295 change. Does it get its own spec loop, and before or after F295's implementation? They interact -- a graceful Windows stop would start running the shutdown sequence F295's change is adding -- so landing F295 first is the safer order.",
-        "CARRIED, still unanswered, and the page says each is one line: 2026-09-05-the-conversation-carries-its-own-run-facts (F274) sits at spec-queue/APPROVALS.md:158 -- MOVED FROM :99 by iteration 6's insert, re-measure before quoting -- with NO verdict token. It is the only other unarchived change and the one change already ready to build; no night window may build it until it reads APPROVED, REVISING or REJECTED.",
-        "CARRIED, still unanswered: 2026-09-06's DAY-2 -- spend a night slot on F292, or let the CI gate tolerate a re-run. F292 is still open. Today's F295 spec loop deliberately does NOT claim to resolve it, and R3 measured that one mechanism R2 attributed to this class is really F292's own file-handle leak.",
-        "CARRIED, small and still unowned: F296's fix is one word in scripts/drive/t_d4_instructions_failed_load.py:316 (role `button` -> `combobox`) plus deleting the now-false `NOT DRIVEN` print beside it. Harness-only, no product code, needs no approval -- a night window can take it in minutes under the no-spec carve-out. It is named as available filler on the review page.",
-        "ANSWERED, recorded so it is not re-raised: 2026-09-06's DAY-1 (relax the seeded no-merge line). The operator relaxed it, the limits array carries the relaxed text, and iteration 3 used it -- master is at 9fd9853 and the 2026-09-04 cycle has landed.",
-        "CARRIED, small and still unowned, and now the SECOND one of its kind: check_review_page.py's finding-id assertion counts every class=\"fid\" inside section 3, so cross-references within that section read as duplicate rows. review-2026-09-07.html has three real finding items and reports FAILED, and has done since D-5 -- proved pre-existing by running the checker against git HEAD. The other eight checks pass. Fix is one expression: count the <h3> finding headings rather than every .fid in the slice. Harness-only, no product code, no approval needed -- a night window can take it beside F296's one word under the no-spec carve-out. Same class as F296: an assertion that cannot mean what it is read to mean."
-    ],
-    "limits": [
-        "Stay on the cycle branch, now autonomous/2026-09-07-daily. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06, used once at iteration 3 on 2026-09-07 to land the 2026-09-04 cycle. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
-        "This window does NOT implement. If you are editing hub/hub/ or src/agentweave/, stop -- the one exception is a drive harness fixture under scripts/drive/.",
-        "A drive that reverts the served bundle to mutation-check MUST restore it and confirm `git status` is clean for hub/hub/static/ui before committing -- `git checkout <sha> -- <path>` stages the old files and leaves later assets behind as untracked additions. Iteration 2 hit this and cleaned it up.",
-        "A probe that can hang gets an external timeout. probe_guard1.py with either argument, probe_r3_exhaust.py, and probe_r3_dispose_hang.py in `bare` mode all hang by design.",
-        "A line number quoted from spec-queue/APPROVALS.md goes stale the moment a section is inserted above it. Re-measure with grep -n before writing one down. Iteration 6 moved F274's row from :99 to :158.",
-        "Neither R1 nor R2 of 2026-09-07-clearing-instructions-asks-first drove anything, and both said so. R3 owes the drive, and any round quoting an earlier round's component claims re-measures them rather than carrying them forward -- R2 found two of R1's citations wrong that way.",
-        "A multi-line commit message goes through a heredoc in the Bash tool, or through the PowerShell tool if @'...'@ is wanted. Mixing the two shells' quoting is silent: iteration 7's commit subject became a literal @ and git reported nothing wrong.",
-        "A red from a drive harness is checked before it is believed. Iteration 9's first run reported the instructions success acknowledgement missing; it is a 2000ms flash and the harness observed at 2.5s. A finding filed at face value would have been false, which is the third time this cycle a measurement one step further on inverted the conclusion.",
-        "Appending to a file with a bash heredoc fails when the body is long prose: iteration 9 lost a heredoc to an unmatched-quote parse error. Write the body with the Write tool to a temp file and append it with a short python one-liner instead."
-    ]
+    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+    "playbook":  ".claude/loops/day-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-08-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "9fb0809",
+    "stop_at":  "2026-09-08T17:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-08-day-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
