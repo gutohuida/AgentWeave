@@ -20741,8 +20741,15 @@ later reuse of that same connection then awaits a `Future` nothing will ever res
 (`agent_trigger.py:1190`) reachable from both of F292's historically-failing test files, and to a gap
 in the teardown safety net meant to prevent exactly this. See the entry's most recent section for the
 full chain. Not fixed this session -- it is a run-cancellation design issue, not a one-line patch.
-The standing (main-engine registry) mechanism is **falsified for all four occurrences that carried
-the instrument**, n=4 as of 2026-09-06. The alembic-engine half of H1 is separately measured and
+The standing (main-engine registry) mechanism was recorded here as **falsified for all four
+occurrences that carried the instrument**; that reading is **narrowed as of 2026-09-08 (day d1a,
+n=5 negatives)**. The registry is emptied on SQLAlchemy's `close` event, which fires *before* the
+close is attempted and unconditionally (`pool/base.py:877-886`), and the close failure is swallowed
+into the `sqlalchemy.pool` logger -- so a product-engine connection still holding the file is
+*guaranteed* to print `no connection checked out`. The negative is structural, not evidence.
+Narrowed rather than retracted: it does still rule out a connection the pool believes is checked
+out, which is exactly the state the mitigation at `conftest.py:464` was written for, and the one
+state never once observed at a failure. The alembic-engine half of H1 is separately measured and
 **ruled out as a general mechanism** (it cannot explain an occurrence in a test file collected before
 `test_migrations.py` ever runs) -- two real, independent defects in `hub/hub/migrations/env.py` were
 fixed anyway (a 6x-shorter busy timeout than the main engine; a dispose skipped on any migration
@@ -20750,10 +20757,12 @@ failure), covered by two new tests, but they are not this finding's fix, and are
 hang. Filed 2026-09-05 by the day window's D-5 while reading this branch's CI for the review page.
 **A 2026-09-06 occurrence hung for 3.5 hours instead of failing** -- every occurrence before it, and
 every one this entry originally described, failed within 8-14.5 minutes; "bounded failure only" is
-now a stale characterization. The night N-1 checkout registry **has fired in CI four times and
-returned a negative every time**: no connection was checked out from the product engine at any probe
-point -- consistent with the new mechanism, since it lives in a different engine's connection
-entirely, invisible to that registry by construction. Read the sections in order -- each narrowing is
+now a stale characterization. The night N-1 checkout registry **has fired in CI five times and
+returned an identical negative every time** (the eighth occurrence, 2026-09-08, run `34164645184`,
+is the first on `master`). That is consistent with the new mechanism -- but it is equally consistent
+with a product-engine connection SQLAlchemy silently gave up on, so it discriminates between them
+not at all. **A second instrument shipped 2026-09-08 (day d1b)** to close that blind spot; see the
+section at the end of this entry. It is an instrument, **not a fix**, and the finding stays open. Read the sections in order -- each narrowing is
 superseded by the one that follows it, and the most recent section supersedes the "no hangs" framing
 of everything before it.
 
@@ -21345,6 +21354,81 @@ the in-repo second-engine candidates are already eliminated for this file by col
 `test_project_persistence.py`, `test_runner_charter_models.py` and `test_task_workspace_scheme.py`,
 all collected after it — checked 2026-09-08; prior rounds had enumerated engines only under
 `hub/hub/`).
+
+### The instrument d1a asked for, shipped and mutation-checked (2026-09-08, day d1b)
+
+`hub/tests/conftest.py`, fixture-level only -- no `hub/hub/` change, and a green run is exactly as
+quiet as before. Two additions, one per silent path:
+
+1. **`_PoolErrorRecorder`**, a bounded `logging.Handler` on the `sqlalchemy.pool` logger retaining
+   ERROR records with their tracebacks, printed inside `_f292_report`. That logger is the single
+   place every silent give-up path writes to, and pytest discards the log of a *passing* test --
+   which is the test that makes the leak; the failure lands in the *next* test's setup, which logged
+   nothing.
+2. **`_EVER_SEEN`**, every connection the registry has *ever* seen rather than only those still
+   checked out, reporting whether the `sqlite3` handle is still open, whether the aiosqlite worker
+   thread is alive, whether the connection is in a transaction, and whether `stop()` was called
+   without the queued close ever running.
+
+**The leak signature is exact, and that is the point.** `aiosqlite.Connection.stop()` sets
+`_running = False` *immediately* and then queues the only real `sqlite3.Connection.close()` onto its
+worker thread (`aiosqlite/core.py:116-132`). So `_running == False` while `_connection is not None`
+means the close was queued and never ran and the file lock is still held. Measured on the installed
+0.22.1: a stop whose worker thread *is* draining leaves thread dead, `_running` False and
+`_connection` None within milliseconds. The two outcomes are distinguishable.
+
+**Four weakref facts, measured against SQLAlchemy 2.0.50 / aiosqlite 0.22.1 rather than assumed** --
+and they correct the entry's earlier N-1 note, which said only that "the DBAPI connection is not
+weakref-able but `_ConnectionRecord` is":
+
+| Layer | Weakref-able |
+|---|---|
+| `_ConnectionRecord` | yes |
+| `AsyncAdapt_aiosqlite_connection` (the DBAPI adapter) | **no** |
+| `sqlite3.Connection` | **no** |
+| `aiosqlite.Connection` | **yes** |
+
+The last row is what makes the instrument possible: the aiosqlite `Connection` is the one layer that
+both carries the leak signature and can be weakly referenced. The record alone would not do --
+SQLAlchemy sets `record.dbapi_connection = None` when it closes one, so the object holding the file
+becomes unreachable from the record at exactly the moment it becomes interesting.
+
+**Mutation-checked, both halves, against forced reproductions** (a throwaway two-test file, run and
+deleted inside the iteration; a diagnostic that has never fired is not evidence). The decisive one
+simulates the mechanism d1a identified -- SQLAlchemy discards the connection while `stop()` only sets
+`_running = False`, as it does when the worker thread is not draining:
+
+```
+  [before dispose] registry: no connection checked out
+  [before drop_all] registry: no connection checked out
+  [at failure] registry: no connection checked out
+  ever-seen: 2 connection(s) recorded, 0 already collected, 2 with an OPEN sqlite3 handle
+  ever-seen: last checked out by ...::test_a_leaks_a_silently_discarded_connection
+  ever-seen:     sqlite3 handle OPEN, IN TRANSACTION, worker thread alive, _running=False
+                 <-- stop() was called and the close never ran: THIS ONE LEAKED
+```
+
+The old registry printed the CI negative three times -- **the exact printout of all five instrumented
+occurrences** -- while the new section named the holder, its test, and its transaction state. A second
+reproduction, with the terminate raising, captured the real `sqlalchemy.pool` ERROR and its full
+traceback through `_close_connection` -> `do_terminate` -> `_terminate_force_close`, proving the
+first half on the real path too.
+
+**Version-robustness, which d1a flagged as an open caveat.** `hub/pyproject.toml` pins neither
+(`sqlalchemy[asyncio]>=2.0`, `aiosqlite>=0.20`), so CI resolves its own. The instrument does not
+depend on the `pool/base.py` line numbers the diagnosis cites: it keys on the logger name
+`sqlalchemy.pool` (stable across 2.x) and on aiosqlite attribute reads that are each wrapped so any
+failure becomes a string in the report rather than an exception replacing the error being diagnosed.
+
+Verified this iteration: `ruff check src/ hub/ tests/` and
+`black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` clean;
+`test_flow_fires_a_review_turn.py` 8 passed with the report correctly silent; `test_migrations.py`,
+`test_project_persistence.py`, `test_runner_charter_models.py`, `test_task_workspace_scheme.py` --
+the four files that create their own engines -- 109 passed, 1 skipped. The
+`PytestUnhandledThreadExceptionWarning` / `Event loop is closed` that
+`test_flow_fires_a_review_turn.py` emits locally was **confirmed to pre-date this change** by
+re-running the file with the diff stashed (12 matching lines either way); it is F295's signature, not
+a regression from the instrument.
 
 ---
 

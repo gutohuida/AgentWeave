@@ -2,7 +2,9 @@
 
 import asyncio
 import atexit
+import collections
 import contextlib
+import logging
 import os
 import shutil
 import sys
@@ -227,11 +229,13 @@ def _checkout_origin():
 
 @event.listens_for(engine.sync_engine, "checkout")
 def _f292_record_checkout(dbapi_connection, connection_record, connection_proxy):  # noqa: ANN001
+    label = f"{_CURRENT_TEST} [task: {_current_task_label()}]"
     _CHECKED_OUT[id(connection_record)] = (
-        f"{_CURRENT_TEST} [task: {_current_task_label()}]",
+        label,
         _checkout_origin(),
         weakref.ref(connection_record),
     )
+    _f292_remember(connection_record, dbapi_connection, label)
 
 
 @event.listens_for(engine.sync_engine, "checkin")
@@ -242,6 +246,192 @@ def _f292_record_checkin(dbapi_connection, connection_record):  # noqa: ANN001
 @event.listens_for(engine.sync_engine, "close")
 def _f292_record_close(dbapi_connection, connection_record):  # noqa: ANN001
     _CHECKED_OUT.pop(id(connection_record), None)
+
+
+# ---------------------------------------------------------------------------
+# The second half of the diagnostic, added 2026-09-08 after the eighth occurrence.
+#
+# INSTRUMENT, NOT A FIX. Everything below only records. It changes what no fixture does,
+# and a green run stays exactly as quiet as it was before.
+#
+# Why the registry above was not enough, and why its five identical negatives are not
+# the evidence the ledger read them as. `_CHECKED_OUT` is emptied on checkin **and on
+# close**. SQLAlchemy fires `dispatch.close` *before* it attempts the close, and
+# unconditionally (`pool/base.py:877-886`); both `_close_connection` (`:371-384`) and
+# `_finalize_fairy` (`:1006-1011`) then swallow a failure into the `sqlalchemy.pool`
+# logger. So a connection SQLAlchemy has silently given up on, whose SQLite file handle
+# is still open, is *guaranteed* to print "no connection checked out". That negative was
+# structural, not informative.
+#
+# Two things are recorded instead, one per silent path:
+#
+#   1. Every ERROR the `sqlalchemy.pool` logger emits, kept until the failure path wants
+#      it. pytest discards the log of a *passing* test, and the passing test is the one
+#      that makes the leak; the failure lands in the next test's setup, which logged
+#      nothing.
+#   2. The state of every connection the registry has ever seen, whether or not it is
+#      still checked out - because the interesting one is precisely the one that is not.
+#
+# If either names the holder, F292 is named. If both stay silent at the next occurrence
+# that is a result too: it puts the holder outside SQLAlchemy's bookkeeping altogether.
+
+
+class _PoolErrorRecorder(logging.Handler):
+    """Retain `sqlalchemy.pool` ERROR records so the failure path can print them.
+
+    Every path where SQLAlchemy gives up on a connection but may leave its SQLite handle
+    open writes to exactly one place - `pool.logger.error` in `_close_connection`
+    (`pool/base.py:377`) and in `_finalize_fairy` (`:1008`, `:1031`) - and nowhere else.
+    Bounded, and formatted only on the failure path, so a green run pays for an append
+    that never happens.
+
+    `emit` can be reached from the aiosqlite worker thread as well as the main one;
+    `logging.Handler.handle` already holds the handler lock and `deque.append` is atomic.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(level=logging.ERROR)
+        self.records: "collections.deque[str]" = collections.deque(maxlen=50)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # Suppressed rather than handled: a diagnostic must never be able to raise from
+        # inside `logging`, which would replace the error it exists to explain.
+        with contextlib.suppress(Exception):
+            self.records.append(f"[{record.name}] {self.format(record)}")
+
+
+_POOL_ERRORS = _PoolErrorRecorder()
+
+# Attached to the parent logger, not to a pool's own: a pool logs under
+# `sqlalchemy.pool.impl.<PoolClass>` (measured - `AsyncAdaptedQueuePool` for this URL),
+# the engine is disposed once per test so those come and go, and they propagate. The
+# level is only ever *lowered* to ERROR and never below, so nothing verbose is switched
+# on - with echo off, `pool.logger` is the plain module logger and its default WARNING
+# already admits ERROR, so this guards against a stricter config rather than changing the
+# default one.
+_POOL_LOGGER = logging.getLogger("sqlalchemy.pool")
+if _POOL_LOGGER.getEffectiveLevel() > logging.ERROR:
+    _POOL_LOGGER.setLevel(logging.ERROR)
+_POOL_LOGGER.addHandler(_POOL_ERRORS)
+
+
+#: Every connection the registry has *ever* seen, keyed by `id(connection_record)`.
+#:
+#: What is stored is the **aiosqlite `Connection`** - not the record, not the DBAPI
+#: adapter - because that is the one layer which both carries the leak signature and can
+#: be weakly referenced. Measured against the installed SQLAlchemy 2.0.50 / aiosqlite
+#: 0.22.1 rather than assumed: `_ConnectionRecord` is weakref-able,
+#: `AsyncAdapt_aiosqlite_connection` is **not**, `sqlite3.Connection` is **not**, and
+#: `aiosqlite.Connection` **is**. The record alone would not do: SQLAlchemy sets
+#: `record.dbapi_connection = None` when it closes one, so the object holding the file
+#: becomes unreachable from the record at exactly the moment it becomes interesting.
+#:
+#: Weak, so this cannot keep alive a connection that would otherwise be collected. A
+#: collected aiosqlite `Connection` drops its `sqlite3.Connection` with it, and that
+#: object's own finaliser closes the file - so a collected one cannot be the holder, and
+#: pruning it loses nothing.
+_EVER_SEEN: "dict[int, tuple[str, weakref.ref]]" = {}
+
+#: Prune `_EVER_SEEN` of dead entries once it passes this, then raise it. The suite
+#: disposes the engine once per test, so without this the dict grows with the test count.
+_EVER_SEEN_PRUNE_AT = 512
+
+#: At most this many open connections are listed; the counts line carries the rest.
+_EVER_SEEN_REPORT_LIMIT = 12
+
+
+def _f292_remember(connection_record, dbapi_connection, label: str) -> None:  # noqa: ANN001
+    """Record this checkout in the ever-seen registry. Never raises."""
+    global _EVER_SEEN_PRUNE_AT
+    try:
+        _EVER_SEEN[id(connection_record)] = (label, weakref.ref(dbapi_connection._connection))
+    except Exception:  # pragma: no cover - diagnostic only
+        return
+    if len(_EVER_SEEN) > _EVER_SEEN_PRUNE_AT:
+        for key in [key for key, (_, ref) in _EVER_SEEN.items() if ref() is None]:
+            del _EVER_SEEN[key]
+        _EVER_SEEN_PRUNE_AT = max(512, len(_EVER_SEEN) * 2)
+
+
+def _aiosqlite_state(inner):  # noqa: ANN001, ANN201
+    """How this aiosqlite connection stands, or `None` if its sqlite3 handle is closed.
+
+    `aiosqlite.Connection.stop()` sets `_running = False` immediately and then *queues*
+    the only real `sqlite3.Connection.close()` onto its worker thread, returning a future
+    nobody awaits (`aiosqlite/core.py:116-132`). SQLAlchemy's terminate path on this
+    dialect ends there, which is why it is structurally incapable of failing loudly.
+
+    That gives the leak an exact signature: `_running` already `False` - stop was
+    called - while `_connection` is still not `None`, meaning the close was queued, never
+    ran, and the file lock is still held. Measured on the installed 0.22.1: a stop whose
+    worker thread *is* draining leaves the thread dead, `_running` False and `_connection`
+    None within milliseconds, so the two outcomes are distinguishable here.
+
+    Every failure mode is swallowed into the returned string - a diagnostic must not be
+    able to replace the error it is diagnosing.
+    """
+    try:
+        if inner._connection is None:
+            return None
+        running = inner._running
+        alive = inner._thread.is_alive()
+        try:
+            in_transaction = "IN TRANSACTION" if inner.in_transaction else "idle"
+        except Exception as exc:  # pragma: no cover - diagnostic only
+            in_transaction = f"in_transaction unreadable ({type(exc).__name__})"
+        state = (
+            f"sqlite3 handle OPEN, {in_transaction}, "
+            f"worker thread {'alive' if alive else 'DEAD'}, _running={running}"
+        )
+        if not running:
+            state += "  <-- stop() was called and the close never ran: THIS ONE LEAKED"
+        elif not alive:
+            state += "  <-- worker thread died with the connection still open"
+        return state
+    except Exception as exc:  # pragma: no cover - diagnostic only
+        return f"unreadable ({type(exc).__name__})"
+
+
+def _f292_pool_errors() -> str:
+    """What `sqlalchemy.pool` logged at ERROR, which pytest would otherwise have discarded."""
+    if not _POOL_ERRORS.records:
+        return (
+            "  pool log: `sqlalchemy.pool` logged NO error this session.\n"
+            "  pool log: that is a result rather than a blank - it rules out every path\n"
+            "  pool log: where SQLAlchemy reported giving up on a connection."
+        )
+    lines = [f"  pool log: {len(_POOL_ERRORS.records)} ERROR record(s) from `sqlalchemy.pool`:"]
+    for text in _POOL_ERRORS.records:
+        lines.extend(f"  pool log:     {line}" for line in text.splitlines())
+    return "\n".join(lines)
+
+
+def _f292_ever_seen() -> str:
+    """Every connection ever checked out whose sqlite3 handle is still open."""
+    total = len(_EVER_SEEN)
+    seen = [(label, ref()) for label, ref in _EVER_SEEN.values()]
+    collected = sum(1 for _, inner in seen if inner is None)
+    open_ones = []
+    for label, inner in seen:
+        if inner is None:
+            continue
+        state = _aiosqlite_state(inner)
+        if state is not None:
+            open_ones.append((label, state))
+    lines = [
+        f"  ever-seen: {total} connection(s) recorded, {collected} already collected, "
+        f"{len(open_ones)} with an OPEN sqlite3 handle"
+    ]
+    if not open_ones:
+        lines.append("  ever-seen: no connection this process opened still holds the file.")
+        lines.append("  ever-seen: with the pool log silent too, the holder is not SQLAlchemy's.")
+        return "\n".join(lines)
+    for label, state in open_ones[:_EVER_SEEN_REPORT_LIMIT]:
+        lines.append(f"  ever-seen: last checked out by {label}")
+        lines.append(f"  ever-seen:     {state}")
+    if len(open_ones) > _EVER_SEEN_REPORT_LIMIT:
+        lines.append(f"  ever-seen: ... and {len(open_ones) - _EVER_SEEN_REPORT_LIMIT} more")
+    return "\n".join(lines)
 
 
 def _in_transaction(connection_record) -> str:  # noqa: ANN001
@@ -284,6 +474,10 @@ def _f292_report(*snapshots: str) -> str:
         + "=" * 78
         + "\nF292 DIAGNOSTIC: the schema reset failed. Who was holding the database:\n"
         + "\n".join(snapshots)
+        + "\n"
+        + _f292_pool_errors()
+        + "\n"
+        + _f292_ever_seen()
         + "\n(`pool.status()` after the dispose counts a *new* pool and cannot see a "
         "connection\nchecked out from the old one; the registry lines can. See F292 in "
         "scripts/drive/FINDINGS.md.)\n" + "=" * 78 + "\n"
