@@ -357,7 +357,40 @@ checkout — the dev-repo traps are in "The Hub at runtime" above and still appl
   listening. `stop` handles this correctly and kills both — do not "fix" it by killing the
   recorded pid by hand.
 
+## The `spec-queue/` contract — two ways to write a correct-looking approval that does nothing
+
+- **A verdict token under any but the *newest* dated section is never read** *(2026-09-08)*.
+  `APPROVALS.md`'s own header says *"Newest day first. Days below the newest are history and are not
+  read."* Three of the four changes approved on 2026-09-08 had their descriptive rows under
+  `## 2026-09-07`, `## 2026-09-06` and `## 2026-09-05`; writing `APPROVED` in front of *those* rows
+  would have looked entirely correct and been invisible to the FIX window. **Restate the row under
+  today's heading** rather than editing a row in history. `DIRECTION.md` has the identical contract
+  for the day window.
+- **`APPROVED` alone does not get a change built — the default queue is backlog-first**
+  *(2026-09-08)*. `spec-queue/README.md`, decided 2026-09-01: unarchived changes first, then open
+  findings by severity, and `APPROVED` rows only **third**. Four freshly approved changes sit behind
+  8 unarchived changes and the findings list unless an **`ORDER:`** line promotes them — and `ORDER`
+  applies to **that night only**, so it needs rewriting every evening with whatever remains.
+- **`<change-name>` in a row is the directory name under `openspec/changes/` exactly.** Cheap to
+  verify (`test -d openspec/changes/<name>`) and worth doing, because a typo is a row the window
+  silently cannot match.
+
 ## Unattended runs — failure modes the driver does not detect
+
+- **`STATE-night.json` and `STATE-day.json` are stale between runs by design — do not "repair" one
+  before an arm** *(2026-09-08)*. Found `STATE-night.json` carrying `stop_at` three days in the past
+  (`2026-09-07T07:00`), a `branch` that had been superseded, and a `parent_sha` far behind master.
+  None of it matters: `.claude/loops/arm-cycle.ps1` **rewrites the file wholesale** at arm time —
+  fresh `stop_at` (rolled forward a day if the window's `Until` has already passed), `iteration = 0`,
+  `current = "compose"`, a new `log_file`, and a settled cycle branch with a current `parent_sha`.
+  Editing the stale file by hand before 22:55 changes nothing and risks looking like state the
+  window wrote.
+- **`arm-cycle.ps1` refuses to arm on a dirty working tree** *(2026-09-08)*. It prints
+  `REFUSING: working tree is dirty. Leaving this window unarmed.`, lists the paths, and **exits 3**.
+  The Scheduled Task still reports success-ish and the window simply never runs. So uncommitted work
+  left in the tree at 22:55 costs the entire night, silently, and the symptom appears only in
+  `.claude/autonomous/driver-night.log`. **Leave the tree clean before an armed window's start
+  time.**
 
 - **A Claude usage limit turns an autonomous run into a silent no-op loop** *(measured
   2026-09-07)*. The headless CLI printed `You've hit your session limit · resets 7:10pm
