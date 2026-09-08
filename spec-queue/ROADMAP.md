@@ -127,20 +127,30 @@ delta — a tooling call) and **R-3** (four small product calls, each closable i
 | **F140** | ~~One decision with F142, not two.~~ **RETIRED 2026-09-08 — there was no decision here.** Repair 1 shipped `1b4c730` (2026-08-30) and was **driven live 2026-08-31**: both Haiku agents made the `update_task(..., status="completed")` call unprompted, both tasks reached `approved`, both commits verified ancestors of `master`. `_briefing_completion_lines` is byte-identical to the driven version, re-measured this session. The 2026-09-03 banner asked for a re-drive that already existed in `FINDINGS.md` two days earlier. |
 | **F142** | **Not an operator decision — a missing drive.** Its fix shipped `f3a778f` (2026-08-31): the bare `continue` is now three named arms and the operator-completed task is routed for review. Its own change document says group 7 was *"written, compiled, and **not driven**"* and deferred it to `DRIVE-1`, which has not happened. **Queue one drive**: `t_row12_review_leg.py` with `AW_COMPLETE_BY=operator` must reach a staffed review, plus its uncovered row four (the operator completes a task no agent ever touched). `F167` (B) is a known residual on the adjacent `wedged_review` path and does not reopen this. |
 | **F14, F60** | ~~F60 not implemented, blocked on F14's undecided fix shape.~~ **Both `FIXED 2026-08-30`**, shipped together in `a-task-waits-while-its-run-waits`, and `FINDINGS.md` has said so since. Verified in code 2026-09-08: ask-time parking at `agent_actions.py:509-514`, `Question.wait_ended_at` at `models.py:1001`, migration `0099`, drive harness `t_f14_f60_wait_parks_the_task.py`. This table was simply wrong. |
+| **F154** | ~~Archived change, never driven.~~ **RETIRED 2026-09-08 — the drive existed.** Fix `001a07d` (2026-08-31), driven the same day: `t_f154_wedged_review.py`, **18/18** on both the reviewer-wedged and author-wedged populations, re-driven 18/18 later. `run_task_binding.py` and `scheduler.py` are byte-identical `001a07d`→`HEAD`. |
+| **F155** | ~~Archived change, never driven.~~ **RETIRED 2026-09-08 — the drive existed.** Fix `0373867` (2026-08-31), driven the same day: `t_f155_conflict_remedy.py`, **23/23**, the harness parsing the branch out of the refusal's own sentence, with the falsifying lane run deliberately. `requirement_gate.py` is byte-identical `0373867`→`HEAD`. Its drive filed **F165 (B)** and **F166 (C)**, which stay open. |
 | **F274, F295** | Already specced — they are Stage 2. |
 
-**This whole table was stale, and in the direction that costs most.** Three of its four rows
+**This whole table was stale, and in the direction that costs most.** Three of its four original rows
 described operator decisions that did not exist, which is how the severity-A tail read as
 *blocked on the operator* when it was actually *one drive short*. Corrected 2026-09-08 by measuring
 the code rather than re-reading the plan. Note the direction: `ROADMAP.md` was written 2026-09-08
 00:30 and was stale on rows `FINDINGS.md` had had correct for nine days — **a newer document is not
 a more current one.**
 
-After F52 is retired and F274/F295 are built, the open severity-A list is **F142, F154, F155** —
-none blocked on an operator decision, all three blocked on the same thing: **a drive that was
-deferred to `DRIVE-1` and never run.** F154 and F155 have not been re-checked the way F140 was, and
-that search is the obvious next move: grep `FINDINGS.md` for the finding's own number before
-believing a banner that says no drive exists.
+**Corrected again the same day, and the second correction is larger than the first.** The paragraph
+here used to end *"F154 and F155 have not been re-checked the way F140 was, and that search is the
+obvious next move."* The search was run on 2026-09-08 and **retired both**: each had a fix commit and
+a same-day drive recorded in `FINDINGS.md`, twelve thousand lines below the banner that said no drive
+existed. So the open severity-A tail after F52 is retired and F274/F295 are built is **F142 alone** —
+one finding, blocked on one drive, with no operator decision anywhere in it.
+
+**The arithmetic of this one day is the point.** The severity-A count went **six → five → three**
+without a single line of product code being written. Every one of those retirements was a document
+catching up with evidence that had been on disk for a week. The failure was never capacity — it was
+that three banners asked *"has anyone driven this?"* and nobody grepped this file for the finding's
+own number. **Grep before believing a banner that says no drive exists**; it costs ten seconds and it
+has now paid three times.
 
 ---
 
@@ -191,7 +201,7 @@ them off one at a time is exactly the behaviour R-1 exists to decide about.
 | 1 | One night | 1 window |
 | 2 | Nights | 5–6 windows |
 | 3 | Operator | ~1 hour, resizes everything after it |
-| 4 | Operator + nights | 1 decision + ~2 changes |
+| 4 | Nights | **~1 drive.** No operator decision — F140/F154/F155 all retired 2026-09-08 on drives that already existed, leaving F142 alone |
 | 5 | Operator | ~15 min (`continuity-kit`); **`OV-1` decided 2026-09-08**, `OV-2`…`OV-6` now live |
 | 6 | One window | 1 window |
 

@@ -254,6 +254,39 @@ The ledger was right and the plan was wrong — which is the reverse of the usua
 worth noticing: **`ROADMAP.md` was written 2026-09-08 00:30 and was stale on rows this file had had
 correct for nine days.** A newer document is not a more current one.
 
+**Revised 2026-09-08, later the same day (RESUME session): the open severity-A list is three —
+F274, F142, F295. F154 and F155 both leave it, and both leave under the stricter definition.**
+
+The revision immediately above ended *"F154 and F155 are untouched by this revision — their banners'
+condition is genuinely unmet, and nothing here looked for their drives. Doing that search is the
+obvious next thing and was not done."* This is that search. It took about five minutes and it
+retired both.
+
+| Finding | Fix | Drive | Re-measured 2026-09-08 |
+|---|---|---|---|
+| **F154** | `001a07d`, 2026-08-31 | `t_f154_wedged_review.py`, **18/18** on both populations, same day; re-driven 18/18 later | `run_task_binding.py` + `scheduler.py` **byte-identical** `001a07d`→`HEAD`; sentence live at `scheduler.py:1745` |
+| **F155** | `0373867`, 2026-08-31 | `t_f155_conflict_remedy.py`, **23/23**, with the falsifying lane 3 run deliberately | `requirement_gate.py` **byte-identical** `0373867`→`HEAD`; sentence live at `requirement_gate.py:263` |
+
+Both fix commits are ancestors of `master`. Both drive harnesses are still on disk. **The
+byte-identical check is stronger here than it was for F140**: F140 needed a function-level compare
+because its file had moved on; these two files have not been edited at all since the commit the
+drive exercised, so `git diff <fix> HEAD -- <file>` is empty and the drive describes today's code
+without qualification.
+
+**This is the stale search a third and fourth time, and that is now the finding.** Three findings —
+F140, F154, F155 — were carried as open severity-A for five days each because one banner author on
+2026-09-03 checked `openspec/changes/archive/` for a change and never grepped this file for the
+finding's own number. The four-line rule already written above (*"look for the drive before declaring
+one is missing"*) is confirmed by a second independent instance rather than merely restated. **The
+count went six → five → three in one day without a single line of product code being written**, which
+is the measure of what the missing search cost.
+
+**What did not change.** F274 is specced and unapproved; F142's fix shipped `f3a778f` and genuinely
+lacks a drive — its own change document says so — and F295 is unspecced. Those three are open on
+their own merits and no search retires them. **F165 (B) and F166 (C), filed out of F155's own drive,
+remain open and unqueued**; retiring F155 retires the refusal's wording, not the `_branch_at`
+equivalence class underneath it.
+
 **And one observation that outranks any single row of that table.** F88, F89 and F90 were found in
 one iteration, in three unrelated subsystems, and every one of them was a mechanism this repository
 tests *thoroughly* — against a state the product never produces. F88's access tests pass a
@@ -11907,7 +11940,30 @@ work. That contrast is the most useful thing this drive produced.
 
 ## F154 (A) — a review that ends without a verdict wedges the task forever, and the flow answers "nothing is wrong"
 
-**Unverified, not retired — added 2026-09-03 (night window, iteration 14).** `openspec/changes/archive/2026-09-01-a-review-nobody-is-doing-is-named/` is an implemented and archived change that names this finding. That is a plan marked done, not a drive of the built product, so this entry stays open until somebody re-drives it. Any 'open, filed not fixed' wording below predates the change and should be read against this line.
+**Status: FIXED `001a07d` (2026-08-31), driven the same day, RETIRED 2026-09-08.** The repair
+shipped in `hub/hub/run_task_binding.py` and `hub/hub/scheduler.py`, and it was **driven, not merely
+tested**: `scripts/drive/t_f154_wedged_review.py`, **18/18 on both populations** — the
+reviewer-wedged row and the author-wedged row — against a Hub restarted from the implementing
+commit. The 409 names the reviewer, the task and its title, says no turn is running or queued, and
+states three remedies; `stall_reason` carries the same sentence. Re-driven later at **18/18** again
+(see *"the firing answers 409 with"* below). The whole-suite run at the close was 3,825 passed / 0
+failed. Re-measured 2026-09-08: `run_task_binding.py` and `scheduler.py` are **byte-identical**
+between `001a07d` and `HEAD` — `git diff 001a07d HEAD --` over both files is empty — so the drive
+describes the code shipping today, and `001a07d` is an ancestor of `master`. The sentence is live at
+`hub/hub/scheduler.py:1745`.
+
+**The 2026-09-03 banner is withdrawn, for the same reason F140's was.** It read: *"a plan marked
+done, not a drive of the built product, so this entry stays open until somebody re-drives it."* The
+drive it asked for had already happened, **the day the fix shipped**, and is recorded in this file
+under its own heading. The banner's author checked `openspec/changes/archive/` and did not grep this
+file for `F154`. That search costs about ten seconds and would have saved this finding five days on
+the operator's blocked list.
+
+**One correction inside the finding survives its retirement**, and is kept because it changed the
+repair: `agent_capacity: "held"` was listed above as one of the surfaces getting it wrong, and it is
+the **correct** value — split out of `working` for precisely this row by F63
+(`hub/hub/schemas/jobs.py:136-143`). Round 1 caught it; the obvious fix would have reverted F63 two
+modules away.
 
 **Reproduced live, twice, on `task-5ae53e9b339c`.** The clean lane's reviewer (`alpha`) inspected the
 work, concluded in its own transcript that it was correct — *"The implementation is working
@@ -11982,7 +12038,27 @@ owns is what happens afterwards, and afterwards is F154.**
 
 ## F155 (A) — "Resolve the conflict on the branch, then approve" cannot be followed, by anybody
 
-**Unverified, not retired — added 2026-09-03 (night window, iteration 14).** `openspec/changes/archive/2026-09-01-a-conflict-refusal-names-what-clears-it/` is an implemented and archived change that names this finding. That is a plan marked done, not a drive of the built product, so this entry stays open until somebody re-drives it. Any 'open, filed not fixed' wording below predates the change and should be read against this line.
+**Status: FIXED `0373867` (2026-08-31), driven the same day, RETIRED 2026-09-08.** The repair shipped
+in `hub/hub/requirement_gate.py`, and it was **driven, not merely tested**:
+`scripts/drive/t_f155_conflict_remedy.py`, **23/23**, on a fresh project per run. The check that
+matters is lane 2, and it is the one unit tests structurally cannot make — **the harness parses the
+branch to act on out of the refusal's own sentence** (`recorded from a checkout of ([^\s.,;]+)`),
+uses nothing it knows about its own setup, resolves there, records evidence, approves, and reaches
+`merged`. A remedy is followable or it is not. Lane 3 drove the **old** remedy against a second task
+and got the pre-fix refusal back byte-for-byte, which is the falsifying leg. Re-measured 2026-09-08:
+`requirement_gate.py` is **byte-identical** between `0373867` and `HEAD` — `git diff 0373867 HEAD --`
+over it is empty — so the drive describes the code shipping today, and `0373867` is an ancestor of
+`master`. The sentence is live at `hub/hub/requirement_gate.py:263`.
+
+**The 2026-09-03 banner is withdrawn, for the same reason F140's and F154's were** — the drive it
+asked for predated it by three days and sits in this file under its own heading, *"Drive 2026-08-31 —
+F155's remedy, followed end to end"*. Three findings, one search never run.
+
+**What retiring F155 does not close.** The drive filed **F165 (B)** and **F166 (C)** out of the same
+lanes: an operator or agent whose fresh footprint carries a different `branch` key lands *beside* the
+stale row rather than replacing it, and the refusal stands with no visible reason. Those are their
+own entries and are **still open and unqueued**. F155 was the refusal's *wording*, and the wording is
+fixed; the `_branch_at` equivalence class underneath it is a separate, undecided question.
 
 **The refusal names a remedy that provably does not clear it.** `_merge_detail`
 (`hub/hub/requirement_gate.py:151-164`) says:
