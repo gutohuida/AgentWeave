@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave daily review — 2026-09-08</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --panel-2: #f4f4f2;
+    --ink: #1c1c1a;
+    --ink-dim: #5c5c56;
+    --ink-faint: #85857d;
+    --rule: #e0e0da;
+    --rule-strong: #c9c9c1;
+    --accent: #6b4fbb;
+    --sev-a: #b3261e;
+    --sev-a-bg: #fbe9e7;
+    --sev-b: #a8590a;
+    --sev-b-bg: #fdf0e0;
+    --sev-c: #4d6a1f;
+    --sev-c-bg: #eef4e2;
+    --sev-d: #4a5568;
+    --sev-d-bg: #eceef2;
+    --ok: #2f6b3a;
+    --ok-bg: #e8f3ea;
+    --warn-bg: #fdf6e0;
+    --warn-rule: #d9b84a;
+    --code-bg: #f2f2ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --panel: #1e1e23;
+      --panel-2: #26262c;
+      --ink: #e9e9e6;
+      --ink-dim: #b0b0a8;
+      --ink-faint: #86867e;
+      --rule: #33333a;
+      --rule-strong: #4a4a52;
+      --accent: #b09aec;
+      --sev-a: #ff9c92;
+      --sev-a-bg: #3a1f1d;
+      --sev-b: #f0b878;
+      --sev-b-bg: #392a17;
+      --sev-c: #b3d67a;
+      --sev-c-bg: #26301a;
+      --sev-d: #b4c0d4;
+      --sev-d-bg: #24282f;
+      --ok: #8fd39c;
+      --ok-bg: #1c2c20;
+      --warn-bg: #322a14;
+      --warn-rule: #8a7527;
+      --code-bg: #24242a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    padding: 2.2rem 1.25rem 5rem;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  header.page { border-bottom: 2px solid var(--rule-strong); padding-bottom: 1.1rem; margin-bottom: 1.6rem; }
+  header.page h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -0.015em; }
+  header.page .sub { color: var(--ink-dim); font-size: .95rem; }
+  h2 {
+    font-size: 1.22rem; letter-spacing: -0.01em;
+    margin: 2.6rem 0 .5rem; padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: .5rem; }
+  h3 { font-size: 1.02rem; margin: 1.5rem 0 .4rem; }
+  h4 { font-size: .93rem; margin: 1.1rem 0 .3rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .8rem; padding-left: 1.35rem; }
+  li { margin: .3rem 0; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .875em;
+  }
+  code { background: var(--code-bg); padding: .1em .34em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule);
+    border-radius: 6px; padding: .75rem .9rem; overflow-x: auto; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0 1rem; font-size: .93rem; }
+  th, td { text-align: left; padding: .48rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); border-bottom: 1px solid var(--rule-strong); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0; }
+  .note { border-left: 3px solid var(--warn-rule); background: var(--warn-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .note strong:first-child { display: block; margin-bottom: .2rem; }
+  .sev { display: inline-block; min-width: 1.35rem; text-align: center; font-weight: 700; font-size: .78rem; padding: .1rem .38rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+  .sev.a { color: var(--sev-a); background: var(--sev-a-bg); }
+  .sev.b { color: var(--sev-b); background: var(--sev-b-bg); }
+  .sev.c { color: var(--sev-c); background: var(--sev-c-bg); }
+  .sev.d { color: var(--sev-d); background: var(--sev-d-bg); }
+  .pill { display: inline-block; font-size: .76rem; font-weight: 600; letter-spacing: .03em; padding: .12rem .5rem; border-radius: 999px; border: 1px solid var(--rule-strong); color: var(--ink-dim); }
+  .pill.ok, .pill.driven { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .pill.tested { color: var(--sev-b); background: var(--sev-b-bg); border-color: transparent; }
+  .fid { font-family: ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
+  .loc { font-family: ui-monospace, monospace; font-size: .82em; color: var(--ink-faint); white-space: nowrap; }
+  .lede { font-size: 1.02rem; color: var(--ink-dim); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .28rem 1rem; font-size: .93rem; margin: .6rem 0; }
+  .kv dt { color: var(--ink-faint); }
+  .kv dd { margin: 0; }
+  .ask { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1.1rem; margin: 1rem 0; background: var(--panel); }
+  .ask h4 { color: var(--accent); margin-top: 0; }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  a:visited { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  footer.page { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .85rem; }
+  .small { font-size: .88rem; color: var(--ink-dim); }
+  .measured { color: var(--ink-faint); font-size: .82rem; font-style: italic; }
+  @media (max-width: 34rem) {
+    body { padding: 1.4rem .8rem 3rem; font-size: 15px; }
+    table { font-size: .86rem; }
+    .kv { grid-template-columns: 1fr; gap: .1rem .5rem; }
+    .kv dd { margin-bottom: .45rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>Daily review — 2026-09-08</h1>
+  <div class="sub">
+    Branch <code>autonomous/2026-09-08-daily</code> · one day, 17 commits ·
+    <strong>the merge gate did not open</strong> · <strong>nothing was specced, by instruction</strong> ·
+    three F292 occurrences read, a rate measured at <strong>20.4 %</strong>, ROADMAP Stage 6 closed
+  </div>
+</header>
+
+<div class="note">
+  <strong>Read this first: today's page has no centre, and that was the instruction.</strong>
+  <code>DIRECTION.md</code>'s <code>2026-09-08</code> section says <em>"Do not run the spec loop today.
+  There is no D-2/D-3/D-4"</em> and forbids the window from speccing anything it finds. So
+  <strong>§4 — the section this page exists for — is empty</strong>, there is nothing new to approve,
+  and no verdict is being asked of you on any change. What the page carries instead is a measurement,
+  four closures, one reconciliation that says the day started from a false premise, and
+  <strong>three questions</strong> marked <strong>DAY-1</strong>, <strong>DAY-2</strong> and
+  <strong>DAY-3</strong>. Ask ids are scoped to <em>this</em> page.
+</div>
+
+<p class="lede">
+  The one thing that would change tonight is not on this page at all: <code>APPROVALS.md</code>
+  already carries <strong>ALL FOUR APPROVED</strong> with an <code>ORDER:</code> line, written by you
+  at 01:24 this morning. <strong>Tonight at 22:55 is the first build night those four approvals have
+  ever had.</strong> Nothing further is required from you for that to happen — §5 says what it will do.
+</p>
+
+<!-- ============================== 1 ============================== -->
+<h2 id="s1"><span class="num">1</span>The branch, and a gate held shut by exactly one defect</h2>
+
+<div class="card">
+  <dl class="kv">
+    <dt>Branch</dt><dd><code>autonomous/2026-09-08-daily</code>, cut from <code>master</code> at <code>9fb0809</code>, <strong>one day</strong>, 17 commits at the time of writing</dd>
+    <dt>Merge gate</dt><dd><strong>did not open</strong>, on condition 3 alone</dd>
+    <dt>Stranded work</dt><dd>None. <code>master</code> is an ancestor; only <code>9fb0809</code> was behind. No previous cycle is unmerged — 2026-09-07's landed.</dd>
+  </dl>
+</div>
+
+<table>
+  <thead><tr><th>Condition</th><th>Verdict at 09:01</th></tr></thead>
+  <tbody>
+    <tr><td>Not <code>master</code>, and <code>HEAD..master</code> is 0</td><td><span class="pill ok">pass</span> count 0</td></tr>
+    <tr><td>Tree clean and <code>HEAD == @{u}</code></td><td><span class="pill ok">pass</span> both <code>8c01b50</code></td></tr>
+    <tr><td>CI concluded <code>success</code> for that exact sha</td><td><strong>FAIL</strong> — <code>in_progress</code>, created 07:55Z, six minutes into a 15–25 minute suite</td></tr>
+    <tr><td>No line-initial <code>HOLD MERGE</code></td><td><span class="pill ok">pass</span></td></tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>This is structural rather than unlucky, and it now has a name in the durable record.</strong>
+  The branch is armed at 08:55 and the gate is read at ~09:00, so the arm commit's own CI run has had
+  five minutes. The gate will essentially always find CI mid-run on the first firing. Filed to
+  <code>DEAD-ENDS.md</code> from the interactive session this morning, independently of this window
+  finding it.
+</p>
+
+<div class="note">
+  <strong>The sharper fact, and it is measured: CI redness on this project currently has exactly one
+  cause.</strong> Over the 54 completed <code>ci.yml</code> runs across all branches from
+  2026-09-07T00:00Z to 2026-09-08T08:26Z there were <strong>11 failures, and all 11 are
+  <span class="fid">F292</span></strong> — the schema-reset <code>database is locked</code>. Every one
+  was classified from its own log, not counted as red. So the gate that keeps deferring is not being
+  held shut by a class of flakes; it is being held shut by <em>one defect</em>, and that defect is
+  §3's subject.
+</div>
+
+<!-- ============================== 2 ============================== -->
+<h2 id="s2"><span class="num">2</span>What the night built: nothing — and the day started from a false premise</h2>
+
+<p>
+  <strong>There was no night window.</strong> <code>.claude/autonomous/2026-09-07-night-log.md</code>
+  does not exist and <code>STATE-night.json</code> still describes the 2026-09-06 window. So D-1's usual
+  content — drive what the night built — had no subject, and nothing on this page is a drive of new
+  product code, because none was written.
+</p>
+
+<p>
+  The scheduled task itself was measured directly rather than inferred:
+  <code>AgentWeaveArmNight</code> is <strong><code>Ready</code></strong>,
+  <code>LastTaskResult=0</code>, last fired 2026-09-06 22:55, <strong>next 2026-09-08 22:55</strong>.
+</p>
+
+<h3>The reconciliation, and it is the day's most uncomfortable finding</h3>
+
+<p>
+  The two authorities this window composed its queue from — <code>DIRECTION.md</code>'s
+  <code>2026-09-08</code> section and <code>ROADMAP.md</code>'s headline — were both written by the
+  DECIDE session at <strong>00:30</strong>. Your approval commit <code>0d82d6d</code> landed at
+  <strong>01:24</strong>, fifty-four minutes later, and is an ancestor of this branch. The window read
+  those files at <strong>09:01</strong> — <strong>seven hours and thirty-one minutes</strong> after the
+  premise stopped being true.
+</p>
+
+<table>
+  <thead><tr><th>Claim, as written</th><th>Where</th><th>Measured 2026-09-08</th></tr></thead>
+  <tbody>
+    <tr><td>"not one carries an approval token"</td><td><code>DIRECTION.md</code>, <code>ROADMAP.md</code> headline</td><td><strong>all four APPROVED</strong> at 01:24, with an <code>ORDER:</code> line</td></tr>
+    <tr><td>"127 tasks, 2 ticked"</td><td><code>DIRECTION.md</code></td><td><strong>129</strong> — re-derived from the four rows (25+35+44+25)</td></tr>
+    <tr><td><code>AgentWeaveArmNight</code> disabled</td><td><code>DIRECTION.md</code></td><td><strong><code>Ready</code></strong>, next 22:55 tonight</td></tr>
+    <tr><td>"the DECIDE step has not run since 2026-09-06"</td><td><code>ROADMAP.md</code> headline</td><td>it ran twice today — 00:30, and again in session from 09:20</td></tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>No work was misdirected, and that is luck rather than design.</strong> The queue's shape
+  survives because the playbook's own drain gate reaches "no spec loop today" by a route that does not
+  depend on the approval state at all. What did not survive is the picture: nothing in eight iterations
+  said the pipeline had stopped being verdict-starved. <strong>The general shape is worth more than
+  the instance</strong> — a dated <code>DIRECTION.md</code> section is read as an instruction
+  <em>and</em> as a description, and only the instruction half is protected by the newest-section-only
+  contract. Its premises can be overtaken by a commit landing an hour later and nothing re-derives
+  them. Filed to <code>DEAD-ENDS.md</code>. <code>ROADMAP.md</code>'s headline was struck through and
+  dated in place.
+</p>
+
+<!-- ============================== 3 ============================== -->
+<h2 id="s3"><span class="num">3</span>What today found</h2>
+
+<p>
+  Nothing today was a drive of the product — there was no night build to drive. The work was an
+  instrument on the test suite, a measurement of a failure rate, and four roadmap closures. Every row
+  below is measured; nothing is a code reading presented as an outcome.
+</p>
+
+<table>
+  <thead><tr><th>Sev</th><th>What</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td><strong><span class="fid">F292</span>'s falsification claim did not hold.</strong> The entry led with "the registry mechanism is falsified for all occurrences that carried the instrument". The registry is emptied on SQLAlchemy's <code>close</code> event, which fires <em>before</em> the close is attempted and unconditionally, and the close failure is swallowed into a logger pytest discards — so a connection still holding the file is <em>guaranteed</em> to print <code>no connection checked out</code>. The negative was structural. Narrowed, not retracted.</td>
+      <td class="loc">sqlalchemy/pool/base.py:877-886</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td><strong><span class="fid">F292</span>'s rate, with its denominator, for the first time.</strong> 11 failures in 54 runs, all branches, 2026-09-07T00:00Z → 2026-09-08T08:26Z = <strong>20.4 %</strong>; <code>master</code>-only since 2026-09-06 is 25.0 %. The plan's "wrong roughly half the time" was <span class="fid">F279</span>'s <em>local</em> rate borrowed for <span class="fid">F292</span>'s <em>CI</em> rate — an overstatement of 2.5×. Occurrence count corrected from 8 to a floor of <strong>22</strong>, earliest 2026-09-04T22:02Z, one day <em>before</em> the finding was filed.</td>
+      <td class="loc">gh run list, 297 runs classified</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td><strong>A rate without its denominator is not a measurement.</strong> <code>DEAD-ENDS.md</code> records "4 failures in the last 20 runs, ~22 %" — which agrees in magnitude but cannot be reconciled run-by-run, because 4/20 is 20 % and the line states neither its population nor its window. Both records now state all three.</td>
+      <td class="loc">.claude/handoffs/DEAD-ENDS.md</td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td><strong>The rate cannot see a hang.</strong> Run <code>34041037112</code>'s <code>hub-test</code> ran exactly six hours — GitHub's job ceiling — and was <code>cancelled</code>, so a rate keyed on "<code>hub-test</code> was the only failing job" excludes the <em>worst</em> occurrences. Any future rate must count cancelled-after-timeout jobs separately.</td>
+      <td class="loc">scripts/drive/FINDINGS.md, F292</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td><strong>The instrument's silence was sampled thirty seconds too late.</strong> Occurrence #9 printed one open handle, <code>idle</code> — <em>the victim</em>, the DROP's own connection. But the census was computed once at report time, after a whole <code>busy_timeout</code> had expired, so it said "no holder thirty seconds after the fact", not "no holder". Structurally the same error as the registry claim, made twice in one day with two different instruments.</td>
+      <td class="loc">hub/tests/conftest.py</td>
+    </tr>
+    <tr>
+      <td><span class="sev a">A</span></td>
+      <td><strong>Three of the sixteen owned skills were reported stale; six were.</strong> The three the roadmap missed include <strong>the autonomous driver's own two PowerShell scripts</strong>, 48 and 85 lines behind — a Codex run started from <code>~/.codex/skills/</code> would have installed a two-week-stale driver. The list had been assembled from what a reader noticed rather than from a diff.</td>
+      <td class="loc">scripts/sync_skills.py</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td><strong><code>aw.py:16</code>'s comment lied, and it was quieter than the roadmap said.</strong> It promised "an unset key fails loudly below". Against the live trial Hub with <code>AW_KEY</code> unset: <strong>401 and exit code 0</strong>. A drive script that prints the returned code and carries on was behaving as if configured.</td>
+      <td class="loc">scripts/drive/aw.py:16</td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td><strong>The roadmap row named one file; the ratchet found nine.</strong> A hand grep earlier in the same iteration "checked" and reported two — it had been truncated by its own <code>head -20</code>. Tracked <code>aw_live_</code> literals fell from 18 in 16 files to 10 in 8, and what remains is documented placeholders, redaction fixtures, and history.</td>
+      <td class="loc">tests/test_drive_key_guard.py</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>The one that arrived after the day log closed, and it corrects today's own conclusion</h3>
+
+<div class="note">
+  <strong>Occurrences #10 and #11 falsify a negative this window recorded five hours ago.</strong>
+  Occurrence #9 printed <em>"<code>sqlalchemy.pool</code> logged NO error this session"</em>, and that
+  was written down as killing the silent-discard hypothesis outright. <strong>Two runs later the same
+  instrument printed the error.</strong> #10 (<code>34205968391</code>, <code>8868088</code>) carried
+  one <code>sqlalchemy.pool</code> ERROR record; #11 (<code>34206652706</code>, <code>a84e608</code>)
+  carried three. Both runs concluded <em>after</em> the iteration that declared the hypothesis dead —
+  #10's at 08:57:25Z, one minute after that iteration committed.
+</div>
+
+<p>Every one of the four records is the same traceback:</p>
+
+<pre><code>[sqlalchemy.pool.impl.AsyncAdaptedQueuePool] Exception during reset or similar
+  pool/base.py:986                 in _finalize_fairy  fairy._reset(
+  pool/base.py:1441                in _reset           pool._dialect.do_rollback(self)
+  engine/default.py:712            in do_rollback      dbapi_connection.rollback()
+  dialects/sqlite/aiosqlite.py:338 in rollback         self.await_(self._connection.rollback())
+  util/_concurrency_py3k.py:132 / :196                 value = await result
+  aiosqlite/core.py:197            in rollback         await self._execute(self._conn.rollback)
+  aiosqlite/core.py:160            in _execute         return await future
+asyncio.exceptions.CancelledError</code></pre>
+
+<p>
+  <strong>What it adds, stated no more strongly than it supports.</strong> There is now a named,
+  measured way for a connection of the product engine to be abandoned with its transaction unresolved:
+  the rollback in <code>_finalize_fairy</code> is <strong>cancelled mid-flight</strong> — the awaiting
+  task was cancelled while the worker thread held the statement. <code>CancelledError</code> is a
+  <code>BaseException</code>, so the handler catches it, logs it here, and calls
+  <code>invalidate()</code> → <code>__close()</code> → terminate → <code>stop()</code>, which on this
+  dialect only <em>queues</em> the real <code>sqlite3</code> close. A rollback that never completed
+  leaves the write lock held; a close that is only queued does not take it back.
+</p>
+
+<p>
+  <strong>What it does not establish.</strong> That the cancelled connection is the one holding the
+  file at the DROP — both runs are still late-only censuses and both again print one <code>idle</code>
+  handle, the victim's signature. The per-stage census that would settle it landed at
+  <code>b682176</code> and <strong>has not yet fired</strong>: the six runs after it are green. The
+  standing candidate for where the cancellation comes from is
+  <code>agent_trigger.py:1190</code>'s un-awaited <code>asyncio.create_task(_execute_run(...))</code>,
+  because a task torn down at loop close is cancelled — <em>named as a hypothesis to falsify, not
+  measured</em>.
+</p>
+
+<h3>What was closed, and both closures found the row understating the defect</h3>
+
+<ul>
+  <li><strong>ROADMAP 6.1</strong> — the 16 owned skills are synced to both mirrors and
+    <code>tests/test_skill_sync.py</code> now gates them. Mutation-checked in four shapes, including
+    the one a one-directional check would have passed (an orphan file at the destination) and the one
+    that must <em>skip</em> rather than fail (the CI runner, where neither mirror exists). Two
+    sub-defects fixed at the source rather than worked around: the sync was copying
+    <code>__pycache__</code>, which would have made the gate flap; and the destination paths were
+    literals inside <code>main()</code>, so the test now imports them.</li>
+  <li><strong>ROADMAP 6.2</strong> — <code>require_key()</code> in <code>scripts/drive/aw.py</code>,
+    raising <code>SystemExit</code> rather than <code>RuntimeError</code> because <code>api()</code>'s
+    own <code>except Exception</code> demonstrably swallows the latter into a <code>(0, …)</code>
+    return. Nine drive scripts converted; three assertions gate the directory; the guard was checked
+    across nine legs including four against the live Hub on <code>:8010</code>.</li>
+  <li><strong>ROADMAP 6.3</strong> — closed in part by you in session (the disclosed key was rotated),
+    with the residual literals mostly cleared as a side effect of 6.2. The policy half is
+    <strong>DAY-1</strong> below.</li>
+  <li><strong>ROADMAP 6.4</strong> — re-confirmed closed in one command; <code>LATEST.md</code> names
+    the highest handoff on disk.</li>
+</ul>
+
+<div class="note">
+  <strong>Neither closure believed its own row.</strong> 6.1 said three skills were stale and six were;
+  6.2 said one file carried a key literal and nine did. In both cases the correct count came from
+  writing the check as a test rather than from reading, and in both cases the row's number had been a
+  hand count. That is the same defect the two rows were written about, reproduced in the rows
+  themselves.
+</div>
+
+<h3>The finding this window did not produce, recorded because it changes the arithmetic</h3>
+
+<p>
+  Your interactive session classified all <strong>271</strong> finding sections with
+  <code>scripts/classify_findings.py</code>, an instrument that was attacked until it failed. Re-run
+  at the time of writing:
+</p>
+
+<table>
+  <thead><tr><th>Severity</th><th>Total</th><th>CONFLICT</th><th>OPEN</th><th>RESOLVED</th><th>UNCLASSIFIED</th></tr></thead>
+  <tbody>
+    <tr><td><span class="sev a">A</span></td><td>42</td><td>3</td><td><strong>1</strong></td><td>38</td><td>0</td></tr>
+    <tr><td><span class="sev b">B</span></td><td>112</td><td>2</td><td>18</td><td>49 (+3 elsewhere)</td><td>40</td></tr>
+    <tr><td><span class="sev c">C</span></td><td>95</td><td>1</td><td>16</td><td>21 (+2 elsewhere)</td><td>55</td></tr>
+    <tr><td><span class="sev d">D</span></td><td>20</td><td>0</td><td>0</td><td>4 (+2 elsewhere)</td><td>14</td></tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>109 unclassified, not the 147 the plan estimated</strong> — a heading regex demanding exactly
+  <code>(A)</code>…<code>(D)</code> had hidden 13 sections. And the number worth carrying: of the
+  findings currently counted resolved, <strong>17 rest on <code>NOT A DEFECT</code> prose</strong>
+  (an arm with at least one known-wrong member, <span class="fid">F187</span>) and
+  <strong>7 on a cross-reference</strong> whose hand-check came back <strong>3 of 5 false</strong>.
+  Roughly two dozen closures are weaker than the ledger's totals imply.
+</p>
+
+<!-- ============================== 4 ============================== -->
+<h2 id="s4"><span class="num">4</span>What was specced: nothing, and that was the instruction</h2>
+
+<p>
+  This is the section the page exists for, and today it is empty. <strong>No change was proposed, no
+  round was run, no approval token was written, and no decision was marked.</strong>
+  <code>DIRECTION.md</code>'s <code>2026-09-08</code> section forbade all four, and the window held to
+  it: nothing it found today — the six stale skills, the nine key literals, the cancelled-rollback
+  mechanism — was turned into a proposal.
+</p>
+
+<p>
+  <strong>The playbook's own gate reached the same answer independently, and that is the first time
+  that has happened.</strong> D-2's drain check suppresses the spec loop whenever two or more specced
+  changes are unbuilt. Measured with the playbook's own command: <strong>four</strong>. So the loop
+  would have skipped proposing today even with no <code>DIRECTION</code> section at all.
+</p>
+
+<div class="note">
+  <strong>One honest qualification on that agreement.</strong> Both authorities were right, but one of
+  them was right for a reason that had expired seven hours earlier — <code>DIRECTION</code>'s stated
+  reason was <em>"127 tasks, 2 ticked, and not one carries an approval token"</em>, and all four had
+  carried a token since 01:24. The drain gate does not depend on approval state, so it is the half of
+  the agreement that still holds. §2 has the full reconciliation.
+</div>
+
+<h3>Three questions</h3>
+
+<div class="ask" id="day1">
+  <h4>DAY-1 — may the loop rotate a trial-profile Hub key itself?</h4>
+  <p>
+    <strong>The specific instance is closed</strong> — you rotated the disclosed <code>aw_live_</code>
+    key in session this morning, and ROADMAP 6.3 closed with it. What is still open is the policy the
+    window stopped on: <em>when an unattended window finds a disclosed credential, may it rotate, or is
+    every rotation yours?</em>
+  </p>
+  <p>
+    The reasoning is unchanged: rotating invalidates whatever still holds the old key, and the likeliest
+    holder is the live instance on port <strong>8000</strong>, which every unattended window is forbidden
+    to touch. The window carved this out of its hygiene item rather than doing it. A one-line answer in
+    <code>DIRECTION.md</code> settles it either way; with no answer, the next window meeting a disclosed
+    credential will stop and ask again, which is the safe default but costs a window.
+  </p>
+</div>
+
+<div class="ask" id="day2">
+  <h4>DAY-2 — the drive-harness literals sweep: queue it, or leave it?</h4>
+  <p>
+    After 6.2, <strong>10 real-shaped <code>aw_live_</code> literals survive in 8 tracked files</strong>,
+    all dead against the rotated key. The nine <em>drive</em> scripts were converted today, so what
+    remains is the documented <code>a1b2c3…</code> placeholder, the redaction fixtures in
+    <code>hub/tests/test_operator_is_told_the_truth.py</code> that exist <em>because</em> this key leaked,
+    and historical documents.
+  </p>
+  <p>
+    <code>DECISIONS.md</code> already records this as <em>"not queued: a hygiene sweep nobody asked for,
+    worth exactly one decision from the operator before anyone spends a window on it."</em> This is that
+    decision, surfaced where the loop will see it. <strong>The honest recommendation is: leave it.</strong>
+    The class that mattered — a script that silently authenticates with a stale key — is now gated by
+    <code>tests/test_drive_key_guard.py</code>, and the remainder is fixtures and history that a sweep
+    would make worse, not better.
+  </p>
+</div>
+
+<div class="ask" id="day3">
+  <h4>DAY-3 — build Stage 2 tonight through a suite that is wrong 20.4 % of the time?</h4>
+  <p>
+    <code>ROADMAP.md</code> orders <strong>Stage 1</strong> (repair the F292 instrument) <em>before</em>
+    <strong>Stage 2</strong> (build the four approved changes), on the argument that repairing the
+    instrument precedes using it. <strong>Stage 1 is not closed.</strong> Today built a diagnostic and
+    measured a rate; the holder is unnamed, and any real repair is <code>hub/hub/</code> production code
+    — out of a day window's scope.
+  </p>
+  <p>
+    Meanwhile <code>APPROVALS.md</code>'s <code>ORDER:</code> line is what actually steers the FIX
+    window, it names four changes, and it carries no stop token. <strong>So tonight builds Stage 2
+    regardless of the roadmap's stage numbers.</strong> The window did not treat this as its call and has
+    not touched <code>APPROVALS.md</code>.
+  </p>
+  <p>
+    <strong>If you accept that — which is the default, since the loop may not write tokens — the night
+    needs one fact and it is on this page for that reason:</strong> a red CI on tonight's build is more
+    likely <span class="fid">F292</span> (20.4 %, and 11 of 11 red runs in the measured window) than a
+    regression from the change, and must be classified with
+    <code>gh run view &lt;id&gt; --log-failed</code> before anything is diagnosed. The alternative is a
+    line holding <code>ORDER:</code> until F292 has a named holder, which costs a build night and buys a
+    cleaner signal.
+  </p>
+</div>
+
+<!-- ============================== 5 ============================== -->
+<h2 id="s5"><span class="num">5</span>What tonight does — and it does not need you</h2>
+
+<p>
+  Unusually, <strong>the "if you approve nothing" branch is not the live one.</strong>
+  <code>APPROVALS.md</code>'s newest section already carries four <code>APPROVED</code> rows and an
+  <code>ORDER:</code> line, written by you at 01:24 today. Nothing on this page changes it, and this
+  window may not. Tonight's window will read it and build, in this order:
+</p>
+
+<ol>
+  <li><code>2026-09-07-a-dead-connection-is-never-handed-back-out</code> — <span class="fid">F295</span> <span class="sev a">A</span>, 25 tasks. Python only, no bundle. Its task 1.6 carries an open choice the approval says either answer satisfies.</li>
+  <li><code>2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing</code> — sidequest, 35 tasks. Python and docs only. Build task 2.2 from the third review's rewrite, not from an earlier copy.</li>
+  <li><code>2026-09-05-the-conversation-carries-its-own-run-facts</code> — <span class="fid">F274</span> <span class="sev a">A</span>, 44 tasks. <strong>Touches the bundle.</strong> Phase 0 is a hard gate. Likely two nights.</li>
+  <li><code>2026-09-07-clearing-instructions-asks-first</code> — 25 tasks. <strong>Touches the bundle.</strong></li>
+</ol>
+
+<p>
+  <strong>One change per night, and <code>ORDER:</code> is that night's only</strong> — it needs
+  rewriting each evening with what remains. The two bundle-free changes lead precisely so that the two
+  that rebuild <code>hub/hub/static/ui</code> never run beside each other.
+</p>
+
+<div class="note">
+  <strong>If you would rather it did something else, the backlog is thinner than it has ever been.</strong>
+  The default queue's source 1 (implemented changes needing only archiving) is empty. Source 2 — open
+  findings, A first — has collapsed to <strong>one</strong> open severity-A finding,
+  <span class="fid">F142</span>; <span class="fid">F154</span> and <span class="fid">F155</span> were
+  retired today when their drives were found to exist, and <span class="fid">F274</span> and
+  <span class="fid">F295</span> are now <code>CONFLICT</code> rather than open because they have approved
+  changes. So the <code>APPROVED</code> rows are not merely the best available work tonight; they are
+  close to the only queued work of that severity.
+</div>
+
+<p>
+  <code>NOTHING TONIGHT</code> remains available and is cheaper than silence — the window logs it, sets
+  <code>next_action</code> to null and exits without spending a model invocation. Given that tonight is
+  the first build night these four approvals have ever had, it is not the recommendation.
+</p>
+
+<!-- ============================== 6 ============================== -->
+<h2 id="s6"><span class="num">6</span>Research — three candidates, ranked, none specced</h2>
+
+<p>
+  <code>spec-queue/research/2026-09-08.md</code>, 536 lines. <strong>The routine read
+  <code>DIRECTION</code> itself and wrote today's three as findings rather than proposals</strong> —
+  its own words: <em>"a research file that ignored the operator's own rate-mismatch instruction and
+  produced three more proposal-shaped items would be adding to exactly the pile DIRECTION was written
+  to stop."</em> Ranking them still holds; <em>next</em> means when Stage 2 drains.
+</p>
+
+<p>
+  <strong>Two publications in 24 hours across twenty watched repositories</strong> — the MCP Python SDK
+  (v2.2.0 and v1.30.0, same day) and a Codex alpha whose entire release body is its own version string.
+  Claude Code, AG2, opencode, goose, crewAI, Mastra, Langfuse, fastmcp, spec-kit, LangGraph, OpenHands,
+  both Agent SDKs, Temporal, browser-use and Aider are unmoved. The MCP specification is on its
+  <strong>ninth day</strong> without a protocol revision. <strong>The day's load-bearing source is a
+  measurement, not a release:</strong> Dan Luu, 2026-09-08, <em>"How well do agents use
+  test/verification techniques?"</em> — 26 prompt conditions, 80 runs each at two effort levels,
+  scored against hidden tests. It is the largest controlled dataset the routine has seen on whether an
+  agent's own testing means anything, and it lands on the one artefact AgentWeave's spec flow is built
+  to accept.
+</p>
+
+<table>
+  <thead><tr><th>#</th><th>Candidate</th><th>Cost</th><th>What it would mean for AgentWeave</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><strong>Say whether a <code>test_result</code> ran tests the same footprint wrote.</strong></td>
+      <td>S/M</td>
+      <td>
+        Dan Luu's central result: <em>"across all conditions, agents were able to get the tests they
+        wrote to pass"</em>, and <em>"getting their own tests to pass more iteratively tended to get
+        agents to write more incorrect tests that would enforce incorrect behavior."</em> Asking for more
+        tests produced <strong>double the tests on medium and no better correctness</strong>.
+        AgentWeave's <code>record_evidence</code> defaults <code>kind="test_result"</code>
+        (<code>mcp_server.py:1290-1296</code>); <code>requirement-traceability/spec.md:140</code> refuses
+        the agent's <em>assertion</em> and <code>:155</code> refuses self-<em>acceptance</em> —
+        <strong>neither reaches self-<em>authorship</em></strong>. The fact is already stored:
+        <code>EvidenceFootprint.entries</code> is <code>{path: blob id}</code> for the changed paths.
+        This is a report over data the product already has, not a new capability.
+      </td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>Scrub the spawned run's environment by policy, not by a list of five names.</strong></td>
+      <td>S</td>
+      <td>
+        Trail of Bits published <code>coop</code>'s trust model for exactly AgentWeave's deployment shape
+        — local agent CLIs, broad autonomy. Its invariant: <em>"Proxy mode keeps the model API keys out
+        of the guest entirely… the guest gets only a per-instance capability token."</em> AgentWeave's
+        base is <code>dict(os.environ)</code> and it pops <strong>five</strong> names
+        (<code>agent_trigger.py:1117-1129</code>); <code>launchability.py:152-158</code> then <em>adds</em>
+        <code>ANTHROPIC_API_KEY</code> back. <strong>AgentWeave already mints the per-run capability
+        token</strong> — <code>AW_RUN_TOKEN</code> — so the machinery coop built exists here and is simply
+        not pointed at the provider credential.
+      </td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>Pin the Hub credential to the endpoint's origin.</strong></td>
+      <td>S</td>
+      <td>
+        Both maintained MCP Python SDK lines shipped the identical redirect fix on the same afternoon —
+        <em>"HTTP client redirects are only followed within the endpoint's origin"</em> — which is how a
+        project signals a security class rather than a bug. <strong>Measured on this machine today</strong>,
+        Python 3.11.9: <code>urllib.request.urlopen</code> follows a 302 to a different origin
+        <em>and carries <code>Authorization: Bearer</code> to the new host</em>. AgentWeave's tool surface
+        (<code>mcp_server.py:151-176</code>) and its CLI/operator transport
+        (<code>transport/http.py:186-191</code>) both use bare <code>urlopen</code> with a bearer header,
+        and the second carries the <strong>project API key</strong>, from a <code>transport.json</code>
+        whose <code>url</code> is arbitrary.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>What the routine withdrew, which is the part worth reading</h3>
+
+<p>
+  <strong>Yesterday's §3 — count what a reviewer has actually changed — took a direct hit from today's
+  source and should be re-derived or dropped rather than re-listed.</strong> Dan Luu's Audit condition
+  measures the base rate: <em>151 of 152 agents claimed to find an issue and then made a change as a
+  result</em>, and <em>"on average, Audit did about as well as Default."</em> A rejection-and-change rate
+  of 151/152 carries no information — the count that candidate wanted to add would read ~99 % for every
+  reviewer in the roster. The discriminating measurement is whether the <em>outcome</em> differed, and
+  AgentWeave has no held-out signal to compare against.
+</p>
+
+<p>
+  <strong>And one finding about charters, filed as an observation rather than a candidate.</strong> The
+  same dataset measured a 34k-character skill loading a 45k reference: <strong>26–41 % more tokens,
+  16–18 % more dollars, and worse correctness</strong>, with an exposure gradient — <em>"the earlier an
+  agent looked at the skill, the more its behavior was impacted and the worse the correctness
+  result."</em> AgentWeave's charter is the same object, an injected markdown behaviour contract, and
+  <code>agent-charter/spec.md</code> contains <strong>zero</strong> occurrences of <em>size</em>,
+  <em>length</em>, <em>bytes</em>, <em>token</em>, <em>limit</em> or <em>truncate</em> across its eight
+  requirements.
+</p>
+
+<footer class="page">
+  <p>
+    Written by the FILL window on <code>autonomous/2026-09-08-daily</code>, 2026-09-08, iteration 10.
+    Every number on this page is measured from the repository, the ledger,
+    <code>scripts/classify_findings.py</code> re-run at the time of writing, <code>gh run list</code>
+    and <code>gh run view --log-failed</code>, or <code>Get-ScheduledTaskInfo</code>; anything inferred
+    is labelled as such. <strong>Nothing here was specced, approved or decided</strong> — that was
+    today's instruction, and §4 says so where a reader looking for the usual centre of this page will
+    find it.
+  </p>
+  <p>
+    Approvals: <code>spec-queue/APPROVALS.md</code> ·
+    Findings: <code>scripts/drive/FINDINGS.md</code> (F292) ·
+    Research: <code>spec-queue/research/2026-09-08.md</code> ·
+    Plan: <code>spec-queue/ROADMAP.md</code> ·
+    Log: <code>.claude/autonomous/2026-09-08-day-log.md</code>
+  </p>
+</footer>
+
+</div>
+</body>
+</html>

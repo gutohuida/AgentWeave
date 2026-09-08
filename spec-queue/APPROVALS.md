@@ -89,6 +89,37 @@ and `clearing-instructions-asks-first` touch the bundle, and those two share **n
 their only collision is the generated `hub/hub/static/ui`. So the ordering constraint is narrower
 than the roadmap states.
 
+---
+
+### The day window's section — 2026-09-08, and it has no rows
+
+Review page: `review/review-2026-09-08.html`. **No change was proposed today, so there is nothing
+here to take a verdict.** `DIRECTION.md`'s `2026-09-08` section forbade the spec loop outright — no
+R1/R2/R3, no approval token, no decision marked, and nothing found today specced. The window held to
+all four. This subsection exists so a reader does not mistake the absence of rows for an omission.
+
+**The four `APPROVED` rows above are still the night's authority and were not touched.** They were
+written by you at 01:24 today (`0d82d6d`); the day window may not add to them, reorder them, or write
+a token of its own. `ORDER:` stands exactly as it was. **Tonight at 22:55 is the first build night
+those four approvals have ever had** — `AgentWeaveArmNight` measured `Ready`, `LastTaskResult=0`,
+next run 2026-09-08 22:55.
+
+**One fact the night needs, and it is the reason this subsection is not empty.** F292's CI failure
+rate is now measured rather than estimated: **11 failures in 54 runs (20.4 %) across all branches
+2026-09-07T00:00Z → 2026-09-08T08:26Z, and all 11 are F292.** CI redness on this project currently
+has exactly one cause. So a red CI on tonight's build is more likely F292 than a regression from the
+change, and the window **must classify with `gh run view <id> --log-failed` before diagnosing a
+regression**. Two further occurrences (#10 `34205968391`, #11 `34206652706`) were read while writing
+the review page; see F292's last section for what they add and what they correct.
+
+**Three things on the review page are questions, not work, and want no row here:** DAY-1, whether the
+loop may rotate a trial-profile Hub key itself (the specific instance is closed — you rotated it —
+but the policy is open); DAY-2, whether the residual `aw_live_` literals sweep should be queued (the
+page recommends leaving it); and DAY-3, whether building Stage 2 tonight through a 20.4 %-wrong suite
+is accepted, or `ORDER:` should be held until F292 has a named holder. Answer any of them in
+`DIRECTION.md`.
+
+
 ## 2026-09-07
 
 Review page: `review/review-2026-09-07.html`. **Two changes proposed, each taken through all three

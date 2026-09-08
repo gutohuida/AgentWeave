@@ -20925,6 +20925,17 @@ measured on the green path at 76 us per snapshot, ~0.6 s across the suite. Still
 still not a fix: the holder remains unnamed and the entry stays open. The next occurrence's report
 is the first one whose silence would mean something.**
 
+**Corrected 2026-09-08 (day `d5`), by two occurrences that concluded after the paragraph above was
+written.** #10 (`34205968391`, sha `8868088`) and #11 (`34206652706`, sha `a84e608`) both printed
+`sqlalchemy.pool` ERROR records -- 1 and 3 of them, every one the same `Exception during reset or
+similar` ending in `asyncio.exceptions.CancelledError` raised inside aiosqlite's `rollback`. So
+**#9's silence was a property of that session, not of the mechanism, and "that kills d1a's
+silent-discard hypothesis" above is too strong.** There is now a measured way for a product-engine
+connection to be abandoned with its transaction unresolved: a rollback cancelled mid-flight in
+`_finalize_fairy`, followed by an `invalidate()` whose terminate only *queues* the real close. It is
+a mechanism that fits, not the holder named -- both runs still show one `idle` handle at failure and
+both are late-only censuses. Read the section at the end of this entry.
+
 **Narrowed 2026-09-05 (day D-6), by a control run for a different finding.** Still open, still not
 reproduced from the suite itself, but the space of mechanisms is smaller than it was this morning.
 `scripts/drive/f287_does_the_refresh_hold_a_lock.py` rebuilds the `app` fixture's conditions
@@ -21832,6 +21843,76 @@ as such by `d1b`, not a regression from this.
 informative where #9's was not. It names no holder, changes no product code, and does not lower the
 20.4 % rate by a point. If the early census also comes back empty, the child-process candidate named
 above becomes the live one.
+
+### Occurrences #10 and #11 — the pool log is not silent, and #9's silence was a session, not a fact
+
+**Read 2026-09-08 by `d5`, from two CI runs that concluded *after* the iteration which called this
+hypothesis dead.** Both are F292 by signature, classified from their own logs rather than counted as
+red, and both carry `d1b`'s instrument but not `d1c`'s per-stage census (they predate `b682176`).
+
+| | #10 | #11 |
+|---|---|---|
+| Run / sha | `34205968391` / `8868088` | `34206652706` / `a84e608` |
+| Failing job | `hub-test` only | `hub-test` only |
+| Errored at setup of | `test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn` | `test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted` |
+| Reported | 08:57:25Z | 09:06:08Z |
+| `sqlalchemy.pool` ERROR records | **1** | **3** |
+
+**Every one of the four records is the same traceback**, and it is the path `d1a` argued for:
+
+```
+[sqlalchemy.pool.impl.AsyncAdaptedQueuePool] Exception during reset or similar
+  pool/base.py:986   in _finalize_fairy        fairy._reset(
+  pool/base.py:1441  in _reset                 pool._dialect.do_rollback(self)
+  engine/default.py:712 in do_rollback         dbapi_connection.rollback()
+  dialects/sqlite/aiosqlite.py:338 in rollback self.await_(self._connection.rollback())
+  util/_concurrency_py3k.py:132 / :196         value = await result
+  aiosqlite/core.py:197 in rollback            await self._execute(self._conn.rollback)
+  aiosqlite/core.py:160 in _execute            return await future
+asyncio.exceptions.CancelledError
+```
+
+**What this corrects.** Occurrence #9 printed *"`sqlalchemy.pool` logged NO error this session"*, and
+that was read here as ruling out every path where SQLAlchemy gives up on a connection and leaves its
+handle open — i.e. as killing `d1a`'s silent-discard mechanism outright. **Two runs later the same
+instrument printed the error.** The recorder was working; #9 was simply a session in which no reset
+failed. The negative was a fact about one session and was written down as a fact about the
+mechanism — which is, for the third time in this entry, an instrument's silence being read as a
+statement about the world. `d1a` made it about the registry, #9 made it about the census, and this
+makes it about the pool log.
+
+**What it adds, stated no more strongly than it supports.** There is now a *named, measured* way for
+a connection of the product engine to be abandoned with its transaction unresolved: the rollback in
+`_finalize_fairy` is **cancelled mid-flight** (`CancelledError` out of `aiosqlite`'s
+`_execute`/`await future`, i.e. the awaiting task was cancelled while the worker thread held the
+statement). `CancelledError` is a `BaseException`, so `_finalize_fairy`'s `except BaseException`
+catches it, logs it here, and calls `invalidate()` → `__close()` → terminate → `stop()`, which on
+this dialect only *queues* the real `sqlite3` close. A rollback that never completed leaves the write
+lock held; a close that is only queued does not take it back.
+
+**This is a mechanism that fits, not the holder named.** Two things it does not establish: that the
+cancelled connection is the one holding the file at the DROP (the census is still late-only in both
+runs, and both again print one `idle` handle — the victim's signature), and how many of the earlier
+occurrences had the same records, since only occurrences #9 onward carried the recorder at all. The
+per-stage census (`d1c`, `b682176`) has **not yet fired**: the six runs after it are green.
+
+**Where the cancellation plausibly comes from, unverified.** `agent_trigger.py:1190`'s un-awaited
+`asyncio.create_task(_execute_run(...))` is the entry's standing candidate for a task outliving its
+test, and a task torn down at loop close is cancelled — which is exactly this signature. Nothing here
+measures that link; it is named so the next occurrence's reader has a hypothesis to falsify rather
+than a blank.
+
+**Bearing on `2026-09-07-a-dead-connection-is-never-handed-back-out` (F295), first in tonight's
+`ORDER:`.** `d1a` concluded *do not expect that change to close F292*, and this does not overturn it:
+F295 is about a connection whose worker thread died being handed back out, and the connection here is
+invalidated rather than reused. But the two now share more than a call site — both are about a run's
+database work being abandoned rather than settled — so a night that builds F295 should record whether
+the CI rate moves, and must not treat a movement as proof either way.
+
+**Rate unchanged by this reading:** 20.4 % over the 54-run window to 2026-09-08T08:26Z stands; #10
+and #11 fall after it. Occurrence floor rises from 9 read to **11 read**, against a classified floor
+of 22.
+
 
 ---
 
