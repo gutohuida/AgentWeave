@@ -560,6 +560,49 @@ serving four-day-old code.
 
 ## Decided
 
+### Trial-profile key rotation — the loop may do it itself
+
+**DECIDED 2026-09-08 ~09:55, by the operator, in session.** The day window raised this on
+2026-09-08 (`decisions_for_user` entry `day1`) and rotating the one disclosed key closed the
+*instance* without closing the *policy*. Asked as a standing rule for the next one.
+
+**Operator's words:** *"No problem with keys on trial hubs I regularly destroy and create new
+ones."*
+
+**So: an unattended window may rotate a trial-profile Hub key without asking, and need not stop or
+raise a decision to do it.** The reasoning is the operator's own and is about what the credential
+protects: trial profiles are destroyed and recreated as a matter of routine, so a trial key
+guards nothing durable and the cost of a rotation is a file rewrite.
+
+**The boundary this does not move.** The `live` profile on port 8000 is the operator's real usage
+(`C:\Users\huida\agentweave-live`), and nothing here authorises a window to touch its credential,
+its database or its process. This decision is scoped to *trial* profiles by its own wording.
+
+Rejected: *every rotation is the operator's* — it re-raises the same block on each disclosure and
+costs a window to answer something the operator has now said they do not care about at this scope.
+Also rejected: *rotate, then surface it as a decision anyway* — that is the same interruption with
+extra steps, and the operator's answer was that there is no problem to surface.
+
+**Supersedes** the open half of `day1`. That entry is now closed in both halves.
+
+### Delete the merged remote branches — done
+
+**DECIDED 2026-09-08 ~09:55, by the operator, in session** (*"Delete the 13 merged"*), and executed
+the same minute. **The count was 12, not 13** — re-measured with `git branch -r --merged master`
+after a `--prune` fetch; one of 0116's 13 had already gone. Deleted, with their tips recorded in the
+commit message so any of them can be resurrected by SHA:
+
+`2026-08-24-stress-test-remediation` `bef90ff` · `2026-08-26-drive-everything-and-fix-it` `3c3e851` ·
+`2026-08-27-fix-and-drive` `25469ac` · `2026-08-27-the-rest-of-the-work` `4f5db93` ·
+`2026-08-30-decided-work-and-drive` `0d3974c` · `2026-08-31-the-flow-lands-its-work` `1b46110` ·
+`2026-08-31-the-turn-must-end-first` `a4b2833` · `2026-09-04-daily` `9fd9853` · `2026-09-07-daily`
+`3c918b9` · `2026-09-07-sidequest` `c54b2d2` · `fix/2026-08-23-design-audit-remediation` `969b7b9` ·
+`panel-shell/2026-08-18-tab-store` `8d52a93`
+
+**Kept:** `autonomous/2026-08-19-project-portability` and `autonomous/2026-08-27-build-everything-decided`
+(both genuinely unmerged and carrying work `master` does not have), and
+`autonomous/2026-09-08-daily`, which is today's live cycle branch.
+
 ### F140 + F142 — split them; the decision they were waiting for did not exist
 
 **DECIDED 2026-09-08 01:50, by the operator, in session**, after the code was measured rather than
