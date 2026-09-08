@@ -53,6 +53,8 @@ PATH = str(Path(__file__).resolve().parent / "drive" / "FINDINGS.md")
 STRONG_MARKERS = {"Status: FIXED", "RETIRED", "RETRACTED", "SUPERSEDED", "WITHDRAWN"}
 
 HEAD = re.compile(r"^#{1,4}\s+F(\d+)\s+\(([^)]*)\)")
+# Every F-heading, parenthetical or not. Used for SECTION BOUNDARIES -- see classify().
+ANY_HEAD = re.compile(r"^#{1,4}\s+F(\d+)\b")
 SEV_IN = re.compile(r"\b([ABCD])\b")
 
 RESOLVED_PAT = [
@@ -102,16 +104,59 @@ def load(path=PATH):
 
 
 def classify(lines):
-    heads = []
+    # Two passes, because a heading does two jobs and they are not the same job.
+    #
+    # BLIND SPOT 5, found 2026-09-08 by an adversarial review of this script:
+    # `HEAD` requires a parenthetical, and **46 headings in this ledger do not have
+    # one** -- `## F77 — an agent has no way to address the operator`. Consequences,
+    # both measured:
+    #   (a) 26 finding numbers had NO section at all and were invisible to every
+    #       census ever run here. One of them, F77, is `**Status:** open`.
+    #       The real census is 297, not 271.
+    #   (b) far worse: a heading the scanner cannot see does not END the previous
+    #       section, so an em-dash finding's whole body was appended to whichever
+    #       paren-headed finding preceded it. F71's "section" absorbed F72-F86 --
+    #       1,223 lines. Seven verdicts were computed from a marker belonging to a
+    #       different finding, four of them on the STRONG arm this file's header
+    #       calls trustworthy: F65, F68, F135, F149, F152, F164, F168. F168 read
+    #       RESOLVED off `## F154 — Status: **FIXED**`, two clauses after stating
+    #       its own "Not queued."
+    #
+    # So: ANY `F<n>` heading is a boundary, but only a number with no parenthetical
+    # heading anywhere becomes a section of its own. That distinction matters because
+    # `### F63 — Resolution, 2026-08-26` is a continuation of F63, not a new finding.
+    bounds = []  # every heading -- these cut sections
     for i, ln in enumerate(lines):
-        m = HEAD.match(ln)
+        m = ANY_HEAD.match(ln)
         if m:
-            sm = SEV_IN.search(m.group(2))
-            heads.append((i, int(m.group(1)), sm.group(1) if sm else "?", m.group(2)))
+            pm = HEAD.match(ln)
+            bounds.append((i, int(m.group(1)), pm.group(2) if pm else None))
+
+    titled = {num for _, num, inner in bounds if inner is not None}
+    seen: set = set()
     sections = []
-    for n, (i, num, sev, inner) in enumerate(heads):
-        end = heads[n + 1][0] if n + 1 < len(heads) else len(lines)
-        sections.append({"num": num, "sev": sev, "inner": inner, "start": i, "end": end})
+    for n, (i, num, inner) in enumerate(bounds):
+        end = bounds[n + 1][0] if n + 1 < len(bounds) else len(lines)
+        # A parenthetical heading is the finding's own section. An em-dash heading is
+        # only its own section if the number has no parenthetical heading at all --
+        # otherwise it is a continuation (a "Resolution" block) and must not double-count.
+        if inner is None and num in titled:
+            continue
+        if num in seen:
+            continue
+        seen.add(num)
+        sev = "?"
+        if inner:
+            sm = SEV_IN.search(inner)
+            sev = sm.group(1) if sm else "?"
+        else:
+            # No parenthetical: many of these state severity in the body instead.
+            body_head = "\n".join(lines[i : min(i + 8, end)])
+            bm = re.search(r"\*\*Severity:?\*?\*?\s*([ABCD])\b", body_head)
+            sev = bm.group(1) if bm else "?"
+        sections.append(
+            {"num": num, "sev": sev, "inner": inner or "", "start": i, "end": end}
+        )
     span = {s["num"]: (s["start"], s["end"]) for s in sections}
 
     def hits(text, pats):
@@ -179,9 +224,15 @@ if __name__ == "__main__":
         1 for x in res if x["verdict"] == "RESOLVED" and x["evidence"][0] in STRONG_MARKERS
     )
     weak = [x for x in res if x["verdict"] == "RESOLVED" and x["evidence"][0] not in STRONG_MARKERS]
-    print(f"RESOLVED on a STRONG marker : {strong}   (trustworthy)")
+    elsewhere = [x for x in res if x["verdict"] == "RESOLVED_ELSEWHERE"]
+    print(f"RESOLVED on a STRONG marker : {strong}   (see header -- NOT fully trustworthy)")
     print(f"RESOLVED on 'NOT A DEFECT'  : {len(weak)}   (weak -- >=1 known wrong, F187)")
-    print("RESOLVED_ELSEWHERE          : lead only -- 3 of 5 hand-checked FALSE\n")
+    print(f"RESOLVED_ELSEWHERE          : {len(elsewhere)}   lead only, hand-check each")
+    print("  " + ", ".join(f"F{x['num']}" for x in elsewhere))
+    print(
+        "\nNumbers are COMPUTED. Do not copy them into a document that this file\n"
+        "then reads back -- writing the census into FINDINGS.md changes the census.\n"
+    )
     tally = collections.defaultdict(collections.Counter)
     for r in res:
         tally[r["sev"]][r["verdict"]] += 1

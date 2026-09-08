@@ -324,16 +324,14 @@ for gating it.
 
 ### 2. What the plan does not schedule — decided work with no owner
 
-This is the real gap, and it is new since the plan was written. **2026-09-08 produced nine verdicts
+This is the real gap, and it is new since the plan was written. **2026-09-08 produced eight AgentWeave verdicts
 that are AgentWeave's, and no stage owns their implementation.** (It produced eleven; two were
 another repository's and left with the `OV-` series on 2026-09-08.)
 
 **All nine were re-verified against the code on 2026-09-08** at the operator's instruction — see
-`DECISIONS.md`, *"Verification pass"*. **Eight hold; entry 19 does not**, and R-3.2 holds with a side
+`DECISIONS.md`, *"Verification pass"*. **Seven of eight hold; entry 19 does not**, and R-3.2 holds with a side
 effect the verdict missed. The `Status` column below reflects that pass, not the verdict alone.
 
-| Work | From | Status |
-|---|---|---|
 | Work | From | Status after the 2026-09-08 verification |
 |---|---|---|
 | Thread F209's `reason` through, or delete the field | R-3 | **HOLDS exactly.** `accept` passes no `reason=`; `reject` three functions away passes it. Unqueued. |
@@ -356,10 +354,15 @@ respect is `CLAUDE.md`'s own documented trial-Hub start command, which *is* a ba
 
 ### 3. What the plan excludes on purpose — and what that costs
 
-The plan covers **severity A** plus hygiene. `scripts/drive/FINDINGS.md` holds **271 findings**: 41
-A, 107 B, 90 C, 20 D. Classified mechanically by their own status lines — with the negation guard the
-2026-09-06 recount learned the hard way, since a substring test for `fixed` reads *"not fixed"* as
-fixed — **roughly 147 sections below severity A carry no resolution marker at all.**
+The plan covers **severity A** plus hygiene. `scripts/drive/FINDINGS.md` holds **297 findings** —
+49 A, 118 B, 97 C, 20 D, 13 unlabelled. Classified mechanically by their own status lines, with the
+negation guard the 2026-09-06 recount learned the hard way (a substring test for `fixed` reads
+*"not fixed"* as fixed), and with the section boundaries an adversarial review had to correct.
+**119 sections carry no resolution marker at all**, and all but a handful are below severity A.
+
+~~The breakdown that stood here read 41 A, 107 B, 90 C, 20 D — which sums to 258, beside a stated
+total of 271.~~ **Struck 2026-09-08.** Neither number was right and the two contradicted each other
+inside one sentence; the review that caught it also found the cause.
 
 **Four were sampled at random to find out what that population actually is, because a count of
 unclassified rows is not a count of open defects.** All four were real, unfixed, and none is anywhere
@@ -399,7 +402,7 @@ were retired with no code written, because somebody finally looked.** Until that
 size of the remaining work is genuinely unknown, and this plan's totals silently assume it is zero.
 
 ~~**One caveat on this audit** … treat 147 as an upper bound …~~ **The caveat was justified and the
-classification has now been run. 147 was wrong; the figure is 111.** See below.
+classification has now been run. 147 was wrong, and so was its replacement: the figure is **119 of 297**.** See below.
 
 ---
 
@@ -409,18 +412,28 @@ The operator's instruction was *"confirm everything that it needs, double check 
 instrument was therefore built, then **attacked until it failed**, then fixed. Full method and error
 rates are in `FINDINGS.md`'s third 2026-09-08 revision; this is the result.
 
+**CORRECTED 2026-09-08 after an adversarial review.** The table first published here said 271
+findings with 111 unclassified. **Both were wrong.** The instrument could not see 46 headings that
+lack a parenthetical, so 26 findings had no section at all and 20 sections silently swallowed the
+next finding's text. Fixed; re-run; figures below are the corrected ones.
+
 | Verdict | N | Trust |
 |---|---|---|
-| `RESOLVED`, strong marker | **97** | 9 of 9 sampled correct |
-| `RESOLVED`, `NOT A DEFECT` prose | **17** | **≥1 known wrong** (F187) |
-| `RESOLVED_ELSEWHERE` | **5** | **3 of 5 hand-checked FALSE** — a lead only |
-| `CONFLICT` | **5** | F52, F274, F295 (A); F273, F292 (B) |
-| `OPEN` | **36** | F142 (A); 18 B; 17 C |
-| `UNCLASSIFIED` | **111** | 41 B, 56 C, 14 D — **the real unknown** |
-| | **271** | |
+| `RESOLVED`, strong marker | **108** | **NOT fully trustworthy** — 4 strong-arm verdicts were reading another finding's marker |
+| `RESOLVED`, `NOT A DEFECT` prose | **16** | **≥1 known wrong** (F187) |
+| `RESOLVED_ELSEWHERE` | **9** | a lead only — hand-check each; several already known false |
+| `CONFLICT` | **6** | |
+| `OPEN` | **39** | F142 (A); 19 B; 19 C — **includes F77, which no census had ever counted** |
+| `UNCLASSIFIED` | **119** | 42 B, 56 C, 15 D, 6 unlabelled — **the real unknown** |
+| | **297** | not 271 |
+
+**Do not copy these into `FINDINGS.md`.** That file is the tool's input: the first census was
+published *into* it and thereby changed itself — measured, `c18cb6f` differs from `c18cb6f~1` on
+four rows for no reason but the prose added between them. Run
+`py -3.11 scripts/classify_findings.py` instead.
 
 **Three defects in the instrument, each found by measurement, not review.** Its heading regex
-demanded exactly `(A)`…`(D)` and hid **13 sections** — that is the whole 147→111 correction, and it
+demanded exactly `(A)`…`(D)` and hid **13 sections** — that was the 147→111 step, later superseded when a review found the parenthetical requirement hid 26 findings outright, and it
 was found by a count mismatch against `grep`, not by reading the code. Its cross-section arm reused
 `Status:`-anchored patterns and so **could not fire at all**, reporting a 0 that read as a result.
 And it **read quoted history as current status** — a section withdrawing its own banner *quotes*
@@ -436,15 +449,17 @@ a sentence that mentions finding X while resolving finding Y.** Prose is not a s
 
 - **The severity-A tail is confirmed by an instrument that did not know today's answer.** F142 open;
   F52/F274/F295 in conflict, all three known and all three accounted for by Stage 0 and Stage 2.
-- **111 findings have no resolution language anywhere** and have never been read by anybody. Four
-  sampled at random were four-for-four real. That is not a projection onto 111; it is a statement
-  that the population cannot be assumed empty.
+- **119 findings have no resolution language anywhere** and have never been read by anybody. Of six
+  since sampled, **four were real and unfixed, one (F281) was not in the population at all, and one
+  (F109) was already fixed** by F285's change on 2026-09-04. So the population is neither noise
+  nor uniformly live — it is unread, which is a different claim and the only one the evidence
+  supports. **Plus F77, open and never counted by any census.**
 - **17 more rest on `NOT A DEFECT` prose and 5 on a cross-reference**, and both arms are measurably
   unreliable. Roughly **22 findings currently counted as resolved are not confirmed resolved.**
 
 ### The next move, priced
 
-Reading 111 sections is a window's work and needs no decision. It is mechanical, it changes no code,
+Reading 119 sections is a window's work and needs no decision. It is mechanical, it changes no code,
 and today has shown four times over what it produces — F140, F154, F155 retired and 13 sections found
-that no census had ever seen. **Until it is done this plan's totals silently assume 111 zeroes**, and
+that no census had ever seen. **Until it is done this plan's totals silently assume 119 zeroes**, and
 the four that were sampled say that assumption is false.

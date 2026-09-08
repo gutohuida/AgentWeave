@@ -293,20 +293,65 @@ sections only**. This one bounds and classifies all **271**. The instrument is c
 number can be re-derived rather than believed, and **its own error rates are printed above its
 results** — the point of the exercise was never the count.
 
-| Verdict | N | Trust |
-|---|---|---|
-| `RESOLVED`, strong marker (`Status: FIXED`, `RETIRED`, `RETRACTED`, `SUPERSEDED`, `WITHDRAWN`) | **97** | 9 of 9 sampled correct — these are `**Status:** fixed <sha>` lines under the heading |
-| `RESOLVED`, weak marker (`NOT A DEFECT` prose) | **17** | **≥1 known wrong** (F187) — needs a human |
-| `RESOLVED_ELSEWHERE` (resolved in another section) | **5** | **3 of 5 hand-checked FALSE** — a lead, never a verdict |
-| `CONFLICT` (open marker *and* an external resolution) | **5** | F52, F274, F295 (A); F273, F292 (B) |
-| `OPEN` (explicit open marker) | **36** | F142 (A); 18 B; 17 C |
-| `UNCLASSIFIED` (no resolution language anywhere) | **111** | 41 B, 56 C, 14 D — **the real unknown** |
+**The counts deliberately do not live on this page. Run
+`py -3.11 scripts/classify_findings.py` and read them off the tool.** They were printed here
+once, on 2026-09-08, and **that is itself how a defect was found**: this file is the tool's input,
+so writing a census *into* it changed the census. The table published in `c18cb6f` matched the tree
+it was measured on (`c18cb6f~1`) and was already stale in the commit that carried it, because the
+prose naming `F32`, `F108`, `F161`, `F162`, `F187` and `F272` alongside resolution words fed the
+cross-section arm six new matches. **A measurement written into the thing it measures is not a
+record of it.** `ROADMAP.md` carries the current figures; that file is not read by the tool.
 
 **The severity-A tail is confirmed independently.** The classifier had no knowledge of this
 morning's work and reproduced it: `F142` open, `F52`/`F274`/`F295` in conflict (all three are known
 — F52 is bookkeeping nobody retired, F274 and F295 are specced *and approved* but not built), and
 every other A resolved. **That agreement is the reason the instrument was then attacked rather than
 trusted.**
+
+### Two more defects, found the same day by an adversarial review that was told to falsify
+
+**The first three below were found by me. These two were found by an Opus review agent spawned at
+the operator's request and told to attack the instrument, and they are worse than the three.**
+
+**4. The scanner could not see 46 headings, because it demanded a parenthetical.**
+`## F77 — an agent has no way to address the operator` has no `(C)`. Two consequences, both measured:
+
+- **26 finding numbers had no section at all** — F66, F67, F69, F72–F86, F130, F131, F132, F145,
+  F148, F150, F151, F153. **The ledger holds 297 findings, not 271**, and every census ever run on
+  this page — including all three of mine — was blind to 26 of them. **One is open: F77,
+  `**Status:** open — filed, not fixed`, severity C.** No count has ever included it.
+- **Far worse: a heading the scanner cannot see does not *end* the previous section.** So an
+  em-dash finding's whole body was appended to whichever paren-headed finding came before it.
+  **F71's "section" absorbed F72 through F86 — 1,223 lines.**
+
+**Seven verdicts were computed from a marker belonging to a different finding**, and **four were on
+the STRONG arm this page called trustworthy**. Re-run after the fix, every one changed:
+
+| | Was | Now | It had been reading |
+|---|---|---|---|
+| **F65** | RESOLVED | **OPEN** | F67's resolution |
+| **F68** | RESOLVED | **OPEN** | F69's |
+| **F149** | RESOLVED | **OPEN** | F150's |
+| **F135** | RESOLVED | UNCLASSIFIED | F115's `RETIRED IN PART` |
+| **F152** | RESOLVED | RESOLVED_ELSEWHERE | F153's |
+| **F164** | RESOLVED | UNCLASSIFIED | `## F154 — Status: **FIXED**` |
+| **F168** | RESOLVED | UNCLASSIFIED | `## F154 — Status: **FIXED**` |
+
+**F168 is the sharpest.** Its own body says *"Not queued."* two clauses before the foreign marker,
+and `if in_res:` gave RESOLVED unconditional precedence. **Three findings with explicit open
+markers — F65, F68, F149 — were being counted as resolved.**
+
+**5. The script printed a hardcoded verdict about itself.** One line read
+*"RESOLVED_ELSEWHERE: lead only — 3 of 5 hand-checked FALSE"* as a **string literal**, not a
+computation. By then the real count was 7 (now 9), and two of them — F185 and F266 — had never been
+hand-checked while the header asserted *"Only F161 and F162 are real."* **A self-report that does
+not recompute is a claim, not a measurement**, which is the same error as a banner.
+
+**The rule these two produce, and it generalises past this script.** Defects 1–3 were about *what
+the text says*. These are about *where the text stops*. **An instrument that segments a document
+must be checked against the document's own structure, not only against its vocabulary** — and the
+cheapest check is the one that found this: count the same thing two ways and reconcile the
+difference. `grep` said 297 heading numbers; the script said 271; nobody reconciled 26 for a day.
 
 ### Three defects the instrument had, each found by measurement and not by review
 
