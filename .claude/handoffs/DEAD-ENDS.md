@@ -488,6 +488,45 @@ session is sitting in, on a cycle branch, every few minutes.*
   in the scratchpad with the Write tool, then `git commit -F <that path>`.** Costs one extra tool
   call and never loses a composed message.
 
+## Measuring this repository's own documents
+
+*Added 2026-09-08, after an instrument that read `scripts/drive/FINDINGS.md` was wrong four
+separate ways in one afternoon. These are about measuring prose, not about any one script.*
+
+- **Writing a census INTO the file it measures changes the census.** Measured, not theorised: the
+  classification table published in `c18cb6f` matched the tree it was taken from (`c18cb6f~1`) and
+  was **already stale in the commit that carried it**, because the prose naming `F32`, `F108`,
+  `F161`, `F162`, `F187` and `F272` beside resolution words fed the cross-section arm six new
+  matches. `FINDINGS.md` is an input to `scripts/classify_findings.py`. **Put computed counts
+  somewhere the tool does not read** — `ROADMAP.md` — and leave a pointer in the measured file.
+- **Reconcile two counts of the same thing the moment they disagree — the gap is the finding.**
+  `grep -c` said **297** F-headings and the script said **271**; that 26 sat unexplained for a day.
+  It was not a rounding difference: 26 findings had **no section at all** because their headings
+  carry no `(A)`-style severity, and **one of them, F77, is open**. No census on that page had ever
+  counted it.
+- **An instrument that segments a document must be checked against the document's STRUCTURE, not
+  only its vocabulary.** The same missing-parenthetical bug meant an unseen heading did not *end*
+  the previous section, so **F71's section absorbed F72–F86, 1,223 lines**, and seven findings took
+  their verdict from a neighbour's status line — four on the arm the script called trustworthy.
+  Vocabulary tests (does "not fixed" read as fixed?) all passed while this was happening.
+- **A self-report that does not recompute is a claim, not a measurement.** The same script printed
+  *"3 of 5 hand-checked FALSE"* as a **string literal**. By then the true count was 7. This is the
+  banner disease in Python: a sentence asserting a fact nobody re-derived.
+- **`^#{1,4} F\d+ \(` is not a safe heading pattern for `FINDINGS.md`.** 46 headings lack a
+  parenthetical, and headings also come in `(A-)`, `(—)`, `(B?)`, `(C, open)`,
+  `(new, severity **B**)`, `(C, was B)`, `(RETRACTED, was B)` and `(C, harness)` forms.
+- **A spawned review agent's findings are leads, not verdicts — check them too.** An Opus review
+  correctly found both structural defects above, and was **wrong about the cause** of the third,
+  asserting the published table *"never reproduced"*. It had reproduced, one commit earlier; the
+  agent had not thought to test the parent. Both halves mattered, and only measuring separated them.
+
+- **Backticks in a double-quoted `git commit -m` execute.** *(Re-confirmed 2026-09-08, having
+  already been in this file.)* It cost a failed commit with
+  `error: pathspec 'the' did not match any file(s)` and `relative: command not found`, because the
+  message contained `` `uvicorn hub.main:app` ``. The ledger entry above was right and was not read
+  first. **Use `git commit -F <file>` for any message containing backticks — which, in this
+  repository, is most of them.**
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly
