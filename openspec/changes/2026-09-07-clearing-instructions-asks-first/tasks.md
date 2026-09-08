@@ -107,8 +107,14 @@ only measurement showed which.
   of the *pre-change* product: it is the one thing that stops being observable once §2 lands. §5.1's
   post-change harness is still owed and is not this file.
 - [ ] 5.3 Fresh Hub on a spare port started from source from `hub/`, throwaway project, deleted
-  afterwards and confirmed absent. Never `proj-5e960453` or `proj-18e5d4e0`; never `:8000`; leave
-  `:8010` alone. No agent turn is needed, so nothing binds a model.
+  afterwards and confirmed absent. Never the repo's own registered project — that is
+  `proj-d85a82bf4216` today; never `:8000`; leave `:8010` alone. No agent turn is needed, so nothing
+  binds a model. *Corrected editorially 2026-09-08:* this task named `proj-5e960453` and
+  `proj-18e5d4e0`, **both deleted in the 2026-09-07 clean slate**, so it forbade two IDs that no
+  longer exist and did not name the one that now must be left alone. The sister change
+  `2026-09-05-the-conversation-carries-its-own-run-facts` had the identical literal repaired at its
+  task 0.1 by the second review; this occurrence was missed. Naming the class rather than the
+  literal is what survives the next profile rebuild.
 - [ ] 5.4 Drive the dialog by keyboard as well as by mouse — Tab cycles within the panel, Escape
   cancels, focus returns to Save afterwards. That is `useDialogFocus`'s contract and no unit test in
   jsdom proves it in a real browser.

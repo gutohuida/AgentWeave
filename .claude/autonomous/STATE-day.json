@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "9fb0809",
     "stop_at": "2026-09-08T17:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-09-08-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d6-stage2-readiness",
-    "next_action": "d6. Stage 2 readiness, per change, for tonight's 22:55 build -- the highest-value remaining item, since tonight is the FIRST build night the four approvals have ever had (they landed at 01:24 today, 0d82d6d). The question is narrow: what would BLOCK a build starting tonight, per change, in ORDER: order? Check each of the four in openspec/changes/ for (a) does `openspec validate --strict` pass today, (b) does phase 0 / any hard gate exist and is it discharged, (c) do the task counts in APPROVALS.md still match tasks.md, (d) does any task name a migration number, port, or file that a later commit has invalidated -- 2026-09-05-the-conversation's port instruction was already reworded once for the clean slate, and a-write-outside's 0100->0101 is the precedent for the migration hazard, (e) bundle collisions: only ONE of the two bundle-touching changes may run per night. File what you find; do NOT fix a change's tasks by writing new spec text (that is proposing, forbidden today) -- an editorial correction to a stale literal is fine, a rewritten argument is not. Report per change, not in aggregate. THEN gate-retry: re-check ALL FOUR gate conditions against the branch's then-current head (NOT 8c01b50, NOT 716cbdd -- the branch moves every iteration); expect CI mid-run and do not force it; a green from an earlier commit is explicitly not a pass. If d6 and gate-retry both finish, the queue is EMPTY: set next_action to null so the driver unregisters.",
+    "current": "gate-retry",
+    "next_action": "gate-retry ONLY, and it is the last item. Re-check ALL FOUR gate conditions (day-window.md Iteration 1 step 1) against the sha whose CI has actually CONCLUDED -- not a stale green from an earlier commit, and not a sha with a run still in_progress. Note the structural trap this window hit twice: every iteration commits and pushes, so HEAD always has a run in flight by the time the gate is read; the resolution is to wait for the concluded sha and fast-forward master to THAT sha with `git merge --ff-only <sha>`, which is still a fast-forward and still incapable of inventing a merge commit. If the gate opens, record exactly what landed. If it does not, name the failed condition. EITHER WAY, set next_action to null afterwards: the queue is then empty and the driver must unregister.",
     "queue": [
         {
             "id": "compose",
@@ -80,9 +80,10 @@
         },
         {
             "id": "d6-stage2-readiness",
-            "status": "open",
+            "status": "done",
             "title": "If the window has room: what would block a build starting tonight?",
-            "detail": "DIRECTION's 'if the window finishes early' item. Re-read ROADMAP Stage 2 against the four unbuilt changes' tasks.md files -- 2026-09-05-the-conversation-carries-its-own-run-facts, 2026-09-07-a-dead-connection-is-never-handed-back-out, 2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing, 2026-09-07-clearing-instructions-asks-first -- and report per change what would stall a build: a stale line reference, a task naming a file that has moved, a phase whose predecessor was archived. This is verification of work already specced, not new scope."
+            "detail": "DIRECTION's 'if the window finishes early' item. Re-read ROADMAP Stage 2 against the four unbuilt changes' tasks.md files -- 2026-09-05-the-conversation-carries-its-own-run-facts, 2026-09-07-a-dead-connection-is-never-handed-back-out, 2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing, 2026-09-07-clearing-instructions-asks-first -- and report per change what would stall a build: a stale line reference, a task naming a file that has moved, a phase whose predecessor was archived. This is verification of work already specced, not new scope.",
+            "result": "Done, iteration 11. All four changes validate --strict; all four task counts match APPROVALS.md exactly (25/1, 35/0, 44/0, 25/1); no migration number is invalidated; only the-conversation carries a hard gate (phase 0, undischarged) and it is third in ORDER. NOTHING BLOCKS TONIGHT. Two changes were found stale and BOTH were made stale by this window's own commits today: hub/tests/conftest.py went 667->898 lines via 66861a4 and b682176, shifting a-dead-connection's four cited sites (+231 past :317, +2 for :84); and clearing-instructions task 5.3 still forbade proj-5e960453 / proj-18e5d4e0, both deleted in the 2026-09-07 clean slate. Both corrected editorially -- counts, ticks and arguments untouched, both re-validate. Also recorded: conftest's F292 census listeners sit on the SAME engine object task 1.1/1.5 add to, and production listeners register first, so 1.2's raise suppresses the census record for the connections it discards."
         },
         {
             "id": "gate-retry",

@@ -14,6 +14,23 @@ was cleared, which task 4.3 had anticipated. They are quoted as the record of a 
 pointing at `probe_guard_lib.py`, and 1.1's attribute path was re-confirmed on 2026-09-08 by reading
 the installed library. Repaired by the second review, 2026-09-08.
 
+**Every `hub/tests/conftest.py` line number below was re-derived on 2026-09-08** and is a
+correction, not the number this file was written with. `66861a4` and `b682176` added the F292
+census instrument to that fixture on 2026-09-08 and took it from 667 lines to 898, shifting
+everything past `:317` by **+231** and the `connect` listener by **+2**: `:84`→`:86`,
+`:317-330`→`:548-561`, `:349-370`→`:580-601`, `:364-368`→`:595-599`, `:369`→`:600`. The anchors
+themselves are unchanged text; only their addresses moved. Editorial only — no task's argument,
+count or tick was touched. `proposal.md` and `design.md` still carry the pre-shift numbers
+deliberately: they are the record of what those rounds read, not instructions to follow.
+
+**One interaction the tasks predate, and §3 must expect it.** That same instrument registers
+`checkout`, `checkin` and `close` listeners on `engine.sync_engine` (`hub/tests/conftest.py:230`,
+`:241`, `:246`) — and `conftest` imports the *same* engine object this change adds its listeners to
+(`from hub.db.engine import ... engine ...`, `:77`). Production listeners register at module import,
+so 1.2's `DisconnectionError` fires **before** `_f292_record_checkout` and suppresses the census
+record for exactly the connections the guard discards. Nothing here is wrong, but a test that reads
+the census, and any later reading of an F292 CI negative, must know it.
+
 ## 1. The checkout guard
 
 - [ ] 1.1 Add a `checkout` pool listener on the Hub's engine in `hub/hub/db/engine.py`, next to the
@@ -86,12 +103,12 @@ the installed library. Repaired by the second review, 2026-09-08.
   and is what fixes the position — settle `agent_trigger._background_runs` to a fixed point: cancel
   the current members, `gather(..., return_exceptions=True)`, `difference_update` what this pass
   settled (**not** `clear()`), and loop while the set refills.
-- [ ] 2.2 Bound the loop and **do not raise on the bound.** `hub/tests/conftest.py:349-370` is the
+- [ ] 2.2 Bound the loop and **do not raise on the bound.** `hub/tests/conftest.py:580-601` is the
   reference implementation and raises `AssertionError` on its cap, which is right for a test and
   wrong here: an instance asked to stop must stop. Log at WARNING with the count of leftovers and
   continue to 2.3.
 - [ ] 2.3 `await engine.dispose()` after the settle, while the loop is still running. Disposing
-  before the settle is the failure `conftest.py:317-330` documents having already made — it takes
+  before the settle is the failure `conftest.py:548-561` documents having already made — it takes
   the connection away from a run that is still using it. **This step depends on 1.5**: measured, a
   dispose with a dead-worker connection in the pool never returns. Do not ship 2.3 without 1.5.
 - [x] 2.4 **Answered by R2 — it can, so 2.1's settle goes after it.** The scheduler reaches
@@ -132,12 +149,12 @@ the installed library. Repaired by the second review, 2026-09-08.
 - [ ] 3.7 A test that the replacement connection is **configured, not bare** — that the forced
   reconnect re-fires the engine's `connect` listeners. R2 measured this holds
   (`testbed/scratch/f295/probe_guard3.py`: `busy_timeout = 30000` on the replacement, through a
-  listener of `hub/tests/conftest.py:84`'s shape), and it is worth a test precisely because the
+  listener of `hub/tests/conftest.py:86`'s shape), and it is worth a test precisely because the
   failure would be silent: a guard that quietly hands back a connection on SQLite's 5s default busy
   timeout instead of the suite's 30s is a new flake class, not a fix.
 - [ ] 3.8 Make `hub/tests/conftest.py`'s teardown dispose in a `try`/`finally`, or otherwise
-  unconditionally. Today the settle's `for ... else: raise AssertionError(...)` (`:364-368`) sits
-  *before* `await _REAL_ENGINE.dispose()` (`:369`), so hitting the pass cap skips the dispose and
+  unconditionally. Today the settle's `for ... else: raise AssertionError(...)` (`:595-599`) sits
+  *before* `await _REAL_ENGINE.dispose()` (`:600`), so hitting the pass cap skips the dispose and
   carries the whole pool into the next test's event loop — the fixture that exists to stop a
   connection outliving its loop stops doing so exactly when something has already gone wrong. Found
   by R2 reading the fixture, **not run**. This is a test-harness change and is **not** a claim to
