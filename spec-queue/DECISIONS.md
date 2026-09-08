@@ -569,6 +569,49 @@ serving four-day-old code.
 
 ## Decided
 
+### Verification pass, 2026-09-08 — do the 2026-09-08 verdicts still hold?
+
+At the operator's instruction, *"review all of those works to make sure they still hold."* Every
+decided-but-unbuilt item re-checked **against the code**, not against the entry that describes it.
+**Seven of eight hold. One was decided on a premise that had already been repaired three weeks
+earlier.**
+
+| Item | Verdict | Evidence |
+|---|---|---|
+| **R-3.1 — F209's `reason`** | **HOLDS, exactly** | `spec.py:615 accept_proposal_route` passes `expected_digest=` and **no `reason=`**; `reject_proposal_route` at `:665` passes `reason=body.reason`. Both take the same body carrying `reason: str = Field(default="", max_length=2000)` (`:607`). |
+| **R-3.2 — remove `PATCH /queue/settings`** | **HOLDS, with one thing the verdict missed** | Route is real at `inbound_queue.py:81`, writes exactly the four columns (`hop_budget`, `turn_delivery_cap`, `agent_budget`, `allow_agent_jobs`) that `ProjectSettingsUpdate` (`projects.py:76-80`) also owns, and **the UI never calls it** — independently confirmed by `n10`, which lists `/queue/settings` under *no client anywhere*. **But it also re-schedules every queued agent** (`schedule_agent` per queued agent, `:105-108`), and `schedule_agent` appears **0 times** in `projects.py`. Removing the route deletes that side effect. It is already unreachable from the UI, so nothing an operator does today depends on it — but an agent or script calling the route would notice. **Either drop it knowingly or move the reschedule into the PUT; do not remove it without deciding which.** |
+| **R-3.3 — entry 19, bare `uvicorn` must refuse to start** | **PREMISE IS STALE** | See below. |
+| **R-3.4 — entry 21, the model catalog** | **HOLDS** | `model_catalog.py` contains **no runtime read** of `~/.codex/models_cache.json` — the only mention is in the module docstring (`:34`), describing how the literal was *derived*. It is a compile-time literal, as F267 says. The cache file exists and was last written **2026-08-29**, ten days ago. Nothing re-checks it. |
+| **R-2 — archive collision check** | **HOLDS — not built** | No script, no skill hook. Its recorded weakness (it only fires if whoever archives remembers to run it) is unchanged. |
+| **R-1a — route reachability ceiling 35** | **REPRODUCES EXACTLY** | Re-run 2026-09-08: **187** declared `/api/v1` route+method pairs, **35** with no client anywhere. |
+| **R-1b — query error surface ceiling 51** | **REPRODUCES EXACTLY** | Re-run 2026-09-08: 54 MISREPORT total, **51 on a surface an operator can reach** (12 an empty picker, 39 a sentence/number/terminal skeleton). |
+| **R-1c — dependency ceilings** | **HOLDS** | Exactly **three** `fastmcp>=2.0,<4` declarations — `pyproject.toml:47`, `pyproject.toml:71`, `hub/pyproject.toml:24` — and `starlette<2.0` at `hub/pyproject.toml:32`. The count the check would freeze is correct. |
+
+**Entry 19 is the one that did not survive, and it is the day's pattern again.** The verdict asks
+whether a bare `uvicorn hub.main:app` from `hub/` should refuse to start *"on the relative default
+rather than silently opening a second database beside the one everything else uses."*
+**There is no relative default.** `_default_database_url()` (`hub/hub/config.py:9-17`) returns
+`Path.home() / ".agentweave" / "hub" / "data" / "agentweave.db"` — absolute, and its own docstring
+says *"Same absolute, home-relative path native mode (cli.py's HUB_DIR) already computes."* It was
+fixed by **`44a1ae5`, 2026-08-17** — *"fix config.py's database_url default (D1)"* — **three weeks
+before the decision was taken.** `hub/data/` does not exist on disk.
+
+**What survives of it, narrowed.** The default is still not the *trial profile* database
+(`~/.agentweave/hub/profiles/trial/agentweave.db`), so a bare `uvicorn` without `DATABASE_URL` still
+opens a database nobody meant — but a **fixed** one, not a cwd-dependent one, so it can no longer
+produce a different database per launch directory. That is a much smaller defect than the verdict
+describes. **And any refusal must not break `CLAUDE.md`'s own documented trial-Hub start command,
+which is a bare `uvicorn hub.main:app` from `hub/` with `DATABASE_URL` set explicitly.** Re-decide
+the narrowed question or drop it; do not build the verdict as written.
+
+**OV-2 and OV-6 are a different case — not unbuilt, but built before they were decided.** The
+`witness` repository's last commit is **2026-09-07 20:17**, and the OV verdicts landed 2026-09-08:
+nothing there has moved since. It now carries a `src/witness/` skeleton of seven modules with tests,
+and **redaction already appears in `provenance.py`, `report.py`, `surfaces.py` and the test file** —
+written against the *proposal's* assumption, not against the decided *redact-at-write* posture. So
+the work there is **reconciliation, not implementation**, and pricing it as a fresh build would be
+wrong. `ROADMAP.md` Stage 5's description of that repo as barely started is out of date.
+
 ### Trial-profile key rotation — the loop may do it itself
 
 **DECIDED 2026-09-08 ~09:55, by the operator, in session.** The day window raised this on
