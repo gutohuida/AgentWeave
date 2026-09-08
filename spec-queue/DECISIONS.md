@@ -560,6 +560,41 @@ serving four-day-old code.
 
 ## Decided
 
+### F140 + F142 — split them; the decision they were waiting for did not exist
+
+**DECIDED 2026-09-08 01:50, by the operator, in session**, after the code was measured rather than
+the plan re-read. `ROADMAP.md` Stage 4 held these as *"one decision, not two"* — F142 changes which
+of F140's two defensible repairs is worth building — and both as blocked on the operator.
+
+**Neither was.** F140's repair 1 shipped `1b4c730` (2026-08-30) and was **driven live 2026-08-31**,
+before the choice was ever put to anyone: both Haiku agents made the `update_task(...,
+status="completed")` call unprompted, both tasks reached `approved`, both commits verified ancestors
+of `master`. `_briefing_completion_lines` is byte-identical to the driven version. That makes F142's
+"which repair" premise moot, and the coupling with it.
+
+**The decision taken: treat them separately, because their evidence differs.** F140 **retired** on
+the 2026-08-31 drive. F142 **stays open** with its reason narrowed from *awaiting an operator
+decision* to *awaiting a drive* — its fix shipped `f3a778f` (2026-08-31) and its own change document
+says group 7 was *"written, compiled, and not driven"*, deferred to `DRIVE-1`, which has not
+happened. One drive closes it: `t_row12_review_leg.py` with `AW_COMPLETE_BY=operator`, plus its
+uncovered row four.
+
+**Rejected: retire all four on the shipped code.** It would have taken the severity-A count from six
+to two in one move, and it would have retired an A on *the tests pass* — the failure mode this
+repository is worst at, and the reason the 2026-09-03 banners exist at all. **Also rejected:
+re-drive F140 too.** A drive of byte-identical code buys nothing that the 2026-08-31 run has not
+already bought.
+
+**Settles nothing about F154 and F155.** They carry the same 2026-09-03 banner and have **not** been
+re-checked the way F140 was. Do that search before believing them.
+
+**Also corrected, not decided: F14 and F60.** Stage 4 listed F60 as blocked on F14's *"undecided fix
+shape"*. Both are `FIXED 2026-08-30`, shipped together in `a-task-waits-while-its-run-waits`, and
+`FINDINGS.md` had said so for nine days. Verified in code this session. No decision was needed and
+none was taken.
+
+---
+
 ### OV-1 — Witness may read the local Claude Code transcript corpus
 
 **DECIDED 2026-09-08 01:40, by the operator, in session.** The answer is **yes**. Unblocks the

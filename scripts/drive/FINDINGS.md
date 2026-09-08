@@ -217,6 +217,43 @@ leaving written down — it is the same class of error as the definition drift a
 agreeing with the expected answer, and it was caught only because the heading count came back 41
 against a remembered 40.
 
+**Revised 2026-09-08 (DECIDE session): the open severity-A list is five — F274, F142, F154, F155,
+F295. F140 leaves it, and it leaves under the stricter definition, not the looser one.**
+
+**F140's re-drive already existed when the banner asking for one was written.** Repair 1 shipped
+`1b4c730` (2026-08-30) and was driven live on 2026-08-31 — both Haiku agents made the
+`update_task(..., status="completed")` call unprompted, both tasks reached `approved`, both commits
+verified ancestors of `master`. That drive is recorded **in this file**, under *"the flow lands its
+work"*, two days *before* the 2026-09-03 banner. Re-measured this session:
+`_briefing_completion_lines` is **byte-identical** to the version the drive exercised, so the
+evidence describes the shipped code and not a since-edited copy.
+
+**The error this makes visible is a third one, distinct from the two above.** 2026-09-04 found a
+stale *count*. 2026-09-03 found a stale *definition*. This is a stale **search**: the banner author
+checked `openspec/changes/archive/` for a change and did not check this file for a drive, so a
+finding was reopened for want of evidence that was already written down twelve thousand lines above.
+The rule that follows is not "count again" or "re-derive the definition" — it is **look for the
+drive before declaring one is missing**, and the cheapest form of that is grepping this file for the
+finding's own number, not for its status line.
+
+**F142 stays open and its reason is narrowed**: not an operator decision, and never one of two
+alternatives — F140 was fixed and driven before the choice was ever put to the operator, which makes
+F142's *"it changes which of F140's repairs is worth building"* moot. Its fix **shipped** `f3a778f`
+(2026-08-31); what is unmet is a drive, and its own change document says so in its own words
+(*"Written, compiled, and not driven … that is `DRIVE-1`"*). **F154 and F155 are untouched by this
+revision** — their banners' condition is genuinely unmet, and nothing here looked for their drives.
+Doing that search is the obvious next thing and was not done.
+
+**Also corrected, in `spec-queue/ROADMAP.md` rather than here: F14 and F60.** Stage 4 listed F60 as
+*"not implemented, blocked on F14's task-state half, which is itself an undecided fix shape"*. Both
+are **`FIXED 2026-08-30`**, shipped together in `a-task-waits-while-its-run-waits`, and this file's
+own status lines have said so since. Verified in code this session: ask-time parking at
+`hub/hub/api/v1/agent_actions.py:509-514`, `Question.wait_ended_at` at `hub/hub/db/models.py:1001`,
+migration `0099_question_wait_window.py`, drive harness `scripts/drive/t_f14_f60_wait_parks_the_task.py`.
+The ledger was right and the plan was wrong — which is the reverse of the usual direction here, and
+worth noticing: **`ROADMAP.md` was written 2026-09-08 00:30 and was stale on rows this file had had
+correct for nine days.** A newer document is not a more current one.
+
 **And one observation that outranks any single row of that table.** F88, F89 and F90 were found in
 one iteration, in three unrelated subsystems, and every one of them was a mechanism this repository
 tests *thoroughly* — against a state the product never produces. F88's access tests pass a
@@ -10513,11 +10550,39 @@ first and withdraws the entry that queues behind the running turn.
 
 ## F140 (A) — a flow's briefing tells the agent to "finish the task and stop", and never tells it, or the Hub, what finishing means
 
-**Unverified, not retired — added 2026-09-03 (night window, iteration 14).** `openspec/changes/archive/2026-09-01-a-flow-briefing-names-its-contract/` is an implemented and archived change that names this finding. That is a plan marked done, not a drive of the built product, so this entry stays open until somebody re-drives it. Any 'open, filed not fixed' wording below predates the change and should be read against this line.
+**Status: FIXED `1b4c730` (2026-08-30), driven live 2026-08-31, RETIRED 2026-09-08.** Repair 1 —
+the briefing names the call — shipped as `_briefing_completion_lines` (`hub/hub/scheduler.py:2025`,
+reached at `:2220`), and it was **driven, not merely tested**: on 2026-08-31 both tasks in a real
+flow went `pending → in_progress → completed` inside firing 1 with **no operator transition at
+all**, both Haiku agents making the `update_task(..., status="completed")` call ~24 seconds in, both
+tasks reaching `approved`, and both commits verified ancestors of `master` with
+`git merge-base --is-ancestor`. That drive is recorded in this file under *"the flow lands its
+work"*. Re-measured 2026-09-08: the function is **byte-identical** to the version that drive
+exercised, so the evidence still describes the shipped code.
 
-**Status:** open, filed not fixed. Two defensible repairs exist and choosing between them is a
-design decision (decision D5's stated line for filing). Found driving **row 12, flows** — the first
-time that row has been reached by any sweep.
+**The 2026-09-03 banner is withdrawn, and why it was wrong is worth keeping.** It read: *"an
+implemented and archived change … is a plan marked done, not a drive of the built product, so this
+entry stays open until somebody re-drives it."* The reasoning was right and the conclusion was
+wrong — **the re-drive it asked for had already happened, two days earlier**, in this same file. The
+banner's author checked `openspec/changes/archive/` and did not check the drive record. A finding
+reopened for want of evidence that already exists costs exactly as much as one closed without
+evidence, and this one cost five days and a place on the operator's blocked list.
+
+**The decision this finding was filed for no longer exists.** It was filed rather than fixed because
+choosing between two defensible repairs was the operator's call (decision D5's stated line). Repair
+1 was built and driven before the choice was ever put to them; **F142's** "it changes which of
+F140's repairs is worth building" is moot for the same reason, and the two are no longer one
+coupled decision. Confirmed with the operator, in session, 2026-09-08.
+
+**Repair 3 was never built and is not carried here.** *"Surface a turn that ended with its task
+still `in_progress`, rather than silently re-briefing"* remains unbuilt — `decide_firing`'s
+resumption arm still takes `agent = task.assignee` without comment (`scheduler.py:1421-1425`). The
+briefing repair removes the cause rather than reporting the symptom, so this is a hardening idea and
+not a residual defect. **If it is wanted, file it as a new finding** rather than reopening this one.
+
+Everything below this line is the original 2026-08-30 filing, retained as the record of the defect
+and of what was driven. Found driving **row 12, flows** — the first time that row had been reached
+by any sweep.
 
 **What was driven.** `scripts/drive/t_row12_flows.py` against `proj-1964cdedffe2` on the 8011 Hub:
 a `change-spec` document with two independent tasks, approved into a flow
@@ -10789,12 +10854,47 @@ says which of these held rather than printing four thousand lines of JSON.
 
 ## F142 (A) — a task the operator marks finished can never be reviewed by its flow, and the stall blames the queue instead
 
-**Unverified, not retired — added 2026-09-03 (night window, iteration 14).** `openspec/changes/archive/2026-09-01-a-review-a-flow-cannot-staff-is-named/` is an implemented and archived change that names this finding. That is a plan marked done, not a drive of the built product, so this entry stays open until somebody re-drives it. Any 'open, filed not fixed' wording below predates the change and should be read against this line.
+**Status: open — FIX SHIPPED `f3a778f` (2026-08-31), AWAITING A DRIVE. Reclassified 2026-09-08.**
+It is no longer waiting on an operator decision, and it never was one of two alternatives: **F140
+was fixed and driven before either was put to the operator**, so this finding's "it changes which of
+F140's repairs is worth building" is moot. What is left is a single unmet condition — **nobody has
+driven the repair.**
 
-**Status:** open, filed not fixed. It changes which of F140's repairs is worth building, which is
-why it was worth establishing before the operator chooses. Found by
-`scripts/drive/t_row12_review_leg.py`, written to answer one question F140 left open: *what is
-waiting on the other side?*
+**What shipped.** The bare `continue` that dropped an unattributable task from the walk is now
+**three named arms** (`hub/hub/scheduler.py:1499-1575`), on `completion_attribution`:
+
+- *nothing completed it* → `unstaffed` with a sentence naming the task, not the queue histogram;
+- *no commit to review* → `unstaffed`, quoting `commit_for_task_review`'s own refusal, asked with
+  the same function the trigger uses so the gate and the refusal cannot disagree;
+- *the operator completed it* → **routed for review**, with the exclusion set widened to
+  `agents_that_may_have_authored` because there is no author to name and `exclude=set()` would be a
+  self-approval route.
+
+**Why it is still open.** Its own change document says so, in its own words: task group 7 is headed
+*"Written, compiled, and **not driven**. A harness whose expectations were inverted by the same
+session that inverted the code proves nothing until it runs against a live Hub; that is `DRIVE-1`,
+and it is what settles the judgement half of this change."* `DRIVE-1` has not happened. Tasks 7.1
+and 7.2 are ticked as *written*, which is the ordinary reading of a task list and not evidence of a
+run — the same shape as CLAUDE.md's *never mark a task complete on the strength of a plan existing*.
+
+**What the drive has to cover**, both from the change's own 7.1/7.2:
+
+- `AW_COMPLETE_BY=operator` on `scripts/drive/t_row12_review_leg.py` must now reach a **staffed
+  review** — or, in a project with no second agent, a `409` whose reason names *the task* rather
+  than the histogram. Assert specific strings: the file records an earlier version passing checks on
+  content that said the opposite.
+- **Row four, which has no coverage at all**: the operator completes a task **no agent ever
+  touched**, and a review is staffed with nobody excluded. That is the widest-exclusion arm.
+
+**A known residual on the adjacent path, already filed: `F167` (B).** F70's `wedged_review` asks
+`task.assignee in agents_that_worked(...)` when `completion_attribution` names nobody, and
+`actor_agent` is NULL for every edge an operator walked by hand — so an **all-operator history**
+defeats the recovery and takes the `in_flight` arm, which is this finding's own measured wedge
+arriving through the fallback added to close it. It is scoped to F167 and does not reopen this
+entry; a drive here should not be surprised by it.
+
+Originally found by `scripts/drive/t_row12_review_leg.py`, written to answer one question F140 left
+open: *what is waiting on the other side?* The filing below is retained as the record of the defect.
 
 F140 leaves the operator holding a flow whose task sits in `in_progress` forever, and the obvious
 thing to do about it is to move the task to `completed` by hand. **That is the one way of

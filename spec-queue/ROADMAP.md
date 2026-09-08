@@ -124,12 +124,23 @@ delta — a tooling call) and **R-3** (four small product calls, each closable i
 | Finding | What it actually needs |
 |---|---|
 | **F52** | **Close it — bookkeeping only.** Its operator-visibility half shipped (`68459ea`), `0cda570` disproved its central inference, and `57eb92b` drove a full live turn that committed. Its own row says a new git refusal would be a *new* finding. It is counted as open because nobody retired it. |
-| **F140 + F142** | **One decision, not two.** F142 changes which of F140's two defensible repairs is worth building, so deciding F140 alone produces the wrong answer. Operator call → one spec loop → one build. |
-| **F60** | Fix already chosen by the operator, not implemented, and **blocked on F14's task-state half**, which is itself an undecided fix shape. Decide F14 or F60 cannot start. |
+| **F140** | ~~One decision with F142, not two.~~ **RETIRED 2026-09-08 — there was no decision here.** Repair 1 shipped `1b4c730` (2026-08-30) and was **driven live 2026-08-31**: both Haiku agents made the `update_task(..., status="completed")` call unprompted, both tasks reached `approved`, both commits verified ancestors of `master`. `_briefing_completion_lines` is byte-identical to the driven version, re-measured this session. The 2026-09-03 banner asked for a re-drive that already existed in `FINDINGS.md` two days earlier. |
+| **F142** | **Not an operator decision — a missing drive.** Its fix shipped `f3a778f` (2026-08-31): the bare `continue` is now three named arms and the operator-completed task is routed for review. Its own change document says group 7 was *"written, compiled, and **not driven**"* and deferred it to `DRIVE-1`, which has not happened. **Queue one drive**: `t_row12_review_leg.py` with `AW_COMPLETE_BY=operator` must reach a staffed review, plus its uncovered row four (the operator completes a task no agent ever touched). `F167` (B) is a known residual on the adjacent `wedged_review` path and does not reopen this. |
+| **F14, F60** | ~~F60 not implemented, blocked on F14's undecided fix shape.~~ **Both `FIXED 2026-08-30`**, shipped together in `a-task-waits-while-its-run-waits`, and `FINDINGS.md` has said so since. Verified in code 2026-09-08: ask-time parking at `agent_actions.py:509-514`, `Question.wait_ended_at` at `models.py:1001`, migration `0099`, drive harness `t_f14_f60_wait_parks_the_task.py`. This table was simply wrong. |
 | **F274, F295** | Already specced — they are Stage 2. |
 
-After F52 is retired and F274/F295 are built, the open severity-A count goes from six to two
-(F140/F142 as one, F60), both blocked on operator decisions rather than on work.
+**This whole table was stale, and in the direction that costs most.** Three of its four rows
+described operator decisions that did not exist, which is how the severity-A tail read as
+*blocked on the operator* when it was actually *one drive short*. Corrected 2026-09-08 by measuring
+the code rather than re-reading the plan. Note the direction: `ROADMAP.md` was written 2026-09-08
+00:30 and was stale on rows `FINDINGS.md` had had correct for nine days — **a newer document is not
+a more current one.**
+
+After F52 is retired and F274/F295 are built, the open severity-A list is **F142, F154, F155** —
+none blocked on an operator decision, all three blocked on the same thing: **a drive that was
+deferred to `DRIVE-1` and never run.** F154 and F155 have not been re-checked the way F140 was, and
+that search is the obvious next move: grep `FINDINGS.md` for the finding's own number before
+believing a banner that says no drive exists.
 
 ---
 
