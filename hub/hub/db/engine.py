@@ -7,6 +7,8 @@ import secrets
 from pathlib import Path
 from typing import AsyncGenerator
 
+from sqlalchemy import event
+from sqlalchemy.exc import DisconnectionError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ..config import settings
@@ -36,6 +38,127 @@ engine = create_async_engine(
     echo=False,
     connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {},
 )
+
+# ---------------------------------------------------------------------------
+# The dead-worker guard (finding F295).
+#
+# aiosqlite carries out every statement for a connection on one dedicated worker
+# thread. If that thread ends -- which is what happens when the event loop a statement
+# was issued on is closed underneath it (aiosqlite 0.22.1, `core.py:47-75`: the worker
+# fails to report a result on the closed loop, fails again reporting *that* the same
+# way, and its `while True` ends) -- the connection is not slow and is not merely in an
+# error state. It accepts work, never answers, and cannot be closed, because closing is
+# itself work for the thread that ended. Anything that waits on it waits without bound,
+# and cancelling the wait does not return either.
+#
+# Two listeners, measured against aiosqlite 0.22.1 and SQLAlchemy 2.0.50:
+#
+#   - `checkout` DETECTS ONLY. It raises `DisconnectionError`, which makes SQLAlchemy
+#     invalidate the record and retry the checkout on a fresh connection.
+#   - `close` (and `close_detached`) NEUTRALISE, so that the invalidation above -- and
+#     every other close -- returns instead of waiting on the ended thread.
+#
+# Both reach two private aiosqlite attributes on the inner `aiosqlite.Connection`:
+# `_connection`, the `sqlite3` handle (assigned `core.py:85`), and `_thread`, the worker
+# (`core.py:90`). They are read and set, never reimplemented -- these are the same two
+# attributes aiosqlite's own code branches on:
+#
+#   - `Connection.close()` opens with `if self._connection is None: return`
+#     (`core.py:202-203`), so a connection whose handle has been cleared closes
+#     instantly and without touching its thread;
+#   - `Connection._execute()` raises `ValueError("Connection closed")` when `_running`
+#     is false (`core.py:152-153`), so anything still holding a reference gets a loud
+#     failure rather than a silent unbounded wait.
+#
+# Every access is a `getattr` with a `None` default and every listener no-ops when the
+# shape is absent, so a driver that is not aiosqlite is untouched and a rename upstream
+# disables the guard visibly rather than breaking a healthy checkout.
+
+
+def _dead_worker_connection(dbapi_connection):  # noqa: ANN001, ANN202
+    """Return the inner aiosqlite connection if its worker thread has ended, else None."""
+    inner = getattr(dbapi_connection, "_connection", None)
+    thread = getattr(inner, "_thread", None)
+    if inner is None or thread is None:
+        return None
+    if thread.is_alive():
+        return None
+    return inner
+
+
+def _neutralise_dead_worker(dbapi_connection) -> bool:  # noqa: ANN001
+    """Put a dead-worker connection beyond use so closing it cannot wait on the thread.
+
+    Sets `_running = False` and `_connection = None` on the inner `aiosqlite.Connection`
+    -- not on the SQLAlchemy adapter, whose `__slots__` carry neither. Returns whether it
+    acted.
+    """
+    inner = _dead_worker_connection(dbapi_connection)
+    if inner is None:
+        return False
+    inner._running = False
+    inner._connection = None
+    return True
+
+
+@event.listens_for(engine.sync_engine, "checkout")
+def _refuse_dead_worker_connection(
+    dbapi_connection, connection_record, connection_proxy
+):  # noqa: ANN001, ANN201
+    """Never hand out a pooled connection whose aiosqlite worker thread has ended.
+
+    Detection only, deliberately. An earlier draft neutralised the connection here,
+    inline, before raising -- correct as far as it went and sited wrongly: the checkout
+    is one of several paths that close such a connection, and a neutralisation here
+    leaves the others unprotected. The neutralisation lives on the `close` event below.
+    """
+    if _dead_worker_connection(dbapi_connection) is None:
+        return
+    # WARNING, not DEBUG: this is the only place the condition is ever observable, and a
+    # silently transparent recovery would hide a live defect somewhere else -- a worker
+    # only ends because an event loop was closed under a connection still in the pool.
+    logger.warning(
+        "Discarding a pooled database connection whose driver worker thread had ended; "
+        "it could no longer complete work. Opening a fresh connection instead. "
+        "The statement is unaffected, but an event loop was closed under a live "
+        "connection somewhere (see finding F295)."
+    )
+    raise DisconnectionError("aiosqlite worker thread has ended for this connection")
+
+
+@event.listens_for(engine.sync_engine, "close")
+def _neutralise_dead_worker_on_close(dbapi_connection, connection_record):  # noqa: ANN001, ANN201
+    """Neutralise a dead-worker connection before the pool closes it.
+
+    THIS BELONGS ON `close`, NOT INLINE IN THE CHECKOUT LISTENER ABOVE. Do not move it
+    back. SQLAlchemy dispatches `close` from `_ConnectionRecord.__close()`
+    (2.0.50, `pool/base.py:878-880`), which is reached by every path that closes a
+    pooled connection: the checkout listener's own `invalidate()`, `QueuePool.dispose()`
+    -- which `engine.dispose()` calls at instance shutdown -- a checkin-time close, and
+    the abandon at the end of `_ConnectionFairy._checkout` when the retries are
+    exhausted. A checkout-only guard covers exactly the first of those, so
+    `engine.dispose()` would still hang on a dead connection that was sitting idle in the
+    pool and had never been handed out. Measured: bare `await engine.dispose()` in that
+    state never returns; with this listener it returns in 0.00s.
+    """
+    _neutralise_dead_worker(dbapi_connection)
+
+
+@event.listens_for(engine.sync_engine, "close_detached")
+def _neutralise_dead_worker_on_close_detached(dbapi_connection):  # noqa: ANN001, ANN201
+    """The same neutralisation for the one close path that does not dispatch `close`.
+
+    DELIBERATELY UNREACHABLE IN THE HUB TODAY, and kept anyway. `_finalize_fairy` closes
+    a *detached* connection through `pool/base.py:999-1000`, which dispatches
+    `close_detached` rather than `close`, so the listener above never sees it. Nothing in
+    `hub/` calls `.detach()`, and a probe's `close_detached` counter fired zero times
+    across both checkout invalidation and dispose -- so this is not evidence that the
+    state occurs, and it should not be cited as such. It is here because putting a
+    dead-worker connection beyond use has to cover every path that closes one, and this
+    is the fifth path.
+    """
+    _neutralise_dead_worker(dbapi_connection)
+
 
 async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 

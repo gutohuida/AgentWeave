@@ -33,7 +33,7 @@ the census, and any later reading of an F292 CI negative, must know it.
 
 ## 1. The checkout guard
 
-- [ ] 1.1 Add a `checkout` pool listener on the Hub's engine in `hub/hub/db/engine.py`, next to the
+- [x] 1.1 Add a `checkout` pool listener on the Hub's engine in `hub/hub/db/engine.py`, next to the
   `create_async_engine(...)` call at `:34`. Reach the driver connection as
   `dbapi_connection._connection` and its thread as `._thread` — both were confirmed reachable from
   a `checkout` listener against `AsyncAdaptedQueuePool` and `AsyncAdapt_aiosqlite_connection`
@@ -41,7 +41,7 @@ the census, and any later reading of an F292 CI negative, must know it.
   reading the installed aiosqlite 0.22.1** — `_thread` is assigned at `core.py:90`, `_running` at
   `:85`). Use `getattr` with a `None` default for both, and return
   without doing anything if either is absent, so a non-aiosqlite driver is untouched.
-- [ ] 1.2 **The checkout listener only detects. It raises `sqlalchemy.exc.DisconnectionError` and
+- [x] 1.2 **The checkout listener only detects. It raises `sqlalchemy.exc.DisconnectionError` and
   does nothing else.** R1 and R2 had it neutralise the connection inline first, on the measurement
   that raising alone hangs (`probe_guard_lib.py`) — true, and the wrong conclusion. Raising alone
   hangs *because nothing neutralises the connection on the way to its close*, and the checkout
@@ -49,16 +49,16 @@ the census, and any later reading of an F292 CI negative, must know it.
   and this listener becomes a short predicate with no ordering to get wrong. Measured:
   `probe_r3_close_listener.py` case A, raise-only checkout plus the 1.5 listener,
   `RESULT after 0.00s: RECOVERED, select 2 -> 2`.
-- [ ] 1.3 Comment both listeners with the aiosqlite version they were measured against (0.22.1), the
+- [x] 1.3 Comment both listeners with the aiosqlite version they were measured against (0.22.1), the
   two private attributes they depend on, and the two-line justification for each — `close()` returns
   immediately when `_connection is None` (`aiosqlite/core.py:202-203`), and `_execute` raises
   `ValueError("Connection closed")` when `_running` is false (`:152-153`), which turns any remaining
   holder's silent hang into a loud failure. Say in the `close` listener's comment *why it is on
   `close` and not inline in the checkout listener*, naming `dispose()`, or it will be moved back.
-- [ ] 1.4 Log the discard at WARNING with enough to act on: that a connection's driver worker had
+- [x] 1.4 Log the discard at WARNING with enough to act on: that a connection's driver worker had
   ended and a fresh connection was opened. This is the only place the condition is ever observable,
   and a silent transparent recovery would hide a live defect somewhere else.
-- [ ] 1.5 **Neutralise on the `close` pool event, which is the one place every close passes
+- [x] 1.5 **Neutralise on the `close` pool event, which is the one place every close passes
   through.** Add a second listener, `@event.listens_for(engine.sync_engine, "close")`, that applies
   the same dead-worker test as 1.1 and, when it holds, sets `_running = False` and
   `_connection = None` **on the inner `aiosqlite.Connection`** — that is
@@ -79,7 +79,7 @@ the census, and any later reading of an F292 CI negative, must know it.
     connection the checkout listener never saw. Without this listener that hangs (45-second kill);
     with it the caller gets `InvalidRequestError: This connection is closed` in 0.00s.
 
-- [ ] 1.6 **The same predicate on the `close_detached` pool event — added by the third review, and
+- [x] 1.6 **The same predicate on the `close_detached` pool event — added by the third review, and
   the operator may drop it.** The second ADDED requirement says the neutralisation *"SHALL cover
   every path that closes such a connection"*; 1.5 enumerates four, and all four are downstream of
   `_ConnectionRecord.__close()`, which dispatches `close` (SQLAlchemy 2.0.50,
