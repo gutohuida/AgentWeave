@@ -20853,6 +20853,13 @@ suite connection held the file, because `_f292_ever_seen()` is sampled once at r
 seconds (a whole `busy_timeout`) after the DROP began; the holder had that long to close and be
 collected. Read the last two sections: the next step is to sample ever-seen at every stage, not to
 conclude from this one.**
+**That hole is closed as of 2026-09-08 (day `d1c`): the census is now taken inside
+`_f292_snapshot()`, so `[before dispose]` and `[before drop_all]` carry one too, and a holder that
+releases during the busy-timeout wait can no longer hide behind the sampling time. Mutation-checked
+against the pre-change conftest -- the two throwaway tests fail on it and pass on this -- and
+measured on the green path at 76 us per snapshot, ~0.6 s across the suite. Still an instrument,
+still not a fix: the holder remains unnamed and the entry stays open. The next occurrence's report
+is the first one whose silence would mean something.**
 
 **Narrowed 2026-09-05 (day D-6), by a control run for a different finding.** Still open, still not
 reproduced from the suite itself, but the space of mechanisms is smaller than it was this morning.
@@ -21691,6 +21698,76 @@ references the `sqlite3.Connection`, e.g. a closure sitting in a stalled worker 
 
 **Count.** This is occurrence **#9** by reading and takes the classified total to **at least 23**.
 The rate measured earlier today (20.4 % all-branch over 54 runs) is not re-derived here.
+
+### The census is now taken at every stage, so the next silence will mean something (day `d1c`, 2026-09-08)
+
+The one-line change the section above asked for, done and mutation-checked. `_f292_ever_seen()` takes
+a `stage` argument and is called from **inside** `_f292_snapshot()`, so all three stages -
+`[before dispose]`, `[before drop_all]`, `[at failure]` - carry a census stamped with when it was
+taken. The standalone call at the end of `_f292_report()` is gone: it was the *same* census as the
+failure stage's, printed a second time without a stage label, which is exactly the ambiguity that
+made occurrence #9 misread. `_f292_pool_errors()` deliberately stays outside the snapshots and
+un-staged, because `_PoolErrorRecorder` records continuously from import - its silence is a fact
+about the session, not about the moment it was read, and stamping it with a stage would claim
+otherwise. `hub/tests/conftest.py` only; **no `hub/hub/` change**, the same scope guard `d1b` held.
+
+**Mutation-checked, and the first attempt at the check was too weak.** A throwaway file (written,
+run and deleted inside this iteration) opens a *pooled* connection, writes into a committed table
+without committing so it holds SQLite's write lock, snapshots the two early stages, then races a
+task that rolls back and closes at 0.6 s against a `DROP TABLE` whose own connection is set to
+`PRAGMA busy_timeout=200`. The DROP fails with the real `OperationalError: database is locked`, the
+holder releases during the wait, the connection is collected, and the late census is taken. This is
+the scenario the section above described, not a stand-in for it.
+
+The first draft asserted on `"IN TRANSACTION"` appearing in the early stage. That would have passed
+against the *pre-change* conftest, because the checked-out registry line already says
+`-> IN TRANSACTION` for a connection the pool knows about. Caught before it was believed; the
+assertions are now on the census line specifically
+(`  [before dispose] ever-seen:     sqlite3 handle OPEN, IN TRANSACTION`). Run against the stashed
+pre-change `conftest.py`, **both tests fail**; against the change, both pass. That is the mutation
+check - an instrument change asserted only against itself is not evidence.
+
+What it printed, and it is worth reading beside occurrence #9's:
+
+```
+  [before dispose] ever-seen: 1 connection(s) recorded, 0 already collected, 1 with an OPEN sqlite3 handle
+  [before dispose] ever-seen: last checked out by ...::test_the_early_stage_sees_a_holder... [task: Task-2 ...]
+  [before dispose] ever-seen:     sqlite3 handle OPEN, IN TRANSACTION, worker thread alive, _running=True
+  [before drop_all] ever-seen:     sqlite3 handle OPEN, IN TRANSACTION, worker thread alive, _running=True
+  [at failure]     ever-seen: 2 connection(s) recorded, 1 already collected, 1 with an OPEN sqlite3 handle
+  [at failure]     ever-seen:     sqlite3 handle OPEN, idle, worker thread alive, _running=True
+```
+
+The last two lines are **occurrence #9's printout, character for character in shape** - one open
+handle, idle, healthy - produced by a scenario in which a holder demonstrably *did* hold the file.
+That is the clearest possible statement of what the late-only census was worth.
+
+**A caveat the reproduction exposed and the ledger should carry.** At the failure stage the surviving
+open connection is labelled with the *same test nodeid* as the holder was, because the label is
+`_CURRENT_TEST` and both belong to the same test. Label alone does not distinguish victim from
+holder; **transaction state does** - the holder reads `IN TRANSACTION`, the victim `idle`. Occurrence
+#9's `idle` was therefore already the victim's signature, and a future reading should not treat a
+matching nodeid as identification.
+
+**Green-path cost, measured rather than asserted.** The snapshots *are* built on the green path -
+twice per test, in the `app` fixture's reset - so the earlier claim that "cost on the green path is
+unchanged" was wrong, and this section says so rather than repeating it. At a full `_EVER_SEEN`
+(512 entries, all collected - the CI shape, where 495 of 506 were): **76 us per snapshot**, i.e.
+~0.6 s over a 4,000-test suite that takes 15-25 minutes. The cost is O(size of `_EVER_SEEN`), not
+O(open connections), because a collected weakref still has to be dereferenced. Accepted; the number
+is in the `_f292_snapshot` docstring so nobody has to re-measure it.
+
+**Verified green and silent.** `ruff check src/ hub/ tests/` and
+`black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` clean over CI's exact paths.
+Both historically-failing files under `py -3.11`: **21 passed**, and a grep for `F292 DIAGNOSTIC` and
+`ever-seen` over the full output returns **0** - the report still fires only on the failure path.
+The `PytestUnhandledThreadExceptionWarning` in that run is F295's pre-existing signature, confirmed
+as such by `d1b`, not a regression from this.
+
+**What this does and does not buy.** It buys one thing: the *next* occurrence's silence will be
+informative where #9's was not. It names no holder, changes no product code, and does not lower the
+20.4 % rate by a point. If the early census also comes back empty, the child-process candidate named
+above becomes the live one.
 
 ---
 

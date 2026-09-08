@@ -406,8 +406,24 @@ def _f292_pool_errors() -> str:
     return "\n".join(lines)
 
 
-def _f292_ever_seen() -> str:
-    """Every connection ever checked out whose sqlite3 handle is still open."""
+def _f292_ever_seen(stage: str) -> str:
+    """Every connection ever checked out whose sqlite3 handle is still open, at `stage`.
+
+    Sampled at every stage rather than once, and the parameter is the whole point of
+    it. The ninth occurrence (run 34205295463) computed this census only at report
+    time - which is *after* `PRAGMA busy_timeout=30000` has expired - and it came back
+    empty. That reads as "nothing this process opened held the file" and means no such
+    thing: a holder that closed its handle during the 30-second wait and was collected
+    is invisible to a sample taken at the end of that wait. The `before dispose` and
+    `before drop_all` samples are taken before the wait begins, so a holder that lets
+    go during it appears there and nowhere else.
+
+    An empty census at `at failure` beside a populated one at `before dispose` is
+    therefore a *result*: the holder released while the DROP was waiting. Empty at
+    every stage is the stronger negative - no pooled connection of this process was
+    ever a candidate.
+    """
+    marker = f"  [{stage}] ever-seen:"
     total = len(_EVER_SEEN)
     seen = [(label, ref()) for label, ref in _EVER_SEEN.values()]
     collected = sum(1 for _, inner in seen if inner is None)
@@ -419,18 +435,17 @@ def _f292_ever_seen() -> str:
         if state is not None:
             open_ones.append((label, state))
     lines = [
-        f"  ever-seen: {total} connection(s) recorded, {collected} already collected, "
+        f"{marker} {total} connection(s) recorded, {collected} already collected, "
         f"{len(open_ones)} with an OPEN sqlite3 handle"
     ]
     if not open_ones:
-        lines.append("  ever-seen: no connection this process opened still holds the file.")
-        lines.append("  ever-seen: with the pool log silent too, the holder is not SQLAlchemy's.")
+        lines.append(f"{marker} no connection this process opened still held the file here.")
         return "\n".join(lines)
     for label, state in open_ones[:_EVER_SEEN_REPORT_LIMIT]:
-        lines.append(f"  ever-seen: last checked out by {label}")
-        lines.append(f"  ever-seen:     {state}")
+        lines.append(f"{marker} last checked out by {label}")
+        lines.append(f"{marker}     {state}")
     if len(open_ones) > _EVER_SEEN_REPORT_LIMIT:
-        lines.append(f"  ever-seen: ... and {len(open_ones) - _EVER_SEEN_REPORT_LIMIT} more")
+        lines.append(f"{marker} ... and {len(open_ones) - _EVER_SEEN_REPORT_LIMIT} more")
     return "\n".join(lines)
 
 
@@ -454,21 +469,43 @@ def _in_transaction(connection_record) -> str:  # noqa: ANN001
 
 
 def _f292_snapshot(stage: str) -> str:
-    """One line of pool state, plus one line per connection this process still holds out."""
+    """Pool state, the checked-out registry, and the ever-seen census, all at `stage`.
+
+    Every line here is sampled at the moment of the call. That matters because the two
+    early stages run *before* the DROP starts waiting out its 30-second busy timeout,
+    and the failure stage runs after - so a holder that releases during the wait is
+    only ever visible in the early two. See `_f292_ever_seen`.
+
+    Built on the green path too - twice per test, in the `app` fixture's reset - and
+    discarded unless the reset raises, so the census is now paid for on every test
+    rather than only on the failure path. Measured before it was accepted, at a full
+    `_EVER_SEEN` (512 entries, all collected - the CI shape, where 495 of 506 were):
+    **76 us per snapshot, ~0.6 s across a 4,000-test suite** that takes 15-25 minutes.
+    The cost is O(size of `_EVER_SEEN`) rather than O(open connections), because a
+    collected weakref still has to be dereferenced; `_EVER_SEEN_PRUNE_AT` is what
+    bounds the dict and therefore this.
+    """
     lines = [f"  [{stage}] pool.status()={_REAL_ENGINE.sync_engine.pool.status()!r}"]
     if not _CHECKED_OUT:
         lines.append(f"  [{stage}] registry: no connection checked out")
-        return "\n".join(lines)
     for nodeid, origin, record_ref in list(_CHECKED_OUT.values()):
         record = record_ref()
         state = "collected" if record is None else _in_transaction(record)
         lines.append(f"  [{stage}] held by {nodeid} -> {state}")
         for frame_line in origin:
             lines.append(f"  [{stage}]     at {frame_line}")
+    lines.append(_f292_ever_seen(stage))
     return "\n".join(lines)
 
 
 def _f292_report(*snapshots: str) -> str:
+    """The failure-path printout. The pool log is cumulative; every other line is staged.
+
+    `_f292_pool_errors` is deliberately *not* per-stage: `_PoolErrorRecorder` records
+    continuously from import, so its silence is a fact about the whole session rather
+    than about the moment it was read. Everything else lives inside a snapshot, so it
+    carries the stage it was taken at.
+    """
     return (
         "\n"
         + "=" * 78
@@ -476,11 +513,11 @@ def _f292_report(*snapshots: str) -> str:
         + "\n".join(snapshots)
         + "\n"
         + _f292_pool_errors()
-        + "\n"
-        + _f292_ever_seen()
         + "\n(`pool.status()` after the dispose counts a *new* pool and cannot see a "
-        "connection\nchecked out from the old one; the registry lines can. See F292 in "
-        "scripts/drive/FINDINGS.md.)\n" + "=" * 78 + "\n"
+        "connection\nchecked out from the old one; the registry lines can. The two early "
+        "stages are\nsampled before the DROP waits out its busy timeout and the last one "
+        "after, so a\nholder that releases during the wait shows only in the early two. "
+        "See F292 in\nscripts/drive/FINDINGS.md.)\n" + "=" * 78 + "\n"
     )
 
 
