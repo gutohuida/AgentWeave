@@ -21272,6 +21272,80 @@ either (a) genuinely await the underlying thread instead of only the coroutine o
 loop. Not attempted this session: it needs its own dedicated investigation, and this session's
 authorisation was for chasing F292's cause, not for changing run-cancellation behaviour.
 
+**An eighth occurrence, 2026-09-07 22:03Z — the first on `master` — and a correction to this entry's
+own leading conclusion.** (2026-09-08 day window, `d1a`. Full derivation in
+`.claude/autonomous/2026-09-08-day-log.md`, iteration 2.) CI run `34164645184`, sha `15ce482`, read
+first-hand with `gh run view --log-failed`: `hub-test` the only failing job, `3968 passed, 18
+skipped, 230 warnings, 1 error in 657.72s`, `ERROR at setup of
+test_flow_fires_a_review_turn.py::test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn`
+on `DROP TABLE requirement_drift` at `tests/conftest.py:473`. Being on `master` removes the last
+reading in which this could be a property of the cycle branches' trees. Two new numbers: the failure
+is at progress `[33%]`, not the `[66%]` of the `test_reviewer_is_not_the_author.py` occurrences, so
+the sliding window is not confined to one region; and the preceding test passed at `21:56:02.822`
+against an error reported at `21:56:33.556` — **30.7 s**, the whole `busy_timeout`, so the holder held
+for the entire window rather than losing a brief race.
+
+*The correction, and it matters more than the occurrence.* This entry's leading claim — that the
+main-engine registry's identical negatives **falsify** a product-engine connection as the holder,
+"n=4" (now n=5) — **is too strong, and SQLAlchemy 2.0.50's own source says why.**
+`_ConnectionRecord.__close()` fires `pool.dispatch.close` **before** attempting the close and
+unconditionally (`pool/base.py:877-886`); `Pool._close_connection` then swallows any `Exception` from
+`do_close`/`do_terminate`, logging it only to the `sqlalchemy.pool` logger and nulling
+`dbapi_connection` regardless (`pool/base.py:371-384`); `_finalize_fairy` does the same for a failed
+reset (`pool/base.py:1006-1011`). **So on every path where SQLAlchemy gives up on a connection whose
+OS-level handle survives, the registry's entry is removed first and the failure is written only to a
+logger pytest discards for a passing test.** The five negatives are *consistent with* a product-engine
+connection holding the file; they falsify only the narrower claim *no connection was checked out and
+still tracked at the probe points*. The wrong inference here is the shape `CLAUDE.md`'s round
+discipline names: the argument was wrong while every measurement under it was right.
+
+*A silent leak path that fits the printout exactly.* `SQLiteDialect_aiosqlite` sets `has_terminate =
+True` (aiosqlite 0.22.1 has `stop`), so `_finalize_fairy`'s discard path calls
+`_close_connection(terminate=True)` → `_terminate_force_close` → `aiosqlite.Connection.stop()`, which
+merely **queues** `close_and_stop` — the only thing that ever calls the real
+`sqlite3.Connection.close()` — onto the connection's worker thread and returns a future nobody awaits
+(`aiosqlite/core.py:116-132`). If that thread is not draining its queue, the handle is never closed,
+its transaction never rolled back, its locks persist, and **nothing raises**, so not even the
+`sqlalchemy.pool` ERROR is emitted. A terminate on this dialect is structurally incapable of failing
+loudly.
+
+*But F295's loud signature is absent from both readable CI occurrences, which is the sharpest new
+constraint.* `34164645184` and `34029310406` each contain **zero**
+`PytestUnhandledThreadExceptionWarning`, zero `RuntimeError: Event loop is closed`, and zero
+`_finalize_fairy` GC "non-checked-in connection" warnings. `hub/pyproject.toml` sets no
+`filterwarnings`, so nothing was suppressed and the warnings summaries were read whole. In the two
+occurrences whose logs exist, **the aiosqlite worker thread did not visibly crash.** This is measured
+support for `DIRECTION`'s standing instruction not to expect
+`a-dead-connection-is-never-handed-back-out` to close F292; F295 still fits the one 3.5-hour hang,
+which is also the one occurrence with no log.
+
+*Why `be6a70d`'s mitigation cannot hold, stated precisely.* Beyond `dispose()` being unable to
+reclaim a checked-out connection: **the state its comment blames — a live `JobScheduler` holding a
+checked-out connection — has never once been observed at a failure**, across five instrumented
+occurrences. Strengthening it (another dispose, a longer timeout, a retry around `drop_all`) is the
+move already measured to fail.
+
+*F279 is **not** the same class, answered explicitly.* Different exception (`InvalidRequestError:
+Could not refresh instance`, ORM session state, vs an OS-level file lock), different locus (inside
+the run at `output_recording.py:94` vs the next test's fixture), different latency (~1.5 s vs the
+full 30 s timeout), and opposite reproducibility (F279 fails 7/12 and 4/12 locally; F292 survived 15
+local runs of the blamed pair and a whole suite at `busy_timeout=50`). What they share is a cause of
+opportunity — both sit downstream of `agent_trigger.py:1190`'s un-awaited `_execute_run` task — so a
+repair that makes a run's DB work genuinely settle before its caller moves on could reduce both. That
+is a reason to build F295's change, not evidence that it fixes either.
+
+*The instrument the next occurrence needs* is not a stronger dispose: it is a session-scoped handler
+retaining `sqlalchemy.pool` ERROR records printed inside `_f292_report`, plus, for every connection
+the registry has **ever** seen, whether its aiosqlite worker thread is alive and whether
+`sqlite3.Connection.in_transaction` is set. Both are fixture-level. If both stay silent at the next
+occurrence, that is also a result: it puts the holder outside SQLAlchemy's bookkeeping entirely — and
+the in-repo second-engine candidates are already eliminated for this file by collection order
+(`test_flow_fires_a_review_turn.py` at 1386; every test-suite `create_async_engine`,
+`sqlite3.connect` and `aiosqlite.connect` lives in `test_migrations.py`,
+`test_project_persistence.py`, `test_runner_charter_models.py` and `test_task_workspace_scheme.py`,
+all collected after it — checked 2026-09-08; prior rounds had enumerated engines only under
+`hub/hub/`).
+
 ---
 
 ## F293 (B) — the F126 guard is on the predecessor's lifecycle, so following the refusal's own advice mints the duplicate successor it was built to prevent
