@@ -1,40 +1,125 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-08-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "755bdad",
-    "stop_at":  "2026-09-09T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-08-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX. spec-queue/APPROVALS.md carries an ORDER: line for 2026-09-08, so the default backlog-first shape is overridden. Build the four approved changes in that order, driving each before its queue item closes. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-08-daily",
+    "parent_branch": "master",
+    "parent_sha": "755bdad",
+    "stop_at": "2026-09-09T07:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-09-08-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "c1-guard",
+    "next_action": "Item c1-guard. Implement section 1 of openspec/changes/2026-09-07-a-dead-connection-is-never-handed-back-out/tasks.md (1.1-1.6) in hub/hub/db/engine.py. Read that change's tasks.md and design.md first. Write the two lines for 1.6 -- see the item's detail for why that side of the open choice was taken. No new tests this firing beyond an import/smoke check; section 3 is its own item. Tick only the boxes you actually built, commit, push.",
+    "queue": [
+        {
+            "id": "compose",
+            "status": "done",
+            "title": "Compose this window's queue from the playbook",
+            "detail": "Done iteration 1. Branch autonomous/2026-09-08-daily confirmed against git log (head 170c4cb, the arm commit; parent master@755bdad matches STATE). APPROVALS.md's newest section is 2026-09-08 and carries an ORDER: line, so per the playbook that is tonight's queue verbatim and the default backlog-first shape is ignored. The unarchived changes and the open findings are NOT this window's work tonight. Green check run and passed: py -3.11 -m pytest hub/tests/ -q, 3972 passed, 86 skipped, exit 0, in 46:41. That is 1.9x the 15-25 minute figure both playbooks and DECISIONS.md carried; repaired in this firing (night-window.md, day-window.md, DECISIONS.md all now say 15-47 minutes with all three measurements), so it needs no queue item. Also recorded: the suite hit F295's exact dead-worker mechanism four times as a PytestUnhandledThreadExceptionWarning (aiosqlite/core.py:66 then :75, 'Event loop is closed'), which means task 3.1's kill mechanism is known-good before it is written."
+        },
+        {
+            "id": "c1-guard",
+            "status": "open",
+            "title": "F295 change, section 1 -- the checkout and close pool listeners",
+            "detail": "openspec/changes/2026-09-07-a-dead-connection-is-never-handed-back-out, tasks 1.1-1.6, all in hub/hub/db/engine.py next to the create_async_engine call at :34. 1.2 is R3's replacement: the checkout listener ONLY raises DisconnectionError; the neutralisation lives on the 'close' pool event at 1.5. Do not move it back inline -- the task says why, and 1.3 requires the comment that stops a later reader doing so. TASK 1.6 IS AN OPEN CHOICE AND THIS QUEUE TAKES THE 'WRITE IT' SIDE: two lines, identical predicate, on close_detached, commented as covering a deliberately unreachable state the way 3.11 does. Reason: the ADDED requirement says the neutralisation SHALL cover 'every path', so writing two lines makes that literally true, where narrowing the requirement means editing an approved delta at 02:00. The operator's standing preference is the cleanest solution, not the least work. If implementation shows this wrong, stop and put it in decisions_for_user rather than papering over it."
+        },
+        {
+            "id": "c1-shutdown",
+            "status": "open",
+            "title": "F295 change, section 2 -- shutdown ordering in the lifespan teardown",
+            "detail": "Tasks 2.1-2.3 in hub/hub/main.py's lifespan teardown (:357-358; :356 is the yield). 2.4 is already ticked and is a question, not a step. The settle goes AFTER terminate_all_active_runs() and shutdown_scheduler(); difference_update, not clear(); loop to a fixed point; bound the loop and log at WARNING rather than raising (2.2). 2.3's engine.dispose() DEPENDS ON 1.5 -- do not ship it if c1-guard did not land the close listener."
+        },
+        {
+            "id": "c1-tests-guard",
+            "status": "open",
+            "title": "F295 change, section 3 part A -- tests for the guard",
+            "detail": "Tasks 3.1, 3.2, 3.3, 3.4, 3.7. 3.1 states its worker-kill mechanism inline (the probe files were deleted with the testbed on 2026-09-07) -- kill the thread for real, do not monkeypatch is_alive. Every wait is bounded: the failure mode is a hang, and an unbounded hang in CI is exactly what F292 costs hours to. Note the interaction the tasks predate -- hub/tests/conftest.py registers checkout/checkin/close listeners on the SAME engine object (:230, :241, :246, imported at :77), and 1.2's raise fires before _f292_record_checkout, so the F292 census will not record the discarded connections."
+        },
+        {
+            "id": "c1-tests-shutdown",
+            "status": "open",
+            "title": "F295 change, section 3 part B -- tests for shutdown, dispose, and the conftest teardown",
+            "detail": "Tasks 3.5, 3.6, 3.8, 3.10, 3.11. There is no 3.9 -- R2 held that number and R3 moved it to 3.12; the file holds 24 tasks and nothing was lost. 3.8 makes hub/tests/conftest.py's teardown dispose unconditionally (try/finally) and is explicitly NOT a claim to resolve F292. 3.10 is the test that would have caught R1's and R2's siting mistake: dispose must return with a dead-worker connection idle in the pool. 3.11 covers a deliberately unreachable state and must say so in a comment."
+        },
+        {
+            "id": "c1-mutation",
+            "status": "open",
+            "title": "F295 change, task 3.12 -- mutation-check every test written",
+            "detail": "Revert each line the tests exist for and watch a NAMED test fail. Record the count in the night log the way n3-units did. The standard exists because the night of 2026-09-06 shipped eight unit tests of which the day could only account for seven. A test that names no artefact on reversion was asserting over nothing -- fix or delete it, do not ship it."
+        },
+        {
+            "id": "c1-reconcile",
+            "status": "open",
+            "title": "F295 change, section 4 -- lint, amend the finding, sync and archive",
+            "detail": "4.1 runs exactly what CI runs over exactly CI's paths: ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/; pytest hub/tests/ under py -3.11. 4.2 APPENDS to F295 in scripts/drive/FINDINGS.md (heading at line 22100) -- do not rewrite its history. 4.3 leaves testbed scratch uncommitted. 4.4 openspec-sync-specs then openspec-archive-change. ARCHIVING RETIRES THE FINDINGS THE PROPOSAL NAMES, IN THE SAME COMMIT: set F295's Status: line to 'fixed <sha>' and correct the index paragraph's open severity-A list."
+        },
+        {
+            "id": "c1-drive",
+            "status": "open",
+            "title": "F295 change -- drive it, before the queue item closes",
+            "detail": "Three rounds check the argument; a drive checks the product. Restart the drive Hub on 8011 from source (cd hub, DATABASE_URL at the beta profile, py -3.11 -m uvicorn hub.main:app --port 8011 --host 127.0.0.1), confirm no .py under hub/hub or src is newer than the process start, then exercise a real shutdown with a background run in flight and confirm the instance actually stops. Python-only change, no bundle, so no browser is required. Never 'agentweave --port'. 8010 is the other trial Hub; 8000 is the operator's real usage and must not be touched or probed. Fresh project, never proj-5e960453 or proj-18e5d4e0. Any real agent turn binds claude-haiku-4-5. Never leave a job enabled."
+        },
+        {
+            "id": "c2-notice",
+            "status": "open",
+            "title": "MCP-notice change, section 1 -- the notice tells the truth",
+            "detail": "openspec/changes/2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing, tasks 1.1-1.5 in hub/hub/launchability.py:321-330. Name the variables (AW_RUN_TOKEN, HUB_URL); NEVER interpolate their values -- design.md D4 and the delta both require this. 35 tasks over 6 phases, Python and docs only; tasks.md:7 declares its own bundle exemption."
+        },
+        {
+            "id": "c2-surface",
+            "status": "open",
+            "title": "MCP-notice change, section 2 -- operations described for the access path",
+            "detail": "Tasks 2.1-2.4 around _tool_surface_lines (hub/hub/api/v1/agents.py:884). TASK 2.2 WAS REWRITTEN BY THE THIRD REVIEW -- build from the text now in the file, not from any earlier copy or summary. The original had its ordering backwards: the context materialisation at agent_trigger.py:960 happens 46 lines BEFORE resolve_access_path at :1006, so the value it told the implementer to thread through does not exist yet at that point."
+        },
+        {
+            "id": "c2-contract",
+            "status": "open",
+            "title": "MCP-notice change, section 3 -- the two adapter-only rules move into the contract",
+            "detail": "Tasks 3.1-3.9: archive_job's confirmation and the loop refusal, and ask_user's wait including disclosing wait_expires_at (hub/hub/api/v1/agent_actions.py:496). Read design.md D6 before 3.5 -- round 2 cut that task's scope. 3.9 changes an existing assertion at test_agent_actions_governed.py:137-140 and says to read why first. Tests reach the routes DIRECTLY, without the adapter. hub/hub/mcp_server.py may import only stdlib + fastmcp, and approve_tool_call must not gain a return annotation."
+        },
+        {
+            "id": "c2-resolve",
+            "status": "open",
+            "title": "MCP-notice change, section 4 -- a run is told the access path it actually has",
+            "detail": "Tasks 4.1-4.9 around resolve_access_path (hub/hub/launchability.py:237-245), which returns 'mcp' unconditionally today. Three test files depend on the current behaviour and are named in the tasks: conftest.py:496-507 (an autouse fixture patching probe_mcp_registered), test_agent_trigger.py:793-830, test_launchability.py:390-429. 4.8 asks for the permission posture to be decided SEPARATELY and stated; 4.9 is the approver-flag problem, where the flag names an MCP tool the mirror deployment cannot provide. If either is genuinely the operator's call, it goes to decisions_for_user."
+        },
+        {
+            "id": "c2-verify",
+            "status": "open",
+            "title": "MCP-notice change, sections 5 and 6 -- docs, lint, tests, and the drives",
+            "detail": "5.1 corrects docs/architecture/overview.md:18-19. 5.2 explicitly forbids touching .claude/skills/copilot-test-setup/SKILL.md in this change. 6.1/6.2 lint and hub tests. 6.3-6.5 are drives, including the mirror deployment at 6.5 -- the check that matters for the deployment this change exists for. 6.6 records the drive in FINDINGS.md whether it worked or not. Then sync and archive, retiring anything the proposal names."
+        },
+        {
+            "id": "c3-conversation-run-facts",
+            "status": "open",
+            "title": "F274 change -- the conversation carries its own run facts (BUNDLE; likely two nights)",
+            "detail": "openspec/changes/2026-09-05-the-conversation-carries-its-own-run-facts, 44 tasks. PHASE 0 IS A HARD GATE: if phase 0 has not been recorded, do phase 0 and stop. Its port instruction was reworded on 2026-09-08 after the clean slate, so read the file rather than a remembered version. TOUCHES hub/hub/static/ui -- commit hub/ui/src and the bundle together via py -3.11 scripts/refresh_ui_bundle.py after npm run build; only that script writes the stamp. A UI change is driven IN A BROWSER against the served bundle or it is not driven; scripts/drive/d1_aturn_browser.py is the working pattern, and a Python transcription of a component is exactly how F274 shipped. Realistically not reached tonight; when it is started, split it in the log."
+        },
+        {
+            "id": "c4-clearing-instructions",
+            "status": "open",
+            "title": "DAY-3 change -- clearing instructions asks first (BUNDLE; last in ORDER)",
+            "detail": "openspec/changes/2026-09-07-clearing-instructions-asks-first, 25 tasks, one already ticked (5.2, the pre-change drive, closed on real evidence committed at 3078843). TOUCHES the bundle. ORDER puts it last, and the constraint is strictly one bundle-touching change per night, so this cannot share a night with c3. Almost certainly tomorrow's work; leave it open and say so in the final log entry."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
+        "One bundle-touching change per night. c3 and c4 both rebuild hub/hub/static/ui and may not share a night; they share no source file, so the constraint is on the generated artefact only.",
+        "CI redness is 20.4 percent F292 (11 of 54 runs, 2026-09-07T00:00Z to 2026-09-08T08:26Z, all 11 the same cause). Classify a red CI with 'gh run view <id> --log-failed' BEFORE diagnosing a regression from tonight's change.",
+        "The hub suite is 15-47 minutes and load-dependent (14:39 / 24:50 / 46:41 measured). It far exceeds the 600s command cap: background it and block on the output file, and never size a firing as though it were 25 minutes."
+    ]
 }

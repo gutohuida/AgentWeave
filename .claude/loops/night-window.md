@@ -37,10 +37,11 @@ Only the first firing of the window does this.
 
 3. **Confirm the tree is green before building on it.** A window that starts on a red suite cannot
    tell its own breakage from the one it inherited, and will spend hours attributing one to the
-   other. Run the relevant chunk, not the whole suite — that is **15–25 minutes** depending on what
-   else is running (14:39 measured quiet on 2026-09-01, 24:50 measured contended on 2026-09-03) and
-   exceeds the 600s command cap. If it is red and you did not break it, **that is tonight's first
-   queue item** — fix the inherited breakage before adding to it, and say so in the log.
+   other. Run the relevant chunk, not the whole suite — that is **15–47 minutes** depending on what
+   else is running (14:39 measured quiet on 2026-09-01, 24:50 contended on 2026-09-03, **46:41 on
+   2026-09-08**) and far exceeds the 600s command cap, so background it and block on the output
+   file. If it is red and you did not break it, **that is tonight's first queue item** — fix the
+   inherited breakage before adding to it, and say so in the log.
 
 4. **Write the queue**, in this order unless `ORDER:` says otherwise. Backlog first, decided
    2026-09-01; the rejected alternative was approved-first, which would let 8 unarchived changes and

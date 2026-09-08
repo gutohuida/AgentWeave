@@ -560,7 +560,16 @@ disprove a range. Re-measured 2026-09-03 in a DECIDE session: **3850 passed, 84 
 in 24:50** — with the UI suite and the CI lint set running alongside it, where the 14:39 run had the
 machine to itself. Both are real; the suite is **15–25 minutes and load-dependent**, which is what
 both playbooks now say. The "~25 minutes" figure was never disproven, and two days were spent with
-this file asserting it had been. Also still live there: F47/F120's
+this file asserting it had been.
+
+**Widened again 2026-09-08 by the night window's baseline green check: 3972 passed, 86 skipped in
+46:41** (`py -3.11 -m pytest hub/tests/ -q`, started 23:00:59, exit 0). That is **1.9x the stated
+ceiling**, and it is the third distinct figure from three runs, so the honest statement is
+**15–47 minutes and load-dependent** — which is what both playbooks now say. Two stray `python`
+processes from earlier windows (started 2026-09-07 20:15 and 21:55) were resident throughout and are
+the most likely contention, but that is inferred, not measured. The point the 2026-09-03 entry makes
+survives intact and is reinforced: no single run is *the* figure, and a window that sizes a firing
+against one of them loses the iteration. Also still live there: F47/F120's
 categorical third-actor prohibition, F77 (an agent has no way to address the operator), F53/F65
 never queued, five findings queued 2026-08-29 and dropped from three runs, and the 8010 trial Hub
 serving four-day-old code.

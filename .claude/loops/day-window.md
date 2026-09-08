@@ -278,11 +278,15 @@ before any work, so a later firing inherits them even if this one dies mid-thoug
 - **Decisions that are genuinely the operator's get written to `decisions_for_user`, not guessed.**
 - Stage explicit paths, never `git add -A`. Never commit `kimichanges.md` or `kimiwork.md`.
 - Tests run under `py -3.11`, never bare `python`. `black` needs `--target-version py311`.
-- The hub suite runs whole in **15–25 minutes** and exceeds the 600s command cap — run it in file
-  chunks, and do not run it whole in this window unless something you did could plausibly have
-  broken it. Both ends are measured, and the spread is the point: **14:39 on 2026-09-01** (3831
+- The hub suite runs whole in **15–47 minutes** and far exceeds the 600s command cap — run it in
+  file chunks, and do not run it whole in this window unless something you did could plausibly have
+  broken it. All three ends are measured, and the spread is the point: **14:39 on 2026-09-01** (3831
   passed) on a quiet machine, **24:50 on 2026-09-03** (3850 passed) with the UI suite and the lint
-  set running alongside it. Neither is *the* figure. Size the work against the slow end, and do not
-  copy either number forward as though the machine were always idle — a number measured once and
-  repeated becomes doctrine, which is exactly how "~25 minutes" came to be called disproven in
-  `spec-queue/DECISIONS.md` on the strength of one contended-free run.
+  set running alongside it, and **46:41 on 2026-09-08** (3972 passed, 86 skipped) as the night
+  window's baseline green check with two stray Python processes from earlier windows still resident.
+  None of them is *the* figure. Size the work against the slow end, and do not copy any one number
+  forward as though the machine were always idle — a number measured once and repeated becomes
+  doctrine, which is exactly how "~25 minutes" came to be called disproven in
+  `spec-queue/DECISIONS.md` on the strength of one contended-free run. The 2026-09-08 figure is
+  **1.9x the previous stated ceiling**, so a window that sizes a firing against "25 minutes" can
+  lose an entire iteration to one suite run.
