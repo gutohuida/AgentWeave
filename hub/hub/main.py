@@ -18,10 +18,10 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, bound_address, instance_identity, run_reconciliation
-from .api.v1 import v1_router
+from .api.v1 import agent_trigger, v1_router
 from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
-from .db.engine import init_db
+from .db.engine import engine, init_db
 from .run_reconciliation import reconcile_interrupted_runs, reconcile_stale_job_runs
 from .run_task_binding import TaskBindingError
 from .scheduler import init_scheduler, shutdown_scheduler
@@ -343,6 +343,58 @@ class ContentSizeLimitMiddleware:
         await self.app(scope, receive, send)
 
 
+#: How many settle passes shutdown makes before it stops waiting for the background run set to
+#: empty. A run whose tail raises hands its input back and releases the queue, and that release
+#: can legitimately schedule the same agent again -- so the set can refill while it is being
+#: settled. The chain is bounded in the product by `DELIVERY_ATTEMPT_LIMIT` (3), so a handful of
+#: passes is a real fixed point; this cap is the backstop against a future unbounded respawn.
+_MAX_BACKGROUND_SETTLE_PASSES = 5
+
+
+async def _settle_background_runs() -> None:
+    """Cancel and await the in-flight background run tasks, to a fixed point.
+
+    `hub/tests/conftest.py`'s teardown fixture is the reference implementation and the place the
+    reasoning for the shape is written out at length. Two differences, both deliberate:
+
+      - it raises `AssertionError` when the cap is reached, which is right for a test and wrong
+        here. An instance that has been asked to stop must stop, so reaching the cap is logged at
+        WARNING with the count of leftovers and shutdown continues;
+      - it runs after every test, where this runs once, after `terminate_all_active_runs()` and
+        `shutdown_scheduler()`. Terminating the run *processes* does not settle the in-process
+        tasks that were driving them, and stopping the scheduler first is what stops the set being
+        refilled behind the settle -- `JobScheduler.shutdown` uses `shutdown(wait=False)`, and
+        APScheduler 3.11.2's `AsyncIOExecutor.shutdown` cancels its pending job futures without
+        awaiting them, so a settle placed before it would be settling a set a still-firing job can
+        add to, and those cancellations would have nowhere to land.
+
+    `difference_update`, not `clear()`: a successor scheduled during the `gather` is already in
+    the set by the time it returns, and this pass has not settled it.
+    """
+    for _ in range(_MAX_BACKGROUND_SETTLE_PASSES):
+        leftover = list(agent_trigger._background_runs)
+        if not leftover:
+            return
+        for task in leftover:
+            task.cancel()
+        await asyncio.gather(*leftover, return_exceptions=True)
+        # The `set.discard()` done-callbacks fire via `call_soon` and may not have run yet, so
+        # what this pass settled is removed here explicitly.
+        agent_trigger._background_runs.difference_update(leftover)
+
+    still_running = list(agent_trigger._background_runs)
+    # Dropped rather than kept: these tasks belong to an event loop that is about to close, and
+    # `_background_runs` is module-level, so anything left in it would be awaited by a later
+    # lifespan in the same process against a loop that no longer exists.
+    agent_trigger._background_runs.clear()
+    logger.warning(
+        "Shutdown: %d background run task(s) did not settle in %d passes; stopping anyway: %r",
+        len(still_running),
+        _MAX_BACKGROUND_SETTLE_PASSES,
+        still_running,
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
@@ -356,6 +408,13 @@ async def lifespan(app: FastAPI):
     yield
     await terminate_all_active_runs()
     await shutdown_scheduler()
+    await _settle_background_runs()
+    # Release the pool while the loop is still running, and only after the settle: disposing
+    # first takes the connection away from a run that is still using it, which is the failure
+    # `hub/tests/conftest.py` documents having already made. This step is safe to reach only
+    # because of the `close` listener in `hub/db/engine.py` -- disposing a pool holding a
+    # connection whose aiosqlite worker thread has ended never returns without it (F295).
+    await engine.dispose()
 
 
 def create_app() -> FastAPI:

@@ -98,16 +98,16 @@ the census, and any later reading of an F292 CI negative, must know it.
 
 ## 2. Shutdown ordering
 
-- [ ] 2.1 In `hub/hub/main.py`'s `lifespan` teardown (`:357-358`; `:356` is the `yield`), **after
+- [x] 2.1 In `hub/hub/main.py`'s `lifespan` teardown (`:357-358`; `:356` is the `yield`), **after
   both `terminate_all_active_runs()` and `shutdown_scheduler()`** — see 2.4, which is now answered
   and is what fixes the position — settle `agent_trigger._background_runs` to a fixed point: cancel
   the current members, `gather(..., return_exceptions=True)`, `difference_update` what this pass
   settled (**not** `clear()`), and loop while the set refills.
-- [ ] 2.2 Bound the loop and **do not raise on the bound.** `hub/tests/conftest.py:580-601` is the
+- [x] 2.2 Bound the loop and **do not raise on the bound.** `hub/tests/conftest.py:580-601` is the
   reference implementation and raises `AssertionError` on its cap, which is right for a test and
   wrong here: an instance asked to stop must stop. Log at WARNING with the count of leftovers and
   continue to 2.3.
-- [ ] 2.3 `await engine.dispose()` after the settle, while the loop is still running. Disposing
+- [x] 2.3 `await engine.dispose()` after the settle, while the loop is still running. Disposing
   before the settle is the failure `conftest.py:548-561` documents having already made — it takes
   the connection away from a run that is still using it. **This step depends on 1.5**: measured, a
   dispose with a dead-worker connection in the pool never returns. Do not ship 2.3 without 1.5.
