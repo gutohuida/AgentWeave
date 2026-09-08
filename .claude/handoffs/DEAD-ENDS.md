@@ -357,8 +357,23 @@ checkout — the dev-repo traps are in "The Hub at runtime" above and still appl
   listening. `stop` handles this correctly and kills both — do not "fix" it by killing the
   recorded pid by hand.
 
-## The `spec-queue/` contract — two ways to write a correct-looking approval that does nothing
+## The `spec-queue/` contract — three ways a correct-looking document does nothing, or lies
 
+- **A dated section's *premises* are not protected by the newest-section-only contract — only its
+  *instruction* is** *(2026-09-08, found by the day window reconciling its own log)*. A
+  `DIRECTION.md` or `ROADMAP.md` section is read as both an order and a description of the world,
+  and the world moves under it. The 2026-09-08 `DIRECTION.md` section and `ROADMAP.md` were written
+  by one DECIDE session at **00:30** and both assert *"not one carries an approval token"*;
+  `0d82d6d` approved all four at **01:24**. The day window read them at **09:01**, 7 h 31 m later,
+  and inherited the dead premise into eight iterations of its log without noticing — the queue was
+  still right, but only because a second authority (the drain gate) reached the same shape by a
+  route that did not depend on it. **Before quoting a dated section's arithmetic, check whether
+  `APPROVALS.md` or the file it describes moved after that section's own timestamp**:
+  `git log -1 --format='%ad' --date=iso -- spec-queue/APPROVALS.md` against the section's stated
+  writing time. The same session's `ROADMAP.md` also contradicted itself, saying "starved of
+  verdicts" in its headline and "all four APPROVED" twenty-five lines below — **a long plan file is
+  read at whichever line the reader reaches first**, so a closure has to be written at the headline
+  too, not only in the row it closes.
 - **A verdict token under any but the *newest* dated section is never read** *(2026-09-08)*.
   `APPROVALS.md`'s own header says *"Newest day first. Days below the newest are history and are not
   read."* Three of the four changes approved on 2026-09-08 had their descriptive rows under

@@ -12,23 +12,38 @@ says "the operator writes a verdict", it is describing work, not performing it.
 
 ## The one fact that reorders everything
 
-**The pipeline is not starved of building capacity. It is starved of verdicts.**
+**This section was true for 54 minutes and is now history. It is kept, struck through, because it
+is the argument Stage 0 was built to answer — and because the day window inherited it as current
+and was still repeating it eight hours after it stopped being so.** The live statement follows it.
 
-Four changes are fully specced — three review rounds each, every round non-empty — and **not one
+~~**The pipeline is not starved of building capacity. It is starved of verdicts.**~~
+
+~~Four changes are fully specced — three review rounds each, every round non-empty — and **not one
 carries an approval token.** The FIX window builds roughly one change a night and has been handed
 nothing to build. The queue did not grow because building is slow; it grew because the DECIDE step
-between the two windows has not run since 2026-09-06.
+between the two windows has not run since 2026-09-06.~~
 
-**And it is about to grow again.** `AgentWeaveArmDay` is `Ready` and fires at **08:55 tomorrow**.
+~~**And it is about to grow again.** `AgentWeaveArmDay` is `Ready` and fires at **08:55 tomorrow**.
 `DIRECTION.md`'s newest section is dated 2026-09-07, so tomorrow has none — and the contract says
 *"no section for today means compose the queue as usual"*. The default day queue is
 `D-2/D-3/D-4 = spec R1/R2/R3`, which is **one new proposal**. Left alone, the day window adds a
-fifth change tomorrow morning.
+fifth change tomorrow morning.~~
 
-That is the arithmetic behind everything below. FILL produces one change per day. FIX consumes one
-change per one-to-two nights. **The two windows are structurally mismatched, and no amount of
-discipline closes a gap that is a rate difference.** Finishing what is open requires the day window
-to stop proposing for the duration — not to try harder.
+**Superseded 2026-09-08. Both halves are closed, and neither closure was written *here*, where the
+reader of this claim would meet it.**
+
+- **The verdict starvation ended at 01:24**, when `0d82d6d` approved all four with an `ORDER:`
+  line — 54 minutes after this file was written, and **7 h 31 m before the day window read it.**
+  Stage 0.2 below records this; this heading did not, and a document that contradicts itself in
+  two places is read at whichever place the reader reaches first.
+- **The fifth proposal did not happen.** `AgentWeaveArmDay` fired 08:55 on 2026-09-08 and composed
+  no spec loop, on two independent authorities: `DIRECTION.md`'s dated section, and the standing
+  drain gate at `.claude/loops/day-window.md` step 6 that supersedes it from 2026-09-09 on.
+
+**What is live is the rate mismatch, not the starvation.** FILL produces one change per day and FIX
+consumes one per one-to-two nights, so the arithmetic below still holds — but the queue is now four
+approved changes waiting on **build capacity**, which is the ordinary case this plan is a plan for,
+not a stalled DECIDE step. Tonight, 22:55, is the first build night those approvals have ever had.
 
 ---
 
@@ -43,7 +58,7 @@ Nothing below this line can move until these are done, and item 1 expires in the
 | **0.3** | **Write the `ORDER:` line.** ~~Three of the four touch `hub/ui` and the committed bundle… Only one is bundle-free.~~ **Corrected by the second review, 2026-09-08: two are bundle-free, not one.** `an-agent-without-mcp` names no `hub/ui` file anywhere and declares its own exemption at its `tasks.md:7`; `a-dead-connection` is Python-only. Only the two UI changes touch the bundle, and they share **no source file** — their sole collision is the generated `hub/hub/static/ui`. | `spec-queue/APPROVALS.md` |
 | **0.4** | ~~Decide the night arm — the only thing between the approvals and a build.~~ **RESOLVED — measured 2026-09-08 10:05: `AgentWeaveArmNight` is `Ready`, not disabled**, `LastTaskResult=0`, last fired 2026-09-06 22:55, **next 2026-09-08 22:55.** So Stage 0 is closed in all four rows and **tonight is the first build night** the four approvals have ever had. The roadmap carried this as the single blocker for a day after it had stopped being one. | Task Scheduler |
 
-### The four changes awaiting a token
+### The four changes ~~awaiting a token~~ **approved 2026-09-08 01:24 and awaiting a build**
 
 | Change | Finding | Tasks | Touches UI / bundle |
 |---|---|---|---|
@@ -66,10 +81,39 @@ approvable at all.
 **F292 — `sqlite3.OperationalError: database is locked`.** This is not a backlog item; it is
 actively lying to every verification below it. It **failed CI on `master` at `15ce482` today at
 22:03**, in `hub-test`, and the next commit `af329f5` — the same tree plus one markdown file —
-passed. Every change in Stage 2 will be verified by a suite that is wrong roughly half the time.
+passed. ~~Every change in Stage 2 will be verified by a suite that is wrong roughly half the
+time.~~ **Corrected 2026-09-08 by measurement — the rate is 20.4 %, not half**, and "half" was
+F279's *local* rate borrowed for F292's *CI* rate. Measured over 54 runs since 2026-09-07T00:00Z,
+every failure classified individually from its own log rather than counted as red: **11 failures,
+all F292, 20.4 %**; `master`-only over the last 20 runs, 25 %. The sharper number is that in that
+window **every red CI run is F292 — 11 of 11**, so CI redness on this project currently has
+exactly one cause. Method, three denominators and the 22-occurrence table are in `FINDINGS.md`'s
+F292 entry and in `.claude/autonomous/2026-09-08-day-log.md` iteration 4.
 
-Related and probably the same class: **F279** (the two "a stopped run" tests fail about half the
-time on an unmodified tree).
+~~Related and probably the same class: **F279** (the two "a stopped run" tests fail about half the
+time on an unmodified tree).~~ **Measured 2026-09-08 — not the same class**, and this row was
+where the two findings' numbers got mixed. They differ on every axis checked: exception
+(`sqlite3.OperationalError`, an OS file lock, vs `sqlalchemy.exc.InvalidRequestError`, ORM session
+state), locus (the *next* test's fixture at `conftest.py:473` vs inside the run at
+`output_recording.py:94`), latency (the full 30 s busy timeout vs ~1.5 s), and reproducibility
+(F292 survived 15 local runs of the blamed pair and a whole-suite run at `busy_timeout=50`; F279
+reproduces 7/12 and 4/12 locally). What they share is a *cause of opportunity* — both sit
+downstream of the un-awaited `asyncio.create_task(_execute_run(...))` at `agent_trigger.py:1190`.
+That is a reason to build F295's change, not evidence that it fixes either.
+
+**Status of this stage, 2026-09-08: instrumented and measured, not repaired — so Stage 1 is
+open.** The day window built a fixture-level diagnostic (`hub/tests/conftest.py`: a bounded
+`sqlalchemy.pool` ERROR recorder, plus a census of every connection ever checked out, sampled at
+every stage) and it has now fired twice. It **named the victim, not the holder**: the only open
+connection at the failure is the `DROP TABLE`'s own. No product code changed, deliberately — a
+`hub/hub/` repair is out of a day window's scope. The holder is still unnamed.
+
+**And Stage 2 is not in fact gated on this, whatever the heading says.** The night window is
+steered by `APPROVALS.md`'s `ORDER:` line, not by this file's stage numbering, and that line names
+four changes with no stop token — so tonight builds Stage 2 with Stage 1 open. The consequence
+worth carrying rather than the ordering argument: **a red CI on tonight's build is more likely
+F292 than the change**, at a measured 20.4 %, and must be classified with
+`gh run view <id> --log-failed` before anything is diagnosed as a regression.
 
 `DIRECTION.md`'s 2026-09-07 section is explicit that F292 must **not** be conflated with F295 — the
 F295 change may or may not resolve the flake, and assuming it will is how the flake survives. Treat
@@ -217,7 +261,7 @@ reading a transcript back out of the archive was not.
 
 | # | Item | Detail |
 |---|---|---|
-| **6.1** | ~~Run `scripts/sync_skills.py`, then gate it.~~ **DONE — 2026-09-08, day window iteration 7.** Synced; gated by `tests/test_skill_sync.py`, mutation-checked against four deliberately-stale shapes. **The staleness was wider than this row said:** five skills differed, not two — `autonomous-prep`, `autonomous-session` and `e2e-loop` (`install-driver.ps1` 230→182, `run-iteration.ps1` 266→181, `e2e.py` 411→385) drifted alongside `handoff` and `resume`, and the two `.ps1` files are the autonomous driver itself. The row's own numbers were right; its *inventory* was not, because it was assembled from what a reader noticed rather than from a diff. The gate now does the diffing. Two sub-findings: the sync copied `__pycache__` (fixed, `IGNORED` in the script), and the gate **skips** a destination it cannot find — both trees are untracked and absent on a CI runner, so it ratchets developer machines, not CI. |
+| **6.1** | ~~Run `scripts/sync_skills.py`, then gate it.~~ **DONE — 2026-09-08, day window iteration 7.** Synced; gated by `tests/test_skill_sync.py`, mutation-checked against four deliberately-stale shapes. **The staleness was wider than this row said:** five skills differed, not two — `autonomous-prep`, `autonomous-session` and `e2e-loop` (`install-driver.ps1` 230→182, `run-iteration.ps1` 266→181, `e2e.py` 411→385) drifted alongside `handoff` and `resume`, and the two `.ps1` files are the autonomous driver itself. The row's own numbers were right; its *inventory* was not, because it was assembled from what a reader noticed rather than from a diff. The gate now does the diffing. **Canonical count, reconciled 2026-09-08 because this row and the day log state it two different ways:** of 16 owned skills, **six were wrong at either destination** — `handoff`, `resume`, `autonomous-prep`, `autonomous-session`, `e2e-loop` differed, and `daily-review` was absent from both trees. This row's *“five differed, not two”* counts only the five that existed-and-differed against the two the row gave line numbers for; the log's *“six, not three”* counts absence as wrongness and the row's three named skills as named. Both are arithmetic on the same diff; **6 of 16 wrong, 3 of 6 named in advance** is the form to quote. Two sub-findings: the sync copied `__pycache__` (fixed, `IGNORED` in the script), and the gate **skips** a destination it cannot find — both trees are untracked and absent on a CI runner, so it ratchets developer machines, not CI. |
 | **6.2** | ~~`scripts/drive/aw.py:16` promises a guard that does not exist.~~ **DONE — 2026-09-08, day window iteration 8.** The guard was added rather than the comment weakened. `require_key()` raises `SystemExit` — deliberately not `RuntimeError`, because this directory is full of bare `except Exception` and `api()` swallows one into `(0, "...")`. Measured against the live Hub on 8010: HEAD's code with `AW_KEY` unset returned **401 with exit code 0**; the guard fails locally with exit 1 and a urlopen tripwire proves no request reaches the network. The 200 and the real-401 paths are unchanged. Gated by `tests/test_drive_key_guard.py`, mutation-checked against three defects (the HEAD file; a reintroduced key literal; a blanket refusal) — and one mutation it deliberately does **not** catch, recorded in the test. **Wider than this row said:** the same file family carried the key-literal defect 6.3 describes, and the fix removed all of it — see 6.3. |
 | **6.3** | ~~Rotate the disclosed `aw_live_` key.~~ **DONE — the operator rotated it, stated in session 2026-09-08 09:20.** Closes the day window's `day1` question (*"may the loop rotate keys itself?"*), which is now moot for this key and was never answered in the general case. **Residual, largely cleared 2026-09-08 by 6.2:** the classification found 18 real-shaped 32-character `aw_live_` literals in **16 tracked files**. The nine `scripts/drive/` scripts among them (this row said eight; the test counts nine) now call `require_key()` instead of defaulting a key, and `tests/test_drive_key_guard.py` fails if one comes back — **10 literals in 8 files remain**, all outside `scripts/drive/` except `FINDINGS.md`'s own transcript: the documented `a1b2c3…` placeholder (`hub/.env.example`, `hub/hub/db/engine.py`, `hub/tests/test_setup.py`), the redaction fixtures in `hub/tests/test_operator_is_told_the_truth.py` that exist *because* the key leaked, and four historical documents. All are dead against a rotated key. What is not dead is the practice that produced them; a rotation is final only if nothing commits a live key again. Classified by shape without printing any value. |
 | **6.4** | ~~`.claude/handoffs/LATEST.md` names the wrong handoff.~~ **DONE — verified 2026-09-08 10:10.** It names `handoff-0116-…`, which is the highest-numbered file on disk. Whatever fixed it did not record itself here. |
