@@ -595,6 +595,34 @@ none was taken.
 
 ---
 
+### day1 — the disclosed key is rotated; the general question is still unanswered
+
+**CLOSED 2026-09-08 09:20 by the operator, in session: *"forget that key. It's rotated as well."***
+Raised by the day window at iteration 1 this morning, and it did not block anything — the window had
+already carved ROADMAP 6.3 out of its queue rather than waiting.
+
+**What the window actually asked is broader than the key, and remains open:** *"Say whether the loop
+may rotate trial-profile keys itself, or whether every rotation is yours."* Its reasoning was sound
+and is worth keeping — rotating a credential invalidates whatever still holds the old one, and the
+holder most likely to matter is the operator's live instance on port 8000, which every unattended
+window is forbidden to touch. **This closure answers the instance, not the policy.** If a window
+meets another disclosed credential it will ask again, correctly.
+
+**Residual, recorded rather than reopened.** 18 real-shaped 32-character `aw_live_` literals survive
+in **16 tracked files** — `hub/.env.example`, `hub/hub/db/engine.py`, two under `hub/tests/`, eight
+drive harnesses under `scripts/drive/`, and four documents including `FINDINGS.md` itself. Every one
+is dead against a rotated key. Classified by shape, without any value being printed or quoted.
+
+**The point of noting it is the practice, not these strings.** A rotation is final only if nothing
+commits a live key again, and this repository has produced the situation twice — the disclosed key
+in public history, and the two trial-Hub keys that rode the tracked half of `.claude/handoffs/`
+until 2026-09-04, which is why that directory is now ignored in full. Drive harnesses reading a key
+from the environment rather than carrying a literal would remove the largest bucket of the sixteen.
+**Not queued** — it is a hygiene sweep nobody has asked for, and it is worth exactly one decision
+from the operator before anyone spends a window on it.
+
+---
+
 ### R-3 — the four small product calls, all four answered
 
 **DECIDED 2026-09-08 02:15, by the operator, in session.** Each was one question with two defensible
