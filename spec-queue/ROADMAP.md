@@ -213,47 +213,26 @@ has now paid three times.
 
 ---
 
-## Stage 5 — the two orphan repositories
+## Stage 5 — REMOVED 2026-09-08: not AgentWeave's work
 
-Both live outside this checkout, both have **no remote**, both exist on exactly one disk.
+This stage scheduled work in **two separate repositories** — `witness` and `continuity-kit` — and
+has been removed at the operator's instruction: *"I want only things for agentweave here in this
+repo."* Neither is a dependency of anything above; nothing in Stages 0-4 or 6 waits on them.
 
-**`continuity-kit`** — 7 commits, an unvalidated prototype by its own README, and the only item in
-the whole inventory with no downside. Give it a remote and push it.
+- **`witness`** — `C:\Users\huida\Documents\projects\witness`. Owns its own decisions now, in its
+  own `DECISIONS.md`. The `OV-` series moved there with it.
+- **`continuity-kit`** — parked by the operator 2026-09-08: *"Not yet. Let's leave that one aside,
+  I'll come back to it when we finish with the fixes on agentweave."*
 
-*Price it honestly first.* This repo's own cross-agent port of the same contract already drifted:
-`.agents/skills/` and `~/.codex/skills/` carry `handoff` and `resume` copies that are 73 and 9 lines
-behind and mention `DEAD-ENDS.md` **zero** times — they predate the ledger entirely. The claim to
-ship is "a file contract two agents can read", and the evidence on this disk is that keeping two
-agents in sync needs a check nobody wrote — **written 2026-09-08**, `tests/test_skill_sync.py`;
-see Stage 6.1, and note it found three more drifted skills than this paragraph names.
+**What stayed here, because it is AgentWeave's:** `scripts/snapshot-corpus.ps1` and the
+`ClaudeCorpusSnapshot` scheduled task. It archives this machine's Claude Code transcript corpus
+daily at 12:30 and is unrelated to either repository's roadmap — the retention question was
+deliberately answered *outside* Witness, with a plain file copy.
 
-**`witness`** — 4 commits. **OV-1 is DECIDED: yes, 2026-09-08, operator in session**
-(`DECISIONS.md`). It is no longer blocked, and OV-2…OV-6 — downstream of it, and moot had the answer
-been no — are now live decisions. Its phase 6 (W-2, W-3, W-6) is real work and may start.
-
-~~**The deadline is closed; the loss is not.** … the corpus keeps rolling off … until something is
-built or a snapshot is taken. A snapshot-first framing was offered and declined.~~
-
-**Superseded 2026-09-08 — the snapshot was built the same day, and the roll-off has stopped.**
-`scripts/snapshot-corpus.ps1` plus a `ClaudeCorpusSnapshot` scheduled task, daily 12:30, verified
-from the scheduler (`LastTaskResult=0`) and not only by hand. The full path-by-path
-`Compare-Object` matched **2,598 = 2,598 files, identical total bytes, zero missing.** So the ~29-day
-cliff is no longer live: what has already been lost (≥51 sessions evidenced by committed handoffs)
-stays lost, but nothing new rolls off. This came out of **OV-6 + OV-3**, which split retention *out*
-of Witness rather than choosing between two shapes of it.
-
-**And every OV is now decided** (`DECISIONS.md`, 2026-09-08): OV-1 yes, OV-2 redact at write, OV-4
-the operator only, OV-6+OV-3 split. **OV-5 — does the name `witness` survive a collision check? — is
-the only one still open**, and it is blocked on a web search nobody has run, not on a judgement.
-
-**What this stage still owes.** OV-2's *redact at write* and OV-6's *batch reader* are verdicts with
-no implementation, and no stage schedules them either. Witness phase 6 (W-2, W-3, W-6) is real work
-and may start; it has not.
-
-**Two signals to watch on the snapshot, both currently expected-but-unproven.**
-`kept_beyond_source` is **0** and will stay 0 until the corpus ages past the window — correct today,
-a **failure signal** later. And **the restore path has never been exercised**: copying was verified,
-reading a transcript back out of the archive was not.
+**Two signals on that snapshot, both currently expected-but-unproven.** `kept_beyond_source` is **0**
+and will stay 0 until the corpus ages past the window — correct today, a **failure signal** later.
+And **the restore path has never been exercised**: copying was verified, reading a transcript back
+out of the archive was not.
 
 ---
 
@@ -280,7 +259,7 @@ them off one at a time is exactly the behaviour R-1 exists to decide about.
 | 2 | Nights | 5–6 windows |
 | 3 | Operator | ~1 hour, resizes everything after it |
 | 4 | Nights | **~1 drive.** No operator decision — F140/F154/F155 all retired 2026-09-08 on drives that already existed, leaving F142 alone |
-| 5 | Operator | ~15 min (`continuity-kit`); **`OV-1` decided 2026-09-08**, `OV-2`…`OV-6` now live |
+| 5 | — | **REMOVED 2026-09-08** — it scheduled work in two other repositories. Not this plan's. |
 | 6 | One window | 1 window |
 
 **Total, if R-1 answers "enforce": roughly three to four weeks of nights.** R-1 answered *enforce*
@@ -298,7 +277,8 @@ only and expired at midnight; the gate is what carries it from 2026-09-09 on.
 
 - **No new tools.** Not the loop dashboard (the Hub already ships ~1,030 lines of loop surface —
   `loops.py`, `LoopsIndexTab`, `LoopFiringGroup`, `LoopTab`, `AccountingPanel`), not a database
-  behind the continuity kit, not an overseer beyond what `witness` already is.
+  behind the continuity kit, no overseer. **Both of those live in other repositories and are not
+  this plan's to schedule** — see Stage 5.
 - **No corpus migration.** `openspec/specs/` stays where it is; that call has not been made.
 - **No sweeps.** The 17-row coverage sweep is complete (`scripts/drive/SURVEY.md:144`). New driving
   comes from open findings or from a change just built, never from resuming it.
@@ -344,23 +324,35 @@ for gating it.
 
 ### 2. What the plan does not schedule — decided work with no owner
 
-This is the real gap, and it is new since the plan was written. **2026-09-08 produced eleven verdicts
-and no stage owns their implementation.**
+This is the real gap, and it is new since the plan was written. **2026-09-08 produced nine verdicts
+that are AgentWeave's, and no stage owns their implementation.** (It produced eleven; two were
+another repository's and left with the `OV-` series on 2026-09-08.)
+
+**All nine were re-verified against the code on 2026-09-08** at the operator's instruction — see
+`DECISIONS.md`, *"Verification pass"*. **Eight hold; entry 19 does not**, and R-3.2 holds with a side
+effect the verdict missed. The `Status` column below reflects that pass, not the verdict alone.
 
 | Work | From | Status |
 |---|---|---|
-| Thread F209's `reason` through, or delete the field | R-3 | decided, unqueued |
-| **Remove** `PATCH /queue/settings` | R-3 | decided, unqueued |
-| A bare `uvicorn hub.main:app` from `hub/` must refuse to start | R-3 | decided, unqueued |
-| Model-catalog check as a `scripts/` tool | R-3 | decided, unqueued |
-| Archive-collision check as a repo script | R-2 | decided, unqueued |
-| Redact-at-write | OV-2 | decided, unqueued |
-| Witness as a batch reader (phase 6: W-2, W-3, W-6) | OV-6 + OV-3 | decided, unqueued |
-| The three R-1 ratchet checks | R-1 | decided, named Stage 6 work, unqueued |
+| Work | From | Status after the 2026-09-08 verification |
+|---|---|---|
+| Thread F209's `reason` through, or delete the field | R-3 | **HOLDS exactly.** `accept` passes no `reason=`; `reject` three functions away passes it. Unqueued. |
+| **Remove** `PATCH /queue/settings` | R-3 | **HOLDS, with a catch.** Route real, four columns confirmed, no client anywhere — **but it also reschedules every queued agent and the PUT does not.** Drop that knowingly or move it. Unqueued. |
+| A bare `uvicorn hub.main:app` from `hub/` must refuse to start | R-3 | **DOES NOT HOLD.** There is no relative default — fixed `44a1ae5`, 2026-08-17, three weeks before the verdict. **Re-decide narrowed or drop.** |
+| Model-catalog check as a `scripts/` tool | R-3 | **HOLDS.** No runtime read of `models_cache.json`; compile-time literal, cache 10 days stale. Unqueued. |
+| Archive-collision check as a repo script | R-2 | **HOLDS — not built.** Unqueued. |
+| The three R-1 ratchet checks | R-1 | **ALL THREE REPRODUCE EXACTLY** — 35 clientless routes of 187, 51 operator-reachable MISREPORTs, three `fastmcp` ceilings + `starlette<2.0`. Stage 6, unqueued. |
 
 **A verdict is not an implementation, and this plan has no stage between the two.** That is the
-structural hole the audit found. Entry 19 in particular changes whether a command works and needs the
-scripts relying on the relative-default database found *before* it is built.
+structural hole the audit found. **And the verification proves the hole has a cost**: entry 19 sat
+as a decided-and-unbuilt item for a fix that had already shipped three weeks earlier, and nothing
+would have caught it before somebody started building.
+
+~~Entry 19 in particular changes whether a command works and needs the scripts relying on the
+relative-default database found before it is built.~~ **Withdrawn by the same verification** — there
+is no relative-default database to find scripts for. What a narrowed entry 19 would still have to
+respect is `CLAUDE.md`'s own documented trial-Hub start command, which *is* a bare
+`uvicorn hub.main:app` from `hub/`, with `DATABASE_URL` set explicitly.
 
 ### 3. What the plan excludes on purpose — and what that costs
 
