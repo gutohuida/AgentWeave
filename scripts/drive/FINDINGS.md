@@ -19622,8 +19622,10 @@ the component agree, and the screen still loses the outcome.
 ## F274 (A) - a turn's outcome is erased by work in the agent's *other* conversations
 
 **Status:** open, proposed 2026-09-05 (day window D-2, round 1) as
-`openspec/changes/2026-09-05-the-conversation-carries-its-own-run-facts` - not yet implemented, and
-rounds 2 and 3 have not run. Filed 2026-09-03 by the day window's drive. This is **F190's original
+`openspec/changes/2026-09-05-the-conversation-carries-its-own-run-facts`, reviewed twice since
+(the task text carries both rounds' corrections). **Phase 0 of that change - the observation gate -
+was recorded 2026-09-09** on a clean Hub instance and the defect reproduced in both of its shapes;
+see the section at the end of this entry for the numbers. Phases 1-7 are not implemented. Filed 2026-09-03 by the day window's drive. This is **F190's original
 symptom**, live, against the fix that closed F190 - reached by a route none of the three rounds
 asked about.
 
@@ -19733,6 +19735,96 @@ corner: it is every turn an operator scrolls back to, which is when they ask "di
 it just say nothing?" The degradation is silent - there is no "outcome unavailable", no dimmed
 label - and the reload story the change built (`Worked for 6s` must read the same after a refresh)
 inverts: refresh long enough after the fact and it reads differently.
+
+
+### Reproduced 2026-09-09 (night window, iteration 14) — phase 0 of the change, on a clean instance
+
+Phase 0 of `2026-09-05-the-conversation-carries-its-own-run-facts` is a gate: the 2026-09-05 drive
+did **not** reproduce this at nine runs across six conversations, because those runs were short and
+the cap is on *events*. So the volume was chosen deliberately this time, and counted in events.
+
+Instance: a Hub on **`127.0.0.1:8012`**, its own profile database
+(`~/.agentweave/hub/profiles/f274p0/agentweave.db`, created fresh, migrated `0000 → 0102`), started
+from `hub/` with `py -3.11 -m uvicorn hub.main:app` at `2026-09-09T05:01:46.485+01:00`. No `.py`
+under `hub/hub` or `src/` was newer than that process start (checked, count 0), so the served code
+is the checkout. Fixture project `proj-9042770d2ae3` (`f274p0-050237`, `C:\Users\huida\aw-f274p0`),
+one runner `claude` / `claude-haiku-4-5-20251001`, one agent `scribe050237`. Every turn below is a
+real Haiku turn.
+
+**The headline, cross-conversation (task 0.2).** Conversation A = `conv-16d76ddeb411` (titled
+`ZEBRA-A`); one long turn stopped after 8s, `run-c663930f13c2`, `status=stopped exit=2`,
+`04:03:19.420Z → 04:03:27.591Z`.
+
+```
+before, timeline: events=6  runs=1   A in runs -> True
+before, browser (served bundle, that conversation):
+   turn boundaries   1
+   terminal labels   {'Turn failed': 0, 'Turn stopped': 1, 'Turn interrupted': 0}
+   stat lines        ['Worked for 8s']
+```
+
+Then **eight ordinary turns, each in its own new conversation on the same agent**, nothing touching
+A. An ordinary turn costs **7 timeline events** on this fixture (`run_triggered`,
+`queue_entry_queued`, `queue_entry_delivered`, `run_started`, `run_completed`, and two
+`context_warning`), so the fifty-event window moves in about seven turns:
+
+```
+after filler 2: events=27  runs=4  A in runs -> True
+after filler 3: events=34  runs=5  A in runs -> True
+after filler 4: events=41  runs=6  A in runs -> True
+after filler 5: events=48  runs=7  A in runs -> True
+after filler 6: events=50  runs=8  A in runs -> True     <- the cap is reached
+after filler 7: events=50  runs=8  A in runs -> False    <- and A falls out of it
+after, browser, the SAME conversation, reloaded:
+   turn boundaries   1
+   terminal labels   {'Turn failed': 0, 'Turn stopped': 0, 'Turn interrupted': 0}
+   stat lines        0
+```
+
+Screenshots `testbed/scratch/f274p0/shot-0.2-before.png` and `shot-0.2-after.png` (uncommitted).
+Both halves vanish together, exactly as on 2026-09-03. **The defect is live on this checkout.**
+
+**The headline, single-conversation (task 0.3) — the half that proves no wider window fixes it.**
+Conversation S = `conv-88b2481859f1` (`ZEBRA-S`), ten turns, one conversation, nothing else running:
+
+```
+chat     GET /agent/scribe050237/chat/conv-88b2481859f1   entries=50  distinct run ids=10
+timeline GET /agents/scribe050237/timeline                events=50   runs=8
+runs the chat names and the timeline map does not: 2
+
+browser, that conversation:
+   turn boundaries  10
+   stat lines       10, of which the two oldest carry no duration at all:
+     ['33,170 tokens',
+      '33,445 tokens',
+      'Worked for 8s · 33,724 tokens',
+      'Worked for 7s · 34,000 tokens',  ... seven more, all with a duration]
+```
+
+Ten turns on screen, eight in the map, the two oldest presenting with a token count and no
+"Worked for Ns" — the same shape as the 2026-09-03 measurement (twelve on screen, ten in the map).
+The turns are conversation-scoped and unbounded; the map is agent-scoped and capped at fifty
+events; **one conversation on its own overruns the window**, so widening the window buys turns, not
+correctness.
+
+**Task 0.4, the live half that was expected to already work — and does.** Conversation R =
+`conv-e8f45ba33e67` (`ZEBRAR`), a long turn in flight, browser open on it, nobody touching the page:
+
+```
+05:13:49.663  browser attached to conversation R, turn running, no label
+05:13:57.502  Hub hard-killed (Stop-Process -Force), so the run row stays `running`
+05:14:02.447  new Hub: `Reconciled 1 orphaned run(s) to status=interrupted on Hub start`
+05:14:03.982  new Hub answering /health
+05:14:11.06   browser, with no reload and no click: 'Turn interrupted' x1, 'Worked for 26s'
+```
+
+**8.6 s after the row was written, 7.1 s after the Hub was serving again.** Seconds, not "never",
+so design D8's premise holds and this is a no-regression baseline for task 6.3 rather than a defect.
+**One confound, recorded rather than glossed:** 2 s before the label appeared, a second turn boundary
+appeared — the interrupted run's queue entry was returned and re-delivered as `run-d7db8abcab80` —
+so queue traffic the chat hooks *do* listen to was in the same window. This measurement establishes
+"seconds", not "the reconnect invalidation is what did it". Task 3.5 still has to ask its own
+question.
 
 ## F275 (C) - an abandoned operator message renders after the failures it caused
 
@@ -20906,7 +20998,11 @@ check: watch the reconnected stream for a `run_interrupted` frame and confirm no
 
 ## F291 (C) - a run that fails before its process spawns tells the conversation nothing, and the one path where that is total leaves the turn silent
 
-**Status:** open. Filed 2026-09-05 by the day window's D-4/R3 spec round, while re-deriving why the
+**Status:** open, and **corrected 2026-09-09** by the drive its own `Reproduce` line asked for. The
+mechanism is confirmed to the letter - no output row, `run_failed` unheard by the chat hooks - and
+the *symptom* stated in the heading and below is wrong: there is no silent turn, because on this
+path there is no turn at all. Read the section at the end of this entry before acting on the rest
+of it; the reproduce recipe below is also wrong and that section says why. Filed 2026-09-05 by the day window's D-4/R3 spec round, while re-deriving why the
 `2026-09-05-the-conversation-carries-its-own-run-facts` change adds four run-terminal events to the
 chat hooks' SSE predicate. **Derived from the code, not yet driven** -- every line below is a
 citation on this checkout; task 0.5 of that change is written to measure it.
@@ -20948,6 +21044,73 @@ closes the case above. The `queue_entry_abandoned` omission is left open by that
 Reproduce (not yet run): task 0.5 -- bind an agent to a runner whose binary does not exist, deliver a
 message whose entry is already at `DELIVERY_ATTEMPT_LIMIT`, and watch the conversation with nothing
 else touching it.
+
+### Driven 2026-09-09 (night window, iteration 14) — and the predicted symptom is wrong
+
+Task 0.5 of `2026-09-05-the-conversation-carries-its-own-run-facts` said to reproduce this by
+binding an agent to *a runner whose binary does not exist*. **That recipe cannot work**, and finding
+out why is the first result: `probe_agent` refuses a CLI missing from PATH at
+`agent_trigger.py:665`, before a `Run` row exists, so no run fails and there is nothing to observe.
+The pre-spawn `except` block is reached by the **other** branch of the probe — a *pinned* CLI, where
+`present = os.path.isfile(x) and os.access(x, os.X_OK)` (`launchability.py:83`) and `X_OK` is true
+on Windows for any file that exists. Pinning an agent's CLI at an ordinary text file therefore
+passes the probe and fails at the spawn, which is the exact case the `except` block's own comment
+names. Agent `ghost050237`, CLI pinned at `C:\Users\huida\aw-f274p0\README.md` (pinned through
+`POST /session/sync`, which is not an operator surface — see the caveat at the end).
+
+The mechanism is confirmed, in full:
+
+```
+run-7bf1a981de5c, run-b00de2d65b9b, run-f39ebe679836   three attempts, all `failed`,
+                                                        the whole cycle inside 3 seconds
+run_failed summary   "Run failed: %1 is not a valid Win32 application."   (WinError 193)
+run_failed data      {"agent": "ghost050237", "run_id": ..., "conversation_id": ...}
+GET /agents/ghost050237/output                          0 rows
+entry-ca2727228db7   delivery_state="abandoned"
+                     abandoned_reason="delivery failed 3 times; the Hub stopped retrying"
+```
+
+Zero output rows: `record_agent_output` really is never called on this path, and `run_failed` really
+does carry `agent`, which is separately what task 3.2 of that change asks someone to confirm.
+
+**And then the symptom this entry predicts does not appear, because the thing it predicts it for
+does not exist.** This entry says the operator is left with *"a turn holding a delivered message, no
+outcome and no explanation"*. Watched in the served bundle, conversation open, nothing touching the
+page for 75 s:
+
+```
+t=0.0s   turn boundaries 0   labels {failed 0, stopped 0, interrupted 0, completed 0}
+         ... and it never changes for the whole watch
+05:18:32 a second message sent into the same conversation (run-14aa9f390ec4)
+final page, no reload: two blocks, each reading
+         "NOT DELIVERED / delivery failed 3 times; the Hub stopped retrying"
+         turn boundaries still 0
+```
+
+**There is no turn.** An abandoned entry comes back from `_queued_entries_for`, and
+`groupIntoTurns` puts undelivered entries in `pending`, not in a turn — so on this path `run_failed`
+has nothing to label. The operator is *not* left with silence either: the second failure's
+NOT DELIVERED block appeared **live, with no reload**, because the three delivery attempts each
+broadcast `queue_entry_queued` and `queue_entry_delivered`, both of which the chat hooks do listen
+to, and the last refetch reads the entry in its final abandoned state.
+
+So this finding is **corrected, not retired**. What is true: the pre-spawn path writes no output row
+and the chat hooks do not hear `run_failed`. What is false: that this leaves an unlabelled turn.
+**Task 3.1 of that change is still probably right to add the four terminal events — the map is
+moving onto the chat response and has to be refreshed by something — but the reason written into
+its task text, and into this entry, is falsified as stated, and phase 1 must not transcribe it into
+a source comment.** Re-derive the reason before writing it.
+
+Two caveats on the fixture, stated because an unstated one is how a measurement becomes folklore:
+
+- the CLI pin was applied through `POST /session/sync`, whose own module docstring says its callers
+  are gone and it is reached today "chiefly the test suite". There is no operator-facing way to pin
+  a runner CLI — `OperatorAgentCreate` has no `config` field and `Runner.cli` is the runner *kind*.
+  So this reproduction is reachable in the product only by a path an operator does not have.
+- after that sync, `ghost050237`'s composer rendered **`Model: Sonnet 5`** while its bound `Runner`
+  is `claude-haiku-4-5-20251001`. Not filed: the sync is the contamination, and no clean-fixture
+  measurement was taken. Worth one minute on a clean fixture before anyone trusts the composer's
+  model line.
 
 
 ---

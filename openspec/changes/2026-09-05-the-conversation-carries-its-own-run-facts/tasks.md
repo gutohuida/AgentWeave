@@ -5,7 +5,7 @@ across six conversations, because those runs were short and the cap is on events
 So the first thing to establish is that the defect is still live on this checkout, at a volume you
 choose deliberately. **If phase 0 has not been recorded, do phase 0 and stop.**
 
-- [ ] 0.1 A Hub on **a spare port** — never port 8000, and leave `:8010` alone — from `hub/` with
+- [x] 0.1 A Hub on **a spare port** — never port 8000, and leave `:8010` alone — from `hub/` with
       uvicorn from source, against a fresh fixture project deleted afterwards. Every real agent turn
       binds `claude-haiku-4-5`. Confirm no `.py` under `hub/hub` or `src` is newer than the process
       start.
@@ -16,31 +16,64 @@ choose deliberately. **If phase 0 has not been recorded, do phase 0 and stop.**
       `:8010` serving `~/.agentweave/hub/profiles/trial/agentweave.db` with this repo registered as
       `proj-d85a82bf4216`. Naming a spare port and a throwaway project survives the next profile
       churn; naming a specific one did not survive two days.
-- [ ] 0.2 **The headline, cross-conversation.** In conversation A, run a turn and stop it; confirm
+- [x] 0.2 **The headline, cross-conversation.** In conversation A, run a turn and stop it; confirm
       `GET /agents/{a}/timeline` has its run in `runs` and the served bundle shows the terminal
       label and the "Worked for Ns" line. Then drive turns in **other** conversations on the same
       agent until `len(timeline.events) == 50` and A's run id is no longer a key in `runs`. Reload
       A in the browser and record: turn boundaries, terminal-label occurrences, stat lines.
       **Count events, not turns** — a short turn contributes fewer events, which is why the
       2026-09-05 drive missed this.
-- [ ] 0.3 **The headline, single-conversation.** Same agent, one conversation, enough turns that the
+- [x] 0.3 **The headline, single-conversation.** Same agent, one conversation, enough turns that the
       chat response names more distinct runs than the timeline's fifty events do. Record
       `distinct run ids in chat` vs `len(runs)` vs `terminal labels on screen`. This is the half
       that proves no widening of the event window fixes it.
-- [ ] 0.4 **The live half (D8), and it is expected to already work.** With conversation A open in
+- [x] 0.4 **The live half (D8), and it is expected to already work.** With conversation A open in
       the browser, restart the Hub so `reconcile_interrupted_runs` writes `interrupted` for A's
       running run. Record how long the turn stays unlabelled with nobody touching the page.
       **Expect seconds, not "never"** — `useSSE`'s reconnect handler invalidates every query
       (`useSSE.ts:404-412`), so this is a baseline the change must not regress, not a defect to fix.
       If it *does* read "never", D8 is wrong and this whole change needs another round before
       phase 1.
-- [ ] 0.5 **The live half that is a defect (D4, F291).** Make a run fail before it spawns — bind the
+- [x] 0.5 **The live half that is a defect (D4, F291).** Make a run fail before it spawns — bind the
       agent to a runner whose binary does not exist — with the conversation open, and with its
       delivered entry already at `DELIVERY_ATTEMPT_LIMIT` so nothing is requeued. Record whether the
       turn ever presents `failed` without a reload, a reconnect, or unrelated traffic. This is the
       case task 3.1 exists for.
-- [ ] 0.6 Record run ids, conversation ids, event counts and timestamps in
+- [x] 0.6 Record run ids, conversation ids, event counts and timestamps in
       `scripts/drive/FINDINGS.md` under F274, and 0.5's result under F291.
+
+**Phase 0 recorded 2026-09-09 (night window, iteration 14). The gate is passed and the defect is
+live**, in both shapes: eight ordinary turns in *other* conversations take a stopped turn's label
+and its "Worked for 8s" off the screen, and ten turns in *one* conversation leave the two oldest
+with no duration. Numbers, run ids and screenshots are in `scripts/drive/FINDINGS.md` under F274.
+Hub `127.0.0.1:8012`, own profile database, project `proj-9042770d2ae3`, agent `scribe050237`;
+scripts uncommitted in `testbed/scratch/f274p0/`. **0.1's "deleted afterwards" was not
+done, deliberately:** phase 6 re-runs 0.2 and 0.3 *exactly*, and a before/after is worth more
+on the same rows than on new ones. The Hub process was stopped; the profile database, the
+project and the fixture directory are kept, and `testbed/scratch/f274p0/start_hub.sh` brings
+the instance back.
+
+**0.4 read seconds, not "never"** — 8.6 s from the row being written to the label appearing, with
+no reload — so D8 stands and phase 1 may proceed. One confound is recorded with it: the interrupted
+run's entry was re-delivered 2 s earlier, so queue traffic was in the same window and this does not
+by itself show that the *reconnect* invalidation is what refreshed the page. Task 3.5 still has to
+ask its own question.
+
+**0.5 changed two things and phase 3 must not be written until they are read.**
+
+1. Its own recipe does not work. *"A runner whose binary does not exist"* is refused by
+   `probe_agent` at `agent_trigger.py:665` before a `Run` row exists, so nothing fails and there is
+   nothing to watch. The pre-spawn `except` block is reached by pinning a CLI at a file that exists
+   and is not an executable — and pinning a CLI has no operator-facing route at all.
+2. **F291's predicted symptom is falsified.** The failing run's entry is *abandoned*, an abandoned
+   entry lands in `groupIntoTurns`'s `pending`, and so **there is no turn**: 0 turn boundaries for
+   the whole watch, and the operator is told live by a NOT DELIVERED block instead. `run_failed`
+   has nothing to label on this path.
+
+   Task 3.1 is probably still right — after this change the map rides on the chat response and
+   something has to refresh it — but **the reason written into 3.1's text is false as stated**, and
+   3.1 says in as many words to comment that reason at the site. Re-derive it against the code
+   before writing it; do not transcribe the sentence about F291 into a source comment.
 
 ## 1. The chat responses carry their own run facts
 
