@@ -141,10 +141,10 @@ the census, and any later reading of an F292 CI negative, must know it.
   removed while 1.2 stays. Do not leave a hanging variant enabled in the suite. (This replaces R1's
   ordering test, which pinned an arrangement that no longer exists.)
 - [x] 3.4 A test that a healthy checkout is untouched: no reconnection, no WARNING.
-- [ ] 3.5 A test that shutdown settles a background run before disposing. Assert the ordering
+- [x] 3.5 A test that shutdown settles a background run before disposing. Assert the ordering
   directly — a run task registered in `_background_runs` is not pending when `dispose` is called —
   rather than asserting only that shutdown completed, which is true with the bug.
-- [ ] 3.6 A test that the settle's bound logs and completes rather than raising, driven by a task
+- [x] 3.6 A test that the settle's bound logs and completes rather than raising, driven by a task
   that re-registers a successor every pass.
 - [x] 3.7 A test that the replacement connection is **configured, not bare** — that the forced
   reconnect re-fires the engine's `connect` listeners. R2 measured this holds
@@ -152,19 +152,19 @@ the census, and any later reading of an F292 CI negative, must know it.
   listener of `hub/tests/conftest.py:86`'s shape), and it is worth a test precisely because the
   failure would be silent: a guard that quietly hands back a connection on SQLite's 5s default busy
   timeout instead of the suite's 30s is a new flake class, not a fix.
-- [ ] 3.8 Make `hub/tests/conftest.py`'s teardown dispose in a `try`/`finally`, or otherwise
+- [x] 3.8 Make `hub/tests/conftest.py`'s teardown dispose in a `try`/`finally`, or otherwise
   unconditionally. Today the settle's `for ... else: raise AssertionError(...)` (`:595-599`) sits
   *before* `await _REAL_ENGINE.dispose()` (`:600`), so hitting the pass cap skips the dispose and
   carries the whole pool into the next test's event loop — the fixture that exists to stop a
   connection outliving its loop stops doing so exactly when something has already gone wrong. Found
   by R2 reading the fixture, **not run**. This is a test-harness change and is **not** a claim to
   resolve `F292`; see `proposal.md`'s "What this deliberately does not change".
-- [ ] 3.10 **A test that `engine.dispose()` returns when a pooled connection's worker is dead.**
+- [x] 3.10 **A test that `engine.dispose()` returns when a pooled connection's worker is dead.**
   This is the one that would have caught R1's and R2's siting mistake, and it is about the shutdown
   half as much as the guard half: kill the worker of a connection sitting idle in the pool by the
   real mechanism (3.1's), then `await engine.dispose()` under a bounded wait that must not time out.
   Confirm it hangs with 1.5 removed — `probe_r3_dispose_hang.py` is the reproduction in miniature.
-- [ ] 3.11 A test that the exhausted-retry path raises rather than hangs: force every replacement to
+- [x] 3.11 A test that the exhausted-retry path raises rather than hangs: force every replacement to
   be born dead (a `connect` listener that kills the new worker), assert
   `sqlalchemy.exc.InvalidRequestError` under a bounded wait. Mark it in a comment as covering an
   unreachable state deliberately — the replacement is always `__connect()`-fresh in reality — so

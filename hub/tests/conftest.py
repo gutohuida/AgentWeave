@@ -578,26 +578,37 @@ async def _no_connection_outlives_its_event_loop():
     # leaked rather than a confusing one on the next.
     import hub.api.v1.agent_trigger as _agent_trigger
 
-    for _ in range(_MAX_BACKGROUND_SETTLE_PASSES):
-        leftover = list(_agent_trigger._background_runs)
-        if not leftover:
-            break
-        for task in leftover:
-            task.cancel()
-        await asyncio.gather(*leftover, return_exceptions=True)
-        # Not `clear()`: a successor scheduled during the `gather` is in the set by now, and
-        # this pass has not settled it. The `set.discard()` done-callbacks fire via `call_soon`
-        # and may not have run yet, so the settled tasks are removed here explicitly.
-        _agent_trigger._background_runs.difference_update(leftover)
-    else:
-        still_running = list(_agent_trigger._background_runs)
-        _agent_trigger._background_runs.clear()
-        raise AssertionError(
-            f"background runs did not settle in {_MAX_BACKGROUND_SETTLE_PASSES} passes; "
-            f"{len(still_running)} still registered: {still_running!r}"
-        )
-
-    await _REAL_ENGINE.dispose()
+    # The dispose is in a `finally` deliberately, and it is the whole of task 3.8 of
+    # `openspec/changes/2026-09-07-a-dead-connection-is-never-handed-back-out`. The cap's
+    # `raise` below used to sit *before* it, so hitting the cap skipped the dispose and carried
+    # the entire pool into the next test's event loop — the fixture that exists to stop a
+    # connection outliving its loop stopped doing so exactly when something had already gone
+    # wrong, turning one loud failure into a cascade of confusing ones on later tests. The
+    # `AssertionError` still propagates; it just no longer takes the cleanup with it.
+    #
+    # This is a test-harness change and is **not** a claim to resolve `F292`.
+    try:
+        for _ in range(_MAX_BACKGROUND_SETTLE_PASSES):
+            leftover = list(_agent_trigger._background_runs)
+            if not leftover:
+                break
+            for task in leftover:
+                task.cancel()
+            await asyncio.gather(*leftover, return_exceptions=True)
+            # Not `clear()`: a successor scheduled during the `gather` is in the set by now,
+            # and this pass has not settled it. The `set.discard()` done-callbacks fire via
+            # `call_soon` and may not have run yet, so the settled tasks are removed here
+            # explicitly.
+            _agent_trigger._background_runs.difference_update(leftover)
+        else:
+            still_running = list(_agent_trigger._background_runs)
+            _agent_trigger._background_runs.clear()
+            raise AssertionError(
+                f"background runs did not settle in {_MAX_BACKGROUND_SETTLE_PASSES} passes; "
+                f"{len(still_running)} still registered: {still_running!r}"
+            )
+    finally:
+        await _REAL_ENGINE.dispose()
 
 
 def assert_engine_is_disposable() -> None:

@@ -43,6 +43,7 @@ import logging
 import pytest
 import pytest_asyncio
 from sqlalchemy import event, text
+from sqlalchemy.exc import InvalidRequestError
 
 from hub.db.engine import (
     _neutralise_dead_worker_on_close,
@@ -226,4 +227,77 @@ async def test_the_replacement_connection_is_configured_and_not_bare():
     assert replacement == _TEST_BUSY_TIMEOUT_MS, (
         "the replacement connection came back bare — the engine's connect listeners did "
         "not re-fire for it"
+    )
+
+
+async def test_dispose_returns_when_a_pooled_connection_has_a_dead_worker():
+    """3.10: the test that would have caught R1's and R2's siting mistake.
+
+    Both earlier rounds put the neutralisation *inline in the checkout listener*, which
+    covers exactly one of the paths that close such a connection. `dispose()` is another
+    one, it is reached at shutdown by `hub/hub/main.py`'s teardown, and the connection it
+    has to close was never checked out — so no checkout listener, however careful, ever
+    sees it. With the neutralisation on the `close` pool event instead, this returns.
+
+    **The `wait_for` here does not actually bound this await, and that is measured.**
+    With 1.5 reverted, `asyncio.wait_for(engine.dispose(), timeout=15)` never raises: the
+    dispose reaches aiosqlite through SQLAlchemy's greenlet bridge and the cancellation
+    does not land, so the run hangs rather than failing (`probe_310_wait_for_bound.py`,
+    2026-09-09 — no return in 60s against a 5s bound; with 1.5 in place, 0.00s). The
+    `wait_for` stays because it costs nothing and bounds every *other* way this could go
+    wrong; what it cannot do is turn a 1.5 regression into a named failure. That price is
+    the same one the module docstring above records, and it is the reason this file
+    ships no variant with the listener removed. The pool-identity assertion is what stops
+    a `dispose()` that silently did nothing from passing.
+    """
+    with _pool_events() as (checkouts, _connects):
+        await asyncio.wait_for(_scalar("select 1"), timeout=_BOUND)
+        victim = checkouts[-1]
+
+    # Idle in the pool, not checked out: `_scalar`'s `async with` returned it above.
+    inner = _kill_worker(victim)
+    pool_before = engine.pool
+
+    await asyncio.wait_for(engine.dispose(), timeout=_BOUND)
+
+    assert (
+        engine.pool is not pool_before
+    ), "dispose() returned without replacing the pool — it cannot have disposed anything"
+    assert inner._running is False, "the pooled connection was not neutralised on its close"
+    assert inner._connection is None
+
+
+async def test_the_exhausted_retry_path_raises_instead_of_hanging():
+    """3.11: every replacement born dead — the caller gets an error, not a wait.
+
+    **This covers a state that cannot occur in the Hub today, deliberately.** A
+    replacement connection is always `__connect()`-fresh, so its worker is alive; the
+    only way to reach the exhausted-retry branch is to break every new connection on
+    purpose, which is what the `connect` listener below does. Do not delete this as dead
+    weight, and do not read it as evidence that the state occurs — it exists because the
+    branch's *failure* mode would be a caller waiting forever, and a bounded wait is the
+    only way to say out loud that it is not.
+
+    SQLAlchemy 2.0.50 retries a `DisconnectionError` from a checkout listener twice
+    (`pool/base.py`, `_ConnectionFairy._checkout`) and then raises
+    `InvalidRequestError("This connection is closed")`. The listener registers after
+    `conftest`'s `connect` listener, so the busy-timeout PRAGMA still runs on a live
+    worker and only then is the worker killed.
+    """
+    killed: list = []
+
+    def _kill_every_new_connection(dbapi_connection, connection_record):  # noqa: ANN001
+        killed.append(_kill_worker(dbapi_connection))
+
+    event.listen(engine.sync_engine, "connect", _kill_every_new_connection)
+    try:
+        with pytest.raises(InvalidRequestError):
+            await asyncio.wait_for(_scalar("select 1"), timeout=_BOUND)
+    finally:
+        event.remove(engine.sync_engine, "connect", _kill_every_new_connection)
+        await asyncio.wait_for(engine.dispose(), timeout=_BOUND)
+
+    assert len(killed) >= 2, (
+        "the checkout was refused without a single reconnection attempt; the retry path "
+        "this test exists for was never entered"
     )
