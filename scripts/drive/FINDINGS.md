@@ -24292,3 +24292,76 @@ The defect sits one level under the claim, and only reading `task_transitions` a
 `requirement_evidence` in the drive database told them apart.
 
 ---
+## F307 (B) — a confirmation dialog's first Tab leaves the panel, into the editor behind the scrim
+
+**Status:** open — filed 2026-09-10 (night window, iteration 8), **measured in a real browser**
+against the served bundle, not fixed. **Pre-existing and shared**, not introduced by the change that
+found it: `useDialogFocus` is the common hook, and the blind spot is in the hook.
+
+**What was measured.** `scripts/drive/t_d9_clearing_instructions_postchange.py`, leg E, on a fresh
+`:8012` Hub serving bundle `index-BvtjVm7p.js`. A keyboard operator focuses Save, presses Enter, and
+`ClearInstructionsDialog` opens. Five Tab presses, each read off `document.activeElement`:
+
+| press | lands on | inside the panel? |
+|---|---|---|
+| 1 | `TEXTAREA` `aria-label="Project instructions"` | **no** |
+| 2 | `BUTTON` "Cancel" | yes |
+| 3 | `BUTTON` "Clear instructions" | yes |
+| 4 | `BUTTON` "Cancel" | yes |
+| 5 | `BUTTON` "Clear instructions" | yes |
+
+So the cycle *is* closed — once focus is inside. The first press escapes.
+
+**Why.** `useDialogFocus` (`hub/ui/src/hooks/useDialogFocus.ts`) never moves focus into the panel
+when it activates. It records `document.activeElement` to restore later, binds a `keydown` handler,
+and its Tab branch only acts when the active element is the panel's `first` or `last` focusable:
+
+```
+if (event.shiftKey && document.activeElement === first) { … last.focus() }
+else if (!event.shiftKey && document.activeElement === last) { … first.focus() }
+```
+
+Focus is still on the trigger — Save, which lives in `SettingsSection`'s heading, a sibling subtree
+of the `{children}` the dialog is mounted in — so the active element is neither `first` nor `last`,
+neither branch fires, and press 1 falls through to the browser's native order. The next focusable
+after Save in DOM order is the instructions textarea, which is *behind the scrim*: the operator
+cannot see that it has focus and cannot click it.
+
+**Which dialogs this reaches.** Six components use the hook. Three escape the defect by accident,
+not by design — they `autoFocus` an input **inside** the panel, so focus is already `first` when the
+first Tab arrives:
+
+| dialog | autofocuses inside the panel? | affected |
+|---|---|---|
+| `AgentCreateDialog` (`:204`) | yes, the name input | no |
+| `DeleteProjectDialog` (`:67`) | yes, the type-to-confirm input | no |
+| `ProjectManagerModal` (`:140`) | yes, the path input | no |
+| `ArchiveConfirmDialog` | no — two buttons only | **yes** |
+| `ClearInstructionsDialog` | no — two buttons only | **yes** |
+
+It is exactly the confirm-only dialogs, the ones whose whole content is a question and two buttons,
+that fail to hold focus. `ClearInstructionsDialog` was deliberately shaped after
+`ArchiveConfirmDialog` and inherited it by construction.
+
+**Why B and not C.** There is a path to a wrong write, which is what keeps this off the friction
+pile: open the dialog, Tab once, type — the keystrokes edit `content` in the textarea under the
+scrim, unseen — then Cancel and press Save. The save that lands is over text the operator typed into
+a control they could not see, while a modal about that very text was on screen. It is not A because
+reaching it takes a Tab the operator did not intend and a save they did intend; nothing writes
+behind their back.
+
+**Not fixed here, and the reason is not effort.** The hook serves six dialogs, so *which* control
+takes focus when a dialog opens is a decision that changes all of them — and for a destructive
+confirmation it is a real design question, since focusing the panel's first focusable means focusing
+**Cancel** and focusing its last means focusing **"Clear instructions"**. That belongs to the round
+discipline, and the window that measured this does not write proposals. Two shapes, both guesses
+until someone checks the other five call sites: move focus to the panel's first focusable on
+activation (and let each dialog order its buttons so the safe one is first), or fall back to
+trapping whenever the active element is *outside* the panel rather than only at its edges.
+
+**It is kept as a reproduction, not as a red check.** Leg E asserts both halves — that presses 2-5
+cycle within the panel, and that press 1 escapes to `aria-label="Project instructions"` — so the
+drive exits 0 meaning *"the change's own contract holds and F307 is unchanged"*. Fixing F307 will
+fail that file loudly, which is the right moment to revisit it.
+
+---

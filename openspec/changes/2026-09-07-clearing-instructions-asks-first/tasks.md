@@ -88,11 +88,21 @@ only measurement showed which.
 
 ## 5. The drive — this is what closes the change
 
-- [ ] 5.1 A drive harness under `scripts/drive/`, against a real browser and a real Hub. The decisive
+- [x] 5.1 A drive harness under `scripts/drive/`, against a real browser and a real Hub. The decisive
   measurements, in this order: (a) with real stored text on screen, select all, delete, click Save —
   assert **zero PUTs on the wire** while the dialog is open, then read the row back over the API and
   assert it is byte-identical; (b) Cancel, read back again, still byte-identical; (c) Confirm, and
   only now does the row become `''`. Read the wire, not the DOM's `disabled` attributes.
+
+  **Done 2026-09-10** — `scripts/drive/t_d9_clearing_instructions_postchange.py`, Chromium via
+  Playwright, **59 passed / 0 failed**. All three measurements held in order: (a) the dialog on
+  screen, `0` PUTs counted on the wire, the row read back over the API byte-identical at 1606 chars;
+  (b) after Cancel still `0` PUTs and still byte-identical, with the editor left holding the
+  emptiness as typed; (c) after Confirm **exactly one** PUT carrying `{"content": ""}` and the row
+  finally `''`. Every count comes from a `page.route` interceptor on `**/project/instructions`, and
+  no assertion in the file reads a `disabled` attribute. Leg 0 refuses to trust the run unless the
+  JS asset the Hub is actually serving contains the dialog's own words, so a stale bundle cannot
+  produce a green run.
 - [x] 5.2 **Run it once against the pre-change bundle**, before the fix, so the instrument is known to
   be able to see the write it is asserting the absence of. The pre-change run must show one PUT and
   the row going to `''` on the first Save click. A drive that has only ever seen the passing state
@@ -106,22 +116,53 @@ only measurement showed which.
   only task in this file closed before implementation, and it is closed because it is a measurement
   of the *pre-change* product: it is the one thing that stops being observable once §2 lands. §5.1's
   post-change harness is still owed and is not this file.
-- [ ] 5.3 Fresh Hub on a spare port started from source from `hub/`, throwaway project, deleted
+- [x] 5.3 Fresh Hub on a spare port started from source from `hub/`, throwaway project, deleted
   afterwards and confirmed absent. Never the repo's own registered project — that is
   `proj-d85a82bf4216` today; never `:8000`; leave `:8010` alone. No agent turn is needed, so nothing
   binds a model. *Corrected editorially 2026-09-08:* this task named `proj-5e960453` and
   `proj-18e5d4e0`, **both deleted in the 2026-09-07 clean slate**, so it forbade two IDs that no
   longer exist and did not name the one that now must be left alone. The sister change
   `2026-09-05-the-conversation-carries-its-own-run-facts` had the identical literal repaired at its
-  task 0.1 by the second review; this occurrence was missed. Naming the class rather than the
+  task 0.1 by the second review; this occurrence was missed.
+
+  **Done 2026-09-10** — a **new** Hub on `:8012`, `py -3.11 -m uvicorn hub.main:app` run with cwd
+  `hub/` (never `agentweave --port`, whose bundled migrations lag this checkout), its own fresh
+  database at `%TEMP%/aw-d9-drive/aw.db` migrated from empty to head `0102` at startup. `:8011` was
+  left as it was and `:8010` untouched; `GET /` on `:8012` was checked to name `index-BvtjVm7p.js`
+  rather than assumed. Fixture `proj-1ce9f451cb6e` (`d9-clearing`), **deleted at the end and
+  confirmed absent** — `DELETE` returned `204` and `GET /projects` then returned `count 0`, so the
+  instance holds no project at all. Not `proj-d85a82bf4216`; the harness carries that id in a
+  `PROTECTED` set and refuses it by name. No agent turn was triggered, so nothing bound a model. Naming the class rather than the
   literal is what survives the next profile rebuild.
-- [ ] 5.4 Drive the dialog by keyboard as well as by mouse — Tab cycles within the panel, Escape
+- [x] 5.4 Drive the dialog by keyboard as well as by mouse — Tab cycles within the panel, Escape
   cancels, focus returns to Save afterwards. That is `useDialogFocus`'s contract and no unit test in
   jsdom proves it in a real browser.
-- [ ] 5.5 **Do not fold F296 into this harness.** `scripts/drive/t_d4_instructions_failed_load.py:316`
+
+  **Driven 2026-09-10, and two of the three clauses hold. The Tab clause does not.** Leg E: Save
+  focused by keyboard, `Enter` opens the same dialog a click does and writes nothing; `Escape`
+  cancels with `0` PUTs and the row byte-identical; and **focus returns to Save**, read off
+  `document.activeElement` — the one clause section 4 could not have proved and the reason this task
+  exists.
+
+  Tab is where the contract as written is wrong. Five presses, measured: press 1 lands on the
+  instructions **textarea behind the scrim** (`inPanel: false`), presses 2-5 then cycle Cancel ↔
+  "Clear instructions" correctly. The cycle is closed *once focus is inside*; `useDialogFocus` never
+  moves it there on open and only traps at the panel's edges, so the first press follows native DOM
+  order out. **Filed as F307 (B) and deliberately not fixed here:** the hook serves six dialogs and
+  the two affected are exactly the confirm-only ones — `ArchiveConfirmDialog`, which shipped with
+  this behaviour long before, and this dialog, which was shaped after it and inherited it by
+  construction. Which control takes focus on open changes all six and is a design question for the
+  round discipline, not a repair this window may make. The harness keeps **both** halves as
+  assertions — the closed cycle and the escape — so it exits 0 meaning "this change's contract holds
+  and F307 is unchanged", and a fix to F307 will fail it loudly.
+- [x] 5.5 **Do not fold F296 into this harness.** `scripts/drive/t_d4_instructions_failed_load.py:316`
   queries role `button` where the control is a `combobox`, and its `NOT DRIVEN` print beside it is
   now false. It is one word, it is adjacent, and it is a separate unowned item — taking it here would
   misreport what this change cost. Take it as its own commit if the window has room.
+
+  **Honoured 2026-09-10.** `t_d4_instructions_failed_load.py` was not opened and not touched; F296
+  is still open and still its own item. The one finding this drive did file, F307, is a *result* of
+  driving 5.4 rather than an unrelated repair folded in, and it is filed rather than fixed.
 
 ## 6. Close it out
 
