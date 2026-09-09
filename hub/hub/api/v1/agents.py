@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Literal, Optional, Tuple, get_args
+from typing import Any, Dict, List, Literal, NamedTuple, Optional, Tuple, get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, model_validator
@@ -865,6 +865,45 @@ def _runner_summary(agent_meta: dict) -> str:
     return "; ".join(parts)
 
 
+# The route prefix the capability plane's operations live under. `access_path_notice`'s non-MCP
+# branch names the same prefix, and `test_tool_surface_matches_server.py` checks this constant
+# against the routes the app actually mounts — an agent told the wrong prefix cannot act at all.
+_AGENT_ACTIONS_PREFIX = "/api/v1/agent-actions"
+
+
+class _Operation(NamedTuple):
+    """One capability of the plane, described once and rendered for either access path.
+
+    `design.md` D3 of `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`: the rendering
+    varies by access path, the content does not. `text` and `detail` are the description an agent
+    reads whichever path it is on; everything else is the address of the same operation in one
+    idiom or the other. A second list would drift the first time a tool was added, which is the
+    failure this file already has a test for.
+
+    - `tool` / `args` — the injected call, exactly as an MCP agent sees it.
+    - `method` / `path` — the request, relative to `_AGENT_ACTIONS_PREFIX`. `{name}` in the path is
+      a path parameter.
+    - `fields` — the body (or, for `GET`, query) fields the MCP adapter itself sends for this
+      operation, named as the *route* names them. These are not always the tool's argument names:
+      `send_message(to_agent=...)` is `{"recipient": ...}` on the wire, and an agent given the
+      tool's spelling would be refused.
+    - `required` — the subset the route requires, rendered with a `*`. Both are checked against
+      the app's own OpenAPI schema by `test_tool_surface_matches_server.py`.
+    - `http_note` — rendered only on the HTTP path, for a request whose shape is not simply the
+      argument list (`submit_spec_document` nests its whole document under one field).
+    """
+
+    tool: str
+    args: str
+    method: str
+    path: str
+    fields: Tuple[str, ...]
+    required: Tuple[str, ...]
+    text: str
+    detail: str = ""
+    http_note: str = ""
+
+
 # Tools the server serves that `_tool_surface_lines` deliberately does not describe, each with the
 # reason. An entry here is a decision someone recorded; anything served and absent from both is a
 # line nobody wrote, and `test_tool_surface_matches_server.py` refuses it.
@@ -881,31 +920,12 @@ UNDESCRIBED_TOOLS = {
 }
 
 
-def _tool_surface_lines(*, has_peers: bool = True) -> List[str]:
-    """Describe every tool an agent can call, with the values its constrained parameters take.
+def _operations() -> List[_Operation]:
+    """The single description of the plane's operations, in the order an agent meets them.
 
-    `has_peers` is False in a project with one agent. The closing sentence otherwise points at
-    "the roster above", and in that case there is no roster above to point at — the Team section is
-    omitted entirely (task 13.9). The tools themselves stay described either way, because they stay
-    callable: `request_agent` is in fact how a single-agent project stops being one.
-
-    Naming a tool without its accepted values is what produced the Codex failure: the turn
-    preamble listed four tool names and nothing else, so agents guessed `message_type="text"` and
-    were rejected. Four job tools were never mentioned at all. Constrained values are taken from
-    `mcp_server`'s own `Literal` aliases, so this cannot drift from the schema clients receive.
-
-    `mcp_server.approve_tool_call` is deliberately absent and must stay absent. It is registered
-    on the same server for convenience but is a runtime endpoint the harness invokes, not a
-    capability the agent has: calling it accomplishes nothing and grants nothing. This section
-    exists to tell an agent what it can deliberately use.
-
-    Every other served tool must appear here or in `UNDESCRIBED_TOOLS` below, and
-    `test_tool_surface_matches_server.py` fails the build otherwise. That test exists because this
-    list has now fallen behind the server twice. The second time cost a completed interview: an
-    agent was instructed by the phase block to call `submit_spec_document`, found no such tool in
-    this section, concluded *"the required `submit_spec_document` capability was not exposed in this
-    session"*, and stopped without writing the document it had just spent three rounds designing.
-    A silently incomplete inventory is worse than none, because the agent believes it.
+    Constrained values are taken from `mcp_server`'s own `Literal` aliases, so this cannot drift
+    from the schema clients receive. Imported inside the function because `mcp_server` is spawned
+    standalone and is not imported at this module's scope.
     """
     from ...mcp_server import (
         JobSessionMode,
@@ -919,123 +939,507 @@ def _tool_surface_lines(*, has_peers: bool = True) -> List[str]:
         return ", ".join(f"`{value}`" for value in get_args(alias))
 
     return [
-        "## Your tools",
-        "",
-        "Names below are as injected; with an MCP surface they are prefixed `mcp__agentweave__`.",
-        "",
-        f"- `send_message(to_agent, subject, content, message_type=message, task_id=None)` — "
-        f"message_type is one of {values(MessageType)}.",
-        "- `create_task(title, description, assignee, priority=medium, requirements, "
-        f"acceptance_criteria)` — priority is one of {values(TaskPriority)}.",
-        "- `list_tasks(agent=None)` — read the shared task ledger.",
-        "- `get_task(task_id)` — read one ledger entry.",
-        f"- `update_task(task_id, status)` — status is required, one of {values(TaskStatus)}.",
-        "- `ask_user(questions)` — put a **decision** to the operator and **wait** for it. This is "
-        "for a genuine fork: real alternatives, and you cannot sensibly continue until you know "
-        "which. It blocks your turn, and every question needs options, so it is a decision tool "
-        "rather than the way you ask things generally — an open question, or one whose answer you "
-        "cannot enumerate, belongs in your reply, where the operator can tell you something you "
-        "did not think to ask about. Do not ask what the repository or the task already answers.",
-        "  `questions` is a list of 1 to 4. Ask everything you need in one call: the operator "
-        "steps through them in a single sitting, which interrupts them once instead of once per "
-        "question. Each entry needs `question`, `header`, `options` and `multi_select`, all "
-        "required. `header` is two or three words naming the decision. `options` "
-        'is 2 to 8 entries of `{"label", "description"}` — the label comes back to you, and '
-        "the description is what lets the operator choose without already knowing the trade-off, "
-        "so write what picking it actually means rather than restating the label. There is no "
-        "way to ask without options — which is the signal that a question with no real alternatives "
-        "is not one for this tool. Manufacturing plausible-looking options for an open question is "
-        "how an interview turns into a quiz; ask it in your reply instead. `multi_select` is true "
-        "when several can be chosen together, and that answer "
-        "then arrives as a list. The operator can always reply in their own words instead, so "
-        "handle an answer that is none of yours.",
-        "- `get_answer(question_id)` — only needed for a question you asked with "
-        "`blocking=False`; a normal `ask_user` has already returned the answer.",
-        "- `create_spec_document(title=None)` — start a specification document yourself; you do "
-        "not need the operator to start it. Returns a placeholder `path` (meaningless — a colour "
-        "and a mythic animal) and `phase`. Always a `change-spec`, always `exploring`; there is no "
-        "`kind` or `path` argument to set either. Call `rename_spec_document` once you know the "
-        "subject, then `submit_spec_document` with the renamed path.",
-        f"- `submit_spec_document(path, title, kind, summary, problem, design, lifecycle, scope, "
-        f"requirements, acceptance_criteria, tasks, algorithms, evidence, open_questions)` — write "
-        f"the specification document the operator has open. `kind` is one of {values(SpecKind)}. "
-        "Only `path`, `title` and `kind` are required; the rest fill in as the document takes "
-        "shape. You pass the structure as these arguments — there is no single payload argument, "
-        "and no argument takes prerendered markup. The Hub validates what you send, mints "
-        "requirement identifiers and renders the file, so never write specification HTML "
-        "yourself. Submitting an incomplete document is expected while exploring: what is missing "
-        "comes back to you as `blocking`, and is a list of what to ask about next rather than an "
-        "error. There is no argument that sets a phase or approves — those are the operator's.",
-        "- `rename_spec_document(path, subject)` — a document is created before anyone knows what "
-        "it is about, so it starts with a meaningless placeholder name. `subject` is plain words "
-        "describing what it turned out to cover; the Hub derives the path. Returns the new path, "
-        "which is the one to use for the rest of the turn.",
-        "- `read_spec_document(path)` — read a specification document. **Use this before writing "
-        "code against one.** The document lives in the project directory, not in your working "
-        "copy, so you probably cannot open it as a file; working from someone's summary of it is "
-        "how an implementation stops matching what was approved. Each requirement comes back with "
-        "the `FR-n` identifier the Hub minted, its statement, and its own acceptance criteria — "
-        "quote those identifiers, because tasks, evidence and completion gates all refer to them. "
-        "Readable at any phase, and `phase` tells you how settled it is.",
-        "- `record_evidence(identifier, summary)` — record what demonstrates that a requirement "
-        "is satisfied, as `FR-1`. **This is what lets approved work merge**: approving a task "
-        "integrates nothing until evidence for its requirements has been accepted, and the "
-        "operator is simply told there is nothing to merge. It enters `awaiting` — what you record "
-        "is a claim until somebody else decides on it.",
-        "- `list_evidence(identifier, review_state)` — the evidence this project holds, with who "
-        "produced each row and which branch and commit it was taken from. `review_state=awaiting` "
-        "is what is waiting on somebody.",
-        "- `decide_evidence(evidence_id, decision, reason)` — accept or reject somebody else's "
-        "evidence; `decision` is `accepted` or `rejected`. Only if the operator has granted you "
-        "this, and never on evidence you produced yourself.",
-        "- `list_checkpoints(agent=None)` — the conversation summaries you may open: your own, "
-        "and any peer's the operator has granted you. Each row carries the id the next tool takes.",
-        "- `read_checkpoint(checkpoint_id)` — one of those in full, as an agent continuing that "
-        "conversation would receive it. Read a peer's before you review or continue their work "
-        "rather than re-deriving what they already decided.",
-        "- `recall(observation_id)` — read back one observation by its identifier. Only if the "
-        "operator has granted you this; without it, an observation another agent recorded returns "
-        "not-found whether or not it exists. Your own are always yours to read.",
-        "- `request_agent(name, template, task)` — governed; subject to the project agent budget.",
-        f"- `create_job(name, agent, message, cron, session_mode=new)` — session_mode is one of "
-        f"{values(JobSessionMode)}. Requires the operator's scheduled-work allowance.",
-        "- `toggle_job(job_id, enabled)`, `run_job(job_id)` — same allowance.",
-        "- `archive_job(job_id)` — same allowance for the capability, but always puts this exact "
-        "call to the operator and waits for an explicit answer, whatever this run's permission "
-        "posture is. The allowance alone is not enough — it is what makes the call reachable, not "
-        "a standing yes. Refused if the job has a loop: a loop is archived by the operator only.",
-        '- `create_loop(name, agent, message, cron, purpose="", stop_at=None, '
-        "stop_when_queue_empties=False, work_needs_evidence=None, spec_document_id=None, "
-        "initial_tasks=None)` — a job that "
-        "also queues its own work, each firing claiming the queue's current task. Refused with no "
-        "HTTP call made unless at least one of `stop_at` or `stop_when_queue_empties` is given: a "
-        "loop that cannot stop is not created, and refused if `spec_document_id` is given: a loop "
-        "that declares a document is a flow. `work_needs_evidence` says whether approving one of "
-        "this loop's tasks may write its work to the project's main branch without a reviewer "
-        "having accepted evidence for it; left unset, a loop with no document merges the task's "
-        "own branch. It is fixed at creation and cannot be changed afterwards. `initial_tasks` "
-        "seeds the queue at creation, each "
-        "entry the same shape `create_task` takes. Same allowance as `create_job`.",
-        '- `create_flow(name, agent, message, spec_document_id, cron, purpose="", stop_at=None, '
-        "stop_when_queue_empties=False, work_needs_evidence=None, initial_tasks=None)` — a loop "
-        "that decomposes an approved "
-        "specification document. Same row and same allowance as `create_loop`; what differs is the "
-        "queue behaviour. Each firing starts every task whose prerequisites are met and for which "
-        "an agent is free, so independent work runs in parallel, and a task somebody finished "
-        "becomes claimable by anybody except its author — which is how work is reviewed without "
-        "the author being asked to hand it over. `agent` is the default, not the mandate. Refused "
-        "if `work_needs_evidence` is given: a flow's requirements are its evidence chain, so "
-        "accepted evidence always decides what approving one of its tasks merges.",
-        "",
-        (
-            "Address a peer by its exact name from the roster above. There is no inbox tool: "
-            "everything addressed to you already appears in this turn."
-            if has_peers
-            else "You are the only agent in this project. There is no inbox tool: everything "
-            "addressed to you already appears in this turn."
+        _Operation(
+            tool="send_message",
+            args="to_agent, subject, content, message_type=message, task_id=None",
+            method="POST",
+            path="/messages",
+            fields=(
+                "recipient",
+                "subject",
+                "content",
+                "type",
+                "task_id",
+                "conversation_id",
+                "start_new_thread",
+            ),
+            required=("recipient", "content"),
+            text=f"message_type is one of {values(MessageType)}.",
+            http_note=(
+                "The recipient is `recipient` on the wire and the kind is `type`, not `to_agent` "
+                "and `message_type`."
+            ),
         ),
-        "",
+        _Operation(
+            tool="create_task",
+            args=(
+                "title, description, assignee, priority=medium, requirements, acceptance_criteria"
+            ),
+            method="POST",
+            path="/tasks",
+            fields=(
+                "title",
+                "description",
+                "assignee",
+                "priority",
+                "requirements",
+                "requirement_ids",
+                "spec_document",
+                "acceptance_criteria",
+                "loop_id",
+            ),
+            required=("title",),
+            text=f"priority is one of {values(TaskPriority)}.",
+        ),
+        _Operation(
+            tool="list_tasks",
+            args="agent=None",
+            method="GET",
+            path="/tasks",
+            fields=("agent",),
+            required=(),
+            text="read the shared task ledger.",
+        ),
+        _Operation(
+            tool="get_task",
+            args="task_id",
+            method="GET",
+            path="/tasks/{task_id}",
+            fields=(),
+            required=(),
+            text="read one ledger entry.",
+        ),
+        _Operation(
+            tool="update_task",
+            args="task_id, status",
+            method="PATCH",
+            path="/tasks/{task_id}",
+            fields=("status", "notes"),
+            required=(),
+            text=f"status is required, one of {values(TaskStatus)}.",
+        ),
+        _Operation(
+            tool="ask_user",
+            args="questions",
+            method="POST",
+            path="/questions/batch",
+            fields=("questions", "blocking"),
+            required=("questions",),
+            text=(
+                "put a **decision** to the operator and **wait** for it. This is for a genuine "
+                "fork: real alternatives, and you cannot sensibly continue until you know which. "
+                "It blocks your turn, and every question needs options, so it is a decision tool "
+                "rather than the way you ask things generally — an open question, or one whose "
+                "answer you cannot enumerate, belongs in your reply, where the operator can tell "
+                "you something you did not think to ask about. Do not ask what the repository or "
+                "the task already answers."
+            ),
+            detail=(
+                "`questions` is a list of 1 to 4. Ask everything you need in one call: the "
+                "operator steps through them in a single sitting, which interrupts them once "
+                "instead of once per question. Each entry needs `question`, `header`, `options` "
+                "and `multi_select`, all required. `header` is two or three words naming the "
+                'decision. `options` is 2 to 8 entries of `{"label", "description"}` — the label '
+                "comes back to you, and the description is what lets the operator choose without "
+                "already knowing the trade-off, so write what picking it actually means rather "
+                "than restating the label. There is no way to ask without options — which is the "
+                "signal that a question with no real alternatives is not one for this tool. "
+                "Manufacturing plausible-looking options for an open question is how an interview "
+                "turns into a quiz; ask it in your reply instead. `multi_select` is true when "
+                "several can be chosen together, and that answer then arrives as a list. The "
+                "operator can always reply in their own words instead, so handle an answer that "
+                "is none of yours."
+            ),
+            http_note=(
+                "This request returns as soon as the questions are recorded. Poll "
+                f"`GET {_AGENT_ACTIONS_PREFIX}/questions/{{question_id}}` for each id it gives "
+                "back until the answer is "
+                "there — waiting is what the injected tool does on your behalf, and it is the one "
+                "part of this operation you have to do yourself."
+            ),
+        ),
+        _Operation(
+            tool="get_answer",
+            args="question_id",
+            method="GET",
+            path="/questions/{question_id}",
+            fields=(),
+            required=(),
+            text=(
+                "only needed for a question you asked with `blocking=False`; a normal `ask_user` "
+                "has already returned the answer."
+            ),
+        ),
+        _Operation(
+            tool="create_spec_document",
+            args="title=None",
+            method="POST",
+            path="/spec/documents/create",
+            fields=("title",),
+            required=(),
+            text=(
+                "start a specification document yourself; you do not need the operator to start "
+                "it. Returns a placeholder `path` (meaningless — a colour and a mythic animal) "
+                "and `phase`. Always a `change-spec`, always `exploring`; there is no `kind` or "
+                "`path` argument to set either. Call `rename_spec_document` once you know the "
+                "subject, then `submit_spec_document` with the renamed path."
+            ),
+        ),
+        _Operation(
+            tool="submit_spec_document",
+            args=(
+                "path, title, kind, summary, problem, design, lifecycle, scope, requirements, "
+                "acceptance_criteria, tasks, algorithms, evidence, open_questions"
+            ),
+            method="POST",
+            path="/spec/documents",
+            fields=("path", "document"),
+            required=("path", "document"),
+            text=(
+                "write the specification document the operator has open. `kind` is one of "
+                f"{values(SpecKind)}. Only `path`, `title` and `kind` are required; the rest fill "
+                "in as the document takes shape. You pass the structure as these arguments — "
+                "there is no single payload argument, and no argument takes prerendered markup. "
+                "The Hub validates what you send, mints requirement identifiers and renders the "
+                "file, so never write specification HTML yourself. Submitting an incomplete "
+                "document is expected while exploring: what is missing comes back to you as "
+                "`blocking`, and is a list of what to ask about next rather than an error. There "
+                "is no argument that sets a phase or approves — those are the operator's."
+            ),
+            http_note=(
+                "This is the one operation whose request is not flat: everything after `path` — "
+                "`title`, `kind`, `summary`, `problem`, `design`, `lifecycle`, `scope`, "
+                "`requirements`, `acceptance_criteria`, `tasks`, `algorithms`, `evidence`, "
+                "`open_questions` — goes inside the `document` object, and a key you have nothing "
+                "for is left out rather than sent as null."
+            ),
+        ),
+        _Operation(
+            tool="rename_spec_document",
+            args="path, subject",
+            method="POST",
+            path="/spec/documents/rename",
+            fields=("path", "subject"),
+            required=("path", "subject"),
+            text=(
+                "a document is created before anyone knows what it is about, so it starts with a "
+                "meaningless placeholder name. `subject` is plain words describing what it turned "
+                "out to cover; the Hub derives the path. Returns the new path, which is the one "
+                "to use for the rest of the turn."
+            ),
+        ),
+        _Operation(
+            tool="read_spec_document",
+            args="path",
+            method="GET",
+            path="/spec/documents",
+            fields=("path", "include"),
+            required=("path",),
+            text=(
+                "read a specification document. **Use this before writing code against one.** The "
+                "document lives in the project directory, not in your working copy, so you "
+                "probably cannot open it as a file; working from someone's summary of it is how "
+                "an implementation stops matching what was approved. Each requirement comes back "
+                "with the `FR-n` identifier the Hub minted, its statement, and its own acceptance "
+                "criteria — quote those identifiers, because tasks, evidence and completion gates "
+                "all refer to them. Readable at any phase, and `phase` tells you how settled it is."
+            ),
+        ),
+        _Operation(
+            tool="record_evidence",
+            args="identifier, summary",
+            method="POST",
+            path="/spec/evidence",
+            fields=("identifier", "summary", "kind", "locator", "document", "task_id"),
+            required=("identifier",),
+            text=(
+                "record what demonstrates that a requirement is satisfied, as `FR-1`. **This is "
+                "what lets approved work merge**: approving a task integrates nothing until "
+                "evidence for its requirements has been accepted, and the operator is simply told "
+                "there is nothing to merge. It enters `awaiting` — what you record is a claim "
+                "until somebody else decides on it."
+            ),
+        ),
+        _Operation(
+            tool="list_evidence",
+            args="identifier, review_state",
+            method="GET",
+            path="/spec/evidence",
+            fields=("identifier", "document", "review_state"),
+            required=(),
+            text=(
+                "the evidence this project holds, with who produced each row and which branch and "
+                "commit it was taken from. `review_state=awaiting` is what is waiting on somebody."
+            ),
+        ),
+        _Operation(
+            tool="decide_evidence",
+            args="evidence_id, decision, reason",
+            method="POST",
+            path="/spec/evidence/{evidence_id}/decision",
+            fields=("decision", "reason"),
+            required=("decision",),
+            text=(
+                "accept or reject somebody else's evidence; `decision` is `accepted` or "
+                "`rejected`. Only if the operator has granted you this, and never on evidence you "
+                "produced yourself."
+            ),
+        ),
+        _Operation(
+            tool="list_checkpoints",
+            args="agent=None",
+            method="GET",
+            path="/checkpoints",
+            fields=("agent",),
+            required=(),
+            text=(
+                "the conversation summaries you may open: your own, and any peer's the operator "
+                "has granted you. Each row carries the id the next tool takes."
+            ),
+        ),
+        _Operation(
+            tool="read_checkpoint",
+            args="checkpoint_id",
+            method="GET",
+            path="/checkpoints/{checkpoint_id}",
+            fields=(),
+            required=(),
+            text=(
+                "one of those in full, as an agent continuing that conversation would receive it. "
+                "Read a peer's before you review or continue their work rather than re-deriving "
+                "what they already decided."
+            ),
+        ),
+        _Operation(
+            tool="recall",
+            args="observation_id",
+            method="GET",
+            path="/recall/{output_id}",
+            fields=(),
+            required=(),
+            text=(
+                "read back one observation by its identifier. Only if the operator has granted "
+                "you this; without it, an observation another agent recorded returns not-found "
+                "whether or not it exists. Your own are always yours to read."
+            ),
+            http_note=(
+                "The observation id goes in the `{output_id}` segment — the route spells it that "
+                "way, and it is the same value the tool takes as `observation_id`."
+            ),
+        ),
+        _Operation(
+            tool="request_agent",
+            args="name, template, task",
+            method="POST",
+            path="/agents/request",
+            fields=("name", "template", "task"),
+            required=("name", "template", "task"),
+            text="governed; subject to the project agent budget.",
+        ),
+        _Operation(
+            tool="create_job",
+            args="name, agent, message, cron, session_mode=new",
+            method="POST",
+            path="/jobs",
+            fields=("name", "agent", "message", "cron", "session_mode"),
+            required=("name", "agent", "message", "cron"),
+            text=(
+                f"session_mode is one of {values(JobSessionMode)}. Requires the operator's "
+                "scheduled-work allowance."
+            ),
+        ),
+        _Operation(
+            tool="toggle_job",
+            args="job_id, enabled",
+            method="PATCH",
+            path="/jobs/{job_id}",
+            fields=("enabled",),
+            required=(),
+            text="same allowance.",
+        ),
+        _Operation(
+            tool="run_job",
+            args="job_id",
+            method="POST",
+            path="/jobs/{job_id}/run",
+            fields=(),
+            required=(),
+            text="same allowance.",
+        ),
+        _Operation(
+            tool="archive_job",
+            args="job_id",
+            method="POST",
+            path="/jobs/{job_id}/archive",
+            fields=(),
+            required=(),
+            text=(
+                "same allowance for the capability, but always puts this exact call to the "
+                "operator and waits for an explicit answer, whatever this run's permission "
+                "posture is. The allowance alone is not enough — it is what makes the call "
+                "reachable, not a standing yes. Refused if the job has a loop: a loop is archived "
+                "by the operator only."
+            ),
+        ),
+        _Operation(
+            tool="create_loop",
+            args=(
+                'name, agent, message, cron, purpose="", stop_at=None, '
+                "stop_when_queue_empties=False, work_needs_evidence=None, spec_document_id=None, "
+                "initial_tasks=None"
+            ),
+            method="POST",
+            path="/jobs",
+            fields=(
+                "name",
+                "agent",
+                "message",
+                "cron",
+                "purpose",
+                "stop_at",
+                "stop_when_queue_empties",
+                "work_needs_evidence",
+                "spec_document_id",
+                "initial_tasks",
+            ),
+            required=("name", "agent", "message", "cron"),
+            text=(
+                "a job that also queues its own work, each firing claiming the queue's current "
+                "task. Refused with no HTTP call made unless at least one of `stop_at` or "
+                "`stop_when_queue_empties` is given: a loop that cannot stop is not created, and "
+                "refused if `spec_document_id` is given: a loop that declares a document is a "
+                "flow. `work_needs_evidence` says whether approving one of this loop's tasks may "
+                "write its work to the project's main branch without a reviewer having accepted "
+                "evidence for it; left unset, a loop with no document merges the task's own "
+                "branch. It is fixed at creation and cannot be changed afterwards. "
+                "`initial_tasks` seeds the queue at creation, each entry the same shape "
+                "`create_task` takes. Same allowance as `create_job`."
+            ),
+        ),
+        _Operation(
+            tool="create_flow",
+            args=(
+                'name, agent, message, spec_document_id, cron, purpose="", stop_at=None, '
+                "stop_when_queue_empties=False, work_needs_evidence=None, initial_tasks=None"
+            ),
+            method="POST",
+            path="/jobs",
+            fields=(
+                "name",
+                "agent",
+                "message",
+                "cron",
+                "purpose",
+                "stop_at",
+                "stop_when_queue_empties",
+                "work_needs_evidence",
+                "spec_document_id",
+                "initial_tasks",
+            ),
+            required=("name", "agent", "message", "cron"),
+            text=(
+                "a loop that decomposes an approved specification document. Same row and same "
+                "allowance as `create_loop`; what differs is the queue behaviour. Each firing "
+                "starts every task whose prerequisites are met and for which an agent is free, so "
+                "independent work runs in parallel, and a task somebody finished becomes "
+                "claimable by anybody except its author — which is how work is reviewed without "
+                "the author being asked to hand it over. `agent` is the default, not the mandate. "
+                "Refused if `work_needs_evidence` is given: a flow's requirements are its evidence "
+                "chain, so accepted evidence always decides what approving one of its tasks merges."
+            ),
+        ),
     ]
+
+
+def _mcp_lines(operation: _Operation) -> List[str]:
+    """The injected-tool rendering: the call an agent makes, and what its values mean."""
+    lines = [f"- `{operation.tool}({operation.args})` — {operation.text}"]
+    if operation.detail:
+        lines.append(f"  {operation.detail}")
+    return lines
+
+
+def _http_lines(operation: _Operation) -> List[str]:
+    """The request rendering: method, path and the fields, then the same description.
+
+    Task 2.4 of `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`: this names the
+    address and the shape and stops there. Validation rules are not restated — they come back as
+    typed failures from the route, and restating them here would be the second source of truth
+    that D3 chose this function to avoid.
+    """
+    head = f"- `{operation.method} {_AGENT_ACTIONS_PREFIX}{operation.path}` (`{operation.tool}`)"
+    if operation.fields:
+        where = "query" if operation.method == "GET" else "body"
+        named = ", ".join(
+            f"`{field}`*" if field in operation.required else f"`{field}`"
+            for field in operation.fields
+        )
+        head += f" — {where} {named}"
+    lines = [f"{head} — {operation.text}"]
+    if operation.http_note:
+        lines.append(f"  {operation.http_note}")
+    if operation.detail:
+        lines.append(f"  {operation.detail}")
+    return lines
+
+
+def _tool_surface_lines(*, has_peers: bool = True, access_path: str = "mcp") -> List[str]:
+    """Describe every operation an agent can perform, in the idiom of its own access path.
+
+    `access_path` defaults to `"mcp"`, which is what every caller rendered before
+    `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`, and what a caller outside any run
+    still gets. Anything else renders the HTTP contract those tools adapt: the same operations,
+    addressed as requests. One source, two renderings (`design.md` D3) — the descriptions in
+    `_operations()` are shared verbatim, and `test_tool_surface_matches_server.py` runs its
+    agreement check against both, because a rendering that test does not cover drifts the first
+    time a tool is added, silently.
+
+    `has_peers` is False in a project with one agent. The closing sentence otherwise points at
+    "the roster above", and in that case there is no roster above to point at — the Team section is
+    omitted entirely (task 13.9). The tools themselves stay described either way, because they stay
+    callable: `request_agent` is in fact how a single-agent project stops being one.
+
+    Naming a tool without its accepted values is what produced the Codex failure: the turn
+    preamble listed four tool names and nothing else, so agents guessed `message_type="text"` and
+    were rejected. Four job tools were never mentioned at all.
+
+    `mcp_server.approve_tool_call` is deliberately absent and must stay absent. It is registered
+    on the same server for convenience but is a runtime endpoint the harness invokes, not a
+    capability the agent has: calling it accomplishes nothing and grants nothing. This section
+    exists to tell an agent what it can deliberately use.
+
+    Every other served tool must appear here or in `UNDESCRIBED_TOOLS` above, and
+    `test_tool_surface_matches_server.py` fails the build otherwise. That test exists because this
+    list has now fallen behind the server twice. The second time cost a completed interview: an
+    agent was instructed by the phase block to call `submit_spec_document`, found no such tool in
+    this section, concluded *"the required `submit_spec_document` capability was not exposed in
+    this session"*, and stopped without writing the document it had just spent three rounds
+    designing. A silently incomplete inventory is worse than none, because the agent believes it.
+    """
+    over_mcp = access_path == "mcp"
+    if over_mcp:
+        preamble = (
+            "Names below are as injected; with an MCP surface they are prefixed "
+            "`mcp__agentweave__`."
+        )
+    else:
+        # The variables are NAMED and their values are never interpolated, for the same reason
+        # `access_path_notice` never interpolates them (`design.md` D4): this text is written into
+        # the turn prompt, which is durable, and the agent can read its own environment anyway. The
+        # name discloses nothing it does not already hold; the value would be a credential in
+        # stored turn text.
+        preamble = (
+            "No AgentWeave tools are injected this turn, so each capability below is one HTTP "
+            "request instead. Send it to the address in the `HUB_URL` environment variable, with "
+            "the header `Authorization: Bearer $AW_RUN_TOKEN` — read both values out of your own "
+            "process environment. A field marked `*` is required, and `{...}` in a path is a "
+            "value you substitute. Requests and responses are JSON, and a refusal comes back as "
+            "an HTTP status with a `detail` saying why."
+        )
+    render = _mcp_lines if over_mcp else _http_lines
+    lines = ["## Your tools", "", preamble, ""]
+    for operation in _operations():
+        lines.extend(render(operation))
+    lines.append("")
+    lines.append(
+        "Address a peer by its exact name from the roster above. There is no inbox tool: "
+        "everything addressed to you already appears in this turn."
+        if has_peers
+        else "You are the only agent in this project. There is no inbox tool: everything "
+        "addressed to you already appears in this turn."
+    )
+    lines.append("")
+    return lines
 
 
 # What the agent owes the operator in each phase. Five lines, code-owned, and deliberately not in
@@ -1085,6 +1489,7 @@ async def _render_hub_agent_context(
     task_spec_document: Optional[str] = None,
     task_id: Optional[str] = None,
     review: Optional[ReviewContext] = None,
+    access_path: str = "mcp",
 ) -> Dict[str, Any]:
     """Render the canonical model-facing context for one agent.
 
@@ -1119,6 +1524,22 @@ async def _render_hub_agent_context(
     exists for this project — the operator can only be looking at a document the inventory
     listed, so a path that resolves to no row is a stale client value, and naming it would be a
     guess. Absent, it renders nothing at all rather than a placeholder.
+
+    `access_path` is how the run reaches the capability plane, and it decides which idiom the tool
+    section is written in. It is supplied by `trigger_agent_directly`, which resolves it once —
+    above this call, so that the same value produces both the turn-start notice and this
+    description and the two cannot disagree about the same turn.
+
+    **The other two callers deliberately keep the `"mcp"` default, and that is a decision rather
+    than an omission** (task 2.2 of `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`).
+    `POST /agents/register` and `GET /agents/agent-context` are both answered outside any run,
+    under the project API key rather than a run credential. The access path is a per-*run* fact
+    (`design.md` D3): it is settled at spawn time from the runner about to be launched, and a route
+    answering "what will your next run use" would be making a prediction the trigger is free to
+    contradict — the disagreement this parameter exists to prevent, reintroduced one layer up.
+    Neither route is on a run's path to the plane: a run reads the materialized context file this
+    function writes, never these routes. If a caller ever does need the run's idiom, it must be
+    given the path the trigger resolved, not resolve one of its own.
     """
     registered = agent_row is not None
     missing: List[str] = []
@@ -1540,7 +1961,7 @@ async def _render_hub_agent_context(
             "their ordinary command equivalents. Inbound state is already supplied."
         )
         lines.append("")
-        lines.extend(_tool_surface_lines(has_peers=bool(peers)))
+        lines.extend(_tool_surface_lines(has_peers=bool(peers), access_path=access_path))
     else:
         lines.append("## Registration")
         lines.append("")

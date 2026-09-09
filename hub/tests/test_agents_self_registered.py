@@ -751,3 +751,39 @@ async def test_team_section_returns_as_soon_as_there_is_a_peer(app, auth_headers
     assert "`solo`" in context and "`second`" in context
     assert "Address a peer by the exact name above" in context
     assert "You are the only agent in this project." not in context
+
+
+@pytest.mark.asyncio
+async def test_the_two_routes_outside_a_run_keep_the_injected_tool_wording(app, auth_headers):
+    """A decision, not an omission — and now held by a test rather than by a comment.
+
+    `_render_hub_agent_context` grew an `access_path` parameter in
+    `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing` §2, defaulting to `"mcp"`. Only
+    `trigger_agent_directly` passes it: the access path is a per-*run* fact settled at spawn time,
+    and these two routes are answered under the project API key outside any run, so a path either
+    of them named would be a prediction the next trigger is free to contradict.
+
+    Flipping that default was mutation 9 of this section's check and failed nothing, which is
+    exactly the shape of gap this repository keeps finding after the fact. Both routes are asserted
+    here, because they take the default by two different code paths.
+    """
+    registered = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "default-idiom", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert registered.status_code == 200
+
+    fetched = await app.get(
+        "/api/v1/projects/proj-test/agents/agent-context?agent=default-idiom",
+        headers=auth_headers,
+    )
+    assert fetched.status_code == 200
+
+    for source, context in (
+        ("POST /agents/register", registered.json()["context"]),
+        ("GET /agents/agent-context", fetched.json()["context"]),
+    ):
+        assert "`send_message(to_agent" in context, source
+        assert "prefixed `mcp__agentweave__`" in context, source
+        assert "POST /api/v1/agent-actions/messages" not in context, source

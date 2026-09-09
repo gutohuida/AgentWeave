@@ -2672,3 +2672,129 @@ async def test_a_batch_naming_a_review_and_work_is_refused(app, auth_headers, bi
         )
         assert {entry.state for entry in entries} == {"queued"}
         assert not any(entry.delivered_in_run_id for entry in entries)
+
+
+@pytest.mark.asyncio
+async def test_a_run_without_mcp_is_described_the_operations_it_can_actually_perform(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """The notice and the tool description are two halves of one fact, so one value produces both.
+
+    Task 2.2 of `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`. `resolve_access_path`
+    used to be called 46 lines *after* the canonical context was materialized, so the context could
+    only ever be written in MCP wording — an agent on the HTTP path was told, in the same turn,
+    that it had no injected tools and then handed a list of injected tools to call. The call was
+    hoisted above the materialization and its single value threaded into the renderer; this asserts
+    both ends of that, on the text the run actually receives.
+
+    `resolve_access_path` is patched rather than driven from configuration because it still returns
+    `"mcp"` unconditionally today — §4 of the change is what makes a real run reach the other
+    branch. What is under test here is the *threading*, which is complete and testable now.
+    """
+    monkeypatch.setattr("hub.api.v1.agent_trigger.resolve_access_path", lambda *a, **k: "cli")
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"httponly-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("httponly-claude", cli="claude")
+
+    from hub.api.v1 import agents as agents_module
+
+    real_render = agents_module._render_hub_agent_context
+    seen = {}
+
+    async def _capturing_render(**kwargs):
+        rendered = await real_render(**kwargs)
+        seen["access_path"] = kwargs.get("access_path")
+        seen["context"] = rendered["context"]
+        return rendered
+
+    monkeypatch.setattr(agents_module, "_render_hub_agent_context", _capturing_render)
+
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-http-1"}\n']
+    )
+    captured_kwargs = {}
+    real_build_command = agent_trigger.build_command
+
+    def _capturing_build_command(**kwargs):
+        captured_kwargs.update(kwargs)
+        return real_build_command(**kwargs)
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command):
+                resp = await app.post(
+                    "/api/v1/projects/proj-test/agent/trigger",
+                    json={"agent": "httponly-claude", "message": "hi", "session_mode": "new"},
+                    headers=auth_headers,
+                )
+                assert resp.status_code == 200
+                await _await_background_run()
+
+    # The resolved path reached the renderer at all — the half the hoist exists for.
+    assert seen["access_path"] == "cli"
+
+    context = seen["context"]
+    # Described as requests, with a real route an agent can address.
+    assert "POST /api/v1/agent-actions/messages" in context
+    assert "Authorization: Bearer $AW_RUN_TOKEN" in context
+    # And not as injected calls, which is what it would have said before the hoist.
+    assert "`send_message(to_agent" not in context
+    assert "prefixed `mcp__agentweave__`" not in context
+
+    # The notice in the turn prompt agrees with the description in the same turn's context.
+    assert "no MCP tools this turn" in captured_kwargs["prompt"]
+    assert "the `agentweave` MCP tools are available" not in captured_kwargs["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_a_run_with_mcp_is_still_described_the_injected_tools(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """The other branch of the same threading, so the hoist cannot be "fixed" by hardcoding one
+    answer. Without this, patching the renderer's `access_path` to a constant would pass the test
+    above and silently rewrite every MCP run's tool list."""
+    monkeypatch.setattr("hub.api.v1.agent_trigger.resolve_access_path", lambda *a, **k: "mcp")
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"mcpok-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("mcpok-claude", cli="claude")
+
+    from hub.api.v1 import agents as agents_module
+
+    real_render = agents_module._render_hub_agent_context
+    seen = {}
+
+    async def _capturing_render(**kwargs):
+        rendered = await real_render(**kwargs)
+        seen["access_path"] = kwargs.get("access_path")
+        seen["context"] = rendered["context"]
+        return rendered
+
+    monkeypatch.setattr(agents_module, "_render_hub_agent_context", _capturing_render)
+
+    fake_spawn = _fake_pty(
+        ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-mcp-1"}\n']
+    )
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "mcpok-claude", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            await _await_background_run()
+
+    assert seen["access_path"] == "mcp"
+    assert "`send_message(to_agent" in seen["context"]
+    assert "POST /api/v1/agent-actions/messages" not in seen["context"]

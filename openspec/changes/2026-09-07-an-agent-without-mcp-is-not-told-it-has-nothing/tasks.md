@@ -33,11 +33,11 @@ treat the open choice as permission to skip the requirement.
 
 ## 2. The operations are described for this access path
 
-- [ ] 2.1 Extend `_tool_surface_lines` (`hub/hub/api/v1/agents.py:884`) to render for an access
+- [x] 2.1 Extend `_tool_surface_lines` (`hub/hub/api/v1/agents.py:884`) to render for an access
   path, defaulting to the MCP rendering so no existing call site changes meaning. One source, two
   renderings (`design.md` D3) — do **not** write a second list, and do not reuse
   `src/agentweave/tool_surface.py`, which has zero importers and lives in the other package.
-- [ ] 2.2 Pass the run's access path into the render, so the notice and the description cannot
+- [x] 2.2 Pass the run's access path into the render, so the notice and the description cannot
   disagree about the same turn. **Rewritten by the third review, 2026-09-08: this task had the
   ordering backwards.** It said the path *"is already resolved for the run at
   `agent_trigger.py:1006`"* and that the materialisation *"must receive it"* — but the
@@ -58,10 +58,10 @@ treat the open choice as permission to skip the requirement.
     MCP wording for an agent whose next run takes the HTTP path reintroduces precisely the
     disagreement this task exists to prevent — decide whether those two resolve the path themselves
     or deliberately keep the default, and write the reason down.
-- [ ] 2.3 Extend `test_tool_surface_matches_server.py` to run its existing agreement check against
+- [x] 2.3 Extend `test_tool_surface_matches_server.py` to run its existing agreement check against
   **both** renderings. This is the whole reason `_tool_surface_lines` was chosen as the home; a
   rendering not covered by that test drifts the first time a tool is added, silently.
-- [ ] 2.4 The HTTP rendering names method, path and the required body fields for each operation it
+- [x] 2.4 The HTTP rendering names method, path and the required body fields for each operation it
   describes. It does not restate validation rules — those come back as typed failures, and
   duplicating them here would create the second source of truth §2.1 exists to avoid.
 
