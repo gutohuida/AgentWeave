@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "755bdad",
     "stop_at": "2026-09-09T17:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-09-09-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "repairs",
-    "next_action": "D-6: one more repair that needs no spec, then set next_action to null. Conditions from day-window.md, ALL of which must hold and must be checked rather than assumed: it touches no requirement in openspec/specs/ (grep the capability before believing it), no migration, no API request/response shape change, no Pydantic schema the UI reads; and it is fully described by an existing finding WITH a reproduction, where the fix is smaller than the argument for it would be. Pick from the ledger, which is now fully classified -- `py -3.11 scripts/classify_findings.py` lists 57 open B and 68 open C by finding number and line. Prefer one whose reproduction is already written down. Then the ordinary rules in full: DRIVE it before closing the item (a repair that only passes tests is exactly this repository's worst failure mode), run CI's lint set (`ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`), mutation-check any test added by deleting the line it exists for and watching a NAMED test fail, and set the finding's **Status:** line to `fixed <sha>`. If it turns out to want a spec, STOP and queue it for tomorrow -- discovering that is a good outcome and finishing anyway is not. The day window must not edit hub/hub/ or src/agentweave/ for anything else. If no finding meets all the conditions, say so in the log and set next_action to null rather than stretching one to fit -- the literal JSON null is what unregisters the driver.",
+    "current": "done",
+    "next_action": null,
     "queue": [
         {
             "id": "ci-red",
@@ -53,9 +53,9 @@
         },
         {
             "id": "repairs-spare",
-            "status": "open",
+            "status": "done",
             "title": "D-6 -- one more no-spec repair if the day has room",
-            "detail": "Only after D-5. Conditions from day-window.md: touches no openspec requirement (grep the capability), no migration, no API shape change, no Pydantic schema the UI reads; fully described by an existing finding with a reproduction. Drive it before closing, run CI's lint set, mutation-check any test added, set the finding's **Status:** to `fixed <sha>`."
+            "detail": "DONE 2026-09-09 iteration 8, closing F298 with `0a0aec3` and filing F304 (C). Chosen against the conditions, each checked: no requirement (`grep -rn 'Unhandled error' openspec/ spec-queue/` and `grep -rln CancelledError openspec/specs/` both empty), no migration, no API shape, no Pydantic schema -- the change is two `logger.exception` call sites routed through a new private helper in the same module, and nothing serialised moves. F277 and F278 were read and rejected as wanting specs (a behaviour change to spec-authoring turns; a change to the credential rule itself), F279 as undiagnosed by its own status. What was wrong: both run handlers catch `(Exception, CancelledError)` and each one's own comment names event-loop teardown as the case it exists for -- then reported it with ERROR and a full traceback on every clean shutdown. `_log_abnormal_run_end` logs a CancelledError at WARNING with no stack trace (WARNING not INFO because AW_LOG_LEVEL defaults to WARNING, and INFO would trade a false alarm for silence); everything else keeps its level, message and traceback byte for byte. The finding's open question -- whether a non-shutdown cancellation deserves the louder message -- is answered by not needing it: the wording says `cancelled`, never `shutdown`. Both transports fixed; only the Claude path driven, Codex being undrivable. DRIVEN: f295_shutdown_drive.py with a real Haiku turn in flight, all six checks PASS where `no traceback after the break` was this morning's one FAIL, and the run row still `failed` with `ended_at` set -- the report changed, the behaviour did not. 3 new tests, mutation-checked three ways, each caught by a named test; 64 passed across the four affected files; CI lint set clean. F304 filed rather than folded in: `str(CancelledError())` is `''`, so a cancelled run stores an empty reason -- identical in both drive databases, so pre-existing, and its consequence bounded honestly (no route found that returns Run.error to a screen). Ledger 304 sections, UNCLASSIFIED 0."
         }
     ],
     "decisions_for_user": [

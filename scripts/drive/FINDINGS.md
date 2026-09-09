@@ -23502,7 +23502,8 @@ taskkill /PID <pid from tk.marker.started> /F
 
 ## F298 (C) — stopping the Hub normally reports the operator's own stop as an `ERROR ... Unhandled error in run`, with a traceback
 
-**Status:** open, not specced. Found 2026-09-09 by the `F295` drive
+**Status:** **fixed** `0a0aec3`, driven 2026-09-09 (day window, D-6) — see *The fix* at the
+end of this entry. Filed 2026-09-09 by the `F295` drive
 (`scripts/drive/f295_shutdown_drive.py`), reproduced on all three in-flight stops. **Cosmetic** —
 nothing behaves wrongly, and the code doing it is deliberate — but it is cosmetic in the one place
 an operator looks when deciding whether a stop went cleanly.
@@ -23557,6 +23558,34 @@ py -3.11 scripts/drive/f295_shutdown_drive.py
 #   "run row unfinished immediately before the break: True"
 # and the ERROR appears between "Waiting for application shutdown." and "Application shutdown complete."
 ```
+
+**The fix, 2026-09-09.** `_log_abnormal_run_end` (`agent_trigger.py:1805`) — the report split off
+the two handlers, since one of the things they catch is not an error. A `CancelledError` is logged
+at WARNING with no stack trace and wording that says what happened; everything else keeps
+`logger.exception` and the exact message it always had. The wording deliberately does **not** say
+*shutdown*, which is how the open question above is answered rather than decided: nothing at that
+point distinguishes a teardown cancellation from any other, and a cancellation is a deliberate act
+either way, so no flag was invented. Row marking, the failure tail and the re-raise are untouched.
+Applied to `_execute_codex_appserver_run` (`:2986`) as well — the same two lines, the same falsehood
+— though only the Claude path was driven, Codex being undrivable on this machine.
+
+**Driven, which is the half that matters here.** `py -3.11 scripts/drive/f295_shutdown_drive.py`
+with a real Haiku turn in flight (`run row unfinished immediately before the break: True`):
+**all six checks PASS**, where *"no traceback after the break"* was the one FAIL this morning on the
+same script. The log between the two shutdown lines now reads, in full:
+
+```
+INFO:     Waiting for application shutdown.
+WARNI [hub.api.v1.agent_trigger] The run run-8f02111bdb43 for 'f295110952' was cancelled before
+      it finished; marking it failed and re-raising the cancellation
+INFO:     Application shutdown complete.
+```
+
+and the run row is still `failed` with an `ended_at` — the report changed, the behaviour did not.
+Shutdown took 0.38 s. Covered by `hub/tests/test_a_cancelled_run_is_not_reported_as_a_crash.py`
+(3 tests), mutation-checked three ways: dropping the branch, logging the cancellation with
+`logger.exception`, and demoting the real failure to `warning` each fail a named test.
+
 
 ---
 
@@ -23951,3 +23980,41 @@ key leaked and deleting them deletes the regression; the two historical loop doc
 ledger's own transcript line are the record of the leak, already public in git history, where
 scrubbing the working tree would change nothing about disclosure and would destroy the account of
 it.
+
+---
+
+## F304 (C) — a run cancelled by shutdown stores an empty string as its reason
+
+**Status:** open. Observed 2026-09-09 while driving `F298`'s fix, in the two `f295` drive databases
+either side of it — so it is **pre-existing and unchanged by that fix**, which is why it is filed
+rather than folded into it.
+
+`_record_run_failure_tail` marks the row with `run.error = str(exc)`
+(`hub/hub/api/v1/agent_trigger.py:1877`). `str(asyncio.CancelledError())` is `''`. So the one
+exception that handler was principally written for is the one that leaves the row saying `failed`
+and nothing at all about why:
+
+```
+sqlite> select id, status, ended_at, error from runs;
+run-05b2b6fe5ef5|failed|2026-09-09 01:08:29.888926|      <- pre-F298-fix drive
+run-8f02111bdb43|failed|2026-09-09 10:10:06.610527|      <- post-fix drive, identical
+```
+
+Every other path into that line carries a message; this one carries the empty string, and an empty
+string is indistinguishable from "nobody set it" for any reader that tests truthiness.
+
+**What is not established, and is not being claimed.** No route was found that returns `Run.error`
+to a screen — `agent_chat.py` does not carry it, and the terminal label an operator sees comes from
+the run facts on the chat response (F274). So the measured cost is to the **record**, not yet to a
+surface: a stored row that cannot say why it ended. Whether anything renders it is unverified.
+
+**Reproduction:** `py -3.11 scripts/drive/f295_shutdown_drive.py`, then read the `runs` table in the
+database the script prints — the cancelled run's `error` is `''`. Two databases with it are kept:
+`%TEMP%295drive020814295.db` and `%TEMP%295drive110952295.db`.
+
+**Adjacent, deliberately not merged.** `F298` is about how the cancellation is *reported to the
+console*; this is about what is *stored on the row*. The same `isinstance` branch would serve both,
+but one is a log line and the other changes a persisted value that F274's work reads near, so it
+wants its own look.
+
+---
