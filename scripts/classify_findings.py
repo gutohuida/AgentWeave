@@ -23,6 +23,28 @@ Blind spots corrected, each one found by measurement rather than review:
 
   4 -- a section carrying BOTH an open marker and an external resolution is no
     longer silently forced either way. It is reported as CONFLICT, for a human.
+
+  5 (found by an adversarial review, 2026-09-08) -- `HEAD` demanded a
+    parenthetical, so 46 headings were invisible: 26 findings had no section at
+    all, and 20 sections silently swallowed the next finding's text. Detail and
+    the seven verdicts it corrupted are in classify().
+
+  6 (found 2026-09-09 by writing this file's FIRST TEST) -- a continuation
+    heading was skipped as a section and then dropped: 2,030 lines belonged to
+    NO section, including `### F45 -- fixed 2026-08-25`, a finding's own
+    resolution sitting outside the finding. Detail in classify().
+
+  7 (found while fixing 6) -- the negation guard was line-local BY ACCIDENT and
+    the accident was load-bearing. Blind spot 6's fix widened it, and a
+    finding's TITLE promptly reached across a blank line to negate its own
+    `**Status:** fixed` -- six canonical verdicts silently became UNCLASSIFIED.
+    The line bound is now explicit; see NEG_BEFORE and `hits`.
+
+**This file now has a test: `tests/test_classify_findings.py`.** Every case in it
+is a defect that actually happened, its fixtures are synthetic so they do not
+move when the ledger grows, and all seven guards above were mutation-checked on
+2026-09-09 -- each mutation killed. Two of the tests were decorative when first
+written and only the mutation run said so.
 """
 
 import collections
@@ -57,16 +79,25 @@ HEAD = re.compile(r"^#{1,4}\s+F(\d+)\s+\(([^)]*)\)")
 ANY_HEAD = re.compile(r"^#{1,4}\s+F(\d+)\b")
 SEV_IN = re.compile(r"\b([ABCD])\b")
 
-RESOLVED_PAT = [
+# Split 2026-09-09. The two halves are not equally trustworthy and, since blind spot 6's
+# fix, they no longer see the same text. STRONG markers are declarations; WEAK ones are
+# prose that happens to contain a phrase. Only STRONG runs over merged continuation
+# blocks -- see classify(). Measured reason: letting WEAK run there imported two false
+# positives immediately (F197 "A declaration is not a defect", F164 "One new observation,
+# not a defect"), neither a statement about the finding it would have resolved.
+STRONG_PAT = [
     (re.compile(r"\bRETIRED\b"), "RETIRED"),
     (re.compile(r"\bRETRACTED\b"), "RETRACTED"),
     (re.compile(r"\bStatus\**:\**\s*\**\s*FIXED\b", re.I), "Status: FIXED"),
     (re.compile(r"\bSUPERSEDED\b"), "SUPERSEDED"),
     (re.compile(r"\bWITHDRAWN\b"), "WITHDRAWN"),
+]
+WEAK_PAT = [
     (re.compile(r"\bNOT A DEFECT\b", re.I), "NOT A DEFECT"),
     (re.compile(r"\bis not a defect\b", re.I), "not a defect"),
     (re.compile(r"\bno longer reproduces\b", re.I), "no longer reproduces"),
 ]
+RESOLVED_PAT = STRONG_PAT + WEAK_PAT
 EXT_WORD = re.compile(r"\b(RETIRED|RETRACTED|FIXED|SUPERSEDED|WITHDRAWN|closed|resolved)\b", re.I)
 OPEN_PAT = [
     (re.compile(r"Status[^\n]{0,80}\bopen\b", re.I), "Status: open"),
@@ -78,7 +109,23 @@ OPEN_PAT = [
     (re.compile(r"\bunqueued\b", re.I), "unqueued"),
     (re.compile(r"\bnot queued\b", re.I), "not queued"),
 ]
-NEG_BEFORE = re.compile(r"\b(not|never|isn'?t|aren'?t|no|without|un)\W{0,12}$", re.I)
+# Widened 2026-09-09. The old form required the negation to sit within 12 NON-WORD
+# characters of the marker, so it caught "not resolved" and missed "can never be
+# resolved" -- one intervening word defeated it. That exact sentence is F213's own
+# heading ("the twin can never be resolved") and it read as a resolution. Now up to two
+# short intervening words are tolerated; more than that and the negation is too far away
+# to be reliably about this marker.
+#
+# Callers must pass ONLY the text from the start of the marker's own line -- see `hits`.
+# The old `\W{0,12}` form was line-local by accident (12 non-word characters cannot span a
+# word), and widening it exposed that the constraint had been doing real work: a finding's
+# TITLE routinely negates, while its verdict is a `**Status:**` declaration lines below.
+# `## F16 (C) — ... but never echoed back` / `**Status:** fixed 3b4efd6` then reads as a
+# negated "fixed". Six canonical Status-line verdicts went UNCLASSIFIED that way (F16, F27,
+# F46, F58, F95, F100) before the line bound was made explicit rather than incidental.
+NEG_BEFORE = re.compile(
+    r"\b(not|never|cannot|can'?t|isn'?t|aren'?t|no|without|un)\b(?:\W+\w{1,6}){0,2}\W*$", re.I
+)
 
 # --- blind spot 3: quotation is not assertion -------------------------------
 QUOTED = [
@@ -125,6 +172,20 @@ def classify(lines):
     # So: ANY `F<n>` heading is a boundary, but only a number with no parenthetical
     # heading anywhere becomes a section of its own. That distinction matters because
     # `### F63 — Resolution, 2026-08-26` is a continuation of F63, not a new finding.
+    #
+    # BLIND SPOT 6, found 2026-09-09 by writing this file's first test. The rule above
+    # stops a continuation DOUBLE-COUNTING and then drops it on the floor: a heading
+    # skipped as a section still cut the previous one, so its lines belonged to **no
+    # section at all**. Measured on this ledger: 30 continuation headings, **2,030
+    # orphaned lines**, including `### F45 — fixed 2026-08-25` and `### F162 is closed`
+    # -- a finding's own resolution, sitting outside the finding. Reachable only by the
+    # cross-section arm this file's header calls a lead and never a verdict.
+    # Blast radius when merged back: 3 verdicts move (F164, F168, F197). Smaller than
+    # blind spot 5's seven, and measured rather than asserted.
+    #
+    # The fix generalises past the case that was found: **every heading block for a
+    # number belongs to that number.** That also absorbs a second *parenthetical*
+    # heading for one finding, which the old `seen` guard orphaned the same way.
     bounds = []  # every heading -- these cut sections
     for i, ln in enumerate(lines):
         m = ANY_HEAD.match(ln)
@@ -132,38 +193,43 @@ def classify(lines):
             pm = HEAD.match(ln)
             bounds.append((i, int(m.group(1)), pm.group(2) if pm else None))
 
-    titled = {num for _, num, inner in bounds if inner is not None}
-    seen: set = set()
-    sections = []
+    ranges = collections.defaultdict(list)  # num -> every block of lines that is its text
+    first_paren = {}  # num -> (line, inner) of its first parenthetical heading
+    anchor = {}  # num -> line of its first heading of any kind
     for n, (i, num, inner) in enumerate(bounds):
         end = bounds[n + 1][0] if n + 1 < len(bounds) else len(lines)
-        # A parenthetical heading is the finding's own section. An em-dash heading is
-        # only its own section if the number has no parenthetical heading at all --
-        # otherwise it is a continuation (a "Resolution" block) and must not double-count.
-        if inner is None and num in titled:
-            continue
-        if num in seen:
-            continue
-        seen.add(num)
+        ranges[num].append((i, end))
+        if inner is not None and num not in first_paren:
+            first_paren[num] = (i, inner)
+        anchor.setdefault(num, i)
+
+    sections = []
+    for num in sorted(ranges, key=lambda k: anchor[k]):
+        # The parenthetical heading is the finding's own; an em-dash-only finding
+        # anchors on its first heading. Either way the TEXT is every block above.
+        i, inner = first_paren.get(num, (anchor[num], None))
         sev = "?"
         if inner:
             sm = SEV_IN.search(inner)
             sev = sm.group(1) if sm else "?"
         else:
             # No parenthetical: many of these state severity in the body instead.
+            end = next(hi for lo, hi in ranges[num] if lo == i)
             body_head = "\n".join(lines[i : min(i + 8, end)])
             bm = re.search(r"\*\*Severity:?\*?\*?\s*([ABCD])\b", body_head)
             sev = bm.group(1) if bm else "?"
         sections.append(
-            {"num": num, "sev": sev, "inner": inner or "", "start": i, "end": end}
+            {"num": num, "sev": sev, "inner": inner or "", "start": i, "ranges": ranges[num]}
         )
-    span = {s["num"]: (s["start"], s["end"]) for s in sections}
+    span = {s["num"]: s["ranges"] for s in sections}
 
     def hits(text, pats):
         out = []
         for pat, label in pats:
             for m in pat.finditer(text):
-                if NEG_BEFORE.search(text[max(0, m.start() - 40) : m.start()]):
+                # Only the marker's own line may negate it -- a title that says "never"
+                # has no authority over a `**Status:**` line two lines below it.
+                if NEG_BEFORE.search(text[text.rfind("\n", 0, m.start()) + 1 : m.start()]):
                     continue
                 out.append(
                     (
@@ -177,15 +243,40 @@ def classify(lines):
     results = []
     for s in sections:
         num = s["num"]
-        raw = "\n".join(lines[s["start"] : s["end"]])
-        body = dequote(raw)
-        in_res, in_open = hits(body, RESOLVED_PAT), hits(body, OPEN_PAT)
+        # The primary block is the finding's own statement; continuation blocks are drive
+        # narratives, where "not a defect" is far more often about something the drive met
+        # along the way. So WEAK prose fires only on the primary block -- exactly the text
+        # it was calibrated against -- while STRONG declarations and OPEN markers read the
+        # whole finding. OPEN reads everything deliberately: it is the conservative
+        # direction, and a wrongly-open finding costs a read, not a missed defect.
+        primary = next(rng for rng in s["ranges"] if rng[0] == s["start"])
+        body_primary = dequote("\n".join(lines[primary[0] : primary[1]]))
+        body_all = dequote("\n".join("\n".join(lines[lo:hi]) for lo, hi in s["ranges"]))
+        in_res = hits(body_all, STRONG_PAT) + hits(body_primary, WEAK_PAT)
+        in_open = hits(body_all, OPEN_PAT)
+
+        # A heading of the finding's OWN blocks that carries resolution vocabulary --
+        # `### F162 is closed, measured inside the window`, `### F45 — fixed 2026-08-25`.
+        # Needed because blind spot 6's fix moves these lines INSIDE the section, and the
+        # in-section vocabulary is narrower than `EXT_WORD`: without this, merging the
+        # block correctly would drop F161 and F162 from a verdict to no signal at all --
+        # and those two are the only true positives this file's header credits to the
+        # cross-section arm. This is structural evidence, not prose: it fires on a
+        # heading line that ANY_HEAD already matched to THIS finding's number, which is
+        # why it may be trusted where the same words in a sentence may not.
+        for lo, _hi in s["ranges"]:
+            head_line = dequote(lines[lo])
+            m = EXT_WORD.search(head_line)
+            if m and not NEG_BEFORE.search(head_line[max(0, m.start() - 40) : m.start()]):
+                in_res.append(
+                    ("own heading: " + m.group(1).upper(), lo + 1, lines[lo].strip()[:200])
+                )
 
         ext = []
         npat = re.compile(rf"\bF{num}\b")
-        lo, hi = span[num]
+        own = span[num]
         for i, ln in enumerate(lines):
-            if lo <= i < hi or not npat.search(ln):
+            if any(lo <= i < hi for lo, hi in own) or not npat.search(ln):
                 continue
             cln = dequote(ln)
             m = EXT_WORD.search(cln)
@@ -209,6 +300,9 @@ def classify(lines):
                 "sev": s["sev"],
                 "inner": s["inner"],
                 "line": s["start"] + 1,
+                # Exposed so a caller can check the segmentation itself. Both blind spots
+                # 5b and 6 were segmentation defects that every vocabulary check passed.
+                "ranges": s["ranges"],
                 "verdict": v,
                 "evidence": why,
                 "n_ext": len(ext),
