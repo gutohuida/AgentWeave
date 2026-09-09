@@ -31,19 +31,19 @@ lint set is not required — say so in the log rather than passing over it in si
 
 ## 2. The gate
 
-- [ ] 2.1 In `hub/ui/src/components/instructions/InstructionsPage.tsx`, `handleSave` (`:54-56`)
+- [x] 2.1 In `hub/ui/src/components/instructions/InstructionsPage.tsx`, `handleSave` (`:54-56`)
   becomes conditional. Fire the dialog when `data.content.trim() !== '' && content.trim() === ''`;
   otherwise `saveMutation.mutate(content)` exactly as today.
-- [ ] 2.2 **Trim both sides, and do not trim what is written** (`design.md` D1). A predicate testing
+- [x] 2.2 **Trim both sides, and do not trim what is written** (`design.md` D1). A predicate testing
   `content === ''` misses the commonest near-miss — a select-all-delete that leaves a newline — and
   that write is just as destructive. The confirmed save sends `content` byte-for-byte as typed.
-- [ ] 2.3 **Add no state guard for the unloaded case, and do not remove the structural one.** Save is
+- [x] 2.3 **Add no state guard for the unloaded case, and do not remove the structural one.** Save is
   rendered only inside `actions={data ? … : undefined}` (`:62`), so `handleSave` is unreachable while
   `data` is undefined — that is F271's own gate (its `tasks.md` 1.4), and it is what makes this
   change's confirmation impossible to reach over a state that was never read. Moving Save into the
   `data` branch of `{children}` preserves the property; moving it outside the gate breaks this change
   and F271 together.
-- [ ] 2.4 Leave `hub/hub/api/v1/instructions.py` and `hub/hub/db/models.py` alone. The empty string
+- [x] 2.4 Leave `hub/hub/api/v1/instructions.py` and `hub/hub/db/models.py` alone. The empty string
   stays a legitimate value on the wire; this change is about the destructive-if-wrong UI action.
 
 ## 3. The bundle

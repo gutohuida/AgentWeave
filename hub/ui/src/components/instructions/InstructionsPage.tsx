@@ -59,7 +59,34 @@ export function InstructionsPage() {
     }
   }, [saveMutation.isSuccess])
 
+  /**
+   * Save, with one question interposed — and only one.
+   *
+   * **The predicate trims both sides** (`design.md` D1), and the two halves are trimmed for
+   * different reasons. Outgoing is the load-bearing half: a select-all-delete leaves `''` most of
+   * the time but leaves a lone newline or two spaces easily enough, and that write destroys the
+   * stored rules exactly as completely, so a predicate testing `content === ''` would let the commonest
+   * near-miss through. The stored half is the smaller judgement: instructions that are only
+   * whitespace are not content anyone loses, so blanking them is not worth an interruption.
+   *
+   * **What gets written is never trimmed.** The confirmed save sends `content` byte-for-byte as
+   * typed, as every other save does. This interposes a question; it does not edit the operator's
+   * text.
+   *
+   * **The `data !== undefined` term is TypeScript narrowing, not a guard** (`design.md` D2). Save
+   * is rendered only inside `actions={data ? … : undefined}`, so this function is unreachable while
+   * `data` is undefined — F271's structural gate, and the reason this confirmation can never be
+   * asked about content that was never read. No state guard was added for the unloaded case and the
+   * structural one was not moved; the term is here because `data.content` does not typecheck
+   * without it, and it is written as the narrowing rather than as `data?.content` so that the
+   * unreachable branch falls through to the ordinary save instead of to a dialog the render gate
+   * would then decline to show.
+   */
   const handleSave = () => {
+    if (data !== undefined && data.content.trim() !== '' && content.trim() === '') {
+      setConfirmingClear(true)
+      return
+    }
     saveMutation.mutate(content)
   }
 
