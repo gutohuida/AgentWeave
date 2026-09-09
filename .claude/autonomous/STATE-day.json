@@ -8,18 +8,18 @@
     "parent_branch": "master",
     "parent_sha": "755bdad",
     "stop_at": "2026-09-09T17:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-09-09-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "ci-red",
-    "next_action": "D-0: repair the deterministic CI failure blocking the merge gate. `hub-test` has concluded `failure` on the last 12 completed runs of this branch; run 34325989834 names tests/test_mcp_adapter_online.py::test_the_announce_route_the_adapter_posts_to_is_one_the_app_mounts -- '/api/v1/agent-actions/mcp-adapter-online' absent from the mounted paths, though hub/hub/api/v1/agent_actions.py:419 declares it and the file is tracked. Reproduce it locally FIRST (py -3.11 -m pytest hub/tests/test_mcp_adapter_online.py -v from the repo root, then again the way CI invokes it -- read .github/workflows/ci.yml for the exact cwd and command, because the declaration being present locally is the whole puzzle). Find why the router is not mounted under CI's conditions, fix it, run the lint set CI runs over the touched paths, and push. Do NOT run the whole hub suite -- it takes 15-47 minutes. If the repair turns out to need a spec, stop and queue it for tomorrow instead of finishing.",
+    "current": "drive",
+    "next_action": "D-1: drive the three night changes together on ONE Hub, as the queue item 'drive' describes. a-dead-connection-is-never-handed-back-out (F295) + an-agent-without-mcp-is-not-told-it-has-nothing + the-conversation-carries-its-own-run-facts (F274). Each was driven singly by the night window; the three together are untested. F274 touches the committed UI bundle, so drive the SCREEN, not only the API. Carry F291's open question and answer it from the operator's side, saying confirm or refute in the log: groupIntoTurns (agentTimelineModel.ts:45-62) partitions on delivery_state and never reads run_id, and agent_trigger.py:2005-2011 commits return_run_entries before broadcasting run_failed. Hub on :8011 from hub/ via uvicorn from source, fresh project, every agent turn claude-haiku-4-5, never :8000, never leave a job enabled. New findings append to scripts/drive/FINDINGS.md with severity, file:line, reproduction, and **Status:** open as the first body line. Before starting, check whether CI has concluded on the D-0 repair commit -- if it is green, the merge gate's condition 3 is satisfiable and the NEXT firing's step 1 may reopen the gate; note the conclusion in the log either way, but do not merge from here.",
     "queue": [
         {
             "id": "ci-red",
-            "status": "open",
+            "status": "done",
             "title": "Repair the red hub-test CI job blocking the merge gate",
-            "detail": "Deterministic since 3a1e6bc; newest green is b246017. Failure: the mcp-adapter-online route is not among the app's mounted paths under CI. Repair, verify by reproducing CI's invocation, push. This is a repair with no spec attached (D-6 carve-out shape): touches no openspec requirement, no migration, no schema the UI reads. If that stops being true, stop and queue it."
+            "detail": "DONE 2026-09-09 iteration 2. Not a regression and not a flake: hub/tests/test_mcp_adapter_online.py:159 read create_app().routes directly, and starlette 1.x stopped flattening include_router into app.routes -- it holds _IncludedRouter wrappers whose inner APIRoutes carry relative paths. This machine has starlette 0.52.1 (161 paths, target present); CI resolves 1.6.0 fresh every run (7 paths, target absent, byte-identical to CI's assertion message). The test could never pass on CI and never fail here. Fixed by using api_route_paths from hub/tests/_routing.py, which already existed for this and already named two earlier occurrences. Reproduced and verified in a venv built to CI's exact versions, with a negative control. The route itself was correct throughout."
         },
         {
             "id": "drive",
@@ -49,7 +49,7 @@
             "id": "review",
             "status": "open",
             "title": "D-5 -- write the review page and today's APPROVALS section",
-            "detail": "spec-queue/review/review-2026-09-09.html, self-contained (no external stylesheets/scripts/fonts), full DOCTYPE/html/head/body wrapper, theme-aware (light on bare :root, dark under @media prefers-color-scheme, explicit body background). Answer in the playbook's order: (1) the branch -- autonomous/2026-09-08-daily, TWO days, and that the merge gate did NOT open because CI concluded failure/in-progress, red for 12 commits -- this goes first and must not be skimmable; (2) what the night built and which of it was driven; (3) what the drive found; (4) what was specced -- NOTHING today, and say why (the operator's 'nothing new but finish everything open'); (5) what the night will do if the operator approves nothing; (6) the research, briefly, each candidate ending in what it means for AgentWeave. Carry the open decisions_for_user entry F299-posture-on-a-harness-without-mcp verbatim in substance. Then append today's section to spec-queue/APPROVALS.md with no status tokens -- the operator supplies those."
+            "detail": "spec-queue/review/review-2026-09-09.html, self-contained (no external stylesheets/scripts/fonts), full DOCTYPE/html/head/body wrapper, theme-aware (light on bare :root, dark under @media prefers-color-scheme, explicit body background). Answer in the playbook's order: (1) the branch -- autonomous/2026-09-08-daily, TWO days, and that the merge gate did NOT open on any firing of this cycle, because hub-test concluded failure on 12 consecutive commits -- REPAIRED 2026-09-09 iteration 2, and say what it was: a test reading create_app().routes, a data structure starlette 1.x changed, so it could never pass on CI's 1.6.0 and never fail on this machine's 0.52.1. Say that the gate can only reopen once a commit carrying the repair completes a green run, and that no window has yet observed one. This goes first and must not be skimmable; (2) what the night built and which of it was driven; (3) what the drive found; (4) what was specced -- NOTHING today, and say why (the operator's 'nothing new but finish everything open'); (5) what the night will do if the operator approves nothing; (6) the research, briefly, each candidate ending in what it means for AgentWeave. Carry the open decisions_for_user entry F299-posture-on-a-harness-without-mcp verbatim in substance. Then append today's section to spec-queue/APPROVALS.md with no status tokens -- the operator supplies those."
         },
         {
             "id": "repairs-spare",
@@ -58,7 +58,21 @@
             "detail": "Only after D-5. Conditions from day-window.md: touches no openspec requirement (grep the capability), no migration, no API shape change, no Pydantic schema the UI reads; fully described by an existing finding with a reproduction. Drive it before closing, run CI's lint set, mutation-check any test added, set the finding's **Status:** to `fixed <sha>`."
         }
     ],
-    "decisions_for_user": [],
+    "decisions_for_user": [
+        {
+            "id": "pin-starlette-or-keep-resolving-newest",
+            "opened": "2026-09-09",
+            "question": "Should the Hub pin starlette/fastapi, or keep resolving the newest allowed version on every CI run?",
+            "measured": "hub/pyproject.toml constrains only 'starlette<2.0' and 'fastapi>=0.110', so CI resolved starlette 1.6.0 / fastapi 0.141.1 while this machine has 0.52.1 / 0.136.3 -- two majors apart on starlette. That gap is what made today's CI failure invisible locally for 12 commits: the test passed here and could not pass there, and no amount of local running would have said so. Any test that reads a framework data structure is currently unverifiable locally by default.",
+            "why_it_is_the_operators": "It is a trade between two real costs. Pinning makes local and CI agree and makes this class of failure locally reproducible, but freezes the Hub on a version and turns upstream drift into a deliberate, scheduled upgrade. Not pinning keeps catching real incompatibilities early -- which is what happened today -- at the price of catching them only on CI, hours after the commit. Neither is obviously right and the loop should not choose it unattended.",
+            "not_blocking": "The red CI is repaired either way. This decides whether it recurs in a different test."
+        },
+        {
+            "id": "F299-posture-on-a-harness-without-mcp",
+            "opened": "2026-09-08",
+            "carried": "Open from the night window, enlarged 2026-09-09 by F300/F301. Carried to the review page untouched, per the day-window playbook; this window did not touch it."
+        }
+    ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",

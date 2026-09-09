@@ -153,11 +153,20 @@ def test_the_announce_route_the_adapter_posts_to_is_one_the_app_mounts():
     """The two halves live in different processes — `mcp_server.py` may import only stdlib and
     fastmcp — so a typo in either path is invisible until a run makes it. This is the assertion
     that the two agree, the same shape `test_tool_surface_matches_server.py` uses.
+
+    Read through `api_route_paths` rather than by iterating `create_app().routes` directly, for
+    the reason `_routing.py` was written down: `app.routes` is not the same data structure on
+    every Starlette. Under 1.x it holds `_IncludedRouter` wrappers whose inner `APIRoute`s carry
+    *relative* paths, so a direct comprehension sees only the handful of routes declared on the
+    app itself and this assertion fails on a route that is mounted. Shipped the direct way, it
+    passed on the dev machine's Starlette 0.52.1 and could never pass on CI's 1.6.0 — twelve
+    consecutive red `hub-test` runs, the only failure in 4,032 tests.
     """
     from hub.main import create_app
 
-    paths = {route.path for route in create_app().routes if hasattr(route, "path")}
-    assert "/api/v1/agent-actions/mcp-adapter-online" in paths
+    from ._routing import api_route_paths
+
+    assert "/api/v1/agent-actions/mcp-adapter-online" in api_route_paths(create_app())
 
 
 def test_the_adapter_swallows_a_refusal_rather_than_failing_to_start(monkeypatch):

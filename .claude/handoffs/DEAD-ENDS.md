@@ -238,6 +238,23 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 - **`extra: "forbid"` rejects a forbidden *key* regardless of its value** — including `None`.
 - **There is no `db_session` fixture.** Use `async_session_factory()` from `hub.db.engine`.
 - **The `app` fixture is an httpx client with no `.routes`.**
+- **Never read `create_app().routes` directly — this machine's Starlette is two majors behind CI's,
+  so the shape you measure locally is not the shape CI sees.** *(Measured 2026-09-09.)* Here:
+  starlette **0.52.1** / fastapi **0.136.3**. CI resolves starlette **1.6.0** / fastapi **0.141.1**
+  fresh on every run (read off run `34325989834`'s install step), and 1.x stopped flattening
+  `include_router` into `app.routes`: it holds `_IncludedRouter` wrappers whose inner `APIRoute`s
+  carry *relative* paths. A direct comprehension therefore sees only the routes declared on the app
+  itself — `/health`, `/docs`, `/assets`, `/openapi.json` — and every `/api/v1/...` path looks
+  absent. **Use `api_route_paths` / `iter_api_routes` from `hub/tests/_routing.py`**, which walks
+  either shape. This has now been the same mistake three times (`test_mcp_body_contract`,
+  `test_request_strictness`, and `test_mcp_adapter_online`); the third cost **twelve consecutive red
+  `hub-test` runs** and held the daily loop's merge gate shut for two days, as the only failure in
+  4,032 tests, while passing locally every time it was run.
+  **To check a framework-shape assumption against CI without waiting for CI**, build a throwaway
+  venv — `py -3.11 -m venv <tmp>`, then `pip install -e ./hub[dev]` and `pip install -e .` into it,
+  which resolves the newest allowed starlette exactly as CI does (~4 min). Run the suspect file
+  with that interpreter. This is the only local way to see the 1.x route shape; the repo venv
+  cannot show it.
 - **`run.task_id` is NULL on most runs** — 154 of 202 measured. Read the transition table instead.
 - **`run_job` returns 503 in tests** unless `get_scheduler()` is patched.
 - **The aiosqlite connection internals the F295 guard reads ARE reachable from a pool listener,
