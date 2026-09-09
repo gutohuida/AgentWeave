@@ -87,4 +87,34 @@ describe('eventTargetsAgent — chat live-update matching (previously: no SSE co
     expect(eventTargetsAgent('queue_chain_suspended', { agent: 'claude' }, 'claude')).toBe(true)
     expect(eventTargetsAgent('queue_entry_queued', { agent: 'codex' }, 'claude')).toBe(false)
   })
+
+  /**
+   * F274, task 4.8. The chat response carries `runs` now, so a run row settling has to refetch
+   * THIS query — nothing else will. An operator stop is the case with no cover at all:
+   * `stop_agent_run` terminates the process and writes no `AgentOutput` row, so `run_stopped` is
+   * the only event a chat listener hears about that run ending.
+   */
+  it('matches the four run-terminal events, so the runs map settles without a reload', () => {
+    expect(eventTargetsAgent('run_completed', { agent: 'claude' }, 'claude')).toBe(true)
+    expect(eventTargetsAgent('run_failed', { agent: 'claude' }, 'claude')).toBe(true)
+    expect(eventTargetsAgent('run_stopped', { agent: 'claude' }, 'claude')).toBe(true)
+    expect(eventTargetsAgent('run_interrupted', { agent: 'claude' }, 'claude')).toBe(true)
+  })
+
+  it('does not match a run-terminal event for a different agent', () => {
+    expect(eventTargetsAgent('run_stopped', { agent: 'codex' }, 'claude')).toBe(false)
+    expect(eventTargetsAgent('run_failed', { agent: 'codex' }, 'claude')).toBe(false)
+  })
+
+  /**
+   * The deliberate divergence from `eventBelongsToTimeline`, which does take `run_started`
+   * (`agents.ts`). A starting run adds nothing to a chat response that the
+   * `queue_entry_delivered` above it does not already carry, and the conversation-scoped
+   * response is unbounded, so an extra refetch of it is a real cost. Asserted rather than left
+   * to the implementation, because "reuse the timeline's predicate" is the obvious tidy-up and
+   * it would silently widen this.
+   */
+  it('does NOT match run_started', () => {
+    expect(eventTargetsAgent('run_started', { agent: 'claude' }, 'claude')).toBe(false)
+  })
 })

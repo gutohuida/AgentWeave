@@ -6,7 +6,6 @@ import {
   AgentSummary,
   useAgentOutput,
   useAgents,
-  useAgentTimeline,
 } from '@/api/agents'
 import {
   conversationLabel,
@@ -327,10 +326,6 @@ export function AgentOutputPanel({
   const agentDefaultControls = targetAgentRow?.default_permission_mode
     ? { [PERMISSION_MODE_CONTROL]: targetAgentRow.default_permission_mode }
     : EMPTY_CONTROLS
-  // This panel reads neither half; it is the only thing that can carry them. The hook lives
-  // here and `AgentTimeline` takes both as props, so `runs` is threaded through unread.
-  const { data: timeline } = useAgentTimeline(agent.name)
-  const runFacts = timeline?.runs ?? {}
   const { data: accounting } = useAccounting()
   const { data: conversationUsage } = useConversationAccounting(currentConversationId ?? null)
   const { data: queueStatus } = useQueueStatus(agent.name)
@@ -351,6 +346,13 @@ export function AgentOutputPanel({
   const recentChat = useAgentRecentChat(agent.name)
   const chat = currentConversationId ? conversationChat : recentChat
   const timelineEntries = chat.data?.entries ?? []
+  // This panel reads neither half; it is the only thing that can carry them. Both come off the
+  // SAME response, which is the point: `runs` is keyed to the runs `entries` names, so a turn
+  // rendered here always has its run's row. Taking it from `useAgentTimeline` instead keyed it
+  // to that route's fifty-event window, and a turn whose events had aged out of that window lost
+  // its terminal label and its "Worked for Ns" (F274). The timeline route keeps its own map —
+  // it is correct for its own events — and this component no longer calls it.
+  const runFacts = chat.data?.runs ?? {}
   const sseConnectionState = useSSEConnectionState()
 
   // Follow the entries the timeline actually renders. This used to depend on `lines` — the

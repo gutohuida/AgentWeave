@@ -33,6 +33,7 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
     session_id: conversations[0]?.provider_session_id ?? null,
     agent: 'claude',
     entries: recordedEntries,
+    runs: {},
   })
   return {
     ...actual,

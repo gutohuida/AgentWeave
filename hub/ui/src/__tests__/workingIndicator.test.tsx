@@ -295,6 +295,77 @@ describe("F190's third consequence — an older ended run no longer keeps the in
 })
 
 /**
+ * F274, task 4.10 — stop-then-send, after the map moved onto the chat response.
+ *
+ * This is the 2026-08-20 behaviour ("if I stop the turn and send a new message the working
+ * indicator do not show anymore") and the one thing the map move could have taken away silently.
+ * It used to be carried by `anotherRunIsUnderway`: the TIMELINE route keyed its map to lifecycle
+ * events, so a `run_started` put the new run's row in the map with nothing grouped into a turn
+ * yet. The chat response's map is keyed by the runs its ENTRIES name, so an entry-less run has no
+ * row at all here.
+ *
+ * What carries it instead is an entry. `inbound_queue.py:152-160` stamps `delivered_in_run_id` in
+ * the same commit that adds the new `Run`; `_queue_entry_to_timeline` gives a delivered entry
+ * `timestamp=entry.delivered_at`; both chat routes sort ascending, so that entry is last and
+ * `groupIntoTurns` — which preserves array order — makes the new run the NEWEST turn. So
+ * `lastRunSettled` is what stays false, not `anotherRunIsUnderway`.
+ *
+ * `runsFor` derives the map from the entries the way the server does, so dropping the delivered
+ * entry drops its run row with it. Building the two by hand would let the fixture assert a state
+ * the response cannot produce — a key for a run no entry names — which is the exact thing that
+ * stopped being true.
+ */
+describe('stop-then-send: the delivered operator input is what keeps the indicator up', () => {
+  /** The map exactly as the chat response builds it: a row for each run THESE entries name. */
+  function runsFor(
+    entries: TimelineEntry[],
+    facts: Record<string, AgentRunFacts>,
+  ): Record<string, AgentRunFacts> {
+    const named = new Set(entries.map((e) => e.run_id).filter(Boolean) as string[])
+    return Object.fromEntries(Object.entries(facts).filter(([id]) => named.has(id)))
+  }
+
+  const stoppedAnswer = entry({ id: 'a1', run_id: 'run-a', content: 'a partial answer' })
+  /** What every run persists at its end, whatever the outcome — run A settles on this. */
+  const stoppedStatus = entry({
+    id: 'status-a',
+    output_kind: 'status',
+    content: 'Run stopped (exit 15).',
+    payload: { phase: 'completed', exit_code: 15 },
+    run_id: 'run-a',
+    timestamp: '2026-08-02T00:00:04Z',
+  })
+  /** The operator's next message, delivered — and naming run B from the instant B is committed. */
+  const deliveredInput = entry({
+    id: 'in-b',
+    kind: 'operator_input',
+    content: 'try again',
+    run_id: 'run-b',
+    timestamp: '2026-08-02T00:00:05Z',
+    delivery_state: 'delivered',
+  })
+  const allFacts: Record<string, AgentRunFacts> = {
+    'run-a': run('stopped', '2026-08-02T00:00:04Z'),
+    'run-b': run('started'),
+  }
+
+  it('shows while run B has produced nothing but its delivered input', () => {
+    const entries = [stoppedAnswer, stoppedStatus, deliveredInput]
+    renderTimeline({ isRunning: true, entries, runs: runsFor(entries, allFacts) })
+    expect(screen.getByTestId('timeline-working-indicator')).toBeInTheDocument()
+  })
+
+  it('and goes dark without that entry — which is what the response would then carry', () => {
+    // The mutation, as a case: nothing names run B, so no entry groups it into a turn and no row
+    // for it reaches the map either. The newest turn is the settled run A, and there is nothing
+    // left to say a run is underway.
+    const entries = [stoppedAnswer, stoppedStatus]
+    renderTimeline({ isRunning: true, entries, runs: runsFor(entries, allFacts) })
+    expect(screen.queryByTestId('timeline-working-indicator')).not.toBeInTheDocument()
+  })
+})
+
+/**
  * Task 4.7's per-runner guards. These three cases are not one claim: phase 0 WATCHED the Claude
  * one work (task 0.3, which falsified round 3b), and the other two have never worked, so asserting
  * them together would assert the wrong thing about one of them.

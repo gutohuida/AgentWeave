@@ -17,6 +17,11 @@ import { useConfigStore } from '@/store/configStore'
  * between the hook and the only component that consumes it.
  *
  * These two tests are the only ones that put a NON-empty envelope through the hook.
+ *
+ * **The second test changed direction with F274 (task 4.7).** The panel used to take `runs` off
+ * the timeline envelope; it takes it off the chat response now, because the map has to be keyed to
+ * the same query as the turns it labels. So the two fixtures below hold DIFFERENT maps on purpose:
+ * the timeline's is a decoy, and wiring the panel back to it is what the assertion catches.
  */
 
 let timeline: { events: AgentTimelineEvent[]; runs: Record<string, AgentRunFacts> } = {
@@ -48,6 +53,8 @@ vi.mock('@/components/agents/AgentTimeline', () => ({
 vi.mock('@/components/common/Icon', () => ({
   Icon: ({ name }: { name: string }) => <span data-testid="icon" data-name={name} />,
 }))
+let chatRuns: Record<string, AgentRunFacts> = {}
+
 vi.mock('@/api/agentChat', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agentChat')>()
   const history = (): ChatHistoryResponse => ({
@@ -55,6 +62,7 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
     session_id: null,
     agent: 'claude',
     entries: [],
+    runs: chatRuns,
   })
   return {
     ...actual,
@@ -116,11 +124,22 @@ const stoppedRun: AgentRunFacts = {
   ended_at: '2026-09-02T00:00:09Z',
 }
 
+/** The decoy. Only the timeline route serves this one, and nothing on screen may be labelled
+ *  from it — it stands for the run whose events are still inside that route's fifty-event
+ *  window while the turn on screen names a run that has aged out of it (F274). */
+const timelineOnlyRun: AgentRunFacts = {
+  status: 'completed',
+  exit_code: 0,
+  started_at: '2026-09-02T00:00:20Z',
+  ended_at: '2026-09-02T00:00:22Z',
+}
+
 describe('the timeline envelope is unwrapped by the two consumers that hold the hook', () => {
   beforeEach(() => {
     cleanup()
     handedToTimeline = {}
-    timeline = { events: [stopEvent], runs: { 'run-1': stoppedRun } }
+    timeline = { events: [stopEvent], runs: { 'run-timeline-only': timelineOnlyRun } }
+    chatRuns = { 'run-1': stoppedRun }
     conversations = [
       {
         id: 'conv-1',
@@ -152,13 +171,17 @@ describe('the timeline envelope is unwrapped by the two consumers that hold the 
     expect(screen.queryByText('No activity yet')).not.toBeInTheDocument()
   })
 
-  it('AgentOutputPanel hands the timeline the run facts it never reads, and no events at all', async () => {
+  it("AgentOutputPanel hands the timeline the CHAT response's run facts, not the timeline route's", async () => {
     render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
     await waitFor(() => expect(screen.getByTestId('timeline-stub')).toBeInTheDocument())
 
     // The point of task 3.3a: this panel is the only thing between the hook and the three
-    // consumers, and it must carry a value it has no use for.
+    // consumers, and it must carry a value it has no use for. F274 changed WHICH hook: the map
+    // now rides on the response that carries the entries, so a turn's run row cannot be scoped
+    // away by a window the turn was never in. Wiring `runFacts` back to `useAgentTimeline` fails
+    // both halves of this assertion.
     expect(handedToTimeline.runs).toEqual({ 'run-1': stoppedRun })
+    expect(handedToTimeline.runs).not.toHaveProperty('run-timeline-only')
     // And the other half of the envelope stops here (task 4.6a). `AgentTimeline` had no reader
     // left for the events, and the reader anyone would add back is the one F190 was: run state
     // reduced out of a list the route truncates. Asserted rather than merely deleted, so

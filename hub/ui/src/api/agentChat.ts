@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { ContextUsage } from './agents'
+import type { AgentRunFacts, ContextUsage } from './agents'
 import { ApiError, deleteJson, getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import { useSSE } from '@/hooks/useSSE'
@@ -48,6 +48,18 @@ export interface ChatHistoryResponse {
   session_id: string | null
   agent: string
   entries: TimelineEntry[]
+  /** How every run these `entries` name ended, keyed by `run_id` — the same `RunFacts` shape the
+   *  timeline route serves, carried here so the facts arrive on the response that carries the
+   *  turns they describe.
+   *
+   *  The timeline route's map is scoped to its own fifty-event window; this one is scoped to
+   *  these entries, so a turn on screen always has its run's row (F274). A lookup miss means
+   *  "no run row for this id", never "this run has not ended".
+   *
+   *  Required rather than optional, matching `AgentTimelineResponse.runs`: the server always
+   *  serves the key (`default_factory=dict`), and the only absence a reader has to handle is the
+   *  query having no data yet. */
+  runs: Record<string, AgentRunFacts>
 }
 
 /** Whether a conversation needs the operator, without opening it. `waiting` outranks `running`:
@@ -277,12 +289,49 @@ const QUEUE_EVENT_TYPES = new Set([
   'queue_chain_suspended',
 ])
 
+/** A run reaching a terminal status. These are here because the chat response carries `runs`
+ *  now, and that map is only as fresh as the query it rides on.
+ *
+ *  The run row — not the streamed status line — is what `AgentTimeline` treats as authoritative
+ *  for a turn's outcome, and the row is written by the code that broadcasts these four. An
+ *  operator **stop** is the case with no cover at all: `stop_agent_run`
+ *  (`agent_trigger.py:1571-1627`) force-terminates the process and writes no `AgentOutput` row,
+ *  so nothing this predicate already matched will fire, and `run_stopped` is the only event a
+ *  chat listener hears about that run ending. On the paths that do write a terminal status line,
+ *  the `agent_output` event and the run row's commit are separate broadcasts, so a refetch
+ *  triggered by the output alone can read the row while it still says `started`; these are what
+ *  correct that.
+ *
+ *  Not `run_started` — a deliberate divergence from `eventBelongsToTimeline`, which takes it. A
+ *  starting run adds nothing to a chat response that is not already carried by the
+ *  `queue_entry_delivered` above it (the delivered entry names the new run in the same commit
+ *  that creates it — see `AgentTimeline`'s `anotherRunIsUnderway`), and the conversation-scoped
+ *  response is unbounded, so an extra refetch of it is a real cost.
+ *
+ *  `run_interrupted` is here for completeness of "the row changed", not because it rescues the
+ *  Hub-restart case: `reconcile_interrupted_runs()` is awaited inside the lifespan
+ *  (`main.py:402`, before `yield`), so it broadcasts before uvicorn serves anything and no
+ *  reconnecting client can be subscribed yet. That case is served by `useSSE`'s reconnect
+ *  handler, which invalidates every query (`useSSE.ts:404-412`). */
+const RUN_TERMINAL_EVENT_TYPES = new Set([
+  'run_completed',
+  'run_failed',
+  'run_stopped',
+  'run_interrupted',
+])
+
 /** True if an SSE event names `agent` as its target, across the various
  * payload shapes used by message_created (`to` or `recipient`), agent_output
- * (`agent`), and the queue lifecycle events (`agent`) that move entries
- * between the undelivered and delivered states this timeline renders. */
+ * (`agent`), the queue lifecycle events (`agent`) that move entries
+ * between the undelivered and delivered states this timeline renders, and the
+ * run-terminal events (`agent`) that settle the `runs` map those turns are labelled from. */
 export function eventTargetsAgent(eventType: string, data: unknown, agent: string): boolean {
-  if (eventType !== 'message_created' && eventType !== 'agent_output' && !QUEUE_EVENT_TYPES.has(eventType)) {
+  if (
+    eventType !== 'message_created' &&
+    eventType !== 'agent_output' &&
+    !QUEUE_EVENT_TYPES.has(eventType) &&
+    !RUN_TERMINAL_EVENT_TYPES.has(eventType)
+  ) {
     return false
   }
   const d = (data ?? {}) as Record<string, unknown>

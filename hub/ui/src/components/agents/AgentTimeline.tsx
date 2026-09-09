@@ -25,7 +25,13 @@ interface AgentTimelineProps {
   agent: AgentSummary
   entries: TimelineEntry[]
   roster: AgentSummary[]
-  /** How every run in this window ended, keyed by `run_id`, straight from the timeline route.
+  /** How every run these `entries` name ended, keyed by `run_id`, from the **chat response** —
+   *  the same response `entries` comes from, and that pairing is the requirement rather than an
+   *  implementation detail. The map has to be keyed to the same query as the turns it labels: the
+   *  timeline route serves its own map, scoped to that route's fifty-event window, and reading it
+   *  here left a turn whose events had aged out of that window with no terminal label and no
+   *  "Worked for Ns" (F274).
+   *
    *  This is the component's ONLY source of run state. It used to take the route's lifecycle
    *  events too and reduce this out of them; that prop is gone (task 4.6a) because the route
    *  truncates that list and a run whose terminal event fell off the end read as still going
@@ -131,33 +137,49 @@ export function AgentTimeline({
   //      `payload.phase="completed"` — the row `isSuccessCompletionEntry` hides from view). It
   //      lands the instant the run ends.
   //   2. `runs[runId].status` — the run row's own outcome, authoritative but arriving late: the
-  //      SSE event only INVALIDATES the timeline query (`useAgentTimeline`), so the value costs
-  //      a further HTTP round trip.
+  //      SSE event only INVALIDATES the query this map rides on (the chat query — see the `runs`
+  //      prop), so the value costs a further HTTP round trip.
   //
   // Gating on (2) alone still left a visible tail — the counter kept running under a finished
   // answer for as long as the refetch took (operator, 2026-08-18: "It still linger a little
   // bit"). (1) closes that gap; (2) stays as the backstop for a run whose status line never
   // arrived, and for history loaded fresh where the entry is long since persisted.
   //
-  // Signal 2 used to be reduced out of the lifecycle EVENTS instead, which is the defect this
-  // change deletes: the route truncates its event list, so a run whose terminal event fell off
-  // the end read as "still going" forever (F190). The run row cannot fall off — the route
-  // returns a row for every run the events it returns name.
+  // Signal 2 used to be reduced out of the lifecycle EVENTS instead, which is the defect the
+  // F190 change deleted: that route truncates its event list, so a run whose terminal event fell
+  // off the end read as "still going" forever. The run row cannot fall off — the response
+  // returns a row for every run the ENTRIES it returns name, and those entries are exactly the
+  // turns rendered here. (F190's fix took the map off the timeline route, which merely moved the
+  // truncation: the map was then bounded by that route's fifty events rather than by these
+  // entries. F274 is that residue, and the prop's source is the chat response now.)
   const lastTurn = turns.length > 0 ? turns[turns.length - 1] : undefined
   const lastRunId = lastTurn?.runId ?? null
   const lastRunSettled =
     (lastTurn?.entries.some(isSuccessCompletionEntry) ?? false) ||
     (lastRunId !== null && TERMINAL_STATUSES.has(runs[lastRunId]?.status))
 
-  // A run other than the newest loaded turn's, started and not yet ended. A new run's row is in
-  // `runs` before that run's first entry has been grouped into a turn — the route returns a row
-  // for every run its events name, and `run_started` is one of them — so this is the only signal
-  // available in the window between the two.
+  // A run other than the newest loaded turn's, started and not yet ended.
   //
-  // It is what makes stop-then-send work. Stopping settles run A; sending starts run B; and until
-  // B's own entries arrive, the newest turn on screen is still the stopped A. Gating on the last
-  // turn alone therefore hid the indicator for the whole of B (operator, 2026-08-20: "if I stop
-  // the turn and send a new message the working indicator do not show anymore").
+  // Stop-then-send is what this exists for. Stopping settles run A; sending starts run B; and
+  // before B produces any output of its own, the indicator still has to show, or it goes dark for
+  // the whole of B (operator, 2026-08-20: "if I stop the turn and send a new message the working
+  // indicator do not show anymore").
+  //
+  // What covers that window is NOT this clause, and the comment here used to say it was. It said
+  // a new run's row is in `runs` before any entry names it — true of the timeline route, whose
+  // map was keyed to its own lifecycle events and so held a `run_started` with nothing grouped
+  // yet. The map is the chat response's now (F274) and is keyed by the runs its ENTRIES name, so
+  // an entry-less run has no row here by construction.
+  //
+  // The window is covered by an entry instead, and B is the newest turn rather than a key with no
+  // turn: `inbound_queue.py:152-160` stamps `delivered_in_run_id` in the same commit that adds
+  // B's `Run`, `_queue_entry_to_timeline` gives a delivered entry `timestamp=entry.delivered_at`,
+  // both chat routes sort ascending so that entry is last, and `groupIntoTurns` preserves array
+  // order without sorting. So `lastRunId` is B, B's status is `started`, and `lastRunSettled`
+  // above is false — that is what keeps the indicator up. Measured live by task 6.7.
+  //
+  // This clause is kept for the case its name describes and the one above does not cover: a run
+  // underway that is not the newest turn's.
   //
   // Excluding `lastRunId` is what keeps the lingering-tail fix above intact: during the tail the
   // completed run's own status has not been refetched yet, so counting it here would show the

@@ -104,20 +104,20 @@ ask its own question.
 
 ## 2. The client reads the facts from the response that carries the turns
 
-- [ ] 2.1 `hub/ui/src/api/agentChat.ts`: `ChatHistoryResponse` gains
+- [x] 2.1 `hub/ui/src/api/agentChat.ts`: `ChatHistoryResponse` gains
       `runs: Record<string, AgentRunFacts>`, importing `AgentRunFacts` from `./agents`.
-- [ ] 2.2 `AgentOutputPanel.tsx:333`: `runFacts` comes from `chat.data?.runs ?? {}` and no longer
+- [x] 2.2 `AgentOutputPanel.tsx:333`: `runFacts` comes from `chat.data?.runs ?? {}` and no longer
       from `timeline?.runs`. Check whether `useAgentTimeline` is still called in this component for
       anything else — as of this proposal it is not (`:332-333` is its only use) — and remove the
       call if it has become dead. **Do not remove the timeline route's map** (design D5). The
       two-line comment directly above it (`:330-331`, *"This panel reads neither half; it is the
       only thing that can carry them"*) explains why the hook lives here and must go with the hook
       rather than be left describing something that is no longer there.
-- [ ] 2.3 `AgentTimeline.tsx`'s `runs` prop comment currently reads *"straight from the timeline
+- [x] 2.3 `AgentTimeline.tsx`'s `runs` prop comment currently reads *"straight from the timeline
       route"*. Rewrite it to name the chat response and to say why: the map must be keyed to the
       same query as `entries`, and the timeline route's map is scoped to a different window. Keep
       the existing "a caller with nothing to say must say `{}`" rule.
-- [ ] 2.4 **The working indicator reads this prop too, in two more places** (design D9), and neither
+- [x] 2.4 **The working indicator reads this prop too, in two more places** (design D9), and neither
       is about a turn's terminal label: `lastRunSettled` (`AgentTimeline.tsx:148-150`) and
       `anotherRunIsUnderway` (`:166-172`), whose own comment says it depends on the map holding a
       run *before that run's first entry has been grouped into a turn* — which the new map cannot do
@@ -133,7 +133,7 @@ ask its own question.
 
 ## 3. The invalidation moves with the map
 
-- [ ] 3.1 `agentChat.ts`: `eventTargetsAgent` (`:284`) also returns true for `run_completed`,
+- [x] 3.1 `agentChat.ts`: `eventTargetsAgent` (`:284`) also returns true for `run_completed`,
       `run_failed`, `run_stopped` and `run_interrupted` when `data.agent` matches — deliberately
       **not** `run_started` (design D4). Comment the divergence from `eventBelongsToTimeline` at the
       site, and give the reason that is actually load-bearing: a run that fails **before its process
@@ -141,22 +141,52 @@ ask its own question.
       `run_failed` is the only event a chat hook can hear (F291). Do **not** write the
       Hub-restart reason there — that case is served by `useSSE`'s reconnect invalidation and this
       predicate has nothing to do with it (design D8).
-- [ ] 3.2 Confirm the four events actually carry `agent` in their SSE payload before relying on it —
+- [x] 3.2 Confirm the four events actually carry `agent` in their SSE payload before relying on it —
       `eventBelongsToTimeline` reads `d.agent === name` for exactly these, so this is a check that
       the existing reader is right, not an assumption inherited from it.
-- [ ] 3.3 Both hooks share `eventTargetsAgent`, so 3.1 covers the recent view too. Verify that is
+- [x] 3.3 Both hooks share `eventTargetsAgent`, so 3.1 covers the recent view too. Verify that is
       still true rather than assuming it.
-- [ ] 3.4 **Add no reconnect subscription** (design D8). R2's version of this task told you to give
+- [x] 3.4 **Add no reconnect subscription** (design D8). R2's version of this task told you to give
       both chat hooks their own `onSseReconnect` handler; R3 measured that `useSSE` already has one
       that invalidates *every* query (`useSSE.ts:404-412`), from a hook mounted app-wide at
       `App.tsx:216`. Confirm both facts on the checkout before relying on them — read the two lines,
       do not take them from here — and then write nothing. If either has changed, stop: the second
       ADDED requirement's reconnect half has lost its mechanism and needs a decision, not a patch.
-- [ ] 3.5 Confirm the ordering claim on the checkout rather than inheriting it from this document:
+- [x] 3.5 Confirm the ordering claim on the checkout rather than inheriting it from this document:
       with a browser attached, restart the Hub and check whether any `run_interrupted` frame arrives
       on the reconnected stream. Expect none. If one does arrive, D8's premise is wrong — say so
       rather than deleting the comment, because 0.4's measurement would then have a second
       explanation.
+
+**Sections 2 and 3 built 2026-09-09 (night window, iteration 16), client only.** What was
+written, and what was confirmed and then deliberately not written:
+
+- **2.2's removal was justified before it was made.** `useAgentTimeline` was called once in
+  `AgentOutputPanel` (`:332`) and `timeline` read once (`:333`); both are gone, the import with
+  them, and the two-line comment moved WITH the value to its new site beside `chat.data?.entries`.
+  It says what the pairing is for rather than only that the panel does not read it.
+- **3.1's comment does not carry F291's sentence, and the reason it carries instead is measured
+  off the code.** The load-bearing case is an operator **stop**: `stop_agent_run`
+  (`agent_trigger.py:1571-1627`) force-terminates the process and writes no `AgentOutput` row, so
+  no event this predicate already matched fires and `run_stopped` is the only thing a chat
+  listener hears about that run ending. The secondary reason is an ordering one: on the paths that
+  do persist a terminal status line, the `agent_output` broadcast and the run row's commit are
+  separate, so a refetch triggered by the output alone can read the row while it still says
+  `started`.
+- **3.2 confirmed rather than inherited.** All four events carry `agent`:
+  `_broadcast_run_lifecycle` builds `payload = {"agent": agent, "run_id": run_id, **fields}`
+  (`agent_trigger.py:1785`) for `run_completed`/`run_failed`/`run_stopped`, and
+  `run_reconciliation.py:102-117` does the same for `run_interrupted`, which is broadcast from a
+  different module and so had to be checked separately.
+- **3.3 confirmed:** `useAgentChatHistory` and `useAgentRecentChat` both call `eventTargetsAgent`
+  in their `useSSE` callbacks, so 3.1 covers the recent view with no second edit.
+- **3.4 confirmed, and nothing written.** `useSSE.ts:404-412` still invalidates every query on
+  reconnect, and `App.tsx:216` still mounts `useSSE()` app-wide. Both read on this checkout.
+- **3.5 answered from the code, and the live half is 6.3's.** No `run_interrupted` frame can reach
+  a reconnecting client: `reconcile_interrupted_runs()` is awaited at `main.py:402`, six lines
+  before the lifespan's `yield`, so it broadcasts into `_subscribers` before uvicorn serves
+  anything. D8's premise holds. This is an ordering argument, not a browser measurement — 6.3 has
+  the browser attached and re-runs 0.4, and that is where the frame count gets watched.
 
 ## 4. Tests — each one mutation-checked
 
@@ -202,30 +232,59 @@ the code, not on a red test, and a future change to `_queue_entry_to_timeline` w
 caught. **M7 was what forced the empty-map test to be worth writing**: as first drafted it asserted
 `runs == {}` for a conversation with no runs at all, which no mutation of this code can falsify.
 It now gives the agent a run in a *different* conversation, and M7 kills it.
-- [ ] 4.7 `hub/ui/src/__tests__/` — the panel passes the **chat** response's `runs` to
+- [x] 4.7 `hub/ui/src/__tests__/` — the panel passes the **chat** response's `runs` to
       `AgentTimeline`. Mutation: wire it back to the timeline query and watch it fail. This is D5's
       guard and the reason the two maps may coexist.
-- [ ] 4.8 `hub/ui/src/__tests__/` — `eventTargetsAgent` returns true for the four terminal run
+- [x] 4.8 `hub/ui/src/__tests__/` — `eventTargetsAgent` returns true for the four terminal run
       events and false for `run_started`. Mutation both directions.
-- [ ] 4.9 `hub/ui/src/__tests__/` — an SSE **reconnect** refetches a chat query (design D8). This
+- [x] 4.9 `hub/ui/src/__tests__/` — an SSE **reconnect** refetches a chat query (design D8). This
       pins existing behaviour rather than new code, and it is the requirement's only guard: nothing
       else fails if `useSSE.ts:404-412` is narrowed from `invalidateQueries()` to a filtered call.
       Drive it through `useSSE`'s own reconnect path rather than through a per-hook mock —
       `useSSE-lifecycle.test.tsx:229` is the shape, `agentOutput-polling.test.tsx:22` is the wrong
       one here because it mocks the very layer under test. Mutation: narrow the global invalidation
       to any single key and watch this fail.
-- [ ] 4.10 `hub/ui/src/__tests__/` — the working indicator still shows for a just-started run whose
+- [x] 4.10 `hub/ui/src/__tests__/` — the working indicator still shows for a just-started run whose
       only entry is its delivered operator input, with the previous turn settled (design D9). This
       is the 2026-08-20 stop-then-send behaviour, and it is the one thing the map move could take
       away silently. Mutation: drop the delivered entry from the fixture and watch it fail.
+
+**4.7-4.10 built and mutation-checked 2026-09-09 (night window, iteration 16).** Four tests
+across three files plus one new file, run inside the whole UI suite: **146 files, 1512 tests,
+all passing**, `npm run lint` clean. Every source file was md5-verified back to its baseline after
+each mutation.
+
+| Mutation | Kills |
+|---|---|
+| M-A `runFacts` wired back to `useAgentTimeline(agent.name).data?.runs` | 4.7 (`timelineEnvelopeUnwrap`) |
+| M-B1 `RUN_TERMINAL_EVENT_TYPES` dropped from the predicate | 4.8's positive case |
+| M-B2 `run_started` added to that set | 4.8's `does NOT match run_started` |
+| M-B3 predicate ignores which agent (`return true`) | 4.8's different-agent case, and 2 older ones |
+| M-C reconnect invalidation narrowed to `{queryKey: ['agents']}` | 4.9 — **and nothing else** |
+| M-D `runVisiblyActive` drops the `!lastRunSettled` half | 4.10's positive case, and 6 older ones |
+| M-E `runVisiblyActive` drops both gates | 4.10's negative case, and 7 older ones |
+
+Three things the pass established that the tasks only asserted:
+
+1. **4.9's premise is correct, measured.** Under M-C the existing
+   `useSSE-lifecycle.test.tsx` reconnect test **still passes** — it spies `invalidateQueries` and
+   a filtered call is still a call. 4.9 counts real refetches of a real chat query instead, and it
+   is the only test in the suite that fails when that invalidation is narrowed.
+2. **4.7 needed a decoy, not a fixture.** The existing assertion (`runs` equals the timeline
+   envelope's map) had to change direction anyway; asserting equality against the chat map alone
+   would pass under M-A whenever the two fixtures agreed. The timeline mock now serves a
+   `run-timeline-only` row that must never reach the screen, and M-A fails on both halves.
+3. **4.10's fixture derives `runs` from its entries**, the way the response does. Hand-building
+   the two independently would let it assert a state the response cannot produce — a key for a run
+   no entry names — which is precisely what stopped being true when the map moved.
 
 ## 5. Gates
 
 - [ ] 5.1 `pytest hub/tests/ -v` and `pytest tests/ -v`, under `py -3.11`, never bare `python`.
 - [ ] 5.2 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
       --target-version py311`, `mypy src/`.
-- [ ] 5.3 `cd hub/ui && npm run lint && npm test`.
-- [ ] 5.4 `cd hub/ui && npm run build`, then `python scripts/refresh_ui_bundle.py`. Commit
+- [x] 5.3 `cd hub/ui && npm run lint && npm test`.
+- [x] 5.4 `cd hub/ui && npm run build`, then `python scripts/refresh_ui_bundle.py`. Commit
       `hub/ui/src` and `hub/hub/static/ui` together so `/health` does not report `ui_stale`.
 
 ## 6. Drive it — the same measurements as phase 0, inverted

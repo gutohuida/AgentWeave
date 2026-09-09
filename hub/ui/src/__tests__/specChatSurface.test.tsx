@@ -77,6 +77,7 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
     session_id: null,
     agent: 'speccer',
     entries: [],
+    runs: {},
   })
   return {
     ...actual,

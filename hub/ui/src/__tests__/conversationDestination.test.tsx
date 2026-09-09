@@ -28,7 +28,7 @@ vi.mock('@/api/agentChat', async (importOriginal) => {
     useAgentChatHistory: (_agent: string | null, conversationId: string | null) => {
       requestedConversationId = conversationId
       return {
-        data: { conversation_id: conversationId, session_id: null, agent: 'claude', entries: [] } as ChatHistoryResponse,
+        data: { conversation_id: conversationId, session_id: null, agent: 'claude', entries: [], runs: {} } as ChatHistoryResponse,
         isLoading: false,
       }
     },
