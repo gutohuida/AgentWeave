@@ -48,9 +48,9 @@ lint set is not required — say so in the log rather than passing over it in si
 
 ## 3. The bundle
 
-- [ ] 3.1 `cd hub/ui && npm run build`, then `python scripts/refresh_ui_bundle.py` (`make` is not on
+- [x] 3.1 `cd hub/ui && npm run build`, then `python scripts/refresh_ui_bundle.py` (`make` is not on
   PATH in Git Bash on this machine). Commit `hub/ui/src` and `hub/hub/static/ui` together.
-- [ ] 3.2 **Prove the rebuild reached the bundle rather than assuming it.** Grep the dialog's own
+- [x] 3.2 **Prove the rebuild reached the bundle rather than assuming it.** Grep the dialog's own
   literal string in the served JS and confirm it occurs there and zero times in the bundle committed
   before, with a control string that *does* match in both so a zero is a real absence. Check
   `ui-build-stamp.json`'s `src_commit` moved. `AW_CHECK_UI_BUNDLE=1 pytest
