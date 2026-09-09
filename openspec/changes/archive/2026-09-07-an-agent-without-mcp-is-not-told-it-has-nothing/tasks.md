@@ -271,7 +271,7 @@ forever.
 - [x] 6.1 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
   hub/tests/ tests/`, `mypy src/`. Tests under `py -3.11`, never bare `python`. Say in the log that
   the TypeScript set was not required and why (no UI file changed).
-- [ ] 6.2 `pytest hub/tests/ -v`.
+- [x] 6.2 `pytest hub/tests/ -v`.
 - [x] 6.3 **Drive it.** `proposal.md` names two claims that are source readings and nothing more,
   because this window could not start a Hub. First: that a request to `/api/v1/agent-actions/*`
   carrying `AW_RUN_TOKEN` as a bearer token succeeds **from inside a spawned run's own environment**
