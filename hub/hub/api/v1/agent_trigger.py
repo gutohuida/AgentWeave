@@ -1802,6 +1802,36 @@ async def _broadcast_run_lifecycle(
     await sse_manager.broadcast(project_id, event_type, payload)
 
 
+def _log_abnormal_run_end(exc: BaseException, *, run_id: str, agent: str, label: str) -> None:
+    """How a run that ended on an exception is reported, for the two transports (F298).
+
+    Split off the two call sites because one of the things they catch is not an error.
+    `except (Exception, asyncio.CancelledError)` exists in both handlers principally for
+    event-loop teardown cancelling an orphaned background task -- the case each handler's
+    comment block names -- and that case is a Hub the operator asked to stop, doing exactly
+    what it was asked. Reporting it with `logger.exception` put an `ERROR` and a full
+    traceback into the log of every clean shutdown with a turn in flight, indistinguishable
+    from a crash to an operator reading the console and to anything grepping for `ERROR`.
+
+    So a `CancelledError` is reported as a cancellation, at WARNING and without a stack
+    trace, and everything else keeps the message and the traceback it always had. The
+    wording deliberately does not say *shutdown*: nothing at this point distinguishes a
+    teardown cancellation from any other, and a cancellation is a deliberate act either way.
+    What the handler then does is unchanged -- the row is still marked, the tail still runs,
+    and the `CancelledError` is still re-raised.
+    """
+    if isinstance(exc, asyncio.CancelledError):
+        logger.warning(
+            "The %s %s for %r was cancelled before it finished; marking it failed and "
+            "re-raising the cancellation",
+            label,
+            run_id,
+            agent,
+        )
+    else:
+        logger.exception("Unhandled error in %s %s for %r", label, run_id, agent)
+
+
 async def _record_run_failure_tail(
     *,
     project_id: str,
@@ -2419,7 +2449,7 @@ async def _execute_run(
         # `CancelledError` the way it does for everything else. Re-raised below, once the row is
         # marked, to preserve real cancellation semantics for anything that legitimately depends
         # on it propagating.
-        logger.exception("Unhandled error in run %s for %r", run_id, agent)
+        _log_abnormal_run_end(exc, run_id=run_id, agent=agent, label="run")
         await _record_run_failure_tail(
             project_id=project_id,
             agent=agent,
@@ -2956,7 +2986,7 @@ async def _execute_codex_appserver_run(
         # returning -- which is most of what this `except` exists to catch. The pre-spawn
         # `except` above uses `_transport_failure_fields` for exactly that reason, and so does
         # the shared tail.
-        logger.exception("Unhandled error in app-server run %s for %r", run_id, agent)
+        _log_abnormal_run_end(exc, run_id=run_id, agent=agent, label="app-server run")
         await _record_run_failure_tail(
             project_id=project_id,
             agent=agent,
