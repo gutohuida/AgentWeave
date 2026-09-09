@@ -370,6 +370,21 @@ That is the shortest that sentence has ever been on this page, and it is the obv
 except that unlike F140, F154 and F155, F142's own change document already says the drive is
 missing, so this one is a build, not a grep.
 
+**Revised 2026-09-09 (night window, iteration 3): `F142` is driven on both arms and closed, and it
+does not take the severity-A list to zero — it moves by one and gains one.** The list is not the
+"one" the paragraph above computed, either: the day window's classification pass later the same day
+reads the open severity-A set as **`F299`, `F300`, `F301`** — all three are `DAY-3` decision material
+and none is buildable unattended — with `F142` itself sitting in *conflict* rather than open. Closing
+F142 leaves those three. **And this iteration files a fourth: `F306` (A)**, found by F142's own
+row-four drive and living inside F142's repair — an agent that recorded the accepted implementation
+evidence for a task was staffed to review it and approved its own work, because the exclusion set
+reads three record sources and the evidence table is a fourth it does not read.
+
+So: **F299, F300, F301, F306.** Three of them are the operator's to decide; the fourth is a defect
+with a fix shape and no proposal, which makes it day-window material and not this window's to build.
+The count is stated here rather than by editing any line above it, for the reason the paragraph two
+above gives.
+
 ### Two more defects, found the same day by an adversarial review that was told to falsify
 
 **The first three below were found by me. These two were found by an Opus review agent spawned at
@@ -11123,11 +11138,20 @@ says which of these held rather than printing four thousand lines of JSON.
 
 ## F142 (A) — a task the operator marks finished can never be reviewed by its flow, and the stall blames the queue instead
 
-**Status: open — FIX SHIPPED `f3a778f` (2026-08-31). DRIVEN 2026-09-09 and it holds; one arm is
-still uncovered.** The operator-completed leg reached a staffed review and a verdict on a live Hub
-(20/20), and the arm was proved by its own `excluded_because` sentence rather than inferred. What is
-left is **row four** — the operator completes a task no agent ever touched. See *Driven 2026-09-09*
-below. Reclassified 2026-09-08.
+**Status: fixed `f3a778f` (2026-08-31), DRIVEN AND CLOSED 2026-09-09 (night window, iteration 3).**
+Both arms are now covered on a live Hub: the operator-completed leg reached a staffed review and a
+verdict (20/20, proved by its own `excluded_because` sentence rather than inferred), and **row four**
+— the operator walks a task the whole way and no run is ever bound to it — reached a staffed review
+and `approved` (19/19). See *Driven 2026-09-09* and *Row four driven 2026-09-09* below.
+Reclassified 2026-09-08.
+
+**Row four also found a defect in this very repair, filed separately as `F306` (A) and not reopening
+this entry**: the exclusion set `agents_that_may_have_authored` reads three record sources and the
+evidence table is a fourth it does not read, so the agent that recorded the accepted `implementation`
+evidence was staffed to review and approved its own work. This finding's own two claims — that
+operator-completed work is routed for review at all, and that a refusal names the task rather than
+the queue histogram — both hold; what F306 says is that the widening done to make the routing safe
+is incomplete.
 
 It is no longer waiting on an operator decision, and it never was one of two alternatives: **F140
 was fixed and driven before either was put to the operator**, so this finding's "it changes which of
@@ -11221,8 +11245,47 @@ this task"` (`:1555`, the agent arm) is absent. `GET /loops/{id}` reports the sa
    `approved` in the `operator_after_agent` run — so that is a turn that ended early, correctly
    reported, not a staffing failure.
 
-**Row four (`AW_COMPLETE_BY=untouched`) is still undriven** and is this finding's last unmet
-condition.
+### Row four driven 2026-09-09 — the last unmet condition, met, and one thing it found
+
+Same Hub (`:8011`, pid `7360`, started from source from `hub/` on `54ed088`; **`0 .py` under
+`hub/hub` or `src/` newer than the process start**, re-checked before this run rather than inherited
+from the previous one), a **fourth** throwaway project `proj-f741298c9c6b` built fresh — row four's
+whole claim is that no record associates any agent with the task, so reusing a fixture that had
+already carried a run would have been arguing with the premise. Haiku on every turn. `:8000` and
+`:8010` untouched; `proj-d85a82bf4216` never a target. No job left enabled.
+
+**`AW_COMPLETE_BY=untouched`, 19/19, 0 BAD.** The agent is triggered **without `task_id`**, which is
+what keeps `run.task_id` NULL and `assignee` unwritten; the operator then walks
+`pending → in_progress → completed` by hand and the flow is fired. Measured on
+`task-930385ddb031`, from the drive database:
+
+| sequence | from → to | actor_kind | run_id | actor_agent |
+|---|---|---|---|---|
+| 16 | `pending → in_progress` | operator | NULL | NULL |
+| 17 | `in_progress → completed` | **operator** | NULL | **NULL** ← the defect condition |
+| 18 | `completed → under_review` | operator | NULL | NULL ← the flow routing it |
+| 19 | `under_review → approved` | run | `run-9c401b649920` | `r7af142d` |
+
+`assignee` was never written and the task never left `pending` before the operator moved it, so all
+three sources of `agents_that_may_have_authored` are empty and the exclusion is `set()`. Firing 2
+returned **`200`**, staffed a reviewer, the reviewer got the review briefing (F143's swapped
+assertions all held), and the task reached **`approved`**; the harness prints `19/19 held`. The
+`409` with the status histogram did not occur. **F142's two claims are covered on both arms and this entry closes.**
+
+**What the run found, and it is not this finding's.** The reviewer staffed was `r7af142d` — *the
+agent that wrote the code*. It did the work on an unbound turn and then recorded evidence naming the
+task (`ev-c75844228ecc`, `actor_kind='agent'`, `actor='r7af142d'`, `run_id='run-e8ff74d5c129'` whose
+`task_id` is **NULL**, kind `implementation`, `review_state='accepted'`), and that evidence row is a
+fourth record associating an agent with the task which the exclusion does not read. So sequence 19
+is an agent approving its own implementation — the exact outcome the widening exists to prevent,
+reached through the widening. Filed as **`F306` (A)**.
+
+**The harness's own row-four assertion cannot see it**, and that is worth stating plainly:
+*"with NOBODY excluded — any bound agent may take it"* accepts `reviewer in pool or reviewer ==
+AGENT`, so a correctly-empty exclusion and an exclusion that missed the author are the same string
+to it. It passed truthfully — the exclusion *was* empty — and the defect is one level under the
+claim. Reading the transition and evidence rows is what told them apart, which is the same lesson
+the `operator` arm taught four hours earlier on this page.
 
 **A known residual on the adjacent path, already filed: `F167` (B).** F70's `wedged_review` asks
 `task.assignee in agents_that_worked(...)` when `completion_attribution` names nobody, and
@@ -24130,5 +24193,102 @@ iteration 1 at all. The defect is the missing reconciliation, not the window's o
 `DECISIONS.md` carries a matching decided section, or `decisions_for_user` stops holding questions
 and holds only pointers into `DECISIONS.md`, which would leave one channel. The second is cleaner
 and larger. **Not fixed here** — it changes the loop's own contract and belongs in a proposal.
+
+---
+
+## F306 (A) — an agent can be staffed to review, and approve, work it recorded evidence for
+
+**Status:** open — filed 2026-09-09 (night window, iteration 3), **measured on a live Hub**, not
+fixed. Found by F142's row-four drive, and it lives inside F142's own repair. It does **not** reopen
+F142: that finding's two claims — operator-completed work is routed for review at all, and a refusal
+names the task rather than the queue's status histogram — held on both arms (20/20 on
+`operator_after_agent`, 19/19 on `untouched`; the counts differ because the two modes assert
+different things in section B).
+
+**What was measured.** `proj-f741298c9c6b` on `:8011`, Haiku, `AW_COMPLETE_BY=untouched` in
+`scripts/drive/t_row12_review_leg.py`. Agent `r7af142d` was triggered **without `task_id`**, wrote
+`reviewleg_f142d.py`, and called `record_evidence(task_id='task-930385ddb031', kind='implementation')`.
+The operator then walked the task `pending → in_progress → completed` by hand and fired the flow.
+The flow staffed **`r7af142d`** as the reviewer of its own code, and sequence 19 of the task's
+history is `under_review → approved`, `actor_kind='run'`, `actor_agent='r7af142d'`. Nothing refused
+it and nothing recorded that it happened.
+
+**Why the exclusion missed it.** `agents_that_may_have_authored`
+(`hub/hub/task_transition_service.py:253-283`) is the union of exactly three sources, and its
+docstring tabulates them — transitions, `assignee`, runs bound to the task. All three were empty
+here, correctly:
+
+| source | value in this run | why |
+|---|---|---|
+| `agents_that_worked` (transitions) | ∅ | every pre-review transition is `actor_kind='operator'`, `actor_agent` NULL |
+| `task.assignee` | NULL | the task was never assigned; it went straight from `pending` by operator PATCH |
+| `agents_of_runs_bound_to` | ∅ | `run-e8ff74d5c129` has `task_id` **NULL** — the turn was never bound |
+| **`requirement_evidence.actor`** | **`r7af142d`** | **not a source** |
+
+The evidence row is the fourth record, and by the docstring's own standard it is the *strongest* of
+the four: the other three are circumstantial (this agent moved it / holds it / ran about it), while
+an accepted `implementation` evidence row is the agent asserting **"this is my implementation of
+this task"**, carrying the commit the reviewer is then handed. The function's stated principle is
+*"a record associating an agent with a task is sufficient to exclude it, and a source's silence is
+not evidence that the agent did not work it"* — applied to three of four sources.
+
+**`_guard_author_is_not_reviewer` does not catch it either** (`:286-311`). It compares
+`agent_that_completed` against the actor, and an operator completion writes `actor_agent = NULL`, so
+there is no completer to compare. The two defences against self-approval have the same blind spot
+for the same reason, and this is the arm on which they are the only defences.
+
+**The branch that produced it says, in its own comment, that this must not happen.** At
+`scheduler.py:1566-1571`, immediately above the call:
+
+> **But the exclusion cannot be `{author}`, because there is no author to name**, and `exclude=set()`
+> is a self-approval route: the agent that wrote the work is still eligible, and both transition
+> guards *permit* when the completer is unknown … So the ladder gets every agent any record
+> associates with the task.
+
+`agents_that_may_have_authored` returned the empty set here, so the ladder got `exclude=set()` — the
+value the comment rules out — by the route the comment describes as the remedy for it. The widening
+is not wrong; it is incomplete, and where it is incomplete it is indistinguishable from not having
+been done.
+
+**Severity A, and the reason is in the code's own words.** The design weighed the two costs
+explicitly: *"the cost of excluding an agent that did nothing is a review the flow reports it could
+not staff, which the operator sees; the cost of including one that wrote the work is a self-approval
+nobody sees."* This is the second cost, incurred silently, on the arm the widening was written for.
+It fails **open**, which is what separates it from `F167` (B) — the adjacent residual on the same
+repair, which fails closed.
+
+**How reachable it is in the product, stated exactly.** It needs three things, and none is exotic:
+an agent turn **not bound to a task** (the ordinary shape when an operator drives an agent from the
+composer), that agent recording evidence with a `task_id` (`record_evidence` takes one, and the flow
+briefing asks for evidence), and the operator marking the task complete themselves — which is
+precisely the operator behaviour F140 and F142 are both about. What is **not** established is how
+often the reviewer ladder picks the author rather than another agent when both are eligible; here
+the pool was two and it picked the author. Unverified: whether ordering is deterministic.
+
+**A truly untouched task is reachable and is not affected.** `POST /spec/evidence`
+(`hub/hub/api/v1/spec.py:801-833`) records evidence as `Actor(kind="operator")`, so an operator can
+supply the accepted evidence naming a commit that the review arm requires
+(`scheduler.py:1538-1548`) without any agent touching the task. In *that* world the empty exclusion
+is correct and this finding does not apply. The defect is the case where the evidence came from an
+agent and nothing else did.
+
+**The shape of a fix, not decided here** — this window does not write proposals, and this changes
+who may review, which needs one:
+
+- add the evidence table as a fourth source to `agents_that_may_have_authored`, scoped by `kind` so
+  a *reviewer's* own evidence does not exclude the reviewer that produced it — the naive union would
+  make the second review of a task unstaffable; or
+- have `_guard_author_is_not_reviewer` fall back to `agents_that_may_have_authored` when
+  `agent_that_completed` is NULL, which puts the refusal at the transition rather than at staffing
+  and so also covers a reviewer the operator assigns by hand.
+
+The first is the same principle the exclusion already states, extended; the second closes the door
+rather than the corridor. **Both are guesses until someone reads what else writes evidence rows.**
+
+**How it was found is worth keeping.** The drive's own assertion — *"with NOBODY excluded — any
+bound agent may take it"* — passed, truthfully. It accepts `reviewer in pool or reviewer == AGENT`,
+so a correctly-empty exclusion and an exclusion that missed the author are the same string to it.
+The defect sits one level under the claim, and only reading `task_transitions` and
+`requirement_evidence` in the drive database told them apart.
 
 ---

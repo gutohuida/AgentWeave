@@ -194,9 +194,28 @@
 
 ## 7. The harness
 
-*Written, compiled, and **not driven**. A harness whose expectations were inverted by the same
-session that inverted the code proves nothing until it runs against a live Hub; that is `DRIVE-1`,
-and it is what settles the judgement half of this change.*
+*Written, compiled, and — as of 2026-09-09 — **driven**. `DRIVE-1` is done, and it settles the
+judgement half of this change: staffing a review for operator-completed work is right, and it works.
+Evidence, on `:8011` from source with no `.py` under `hub/hub` or `src/` newer than the process
+start, Haiku on every turn:*
+
+- *`AW_COMPLETE_BY=operator_after_agent` (added because `operator` can no longer reach this arm —
+  F140's repair 1 makes the agent complete its own task first): `proj-4882c91d39e2`,
+  `task-9529de5132cd` sequence 7 is `in_progress → completed` / `operator` / `actor_agent` NULL,
+  firing 2 returned `200`, staffed a non-author, task reached `approved` in 84 s. **20/20.** The arm
+  is proved rather than inferred: on a one-agent project the `409` carries `excluded_because` =
+  "has worked on this task" (`scheduler.py:1575`, the operator arm) and not "is the one that
+  completed this task" (`:1555`, the agent arm). **13/13.***
+- *7.2's row four, `AW_COMPLETE_BY=untouched`: `proj-f741298c9c6b`, `task-930385ddb031`, `assignee`
+  never written, the task never left `pending` before the operator moved it, `run.task_id` NULL —
+  all three exclusion sources empty. Firing 2 returned `200`, a reviewer was staffed, the task
+  reached `approved`. **19/19.** The status histogram did not appear on either arm. (The two modes
+  assert different things in section B, so the totals differ; both ran with zero failures.)*
+
+*Row four also found a defect **in this repair**, filed as `F306` (A) and not reopening F142: the
+exclusion reads three record sources and the evidence table is a fourth it does not read, so the
+agent that recorded the accepted `implementation` evidence was staffed to review — and approved —
+its own work. See `scripts/drive/FINDINGS.md`, F142's "Row four driven 2026-09-09" and F306.*
 
 - [x] 7.1 `scripts/drive/t_row12_review_leg.py` already drives all three rows under `AW_COMPLETE_BY`.
   Invert row one's expectation: `AW_COMPLETE_BY=operator` should now reach a staffed review, or — in

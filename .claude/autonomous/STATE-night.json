@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "bdb5a79",
     "stop_at": "2026-09-10T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-09-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "F142-drive-row4-and-close",
-    "next_action": "Drive F142's row four -- the operator completes a task NO agent ever touched -- then close the finding. The :8011 Hub is ALREADY RUNNING (pid 7360, started 2026-09-09T22:37:51Z on 54ed088, DB C:/Users/huida/AppData/Local/Temp/aw-f142-drive/aw.db, AW_KEY=aw_live_f142drive00000000000000000000): reuse it ONLY after confirming no .py under hub/hub or src is newer than that start time, otherwise restart it from source from hub/. Build a fresh fixture with scripts/drive/setup_row7.py (never proj-d85a82bf4216, never :8000, leave :8010 alone) and run scripts/drive/t_row12_review_leg.py with AW_COMPLETE_BY=untouched. Assert what that mode already asserts: assignee never written, the task never left pending, and after the operator walks it the whole way a reviewer is staffed with NOBODY excluded -- any bound agent, the flow's own default agent included. Then close: set F142's Status line in scripts/drive/FINDINGS.md to fixed <sha>, tick task group 7 / DRIVE-1 in openspec/changes/archive/2026-09-01-a-review-a-flow-cannot-staff-is-named/tasks.md on the real evidence, and correct the index paragraph's open severity-A list. Every real agent turn binds claude-haiku-4-5.",
+    "current": "clearing-1-dialog",
+    "next_action": "Implement section 1 of 2026-09-07-clearing-instructions-asks-first -- the dialog -- tasks.md:10-31, via openspec-apply-change. THIS IS THE FIRST FIRING OF THE WINDOW THAT BUILDS PRODUCT CODE, so it inherits an unpaid debt: iterations 1-3 never ran step 3 of the playbook (confirm the tree is green before building on it). Start the relevant Hub/UI chunk in the background FIRST -- it is 15-47 minutes and exceeds the 600s command cap -- and read it before claiming anything; if it is red and you did not break it, that inherited breakage is the item, not this one. Read task 5.2's recorded evidence (committed at 3078843) before changing behaviour, because section 2 is what makes that measurement stop being observable. Do NOT rebuild the bundle in this item -- section 3 owns that, and only py -3.11 scripts/refresh_ui_bundle.py writes ui-build-stamp.json. The :8011 drive Hub is still running (pid 7360, started 2026-09-09T22:37:51Z on 54ed088) with FOUR fixtures and no job enabled; the moment this item edits a .py under hub/hub or src it is stale and any later drive must restart it from source from hub/. A UI edit alone does not make it stale, but the served bundle it holds is the pre-change one.",
     "queue": [
         {
             "id": "compose",
@@ -29,13 +29,13 @@
         },
         {
             "id": "F142-drive-row4-and-close",
-            "status": "open",
+            "status": "done",
             "title": "F142 drive, arm 2: row four (no agent ever touched the task), then close the finding",
-            "detail": "The widest-exclusion arm and the one with NO coverage at all: the operator completes a task no agent ever touched, and a review is staffed with nobody excluded. This is the arm where exclude=set() would be a self-approval route, so the code widens to agents_that_may_have_authored. After it: set F142's Status line in scripts/drive/FINDINGS.md to fixed <sha> (or record precisely what the drive disproved), tick task group 7 / DRIVE-1 in the change document on real evidence, and correct the index paragraph's open severity-A list. NOTE the day window's correction of 2026-09-09: after classification the instrument reads open severity-A as THREE (F299/F300/F301, all DAY-3 decision material and not buildable unattended) and F142 itself sits in CONFLICT, not OPEN -- so closing F142 does not take the A-list to zero. Do not write that it does. ADDED iteration 2: the operator_after_agent leg is DONE and recorded in F142's 'Driven 2026-09-09' subsection -- read it before writing the Status line, because it already states what was and was not measured. F142's Status line currently reads 'DRIVEN 2026-09-09 and it holds; one arm is still uncovered'; row four is that arm and closing it is what makes 'fixed <sha>' true. The :8011 Hub is left running with three fixtures (proj-2604d47e1295, proj-4882c91d39e2, proj-490d5df86b3d) and no job enabled; build a FOURTH fixture rather than reusing one, since row four's whole claim is that no record associates any agent with the task."
+            "detail": "DONE iteration 3, and it found a defect inside the repair it was closing. Row four ran 19/19 0 BAD on a FOURTH fresh fixture (proj-f741298c9c6b, task-930385ddb031): the agent triggered without task_id so run.task_id stayed NULL and assignee was never written, the operator walked pending -> in_progress -> completed by hand (sequences 16-18 all actor_kind='operator', actor_agent NULL), firing 2 returned 200, a reviewer was staffed and the task reached 'approved'. No status histogram. F142's Status line is now 'fixed f3a778f, DRIVEN AND CLOSED', DRIVE-1's preamble in the archived change document carries both arms' evidence, and the index paragraph has a new dated revision rather than an edited dated line. NEW: F306 (A) filed -- the reviewer staffed was the agent that wrote the code, because agents_that_may_have_authored unions exactly three sources (transitions, assignee, bound runs) and the requirement_evidence table is a fourth it does not read; it approved its own work at sequence 19. NOT FIXED here: it changes who may review, so it needs the round discipline and this window writes no proposals."
         },
         {
             "id": "clearing-1-dialog",
-            "status": "open",
+            "status": "current",
             "title": "2026-09-07-clearing-instructions-asks-first, section 1: the dialog",
             "detail": "APPROVED (carried forward from 2026-09-08; no new approval granted). 25 tasks, 1 ticked -- 5.2 only, the pre-change drive, closed on real evidence committed at 3078843. THIS IS THE ONE BUNDLE-TOUCHING CHANGE TONIGHT; nothing else on the ORDER line touches hub/hub/static/ui, so the one-bundle-change-per-night constraint is satisfied. Method is openspec-apply-change. Section 1 is tasks.md:10-31."
         },
@@ -92,6 +92,12 @@
             "status": "open",
             "title": "DAY-1 -- a development constraints file pinned to CI's resolution",
             "detail": "From DECISIONS.md DAY-1. Pin starlette 1.6.0 and fastapi 0.141.1; leave hub/pyproject.toml's PUBLISHED range (starlette<2.0 at :32, fastapi>=0.110 at :12) UNTOUCHED. Two binding conditions from the verdict: it is DEVELOPMENT-ONLY and not a second source of truth for what the Hub supports, and BOTH the CI job AND CLAUDE.md's documented local commands must install through it -- a constraints file nothing installs through is decoration, and the drift it exists to stop returns silently. This is what would have caught the 2026-09-09 starlette defect before a push instead of thirteen commits later. OUT OF SCOPE TONIGHT, DELIBERATELY: the missing guard against a fourth app.routes occurrence -- a naive grep false-positives on the three files whose comments document the trap, hub/tests/_routing.py included. Unowned, and not this window's to invent."
+        },
+        {
+            "id": "F306-note-to-the-day-window",
+            "status": "note",
+            "title": "F306 (A) -- NOT this window's to build. A note to tomorrow's FILL window.",
+            "detail": "Filed iteration 3 in scripts/drive/FINDINGS.md, measured on a live Hub, open. An agent that recorded accepted 'implementation' evidence naming a task can be staffed to review that task and approve its own work, whenever the operator completed it: agents_that_may_have_authored (hub/hub/task_transition_service.py:253-283) unions transitions, assignee and runs bound to the task, and the requirement_evidence table is a fourth record it does not read; _guard_author_is_not_reviewer (:286-311) misses it too because it compares agent_that_completed, which an operator completion leaves NULL. The branch's own comment at scheduler.py:1566-1571 says exclude=set() is a self-approval route -- the widening returned set() anyway. TWO FIX SHAPES ARE SKETCHED IN THE FINDING AND BOTH ARE LABELLED GUESSES: add the evidence table as a fourth source scoped by kind (a naive union makes a task's SECOND review unstaffable, because the first reviewer's own evidence would exclude them), or have the transition guard fall back to the exclusion set when agent_that_completed is NULL. Whoever proposes this must first read what else writes requirement_evidence rows. It reaches the day window through 'git diff on FINDINGS.md', which day-window.md step 3 already reads; this row exists so it is a queue item and not only a paragraph. DO NOT BUILD IT TONIGHT."
         }
     ],
     "decisions_for_user": [],
