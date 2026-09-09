@@ -522,3 +522,83 @@ That is precisely the failure mode `classify_findings.py`'s own header calls *th
 mode behind every error*: a sentence that mentions finding X while resolving finding Y. **Writing
 into the ledger can corrupt the ledger's own census, and the only reason this was caught is that
 every non-B bucket was diffed against the pre-edit run.** Do the same in D-3.
+
+### Done, part 2 — C, D and the unlabelled are read, 2026-09-09 (day D-3)
+
+**The ledger now reports `UNCLASSIFIED: 0`.** The remaining 75 sections — severity C (55), D (14)
+and the 6 carrying no severity label — were read and given a machine-readable `**Status:**` line as
+their first body line. **67 are open, 8 were already answered.** Nothing moved that was not touched:
+every bucket was set-diffed against the pre-edit run by finding number, and 302 sections exist before
+and after.
+
+| | C | D | ? | total |
+|---|---|---|---|---|
+| **open** | 51 | 14 | 2 | **67** |
+| **resolved** | 4 | 0 | 4 | **8** |
+
+Whole-ledger position after both parts: **144 open, 143 resolved, 9 conflict, 6 resolved-elsewhere**,
+across 302 sections.
+
+**The C/D population is not the B population.** Part 1 found 95 % of severity B live, and the honest
+summary of the low-severity half is different in two ways worth pricing.
+
+- **89 % is live (67 of 75)** — a lower proportion than B, but the eight exceptions are all
+  *records*, not repairs anybody owes.
+- **35 of the 75 are named nowhere outside `FINDINGS.md`** — measured by a cross-reference sweep over
+  `openspec/`, `spec-queue/`, `hub/`, `src/`, `scripts/` and `tests/`. These are the ones for which
+  the ledger is the only copy.
+
+### The eight that were already answered, and why no census had counted them
+
+Four kinds, and only one of them is an ordinary repair:
+
+| | |
+|---|---|
+| **F270** | fixed `3b1b8f0` by `a-turn-says-how-it-ended` task 2.2 — **the side effect the entry itself predicted**. The finalize block now persists the terminal `phase="completed"` row for every run on either runner, so the client's first settled signal is no longer Claude-only. |
+| **F280** | fixed `c063e28` in the iteration that filed it; the agent's recording response carries `footprint` through the shared `footprint_view`. Named nowhere outside the ledger. |
+| **F66**, **F131** | fixed 2026-08-30 by `every-run-knows-its-task` (`f5b46e9`) and `continue-starts-what-it-names` (`5958200`). Both were verified in code today rather than taken from their own prose. |
+| **F137**, **F144**, **F145**, **F148** | **not product defects at all** — drive-harness records, each repaired in its filing commit. F145's is the sharpest: it was written expecting a hard Hub kill to orphan the CLI, and measured the opposite twice. |
+
+That last row is a species the census had no name for. Four of the 75 were never claims about the
+product, and counting them as unknown defects overstated the backlog by exactly as much as leaving
+the eight uncounted understated the progress.
+
+### The instrument cannot read the ledger's own strongest verdicts
+
+**Two of the four already-fixed sections said so in their first body line and were still
+`UNCLASSIFIED`.** `## F131` opens `**FIXED 2026-08-30**` and `## F66` opens
+`**Status:** **closed 2026-08-30`. Neither matches: the strong pattern requires the literal
+`Status:` before `FIXED`, and `closed` is in-section vocabulary nowhere — it is only recognised
+*across* sections, which is exactly the arm the instrument's header says to treat as a lead.
+
+This is not a defect in the verdicts (both were read by hand and are now correct); it is a
+measurement of the gap between the ledger's prose and the instrument's vocabulary. Deliberately not
+fixed inside this task: widening `STRONG_PAT` moves verdicts, and moving verdicts in the same pass
+that writes 75 of them would make the bucket diff — the only thing that catches a self-inflicted
+re-verdict — unreadable. Candidate for the instrument's next round, with the same
+mutation-check discipline the seven existing guards got.
+
+### Not "unread" — a decided-and-dropped tail
+
+Severity C is where the plan's remedies go to be forgotten. Six of the 51 open C findings already
+have a remedy chosen in writing and no implementation behind it: **F181** (`DECISIONS.md:536`,
+*"already answered by something already written down"*, paired there with the severity-B F185),
+**F195** and **F201**
+(`:263-264`, sized at ~8 and 9 sites, with `:545` deciding the narrow repair and the sweep should
+ship together), **F198** (`:825`, *remove the route*), **F209** (`:820` and `ROADMAP.md:337`, whose
+R-3.1 re-check records *HOLDS, exactly*) and **F212** (`:527`). Reading the population does not
+create work for these; it reveals that the decision was the easy half.
+
+### Method notes
+
+- **41 of the 67 open verdicts rest on a code check taken 2026-09-09**, stated at the line and
+  citing file and line. The rest rest on the ledger plus the cross-reference sweep, and say so.
+- **The placer now refuses to write a line that names another finding beside a resolution word.**
+  That is D-2's collateral defect — F3 flipped `OPEN → CONFLICT` off one word in F111's new line —
+  turned into a guard instead of a habit. It did not fire on this batch; the bucket diff was taken
+  anyway, because a guard that has never fired has not been shown to work.
+- **`NOT A DEFECT` is now a declaration as well as a phrase.** Four of the instrument's 25 verdicts
+  on that weak marker are deliberate first-line declarations rather than prose it happened to match,
+  which makes that count mean slightly less than it did — the arm still cannot tell the two apart.
+- Counts live here. `FINDINGS.md` is the instrument's input, and publishing a census into it changes
+  the census.
