@@ -63,28 +63,28 @@ Each must fail against the pre-change component. **Mutation-check by reverting t
 reasoning about it** — the sibling change found two of its eight tests passing before and after, and
 only measurement showed which.
 
-- [ ] 4.1 Non-empty stored content, editor emptied, Save clicked → the dialog is present **and no PUT
+- [x] 4.1 Non-empty stored content, editor emptied, Save clicked → the dialog is present **and no PUT
   is issued**. Assert on the request, not on the dialog's markup: a test that only asserts the dialog
   appears passes against a page that renders it *and* fires the write.
-- [ ] 4.2 Cancel → still no PUT, and the textarea still holds what the operator typed.
-- [ ] 4.3 Confirm → exactly one PUT carrying the empty string, and the success acknowledgement is
+- [x] 4.2 Cancel → still no PUT, and the textarea still holds what the operator typed.
+- [x] 4.3 Confirm → exactly one PUT carrying the empty string, and the success acknowledgement is
   shown as for any other save. **The acknowledgement is a 2000 ms flash** (`InstructionsPage.tsx:46-52`)
   — measured by round 3's drive, present at 0.7 s and gone by 3.3 s. Assert inside that window, in
   jsdom and in the browser alike; an observer that arrives late reports a correct page as broken,
   which is exactly what happened on the drive harness's first run.
-- [ ] 4.4 Whitespace-only editor over non-empty stored content → the dialog is asked. This is the
+- [x] 4.4 Whitespace-only editor over non-empty stored content → the dialog is asked. This is the
   assertion `content === ''` would fail.
-- [ ] 4.5 A non-empty save → no dialog, one PUT, unchanged behaviour.
-- [ ] 4.6 An empty editor over **already-empty** stored content → no dialog, one PUT. The
+- [x] 4.5 A non-empty save → no dialog, one PUT, unchanged behaviour.
+- [x] 4.6 An empty editor over **already-empty** stored content → no dialog, one PUT. The
   confirmation is about loss, and there is none. Assert the same for stored content that is **only
   whitespace**: the predicate trims the stored side too, and until R2 that half lived only in prose —
   it is now a clause in *A save that blanks nothing is not interrupted* and needs a test that would
   fail against a predicate testing `data.content !== ''`.
-- [ ] 4.7 Successful read, then a failing background refetch, then clear and Save → the dialog is
+- [x] 4.7 Successful read, then a failing background refetch, then clear and Save → the dialog is
   still asked, measured against the content that was read. This is the scenario that would fail
   against an implementation deriving its baseline from anything but the last successful `data`, and
   it is the one that ties this change to F271's `data`-first ordering.
-- [ ] 4.8 Escape closes the dialog and issues no PUT.
+- [x] 4.8 Escape closes the dialog and issues no PUT.
 
 ## 5. The drive — this is what closes the change
 
