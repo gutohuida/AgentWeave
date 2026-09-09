@@ -578,6 +578,69 @@ serving four-day-old code.
 
 ## Decided
 
+### The day window's two, 2026-09-09 evening — and one it asked that was already answered
+
+**DECIDED 2026-09-09 ~17:45, by the operator, in session**, from
+`spec-queue/review/review-2026-09-09.html`. That page raised three decisions. **`DAY-3` was not
+one** — it is the `F299` posture question the operator answered at **08:51 the same morning**,
+recorded in the section below, and re-published as open at 10:55. Filed as **`F305` (B, harness)**:
+the windows carry `decisions_for_user` in their `STATE-*.json` and nothing reconciles it against
+this file, so an answered question is re-asked indefinitely. **The verdict below stands and needs no
+restating** — the earlier section is the authority for it.
+
+#### DAY-1 — a dev constraints file, not a pin
+
+**DECIDED: keep `hub/pyproject.toml`'s published range as it is, and add a development
+constraints file pinned to CI's resolution.**
+
+The problem measured today: `hub/pyproject.toml` constrains only `starlette<2.0` and
+`fastapi>=0.110`, so CI resolved **starlette 1.6.0 / fastapi 0.141.1** against this machine's
+**0.52.1 / 0.136.3**. `{r.path for r in create_app().routes}` yields **161 paths here and 7 on CI**
+— which is why a test that could never pass on CI and never fail locally survived **thirteen
+commits**.
+
+**Why this option.** It is the only one that keeps both halves. Local and CI agree, so this class of
+failure reproduces before a push; and the published range stays loose, so upstream incompatibilities
+still surface early — which is exactly what happened today and is worth keeping. Rejected: **pinning
+`pyproject.toml`**, which buys agreement by freezing the Hub on a version and converting upstream
+drift into an upgrade nobody is prompted to do; and **changing nothing**, which leaves any test that
+reads a framework data structure unverifiable locally by default.
+
+**Two constraints on whoever builds it.** The constraints file is **not** a second source of truth
+for what the Hub supports — `pyproject.toml` remains that, and the file must be documented as
+development-only. And it is worth nothing if it is not used: the CI job and `CLAUDE.md`'s documented
+local commands must both install through it, or local and CI drift apart again silently, which is
+the whole defect.
+
+**This does not close the related gap, deliberately.** The review page records that there is still
+**no guard against a fourth occurrence** of the `app.routes` mistake — a grep-based test would
+false-positive on the three files whose comments document the trap, `_routing.py` included. That is
+unbuilt and unowned, and this verdict does not cover it.
+
+#### DAY-2 / F302 — the notice stops asserting, and does not start trusting
+
+**DECIDED: drop the `no MCP tools this turn` sentence. Do not give a fresh agent the MCP rendering
+on trust.**
+
+The requirement the notice shipped against asks only that the HTTP form be described and that tools
+not be claimed. **It never asked for the denial** — that sentence is a positive claim about the
+run's tool list, made on no evidence, and it is false: a probe agent called
+`mcp__agentweave__create_task` on exactly the turn it was told it had nothing, and the row exists.
+
+**Why not the other direction.** Granting the MCP rendering on trust asserts *presence* with no
+observable ground — the same disease pointed the other way — and would be wrong on precisely the
+harness the notice exists for. Describing without claiming is the only branch that states nothing it
+cannot know.
+
+**What makes this cheaper than it was this morning.** The `F299` verdict below has the workspace
+approver learn to recognise the run's own Hub URL, so the HTTP form the notice steers a fresh agent
+toward is one the agent can actually use. Before that verdict, removing the denial would have left
+a first turn pointed at a path `F300`/`F301` measured it could not take.
+
+Rejected: leaving it. It is bounded — one turn per agent, healing on the second, with
+`hub_client: "mcp"` fixing turn 1 today — but it is a falsehood in the first thing every new agent
+is told, and the fix is a wording change inside a requirement that never asked for the words.
+
 ### Four verdicts, 2026-09-09 morning — and three of them are second answers
 
 **DECIDED 2026-09-09 ~08:55, by the operator, in session**, on a RESUME session's reading of the

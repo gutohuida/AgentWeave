@@ -24018,3 +24018,43 @@ but one is a log line and the other changes a persisted value that F274's work r
 wants its own look.
 
 ---
+
+## F305 (B, harness) — a decision the operator has answered is re-asked, because the authority file is not what the windows read
+
+**Status:** open — filed 2026-09-09, measured, not fixed.
+
+**Measured today, end to end.** The operator answered the `F299` posture question in session and the
+verdict was committed to `spec-queue/DECISIONS.md` at **`0ecfc38`, 08:51**. The day window composed
+its queue at **`ed7d3ef`, 09:17** — 26 minutes later, with that commit already on the branch — and
+at **10:55** published `spec-queue/review/review-2026-09-09.html` carrying the same question as
+open decision `DAY-3`, *"carried from last night"*.
+
+**The cause is structural, not a slip.** There are two decision channels and only one of them is
+the authority:
+
+- `spec-queue/DECISIONS.md` — the contract at its head says *"the status token is the authority"*
+  and *"a window may never mark one DECIDED."* This is where a verdict is written.
+- `decisions_for_user` inside `STATE-night.json` / `STATE-day.json` — where a window *raises* one,
+  and where the next window inherits it. `STATE-night.json` still carries the `F299` entry now.
+
+Nothing reconciles the second against the first. A window carries its predecessor's
+`decisions_for_user` forward without checking whether `DECISIONS.md` has since answered it, so an
+answered question is re-raised on every subsequent review page until somebody edits the state file
+by hand. **The failure is silent and it costs the operator, not the loop**: the review page presents
+a decided question as still owed.
+
+**Why this is worse than an ordinary stale document.** `DECISIONS.md` exists *because* this list
+used to live only in `STATE-night.json`, which each window rewrites — that is stated in its own
+opening paragraph, and the durable file was the fix. Half the fix shipped: verdicts became durable,
+but the raising side kept its own copy and no link back.
+
+**What it is not.** Not a wrong verdict, and not a window ignoring the operator — the day window had
+no instruction to read `DECISIONS.md` at compose time, and its playbook does not name that file in
+iteration 1 at all. The defect is the missing reconciliation, not the window's obedience.
+
+**The shape of a fix, not yet decided:** either the window clears a `decisions_for_user` entry when
+`DECISIONS.md` carries a matching decided section, or `decisions_for_user` stops holding questions
+and holds only pointers into `DECISIONS.md`, which would leave one channel. The second is cleaner
+and larger. **Not fixed here** — it changes the loop's own contract and belongs in a proposal.
+
+---
