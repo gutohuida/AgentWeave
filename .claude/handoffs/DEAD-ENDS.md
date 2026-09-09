@@ -481,6 +481,26 @@ session is sitting in, on a cycle branch, every few minutes.*
   end an iteration with a dirty tree and unexpected modified files can confuse it.
 - **Do not leave your own edits uncommitted while a window runs**, and do not leave them uncommitted
   going into 22:55 — `arm-cycle.ps1` refuses on a dirty tree and the whole night is lost.
+- **The same trap has a MORNING mouth at 08:55, and an interactive session is the likeliest thing
+  to walk into it** *(2026-09-09, walked into)*. `AgentWeaveArmDay` runs the identical
+  `arm-cycle.ps1:118-125` check. A session that commits at 08:45 to leave a clean tree, then opens
+  an editor at 08:50, is dirty at 08:55:01 and the **whole day window is skipped** — silently, to a
+  hidden console. Ten minutes earlier that same session had written *"committed before 08:55
+  deliberately, arm-cycle.ps1:118 refuses on a dirty tree"* into a commit message. Knowing the rule
+  is not the same as holding the tree clean **through** the firing instant. **Between about 08:50
+  and 08:56, and again 22:50–22:56, either be committed or do not be editing.**
+  Detect it with `(Get-ScheduledTaskInfo -TaskName AgentWeaveArmDay).LastTaskResult` — **3 means it
+  refused.** Corroborate before believing it: `STATE-day.json` and `driver-day.log` will still carry
+  *yesterday's* mtime, and `Get-ScheduledTask AgentWeaveDayLoop` will not exist at all.
+- **Re-arming a missed window by hand needs `-StartAt`; a plain re-arm fails in a way that reads
+  like a bug** *(2026-09-09)*. `arm-cycle.ps1 -Window day` after 09:00 computes the *next* 09:00 —
+  tomorrow — and `install-driver.ps1` dies with `Start 2026-09-10 09:00 is not before stop
+  2026-09-09 17:00; the run would have no window.` The override exists and its own comment says it
+  is for exactly this: `powershell -File .claude/loops/arm-cycle.ps1 -Window day -StartAt "09:15"`.
+  **The failed first attempt is not harmless** — it writes, commits and pushes `STATE-day.json` and
+  the day log before the installer runs, so the repo briefly carries an armed-looking state with no
+  registered driver. Re-running with `-StartAt` reconciles it (`nothing to commit (state
+  unchanged)`), so recover forward rather than reverting the arm commit.
 - Concurrent commits interleave without incident: the window's next commit simply takes yours as
   parent. Observed working on 2026-09-08 09:20, with `e964226` landing between the window's
   `101f836` and its following iteration.
