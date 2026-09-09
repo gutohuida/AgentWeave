@@ -16,6 +16,49 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-09
+
+**Why this section exists: the 2026-09-08 `ORDER:` line below is now a trap.** The night window
+reads *the newest day section only* and takes an `ORDER:` line **verbatim, ignoring the default
+queue** (`.claude/loops/night-window.md`, iteration 1 step 2) — and it applies **no date check**,
+unlike `DIRECTION.md`. Three of the four changes that line names were built, driven and **archived
+by the night of 2026-09-08**. Left alone, tonight's window would queue three archived changes.
+
+**No new approval is granted here.** The row below is the operator's 2026-09-08 verdict carried
+forward, restated because only the newest section is read. Written 2026-09-09 morning by a RESUME
+session; the `ORDER:` line is the operator's, given in session.
+
+- APPROVED  2026-09-07-clearing-instructions-asks-first   DAY-3. 25 tasks, 1 ticked (5.2, the pre-change drive, closed on real evidence committed at `3078843`). **Touches the bundle.** Unchanged from 2026-09-08 — it is the one change on that night's `ORDER:` line the window did not reach, because it is bundle-touching and iteration 16 had already spent that slot.
+
+ORDER: F142, 2026-09-07-clearing-instructions-asks-first
+
+**Why the drive leads.** `F142` is the **last open severity-A finding**, and it is not a build: the
+fix shipped at `f3a778f` on 2026-08-31 and the single unmet condition is that **nobody has driven
+it**. Its own change document says so — task group 7 is headed *"Written, compiled, and not
+driven"*, and 7.1/7.2 are ticked as *written*, which is the ordinary reading of a task list and not
+evidence of a run. A few hours against a live Hub takes the open severity-A list to **zero**, which
+is the milestone `ROADMAP.md` names; the 25-task bundle change would very likely consume the whole
+night and leave the A-list at one.
+
+**What the drive has to cover** (both from the change's own 7.1/7.2, restated here so the window
+does not have to find them):
+
+- `AW_COMPLETE_BY=operator` on `scripts/drive/t_row12_review_leg.py` must reach a **staffed
+  review** — or, in a project with no second agent, a `409` whose reason names *the task* rather
+  than the queue histogram. **Assert specific strings**: an earlier version of that file passed its
+  checks against content that said the opposite.
+- **Row four, which has no coverage at all**: the operator completes a task **no agent ever
+  touched**, and a review is staffed with nobody excluded. That is the widest-exclusion arm.
+- **Do not be surprised by `F167` (B)**, a known residual on the adjacent path: an all-operator
+  history defeats `wedged_review`'s recovery and takes the `in_flight` arm. It is scoped to F167 and
+  does not reopen F142.
+
+**On the change, if the night reaches it.** It touches `hub/hub/static/ui`; nothing else tonight
+does, so the one-bundle-change-per-night constraint is satisfied. Rebuild the bundle through
+`make ui` / `scripts/refresh_ui_bundle.py` so the stamp is written — only that script writes it.
+
+---
+
 ## 2026-09-08
 
 ## ALL FOUR APPROVED — the operator, in session, 2026-09-08
