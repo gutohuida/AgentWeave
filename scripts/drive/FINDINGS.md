@@ -327,6 +327,23 @@ not a stale count, a stale definition, or a stale search, but a **premature** on
 that the stricter definition was introduced to prevent, committed by the window that introduced it.
 The 41-heading census is unchanged; no new severity-A section was written.
 
+**Revised 2026-09-09 (night window, iteration 8, `c1-drive`): the open severity-A list is two —
+F274 and F142 — under *both* definitions. F295's second half is done.**
+
+The paragraph immediately above refused to report "two" because the drive had not happened. It has
+now: a Hub started from source on 8011, a real Haiku turn in flight, and `CTRL_BREAK_EVENT` — the
+only stop that reaches the lifespan teardown at all, since `agentweave stop` is `taskkill /F`
+(`F297`). The process runs the whole teardown and exits in **0.42 s**, against **0.22 s** for the
+idle control, with no settle-bound warning, no dead-worker warning, and no `Event loop is closed`.
+Reproduced three times; the harness is committed as `scripts/drive/f295_shutdown_drive.py` and
+`scripts/drive/f295_restart_reconciles.py`. F295's own section carries the numbers and the two
+things the drive found that no round had looked at, one of which is filed as **`F298` (C)**.
+
+**F142 is now the only severity-A finding whose fix shipped and whose drive is genuinely owed.**
+That is the shortest that sentence has ever been on this page, and it is the obvious next search —
+except that unlike F140, F154 and F155, F142's own change document already says the drive is
+missing, so this one is a build, not a grep.
+
 ### Two more defects, found the same day by an adversarial review that was told to falsify
 
 **The first three below were found by me. These two were found by an Opus review agent spawned at
@@ -22119,11 +22136,14 @@ finding, and nothing else.
 ## F295 (A) - a cancelled or superseded run's background task can leave a permanently dead worker thread, and any later reuse of its connection hangs forever
 
 **Status:** **fixed** `00d72a8` (the pool guard) and `0f06bea` (the shutdown settle), specced,
-tested `2d399c7`/`9a0fdde`/`2046c4e`, and archived as
-`2026-09-07-a-dead-connection-is-never-handed-back-out`. **Not yet driven** — under this file's
-stricter definition that is what a finding needs to leave the open-A list, so F295 sits exactly
-where F142 sits: shipped, and owed a drive. Read *"The change that fixed it"* at the end of this
-entry before acting on anything above it; three rounds corrected the trigger this heading names.
+tested `2d399c7`/`9a0fdde`/`2046c4e`, archived as
+`2026-09-07-a-dead-connection-is-never-handed-back-out`, and **driven 2026-09-09** against a real
+Hub process on 8011 with a real Haiku turn in flight — see *"The drive"* at the very end of this
+entry. **Retired under the stricter definition**, which is the one this file adopted 2026-09-06:
+fixed, tested, archived *and* driven. It no longer sits where F142 sits.
+
+Read *"The change that fixed it"* below before acting on anything above it; three rounds corrected
+the trigger this heading names.
 Split out from F292's entry 2026-09-06, where it was found
 while chasing F292's alembic hypothesis — it is a distinct, more general and more severe defect than
 the CI flake it was discovered underneath, so it gets its own number rather than staying folded into
@@ -22276,6 +22296,83 @@ length in the change's task 2.4 and is held by a comment in `hub/hub/main.py`, n
 tests pin that the settle happens before `engine.dispose()` — a `_DisposeProbe` samples `task.done()`
 at the instant dispose is entered — and they do not pin its position relative to the two teardown
 steps above it. A future edit that reorders those is free to do so silently.
+
+### The drive — 2026-09-09, a real Hub process, a real turn, and the stop that actually reaches the teardown
+
+Three rounds and fourteen mutations checked the *argument*. This checks the *product*, and it is the
+half this entry was missing. `scripts/drive/f295_shutdown_drive.py` starts the Hub **from source**
+(`cd hub`, `py -3.11 -m uvicorn hub.main:app --port 8011`) against a throwaway database under the
+temp tree, on a fresh project, with a Haiku runner — then stops it while a turn is genuinely still
+running. Never 8000, never 8010's database, and the script refuses to start if 8011 is already
+listening. It confirms **0 `.py` under `hub/hub` or `src/` is newer than the process start** before
+measuring anything, so the drive is not of stale code.
+
+**The stop under test is `CTRL_BREAK_EVENT`, not `agentweave stop`.** The product's own stop is
+`taskkill /F` and runs no teardown at all (`F297`), so driving it would have measured nothing about
+this change. uvicorn installs `handle_exit` for `SIGBREAK` on Windows (`uvicorn/server.py`,
+0.41.0), so a Ctrl-Break to a child started in its own process group is the Ctrl-C path.
+
+| | run in flight | shutdown | teardown completed | settle-bound WARNING | dead-worker WARNING | `Event loop is closed` |
+|---|---|---|---|---|---|---|
+| measurement | **yes** (run row `ended_at IS NULL` at the instant of the break) | **0.42 s** | yes | absent | absent | absent |
+| control (`--no-run`) | no | **0.22 s** | yes | absent | absent | absent |
+
+**The hang this finding is about does not happen.** The process exits in under half a second with
+`Application shutdown complete`, which is the line printed *after* `_settle_background_runs()` and
+`await engine.dispose()` have both returned — so the settle reached its fixed point and the pool
+was released, with a run cancelled mid-`pty.read` and its connection in the pool. Reproduced three
+times; the control says the in-flight case costs about 0.2 s more than an idle one, not that it
+costs a timeout.
+
+**"In flight" is read from the run row, not from the roster, and that correction cost a run.** The
+first attempt used *"count slowly from 1 to 40"* and asserted in-flight from output lines having
+arrived. Haiku finished it in 10 s, the break landed on an idle Hub, and the drive reported a clean
+6/6 for a shutdown that had nothing to settle. Output lines prove a run **started**; only
+`runs.ended_at IS NULL`, sampled in the same breath as the break, proves it is still going. The
+script now blocks the turn on a real `time.sleep(120)` child and re-checks the row immediately
+before signalling. This is the same class of error as `F296` — an assertion that could not fail
+reported as evidence — caught this time by the numbers being suspiciously identical to the control.
+
+### Two things the drive found that no test and no round had looked at
+
+**1. A deliberate stop logs `ERROR ... Unhandled error in run` with a traceback.** Every in-flight
+stop prints, at ERROR level:
+
+```
+ERROR [hub.api.v1.agent_trigger] Unhandled error in run run-05b2b6fe5ef5 for 'f295020814'
+Traceback (most recent call last):
+  File "...\hub\hubpi1gent_trigger.py", line 2132, in _execute_run
+    chunk = await loop.run_in_executor(None, pty.read)
+asyncio.exceptions.CancelledError
+```
+
+This is the handler at `agent_trigger.py:2372-2394` doing exactly what its own comment says it was
+written for — catching a teardown cancellation so the `Run` row cannot be stranded at `running`
+forever — so the *behaviour* is correct and this is **not** a regression from this change. What is
+wrong is the *report*: an operator who presses Ctrl-C on a healthy Hub is shown an ERROR and a
+traceback describing their own intended stop as an unhandled error. Filed as **`F298`**.
+
+**2. The stop leaves one `Run` row at `running`, and the next start repairs it.** Measured on all
+three in-flight runs, identically: cancelling the in-flight run makes its failure tail hand the
+input back, that release schedules a **successor** turn, and the settle's second pass cancels the
+successor before it has run a single step — so the successor never enters its own `try`, nothing
+marks its row, and it is left `('run-29411934268e', 'running', None)`. This is precisely the
+"cancelled before its first await" behaviour the change's own task 3.6 had already found in a test.
+
+It is **not** a wedge, and that was measured rather than assumed
+(`scripts/drive/f295_restart_reconciles.py`): restarting against the same database logs
+`WARNI [hub.run_reconciliation] Reconciled 1 orphaned run(s) to status=interrupted on Hub start`,
+the row moves to `interrupted` with an `ended_at`, **zero rows remain `running`**, the agent reports
+`idle`, and a fresh trigger runs to `completed`. The row only ever matters to a running Hub, and a
+running Hub has reconciled it before it can read it. Recorded because "the stop leaves a `running`
+row behind" is alarming on its own and would otherwise be re-discovered as a defect.
+
+**No orphan processes.** `terminate_all_active_runs()` takes the PTY tree with it — after each stop,
+nothing matching the drive's temp path or its `time.sleep(120)` child survives.
+
+**Not claimed by this drive.** The `4 → 10` `PytestUnhandledThreadExceptionWarning` count from the
+full suite is untouched by it; that is `F292`'s traceback-at-loop-close, which this change explicitly
+does not fix, and it still wants a third sample.
 
 
 ## F296 (C, harness) - a drive assertion that can never be non-zero was reported as evidence about the product
@@ -22481,9 +22578,74 @@ taskkill /PID <pid from tk.marker.started> /F
   `GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid)`, which requires the child to have been created
   with `CREATE_NEW_PROCESS_GROUP` — so the fix touches `_hub_native_start` as well as
   `_hub_kill_pid`, and a Hub already running was not started that way.
+  **That mechanism is now measured, not just proposed** (2026-09-09,
+  `scripts/drive/f295_shutdown_drive.py`): a uvicorn started with `CREATE_NEW_PROCESS_GROUP` and
+  sent `CTRL_BREAK_EVENT` runs the full lifespan teardown and exits in **0.22 s** idle / **0.42 s**
+  with a turn in flight. So the graceful path a fix would take works on this machine, and the 10-second
+  backstop below is a backstop rather than the expected case.
 - A graceful stop has to stay bounded. The POSIX branch waits 10 seconds and then `SIGKILL`s; the
   Windows one needs the same backstop, and — see the change above — the shutdown sequence it would
   now be running contains a dispose that can itself block if `F295`'s guard is not in place. The
   two are worth landing in that order.
 - The docstring is currently false on Windows and should stop claiming a SIGTERM that is not sent,
   whatever else is done.
+
+---
+
+## F298 (C) — stopping the Hub normally reports the operator's own stop as an `ERROR ... Unhandled error in run`, with a traceback
+
+**Status:** open, not specced. Found 2026-09-09 by the `F295` drive
+(`scripts/drive/f295_shutdown_drive.py`), reproduced on all three in-flight stops. **Cosmetic** —
+nothing behaves wrongly, and the code doing it is deliberate — but it is cosmetic in the one place
+an operator looks when deciding whether a stop went cleanly.
+
+**What happens.** Stop a Hub that has a turn in flight, by the path that actually reaches the
+lifespan teardown (Ctrl-C / `CTRL_BREAK_EVENT`; **not** `agentweave stop`, which reaches nothing —
+`F297`). Between `Waiting for application shutdown.` and `Application shutdown complete.`, the log
+gets one of these per in-flight run:
+
+```
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+ERROR [hub.api.v1.agent_trigger] Unhandled error in run run-05b2b6fe5ef5 for 'f295020814'
+Traceback (most recent call last):
+  File "...\hub\hubpi1gent_trigger.py", line 2132, in _execute_run
+    chunk = await loop.run_in_executor(None, pty.read)
+asyncio.exceptions.CancelledError
+INFO:     Application shutdown complete.
+```
+
+**Why the code is right and the message is wrong.** `_execute_run`'s
+`except (Exception, asyncio.CancelledError)` at `agent_trigger.py:2372` exists *for exactly this
+cancellation*: its comment (`:2385-2393`) names "event-loop teardown cancelling an orphaned
+background task" as the case it was added to catch, and without it the `Run` row would stay
+`running` forever and `turn_scheduler.schedule_agent` would refuse the agent every future turn. The
+handler must stay, the row must be marked, and the `CancelledError` must be re-raised. The defect is
+that the one path it was *written* for is reported in the vocabulary of the paths it was not:
+`logger.exception("Unhandled error in run %s for %r")` at ERROR, with a stack trace, for an event
+the operator caused on purpose and the Hub handled correctly.
+
+**The consequence is real even though the behaviour is not.** An operator stopping a Hub sees red
+ERROR text and a traceback and has no way to tell it apart from a genuine crash; and a log scraper
+or a CI job that greps for `ERROR` on a clean shutdown gets a false positive on every stop with a
+turn open. It also inverts the signal for the next person driving `F295`: the drive script's
+`no traceback after the break` check FAILs on a shutdown that is, in every other respect, perfect
+(0.42 s, teardown complete, no hang, no dead-worker warning, no `Event loop is closed`).
+
+**Shape of a fix, not decided.** The cancellation is distinguishable from a real failure at the
+point it is caught — `isinstance(exc, asyncio.CancelledError)` is already tested six lines below, to
+decide whether to re-raise. Logging that branch at INFO or WARNING with wording that says what it is
+("run cancelled by shutdown"), and keeping `logger.exception` for `Exception`, would leave the row
+marking and the re-raise untouched. Whether a cancellation that is *not* from shutdown deserves the
+louder message is the open question — nothing distinguishes the two at that point today, and
+inventing a flag to do so may be more machinery than a log line is worth.
+
+**Reproduce**
+
+```
+py -3.11 scripts/drive/f295_shutdown_drive.py
+# the run must still be in flight at the break: the script prints
+#   "run row unfinished immediately before the break: True"
+# and the ERROR appears between "Waiting for application shutdown." and "Application shutdown complete."
+```
+
