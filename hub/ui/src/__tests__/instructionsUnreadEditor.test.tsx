@@ -143,7 +143,11 @@ describe('an unread instructions editor cannot overwrite what it never read (F27
 
     const box = await screen.findByRole('textbox')
     expect(box).toHaveValue(STORED)
-    expect(getJson).toHaveBeenCalledTimes(2)
+    // Counted on the instructions path rather than on `getJson` as a whole. The page also reads
+    // the instance-scoped `['projects']` key — it names the project in the clear-confirmation —
+    // and a bare call count would make this assertion about how many queries the page happens to
+    // mount instead of about the retry it is here to measure.
+    expect(vi.mocked(getJson).mock.calls.filter(([path]) => path === pathFor(ALPHA))).toHaveLength(2)
     expect(screen.queryByRole('alert')).toBeNull()
   })
 

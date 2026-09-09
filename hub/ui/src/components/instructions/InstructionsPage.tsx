@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useInstructions, useSaveInstructions } from '@/api/instructions'
+import { useProjects } from '@/api/projects'
 import { readableApiError } from '@/api/client'
+import { useConfigStore } from '@/store/configStore'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/input'
 import { Icon } from '@/components/common/Icon'
 import { SettingsSection } from '@/components/environment/SettingsSection'
+import { ClearInstructionsDialog } from '@/components/instructions/ClearInstructionsDialog'
 
 /**
  * The project's instructions, editable — but only once they have actually been read.
@@ -34,8 +37,13 @@ import { SettingsSection } from '@/components/environment/SettingsSection'
 export function InstructionsPage() {
   const { data, isError, error, refetch } = useInstructions()
   const saveMutation = useSaveInstructions()
+  const { selectedProjectId } = useConfigStore()
+  // The `['projects']` key is instance-scoped and already resident — the rail and the project
+  // header both hold it — so naming the project in the dialog costs a lookup, not a request.
+  const { data: projects = [] } = useProjects()
   const [content, setContent] = useState('')
   const [saved, setSaved] = useState(false)
+  const [confirmingClear, setConfirmingClear] = useState(false)
 
   useEffect(() => {
     if (data) {
@@ -110,6 +118,25 @@ export function InstructionsPage() {
             <Icon name="info" size={15} className="mt-0.5 shrink-0" />
             <span><strong style={{ color: 'var(--text-2)' }}>Session boundary.</strong> Changes take effect when agents start a new session. Running sessions are not affected.</span>
           </div>
+          {/* Mounted inside the `data` branch, not beside Save. Save lives in `actions`, which
+              `SettingsSection` renders in its own heading — a sibling subtree of `{children}` —
+              and moving it here would break the structural gate F271 relies on. Rendering the
+              dialog here instead is what lets `useDialogFocus` restore focus across the two
+              subtrees when it closes. `data` is in scope by construction, so the dialog can never
+              be asked about content that was never read. */}
+          {confirmingClear && data && (
+            <ClearInstructionsDialog
+              projectName={projects.find((project) => project.id === selectedProjectId)?.name ?? 'this project'}
+              storedContent={data.content}
+              // Cancel leaves the editor exactly as the operator typed it. Restoring the old text
+              // under them would be a second surprise answering the first (`design.md` D4).
+              onCancel={() => setConfirmingClear(false)}
+              onConfirm={() => {
+                setConfirmingClear(false)
+                saveMutation.mutate(content)
+              }}
+            />
+          )}
         </div>
       ) : isError ? (
         /* Stated inside `{children}`, never in place of the whole section: the section's title and

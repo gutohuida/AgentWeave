@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "bdb5a79",
     "stop_at": "2026-09-10T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-09-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "clearing-1-dialog",
-    "next_action": "Implement section 1 of 2026-09-07-clearing-instructions-asks-first -- the dialog -- tasks.md:10-31, via openspec-apply-change. THIS IS THE FIRST FIRING OF THE WINDOW THAT BUILDS PRODUCT CODE, so it inherits an unpaid debt: iterations 1-3 never ran step 3 of the playbook (confirm the tree is green before building on it). Start the relevant Hub/UI chunk in the background FIRST -- it is 15-47 minutes and exceeds the 600s command cap -- and read it before claiming anything; if it is red and you did not break it, that inherited breakage is the item, not this one. Read task 5.2's recorded evidence (committed at 3078843) before changing behaviour, because section 2 is what makes that measurement stop being observable. Do NOT rebuild the bundle in this item -- section 3 owns that, and only py -3.11 scripts/refresh_ui_bundle.py writes ui-build-stamp.json. The :8011 drive Hub is still running (pid 7360, started 2026-09-09T22:37:51Z on 54ed088) with FOUR fixtures and no job enabled; the moment this item edits a .py under hub/hub or src it is stale and any later drive must restart it from source from hub/. A UI edit alone does not make it stale, but the served bundle it holds is the pre-change one.",
+    "current": "clearing-2-gate",
+    "next_action": "Implement section 2 of 2026-09-07-clearing-instructions-asks-first -- the gate -- tasks.md:32-48, via openspec-apply-change. This is the item that makes the dialog reachable: iteration 4 shipped ClearInstructionsDialog and mounted it in InstructionsPage's `data` branch, but NOTHING calls setConfirmingClear(true), so the component is correct and unopenable. handleSave (InstructionsPage.tsx, `const handleSave = () =>`) becomes conditional: fire the dialog when data.content.trim() !== '' && content.trim() === '', otherwise saveMutation.mutate(content) exactly as today. TRIM BOTH SIDES and do NOT trim what is written -- the confirmed save sends `content` byte-for-byte. Read 5.2's recorded evidence (committed at 3078843) BEFORE changing behaviour, because this is the section that makes that pre-change measurement stop being observable: one PUT carrying content='', zero dialogs, the row empty, no undo anywhere on the page, /instructions/history 404. Task 2.3 is load-bearing and easy to breach by accident: add NO state guard for the unloaded case and do NOT move Save out of `actions={data ? ... : undefined}` -- that structural gate is F271's and it is what makes this confirmation impossible to reach over a state that was never read. Leave hub/hub/api/v1/instructions.py and hub/hub/db/models.py alone (2.4). Do NOT rebuild the bundle -- section 3 owns that. Verify with `npx vitest run` FULL (not just changed files) plus `npx tsc --noEmit` and `npm run lint`; ruff/black/mypy are not required and say so rather than skipping silently. The hub/tests/ suite is SLOW (~45+ min) -- iteration 4 ran it and its result is in the iteration 4 log entry; no .py under hub/hub or src/ has changed since, so it need not be re-run for a UI-only section. pytest-timeout is NOT installed under py -3.11: passing --timeout=N dies in 4 seconds with EXIT=4 and looks like a finished run. The :8011 drive Hub is still running (pid 7360, started 2026-09-09T22:37:51Z) and is NOT stale -- sections 1 and 2 touch no .py -- but the bundle it serves is pre-change, so it cannot demonstrate this change until section 3 rebuilds.",
     "queue": [
         {
             "id": "compose",
@@ -35,13 +35,13 @@
         },
         {
             "id": "clearing-1-dialog",
-            "status": "current",
+            "status": "done",
             "title": "2026-09-07-clearing-instructions-asks-first, section 1: the dialog",
-            "detail": "APPROVED (carried forward from 2026-09-08; no new approval granted). 25 tasks, 1 ticked -- 5.2 only, the pre-change drive, closed on real evidence committed at 3078843. THIS IS THE ONE BUNDLE-TOUCHING CHANGE TONIGHT; nothing else on the ORDER line touches hub/hub/static/ui, so the one-bundle-change-per-night constraint is satisfied. Method is openspec-apply-change. Section 1 is tasks.md:10-31."
+            "detail": "DONE iteration 4. ClearInstructionsDialog.tsx created (ArchiveConfirmDialog's shape, no type-to-confirm, no isPending prop -- Confirm closes and fires in one act so no second click is reachable and the save acknowledgement in SettingsSection's heading is not covered), and mounted inside {children}'s `data` branch per 1.4. Save was NOT moved out of `actions`. Tasks 1.1-1.4 ticked. Verified in jsdom by a THROWAWAY test file, 7 passed, then deleted so section 4 is not credited with tests of the dialog rather than of the gate; three mutations each killed a NAMED test (trailing-newline strip, scrim target guard, useDialogFocus). NOT DRIVEN and not drivable: nothing sets confirmingClear true until section 2. COLLATERAL, already repaired: naming the project needs useProjects(), which broke instructionsUnreadEditor.test.tsx's F271 retry case -- it counted EVERY getJson call (2 -> 3). Rewritten to count calls on the instructions path only, and mutation-checked by removing Retry's refetch(). Full UI suite 1512/1512, tsc and lint clean."
         },
         {
             "id": "clearing-2-gate",
-            "status": "open",
+            "status": "current",
             "title": "clearing-instructions, section 2: the gate",
             "detail": "tasks.md:32-48. This is the section that makes the pre-change measurement (5.2) stop being observable, so read 5.2's recorded evidence before changing behaviour: one PUT carrying a content field of empty string, zero dialogs, the row empty, no undo anywhere on the page, /instructions/history 404."
         },

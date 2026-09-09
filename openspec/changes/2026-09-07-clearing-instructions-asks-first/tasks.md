@@ -9,19 +9,19 @@ lint set is not required — say so in the log rather than passing over it in si
 
 ## 1. The dialog
 
-- [ ] 1.1 New `hub/ui/src/components/instructions/ClearInstructionsDialog.tsx`, copying the shape of
+- [x] 1.1 New `hub/ui/src/components/instructions/ClearInstructionsDialog.tsx`, copying the shape of
   `components/spec/ArchiveConfirmDialog.tsx` — `role="dialog"`, `aria-modal`, `aria-labelledby`, the
   `lifted-surface` panel over `var(--scrim)`, a ghost Cancel and a `destructive` Confirm — and
   reusing `hooks/useDialogFocus.ts` for Escape, focus trapping and focus restoration. Do **not**
   reuse `DeleteProjectDialog`'s type-to-confirm: its own docstring says it exists because no other
   destructive control removes as much at once, and this one does not.
-- [ ] 1.2 The dialog states three things, per `design.md` D3: the project it is about, how much
+- [x] 1.2 The dialog states three things, per `design.md` D3: the project it is about, how much
   content would be discarded (a line count taken from `data.content`, the text that was read), and
   that AgentWeave keeps no copy. The third is the fact the operator cannot discover anywhere else —
   it is measured in `proposal.md`, one row upserted in place, no history table.
-- [ ] 1.3 Cancel, Escape and a scrim click all do the same nothing: no write, no change to the
+- [x] 1.3 Cancel, Escape and a scrim click all do the same nothing: no write, no change to the
   editor's content. Do not restore the old text on Cancel — the operator typed the empty editor.
-- [ ] 1.4 **Mount it inside the `data` branch of `{children}`** (`InstructionsPage.tsx:71`), or wrap
+- [x] 1.4 **Mount it inside the `data` branch of `{children}`** (`InstructionsPage.tsx:71`), or wrap
   the component's return in a fragment. Named by the third review because no task said where the
   dialog goes: `InstructionsPage` returns a single `<SettingsSection>`, Save lives in the `actions`
   prop (`:62-69`) which renders in the section's heading, and `{children}` (`:71-152`) is a sibling
