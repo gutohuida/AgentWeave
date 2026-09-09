@@ -25,6 +25,85 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ---
 
+## 2026-09-09
+
+Written 08:45 by a RESUME session, on the operator's instruction this morning, after reading the
+night window's result. **Read `.claude/autonomous/2026-09-08-night-log.md` iteration 17 first** — it
+is what makes this section necessary.
+
+### The drain gate has released itself, and this section overrides it
+
+`day-window.md` step 6 counts unbuilt specced changes and runs no spec loop at 2 or more. Last night
+built and archived three of the four approved changes, so **the count is 1** — measured 08:39 today,
+the only survivor being `2026-09-07-clearing-instructions-asks-first`. By the playbook that unlocks
+`D-2/D-3/D-4 = spec R1/R2/R3` and today would write a fifth proposal.
+
+**Do not.** The operator's standing instruction is *"nothing new but finish everything that we have
+open"*, and `ROADMAP.md`'s own completeness audit prices the alternative: **119 of 297 findings have
+never been read by anybody**, four of six sampled were real and unfixed, and until that scan exists
+every total in that plan silently assumes 119 zeroes.
+
+This is not the gate being wrong. The gate measures *specced* work and it is right that the specced
+queue has drained; what it cannot see is a 119-finding backlog that has no spec and never will. The
+instruction is temporary and holds for today only.
+
+### The queue
+
+```
+D-1  drive     e2e, scoped to the three changes the night built
+D-2  repairs   read the 119 unclassified findings -- part 1
+D-3  repairs   read the 119 unclassified findings -- part 2
+D-4  repairs   key hygiene -- recount the aw_live_ literals, then fix
+D-5  review    the review page, as usual
+D-6  repairs   if the day has room
+```
+
+### D-1 — drive what the night built
+
+Three changes landed and each was already driven once by the night window itself, so **this is not a
+re-run of those drives.** What has never been exercised is the three of them *together* on one Hub:
+`a-dead-connection-is-never-handed-back-out` (F295), `an-agent-without-mcp-is-not-told-it-has-nothing`,
+and `the-conversation-carries-its-own-run-facts` (F274). The last touches the committed UI bundle, so
+drive the screen, not only the API.
+
+**Carry one open question into it.** Iteration 17 refused task 7.1 and left **F291 open** with a
+measurement: `groupIntoTurns` (`agentTimelineModel.ts:45-62`) partitions on `delivery_state` and
+never looks at `run_id`, and the pre-spawn path commits `return_run_entries` before it broadcasts
+`run_failed` (`agent_trigger.py:2005-2011`), so a run that never started has no turn to label. If the
+drive can confirm or refute that from the operator's side, say so in the log.
+
+### D-2 / D-3 — the 119, and the one rule that governs them
+
+Start from `py -3.11 scripts/classify_findings.py` and take its `UNCLASSIFIED` list. Write a
+`**Status:**` line into each section. Mechanical, no decisions inside it, and the operator has
+already approved the work.
+
+**Read `scripts/classify_findings.py`'s header before believing its output** — it documents five
+blind spots it has had, and it was wrong four separate ways on the day it was written.
+
+**Do not write the resulting counts into `FINDINGS.md`.** That file is the tool's input: the first
+census was published into it and thereby changed itself, measured at `c18cb6f` against `c18cb6f~1`,
+four rows differing from nothing but the prose added between them. Computed counts go in
+`ROADMAP.md`.
+
+Two answers are known already and are the calibration for the rest: **F109 is fixed** (F285's change,
+2026-09-04) and **F77 is open, severity C, and has never been counted by any census.**
+
+### D-4 — key hygiene
+
+`ROADMAP.md` Stage 6. **Recount before fixing** — the last count was 10 `aw_live_` literals in 8
+files, taken before `scripts/drive/aw.py` gained a real `require_key()`, and several harnesses may be
+clean for free now. The operator decided 2026-09-08 that **rotating trial-profile keys is the loop's
+to do without asking**; the `live` profile on `:8000` is not in scope and is not to be touched.
+
+### What this section does not do
+
+It does not approve, re-order or unblock anything in `APPROVALS.md`. That file's newest section is
+still `## 2026-09-08` and its `ORDER:` line names three changes that are now archived —
+**correct as history, stale as an instruction, and the evening's job to rewrite**, not this window's.
+
+---
+
 ## 2026-09-08
 
 Written by a DECIDE session, 2026-09-08 00:30, on the operator's behalf. It implements Stage 0.1 and
