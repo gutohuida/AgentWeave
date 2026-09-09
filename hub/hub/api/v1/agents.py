@@ -1041,11 +1041,20 @@ def _operations() -> List[_Operation]:
                 "is none of yours."
             ),
             http_note=(
-                "This request returns as soon as the questions are recorded. Poll "
-                f"`GET {_AGENT_ACTIONS_PREFIX}/questions/{{question_id}}` for each id it gives "
-                "back until the answer is "
-                "there — waiting is what the injected tool does on your behalf, and it is the one "
-                "part of this operation you have to do yourself."
+                "This request returns as soon as the questions are recorded, and waiting is the "
+                "one part of this operation you have to do yourself — it is what the injected tool "
+                "does on an agent's behalf. The reply gives you each question's `id` and its "
+                "`wait_expires_at`, which is the deadline the Hub itself will hold you to. Poll "
+                f"`GET {_AGENT_ACTIONS_PREFIX}/questions/{{question_id}}` for each id until it "
+                "comes back `answered` (the answer is in `answer`, and in `answer_labels` when "
+                "several options were chosen) or `declined` — the operator saw it and chose not to "
+                "answer, so nothing further is coming and re-asking it is wrong. Stop at "
+                "`wait_expires_at` for any that are neither: that is silence, not a decision. Then "
+                f"`POST {_AGENT_ACTIONS_PREFIX}/questions/wait-ended` with `question_ids`* holding "
+                "**only the ones that ran out of time** — reporting a declined question there "
+                "would record the operator's answer as nobody having answered. Send it before you "
+                "carry on: until you do, the task you are holding goes on telling the operator "
+                "somebody is still waiting on them."
             ),
         ),
         _Operation(
@@ -1269,6 +1278,15 @@ def _operations() -> List[_Operation]:
                 "posture is. The allowance alone is not enough — it is what makes the call "
                 "reachable, not a standing yes. Refused if the job has a loop: a loop is archived "
                 "by the operator only."
+            ),
+            http_note=(
+                "So the first attempt is refused with `409` and a body carrying `code` "
+                "`operator_direction_required` and a `permission_request_id`; nothing was archived "
+                "and nothing is wrong with your request. The operator now has that request in "
+                f"front of them. Poll `GET {_AGENT_ACTIONS_PREFIX}/permission-requests/"
+                "{permission_request_id}` until its `status` leaves `pending`, then send this same "
+                "request again if it is `allowed`. `denied` is their answer and not a hurdle: do "
+                "not repeat it."
             ),
         ),
         _Operation(

@@ -72,6 +72,19 @@ class QuestionResponse(BaseModel):
     # (`2026-08-11-declining-a-question`, D1).
     declined: bool = False
     declined_at: Optional[datetime] = None
+    # When the wait this question started runs out, stamped by the Hub from its own inputs at
+    # `api/v1/agent_actions.py::_record_the_wait_and_park` and never told to the Hub by anybody.
+    #
+    # **Disclosed because the Hub judges the asker against it** (§3.6 of
+    # `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`): `POST /questions/wait-ended`
+    # refuses a report whose question has not in fact expired (`run_task_binding.py`), so until this
+    # was on the schema a caller was held to a deadline it was never shown. The injected `ask_user`
+    # tool has a private copy of the number from `AW_QUESTION_TIMEOUT`; a caller reaching the plane
+    # over HTTP has neither that environment variable nor the tool, and this is the only way it can
+    # know when to stop waiting.
+    #
+    # `None` for a non-blocking question: nobody is waiting, so no wait was stamped.
+    wait_expires_at: Optional[datetime] = None
     # Whether anyone is still waiting on this question.
     #
     # Computed from the asking run rather than stored: the `runs` table already holds it, and a

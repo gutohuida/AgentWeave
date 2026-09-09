@@ -67,23 +67,23 @@ treat the open choice as permission to skip the requirement.
 
 ## 3. The two adapter-only rules move into the contract
 
-- [ ] 3.1 **Archiving.** `POST /jobs/{job_id}/archive`
+- [x] 3.1 **Archiving.** `POST /jobs/{job_id}/archive`
   (`hub/hub/api/v1/agent_actions.py:764-777`) currently asks the operator nothing; the always-ask
   rule is in `hub/hub/mcp_server.py:815` alone. Move it to the route. Mechanism open (`design.md`
   D5): block on the operator's answer, or return a typed "direction required" failure carrying a
   request id the caller polls, matching how `/permission-requests`
   (`hub/hub/api/v1/agent_actions.py:887-954`) already works.
-- [ ] 3.2 Whichever mechanism §3.1 chooses, `mcp_server.archive_job` stops holding the rule itself.
+- [x] 3.2 Whichever mechanism §3.1 chooses, `mcp_server.archive_job` stops holding the rule itself.
   Two independent confirmations for one archive is a worse product than none, and leaving both is
   how the rule silently diverges later.
-- [ ] 3.3 Preserve the rule's actual content, not just a prompt: the confirmation is required
+- [x] 3.3 Preserve the rule's actual content, not just a prompt: the confirmation is required
   **regardless of the run's permission posture**, and a standing `project.allow_agent_jobs`
   allowance does not satisfy it. That distinction is the entire point of design D18 and is easy to
   lose in a move.
-- [ ] 3.4 Preserve the loop refusal — a job with a loop is archived by the operator only, never an
+- [x] 3.4 Preserve the loop refusal — a job with a loop is archived by the operator only, never an
   agent. It is stated in `archive_job`'s docstring; confirm where it is actually enforced before
   assuming the route already has it.
-- [ ] 3.5 **Waiting — and read `design.md` D6 before starting, because round 2 cut this task
+- [x] 3.5 **Waiting — and read `design.md` D6 before starting, because round 2 cut this task
   down.** Ordering, the decline/expiry distinction, the deadline stamp and the task park are already
   the routes' (`hub/hub/api/v1/agent_actions.py:440-529`, `hub/hub/schemas/questions.py:65-77`), and
   an unreported wait is swept at the run boundary (`hub/hub/run_divergence.py:644`). Do **not**
@@ -91,22 +91,22 @@ treat the open choice as permission to skip the requirement.
   never discloses the deadline it stamps. Mechanism open (`design.md` D5) — a long-held request, or
   a documented poll-and-report protocol that §2's HTTP rendering states explicitly and that
   `ask_user` is then re-expressed over.
-- [ ] 3.6 **Disclose `wait_expires_at`.** It is written at `hub/hub/api/v1/agent_actions.py:496`
+- [x] 3.6 **Disclose `wait_expires_at`.** It is written at `hub/hub/api/v1/agent_actions.py:496`
   and is on no response schema, so the caller is judged against a deadline it was never shown
   (`hub/hub/run_task_binding.py:817` is the judgement). Put it on the question response. Then
   consider whether `mcp_server.QUESTION_ANSWER_TIMEOUT` (`:891`) should read the Hub's stamp instead
   of recomputing its own copy of `QUESTION_WAIT_DEFAULT` (`agent_trigger.py:501`) — two literals
   reading `240` in two modules that may not import each other is the same duplication this change is
   about, one layer down. Not required by the delta; note the decision either way.
-- [ ] 3.7 The wait-ended report is load-bearing: without it a parked task goes on claiming somebody
+- [x] 3.7 The wait-ended report is load-bearing: without it a parked task goes on claiming somebody
   is waiting until the run ends. `hub/hub/mcp_server.py` sends it for expired questions only,
   deliberately — a decline is a decision the operator handed back, not silence. Keep that
   distinction wherever the rule lands.
-- [ ] 3.8 Tests that reach the routes **directly**, without the adapter, and assert both rules hold.
+- [x] 3.8 Tests that reach the routes **directly**, without the adapter, and assert both rules hold.
   A test that exercises the MCP tool proves nothing here — the defect is that the tool is where the
   rule lives. `hub/tests/test_agent_actions_governed.py` already reaches them this way with a bearer
   run token; extend it rather than starting a new file.
-- [ ] 3.9 **`test_agent_actions_governed.py:137-140` has to change, and read why before changing
+- [x] 3.9 **`test_agent_actions_governed.py:137-140` has to change, and read why before changing
   it.** It archives over HTTP with only the standing allowance and asserts `200`, under a comment
   stating that archiving is governed by the same allowance as every other job mutation — the exact
   opposite of what `archive_job`'s docstring and design D18 say. It is not a stale assertion; it is
@@ -115,6 +115,49 @@ treat the open choice as permission to skip the requirement.
   and say in the log that a green test was asserting the behaviour this change removes. If the
   operator's answer is the allowance, this task and §3.1–§3.4 collapse into deleting
   `mcp_server.py:815` instead.
+
+### What §3 decided, and why — written 2026-09-09 by the implementing window
+
+**The mechanism (`design.md` D5, archiving).** The route returns a typed failure and the caller
+polls; it does not block on the operator. Three reasons, in `hub/hub/operator_direction.py`'s own
+docstring: `/permission-requests` already works this way and the adapter's `_ask_operator` is
+already a poll loop over it, so this is one protocol on the plane rather than two and the operator's
+card is the shipped one; a blocking route would hold an `AsyncSession`, and so a pooled connection,
+for the whole operator budget, which on SQLite is the pool F295 is about; and the waiting then
+belongs to the caller, which is the point — an HTTP agent performs what the injected tool performs
+for an MCP one, from the description §2 renders.
+
+The refusal is `409` with `code: operator_direction_required`, a `permission_request_id` and a
+`poll` address. `409` rather than `403` deliberately: nothing has been denied, and the state that
+blocks the request is one the operator can change. A denial afterwards **is** `403`
+(`code: operator_refused`).
+
+**Where the rule landed.** In `jobs.archive_job` itself, not in the agent-actions adapter route,
+which delegates to it. That makes the rule reach every caller of the contract by the same code, and
+it puts the gate *after* the existence, already-archived and loop checks — so a card is only ever
+opened for an archive that would otherwise have happened. Asking a person to authorise a 404 is
+asking them to read something meaningless.
+
+**§3.6's second half, decided and not done.** `mcp_server.QUESTION_ANSWER_TIMEOUT` keeps computing
+its own monotonic deadline from `AW_QUESTION_TIMEOUT` and does **not** read the Hub's stamp. Reading
+it would convert an absolute instant from another process into a local monotonic deadline, which is
+exactly the cross-process clock comparison `_record_the_wait_and_park`'s docstring says the design
+avoids — and the tool's deadline being *later* than the Hub's stamp is what makes the `wait-ended`
+refusal able to reject a forged early report and never a genuine one. The duplication that remains
+is the literal `240`, and it is already pinned: `test_question_wait_resolution.py:39` asserts the two
+agree. Disclosure was for the caller that has neither copy, which is the HTTP one.
+
+**§3.9's answer: D18.** The operator settled it by approving a proposal that states the position in
+its own text and a delta that states it as a scenario — *"Archiving scheduled work is directed, on
+either path"*. So `test_agent_actions_governed.py`'s archive block was flipped, comment and all, and
+a green test was asserting the behaviour this change removes. It is not collapsed into deleting
+`mcp_server.py:815`.
+
+**Eleven mutations, eleven named victims** (`testbed/scratch/mutate_c2_contract.py`, uncommitted;
+every file md5-restored and the tree's shape re-checked after each). Every test written or changed
+here is named by at least one. The one worth keeping: relabelling the archive's `http_note` as
+`detail` named nobody, correctly — `_http_lines` renders `detail` too, so the text was still there
+on the HTTP path. The mutation was replaced with one that removes the note.
 
 ## 4. The access path a run is told about is one it actually has
 

@@ -1,5 +1,6 @@
 """Unit tests for the canonical Hub-owned, identity-bound MCP surface."""
 
+import io
 import json
 import urllib.error
 from unittest.mock import MagicMock
@@ -35,6 +36,32 @@ def hub(monkeypatch):
 
 def _body(request):
     return json.loads(request.data) if request.data else None
+
+
+def _refusal(status_code: int, detail) -> urllib.error.HTTPError:
+    """A refusal from the Hub, in the shape `_hub_request` actually meets one.
+
+    `fp` is a real byte stream because `_hub_request` calls `.read()` on it: a refusal whose body
+    never arrives would test the adapter's handling of a body it did not have.
+    """
+    return urllib.error.HTTPError(
+        "http://localhost:8000/x",
+        status_code,
+        "refused",
+        {},  # type: ignore[arg-type]
+        io.BytesIO(json.dumps({"detail": detail}).encode()),
+    )
+
+
+# The Hub's own refusal when an agent archives a job the operator has not directed
+# (`hub/hub/operator_direction.py`). Restated here as the wire body, so this file is testing what
+# the adapter receives rather than what a helper of ours composes.
+_DIRECTION_REQUIRED = {
+    "code": "operator_direction_required",
+    "message": "archiving this job needs the operator's explicit direction ... poll ... perm-1",
+    "permission_request_id": "perm-1",
+    "poll": "/api/v1/agent-actions/permission-requests/perm-1",
+}
 
 
 def test_hub_request_binds_run_token_without_identity_headers(hub):
@@ -269,13 +296,18 @@ def test_job_mutations_reach_only_governed_api(call, method, path, body, hub):
     assert _body(calls[0]) == body
 
 
-def test_archive_job_asks_the_operator_before_reaching_the_archive_route(hub, monkeypatch):
-    """D18/B3.2: `archive_job` puts the request to the operator itself — via `_ask_operator`,
-    the same mechanism `approve_tool_call` uses for a `manual`-posture harness prompt — before
-    ever calling the governed archive route. This is deliberately NOT the ordinary
-    `_job_effect`/governed-API pattern the other job tools use (see the parametrize above),
-    because none of those reach the operator at all unless the run's own permission posture
-    already routes through `approve_tool_call` — an `auto` posture would skip that entirely."""
+def test_archive_job_asks_nobody_itself_and_waits_on_the_request_the_hub_opened(hub, monkeypatch):
+    """§3.2, 2026-09-09: the always-ask rule is the *contract's*, and this tool no longer holds it.
+
+    Until this change `archive_job` called `_ask_operator` first and only then the archive route,
+    which asked nothing — so the same effect reached over HTTP was governed by the standing
+    allowance alone. Now the route refuses with `operator_direction_required` and opens the request
+    itself; the tool's remaining job is to wait on the id that refusal carries and repeat.
+
+    The load-bearing assertion is the last one: this tool opens **no** permission request. Two
+    independent confirmations for one archive would be a worse product than none, and a second copy
+    of the rule is how it silently diverges later.
+    """
     from hub import mcp_server
     from hub.mcp_server import archive_job
 
@@ -283,7 +315,7 @@ def test_archive_job_asks_the_operator_before_reaching_the_archive_route(hub, mo
     calls, responses = hub
     responses.extend(
         [
-            b'{"id":"perm-1","status":"pending"}',
+            _refusal(409, _DIRECTION_REQUIRED),
             b'{"id":"perm-1","status":"allowed"}',
             b'{"ok":true}',
         ]
@@ -291,23 +323,29 @@ def test_archive_job_asks_the_operator_before_reaching_the_archive_route(hub, mo
     assert archive_job("job-1") == {"ok": True}
 
     assert calls[0].method == "POST"
-    assert calls[0].full_url.endswith("/api/v1/agent-actions/permission-requests")
-    assert _body(calls[0]) == {
-        "tool_name": "archive_job",
-        "tool_use_id": "archive-job-1",
-        "tool_input": {"job_id": "job-1"},
-    }
+    assert calls[0].full_url.endswith("/api/v1/agent-actions/jobs/job-1/archive")
     assert calls[1].method == "GET"
     assert calls[1].full_url.endswith("/api/v1/agent-actions/permission-requests/perm-1")
     assert calls[2].method == "POST"
     assert calls[2].full_url.endswith("/api/v1/agent-actions/jobs/job-1/archive")
+    assert not [
+        call
+        for call in calls
+        if call.method == "POST" and call.full_url.endswith("/permission-requests")
+    ]
 
 
 @pytest.mark.parametrize("posture", [None, "auto", "operator"])
-def test_archive_job_asks_the_operator_under_every_posture(hub, monkeypatch, posture):
-    """D18's whole point: the standing `allow_agent_jobs` allowance is not enough alone, and
-    this must not silently degrade to `_decide`'s blanket 'the Hub's own tools' allow just
-    because the run's posture happens to be `auto` or unset."""
+def test_archive_job_is_directed_under_every_posture(hub, monkeypatch, posture):
+    """D18's whole point: the standing `allow_agent_jobs` allowance is not enough alone, and this
+    must not silently degrade to `_decide`'s blanket 'the Hub's own tools' allow just because the
+    run's posture happens to be `auto` or unset.
+
+    Posture is now structurally unable to reach the decision — it is an environment variable of this
+    process and the rule is enforced in the Hub, which never sees it. Kept as a test anyway: it is
+    the property the delta states, and a later refactor that reintroduced a local shortcut here
+    would pass every other test in this file.
+    """
     from hub import mcp_server
     from hub.mcp_server import archive_job
 
@@ -319,13 +357,13 @@ def test_archive_job_asks_the_operator_under_every_posture(hub, monkeypatch, pos
     calls, responses = hub
     responses.extend(
         [
-            b'{"id":"perm-1","status":"pending"}',
+            _refusal(409, _DIRECTION_REQUIRED),
             b'{"id":"perm-1","status":"allowed"}',
             b'{"ok":true}',
         ]
     )
     archive_job("job-1")
-    assert calls[0].full_url.endswith("/permission-requests")
+    assert [call.method for call in calls] == ["POST", "GET", "POST"]
 
 
 def test_archive_job_denied_by_the_operator_never_reaches_the_archive_route(hub, monkeypatch):
@@ -336,14 +374,32 @@ def test_archive_job_denied_by_the_operator_never_reaches_the_archive_route(hub,
     calls, responses = hub
     responses.extend(
         [
-            b'{"id":"perm-1","status":"pending"}',
+            _refusal(409, _DIRECTION_REQUIRED),
             b'{"id":"perm-1","status":"denied"}',
         ]
     )
     with pytest.raises(HubAPIError, match="not approved"):
         archive_job("job-1")
-    # Only the operator ask happened -- a denial must never fall through to archiving anyway.
+    # The refused attempt and the poll. A denial must never fall through to repeating the archive,
+    # and the Hub would refuse it a second time anyway — but the agent is owed the reason, not a
+    # second identical refusal.
     assert len(calls) == 2
+
+
+def test_archive_job_reraises_a_refusal_that_is_not_about_direction(hub, monkeypatch):
+    """A job with a loop, an already-archived job, a withdrawn allowance: those are answers about
+    this job, and the tool must hand them back rather than waiting for an operator who was never
+    asked. The `code` is what tells the two apart, so a refusal carrying none is re-raised."""
+    from hub import mcp_server
+    from hub.mcp_server import HubAPIError, archive_job
+
+    monkeypatch.setattr(mcp_server, "OPERATOR_POLL_SECONDS", 0.01)
+    calls, responses = hub
+    responses.append(_refusal(400, "this job has a loop; loops are archived by the operator only"))
+
+    with pytest.raises(HubAPIError, match="loops are archived by the operator only"):
+        archive_job("job-1")
+    assert len(calls) == 1
 
 
 def test_create_loop_refuses_with_no_stop_condition_before_any_hub_call(hub):

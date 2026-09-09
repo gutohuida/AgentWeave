@@ -1601,3 +1601,75 @@ async def test_the_agent_whose_run_is_waiting_is_not_free(app):
     async with async_session_factory() as session:
         free = await _agents_that_are_free(session, "proj-test")
     assert "worker" not in free
+
+
+# ---------------------------------------------------------------------------
+# 4b. The wait's deadline, disclosed
+#
+# Added 2026-09-09 by §3.6 of `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`. The
+# stamp above was written, judged against, and told to nobody: `POST /questions/wait-ended` refuses
+# a report whose question has not in fact expired, so a caller was held to a deadline it had never
+# been shown. The injected `ask_user` tool did not notice because it carries a private copy of the
+# number in `AW_QUESTION_TIMEOUT`; a caller reaching the plane over HTTP has neither that variable
+# nor the tool, and until now had no way to know when to stop waiting.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_ask_discloses_the_deadline_the_asker_is_judged_against(app):
+    """The response the run receives carries the same instant the Hub stored.
+
+    Read from the response body rather than from the row, which is the whole point: the row was
+    always right, and the run could not see it.
+    """
+    await make_agent(question_timeout_seconds=90)
+    headers = await make_run()
+
+    asked = await app.post("/api/v1/agent-actions/questions", headers=headers, json=one())
+    assert asked.status_code == 201, asked.text
+    disclosed = asked.json()["wait_expires_at"]
+    assert disclosed is not None
+
+    stored = (await question_row(asked.json()["id"])).wait_expires_at
+    if stored.tzinfo is None:
+        stored = stored.replace(tzinfo=timezone.utc)
+    assert datetime.fromisoformat(disclosed) == stored
+
+    # And on the poll, which is the request an HTTP caller actually loops on — a deadline visible
+    # only in the reply to the ask would be lost by any caller that resumed from an id.
+    polled = await app.get(f"/api/v1/agent-actions/questions/{asked.json()['id']}", headers=headers)
+    assert polled.status_code == 200, polled.text
+    assert datetime.fromisoformat(polled.json()["wait_expires_at"]) == stored
+
+
+@pytest.mark.asyncio
+async def test_a_batch_discloses_one_deadline_across_all_of_its_questions(app):
+    """Four questions are one wait, and the batch route is the one `ask_user` posts to. A caller
+    given four different deadlines would have to decide which of them ends the wait."""
+    await make_agent()
+    headers = await make_run()
+
+    asked = await app.post(
+        "/api/v1/agent-actions/questions/batch",
+        headers=headers,
+        json={"blocking": True, "questions": [one("a"), one("b"), one("c")]},
+    )
+    assert asked.status_code == 201, asked.text
+    deadlines = {row["wait_expires_at"] for row in asked.json()["questions"]}
+    assert len(deadlines) == 1
+    assert None not in deadlines
+
+
+@pytest.mark.asyncio
+async def test_a_note_discloses_no_deadline(app):
+    """The mirror of `test_a_note_starts_no_wait_and_records_no_deadline`, one layer out: a
+    non-blocking ask starts no wait, so the field a caller would wait on is absent rather than
+    invented. `null` here is the honest answer, and it is what tells a caller not to poll."""
+    await make_agent()
+    headers = await make_run()
+
+    asked = await app.post(
+        "/api/v1/agent-actions/questions", headers=headers, json=one(blocking=False)
+    )
+    assert asked.status_code == 201, asked.text
+    assert asked.json()["wait_expires_at"] is None

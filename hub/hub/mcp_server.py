@@ -82,11 +82,23 @@ class HubAPIError(RuntimeError):
     request means the Hub is right there and said no; an unreachable one means nothing
     ever answered, possibly at the wrong address entirely."""
 
-    def __init__(self, status_code: int, detail: str, method: str = "", path: str = "") -> None:
+    def __init__(
+        self,
+        status_code: int,
+        detail: str,
+        method: str = "",
+        path: str = "",
+        data: Optional[Dict[str, Any]] = None,
+    ) -> None:
         self.status_code = status_code
         self.detail = detail
         self.method = method
         self.path = path
+        # The refusal's own body, when it had structure, alongside the sentence `_readable_detail`
+        # reduced it to. Added for `archive_job`: a "direction required" failure carries the id of
+        # the request the operator is now looking at, and an adapter that had only the prose would
+        # have to parse an identifier back out of a sentence written for a person.
+        self.data: Dict[str, Any] = data or {}
         endpoint = f"{method} {path}".strip()
         prefix = f"Hub rejected {endpoint}" if endpoint else "Hub API error"
         super().__init__(f"{prefix} ({status_code}): {detail}")
@@ -173,12 +185,16 @@ def _hub_request(
         return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode(errors="replace")
+        structured: Optional[Dict[str, Any]] = None
         try:
             parsed = json.loads(detail)
-            detail = _readable_detail(parsed.get("detail", detail))
+            body = parsed.get("detail", detail)
+            if isinstance(body, dict):
+                structured = body
+            detail = _readable_detail(body)
         except (ValueError, AttributeError):
             pass
-        raise HubAPIError(exc.code, detail, method, path) from exc
+        raise HubAPIError(exc.code, detail, method, path, structured) from exc
     except urllib.error.URLError as exc:
         raise HubUnreachableError(url, method, path, str(exc.reason)) from exc
 
@@ -811,16 +827,37 @@ def archive_job(job_id: str) -> Dict[str, Any]:
 
     Refused if the job has a loop: a loop is archived by the operator only, never an agent
     (mirrors `create_loop`'s "continuity is by checkpoint, not resume" rule).
+
+    **The rule above is the Hub's, not this tool's** (§3.2 of
+    `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`, 2026-09-09). This function used to
+    ask the operator itself and only then call the route; the route asked nothing, so an agent on the
+    HTTP access path was governed by the allowance alone. Now the route refuses with
+    `operator_direction_required` and opens the request, and this waits on it — which is why the
+    first call below is the archive and not a question. Do **not** reinstate an ask here: two
+    independent confirmations for one archive is a worse product than none, and the second copy is
+    how the rule silently diverges.
     """
-    decision = _ask_operator("archive_job", {"job_id": job_id}, tool_use_id=f"archive-{job_id}")
+    path = f"/jobs/{job_id}/archive"
+    try:
+        return _job_effect("POST", path)
+    except HubAPIError as exc:
+        request_id = exc.data.get("permission_request_id")
+        if exc.data.get("code") != "operator_direction_required" or not request_id:
+            # Any other refusal is this job's own — no such job, already archived, it has a loop,
+            # the allowance is off. Those are answers, and re-raising is how the agent gets them.
+            raise
+
+    decision = _await_decision(str(request_id))
     if not decision["allow"]:
         raise HubAPIError(
             403,
             f"archiving this job was not approved: {decision['reason']}",
             "POST",
-            f"/jobs/{job_id}/archive",
+            path,
         )
-    return _job_effect("POST", f"/jobs/{job_id}/archive")
+    # The Hub decides again from the row the operator answered; this repeat is the caller doing what
+    # the refusal told it to do, not a second grant.
+    return _job_effect("POST", path)
 
 
 @mcp.tool()
@@ -1013,6 +1050,20 @@ def _ask_operator(tool_name: str, tool_input: Dict[str, Any], tool_use_id: str) 
             "reason": "the operator could not be asked (the Hub did not accept the request)",
         }
 
+    return _await_decision(request_id)
+
+
+def _await_decision(request_id: str) -> Dict[str, Any]:
+    """Wait out one already-open permission request and report what the operator did.
+
+    Split from `_ask_operator` so `archive_job` can wait on a request it did not open: the Hub's
+    own route opens that one, because the rule that it must exist is the contract's
+    (`hub/hub/operator_direction.py`). Waiting is protocol and may be shared; opening is not, and
+    is why this half took the request id rather than the tool name.
+
+    Reports the wait ended on a timeout, for the same reason `ask_user` does: the operator must
+    stop being offered a card whose answer can no longer reach anybody.
+    """
     deadline = time.monotonic() + OPERATOR_DECISION_TIMEOUT
     while time.monotonic() < deadline:
         time.sleep(OPERATOR_POLL_SECONDS)

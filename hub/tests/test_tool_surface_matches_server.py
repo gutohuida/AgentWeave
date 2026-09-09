@@ -333,3 +333,51 @@ def test_the_mcp_rendering_is_what_a_caller_that_says_nothing_gets():
     without a run, so they have no path to describe and must not invent one."""
     assert _tool_surface_lines() == _tool_surface_lines(access_path="mcp")
     assert _tool_surface_lines() != _tool_surface_lines(access_path=HTTP_PATH)
+
+
+def _http_line_for(tool: str) -> str:
+    """Every line the HTTP rendering writes about one operation, joined.
+
+    An operation's description spans its head line plus the notes under it, and the protocol these
+    two tests are about lives in the notes.
+    """
+    lines = _tool_surface_lines(access_path=HTTP_PATH)
+    start = next(index for index, line in enumerate(lines) if f"(`{tool}`)" in line)
+    end = start + 1
+    while end < len(lines) and lines[end].startswith("  "):
+        end += 1
+    return "\n".join(lines[start:end])
+
+
+def test_the_http_rendering_states_the_wait_protocol_ask_user_performs():
+    """§3.5/§3.7 of `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`.
+
+    `ask_user` is a call that waits, and the waiting was the adapter's alone: the contract offered
+    no way to wait and never disclosed the deadline it stamps. The deadline is now on the response
+    (`QuestionResponse.wait_expires_at`), and this is the other half — a caller with no injected
+    tool is told, here, how to participate: poll, stop at the deadline, then report.
+
+    The expired-only clause is the one worth a test of its own. A decline is a decision the operator
+    made and handed back; reporting one as a wait that ran out records the opposite of what
+    happened, and `mcp_server.ask_user` is careful about it in a comment that only governs itself.
+    """
+    described = _http_line_for("ask_user")
+
+    assert "wait_expires_at" in described
+    assert f"GET {_AGENT_ACTIONS_PREFIX}/questions/" in described
+    assert f"{_AGENT_ACTIONS_PREFIX}/questions/wait-ended" in described
+    assert "declined" in described
+    assert "only the ones that ran out of time" in described
+
+
+def test_the_http_rendering_states_how_an_archive_is_directed():
+    """§3.1/§3.5: the always-ask rule is the route's now, so an HTTP caller meets a `409` it has to
+    act on. A description that stated the rule without stating the protocol would leave that caller
+    reading its own refusal as a defect."""
+    described = _http_line_for("archive_job")
+
+    assert "operator_direction_required" in described
+    assert "permission_request_id" in described
+    assert f"{_AGENT_ACTIONS_PREFIX}/permission-requests/" in described
+    # The rule itself is in the shared description, so both renderings carry it.
+    assert "whatever this run's permission posture is" in "\n".join(_tool_surface_lines())

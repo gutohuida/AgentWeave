@@ -15,6 +15,7 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, AIJob, JobRun, Loop, Project, Question, Run, Task
 from ...loop_ending import end_loop
+from ...operator_direction import require_operator_direction
 from ...scheduler import cron_day_ambiguity_reason
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate, LoopSummary
 from ...schemas.tasks import TaskCreate
@@ -1112,11 +1113,23 @@ async def archive_job(
 ):
     """Archive a job (design D16/D18). Hides it from default listings; deletes nothing.
 
-    Governed the same way as every other agent-originated job mutation
-    (`_require_agent_job_allowance`) — the standing `allow_agent_jobs` project setting is the
-    capability gate here. D18's *always ask, independent of the run's permission posture* rule is
-    enforced one layer up, at the MCP tool (`archive_job` in `mcp_server.py`, B3.2) — this route
-    is the mechanism the tool calls once that has already happened, not the policy itself.
+    Two gates for an agent caller, and they are different questions. `_require_agent_job_allowance`
+    asks whether this run may manage scheduled work at all — the standing `allow_agent_jobs` project
+    setting. `require_operator_direction` asks whether the operator has directed *this* archive, of
+    *this* job, now; D18's rule that the answer is required whatever the run's permission posture is,
+    and that the standing allowance is not a standing yes.
+
+    **That second gate moved here on 2026-09-09**
+    (`2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`, §3.1). It used to live in the MCP
+    tool alone, so this route asked nothing and an agent reaching the same effect over HTTP was
+    governed by the allowance and nothing else. The rule is the contract's now, and
+    `mcp_server.archive_job` no longer holds a copy — two independent confirmations for one archive
+    would be a worse product than none.
+
+    **The order of the two is deliberate.** The direction gate runs *after* the job is known to
+    exist, to be unarchived, and to have no loop, so a card is only ever put in front of the operator
+    for an archive that would otherwise have happened. Asking a person to authorise a 404 is asking
+    them to read something that means nothing.
 
     B3.3: a job with a `Loop` is refused here, for an agent caller only. D18's own text is
     explicit that "archive_job's agent path therefore only ever targets a job with no loop" —
@@ -1143,6 +1156,22 @@ async def archive_job(
         raise HTTPException(
             status_code=400,
             detail="this job has a loop; loops are archived by the operator only",
+        )
+
+    if agent_identity is not None or run_identity is not None:
+        # `_require_agent_job_allowance` above has already refused an agent caller whose attribution
+        # is incomplete, so `agent_identity` is a string by the time this runs. The `tool_use_id` is
+        # the one the MCP tool has always used, so the operator's card is the same card, joinable by
+        # `_operator_already_refused` exactly as before.
+        await require_operator_direction(
+            session,
+            project_id=project_id,
+            agent=str(agent_identity),
+            run_id=run_identity,
+            tool_name="archive_job",
+            tool_use_id=f"archive-{job_id}",
+            tool_input={"job_id": job_id},
+            action="archiving this job",
         )
 
     archived_at = datetime.now(timezone.utc)

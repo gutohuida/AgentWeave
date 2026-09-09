@@ -767,6 +767,15 @@ async def archive_governed_job(
     actor: AgentActor = Depends(get_agent_actor),
     session: AsyncSession = Depends(get_session),
 ):
+    """Archive scheduled work — and this is the one job route that needs a person first.
+
+    Unchanged in shape from its four neighbours, deliberately: the always-ask rule is imposed by
+    `jobs.archive_job` itself (`hub/hub/operator_direction.py`, §3.1 of
+    `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`), so it reaches this caller and the
+    operator's own by the same code, and this adapter cannot be the place it is remembered or
+    forgotten. A caller here is refused with `409` and a `permission_request_id` until the operator
+    answers; see that module for the protocol and for why it is a poll rather than a held request.
+    """
     return await archive_job(
         job_id,
         project=(actor.project_id, actor.project_id),
