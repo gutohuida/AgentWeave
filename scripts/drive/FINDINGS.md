@@ -7485,7 +7485,12 @@ and the delivery-attempt accounting that is now **F114**.
 
 ## F109 (B) — the hub suite runs every session on one database connection, and the retry chain stalls because of it
 
-**Status:** **the mechanism was already known — this finding rediscovered it.** Filed 2026-08-28
+**Status:** fixed `d9ad1e0` (2026-09-04, by F285's change). The 2026-08-29 decision recorded
+below was **reversed**: CI made the file-backed fixture unavoidable and the operator took it.
+`hub/tests/conftest.py:22-36` now names F285 and states the same three candidates this entry
+measured. *"Do not re-propose the file-backed fixture"* no longer applies -- it shipped. [classified 2026-09-09, D-2]
+
+**Status as filed:** **the mechanism was already known — this finding rediscovered it.** Filed 2026-08-28
 while implementing F108, upgraded the same night, and then **corrected**: see *This was not news*
 immediately below before reading the rest. What is genuinely new is the link to the flaky test, a
 cheap reproduction, three measured fixes, and a second affected test.
@@ -7748,7 +7753,12 @@ decision rather than a repair.
 
 ## F111 (B) — a self-registered agent with no runner is told to install a binary named after itself
 
-**Status:** **superseded by an operator decision, 2026-08-29 — self-registration leaves the product.**
+**Status:** open. The wrong sentence still ships: `POST /agents/register` is live at
+`hub/hub/api/v1/agents.py:2144` (verified 2026-09-09). The operator's 2026-08-29 decision settled
+the *route* out -- delete self-registration, alongside F3 -- rather than taking it. That deletion
+is unimplemented, and F3 is itself still open. [classified 2026-09-09, D-2]
+
+**Status as filed:** **overtaken by an operator decision, 2026-08-29 — self-registration leaves the product.**
 Found 2026-08-28 by driving F108's own fix against the trial Hub, and originally filed as a question
 about what a third sentence should say. It is not. See *The decision* at the end.
 
@@ -8534,7 +8544,12 @@ and contained no task id.
 
 ## F119 (B) — F31's repair landed in one of three copies of the same regex
 
-**Status:** Hub half fixed this session (`hub/hub/scheduler.py` now calls `redact_secrets`); the
+**Status:** open on the CLI half. The Hub half landed -- `hub/hub/scheduler.py:57`
+`_safe_error_summary` calls `redact_secrets` (verified 2026-09-09). `src/agentweave/diagnostics.py`
+keeps the broad pre-F31 third alternative deliberately, and the question this entry ends on --
+should the CLI's catch-all be narrowed -- has never been put to the operator or answered. [classified 2026-09-09, D-2]
+
+**Status as filed:** Hub half fixed this session (`hub/hub/scheduler.py` now calls `redact_secrets`); the
 CLI's copy keeps its own third alternative deliberately, and that divergence is left for the
 operator.
 
@@ -9558,6 +9573,11 @@ routes through the same `end_loop` a firing uses. Both drive harnesses now tear 
 
 ## F127 (B) — pressing Run on a healthy loop whose agent is busy answers 500 "Failed to fire job"
 
+**Status:** open. Reproduced deterministically (`t_run_while_busy2.py`, 7/7) and never
+repaired: this entry's own *"shape of the fix (not implemented -- it wants a round)"* still
+describes the code. No openspec change covers it; the only external mention is the 2026-08-30
+release roadmap. [classified 2026-09-09, D-2]
+
 Reproduced deterministically: `t_run_while_busy2.py`, **7 of 7 verdicts held**, against
 `proj-dc4d43543bea` on 8011.
 
@@ -9625,6 +9645,11 @@ loop-scoped (a loop staffs only the agents it names, a flow staffs its roster), 
 API stop presenting `job.agent` as who runs this loop. Filed, not fixed.
 
 ## F129 (B) — requirement drift works, and the app cannot reach any of it
+
+**Status:** open. Verified 2026-09-09: `hub/ui/src` contains no reference to `spec/drift`,
+`drift/detect` or `requirement_drift`, so the detection route is still unreachable from the app.
+Named in the 2026-08-30 release roadmap, never specced. F132 sharpens it -- read that entry's
+*"what this changes about F129's fix"* before proposing one. [classified 2026-09-09, D-2]
 
 **Driven 2026-08-29, iteration 10, on the 8011 Hub running this branch. Row 10 of TESTPLAN.md,
 never driven before today. `scripts/drive/t_row10_drift.py`, 31/31 assertions good.**
@@ -10335,6 +10360,10 @@ positives whose cost is paid by whoever reads the report.
 
 ## F136 (B) — the fix that stopped the Hub naming a binary after your agent does not cover the agents that most need it
 
+**Status:** open. This entry says so itself -- *"they are not fixed"* -- and it shares a root
+with F111: the `self_registered` guard in `get_agent_config`. Both close by deleting
+self-registration, which is unimplemented. [classified 2026-09-09, D-2]
+
 **Driven 2026-08-30, iteration 12, on the 8011 Hub, `proj-1964cdedffe2` (`drive-0830-sweep`).
 Reproduced on two independent surfaces in the same request cycle.**
 
@@ -10563,6 +10592,11 @@ person to look at titles knows nothing generates one.
 
 ## F138 (B) — three drive harnesses are hard-wired to a forbidden project, and one of them writes
 
+**Status:** open, with the larger half fixed. The three hard-wired harnesses were repaired in
+the filing commit. The residual left for the operator is now half-closed too: `aw.py`'s `KEY`
+default is gone (`scripts/drive/aw.py:18`, plus a `require_key()` that exits, 2026-09-07), but
+`HUB` still defaults to `http://127.0.0.1:8010` -- the one instance a drive must not disturb. [classified 2026-09-09, D-2]
+
 **Found 2026-08-30, iteration 12, while reading `t_hop.py` before trusting it. Fixed in the same
 commit.** No damage occurred: the files were read, not run.
 
@@ -10620,6 +10654,10 @@ refusing — is a one-line change with no caller to break, but it changes how ev
 directory is invoked, so it is stated here rather than done unattended.
 
 ## F139 (B) — the agent reached for the host's `SendMessage`, and reported AgentWeave's own roster as unreachable
+
+**Status:** open. Non-deterministic and unfixed. The archived change
+`2026-09-01-a-flow-briefing-names-its-contract` cites it in `design.md:35` as a reason its own
+briefing cannot assume a tool call, and repairs nothing here. [classified 2026-09-09, D-2]
 
 **Driven 2026-08-30, iteration 12, on the 8011 Hub, `proj-1964cdedffe2`, agent `driver` on
 Claude/Haiku. Non-deterministic: the identical instruction succeeded on the run nine minutes
@@ -12299,6 +12337,11 @@ it.
 
 ## F156 (B) — `integration-preview` says `will_merge: true` for a task approval refuses outright
 
+**Status:** open, and twice declared out of scope by the changes nearest to it:
+`2026-09-01-a-conflict-refusal-names-what-clears-it/proposal.md:116` (*"F156 is not in scope"*) and
+`2026-09-01-a-loop-declares-whether-it-needs-evidence/design.md:403` (*"adjacent and is not fixed
+here"*). `integration-preview` still answers `will_merge: true` for a task approval refuses. [classified 2026-09-09, D-2]
+
 Same task, same moment, the drawer the operator is meant to consult *before* approving:
 
 ```
@@ -12369,6 +12412,10 @@ shipped route, which is the operator's call and not a round-1 side effect.
 
 ## F158 (B) — a task branch cut before its prerequisite was approved never gets that prerequisite's work
 
+**Status:** open. This entry says *"not fixed"*, and the change it was raised against agrees:
+`2026-09-01-a-loop-declares-whether-it-needs-evidence/design.md:729` -- *"F158 stands, unfixed and
+out of scope"*. The candidate repair is still the open decision that design names. [classified 2026-09-09, D-2]
+
 Found in `D-R2` by reading the chain design D5 leans on, rather than by driving. It is **not** about
 `a-loop-declares-whether-it-needs-evidence`; it is about the shipped per-task isolation, and the
 evidence route has it today.
@@ -12412,6 +12459,14 @@ that is a fourth call site the change deliberately left still. Put to round 3 as
 
 
 ## F159 (B) — design D12's `approved` filter, applied to both merge routes, would have stopped prerequisite work that reaches successors today
+
+**Status:** fixed `eeab0d3` (2026-09-01), in the same change that introduced it -- it never
+shipped as a defect. Verified 2026-09-09: `hub/hub/task_workspace.py:239-240` applies the
+`approved` filter only where `task_integration.evidence_governs` is False, and both guards exist --
+`test_an_unapproved_evidence_free_prerequisite_contributes_nothing` and the shipped
+`test_a_prerequisites_accepted_commits_are_in_the_task_checkout`
+(`hub/tests/test_turn_workspace.py:907` and `:547`). Kept for the transferable lesson at the end,
+which is this entry's real value. [classified 2026-09-09, D-2]
 
 Found while **implementing** D12 (`a-loop-declares-whether-it-needs-evidence`, group 4, task 4.9), by
 a shipped test failing. Not found by any of the three rounds, and the reason it was not is worth
@@ -13033,6 +13088,11 @@ can be pressed before and after.
 
 ### F167 (B, new) — the F70/F142 recovery cannot see an author whose history is entirely the operator's
 
+**Status:** open, and said so by the change that met it:
+`2026-09-01-a-review-nobody-is-doing-is-named/proposal.md:119` -- *"it does not repair the
+recovery's blindness, and F167 stays open"*. `spec-queue/ROADMAP.md:187` records it as a known
+residual on the adjacent `wedged_review` path that does not reopen F142. [classified 2026-09-09, D-2]
+
 LANE 5 was written expecting a **contrast**: put the AUTHOR in `assignee` instead of a reviewer,
 one variable changed, and watch F70's recovery fire and answer differently. It did not. The
 author-wedged row answers the **byte-for-byte identical 409**, and the board names `alpha` — the
@@ -13515,6 +13575,10 @@ marker is not offered as a workspace path"*.
 
 ## F171 (B) — the identity-conflict screen offers the right remedy under the wrong explanation
 
+**Status:** open. Filed by the row-1 sweep (`3280f52`), never fixed and never specced. The
+regression assertion in `t_sweep_row1_ui.py` asserts the defect's shape for a future fix; it is not
+a fix. [classified 2026-09-09, D-2]
+
 Driven, not read: `scripts/drive/t_sweep_row1_ui.py` opens the real dashboard, opens **Add project**,
 types the path of a folder copied from a registered project, and reads what comes back.
 
@@ -13567,6 +13631,10 @@ not assert a cause it cannot know"*.
 ---
 
 ## F172 (B) — relocating onto a path another project still claims answers a bare 500
+
+**Status:** open. Deterministically reproduced
+(`t_f172_relocate_onto_a_claimed_path.py`), filed by the row-1 sweep (`3280f52`), never fixed and
+never specced. [classified 2026-09-09, D-2]
 
 Found by the sweep by accident — a second run of the harness against a database that remembered the
 first — then reduced to a deterministic reproduction from nothing:
@@ -13758,6 +13826,10 @@ rebuilds once, in its section 5. Retirement waits on that drive.
 ---
 
 ## F174 (B) — the Codex catalog has drifted from the file it says it is copied from, and the drift includes the default
+
+**Status:** open. Filed by the row-2 sweep (`6908cfd`). The catalog drift is unrepaired; the
+adjacent effort control was re-checked and holds, which is a vindication inside this entry rather
+than a resolution of it. Reappears in the 2026-09-03 and 2026-09-04 research pages, still open. [classified 2026-09-09, D-2]
 
 `model_catalog.py`'s docstring states its own source of truth:
 
@@ -13983,6 +14055,11 @@ and model it used (`Run started (claude, claude-haiku-4-5-20251001)`).
 
 ## F178 (B) — the collaboration-readiness report the Hub computes on every call reaches no screen, and has not since 2026-08-08
 
+**Status:** open, and sharper than filed. Verified 2026-09-09: `useAgentLaunchability`
+(`hub/ui/src/api/agents.ts:376`) has **no non-test caller** anywhere in `hub/ui/src` -- its only
+consumers are three `__tests__` mocks. So the report reaches no screen, and three tests mock a hook
+no component renders. [classified 2026-09-09, D-2]
+
 `hub/hub/api/v1/agents.py:159`'s `get_agents_launchability` states its own consumer in its
 docstring:
 
@@ -14023,6 +14100,10 @@ only the two definitions.
 ---
 
 ## F179 (B) — an agent that cannot run at all is presented as a neutral dropdown value
+
+**Status:** open. Filed by the row-3 sweep (`58bd3fd`) alongside F178, never fixed. Named in
+the 2026-09-01 exploration `a-refusal-reaches-the-operator` and in `spec-queue/DECISIONS.md`;
+neither repairs it. [classified 2026-09-09, D-2]
 
 The Execution section of agent settings — subtitle *"What this agent runs as when you give it a
 turn"* (`AgentSettingsPage.tsx:103-121`) — renders the runner binding as `RunnerPicker`
@@ -14312,6 +14393,9 @@ in the roster.
 
 ## F186 (B) — the charter screen destroys authored text on one click, with no confirmation and no undo
 
+**Status:** open. Filed by the row-4 sweep (`66e085f`), never fixed and never specced. No
+external mention anywhere in `openspec/` or `spec-queue/`. [classified 2026-09-09, D-2]
+
 **Severity:** B. Destructive, immediate, irreversible, and the record it destroys is the one thing
 on this screen that cannot be recreated by the product.
 
@@ -14590,6 +14674,10 @@ and pruning is the whole repair, and the operator has to know that from outside 
 
 ## F189 (B) — the Workspace section shows a path that does not exist, and calls it where the work happened
 
+**Status:** open, and explicitly excluded by the nearest change:
+`2026-09-04-a-blocked-agent-workspace-holds-its-input/design.md:44` -- *"not a fix for F189 (the
+Workspace section's invented session path), which is adjacent in the ledger"*. [classified 2026-09-09, D-2]
+
 `hub/hub/api/v1/agent_trigger.py:2788` hardcodes, for every provider session it returns:
 
 ```python
@@ -14799,6 +14887,10 @@ worker-generated title really does replace the truncated one, and an operator's 
 survive the next turn's titler.** The three findings are at the seams around them.
 
 ## F193 (B) — an open conversation whose agent is archived vanishes from one rail view, survives in the other, and opens on the words "Agent unavailable."
+
+**Status:** open. `spec-queue/DECISIONS.md:540` does not resolve it -- it says the product
+already made the analogous three-way choice for archiving a conversation with a live run, and that
+F193 should follow that precedent. That is guidance for a fix, not a fix. [classified 2026-09-09, D-2]
 
 Archiving an agent does **not** archive or close the conversations it owns — measured: the
 conversation stayed `lifecycle: "open"`. The two rail views then disagree about whether it exists,
@@ -15010,6 +15102,9 @@ came through clean.
 
 ## F196 (B) — one route writes a value another route's response model cannot serialise, and the project settings page is then unreachable in both directions
 
+**Status:** open. `spec-queue/DECISIONS.md:825` carries the decided remedy -- *"F196 + F198 --
+remove `PATCH /queue/settings`"* -- as queue work. It has not been specced or implemented. [classified 2026-09-09, D-2]
+
 `PATCH /queue/settings` validates its four fields with `Field(ge=1)` and **no upper bound**
 (`hub/hub/api/v1/inbound_queue.py:48-52`). `ProjectSettings`, the model behind
 `GET`/`PUT /projects/{id}/settings`, declares `Field(ge=1, le=1000)` for the same four columns
@@ -15042,6 +15137,10 @@ API has no way back from inside the product.
 only, which is why it is B and not higher.
 
 ## F197 (B) — the settings page has no error state, so a failing settings query renders a loading skeleton forever
+
+**Status:** open, and sized. `spec-queue/DECISIONS.md:296` supersedes the original estimate
+with a count taken by the night window on 2026-09-02 (N-11): 51 reachable MISREPORT sites of 107
+call sites. `713544d` established it is F271 with a skeleton in front of it. Sized, not fixed. [classified 2026-09-09, D-2]
 
 The screen half of F196, and a defect in its own right because *any* failure of that one query
 produces it. `ProjectSettingsPanel` early-returns a skeleton whenever `form` is unset
@@ -15385,6 +15484,10 @@ absence.
 
 ## F202 (B) — the Overview says "100 tasks" about a project with 241, and the board silently drops the newest work
 
+**Status:** open. Filed by the row-8 sweep (`7e45a27`). `spec-queue/DECISIONS.md:530` records
+the shape -- `GET /projects/{id}/tasks` defaults to `limit=100` with no `total`/`has_more`/`next` --
+as undecided work, not as a repair. [classified 2026-09-09, D-2]
+
 `GET /api/v1/projects/{id}/tasks` declares `limit: int = Query(100, ge=1, le=1000)` and
 `offset: int = Query(0, ge=0)` (`hub/hub/api/v1/tasks.py:849-850`), orders by `Task.created_at`
 **ascending**, and returns a **bare JSON array** — no `total`, no `has_more`, no `next`, no `Link`
@@ -15694,6 +15797,9 @@ Severity C rather than B: the state is recoverable by any direct HTTP client, an
 recovering it is a standing drift warning rather than lost work.
 
 ## F206 (B) — five of the spec flow's operator-only routes have no operator surface
+
+**Status:** open. Filed by the row-9a sweep (`fce9f83`) and carried into the 2026-09-01
+research page and review page. No change addresses it. [classified 2026-09-09, D-2]
 
 Measured twice from outside the product: against `hub/hub/static/ui` (**the bundle this Hub
 actually serves**, 1,209,306 bytes of js/html/css read as bytes) and again against `hub/ui/src`.
@@ -16157,6 +16263,10 @@ Four fixture projects, all deleted afterwards.
 
 ## F215 (B) — the operator's screen tells them evidence is waiting for them and gives them nothing to press
 
+**Status:** open, and confirmed open by sampling. `spec-queue/ROADMAP.md` drew four
+unclassified findings at random to test whether the population was noise; this was one of the four,
+and all four were *"real, unfixed, and none is anywhere in this plan"*. [classified 2026-09-09, D-2]
+
 Every route in row 9c is absent from the operator's surface. Measured twice from outside the
 product, as F206 and F211 were: substring hits against **the bundle this Hub actually serves**
 (`hub/hub/static/ui`, 1,472,146 bytes of js/html/css read as bytes) and again against `hub/ui/src`.
@@ -16612,6 +16722,10 @@ hurt.
 
 ## F222 (B) — an archived job can be switched back on, and an archived loop then works a real task
 
+**Status:** open, and confirmed open by the same random sample as F215
+(`spec-queue/ROADMAP.md`) -- an archived job switched back on with one PATCH, which this entry's own
+docstring calls *"the exact governance failure loops exist to make impossible"*. [classified 2026-09-09, D-2]
+
 `POST /jobs/{id}/archive` is the product's only way to retire a job. Its own docstring calls the
 alternative "the exact governance failure loops exist to make impossible (D17)": a loop hidden from
 the default listing while it keeps firing. That state is one PATCH away.
@@ -16805,6 +16919,12 @@ reasons in it and no error — `??` is satisfied by the six-key rows.
 ---
 
 ## F227 (B) — the operator declines a question, then answers it, and a real turn is spent on it
+
+**Status:** open, and enlarged rather than repaired. The 2026-09-06 re-measurement appended
+below reaches the same defect through a second door -- a race between decline and answer in
+`AgentQuestionCard.tsx`, where the decline button is held during an in-flight answer but nothing
+holds the answer path during an in-flight decline. Both doors close on the one fix this entry
+already asked for: a `declined` guard on `PATCH /questions/{id}`. That guard is unwritten. [classified 2026-09-09, D-2]
 
 Two routes resolve a question and they are not symmetric. `POST /questions/{id}/decline` refuses a
 question that has already been answered, with a sentence naming the reason:
@@ -17211,6 +17331,10 @@ ones consumed-and-discarded so they cannot resurface.
 
 ## F237 (B) — two controls set the project's token budget; the one in Settings leaves every surface that displays it stale
 
+**Status:** open, and confirmed open by the same random sample as F215
+(`spec-queue/ROADMAP.md`) -- two controls write `Project.token_budget` through different routes and
+emit different events, and the one in Settings leaves every surface displaying it stale. [classified 2026-09-09, D-2]
+
 `Project.token_budget` has two write paths and the operator has two places to type into:
 
 | control | route | what listeners are told |
@@ -17309,6 +17433,10 @@ no such conversation" are not the same claim and are indistinguishable here.
 **Reproduction:** `scripts/drive/t_sweep_row14_accounting.py`, leg 5.
 
 ## F240 (B) — with the budget exhausted and "spending is paused" on screen, the Hub spent $0.042 that reaches no total and no budget
+
+**Status:** open. Filed by the row-14 drive (`d68f39a`) and carried into the 2026-09-06 and
+2026-09-07 research pages. F92 recorded the `worker_invocations` half as an operator question
+rather than a defect; neither half has been repaired. [classified 2026-09-09, D-2]
 
 `BudgetExhaustionNotice.tsx:12` is the product's own sentence for an exhausted budget:
 
@@ -17421,6 +17549,9 @@ following passed twice:
 
 ## F241 (B) — the conflict report is computed, correct, and read by nothing
 
+**Status:** open. Filed by the row-15 drive (`4488e8f`), never fixed and never specced. Its
+only external mention is the 2026-09-01 review page. [classified 2026-09-09, D-2]
+
 `hub/hub/worktrees.py:1014` `detect_conflicts` pairwise-merges every provisioned Hub-owned branch
 with `git merge-tree`; `hub/hub/api/v1/worktrees.py:135` serves it as
 `GET /projects/{p}/worktrees/conflicts`, with a docstring calling it *"the interface identifies
@@ -17445,6 +17576,8 @@ bundle), and worth queueing with it: both are "the endpoint exists, the UI never
 ---
 
 ## F242 (B) — one PATCH moves an agent off isolation mid-task, and its next task-bound turn writes uncommitted into the operator's checkout
+
+**Status:** open. Filed by the row-15 drive (`4488e8f`), never fixed and never specced. [classified 2026-09-09, D-2]
 
 `hub/ui/src/components/agents/AgentSettingsPage.tsx:290` states, in writing, why the Isolation row
 is display-only:
@@ -17540,6 +17673,8 @@ indistinguishable from every other one on the roster.
 ---
 
 ## F245 (B) — the conflict check never compares a task branch against the branch it will merge into
+
+**Status:** open. Filed by the row-15 drive (`4488e8f`), never fixed and never specced. [classified 2026-09-09, D-2]
 
 `detect_conflicts` (`worktrees.py:1014`) walks `list_workspace_branches` and pairs each
 *provisioned Hub-owned checkout* with each other. The base branch is not a Hub-owned checkout, so
@@ -17672,6 +17807,8 @@ with the wrong invalidation; here there is no event to answer.
 
 ## F251 (B) — the Hub broadcasts 17 event names the client discards before any listener, 9 of them into handling code written for them
 
+**Status:** open. Filed by the row-16 drive (`00b5dd9`), never fixed and never specced. [classified 2026-09-09, D-2]
+
 `useSSE.ts:335` is the whole of it:
 
 ```ts
@@ -17741,6 +17878,8 @@ it true.
 
 ## F252 (B) — the Logs screen renders the oldest 500 events a project ever recorded, and can never show a newer one
 
+**Status:** open. Filed by the row-16 drive (`00b5dd9`), never fixed and never specced. [classified 2026-09-09, D-2]
+
 `useLogs` (`hub/ui/src/api/logs.ts:34`) asks for `limit=500` and no offset. `list_logs`
 (`hub/hub/api/v1/logs.py:66`) answers:
 
@@ -17780,6 +17919,8 @@ from whatever half-hour happens to sit inside the first 500 rows.
 ---
 
 ## F253 (B) — a subscriber that falls behind loses events silently: 1,426 of 3,000, twice, with no gap on the wire and no disconnect
+
+**Status:** open. Filed by the row-16 drive (`00b5dd9`), never fixed and never specced. [classified 2026-09-09, D-2]
 
 `SSEManager.broadcast` (`hub/hub/sse.py:93`, `:102`) drops on a full queue:
 
@@ -17929,6 +18070,8 @@ them one import away.
 
 ## F258 (B) — every message the operator sends through `POST /messages` is born one hop past the budget, and waits there until somebody releases it by hand
 
+**Status:** open. Filed by the row-17 drive (`78461c9`), never fixed and never specced. [classified 2026-09-09, D-2]
+
 `create_message_for_actor` (`hub/hub/api/v1/messages.py:56`) opens with:
 
 ```python
@@ -17986,6 +18129,12 @@ message"* — and that table is also stale on the route shape, which is project-
 ---
 
 ## F259 (B) — nothing in the product ever marks a message read, so the StatusBar's `N msgs` chip only ever counts up
+
+**Status:** open in substance, with its headline struck. The amendment below (2026-09-02, D-5)
+withdraws the consequence, not the finding: `StatusBar.tsx` is imported by nothing and absent from
+the bundle, so no operator sees the chip. What survives is that nothing in the product ever marks a
+message read while `GET /status` and `hub/hub/scheduler.py:420` both depend on the flag -- which is
+where F264 picks it up. Read this entry as that sentence; the chip is gone. [classified 2026-09-09, D-2]
 
 **Amended 2026-09-02 (D-5): the title's consequence is wrong, the finding is not.** `StatusBar.tsx`
 is imported by nothing and is absent from the shipped bundle, measured by the reachability walk at
@@ -18189,6 +18338,12 @@ show a recent one. `useMessageHistory` sends no limit, so the dead screen would 
 
 ## F264 (B) — the query that decides what a loop is waiting on has no project filter, and the flag it depends on is never set
 
+**Status:** open, and half-driven. The code half is established: `_pending_loop_request`
+(`hub/hub/scheduler.py:415`) has no project filter and depends on a flag nothing sets (F259). The
+live pass of 2026-09-01 fired the branch but **did not reproduce the leak**, and this entry records
+itself as inconclusive rather than negative. It names the drive still owed -- one pass in which the
+foreign row is the newest at firing time -- and that pass has not been run. [classified 2026-09-09, D-2]
+
 `_pending_loop_request` (`hub/hub/scheduler.py:415`) explains the loop's stall to the operator. Its
 message branch is:
 
@@ -18276,6 +18431,10 @@ The cost is letting leg 1's orphan turn finish before leg 2 seeds; 300 s was not
 assertions, which fail because the leak did not occur, plus the precondition that explains why).
 
 ## F265 (B) — an agent's `create_loop` with `initial_tasks` is refused 403 *after* the loop and job it refused have been committed and left enabled
+
+**Status:** open. Filed by the row-14 drive, never fixed and never specced. The refused
+`create_loop` still leaves a committed job **enabled** with a next firing stamped, which is the half
+of this entry that costs something. [classified 2026-09-09, D-2]
 
 A real `claude-haiku-4-5` turn as `boss` called `create_loop` with `agent="worker"` and
 `initial_tasks=[...]` — exactly as the tool's own docstring advertises. What came back to the agent:
@@ -18657,6 +18816,9 @@ refresh route, honour aliases (F221), or accept the literal and add a staleness 
 between those is what a spec loop is for.
 
 ## F268 (B) — the runner-binding select renders `name (cli)`, so the spec's own "second runner with a different model" is unpickable
+
+**Status:** open. Filed alongside F267 by the 2026-09-02 catalog drive (`7b7720d`), never
+fixed and never specced. [classified 2026-09-09, D-2]
 
 Fell out of F267's drive rather than being looked for. `RunnerCreate` puts no uniqueness on `name`
 and `runners.__table_args__` carries `Index("ix_runners_project_name", ...)` — a plain index, not a
@@ -22753,7 +22915,8 @@ stop prints, at ERROR level:
 ```
 ERROR [hub.api.v1.agent_trigger] Unhandled error in run run-05b2b6fe5ef5 for 'f295020814'
 Traceback (most recent call last):
-  File "...\hub\hubpi1gent_trigger.py", line 2132, in _execute_run
+  File "...\hub\hubpi
+1gent_trigger.py", line 2132, in _execute_run
     chunk = await loop.run_in_executor(None, pty.read)
 asyncio.exceptions.CancelledError
 ```
@@ -23021,7 +23184,8 @@ INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 ERROR [hub.api.v1.agent_trigger] Unhandled error in run run-05b2b6fe5ef5 for 'f295020814'
 Traceback (most recent call last):
-  File "...\hub\hubpi1gent_trigger.py", line 2132, in _execute_run
+  File "...\hub\hubpi
+1gent_trigger.py", line 2132, in _execute_run
     chunk = await loop.run_in_executor(None, pty.read)
 asyncio.exceptions.CancelledError
 INFO:     Application shutdown complete.

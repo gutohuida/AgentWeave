@@ -463,3 +463,62 @@ Reading 119 sections is a window's work and needs no decision. It is mechanical,
 and today has shown four times over what it produces — F140, F154, F155 retired and 13 sections found
 that no census had ever seen. **Until it is done this plan's totals silently assume 119 zeroes**, and
 the four that were sampled say that assumption is false.
+
+### Done, part 1 — severity B is read, 2026-09-09 (day D-2)
+
+**All 40 unclassified severity-B sections were read and now carry a machine-readable
+`**Status:**` line as their first body line.** The instrument reports **0 unclassified B**, down
+from 40; the population moved **38 to open, 2 to fixed**. The 75 that remain are severity C (55),
+D (14) and unlabelled (6) — that is D-3's work.
+
+**The sample's implication held, and got stronger.** The block above extrapolated from six sampled
+findings that the population was *unread rather than noisy*. Read in full, **38 of 40 are live
+defects that nobody had fixed**, and the two exceptions are both already-fixed rows that were never
+given a status line:
+
+| | |
+|---|---|
+| **F109** | fixed `d9ad1e0` by F285's change (2026-09-04). Its own text still said *"the fix is declined"* — a decision the operator **reversed** when CI forced it. `hub/tests/conftest.py:22-36` names F285 and the same three candidates F109 measured. |
+| **F159** | fixed `eeab0d3` (2026-09-01) **in the change that introduced it** — it never shipped as a defect. Verified: `hub/hub/task_workspace.py:239-240` scopes the `approved` filter to `not evidence_governs`, guarded by two tests. |
+
+**So the plan's totals were assuming zeroes for 38 real B defects.** No new severity-A or -B work is
+created by this — every one of the 38 was already filed, most with a reproduction — but the count
+this plan is priced against was wrong in the direction the sample predicted.
+
+**Three things the full read found that sampling could not.** Sampling asks *is it real*; reading
+asks *what is it now*, and four sections answered neither open nor fixed cleanly:
+
+- **F119 and F138 are halves.** Each shipped one half of its repair and left a named residual.
+  F119's Hub copy was deduplicated (`scheduler.py:57` calls `redact_secrets`) and the CLI's broad
+  rule stands on an unanswered operator question. F138's three hard-wired harnesses were fixed in
+  the filing commit and `aw.py`'s `KEY` default went on 2026-09-07 — but `HUB` still defaults to
+  `8010`, the one instance a drive must not disturb. Both read `open`, and both are cheaper than
+  the label suggests.
+- **F259's headline is struck and its substance survives.** The 2026-09-02 amendment withdrew the
+  consequence (`StatusBar.tsx` is in no bundle, so no operator sees the chip) without withdrawing
+  the finding, which lands instead on F264. An entry can be wrong about its own harm and still be
+  a defect.
+- **F264 is half-driven.** Its code half is established; its live pass **fired the branch and did
+  not reproduce the leak**, and it names the drive still owed. `open` overstates it; `unverified`
+  would be the honest fourth verdict, and the instrument has no such bucket.
+
+**Six statuses rest on a fresh code check rather than on the ledger**, taken 2026-09-09 and stated
+at the line: F109 (conftest), F111 (`POST /agents/register` still live at `agents.py:2144`), F119
+(`scheduler.py:57`), F129 (no `drift/detect` reference anywhere in `hub/ui/src`), F138 (`aw.py:18`),
+F159 (`task_workspace.py:239-240`), and F178 — where the check **sharpened the finding**:
+`useAgentLaunchability` has *no non-test caller* in `hub/ui/src`, so the report reaches no screen
+and three `__tests__` files mock a hook no component renders.
+
+**What produced the lines:** `scripts/drive/_d2_write_status.py`, kept so D-3 extends the same list
+rather than inventing a second format. It refuses to write where a `**Status:**` line already leads
+a section, so re-running it is a no-op rather than a duplicate. The classification in each line was
+made by reading the section and its cross-references — openspec changes, `spec-queue/DECISIONS.md`,
+the git log — not by the script.
+
+**One collateral defect, found and fixed inside this task.** The first draft of F111's status line
+put the word *"closed"* on the same line as a reference to `F3`, and F3 immediately flipped from
+`OPEN` to `CONFLICT` — the cross-section arm reading a sentence about F111 as a resolution of F3.
+That is precisely the failure mode `classify_findings.py`'s own header calls *the single failure
+mode behind every error*: a sentence that mentions finding X while resolving finding Y. **Writing
+into the ledger can corrupt the ledger's own census, and the only reason this was caught is that
+every non-B bucket was diffed against the pre-edit run.** Do the same in D-3.
