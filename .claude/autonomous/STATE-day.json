@@ -1,40 +1,74 @@
 {
-    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook":  ".claude/loops/day-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-08-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "755bdad",
-    "stop_at":  "2026-09-09T17:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-09-day-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+    "playbook": ".claude/loops/day-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-08-daily",
+    "parent_branch": "master",
+    "parent_sha": "755bdad",
+    "stop_at": "2026-09-09T17:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-09-09-day-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "ci-red",
+    "next_action": "D-0: repair the deterministic CI failure blocking the merge gate. `hub-test` has concluded `failure` on the last 12 completed runs of this branch; run 34325989834 names tests/test_mcp_adapter_online.py::test_the_announce_route_the_adapter_posts_to_is_one_the_app_mounts -- '/api/v1/agent-actions/mcp-adapter-online' absent from the mounted paths, though hub/hub/api/v1/agent_actions.py:419 declares it and the file is tracked. Reproduce it locally FIRST (py -3.11 -m pytest hub/tests/test_mcp_adapter_online.py -v from the repo root, then again the way CI invokes it -- read .github/workflows/ci.yml for the exact cwd and command, because the declaration being present locally is the whole puzzle). Find why the router is not mounted under CI's conditions, fix it, run the lint set CI runs over the touched paths, and push. Do NOT run the whole hub suite -- it takes 15-47 minutes. If the repair turns out to need a spec, stop and queue it for tomorrow instead of finishing.",
+    "queue": [
+        {
+            "id": "ci-red",
+            "status": "open",
+            "title": "Repair the red hub-test CI job blocking the merge gate",
+            "detail": "Deterministic since 3a1e6bc; newest green is b246017. Failure: the mcp-adapter-online route is not among the app's mounted paths under CI. Repair, verify by reproducing CI's invocation, push. This is a repair with no spec attached (D-6 carve-out shape): touches no openspec requirement, no migration, no schema the UI reads. If that stops being true, stop and queue it."
+        },
+        {
+            "id": "drive",
+            "status": "open",
+            "title": "D-1 -- drive the three night changes together on one Hub",
+            "detail": "Per DIRECTION 2026-09-09. Each was already driven singly by the night window; what is untested is a-dead-connection-is-never-handed-back-out (F295) + an-agent-without-mcp-is-not-told-it-has-nothing + the-conversation-carries-its-own-run-facts (F274) on ONE Hub. F274 touches the committed UI bundle, so drive the SCREEN, not only the API. Carry F291's open question: groupIntoTurns (agentTimelineModel.ts:45-62) partitions on delivery_state and never reads run_id, and agent_trigger.py:2005-2011 commits return_run_entries before broadcasting run_failed -- confirm or refute from the operator's side and say which in the log. Hub :8011 from hub/ via uvicorn from source, fresh project, every agent turn claude-haiku-4-5, never :8000, never leave a job enabled. New findings append to scripts/drive/FINDINGS.md with severity, file:line, reproduction, and **Status:** open as the first body line."
+        },
+        {
+            "id": "classify-1",
+            "status": "open",
+            "title": "D-2 -- the 119 unclassified findings, part 1",
+            "detail": "Start from `py -3.11 scripts/classify_findings.py` and take its UNCLASSIFIED list. Read that script's header before believing its output -- it documents blind spots and was wrong four ways on the day it was written. Write a **Status:** line into each section read. Mechanical; the operator has already approved the work. Do NOT write computed counts into FINDINGS.md -- that file is the tool's input and publishing a census into it changed the census (measured at c18cb6f). Counts go in ROADMAP.md. Calibration: F109 is fixed (F285's change, 2026-09-04); F77 is open, severity C, never counted by any census."
+        },
+        {
+            "id": "classify-2",
+            "status": "open",
+            "title": "D-3 -- the 119 unclassified findings, part 2",
+            "detail": "Continue part 1 from wherever it stopped; the part-1 log entry says where. Same rules."
+        },
+        {
+            "id": "key-hygiene",
+            "status": "open",
+            "title": "D-4 -- recount the aw_live_ literals, then fix",
+            "detail": "ROADMAP.md Stage 6. RECOUNT before fixing: the last count was 10 aw_live_ literals in 8 files, taken before scripts/drive/aw.py gained a real require_key(), so several harnesses may be clean for free now. The operator decided 2026-09-08 that rotating trial-profile keys is the loop's to do without asking; the `live` profile on :8000 is NOT in scope and must not be touched."
+        },
+        {
+            "id": "review",
+            "status": "open",
+            "title": "D-5 -- write the review page and today's APPROVALS section",
+            "detail": "spec-queue/review/review-2026-09-09.html, self-contained (no external stylesheets/scripts/fonts), full DOCTYPE/html/head/body wrapper, theme-aware (light on bare :root, dark under @media prefers-color-scheme, explicit body background). Answer in the playbook's order: (1) the branch -- autonomous/2026-09-08-daily, TWO days, and that the merge gate did NOT open because CI concluded failure/in-progress, red for 12 commits -- this goes first and must not be skimmable; (2) what the night built and which of it was driven; (3) what the drive found; (4) what was specced -- NOTHING today, and say why (the operator's 'nothing new but finish everything open'); (5) what the night will do if the operator approves nothing; (6) the research, briefly, each candidate ending in what it means for AgentWeave. Carry the open decisions_for_user entry F299-posture-on-a-harness-without-mcp verbatim in substance. Then append today's section to spec-queue/APPROVALS.md with no status tokens -- the operator supplies those."
+        },
+        {
+            "id": "repairs-spare",
+            "status": "open",
+            "title": "D-6 -- one more no-spec repair if the day has room",
+            "detail": "Only after D-5. Conditions from day-window.md: touches no openspec requirement (grep the capability), no migration, no API shape change, no Pydantic schema the UI reads; fully described by an existing finding with a reproduction. Drive it before closing, run CI's lint set, mutation-check any test added, set the finding's **Status:** to `fixed <sha>`."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ]
 }
