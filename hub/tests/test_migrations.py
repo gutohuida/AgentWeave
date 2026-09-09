@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0101"
+HEAD_REVISION = "0102"
 
 
 # ---------------------------------------------------------------------------
@@ -3414,3 +3414,82 @@ def test_migration_0101_adds_the_column_to_whichever_table_is_present(tmp_path) 
             row[1] for row in conn.execute("PRAGMA table_info(runs)")
         }
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0101"
+
+
+# ---------------------------------------------------------------------------------------------
+# 0102 — whether a run's harness actually started the injected MCP server
+# ---------------------------------------------------------------------------------------------
+
+
+def test_migration_0102_adds_mcp_adapter_online_at_to_runs(tmp_path) -> None:
+    """Nullable, no default. NULL is *never reported in*, which covers a harness that ignored the
+    `--mcp-config` and a run that was never given one; both are correctly "no grounds"."""
+    db_file = tmp_path / "mcp_adapter_online.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1]: row for row in conn.execute("PRAGMA table_info(runs)")}
+        assert "mcp_adapter_online_at" in columns
+        assert columns["mcp_adapter_online_at"][3] == 0  # notnull
+        assert columns["mcp_adapter_online_at"][4] is None  # dflt_value
+
+
+def test_migration_0102_does_not_claim_old_runs_honoured_the_injection(tmp_path) -> None:
+    """The load-bearing half, and the same shape as `0101`'s backfill test.
+
+    A backfilled timestamp would assert that every harness that ever ran honoured the server the
+    Hub injected — which is the free assumption `d279d22` made and this whole change exists to
+    stop making. Written as a downgrade-and-back-up because `runs` is never created by the chain,
+    only by `create_all`: the downgrade removes what the model put there, so the re-upgrade is
+    `0102`'s own `op.add_column` doing the work.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "mcp_adapter_online_backfill.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    stamp = "2026-01-01T00:00:00Z"
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0101")
+
+        with sqlite3.connect(db_file) as conn:
+            assert "mcp_adapter_online_at" not in {
+                row[1] for row in conn.execute("PRAGMA table_info(runs)")
+            }
+            conn.execute(
+                "INSERT INTO projects (id, name, created_at) " f"VALUES ('proj-1', 'p', '{stamp}')"
+            )
+            conn.execute(
+                "INSERT INTO runs (id, project_id, agent, status, started_at, initiator) "
+                f"VALUES ('run-1', 'proj-1', 'builder', 'completed', '{stamp}', 'operator')"
+            )
+            conn.commit()
+
+        command.upgrade(cfg, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute(
+            "SELECT mcp_adapter_online_at FROM runs WHERE id = 'run-1'"
+        ).fetchone() == (None,)
+
+
+def test_migration_0102_is_guarded_when_runs_does_not_exist(tmp_path) -> None:
+    """An upgrade starting from an early revision reaches 0102 with only that revision's tables."""
+    db_file = tmp_path / "no_runs_0102.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0101')")
+
+    _upgrade_to(db_url, "0102")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0102"

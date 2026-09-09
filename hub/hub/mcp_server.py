@@ -5,6 +5,7 @@ outbound intent: messaging, task-ledger work, operator questions, governed agent
 and operator-gated scheduled-work mutations.
 """
 
+import contextlib
 import json
 import os
 import re
@@ -1447,8 +1448,27 @@ def decide_evidence(
     )
 
 
+def _announce_adapter_online() -> None:
+    """Tell the Hub this harness actually started us, before serving anything.
+
+    The Hub puts its canonical server on the runner's command line and, until this call existed,
+    had no way to learn whether the harness did anything with it. A deployment that forbids MCP by
+    policy takes the configuration and starts nothing — and the run was told, in its first line, to
+    call tools that were not there. This process existing *is* the measurement, so it is made here
+    rather than inferred from a later tool call: a model told to use HTTP may never reach for a
+    tool, and evidence gathered that way would leave a permitted harness permanently undescribed.
+
+    Best-effort in every direction. A Hub that is unreachable, a credential that is missing, a
+    route that predates this call — none of them are reasons to refuse to serve. The cost of
+    failing is that the *next* run reads the HTTP form, which works.
+    """
+    with contextlib.suppress(Exception):
+        _hub_request("POST", "/mcp-adapter-online")
+
+
 def main() -> None:
     """Run the canonical Hub-owned surface over stdio."""
+    _announce_adapter_online()
     mcp.run(transport="stdio", show_banner=False)
 
 

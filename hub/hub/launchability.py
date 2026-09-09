@@ -11,14 +11,10 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
-import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from .subprocess_windows import no_console_kwargs
 
 # Runner -> CLI binary name. Mirrors the "cli" field of RUNNER_CONFIGS in
 # agentweave.constants (kept independent — see module docstring).
@@ -189,59 +185,114 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
 
 
 # ---------------------------------------------------------------------------
-# Access path: tool-protocol (MCP) vs. plain CLI commands
+# Access path: tool-protocol (MCP) vs. plain HTTP requests
 #
-# Independent mirror of agentweave.tool_surface's probing logic (same reason this whole
-# module is independent of agentweave.constants.RUNNER_CONFIGS — see module docstring).
-# Native runtime spawns agents on the Hub host itself, so probing "<cli> mcp list" here
-# checks the same CLI installation the Hub is about to launch.
+# Two questions, deliberately answered by two functions, because conflating them is what
+# `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing` §4 exists to end:
+#
+#   `resolve_access_path`   — what the run is *given*. Decides whether the Hub injects its
+#                             canonical MCP server, and through that (see D9) the run's
+#                             permission posture. Moved only by the operator.
+#   `described_access_path` — what the run is *told*. Never asserts a tool-protocol surface
+#                             the system has no grounds to believe the harness will honour.
+#
+# The probe that used to stand here is gone. `probe_mcp_registered` shelled `<cli> mcp list`
+# in a *separate* process with no `--mcp-config`, so it could only ever see servers the
+# operator had registered by hand — never the one the Hub injects on the turn's own command
+# line. A `False` from it resolved the path to `cli`, which suppressed the injection it had
+# just been asked about: the probe made its own answer true. It had no production caller from
+# `d279d22` until it was deleted, and three test files were written believing it still ran
+# (`design.md` D10). Do not restore it. The question is not "is a server registered" but
+# "will this harness honour the server we are about to inject", and `mcp list` answers neither
+# on a permitted machine nor on a policy-blocked one.
 # ---------------------------------------------------------------------------
 
-PROBEABLE_RUNNERS = {"claude", "claude_proxy", "native", "codex"}
-MCP_INJECTABLE_RUNNERS = PROBEABLE_RUNNERS
-
-_PROBE_TTL_SECONDS = 300.0
-_probe_cache: Dict[str, Tuple[bool, float]] = {}
+MCP_INJECTABLE_RUNNERS = {"claude", "claude_proxy", "native", "codex"}
 
 
-def probe_mcp_registered(cli: str) -> bool:
-    """Best-effort check: is the ``agentweave`` MCP server actually registered for
-    *cli* on the Hub host, as opposed to merely theoretically supported?
+def resolve_access_path(runner: str, override: Optional[str] = None) -> str:
+    """Choose the path the run is **given**: does the Hub inject its canonical MCP server?
+
+    Unconditional for an injectable runner since `d279d22`, and still unconditional, because
+    the Hub adds the server to the command line itself. The operator's `hub_client` is the
+    only thing that moves it — and it must stay that way, because this value also decides the
+    run's permission posture (`runner_commands.build_command` emits `--permission-prompt-tool`
+    only when a server is injected, and falls back to `acceptEdits` when one is not). An
+    *inference* that moved this would move containment as a side effect, which the
+    `agent-capability-plane` requirement forbids; a *declaration* by the operator is theirs to
+    make. What the run is told is `described_access_path`'s answer, not this one.
     """
-    now = time.monotonic()
-    cached = _probe_cache.get(cli)
-    if cached is not None and now - cached[1] < _PROBE_TTL_SECONDS:
-        return cached[0]
-
-    if not cli or shutil.which(cli) is None:
-        _probe_cache[cli] = (False, now)
-        return False
-
-    try:
-        result = subprocess.run(
-            [cli, "mcp", "list"],
-            capture_output=True,
-            text=True,
-            shell=(os.name == "nt"),
-            timeout=10,
-            **no_console_kwargs(),
-        )
-        available = result.returncode == 0 and "agentweave" in (result.stdout or "").lower()
-    except Exception:
-        available = False
-
-    _probe_cache[cli] = (available, now)
-    return available
-
-
-def resolve_access_path(runner: str, cli: str, override: Optional[str] = None) -> str:
-    """Choose the per-run path now that the Hub injects its canonical server."""
-    del cli
     if override == "cli":
         return "cli"
     if runner not in MCP_INJECTABLE_RUNNERS:
         return "cli"
     return "mcp"
+
+
+async def harness_has_honoured_mcp(db: AsyncSession, project_id: str, agent: str) -> bool:
+    """Has this agent's harness ever actually started a server the Hub injected?
+
+    The one measurement behind `described_access_path`'s grounds. True from the moment any run of
+    this agent has an `mcp_adapter_online_at` — the adapter announcing itself before it serves.
+
+    **Per agent, not per CLI, and that is narrower than the fact it stands for.** Whether a harness
+    honours MCP is a property of the machine and the policy on it, so a second agent on the same
+    proven `claude` installation starts from no grounds and reads the HTTP form on its first turn.
+    A per-CLI grain would need a join through `Agent` to `Runner` for a value that self-corrects on
+    the next spawn, and it would also make one agent's harness speak for another's — a per-agent
+    runner override is ordinary. The narrow answer is the conservative one in the only direction
+    that matters: it under-describes, never over-describes.
+
+    Positive evidence only. There is no negative form to record: a harness that ignores the
+    configuration is silent, and silence is exactly what "no grounds" means.
+    """
+    from .db.models import Run
+
+    result = await db.execute(
+        select(Run.id)
+        .where(
+            Run.project_id == project_id,
+            Run.agent == agent,
+            Run.mcp_adapter_online_at.is_not(None),
+        )
+        .limit(1)
+    )
+    return result.scalars().first() is not None
+
+
+def described_access_path(
+    access_path: str,
+    *,
+    override: Optional[str] = None,
+    harness_honoured_mcp: bool = False,
+) -> str:
+    """Choose the path the run is **told** about — never one there are no grounds for.
+
+    Grounds are one of two things, and an absence of both is not a tie-break in favour of
+    asserting the surface:
+
+    * the operator said so (`hub_client: "mcp"`). A declaration about their own deployment
+      outranks anything the Hub can observe, and `resolve_access_path` already honours the
+      other direction.
+    * the harness has been *seen* honouring an injected server — the MCP adapter reported in
+      from a previous run of this agent (`Run.mcp_adapter_online_at`). Providing a harness with
+      a server is not the same as that harness offering it: a deployment may forbid
+      tool-protocol servers by policy, take the `--mcp-config` and do nothing with it.
+
+    A run given no server (`access_path == "cli"`) is never described as having one, whatever
+    else is true.
+
+    The first run against a fresh harness therefore reads the HTTP form while the server is in
+    fact injected and its tools are in the model's tool list. That is deliberate and it is the
+    safe direction of the two: under-describing a surface costs convenience for one turn, and
+    the adapter announces itself at startup rather than waiting for a tool call, so a permitted
+    harness earns its grounds on that first spawn rather than never.
+    """
+    if access_path != "mcp":
+        return access_path
+    if override == "mcp":
+        return "mcp"
+    return "mcp" if harness_honoured_mcp else "cli"
 
 
 def spec_turn_notice(

@@ -6,9 +6,9 @@ from hub.launchability import (
     RUNNER_UNBOUND,
     access_path_notice,
     auto_snapshot_notice,
+    described_access_path,
     get_agent_config,
     probe_agent,
-    probe_mcp_registered,
     resolve_access_path,
     resolve_agent_env,
 )
@@ -390,84 +390,76 @@ class TestResolveAgentEnv:
 
 
 class TestAccessPath:
-    """Task 4.3: the access path (MCP tool-protocol server vs. plain CLI commands) is
-    probed per runner rather than assumed — `hub_client` becomes the operator's explicit
-    override, honored ahead of any probe."""
+    """Two questions, two functions — `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`
+    §4. `resolve_access_path` answers what the run is *given* (and so what its permission posture
+    is); `described_access_path` answers what the run is *told*, and refuses to assert a tool
+    surface the Hub has no grounds to believe the harness will honour.
 
-    @pytest.fixture(autouse=True)
-    def _clear_probe_cache(self):
-        # probe_mcp_registered caches by CLI name for _PROBE_TTL_SECONDS — several tests
-        # here probe "claude"/"codex" with conflicting fake results, so each test must
-        # start from an empty cache rather than observing a previous test's result.
+    This class used to be introduced by a docstring saying the path "is probed per runner rather
+    than assumed". Nothing was probed; the probe had had no caller since `d279d22`, and two of the
+    tests below guarded a call that could not happen for any input (`design.md` D10).
+    """
+
+    def test_an_explicit_cli_statement_is_what_the_run_is_given(self):
+        """The operator's declaration is the only thing that moves the injected server — and it
+        moves it in the direction that removes the unanswerable approver flag, not only the
+        wording."""
+        assert resolve_access_path("claude", override="cli") == "cli"
+        assert described_access_path("cli", override="cli") == "cli"
+
+    def test_an_explicit_mcp_statement_is_grounds_on_its_own(self):
+        """Nothing has been observed about this harness, and the operator has still settled it.
+
+        The distinguishing half: with the same absent observation and no statement, the run is
+        told the HTTP form. Delete the `override == "mcp"` branch and this test fails while the
+        one below it passes.
+        """
+        assert described_access_path("mcp", override="mcp", harness_honoured_mcp=False) == "mcp"
+        assert described_access_path("mcp", override=None, harness_honoured_mcp=False) == "cli"
+
+    def test_unprobeable_runner_defaults_to_cli(self):
+        assert resolve_access_path("kimi", override=None) == "cli"
+
+    def test_auto_is_treated_as_unset_and_therefore_as_no_statement(self):
+        """`auto` is the CLI's default value for `hub_client`, and it means the operator has said
+        nothing. It must not read as an assertion that MCP is there: injected, yes — described,
+        only on grounds."""
+        assert resolve_access_path("claude", override="auto") == "mcp"
+        assert described_access_path("mcp", override="auto", harness_honoured_mcp=False) == "cli"
+        assert described_access_path("mcp", override="auto", harness_honoured_mcp=True) == "mcp"
+
+    def test_injectable_runner_needs_no_global_registration(self):
+        """Kept from before §4, and updated deliberately rather than by accident.
+
+        It pins the post-`d279d22` behaviour: the Hub injects its server for any injectable runner
+        without asking whether the operator registered one by hand. That is still true and is now
+        the *only* thing this function decides — the second assertion is what §4 added, and it is
+        the one that stops the same value from also asserting the tools are there.
+        """
+        assert resolve_access_path("codex", override=None) == "mcp"
+        assert described_access_path("mcp", override=None, harness_honoured_mcp=False) == "cli"
+
+    def test_a_run_given_no_server_is_never_described_as_having_one(self):
+        """Grounds cannot manufacture a surface that was not injected. A harness that honoured MCP
+        on an earlier run says nothing about a run the operator has moved to `cli`."""
+        assert described_access_path("cli", override=None, harness_honoured_mcp=True) == "cli"
+
+    def test_an_observed_harness_is_described_as_having_the_tools(self):
+        assert described_access_path("mcp", override=None, harness_honoured_mcp=True) == "mcp"
+
+    def test_the_probe_is_gone_and_stays_gone(self):
+        """`probe_mcp_registered` shelled `<cli> mcp list` in a separate process with no
+        `--mcp-config`, so it could only see servers registered by hand — never the one the Hub
+        injects on the turn's own command line. A `False` from it resolved the path to `cli`,
+        suppressing the injection it had been asked about (`design.md` D10). Three test files were
+        written believing it still ran. This asserts it cannot come back unnoticed."""
         import hub.launchability as launchability
 
-        launchability._probe_cache.clear()
-        yield
-        launchability._probe_cache.clear()
+        assert not hasattr(launchability, "probe_mcp_registered")
+        assert not hasattr(launchability, "_probe_cache")
 
-    def test_explicit_override_wins_without_probing(self, monkeypatch):
-        def _boom(cli):
-            raise AssertionError("probe should not run when an override is given")
 
-        monkeypatch.setattr("hub.launchability.probe_mcp_registered", _boom)
-        assert resolve_access_path("claude", "claude", override="mcp") == "mcp"
-        assert resolve_access_path("claude", "claude", override="cli") == "cli"
-
-    def test_unprobeable_runner_defaults_to_cli(self, monkeypatch):
-        def _boom(cli):
-            raise AssertionError("kimi is not in PROBEABLE_RUNNERS — must not probe")
-
-        monkeypatch.setattr("hub.launchability.probe_mcp_registered", _boom)
-        assert resolve_access_path("kimi", "kimi", override=None) == "cli"
-
-    def test_auto_override_is_treated_as_unset_and_probes(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.probe_mcp_registered", lambda cli: True)
-        assert resolve_access_path("claude", "claude", override="auto") == "mcp"
-
-    def test_injectable_runner_needs_no_global_registration(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.probe_mcp_registered", lambda cli: False)
-        assert resolve_access_path("codex", "codex", override=None) == "mcp"
-
-    def test_probe_mcp_registered_false_when_cli_not_on_path(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: None)
-        assert probe_mcp_registered("claude") is False
-
-    def test_probe_mcp_registered_reads_mcp_list_output(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/claude")
-
-        class _FakeResult:
-            returncode = 0
-            stdout = "agentweave: connected\nother-server: connected\n"
-
-        seen_cmd = {}
-
-        def _fake_run(cmd, **kwargs):
-            seen_cmd["cmd"] = cmd
-            return _FakeResult()
-
-        monkeypatch.setattr("hub.launchability.subprocess.run", _fake_run)
-        assert probe_mcp_registered("claude") is True
-        assert seen_cmd["cmd"] == ["claude", "mcp", "list"]
-
-    def test_probe_mcp_registered_false_when_not_in_list_output(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/claude")
-
-        class _FakeResult:
-            returncode = 0
-            stdout = "some-other-server: connected\n"
-
-        monkeypatch.setattr("hub.launchability.subprocess.run", lambda cmd, **kw: _FakeResult())
-        assert probe_mcp_registered("claude") is False
-
-    def test_probe_mcp_registered_swallows_subprocess_errors(self, monkeypatch):
-        monkeypatch.setattr("hub.launchability.shutil.which", lambda cli: "/usr/bin/claude")
-
-        def _raise(cmd, **kwargs):
-            raise OSError("boom")
-
-        monkeypatch.setattr("hub.launchability.subprocess.run", _raise)
-        assert probe_mcp_registered("claude") is False
-
+class TestAccessPathNotice:
     def test_access_path_notice_names_the_available_tools(self):
         assert "send_message" in access_path_notice("mcp")
 

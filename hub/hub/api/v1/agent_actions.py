@@ -416,6 +416,33 @@ async def get_readable_checkpoint(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+@router.post("/mcp-adapter-online", status_code=status.HTTP_204_NO_CONTENT)
+async def report_mcp_adapter_online(
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """The adapter reporting that this run's harness did start it.
+
+    Not an operation, and deliberately not an MCP tool: a transport fact, posted by
+    `hub/hub/mcp_server.py` before it serves its first request. It is the only *measurement* the
+    Hub has that a harness honours an injected server. Everything else it could ask is either a
+    declaration by the operator or, as `probe_mcp_registered` was, a separate process answering a
+    different question (`launchability`'s access-path comment, `design.md` D10).
+
+    `described_access_path` reads it as a fact about the *next* run of this agent — the turn-start
+    notice for this one was composed before the process existed. A run whose harness silently
+    ignores `--mcp-config` never reaches here, and so is never told it has tools.
+
+    Idempotent, and the first report wins: the instant the harness started the server is the fact,
+    and a restart within one run does not make it later. `204` because nothing about the caller's
+    behaviour depends on the answer — an adapter that cannot report in must still serve.
+    """
+    run = await session.get(Run, actor.run_id)
+    if run is not None and run.mcp_adapter_online_at is None:
+        run.mcp_adapter_online_at = datetime.now(timezone.utc)
+        await session.commit()
+
+
 @router.get("/recall/{output_id}")
 async def recall(
     output_id: str,

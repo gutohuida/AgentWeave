@@ -74,7 +74,9 @@ from ...inbound_queue import (
 from ...launchability import (
     access_path_notice,
     auto_snapshot_notice,
+    described_access_path,
     get_agent_config,
+    harness_has_honoured_mcp,
     probe_agent,
     resolve_access_path,
     resolve_agent_env,
@@ -950,11 +952,26 @@ async def trigger_agent_directly(
 
     # Resolved here rather than beside the notice it used to sit with, because the canonical
     # context is materialized just below and has to describe the operations in the idiom of the
-    # path this run will actually take. Its three arguments were all bound long before this point
-    # and none of them is reassigned in between, so the call moved up without changing what it
-    # returns; the single value is reused for the turn-start notice further down. Notice and
-    # description now cannot disagree about the same turn.
-    access_path = resolve_access_path(runner, probe["cli"] or agent, config.get("hub_client"))
+    # path this run will actually take. Its arguments were both bound long before this point and
+    # neither is reassigned in between, so the call moved up without changing what it returns; the
+    # single value is reused for the turn-start notice further down. Notice and description now
+    # cannot disagree about the same turn.
+    #
+    # **Two values, and the difference between them is §4 of
+    # `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`.** `access_path` is what the run
+    # is *given*: it decides `mcp_command` below, and through that the run's permission posture
+    # (`runner_commands.build_command` emits `--permission-prompt-tool` only where a server is
+    # injected). `described_path` is what the run is *told*, and it never asserts a tool surface
+    # the Hub has no grounds to believe this harness will honour. They are separate because the
+    # requirement forbids a truer description from silently widening permission: the operator's
+    # `hub_client` moves both, an inference moves only the second.
+    hub_client = config.get("hub_client")
+    access_path = resolve_access_path(runner, hub_client)
+    described_path = described_access_path(
+        access_path,
+        override=hub_client,
+        harness_honoured_mcp=await harness_has_honoured_mcp(session, project_id, agent),
+    )
 
     # Build context from current Hub-owned state for every turn. Runners consume a file,
     # so materialize the canonical response inside the effective workspace immediately
@@ -973,7 +990,7 @@ async def trigger_agent_directly(
         agent_row=agent_row,
         # How this run reaches the capability plane, so the tool section describes the operations
         # the way this run can actually perform them (injected calls, or HTTP requests).
-        access_path=access_path,
+        access_path=described_path,
         # The directory the run will actually execute in. Passed rather than recomputed so the
         # text an agent reads cannot disagree with the process's own cwd — agents were resolving
         # paths against the project root while running in a worktree, and every such read and
@@ -1015,7 +1032,7 @@ async def trigger_agent_directly(
     # Task 4.5: tell the agent, at turn start, which access path is in use — never offer
     # one that isn't actually available in this environment. `access_path` was resolved above the
     # context materialization, which needs the same value.
-    notices = [access_path_notice(access_path)]
+    notices = [access_path_notice(described_path)]
     # F52: told once, up front, rather than discovered turn after turn by an agent that treats a
     # refused git command as work lost. `review_context is None` matches the condition `worktree`
     # is computed under below (a review checkout is read-only and never snapshotted); an agent with

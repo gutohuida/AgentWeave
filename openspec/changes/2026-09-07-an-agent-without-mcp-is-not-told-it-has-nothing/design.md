@@ -368,3 +368,37 @@ its first answer.
 - Restoring the probe because D7 listed it first. It answers "is a server registered", and the
   server in question is injected on the command line of the very invocation being launched (D10).
   It cannot see it, and acting on its answer removes the injection.
+
+## D12. What §4 chose, written by the implementing window — a fourth option none of the three rounds saw
+
+D7 offered three mechanisms and D9 put a condition on all of them: each moves the run's permission
+posture as a side effect, and the delta forbids that. Read together they are close to a
+contradiction — the requirement demands grounds, and every listed way of getting grounds is ruled
+out by the scenario beside it. The way through is that D7's list shares an assumption none of its
+three entries states: that *what a run is given* and *what a run is told* are one value. They have
+been one value since `access_path` was introduced, which is why three rounds re-derived the list
+without questioning it.
+
+**Splitting them dissolves the condition.** `resolve_access_path` keeps its meaning and its
+behaviour — what the run is *given*, moved only by `hub_client`, and therefore still the sole input
+to `mcp_command` and the posture. `described_access_path` is new and decides what the run is *told*,
+on grounds. A **declaration** by the operator moves containment because it is theirs and it is
+declared; an **inference** by the Hub moves only the wording. D9's condition was never that grounds
+are forbidden — it was that they must not move containment silently, and after the split nothing
+silent can.
+
+The grounds themselves are the one measurement available: the adapter announcing itself before it
+serves (`Run.mcp_adapter_online_at`, migration `0102`). The process existing is the evidence.
+Compare D10's probe, which ran a *different* process that had never been given the config — the
+question is "will this harness honour the server we are about to inject", and only the harness can
+answer it.
+
+**What the drive changed.** §4.9 was written expecting to establish whether the mirror is a wording
+defect or a broken run. It is a broken run — `F299`, three real `claude` invocations: with
+`--permission-prompt-tool` naming an absent MCP tool, every mutating call is denied and the model
+tells the operator their *machine* is misconfigured. That did not change the mechanism; it changed
+what the mechanism is allowed to claim. Correcting the notice does not make such a run work, and
+every remedy that would move containment. So the change ships the honest description and hands the
+containment question to the operator with the evidence attached, rather than picking for them
+inside a change about honesty — which is what D9 said the boundary was.
+

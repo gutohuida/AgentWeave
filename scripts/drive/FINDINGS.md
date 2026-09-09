@@ -22649,3 +22649,80 @@ py -3.11 scripts/drive/f295_shutdown_drive.py
 # and the ERROR appears between "Waiting for application shutdown." and "Application shutdown complete."
 ```
 
+---
+
+## F299 (A) — a `claude` run whose harness has no MCP cannot write a file, and blames the operator's machine for it
+
+**Status:** open. Driven 2026-09-09 by the night window, task §4.9 of
+`openspec/changes/2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`. The prediction being
+tested was the repository's own, written at `hub/hub/runner_commands.py:245-248` and never driven:
+*"naming an approver that will not be there makes every tool call fail, which the model reports as
+a broken approval system."* It is **substantially right, and sharper than it says.**
+
+**The configuration this is about is the ordinary one.** Runner `claude`, `hub_client` unset, a
+harness whose company policy blocks MCP servers. The Hub emits `--mcp-config` (which that harness
+ignores) and, because a server was configured, `--permission-prompt-tool
+mcp__agentweave__approve_tool_call`. Nothing will ever answer that tool.
+
+**What actually happens** — three real `claude -p` runs on Haiku in `testbed/scratch/c2drive`, one
+per condition, with `--output-format json` so `permission_denials` is read rather than inferred:
+
+| | flags | Read | Write / mutating Bash |
+|---|---|---|---|
+| **A** | `--permission-mode manual --permission-prompt-tool mcp__agentweave__approve_tool_call`, **no** `--mcp-config` | **succeeded** | **denied** (`Write`, `PowerShell`, `Bash` all three) |
+| **B** | `--permission-mode acceptEdits` (what the `cli` access path produces) | — | **succeeded** |
+| **C** | `--permission-mode manual`, **no** approver flag | — | **denied** (`Write`) |
+
+So it is not *every* tool call: a `Read`, and a `Bash` that only echoes, go through. Every call that
+needs an approval fails. For an agent asked to do work, that is the same thing.
+
+**The part that is worse than the comment predicted is what the model says about it.** In condition
+A it reported:
+
+> I've encountered a workspace establishment issue that's preventing file creation. […] This
+> appears to be a system-level permission or workspace configuration issue. You may need to check
+> your workspace permissions or contact your system administrator to resolve this.
+
+In condition C — denied for the same reason, but without an approver flag naming an absent tool —
+it reported the truth:
+
+> I need permission to write the file. Please approve the write operation.
+
+Same denial, two different explanations, and the one the Hub's own configuration produces is the
+misleading one. The operator is told their machine is broken. The agent burned the rest of its turn
+retrying the same write through `Write`, then `PowerShell`, then `Bash`, because the error it was
+given did not read as "ask someone".
+
+**What this settles for the change.** The mirror deployment is **not a wording defect**. §1–§3
+correct what such a run is *told*; this is a run that cannot act. Fixing the wording alone leaves it
+broken in exactly the same way — which is what §4.9 was written to find out before a mechanism was
+chosen, and it is why the mechanism chosen (§4.1) deliberately does **not** move the injected server
+on an inference.
+
+**Why it was not fixed in the same change.** Every available remedy moves containment:
+
+- resolve to `cli` when there are no grounds → `acceptEdits`, which has **no path check at all**
+  (`runner_commands.py:66-67`), for every unstated `claude` run on the machine;
+- keep `manual` and drop the approver flag → condition C, which denies every mutating call anyway,
+  and in a headless run there is nobody to approve;
+- leave it as it is → condition A.
+
+There is no non-widening, non-breaking option. `agent-capability-plane`'s *"A truer description does
+not silently widen permission"* says the containment a run gets is the operator's to decide, so this
+is not the implementing window's call to guess. It is in `STATE-night.json`'s `decisions_for_user`.
+
+**The workaround exists today and is one line.** `hub_client: "cli"` — already documented in
+`src/agentweave/config.py:714` as *"uncomment if MCP is blocked by company policy"* — moves the run
+to the `cli` path, which removes the approver flag along with the injection, and the run works
+(condition B). What the operator is choosing when they do that is `acceptEdits`, and nothing in the
+UI says so.
+
+**Reproduce**
+
+```bash
+cd testbed/scratch/c2drive
+claude -p --model haiku --permission-mode manual \
+  --permission-prompt-tool mcp__agentweave__approve_tool_call --output-format json \
+  "Create a file called written_A.txt containing the single word ok. Use your Write tool." \
+  | py -3.11 -c "import json,sys; d=json.load(sys.stdin); print([x['tool_name'] for x in d['permission_denials']]); print(d['result'])"
+```

@@ -15,7 +15,7 @@ from hub import worktrees
 # autouse `_no_real_worktree_provision` fixture in conftest.py monkeypatches the module
 # *attribute* so every other test's module-namespace lookup gets a no-op stub — a name bound
 # here at collection time is a separate reference to the real function, unaffected by that
-# patch, exactly like `test_launchability.py`'s direct imports of `probe_mcp_registered` et al.
+# patch, exactly like `test_launchability.py`'s direct imports of `resolve_access_path` et al.
 from hub.worktrees import resolve_agent_workspace
 
 

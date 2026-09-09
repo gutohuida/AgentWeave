@@ -168,60 +168,94 @@ path the operator's own deployment never takes.
 decides the run's permission posture as well as its notice (`design.md` D9), so the mechanism chosen
 here moves containment whether or not anyone means it to. Choose it knowing that.
 
-- [ ] 4.1 `resolve_access_path` (`hub/hub/launchability.py:237-245`) returns `"mcp"` unconditionally
-  for every runner in `MCP_INJECTABLE_RUNNERS`. Give it grounds. Three mechanisms are laid out in
-  `design.md` D7 — re-aim the probe, make `hub_client` operator-visible and authoritative, or
-  describe both paths — and the delta requires the property, not the mechanism. Choose against a
-  running Hub and record why.
-- [ ] 4.2 If the probe is chosen, `probe_mcp_registered` (`:207-234`) is still there and still
-  unused. It shells `<cli> mcp list`; **verify what that actually reports on a harness whose MCP is
-  disabled by policy before relying on it** — a probe that reports "registered" for a server the
-  harness will refuse to start is the current bug with a subprocess in front of it. **Round 3 found
-  a reason to expect it fails on a permitted harness too, before that check ever runs**
-  (`design.md` D10): it runs a *separate* process with no `--mcp-config`, so it cannot see the
-  server the Hub injects on the turn's own command line, and a `False` from it resolves the path to
-  `cli` — which stops the injection it was asked about. Do not restore it unchanged; if a probe is
-  wanted it must ask whether the harness will honour an injected server, which `mcp list` does not
-  answer.
-- [ ] 4.3 Whatever is chosen must keep an explicit operator statement authoritative: an operator who
-  says `cli` gets `cli` without being probed out of it.
-- [ ] 4.4 **`hub/tests/conftest.py:496-507`.** Its autouse fixture patches `probe_mcp_registered`
-  to `False` under a docstring claiming every test therefore gets the `cli` access path. That has
-  been false since `d279d22`. Correct the docstring, and check whether any test was written
-  believing it — a test that meant to exercise the `cli` path has been exercising `mcp` instead.
-- [ ] 4.5 **`hub/tests/test_agent_trigger.py:793-830`.** It patches the probe to raise and asserts
-  an explicit `hub_client: "mcp"` yields the MCP notice. Nothing probes, so the raise cannot fire,
-  and with no override the outcome is identical — the assertion cannot distinguish the branch it
-  names. Either make it distinguish (assert the *absence* of the MCP notice for a run with no
-  grounds) or delete it, and say which in the log. Do not leave it green and meaningless; that is
-  `F190` again.
-- [ ] 4.6 A test that a run with no grounds for MCP is told the HTTP form — the mirror of §1.5, and
-  the one that actually covers the operator's deployment.
+**The mechanism, chosen 2026-09-09 against a real harness, and why.** None of `design.md` D7's
+three. A fourth: **the Hub separates what a run is *given* from what it is *told*, and the second
+follows grounds while the first stays the operator's.**
 
-- [ ] 4.7 **`hub/tests/test_launchability.py:390-429`, the third file round 2 did not count.** Its
-  `TestAccessPath` docstring states the path "is probed per runner rather than assumed"; nothing
-  probes. `test_explicit_override_wins_without_probing` (`:406-413`) guards against a call that
-  cannot happen for any input, and `test_auto_override_is_treated_as_unset_and_probes` (`:421-423`)
-  passes identically with the probe patched `True` or `False`. Fix the docstring; make both tests
-  distinguish the branch they name, or delete them. Keep
-  `test_injectable_runner_needs_no_global_registration` (`:424-429`) — it is the only place the
-  current unconditional behaviour is pinned, and whatever §4.1 chooses must update it deliberately.
-- [ ] 4.8 **Whichever mechanism §4.1 chooses, decide the permission posture separately and say so.**
-  `mcp_command` is set if and only if the access path is `"mcp"`
-  (`hub/hub/api/v1/agent_trigger.py:1025-1028`), and `_build_claude_command` reads it to choose
-  between `--permission-mode manual` plus `--permission-prompt-tool` and a bare
-  `--permission-mode acceptEdits` (`hub/hub/runner_commands.py:219-222`, `:244-254`). Measured, in
-  `design.md` D9. So moving a run to the `cli` path removes the workspace check on its file and
-  shell actions. Do not let a change about honest notices become a change about containment by
-  accident; the delta's "A truer description does not silently widen permission" scenario is this
-  task's test.
-- [ ] 4.9 **The approver flag names an MCP tool, and the mirror deployment cannot provide it.** With
-  `hub_client` unset and a `claude` runner, the path resolves to `"mcp"`, so the Hub emits
-  `--permission-prompt-tool mcp__agentweave__approve_tool_call` into a harness whose MCP is blocked.
-  `hub/hub/runner_commands.py:245-248` states what that does: "naming an approver that will not be
-  there makes every tool call fail". If that is right, the mirror defect is not a false sentence —
-  it is a run that cannot act. Establish it on a real harness (§6.5) before choosing a mechanism,
-  because a fix that only corrects the notice would leave such a run broken in the same way.
+- `resolve_access_path(runner, override)` — what the run is **given**. Unchanged behaviour:
+  unconditional `"mcp"` for an injectable runner, moved only by `hub_client`. It decides
+  `mcp_command`, and through that the permission posture (D9).
+- `described_access_path(access_path, override=…, harness_honoured_mcp=…)` — what the run is
+  **told**. Asserts the tool surface only on grounds: the operator said `mcp`, or the harness has
+  been *seen* honouring an injected server.
+- The observation is `Run.mcp_adapter_online_at` (migration `0102`), stamped by
+  `POST /api/v1/agent-actions/mcp-adapter-online`, which `hub/hub/mcp_server.py` posts **before it
+  serves**. This process existing is the measurement. Read per agent, per project, positive
+  evidence only — there is no negative form, because a harness that ignores the configuration is
+  silent, and silence is exactly what "no grounds" means.
+
+Why not D7's three. **The probe** answers the wrong question and is self-defeating (D10) — deleted
+rather than re-aimed, along with `_probe_cache` and `PROBEABLE_RUNNERS`. **`hub_client` made
+operator-visible** is a UI change in an otherwise Hub-Python-only change, and D9 shows it would make
+a control that says nothing about permissions widen them. **Describing both paths** does not satisfy
+the requirement at all: it still asserts a tool surface with no grounds, which is the sentence the
+delta forbids.
+
+Why the split is the answer to D9's condition rather than a way around it. A **declaration** by the
+operator moves containment, because it is theirs to move and it is declared. An **inference** by the
+Hub moves only the wording. The delta's scenario is then satisfied literally and is testable as a
+difference between two runs, which §4.8 is.
+
+The bootstrap cost is one turn: a fresh agent on a permitted harness reads the HTTP form on its
+first run while the server is in fact injected, and earns the MCP wording from the second. That is
+why the evidence is gathered at adapter startup rather than from a tool call — a model told to use
+HTTP may never reach for a tool, and tool-call evidence would leave a good harness undescribed
+forever.
+
+- [x] 4.1 `resolve_access_path` (`hub/hub/launchability.py`) returned `"mcp"` unconditionally for
+  every runner in `MCP_INJECTABLE_RUNNERS`. It still does — that is what the run is *given* — and
+  `described_access_path` now decides what it is *told*, on the grounds above. Chosen against a
+  real `claude` harness (§4.9, `F299`) rather than on paper.
+- [x] 4.2 The probe was not restored. `probe_mcp_registered`, `_probe_cache`, `_PROBE_TTL_SECONDS`
+  and the `PROBEABLE_RUNNERS` alias are **deleted**, and `test_the_probe_is_gone_and_stays_gone`
+  asserts they cannot come back unnoticed. D10's argument was not tested against a policy-blocked
+  harness because it does not need to be: `mcp list` runs a process that was never given the
+  config, so it answers the wrong question on both kinds of machine. The reasoning is now in
+  `launchability.py`'s access-path comment, where the next person to reach for a subprocess reads
+  it.
+- [x] 4.3 An explicit statement stays authoritative in both directions and neither is inferred
+  away: `hub_client: "cli"` gets `cli` (`test_an_explicit_cli_statement_is_what_the_run_is_given`),
+  and `hub_client: "mcp"` is grounds on its own with nothing observed
+  (`test_an_explicit_mcp_statement_is_grounds_on_its_own`, and the trigger-level
+  `test_trigger_honours_an_explicit_mcp_statement_with_nothing_observed`).
+- [x] 4.4 `hub/tests/conftest.py`'s autouse `_no_real_mcp_probe` is **removed**, not corrected — the
+  probe it patched no longer exists. A comment stands where it was saying what it claimed and why
+  that was false from `d279d22`. **The answer to "did any test believe it": no test path called the
+  probe, so no test was exercising the `cli` path because of this fixture.** What the fixture
+  actually did was patch a function nothing reached while telling every reader the opposite. Three
+  tests *named* the probe and are dealt with in §4.5 and §4.7.
+- [x] 4.5 `test_trigger_respects_explicit_mcp_override_without_probing` is **replaced, not
+  deleted** — the behaviour it meant to guard is real, and now distinguishable. It became
+  `test_trigger_honours_an_explicit_mcp_statement_with_nothing_observed`, whose negative half is
+  §4.6's test: same agent shape, no override, and the MCP sentence is absent.
+- [x] 4.6 `test_trigger_tells_a_run_with_no_grounds_the_http_form` — a `claude` agent, `hub_client`
+  unset, nothing observed, asserted on the prompt the trigger actually builds. The mirror of §1.5
+  and the one that covers the operator's deployment.
+- [x] 4.7 `TestAccessPath` rewritten. Its docstring said the path "is probed per runner"; it now
+  states the two questions and the two functions.
+  `test_explicit_override_wins_without_probing` and `test_auto_override_is_treated_as_unset_and_probes`
+  both guarded a call that could not happen for any input; each is replaced by one that asserts a
+  *difference* (`auto` with and without grounds; an `mcp` statement against no statement).
+  `test_injectable_runner_needs_no_global_registration` is **kept and updated deliberately**: the
+  injection is still unconditional, and the second assertion is what §4 added — the same value no
+  longer also asserts the tools are there.
+- [x] 4.8 Decided separately and stated: **the inference does not move the posture.** A run with no
+  grounds still gets `--mcp-config`, still gets `--permission-prompt-tool`, and still runs under
+  `manual`; only the wording changed.
+  `test_a_truer_description_does_not_widen_the_runs_permission` asserts it on the built argv, not on
+  `mcp_command`, because the posture is decided two functions away from the flag it reads.
+- [x] 4.9 **Driven, and the prediction holds — filed as `F299`.** Three real `claude` runs on Haiku:
+  with `--permission-prompt-tool` naming an absent MCP tool, a `Read` succeeds and **every mutating
+  call is denied** (`Write`, `PowerShell` and `Bash` all three), and the model reports it as *"a
+  workspace establishment issue … contact your system administrator"*. The same denial without the
+  approver flag produces *"I need permission to write the file"*. So the mirror is a **run that
+  cannot act**, not a false sentence — and it blames the operator's machine.
+  **The remedy is not this change's to choose.** Resolving to `cli` on an inference gives every
+  unstated `claude` run `acceptEdits`, which has no path check at all; keeping `manual` without an
+  approver denies everything anyway with nobody headless to ask. There is no non-widening,
+  non-breaking option, and the delta says containment is the operator's. It is in
+  `STATE-night.json`'s `decisions_for_user` with the drive attached. `hub_client: "cli"` is the
+  one-line workaround that exists today, and what it silently buys is `acceptEdits`.
 
 ## 5. Docs
 

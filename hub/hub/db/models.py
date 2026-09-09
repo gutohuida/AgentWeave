@@ -1172,6 +1172,23 @@ class Run(Base):
     # writes there is outside anything (design D12). Read an empty list as "nothing left this run's
     # boundary", never as "this run was confined".
     outside_workspace_writes: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # When this run's harness actually started the injected MCP server, or NULL.
+    #
+    # Grounds, in the sense `agent-capability-plane` uses the word: providing a harness with a
+    # tool-protocol server is not the same as that harness offering it. A deployment may forbid
+    # MCP servers by policy, accept the `--mcp-config` the Hub puts on the command line, and
+    # start nothing. Until this column the Hub had no way to tell that case from a working one,
+    # and told both of them, in their first line, to call tools that may not be there.
+    #
+    # Stamped once, by `hub/hub/mcp_server.py` announcing itself before it serves — not by the
+    # first tool call. A model that has been told to use HTTP may never reach for a tool, so
+    # evidence gathered from tool calls would leave a permitted harness permanently undescribed;
+    # evidence gathered at startup is available from the very first spawn.
+    #
+    # NULL means "never reported in", which covers both a harness that ignored the config and a
+    # run that was never given one. It is read only through `described_access_path`, and only as
+    # a fact about the *next* run — the notice for this run is composed before it is spawned.
+    mcp_adapter_online_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (
         CheckConstraint("initiator IN ('operator', 'autonomous')", name="ck_runs_initiator"),

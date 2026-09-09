@@ -670,9 +670,9 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
 ):
     """Task 4.1: the Hub — not the agent — establishes identity at spawn, as an env var
     the tool surface reads rather than a caller-supplied parameter. Task 4.5: the agent is
-    told, in its very first prompt, which access path (MCP vs. CLI commands) is in use.
-    Claude accepts per-run MCP configuration, so the Hub injects the canonical surface
-    without relying on a global client registration.
+    told, in its very first prompt, which access path is in use. Claude accepts per-run MCP
+    configuration, so the Hub injects the canonical surface without relying on a global client
+    registration — and, since §4, without that injection deciding what the run is told about it.
     """
     monkeypatch.setenv("HUB_API_KEY", "aw_live_parent-secret")
     monkeypatch.setenv("HUB_PROJECT_ID", "parent-project")
@@ -736,7 +736,13 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
 
     prompt = captured_kwargs["prompt"]
     assert "do the thing" in prompt
-    assert "the `agentweave` MCP tools are available" in prompt
+    # Given the server, and told the HTTP form — the two are separate answers since §4 of
+    # `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`. `hub_client` is unset and this
+    # harness has never had the adapter report in, so the Hub has no grounds to assert the tools
+    # are there; it still injects them, because injection is what the operator's statement moves
+    # and an inference must not move containment with it.
+    assert "no MCP tools this turn" in prompt
+    assert "the `agentweave` MCP tools are available" not in prompt
     assert captured_kwargs["mcp_command"][-1].endswith("mcp_server.py")
 
     from hub.agent_auth import hash_run_token
@@ -790,30 +796,17 @@ async def test_trigger_stamps_the_new_run_with_this_hub_instances_id(
         assert run.instance_id == "test-instance-id"
 
 
-@pytest.mark.asyncio
-async def test_trigger_respects_explicit_mcp_override_without_probing(
-    app, auth_headers, bind_runner, monkeypatch
-):
-    """An operator's explicit `hub_client: "mcp"` override must be honored even though
-    conftest's autouse fixture defaults the probe to False — the override skips probing
-    entirely rather than merely outvoting it."""
+async def _trigger_and_capture_build_command(app, auth_headers, agent, *, session_suffix):
+    """Run one trigger to completion and hand back the kwargs `build_command` was called with.
 
-    def _boom(cli):
-        raise AssertionError("override must skip probing entirely")
-
-    monkeypatch.setattr("hub.launchability.probe_mcp_registered", _boom)
-
-    sync = await app.post(
-        "/api/v1/projects/proj-test/session/sync",
-        json={"data": {"agents": {"override-claude": {"runner": "claude", "hub_client": "mcp"}}}},
-        headers=auth_headers,
+    The shared half of §4's trigger tests. What each of them asserts is a *difference* between two
+    runs, so the machinery has to be identical or the difference means nothing.
+    """
+    result_line = (
+        '{"type":"result","subtype":"success","is_error":false,'
+        f'"session_id":"sess-{session_suffix}"}}\n'
     )
-    assert sync.status_code == 200
-    await bind_runner("override-claude", cli="claude")
-
-    fake_spawn = _fake_pty(
-        ['{"type":"result","subtype":"success","is_error":false,"session_id":"sess-override-1"}\n']
-    )
+    fake_spawn = _fake_pty([result_line])
     captured_kwargs = {}
     real_build_command = agent_trigger.build_command
 
@@ -826,13 +819,150 @@ async def test_trigger_respects_explicit_mcp_override_without_probing(
             with patch("hub.api.v1.agent_trigger.build_command", _capturing_build_command):
                 resp = await app.post(
                     "/api/v1/projects/proj-test/agent/trigger",
-                    json={"agent": "override-claude", "message": "hi", "session_mode": "new"},
+                    json={"agent": agent, "message": "hi", "session_mode": "new"},
                     headers=auth_headers,
                 )
-                assert resp.status_code == 200
+                assert resp.status_code == 200, resp.text
                 await _await_background_run()
+    return captured_kwargs
 
-    assert "the `agentweave` MCP tools are available" in captured_kwargs["prompt"]
+
+@pytest.mark.asyncio
+async def test_trigger_honours_an_explicit_mcp_statement_with_nothing_observed(
+    app, auth_headers, bind_runner
+):
+    """Task 4.5, rewritten so it can fail. `hub_client: "mcp"` is the operator's declaration about
+    their own deployment, and it is grounds on its own — no run of this agent has ever had its
+    harness report the adapter in, and the notice still names the tools.
+
+    What this replaced was `test_trigger_respects_explicit_mcp_override_without_probing`, which
+    patched `probe_mcp_registered` to raise and asserted the MCP notice. Nothing called the probe
+    for any input, so the raise could not fire, and a run with *no* override produced exactly the
+    same notice — the assertion could not distinguish the branch its name claimed. That is `F190`
+    again, and the test below is the half that makes this one mean something.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"override-claude": {"runner": "claude", "hub_client": "mcp"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("override-claude", cli="claude")
+
+    captured = await _trigger_and_capture_build_command(
+        app, auth_headers, "override-claude", session_suffix="override-1"
+    )
+    assert "the `agentweave` MCP tools are available" in captured["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_trigger_tells_a_run_with_no_grounds_the_http_form(app, auth_headers, bind_runner):
+    """Task 4.6, and the case the operator's own deployment actually produces.
+
+    A `claude` agent, `hub_client` unset, and no run of it has ever had a harness start the
+    injected server. The Hub has therefore never observed that this harness honours MCP, and it
+    must not assert that it does — a deployment that forbids MCP by policy takes the
+    `--mcp-config` and starts nothing, and the run reads its first line and calls tools that are
+    not there.
+
+    The mirror of §1.5: that test proved the HTTP text is right when it is rendered, this one
+    proves a real trigger renders it.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"unstated-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("unstated-claude", cli="claude")
+
+    captured = await _trigger_and_capture_build_command(
+        app, auth_headers, "unstated-claude", session_suffix="nogrounds-1"
+    )
+    prompt = captured["prompt"]
+    assert "the `agentweave` MCP tools are available" not in prompt
+    assert "/api/v1/agent-actions" in prompt
+    assert "AW_RUN_TOKEN" in prompt
+
+
+@pytest.mark.asyncio
+async def test_an_observed_harness_earns_the_mcp_description_for_the_next_run(
+    app, auth_headers, bind_runner
+):
+    """The grounds are a measurement, and this is the measurement being made and then read.
+
+    Stamp `Run.mcp_adapter_online_at` the way `POST /agent-actions/mcp-adapter-online` does, and
+    the *next* run of that agent is described as having the tools. Before the stamp it is not.
+    Both halves are here because either alone is satisfiable by a constant.
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"observed-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("observed-claude", cli="claude")
+
+    first = await _trigger_and_capture_build_command(
+        app, auth_headers, "observed-claude", session_suffix="observed-1"
+    )
+    assert "the `agentweave` MCP tools are available" not in first["prompt"]
+
+    async with async_session_factory() as db:
+        found = await db.execute(select(Run).where(Run.agent == "observed-claude"))
+        run = found.scalars().first()
+        assert run is not None
+        run.mcp_adapter_online_at = datetime.now(timezone.utc)
+        await db.commit()
+
+    second = await _trigger_and_capture_build_command(
+        app, auth_headers, "observed-claude", session_suffix="observed-2"
+    )
+    assert "the `agentweave` MCP tools are available" in second["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_a_truer_description_does_not_widen_the_runs_permission(
+    app, auth_headers, bind_runner
+):
+    """Task 4.8, and the delta's "A truer description does not silently widen permission".
+
+    This run is now told the HTTP form where it used to be told it had tools. That is the only
+    thing that changed. `mcp_command` is still set, so `build_command` still emits `--mcp-config`,
+    still emits `--permission-prompt-tool`, and still runs under `manual` rather than falling back
+    to `acceptEdits` — which has no path check at all (`runner_commands.py:66-73`). An inference
+    about what a harness supports must not be allowed to move containment; only the operator's own
+    `hub_client` does that, and it is a declaration rather than a guess.
+
+    Asserted on the built argv rather than on `mcp_command` alone, because the posture is decided
+    from `mcp_command` two functions away and it is the argv the process is handed.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"posture-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("posture-claude", cli="claude")
+
+    captured = await _trigger_and_capture_build_command(
+        app, auth_headers, "posture-claude", session_suffix="posture-1"
+    )
+    assert "the `agentweave` MCP tools are available" not in captured["prompt"]
+    assert captured["mcp_command"], "the server is still injected — only the wording changed"
+
+    argv = agent_trigger.build_command(**captured)
+    assert "--mcp-config" in argv
+    assert "--permission-prompt-tool" in argv
+    assert argv[argv.index("--permission-mode") + 1] == "manual"
+    assert "acceptEdits" not in argv
 
 
 @pytest.mark.asyncio
@@ -2687,11 +2817,13 @@ async def test_a_run_without_mcp_is_described_the_operations_it_can_actually_per
     hoisted above the materialization and its single value threaded into the renderer; this asserts
     both ends of that, on the text the run actually receives.
 
-    `resolve_access_path` is patched rather than driven from configuration because it still returns
-    `"mcp"` unconditionally today — §4 of the change is what makes a real run reach the other
-    branch. What is under test here is the *threading*, which is complete and testable now.
+    **Driven from configuration since §4, not patched.** This test used to monkeypatch
+    `resolve_access_path` to `"cli"`, because the real function returned `"mcp"` unconditionally
+    and no configuration could reach the branch. It can now: a `claude` agent with `hub_client`
+    unset whose harness has never reported the adapter in has no grounds, so it is *described* the
+    HTTP form while still being given the server. That is the ordinary case, and it is what the
+    threading is exercised against here.
     """
-    monkeypatch.setattr("hub.api.v1.agent_trigger.resolve_access_path", lambda *a, **k: "cli")
 
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",
@@ -2757,12 +2889,13 @@ async def test_a_run_with_mcp_is_still_described_the_injected_tools(
 ):
     """The other branch of the same threading, so the hoist cannot be "fixed" by hardcoding one
     answer. Without this, patching the renderer's `access_path` to a constant would pass the test
-    above and silently rewrite every MCP run's tool list."""
-    monkeypatch.setattr("hub.api.v1.agent_trigger.resolve_access_path", lambda *a, **k: "mcp")
+    above and silently rewrite every MCP run's tool list.
 
+    Driven from configuration too: `hub_client: "mcp"` is the operator's own statement about their
+    deployment, which is grounds on its own (§4.3) and needs no observation behind it."""
     sync = await app.post(
         "/api/v1/projects/proj-test/session/sync",
-        json={"data": {"agents": {"mcpok-claude": {"runner": "claude"}}}},
+        json={"data": {"agents": {"mcpok-claude": {"runner": "claude", "hub_client": "mcp"}}}},
         headers=auth_headers,
     )
     assert sync.status_code == 200
