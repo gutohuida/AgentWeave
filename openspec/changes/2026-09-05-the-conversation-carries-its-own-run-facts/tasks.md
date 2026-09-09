@@ -77,22 +77,22 @@ ask its own question.
 
 ## 1. The chat responses carry their own run facts
 
-- [ ] 1.1 `ChatHistoryResponse` (`hub/hub/api/v1/agent_chat.py:173`) gains
+- [x] 1.1 `ChatHistoryResponse` (`hub/hub/api/v1/agent_chat.py:173`) gains
       `runs: Dict[str, RunFacts] = Field(default_factory=dict)`, importing `RunFacts` from
       `hub.schemas.agents` rather than declaring a second shape (design D7).
-- [ ] 1.2 One helper in `agent_chat.py` — `_run_facts_for(session, project_id, entries)` — that
+- [x] 1.2 One helper in `agent_chat.py` — `_run_facts_for(session, project_id, entries)` — that
       collects `entry.run_id` over the entries handed to it, returns `{}` on an empty set, and
       otherwise runs `select(Run).where(Run.project_id == project_id, Run.id.in_(run_ids))` with no
       `ORDER BY` and no `LIMIT`. Carry the `project_id` predicate and the comment saying it is
       enforcement rather than inference (design D2). **`Run` is not imported in `agent_chat.py`** —
       its `from ...db.models import (...)` block at `:36-47` does not name it, so add it there.
       (Noted by the third review; every other symbol this change touches was already named.)
-- [ ] 1.3 `get_chat_history` (`:567`) calls it on the **final** `entries` list — after the sort and
+- [x] 1.3 `get_chat_history` (`:567`) calls it on the **final** `entries` list — after the sort and
       after `_queued_entries_for` extends it (`:633-635`) — and returns the map.
-- [ ] 1.4 `get_recent_chat` (`:646`) calls it on **its** final list — after `entries[-limit:]`
+- [x] 1.4 `get_recent_chat` (`:646`) calls it on **its** final list — after `entries[-limit:]`
       (`:697`) and after `_queued_entries_for` — so the map matches what that response returns and
       not what it read (design D3).
-- [ ] 1.5 The status rename is the boundary's, once: `RunFacts` is constructed exactly as
+- [x] 1.5 The status rename is the boundary's, once: `RunFacts` is constructed exactly as
       `agents.py:830-841` does, `running` spelled `started`, `outside_workspace_writes` passed
       through with no default. Both chat routes go through 1.2's single helper, so there is one
       construction in `agent_chat.py` and nothing to factor — **do not** factor it together with
@@ -163,20 +163,45 @@ ask its own question.
 Every test below must be shown to fail against the unfixed code. A test that passes both ways is
 not evidence, and this repository's dominant failure mode is exactly that.
 
-- [ ] 4.1 `hub/tests/` — a conversation's chat response carries facts for every run its entries
+- [x] 4.1 `hub/tests/` — a conversation's chat response carries facts for every run its entries
       name. Mutation: return `{}` and watch it fail.
-- [ ] 4.2 The one that would have caught F274: build an agent with **one** conversation holding a
+- [x] 4.2 The one that would have caught F274: build an agent with **one** conversation holding a
       finished run, then enough events on **other** conversations to exceed any fixed window, and
       assert the first conversation's response still carries that run. Assert on the chat response
       alone — a test that also reads the timeline route will pass for the wrong reason.
-- [ ] 4.3 Single-conversation volume: more distinct runs in one conversation than a fifty-event
+- [x] 4.3 Single-conversation volume: more distinct runs in one conversation than a fifty-event
       window can name, every one present in the map.
-- [ ] 4.4 The recent-chat route carries facts for the runs **it** returns, taken after its `limit`
+- [x] 4.4 The recent-chat route carries facts for the runs **it** returns, taken after its `limit`
       truncation — construct a case where a pre-truncation entry names a run the post-truncation
       entries do not, and assert that run is absent. This is what pins "after, not before".
-- [ ] 4.5 An entry naming a run with no row leaves the key absent rather than raising.
-- [ ] 4.6 `hub/tests/test_bola.py` — both chat routes' `runs` maps cannot carry another project's
+- [x] 4.5 An entry naming a run with no row leaves the key absent rather than raising.
+- [x] 4.6 `hub/tests/test_bola.py` — both chat routes' `runs` maps cannot carry another project's
       run. Mutation: drop the `project_id` predicate.
+
+**4.1-4.6 built and mutation-checked 2026-09-09 (night window, iteration 15).** Ten tests in
+`hub/tests/test_chat_run_facts.py` plus one in `hub/tests/test_bola.py`; 29 passed with
+`test_agent_chat.py`. **Seven mutations run**, `agent_chat.py` md5-verified back to
+`4cf271e0f368f1f5cb03c0eb6d6d524a` after each, and **every one of the eleven tests is named by at
+least one of them**:
+
+| Mutation | Kills |
+|---|---|
+| M1 `_run_facts_for` returns `{}` | 8 of the 10 in the new file |
+| M2 recent-chat map built **before** `entries[-limit:]` | `..._map_is_taken_after_the_limit_truncation` |
+| M3 `Run.project_id == project_id` dropped | the BOLA test, and only it |
+| M4 boundary rename dropped (`running` served raw) | `..._renamed_started_at_the_boundary` |
+| M5 `outside_workspace_writes or []` | `..._never_none_becomes_empty_list` |
+| M6 `.limit(50)` on the run lookup | `..._more_runs_than_a_window_holds` |
+| M7 map bounded by the project rather than by the entries | 3, including the empty-map test |
+
+Two things the tally makes visible and no test yet covers. **1.3's "after `_queued_entries_for`"
+is not observable**: a queued entry's `run_id` is `delivered_in_run_id`, which is `NULL` until it
+is delivered, so moving that call has no effect on the map today. The ordering is kept because it
+stops being free the moment an abandoned entry keeps its delivered run — but it rests on reading
+the code, not on a red test, and a future change to `_queue_entry_to_timeline` would not be
+caught. **M7 was what forced the empty-map test to be worth writing**: as first drafted it asserted
+`runs == {}` for a conversation with no runs at all, which no mutation of this code can falsify.
+It now gives the agent a run in a *different* conversation, and M7 kills it.
 - [ ] 4.7 `hub/ui/src/__tests__/` — the panel passes the **chat** response's `runs` to
       `AgentTimeline`. Mutation: wire it back to the timeline query and watch it fail. This is D5's
       guard and the reason the two maps may coexist.

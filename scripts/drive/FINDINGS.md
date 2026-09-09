@@ -19826,6 +19826,26 @@ so queue traffic the chat hooks *do* listen to was in the same window. This meas
 "seconds", not "the reconnect invalidation is what did it". Task 3.5 still has to ask its own
 question.
 
+### The server half, inverted against the same rows — 2026-09-09, night window, iteration 15
+
+Phase 1 (tasks 1.1-1.5) shipped and the phase-0 Hub was brought back on `:8012` against the **same
+profile database and the same runs**, so this is a before/after on identical rows rather than on
+new ones. Nothing but `agent_chat.py` changed; the timeline route is untouched and still answers
+exactly as it did during phase 0.
+
+| | phase 0 (05:0x) | after phase 1 |
+|---|---|---|
+| conversation A, `run-c663930f13c2` in the **timeline** map | absent (50 events, 8 runs) | **still absent** (50 events, 8 runs) |
+| conversation A, that run in the **chat** response | *field did not exist* | **present** — `stopped`, exit 2, 04:03:19.420 → 04:03:27.591 |
+| single conversation `conv-88b2481859f1`: distinct runs named / described | 10 / 8 | **10 / 10** |
+
+The 8.17 s between that run's `started_at` and `ended_at` is the "Worked for 8s" phase 0 watched
+disappear. **This is the API half only.** The served bundle still reads `timeline?.runs`, so the
+screen has not changed yet — section 2 moves the client, and tasks 6.1/6.2 re-run these two
+measurements *in the browser*, which is the measurement that closes the finding. Hub `:8012`
+stopped again afterwards; `:8000` untouched throughout (PID 10556 before and after) and nothing
+was listening on `:8010`.
+
 ## F275 (C) - an abandoned operator message renders after the failures it caused
 
 **Status:** open. Filed 2026-09-03. A consequence of F87's fix, not an oversight in it.

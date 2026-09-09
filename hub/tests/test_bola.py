@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 
 from hub.db.engine import async_session_factory
-from hub.db.models import EventLog, Project, Run
+from hub.db.models import AgentOutput, Conversation, EventLog, Project, Run
 
 
 @pytest_asyncio.fixture
@@ -378,3 +378,54 @@ async def test_project_a_can_still_read_its_own_resources(app, project_a, projec
     assert agents_resp.status_code == 200
     names = {a["name"] for a in agents_resp.json()}
     assert ids["agent"] in names
+
+
+@pytest.mark.asyncio
+async def test_chat_run_facts_cannot_carry_another_projects_run(
+    app, other_project, project_a_resources
+):
+    """Both chat routes' `runs` maps are project-scoped (F274 change, task 4.6).
+
+    The map is bounded by the run ids the response's own entries name, and those entries are
+    already project-filtered — so the lookup would be safe without its `project_id` predicate.
+    The predicate is enforcement rather than inference, and this is what enforces it: a Project
+    B row is made to name a Project A run id directly, which is the only way that boundary can
+    be crossed. Drop `Run.project_id == project_id` from `_run_facts_for` and both assertions
+    below fail.
+    """
+    b = other_project["headers"]
+    base = f"/api/v1/projects/{other_project['project_id']}"
+    leaked = project_a_resources["run_id"]
+
+    async with async_session_factory() as session:
+        session.add(
+            Conversation(
+                id="conv-bola-b",
+                project_id=other_project["project_id"],
+                agent="alice",
+                provider_session_id="conv-bola-b",
+                lifecycle="open",
+            )
+        )
+        session.add(
+            AgentOutput(
+                id="out-bola-b",
+                project_id=other_project["project_id"],
+                agent="alice",
+                content="project b output",
+                session_id="conv-bola-b",
+                conversation_id="conv-bola-b",
+                run_id=leaked,
+            )
+        )
+        await session.commit()
+
+    recent = await app.get(f"{base}/agent/alice/chat", headers=b)
+    assert recent.status_code == 200, recent.text
+    assert [e["id"] for e in recent.json()["entries"]] == ["out-bola-b"]
+    assert recent.json()["runs"] == {}, "the recent chat leaked another project's run facts"
+
+    scoped = await app.get(f"{base}/agent/alice/chat/conv-bola-b", headers=b)
+    assert scoped.status_code == 200, scoped.text
+    assert scoped.json()["runs"] == {}, "the conversation chat leaked another project's run facts"
+    assert leaked not in scoped.json()["runs"]

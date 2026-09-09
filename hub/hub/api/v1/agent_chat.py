@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,7 +44,9 @@ from ...db.models import (
     Loop,
     Message,
     Project,
+    Run,
 )
+from ...schemas.agents import RunFacts
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
 
@@ -175,6 +177,15 @@ class ChatHistoryResponse(BaseModel):
     session_id: Optional[str]
     agent: str
     entries: List[TimelineEntry]
+    # How every run named by `entries` went, keyed by run id. Here rather than read off the
+    # agent timeline route because that route answers about a fixed window of recent events,
+    # and a conversation's turns are not that window: a conversation whose runs have aged out
+    # of it renders every turn outcomeless (F274). The map is keyed to the same query that
+    # produced `entries`, so it cannot disagree with them.
+    #
+    # `RunFacts` is imported rather than re-declared (design D7): two shapes for one concept is
+    # how a boundary rename gets applied to only one of them.
+    runs: Dict[str, RunFacts] = Field(default_factory=dict)
 
 
 def _queue_entry_to_timeline(
@@ -278,6 +289,53 @@ async def _queued_entries_for(
         _queue_entry_to_timeline(entry, hop_budget, delivered=False)
         for entry in result.scalars().all()
     ]
+
+
+async def _run_facts_for(
+    session: AsyncSession,
+    project_id: str,
+    entries: List[TimelineEntry],
+) -> Dict[str, RunFacts]:
+    """How every run these entries name actually went, keyed by run id.
+
+    Bounded by the id set the caller is about to return, not by a window and not by a
+    conversation (design D2). `Run` does carry `conversation_id`, but querying on it would rely
+    on `Run.conversation_id` and `AgentOutput.conversation_id` agreeing — a denormalization
+    holding — rather than on the ids the response is literally returning, and the recent-chat
+    route is cross-conversation and would need this form anyway. No `ORDER BY` and no `LIMIT`:
+    the id set is the bound, and dropping any of it would leave a turn on screen with no
+    outcome, which is the whole defect.
+
+    Pass the **final** entries list. A map built before a truncation or before the still-queued
+    entries are appended describes a different list than the one the route returns.
+
+    The `project_id` predicate is enforcement, not inference: the ids come from rows this route
+    already filtered, so the query would be safe without it — but the map is a new cross-project
+    leak surface, `test_bola.py` covers these routes because that matters, and
+    `ix_runs_project_agent` makes the predicate free.
+    """
+    run_ids = {entry.run_id for entry in entries if entry.run_id}
+    if not run_ids:
+        return {}
+
+    run_res = await session.execute(
+        select(Run).where(Run.project_id == project_id, Run.id.in_(run_ids))
+    )
+    return {
+        run.id: RunFacts(
+            # D5: one rename at the boundary; every other value is the row's own.
+            status="started" if run.status == "running" else run.status,
+            exit_code=run.exit_code,
+            started_at=run.started_at,
+            ended_at=run.ended_at,
+            # The row's own value, passed through without a default: `None` means this run was
+            # never observed and `[]` means it was observed and nothing left its workspace, and
+            # coalescing the first into the second would be the one mistake this column exists
+            # to prevent.
+            outside_workspace_writes=run.outside_workspace_writes,
+        )
+        for run in run_res.scalars()
+    }
 
 
 async def _loops_by_conversation(
@@ -639,6 +697,9 @@ async def get_chat_history(
         session_id=conversation.provider_session_id,
         agent=agent,
         entries=entries,
+        # After the sort and after the queued entries are appended, so the map covers every run
+        # the returned list names — including one named by a still-queued or abandoned entry.
+        runs=await _run_facts_for(session, project_id, entries),
     )
 
 
@@ -698,4 +759,13 @@ async def get_recent_chat(
 
     entries.extend(await _queued_entries_for(session, project_id, agent, hop_budget))
 
-    return ChatHistoryResponse(conversation_id=None, session_id=None, agent=agent, entries=entries)
+    return ChatHistoryResponse(
+        conversation_id=None,
+        session_id=None,
+        agent=agent,
+        entries=entries,
+        # After `entries[-limit:]` above, so the map describes what this response returns rather
+        # than what it read: the truncated-away entries' runs are not this response's business
+        # (design D3).
+        runs=await _run_facts_for(session, project_id, entries),
+    )
