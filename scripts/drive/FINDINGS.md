@@ -339,6 +339,32 @@ Reproduced three times; the harness is committed as `scripts/drive/f295_shutdown
 `scripts/drive/f295_restart_reconciles.py`. F295's own section carries the numbers and the two
 things the drive found that no round had looked at, one of which is filed as **`F298` (C)**.
 
+**Revised 2026-09-09 (night window, iteration 17, `c3` phase 6): the open severity-A list is one -
+F142 - under both definitions.**
+
+F274 is retired, and under the stricter definition: `2026-09-05-the-conversation-carries-its-own-run-facts`
+shipped over phases 1-5 (`272adce` server, `503a6ff` client) **and** phase 6 re-ran phase 0's two
+reproductions in a browser, on the same Hub, the same profile database, the same conversations and
+the same run ids. Both inverted. Conversation A's stopped turn shows `Turn stopped` and
+`Worked for 8s` again while its run is *still* outside the timeline map; the ten-turn single
+conversation shows ten durations where it showed eight, with **four** of its runs now outside that
+map rather than two. The map got worse and the screen got right, which is the shape of a fix that
+moved the source rather than widened a window. F274's own section carries the table, the
+stop-then-send indicator trace, the `run_interrupted` SSE measurement and the query-cost numbers.
+
+**Task 7.2 of that change asked for something this page should not do.** It said to *correct* the
+severity-A summary lines at `FINDINGS.md:96-112`, which name F274 as open. Those lines are dated
+revisions - 2026-09-03, 2026-09-04 - in an append-only sequence, and this page's own post-mortem
+below is about a count that went wrong by being edited rather than recomputed. Rewriting a dated
+entry to say something its date did not say is the same error in a politer form. So the revision is
+**appended here** and the historical lines are left exactly as they were written.
+
+**What did not change.** F291 is **not** retired, and task 7.1's instruction to mark it `fixed` is
+refused with a measurement rather than skipped: the failing runs' facts do reach the chat response
+now, and the screen is byte-for-byte what it was, because `groupIntoTurns` never builds a turn from
+an abandoned entry. Its own section carries the re-drive. F142 is unchanged: an implemented and
+archived change (`2026-09-01-a-review-a-flow-cannot-staff-is-named`) that nobody has driven.
+
 **F142 is now the only severity-A finding whose fix shipped and whose drive is genuinely owed.**
 That is the shortest that sentence has ever been on this page, and it is the obvious next search —
 except that unlike F140, F154 and F155, F142's own change document already says the drive is
@@ -19621,11 +19647,12 @@ the component agree, and the screen still loses the outcome.
 
 ## F274 (A) - a turn's outcome is erased by work in the agent's *other* conversations
 
-**Status:** open, proposed 2026-09-05 (day window D-2, round 1) as
-`openspec/changes/2026-09-05-the-conversation-carries-its-own-run-facts`, reviewed twice since
-(the task text carries both rounds' corrections). **Phase 0 of that change - the observation gate -
-was recorded 2026-09-09** on a clean Hub instance and the defect reproduced in both of its shapes;
-see the section at the end of this entry for the numbers. Phases 1-7 are not implemented. Filed 2026-09-03 by the day window's drive. This is **F190's original
+**Status:** **fixed** `272adce` (server) + `503a6ff` (client), driven 2026-09-09, by
+`openspec/changes/2026-09-05-the-conversation-carries-its-own-run-facts`. The run facts now ride on
+the chat response, which is bounded by the same entries the client renders, so a turn's terminal
+label and its "Worked for Ns" no longer depend on an agent-scoped fifty-event window. **Both halves
+of phase 0's reproduction were re-run in the browser on the same rows and both inverted** - see
+*Phase 6* at the end of this entry. Filed 2026-09-03 by the day window's drive. This is **F190's original
 symptom**, live, against the fix that closed F190 - reached by a route none of the three rounds
 asked about.
 
@@ -19845,6 +19872,112 @@ screen has not changed yet — section 2 moves the client, and tasks 6.1/6.2 re-
 measurements *in the browser*, which is the measurement that closes the finding. Hub `:8012`
 stopped again afterwards; `:8000` untouched throughout (PID 10556 before and after) and nothing
 was listening on `:8010`.
+
+### Phase 6 - the same rows, in the browser, and the defect is gone (2026-09-09, night window, iteration 17)
+
+Same Hub (`127.0.0.1:8012`), same profile database, same project `proj-9042770d2ae3`, same agent
+`scribe050237`, **same conversations and the same run ids phase 0 measured** - deliberately not torn
+down, so this is a before/after rather than two unrelated measurements. Zero `.py` under `hub/hub`
+or `src/` newer than the process start.
+
+| | phase 0 (05:0x) | phase 6 (06:2x) |
+|---|---|---|
+| conversation A `conv-16d76ddeb411`, `run-c663930f13c2` in the **timeline** map | absent (50 events, 8 runs) | **still absent** (50 events, 8 runs) |
+| conversation A, browser, turn boundaries | 1 | 1 |
+| conversation A, browser, terminal labels | `{failed 0, stopped 0, interrupted 0}` | **`{failed 0, stopped 1, interrupted 0}`** |
+| conversation A, browser, stat lines | 0 | **`['Worked for 8s']`** |
+| single conversation `conv-88b2481859f1`: runs named by chat / present in the timeline map | 10 / 8 | 10 / **6** (the window has moved further) |
+| that conversation, browser, turn boundaries | 10 | 10 |
+| that conversation, browser, stat lines carrying a duration | **8 of 10** - the two oldest read `'33,170 tokens'`, `'33,445 tokens'` | **10 of 10**, every one `Worked for Ns - N tokens` |
+
+The timeline map is *more* wrong than it was - four of the ten runs are outside it now rather than
+two - and the screen is right anyway, which is the point: the client stopped reading that map.
+`shot-6.1-after.png`, `shot-6.2.png` (uncommitted, `testbed/scratch/f274p0/`).
+
+**A fixture defect found while re-running 0.2, worth recording.** Phase 0's browser watcher
+(`watch_conv.py`) selected a conversation by clicking the first DOM node matching a *text* needle,
+and conversations A and R were both opened with the same "history of the bicycle" prompt. Phase 0's
+own measurement is sound - R did not exist yet when 0.2 ran - but the first phase-6 attempt silently
+measured R instead of A and read `Turn interrupted`/`Worked for 26s`, which would have been recorded
+as a pass for the wrong conversation. Phase 6 selects by id instead
+(`data-testid="rail-conversation-<id>"`, `AgentTree.tsx:208/220`); the script is `watch_conv2.py`.
+
+**Task 6.4, the recent view (no conversation selected)** - the other branch of the ternary:
+`GET /agent/scribe050237/chat` returns 50 entries naming **11** distinct runs and a `runs` map of
+**11**, nothing unlabelled; the pane renders 2 turn boundaries, both with stat lines, and the one
+non-`completed` outcome in view carries its `Turn interrupted` label.
+
+**Task 6.5, the added query's cost.** `GET /agent/{a}/chat/{cid}` on the largest fixture
+conversation (50 entries, 10 distinct runs), n=50 each, same Hub and database, measured by swapping
+`hub/hub/api/v1/agent_chat.py` for `272adce^`'s copy and restarting:
+
+```
+before   min 10.8  median 16.4  p90 30.2  max 39.6  mean 19.3   (ms, runs map absent)
+after    min  6.5  median 16.2  p90 31.6  max 35.3  mean 18.9   (ms, runs map size 10)
+```
+
+**Below the noise floor** - the "after" median is 0.2 ms *faster*, which is the honest way to say the
+extra lookup is not measurable here. Stated with its bound: 50 entries and 10 runs is the largest
+conversation this fixture has, and it is not large.
+
+**Task 6.7, the working indicator across stop-then-send (design D9), live.** Conversation
+`conv-0c52d0358e1b`, indicator node polled directly
+(`data-testid="timeline-working-indicator"`) rather than by substring:
+
+```
+06:25:50-58   Working - 11s ... 19s          run A, 1 boundary, 0 stat lines
+06:25:58      POST stop, then POST trigger immediately -> run_id: null (queued, agent still busy)
+06:25:59      Working - 0s   2 boundaries   Turn stopped x1   1 stat line
+06:26:00-06   Working - 1s ... 7s
+06:26:07      indicator gone; 06:26:08 the second stat line appears
+```
+
+**The indicator never goes dark**, and it re-bases to the new turn's first entry rather than
+carrying A's elapsed forward. What covers the window is the *delivered queue entry*, not a key in
+the run map: the new run was `run_id: null` at trigger time. Stated with its bound - the poll loop's
+real cadence is ~1.0 s (250 ms sleep plus the DOM read), so this bounds any dark frame at under
+~1.1 s rather than proving it is exactly zero. **The negative half:** conversation A on screen, a run
+started and completed in another conversation on the same agent (`06:27:39`, `run-95ae0a5ed7b1`) -
+over 45 s A's pane did not change once: indicator absent throughout, 1 boundary, `Turn stopped` 1,
+1 stat line.
+
+**Task 6.3, the no-regression check on the interrupted label.** Long turn in flight
+(`run-85016a2b514c`), browser attached to `conv-4e39e46a5a8f`, nobody touching the page:
+
+```
+06:28:05.06  Hub hard-killed (Stop-Process -Force)
+06:28:10.27  row written interrupted  (the run's own ended_at, 05:28:10.271901Z UTC)
+06:28:11.82  new Hub answering /health   ("Reconciled 1 orphaned run(s)" on start)
+06:28:21.3   browser, no reload: 'Turn interrupted' x1, 2 boundaries, 1 stat line
+```
+
+**11.0 s from the row to the label, 9.5 s from the Hub serving again**, against phase 0's 8.6 s and
+7.1 s. Seconds, not "never" - the map move did not regress it. And the same confound phase 0
+recorded is present again, so it was measured directly this time rather than left as a suspicion.
+
+**Task 3.5's live half, which iteration 16 could only answer from code ordering.** A client
+subscribed to `GET /api/v1/events` the way the browser is, across a kill and restart
+(`sse_watch.py`, uncommitted):
+
+```
+06:30:45.76  Hub killed        stream #3 DROPPED ConnectionResetError
+06:30:48     connect #4 OPEN
+06:30:49     FRAME queue_entry_delivered {'agent': 'scribe050237', 'run_id': 'run-3d5e08c5d227'}
+06:30:49     FRAME run_started          {'agent': 'scribe050237', 'run_id': 'run-3d5e08c5d227'}
+             ... and no run_interrupted frame, at any point, on any of 11 connections
+```
+
+**D8 holds, and now as a measurement.** `reconcile_interrupted_runs()` broadcasts before uvicorn
+serves, so no reconnecting client can receive it - confirmed by construction *and* observed. What
+the reconnected stream does carry is the successor run's **queue** traffic, which the chat hooks
+listen to. So phase 0's confound is the mechanism, not a coincidence: the label appears because a
+queue frame (or the reconnect invalidation) refetches the chat, never because `run_interrupted`
+reached the client.
+
+**Teardown (6.6).** Project `proj-9042770d2ae3` on the `f274p0` profile database, port `8012`, left
+in place so the review page can cite it; `GET /jobs` and `GET /loops` both `[]`, so nothing is
+enabled. `:8000` untouched throughout (PID 10556 before and after); nothing was listening on `:8010`
+at any point.
 
 ## F275 (C) - an abandoned operator message renders after the failures it caused
 
@@ -21018,11 +21151,17 @@ check: watch the reconnected stream for a `run_interrupted` frame and confirm no
 
 ## F291 (C) - a run that fails before its process spawns tells the conversation nothing, and the one path where that is total leaves the turn silent
 
-**Status:** open, and **corrected 2026-09-09** by the drive its own `Reproduce` line asked for. The
-mechanism is confirmed to the letter - no output row, `run_failed` unheard by the chat hooks - and
-the *symptom* stated in the heading and below is wrong: there is no silent turn, because on this
-path there is no turn at all. Read the section at the end of this entry before acting on the rest
-of it; the reproduce recipe below is also wrong and that section says why. Filed 2026-09-05 by the day window's D-4/R3 spec round, while re-deriving why the
+**Status:** **still open** after `2026-09-05-the-conversation-carries-its-own-run-facts` shipped,
+and that change's own task 7.1 - which instructs the implementer to mark this `fixed` - is wrong.
+Re-driven 2026-09-09 against the built code: the run facts for the failing runs **are** now in the
+chat response, and the screen is unchanged, because `groupIntoTurns` partitions on
+`delivery_state === 'delivered'` and an abandoned entry never becomes a turn there is nothing to
+label. See *Phase 6* at the end of this entry. Corrected once before, on 2026-09-09 by the drive its
+own `Reproduce` line asked for: the mechanism is confirmed to the letter - no output row,
+`run_failed` unheard by the chat hooks - and the *symptom* stated in the heading and below is wrong:
+there is no silent turn, because on this path there is no turn at all. Read both sections at the end
+of this entry before acting on the rest of it; the reproduce recipe below is also wrong and one of
+them says why. Filed 2026-09-05 by the day window's D-4/R3 spec round, while re-deriving why the
 `2026-09-05-the-conversation-carries-its-own-run-facts` change adds four run-terminal events to the
 chat hooks' SSE predicate. **Derived from the code, not yet driven** -- every line below is a
 citation on this checkout; task 0.5 of that change is written to measure it.
@@ -21131,6 +21270,45 @@ Two caveats on the fixture, stated because an unstated one is how a measurement 
   is `claude-haiku-4-5-20251001`. Not filed: the sync is the contamination, and no clean-fixture
   measurement was taken. Worth one minute on a clean fixture before anyone trusts the composer's
   model line.
+
+
+### Phase 6 - the change shipped, and this finding is untouched (2026-09-09, night window, iteration 17)
+
+Task 6.3 of `2026-09-05-the-conversation-carries-its-own-run-facts` calls the 0.5 re-run "a
+before/after, and 3.1 is what changes it". It is a before/after and **nothing changed.**
+
+Same fixture, agent `ghost050237`, CLI still pinned at `C:\Users\huida\aw-f274p0\README.md`. Two
+messages, `06:32:16` and `06:33:12`, each burning its three delivery attempts inside a second. The
+**server** half did change, exactly as designed:
+
+```
+GET /projects/<pid>/agent/ghost050237/chat/conv-f1a8c58f1fb9
+  entries 2, both carrying a run_id
+  runs {"run-2792ffd0ccb0": {"status": "failed", ...},
+        "run-94b577775443": {"status": "failed", ...}}     <- absent entirely before the change
+```
+
+The **screen** did not. Browser attached for 80 s with the second message sent live at `06:33:12`,
+nothing else touched:
+
+```
+t=0.00s  boundaries 0   labels {failed 0, stopped 0, interrupted 0}   ... and never changes
+final page, reopened: two "NOT DELIVERED / delivery failed 3 times; the Hub stopped retrying"
+                      blocks, 0 turn boundaries, 0 terminal labels
+```
+
+**Why, in one line of the client, read rather than inferred.** `groupIntoTurns`
+(`hub/ui/src/lib/agentTimelineModel.ts:45-62`) splits on `delivery_state === 'delivered'` and puts
+everything else in `pending`. It never looks at `run_id`. An abandoned entry carries a run id, and a
+run row now describes that run as `failed`, and neither fact can reach the screen because the entry
+is not in a turn. Adding the four run-terminal events to `eventTargetsAgent` (task 3.1) refreshes a
+map that has no renderer on this path.
+
+So the correction stands and is now sharper: **this finding cannot be closed by anything that
+improves the run-facts map.** Closing it means either rendering `pending` entries as turns, or
+carrying the failure onto the NOT DELIVERED block itself - a product decision, not a repair. What
+the operator gets today is the abandonment banner, live, with no reload; what they do not get is the
+run's own outcome, and that is unchanged from 2026-09-05.
 
 
 ---

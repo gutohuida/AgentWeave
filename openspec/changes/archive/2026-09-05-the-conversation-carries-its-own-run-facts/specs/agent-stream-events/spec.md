@@ -66,11 +66,21 @@ presents that turn exactly as it presents a run with no outcome yet.
 A client displaying a conversation SHALL refresh that conversation's run facts when a run for that agent reaches a terminal status and when the client's event stream reconnects after an interruption, rather than only when new conversation content arrives.
 
 A turn's outcome is now carried by the same response as its entries, so whatever causes that
-response to be re-read is what causes the outcome to appear. Content arriving is not sufficient, and
-two different runs prove it. A run whose end the Hub did not observe produces no output row at all.
-So does a run that ended **before its process ever started** — there was nothing to produce one — and
-that run's end *is* observed, broadcast, and reaches a client with a live stream, which is why the
-rule is stated over the run reaching a terminal status rather than over any content it wrote.
+response to be re-read is what causes the outcome to appear. Content arriving is not sufficient: a
+run whose end the Hub did not observe — one reconciled at restart, one the operator stopped — writes
+no output row at all, and its end is only ever announced by the run reaching a terminal status. That
+is why the rule is stated over the status and not over any content the run wrote.
+
+**Deliberately not stated over a run that failed before its process started.** An earlier draft of
+this requirement claimed that case too, and the phase-6 drive falsified it against the code: the
+pre-spawn failure path returns the run's queue entries to the queue (or abandons them) and commits
+that **before** it broadcasts `run_failed` (`hub/hub/api/v1/agent_trigger.py:2005-2011`), and the
+client groups turns only from entries whose `delivery_state` is `delivered`
+(`hub/ui/src/lib/agentTimelineModel.ts:45-62`). So by the moment any client
+can hear that run ended, no entry names it as delivered and there is no turn to label. The operator
+is told by the abandonment banner instead, live and with no reload. Making that case present a
+terminal label is a change to what a turn *is*, not a refresh rule; it is tracked as **F291** and is
+out of scope here.
 
 Two signals, because one run-ending is not observable by the client at all. A run reconciled at Hub
 restart has its status decided while the client is disconnected — the process that broadcasts the
@@ -97,12 +107,12 @@ costs more than it states.
 - **THEN** the conversation presents that outcome once the stream is back, without the operator
   reloading the page
 
-#### Scenario: A run that never started still says it failed
+#### Scenario: A run that wrote no output row still says how it ended
 
-- **WHEN** a run ends without its process ever having started, so it writes no output row of any
-  kind, while an operator has that conversation open
+- **WHEN** a run that produced no agent output reaches a terminal status while an operator has that
+  conversation open, and its turn's entries are still the delivered entries of that run
 - **THEN** the turn presents its terminal label as a consequence of the run reaching a terminal
-  status, without the operator reloading the page
+  status, without the operator reloading the page and without unrelated traffic arriving
 
 #### Scenario: A stopped run's outcome arrives on the run's own signal
 

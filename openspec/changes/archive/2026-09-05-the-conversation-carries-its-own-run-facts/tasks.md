@@ -280,9 +280,17 @@ Three things the pass established that the tasks only asserted:
 
 ## 5. Gates
 
-- [ ] 5.1 `pytest hub/tests/ -v` and `pytest tests/ -v`, under `py -3.11`, never bare `python`.
-- [ ] 5.2 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
-      --target-version py311`, `mypy src/`.
+- [x] 5.1 `pytest hub/tests/ -v` and `pytest tests/ -v`, under `py -3.11`, never bare `python`.
+      **CLI: 445 passed, 3 skipped, 22.35 s. Hub: 4035 passed, 86 skipped, 254 warnings,
+      26:02.** The 254 include four `PytestUnhandledThreadExceptionWarning` from
+      `aiosqlite/core.py:75` (`Event loop is closed`) — F292's mechanism, present in every
+      recent run of this suite and not a failure.
+- [x] 5.2 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
+      --target-version py311`, `mypy src/`. **All three clean** — ruff `All checks passed!`, black
+      `556 files would be left unchanged`, mypy `no issues found in 22 source files`. Note for the
+      next window: on this machine `ruff` and `mypy` are not on `PATH` as bare commands; they run as
+      `py -3.11 -m ruff` / `py -3.11 -m mypy`, and a bare invocation exits 0 from `command not
+      found` swallowed by the pipeline, which looks exactly like a pass.
 - [x] 5.3 `cd hub/ui && npm run lint && npm test`.
 - [x] 5.4 `cd hub/ui && npm run build`, then `python scripts/refresh_ui_bundle.py`. Commit
       `hub/ui/src` and `hub/hub/static/ui` together so `/health` does not report `ui_stale`.
@@ -291,36 +299,128 @@ Three things the pass established that the tasks only asserted:
 
 A passing suite is not proof of behaviour, and phase 0 exists to make this comparison possible.
 
-- [ ] 6.1 Re-run 0.2 exactly: the evicting turns in other conversations, then reload conversation A.
+- [x] 6.1 Re-run 0.2 exactly: the evicting turns in other conversations, then reload conversation A.
       Terminal label and "Worked for Ns" both present. Record the numbers beside phase 0's.
-- [ ] 6.2 Re-run 0.3 exactly: single conversation, every turn on screen labelled.
-- [ ] 6.3 Re-run 0.4 exactly: with the conversation open, restart the Hub and record how long the
+
+      **Passed.** `conv-16d76ddeb411`, `run-c663930f13c2` still absent from the timeline map
+      (50 events, 8 runs), and the browser now reads 1 boundary, `Turn stopped` × 1,
+      `['Worked for 8s']` — against phase 0's 1 boundary, all labels 0, 0 stat lines.
+
+      **A fixture defect found doing it, recorded because it nearly produced a false pass.** Phase
+      0's `watch_conv.py` picks a conversation by clicking the first node matching a *text* needle,
+      and conversations A and R were both opened with the same "history of the bicycle" prompt. The
+      first attempt silently measured R and read `Turn interrupted`/`Worked for 26s` — a pass, for
+      the wrong conversation. Phase 6 selects by id (`rail-conversation-<id>`, `AgentTree.tsx:208`);
+      the script is `watch_conv2.py`. Phase 0's own number is unaffected: R did not exist yet.
+- [x] 6.2 Re-run 0.3 exactly: single conversation, every turn on screen labelled.
+
+      **Passed.** `conv-88b2481859f1`: 10 boundaries, **10 of 10** stat lines carrying a duration,
+      against phase 0's 8 of 10. And the timeline map is *worse* than it was — 4 of the 10 runs are
+      outside it now rather than 2 — which is the cleanest evidence that the client stopped reading
+      it.
+- [x] 6.3 Re-run 0.4 exactly: with the conversation open, restart the Hub and record how long the
       interrupted turn takes to label itself **without** a reload. This is a **no-regression check,
       not a fix** — 0.4 should already have measured seconds, and the map move must not turn that
       into "never" by moving the facts onto a query the reconnect no longer refreshes. Record both
       numbers side by side. Then re-run 0.5, the pre-spawn failure: that one *is* a before/after,
       and 3.1 is what changes it.
-- [ ] 6.4 The recent view — no conversation selected — labels its turns too. That branch of the
+
+      **No regression.** Row written `interrupted` 06:28:10.27, Hub serving 06:28:11.82, label on
+      screen with no reload 06:28:21.3 — **11.0 s from the row, 9.5 s from serving**, against phase
+      0's 8.6 s and 7.1 s. Seconds, not "never".
+
+      **3.5's live half, which phase 3 could only answer from code ordering, is now measured.** A
+      client subscribed to `/api/v1/events` across a kill and restart received the successor run's
+      `queue_entry_delivered` and `run_started` on the reconnected stream and **no `run_interrupted`
+      frame at any point**, on any of 11 connections. D8 holds as a measurement, and phase 0's
+      "confound" turns out to be the mechanism: what refreshes the page is queue traffic (or the
+      reconnect invalidation), never the terminal event itself.
+
+      **0.5 re-run: the before/after shows no change, and the task's premise is wrong.** The server
+      half did change — both failing runs are now in the chat response's `runs` map as `failed`,
+      where the field did not exist before. The screen did not: 0 turn boundaries, 0 labels, two
+      `NOT DELIVERED` blocks, watched for 80 s with a second message sent live. **Why, read rather
+      than inferred:** `groupIntoTurns` (`agentTimelineModel.ts:45-62`) partitions on
+      `delivery_state === 'delivered'` and never looks at `run_id`, and the pre-spawn path commits
+      `return_run_entries` *before* it broadcasts `run_failed` (`agent_trigger.py:2005-2011`) — so
+      by the moment any client can hear the run ended, no entry names it as delivered. 3.1 is
+      **not** what changes this and cannot be. F291 stays open; the ADDED requirement's scenario
+      that claimed this case was narrowed to what is true before syncing.
+- [x] 6.4 The recent view — no conversation selected — labels its turns too. That branch of the
       ternary is untested by 6.1-6.3.
-- [ ] 6.5 Measure the added query's cost on a conversation large enough to matter: response time for
+
+      **Passed.** `GET /agent/scribe050237/chat`: 50 entries naming 11 distinct runs, `runs` map of
+      11, nothing unlabelled; the pane renders 2 boundaries, both with stat lines, and the one
+      non-`completed` outcome in view carries its `Turn interrupted` label.
+- [x] 6.5 Measure the added query's cost on a conversation large enough to matter: response time for
       `GET /agent/{a}/chat/{cid}` before and after, on the same fixture. Record it rather than
       asserting it is negligible (design, Risks).
-- [ ] 6.6 Teardown: no job left enabled, fixture project named in the write-up so the review page
+
+      **Measured by swapping `agent_chat.py` for `272adce^`'s copy and restarting**, n=50 each, same
+      Hub and database, 50 entries / 10 distinct runs: before `median 16.4 mean 19.3 p90 30.2` ms,
+      after `median 16.2 mean 18.9 p90 31.6` ms. **Below the noise floor** — the "after" median is
+      0.2 ms faster, which is the honest way to say it is not measurable here. Bound stated: that is
+      the largest conversation this fixture has, and it is not large.
+- [x] 6.6 Teardown: no job left enabled, fixture project named in the write-up so the review page
       can cite it.
-- [ ] 6.7 **The working indicator, live** (design D9). Stop a turn, then immediately send another
+
+      `GET /jobs` and `GET /loops` both `[]`. Project `proj-9042770d2ae3` on the `f274p0` profile
+      database, port `8012`, left in place and named in `FINDINGS.md`. `:8000` untouched (PID 10556
+      before and after); nothing listening on `:8010` at any point.
+- [x] 6.7 **The working indicator, live** (design D9). Stop a turn, then immediately send another
       message, and watch the indicator across the window between the run being committed and its
       first output row arriving. Today the timeline map covers that window; after this change a
       delivered queue entry is what covers it. Record what the operator sees, not what the fixture
       returns. Then do the negative half: with conversation A on screen, start a run in conversation
       B on the same agent and confirm A's indicator stays quiet — that is the narrowing D9 chose.
 
+      **Passed, and D9's reasoning is confirmed by the strongest available case.** Stop at 06:25:58
+      and an immediate re-send returned **`run_id: null`** — the agent was still busy, so the message
+      queued and there was no run row at all for a map to hold. One second later the indicator was
+      up again at `Working · 0s` beside a settled `Turn stopped` turn, re-based to the new turn's
+      first entry rather than carrying the old elapsed forward, and it stayed up for the whole 7 s
+      until the reply landed. **The delivered queue entry is what covers the window**, exactly as
+      the rewritten comment says. Bound stated: the poll loop's real cadence is ~1.0 s (250 ms sleep
+      plus the DOM read), so this bounds any dark frame under ~1.1 s rather than proving zero.
+
+      **Negative half passed.** Conversation A on screen, a run started and completed in another
+      conversation on the same agent (06:27:39, `run-95ae0a5ed7b1`): over 45 s A's pane did not
+      change once — indicator absent throughout, 1 boundary, `Turn stopped` 1, 1 stat line.
+
+      Watched with `watch_indicator.py`, which polls the indicator's own node
+      (`data-testid="timeline-working-indicator"`). Phase 0's watcher tested `"working" in body`,
+      which is a **false positive** here: the tool-summary line reads `Work · 1 step`, so a settled
+      conversation reported `working: True`.
+
 ## 7. Close the ledger
 
-- [ ] 7.1 Set F274's and F291's `**Status:**` lines in `scripts/drive/FINDINGS.md` to
+- [x] 7.1 Set F274's and F291's `**Status:**` lines in `scripts/drive/FINDINGS.md` to
       `fixed <sha>` and add the phase-6 numbers under each. F290 is already retracted and needs
       nothing.
-- [ ] 7.2 Correct the ledger's severity-A summary lines (`FINDINGS.md:96-112`), which name F274 as
+
+      **F274 done** — `fixed 272adce (server) + 503a6ff (client), driven 2026-09-09`, with a phase-6
+      section carrying the before/after table, the indicator trace, the SSE measurement and the
+      query-cost numbers.
+
+      **F291 refused, with a measurement rather than a skip.** This task assumes 3.1 fixes it; 6.3
+      shows it does not, and shows why in one line of the client. F291's `Status` now says
+      *still open*, names this task as wrong, and carries its own phase-6 section.
+- [x] 7.2 Correct the ledger's severity-A summary lines (`FINDINGS.md:96-112`), which name F274 as
       open.
-- [ ] 7.3 `openspec-sync-specs`, then `openspec-archive-change`. The MODIFIED requirement replaces
+
+      **Done as an appended revision, not an edit — deliberately.** Those lines are dated entries
+      (2026-09-03, 2026-09-04) in an append-only sequence, and that page's own post-mortem is about
+      a count that went wrong by being edited rather than recomputed. Rewriting a dated entry to say
+      something its date did not say is the same error in a politer form. The new revision states
+      the current list (**one: F142**) and says why the historical lines were left alone.
+- [x] 7.3 `openspec-sync-specs`, then `openspec-archive-change`. The MODIFIED requirement replaces
       the text at `openspec/specs/agent-stream-events/spec.md:299` in full, including the corrected
       cross-reference.
+
+      **One amendment to the delta made first, on the strength of 6.3.** The ADDED requirement's
+      scenario *"A run that never started still says it failed"* is unsatisfiable on this code, and
+      syncing it would have written a false sentence into the current-behaviour corpus. It is
+      narrowed to *"A run that wrote no output row still says how it ended"* — the case that is real
+      and was measured (stop, and restart-reconciliation) — and the requirement's prose now names
+      the pre-spawn case as deliberately out of scope, with the code reason and the F291 pointer.
+      `openspec validate --strict` passes.

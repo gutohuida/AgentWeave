@@ -81,7 +81,11 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 - **`shutil.rmtree(..., ignore_errors=True)` is a lie on Windows** — it silently leaves the tree.
 - **`sqlite3` is not on PATH.** Use `py -3.11 -c "import sqlite3; ..."`. *(Confirmed 2026-09-04.)*
 - **`ruff` and `mypy` are not on PATH in Git Bash.** Use `py -3.11 -m ruff`, `py -3.11 -m mypy`.
-  *(Confirmed 2026-09-04.)*
+  *(Confirmed 2026-09-04.)* **And the failure is silent, which is why this entry keeps being
+  re-learned** *(2026-09-09)*: `ruff check src/ hub/ tests/ 2>&1 | tail -5` prints
+  `command not found` and then reports **exit 0**, because `$?` is the pipeline's last stage. A
+  lint gate written that way reads as a pass while nothing ran. `black` *is* on PATH, so two of
+  the three commands in the documented gate work and only the other two lie.
 - **`pip` warns about two invalid distributions** in Python311 site-packages (`~gentweave-ai`,
   `~nteragent-framework`) — leftover partial uninstalls. Harmless noise, not a failure.
   *(Observed 2026-09-04.)*
