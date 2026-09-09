@@ -183,10 +183,23 @@ the census, and any later reading of an F292 CI negative, must know it.
 
 ## 4. Reconcile and record
 
-- [ ] 4.1 Run the CI-gating commands over the CI-gating paths:
+- [x] 4.1 Run the CI-gating commands over the CI-gating paths:
   `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`,
   `mypy src/`, `pytest hub/tests/ -v` under `py -3.11`.
-- [ ] 4.2 Amend `F295` in `scripts/drive/FINDINGS.md` with R1's correction to its trigger — that
+  **Done 2026-09-09 (night, iteration 7), all four green on the finished tree:** `ruff` — all checks
+  passed; `black --check` — 552 files unchanged; `mypy src/` — no issues in 22 source files;
+  `py -3.11 -m pytest hub/tests/ -q` — **3981 passed, 86 skipped, exit 0, 30:37**. The count is the
+  window's opening measurement (3972) plus exactly this change's nine tests, and 30:37 is a third
+  point on the suite's 14:39/24:50/46:41 spread rather than a new one.
+  **Measured and not claimed as caused:** the run still emits the dead-worker
+  `PytestUnhandledThreadExceptionWarning` (`aiosqlite/core.py:66` then `:75`, `Event loop is
+  closed`) — 10 events, 20 warnings, across 10 pre-existing tests and none of the nine new ones.
+  Iteration 1's pre-fix run of the same suite recorded four. Both runs pass; the guard removes the
+  *hang on reuse* of a dead connection, not the traceback a worker emits when its loop closes under
+  an in-flight call, so noise of this kind surviving is what `proposal.md`'s "What this deliberately
+  does not change" predicts. Whether 4 -> 10 is drift, load, or this change is **not established**
+  by two samples of a load-dependent number.
+- [x] 4.2 Amend `F295` in `scripts/drive/FINDINGS.md` with R1's correction to its trigger — that
   cancellation with a live loop is benign and loop closure is the precondition — and with what R2
   and R3 concluded about its severity. R3's two additions to that account: the production
   consequence is narrower again, because `agentweave stop` on Windows force-kills and runs no
@@ -198,7 +211,15 @@ the census, and any later reading of an F292 CI negative, must know it.
   production half is bounded by process exit, on a measurement R1 did not have — SQLAlchemy, not
   aiosqlite, is what makes the worker threads daemon threads. Do not rewrite the finding's history; append, as the file's
   convention is.
-- [ ] 4.3 Delete `testbed/scratch/f295/` or leave it, but do not commit it — it is scratch by
+- [x] 4.3 Delete `testbed/scratch/f295/` or leave it, but do not commit it — it is scratch by
   construction and the measurements it produced are quoted in `proposal.md` and `design.md`, which
   are what the record needs.
-- [ ] 4.4 `openspec-sync-specs` then `openspec-archive-change` once the above is verified.
+- [x] 4.4 `openspec-sync-specs` then `openspec-archive-change` once the above is verified.
+  **Done 2026-09-09 (night, iteration 7).** Both `ADDED` requirements from
+  `specs/app-lifecycle/spec.md` were appended to `openspec/specs/app-lifecycle/spec.md` verbatim
+  (diff-checked identical ignoring blank lines), `openspec validate <change> --strict` and
+  `openspec validate --specs app-lifecycle --strict` both pass, and the change directory moves to
+  `openspec/changes/archive/` under its own name, as this repository's archive convention is. In
+  the same commit, and because the archive is what makes them true: `F295`'s `Status:` line in
+  `scripts/drive/FINDINGS.md` and that file's index paragraph. `F295` is recorded as **built, not
+  driven** — `c1-drive` is where the second half of this file's stricter retirement test happens.

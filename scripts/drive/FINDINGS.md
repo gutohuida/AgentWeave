@@ -308,6 +308,25 @@ morning's work and reproduced it: `F142` open, `F52`/`F274`/`F295` in conflict (
 every other A resolved. **That agreement is the reason the instrument was then attacked rather than
 trusted.**
 
+**Revised 2026-09-09 (night window, iteration 7): the open severity-A list is two — F274 and
+F142 — under the looser definition, and still three under the stricter one, because F295's change is
+built but not driven.**
+
+F295's fix shipped tonight as `2026-09-07-a-dead-connection-is-never-handed-back-out`: the pool guard
+`00d72a8`, the shutdown settle `0f06bea`, nine tests across two files
+(`2d399c7`, `9a0fdde`), and a 14-mutation check `2046c4e` in which 11 mutations each named a victim
+and every shipped test is named by at least one. The three preceding revisions on this page all
+retired findings by *searching* rather than building; this one is the first in the sequence that
+retires one with product code.
+
+**It is deliberately not claimed as fully retired.** The stricter definition this page adopted on
+2026-09-06 — a change built **and** a drive observing the defect gone — is met only in its first
+half. `c1-drive` is a separate open queue item for the same window and is where the second half
+happens. Reporting "two" without this paragraph would be the fourth error in the sequence above:
+not a stale count, a stale definition, or a stale search, but a **premature** one — the failure mode
+that the stricter definition was introduced to prevent, committed by the window that introduced it.
+The 41-heading census is unchanged; no new severity-A section was written.
+
 ### Two more defects, found the same day by an adversarial review that was told to falsify
 
 **The first three below were found by me. These two were found by an Opus review agent spawned at
@@ -22099,7 +22118,13 @@ finding, and nothing else.
 
 ## F295 (A) - a cancelled or superseded run's background task can leave a permanently dead worker thread, and any later reuse of its connection hangs forever
 
-**Status:** open, not specced, not fixed. Split out from F292's entry 2026-09-06, where it was found
+**Status:** **fixed** `00d72a8` (the pool guard) and `0f06bea` (the shutdown settle), specced,
+tested `2d399c7`/`9a0fdde`/`2046c4e`, and archived as
+`2026-09-07-a-dead-connection-is-never-handed-back-out`. **Not yet driven** — under this file's
+stricter definition that is what a finding needs to leave the open-A list, so F295 sits exactly
+where F142 sits: shipped, and owed a drive. Read *"The change that fixed it"* at the end of this
+entry before acting on anything above it; three rounds corrected the trigger this heading names.
+Split out from F292's entry 2026-09-06, where it was found
 while chasing F292's alembic hypothesis — it is a distinct, more general and more severe defect than
 the CI flake it was discovered underneath, so it gets its own number rather than staying folded into
 an entry framed around test-suite intermittency. Read `scripts/drive/FINDINGS.md`'s F292 entry, the
@@ -22155,6 +22180,102 @@ establishing whether `_execute_run`'s database work can be made to either (a) ge
 underlying thread on cancellation rather than only the coroutine, or (b) run on a connection whose
 worker-thread lifetime is decoupled from any single caller's event loop. Queued in
 `spec-queue/DIRECTION.md` for the day window's spec loop rather than repaired ad hoc.
+
+
+### The change that fixed it — what three rounds and the build corrected in the account above
+
+**Appended 2026-09-09 (night, iteration 7) by
+`openspec/changes/2026-09-07-a-dead-connection-is-never-handed-back-out`.** Everything above this
+heading is the entry as it was written on 2026-09-06 and is left exactly as written, including the
+parts the rounds went on to correct — a correction is only legible against what it corrected. Read
+the change's `proposal.md` for the full derivation; this is the summary the next reader of *this
+file* needs.
+
+**R1 corrected the trigger, by measurement.** The entry above says a **cancelled** run's background
+task leaves the dead thread. Cancellation on its own is benign, and the two shapes were run side by
+side (`testbed/scratch/f295/probe_cancel.py`, `aiosqlite 0.22.1`): coroutine cancelled with the loop
+**alive** → worker alive, connection reuse **succeeds**; coroutine cancelled with the loop
+**closed** under the in-flight call → worker dead, reuse **hangs**. The reason is two lines up from
+the crash the entry quotes: the worker reports through `set_result`, which is
+`if not fut.done(): fut.set_result(...)` (`aiosqlite/core.py:32-34`), and a cancelled future is
+already `done()`, so the report is a no-op and the thread returns to `tx.get()`. **Loop closure is
+the precondition; cancellation is only how a run gets abandoned mid-write.** The accurate statement
+of the defect is *a pooled connection can outlive the event loop that last queued work on it, and
+nothing anywhere notices*.
+
+**R2 and R3 both narrowed the severity, on facts R1 did not have. Neither overturned the severity
+question itself** — R2 reproduced the mechanism independently rather than quoting R1's numbers, and
+left whether `F295` stays an A to the review page. Taken in order:
+
+- The Hub's only loop close is **process exit**, so what production gets today is an uncaught
+  worker-thread traceback on a process that is leaving anyway. R2 attacked "leaving anyway" — an
+  `aiosqlite` worker is non-daemon (`core.py:90`) and should block `threading._shutdown` — and it
+  held: SQLAlchemy's dialect sets `connection._thread.daemon = True` at connect
+  (`sqlalchemy/dialects/sqlite/aiosqlite.py:412`, 2.0.50), measured through an engine of
+  `hub/hub/db/engine.py`'s shape which exited in 0.35s with the engine never disposed.
+- The entry's larger blast radius — the **test suite**, which closes a loop per test — is **one
+  path, not two**. `conftest.py` disposes the engine after every test, so the pooled-reuse
+  precondition is not routinely reachable; the single way past it is the settle's own pass cap,
+  whose `for…else: raise` (`:364-368`) fires *before* `await _REAL_ENGINE.dispose()` (`:369`). The
+  other candidate path was measured away by R3: a checked-out connection is detached rather than
+  closed, but `dispose()` ends with `self.pool = self.pool.recreate()`, so it belongs to a pool the
+  engine no longer references and can never be handed out again (`probe_r3_dispose_pool.py`).
+- R3 sharpened *what the hazard is*, which changes how the entry above should be read: it is **the
+  dead worker thread**, not the outlived loop. A connection left **idle** in the pool while its
+  creating loop closes, then used from a second loop, **completes normally** — the guard fired zero
+  times (`probe_r3_idle_carryover.py`). `aiosqlite` builds each call's future on the *calling* loop
+  and its work queue is a thread-safe `SimpleQueue`, so nothing in a connection is bound to its
+  creating loop except a call **in flight**. The guard's condition is therefore necessary *and*
+  sufficient — and `conftest.py:293`'s stated mechanism ("bound to a loop that no longer exists") is
+  not by itself enough to fail.
+- R3 narrowed the production consequence once more, from a direction nobody had looked: **the
+  product's own stop command never reaches this shutdown at all.** `agentweave stop` on Windows runs
+  `taskkill /PID <pid> /F` with no signal first (`src/agentweave/cli.py:534-535`, despite a docstring
+  promising "graceful SIGTERM, then forced"), and measured, that runs no lifespan teardown. Filed
+  separately as **`F297`**.
+
+**R3 also moved the fix, and this is the correction that mattered most.** A checkout-only guard —
+the obvious repair, and what R1 proposed — would have made things **strictly worse**:
+`engine.dispose()` never dispatches `checkout`, so the guard cannot see the connection it is
+closing, and dispose on a dead-worker connection idle in the pool hangs forever (measured to a
+40-second kill, `probe_r3_dispose_hang.py`). The neutralisation therefore lives on the **`close`**
+pool event, which SQLAlchemy dispatches before every close — checkout invalidation, `dispose()`,
+checkin close and retry-exhausted abandon alike — and the checkout listener only detects. That is
+what shipped.
+
+### Two things measured while building it, both of which cost time and neither of which is in the proposal
+
+**1. `asyncio.wait_for` does not bound `engine.dispose()`.** The proposal establishes that a timeout
+does not rescue a hung *statement*; the same is true of dispose, and it is worth stating separately
+because a test author reaches for `wait_for` as a safety net and it silently is not one. Measured
+(`testbed/scratch/f295/probe_310_wait_for_bound.py`, uncommitted): with the `close` listener
+reverted, a 5-second bound around `await engine.dispose()` **had not fired 60 seconds later**. The
+dispose reaches aiosqlite through SQLAlchemy's greenlet bridge, and the cancellation `wait_for`
+issues has to unwind through it. The *same* `wait_for` **does** bound the checkout/execute path.
+The practical consequence is written into `hub/tests/test_dead_worker_connection.py`'s module
+docstring: a regression in the `close` listener costs one named test failure **and then a stuck CI
+job**, because `conftest.py`'s per-test dispose hangs and no assertion in that file can bound it.
+Confirmed as mutation 4 of 14 — one named failure, then a hang killed at 180s, exit 124.
+
+**2. `caplog` does not survive a lifespan startup.** A test that asserts on a teardown warning
+cannot use `caplog` if it drove the real `lifespan()`: startup runs `init_db`, which runs Alembic,
+whose `fileConfig` **replaces the root logger's handlers** with a single `StreamHandler`, so
+pytest's capture handler is gone by the time the teardown logs. The warning is emitted and the
+assertion fails with an empty record list, which reads exactly like the product not logging.
+Attaching a recorder to the `hub.main` logger itself survives, which is what that file's
+`_warnings_from()` does.
+
+### The gap this change ships with, stated rather than left to be discovered
+
+Fourteen mutations were run against the nine tests (11 named a victim; every shipped test is named
+by at least one). Three named nobody, and two of those are not gaps — the non-aiosqlite `getattr`
+guard covers a state that cannot occur here, and the `close_detached` listener is unreachable, as
+its own docstring says. **The third is a real gap: moving `_settle_background_runs()` to *before*
+`terminate_all_active_runs()` and `shutdown_scheduler()` fails nothing.** That ordering is argued at
+length in the change's task 2.4 and is held by a comment in `hub/hub/main.py`, not by a test. The
+tests pin that the settle happens before `engine.dispose()` — a `_DisposeProbe` samples `task.done()`
+at the instant dispose is entered — and they do not pin its position relative to the two teardown
+steps above it. A future edit that reorders those is free to do so silently.
 
 
 ## F296 (C, harness) - a drive assertion that can never be non-zero was reported as evidence about the product
