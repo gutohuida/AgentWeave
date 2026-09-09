@@ -23871,3 +23871,83 @@ api("POST", f"/projects/{P}/agent/trigger", {"agent": NAME, "message":
 PY
 # the task exists; the turn was told `no MCP tools this turn`
 ```
+
+## F303 (B) — four drive scripts kept defaulting a Hub key for a day after the sweep that removed it, and the guard could not see them because the literal was the wrong shape
+
+**Status:** fixed 2026-09-09 — day window, D-4, in the commit carrying this entry. Both halves.
+
+The 2026-09-08 sweep (`ROADMAP` 6.2/6.3) removed a published `aw_live_` key from
+`scripts/drive/aw.py` and its siblings, gated the directory with
+`tests/test_drive_key_guard.py`, and left a count behind: *"10 literals in 8 files remain, all
+outside `scripts/drive/`"*. Today's recount returns **exactly 10 real-shaped literals in 8 files** —
+the number was right to the digit. **The sentence attached to it was false.** Four scripts in that
+directory still carried
+
+```python
+KEY = os.environ.get("AW_KEY", "aw_live_<33 characters>")
+```
+
+— `t_d1_catalog_is_the_only_door.py:44`, `t_d4_instructions_failed_load.py:59`,
+`t_n3_runner_model_picker_ui.py:38`, `t_n4_runner_refusal_reaches_the_operator.py:45` — each
+sending it straight into `Authorization: Bearer`.
+
+**Why nothing saw them.** Both instruments ask about *shape*. The recount and the guard match
+`aw_live_[0-9a-f]{32}`, a real key's shape; the surviving literal is 33 characters, not hex, one
+character repeated 28 times — a hand-written placeholder. So it is not a disclosed secret, and that
+is exactly what made it invisible: **the count was measuring disclosure while the guard was
+supposed to be preventing a behaviour**, and only one of those two questions is about shape. The
+behaviour is the one `require_key()` exists to stop, described in `aw.py`'s own comment: an unset
+`AW_KEY` produces a bogus Bearer token, the Hub answers **401**, and the script carries on with
+exit code 0.
+
+**Fixed by asking the shape-independent question.** All four now call `require_key()`. The new gate
+`test_no_drive_script_defaults_the_key_to_anything` rejects any `os.environ.get("AW_KEY", <value>)`
+whose default is not empty, of any shape. Mutation-checked, four ways:
+
+| mutation | old shape-based guard | new default-based guard |
+|---|---|---|
+| the placeholder-shaped literal these four carried | **passes** (blind) | **fails** |
+| a real `aw_live_` + 32 hex literal | fails | fails |
+| `os.environ.get("AW_KEY", "")` | passes | passes |
+| `os.environ.get("AW_KEY")` | passes | passes |
+
+Each of the four was then run with `AW_KEY` unset: all exit 1 with the local refusal, before any
+HTTP. Positive control — with a key set, all four pass the key check and reach the next statement
+(the `:8000` refusal), so the guard gates emptiness and not use.
+
+### The second half: the rotated key had somewhere to come back from
+
+`ROADMAP` 6.3 records the disclosed key as rotated by the operator on 2026-09-08 and its ten
+surviving literals as *"all dead against a rotated key"*. Both statements are true and together
+they are not the whole answer. Measured today:
+
+- **No database on this machine honours any of the three distinct real-shaped literals.** All ten
+  sites map to three values; every one was checked against `operator_credentials` and `api_keys` in
+  all three local databases (`trial`, `live`, `f274p0`) — **no rows**. Checked on copies; the
+  `live` profile on :8000 was read, never touched.
+- **`hub/.env` still held the disclosed key**, untracked and gitignored, mtime 2026-03-31. It is
+  the only file on this machine outside the repository's own text that did.
+- **That file is loaded by the documented trial-Hub launch.** `hub/hub/config.py:21` reads
+  `.env` relative to the working directory, and CLAUDE.md's launch command runs from `hub/`.
+  Measured: `Settings()` from `cwd=hub` returns the value in `.env`.
+- **A fresh database mints that value verbatim.** `_seed_operator_credential`
+  (`hub/hub/db/engine.py:336-341`) auto-generates only when the configured key is empty or is the
+  documented `a1b2c3…` placeholder; anything else becomes the instance operator credential as
+  written. Measured on a throwaway in-memory database, with the placeholder as a negative control.
+
+So the disclosed key was dead in every store and one fresh-database launch from the documented
+directory away from being alive again — which is what the 2026-09-07 trial rebuild was. It did not
+happen (the trial credential does not match), but nothing prevented it. **Rotated in `hub/.env`
+today**, one line, same length, no other line touched; the file stays untracked, so no key literal
+enters the repository by this fix. `Settings()` re-read afterwards confirms the new value is what
+the launch path now sees.
+
+**The lesson, and it is the same one twice.** A count of disclosed secrets and a guard against a
+bad practice are different instruments, and 6.3 used one number for both. The other eight literals
+are correctly classified and stay: the documented placeholder (`hub/.env.example:18`,
+`hub/hub/db/engine.py:34`, `hub/tests/test_setup.py:58`) is documentation and is asserted upon; the
+redaction fixtures (`hub/tests/test_operator_is_told_the_truth.py:41,59,128`) exist *because* the
+key leaked and deleting them deletes the regression; the two historical loop documents and this
+ledger's own transcript line are the record of the leak, already public in git history, where
+scrubbing the working tree would change nothing about disclosure and would destroy the account of
+it.

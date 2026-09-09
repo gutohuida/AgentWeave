@@ -31,11 +31,15 @@ import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8")
 
+from aw import require_key  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 HUB = os.environ.get("AW_HUB", "http://127.0.0.1:8011")
 UI = os.environ.get("AW_UI", "http://127.0.0.1:5174")
-KEY = os.environ.get("AW_KEY", "aw_live_n0901aaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+# No default: this file is tracked in a public repository, and a defaulted key is not a
+# convenience -- it turns an unset AW_KEY into a 401 with exit code 0. The literal removed here
+# was placeholder-shaped, which is why the 2026-09-07 sweep and its guard both walked past it.
+KEY = require_key()
 if HUB.endswith(":8000") or UI.endswith(":8000"):
     print("REFUSING TO RUN: 8000 is the operator's real usage.")
     sys.exit(1)

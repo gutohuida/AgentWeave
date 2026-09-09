@@ -90,3 +90,35 @@ def test_a_key_that_is_set_is_not_refused(monkeypatch):
 
     assert aw.api("GET", "/projects") == (200, [])
     assert seen["auth"] == "Bearer aw_live_" + "0" * 32
+
+
+# `os.environ.get("AW_KEY", <default>)`, with the default captured. Non-greedy up to the closing
+# paren: every call site in `scripts/drive/` fits on one line, and a multi-line one would simply
+# not match rather than match wrongly.
+AW_KEY_DEFAULT = re.compile(r"""os\.environ\.get\(\s*["']AW_KEY["']\s*,\s*(?P<default>[^)]*)\)""")
+
+
+def test_no_drive_script_defaults_the_key_to_anything():
+    """The property is the default, not the shape of what is defaulted.
+
+    `test_no_drive_script_carries_a_hub_key_literal` above gates on `aw_live_[0-9a-f]{32}` -- a
+    real key's shape. Four scripts sat under it for a day carrying
+    `os.environ.get("AW_KEY", "aw_live_<33 non-hex characters>")`: placeholder-shaped, so the
+    regex walked past, while the behaviour was exactly the one the guard exists to prevent -- an
+    unset AW_KEY sends a bogus Bearer token, the Hub answers 401, and the script carries on.
+
+    So this gate asks the shape-independent question instead. A drive script may read AW_KEY with
+    no default (`os.environ.get("AW_KEY")`) or with an empty one -- both leave the emptiness
+    visible to `require_key()` or to the script's own `if not KEY` check. It may not substitute a
+    value of any shape, because a substituted value is a key the script never had.
+    """
+    offenders = []
+    for p in sorted(DRIVE.glob("*.py")):
+        for i, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+            m = AW_KEY_DEFAULT.search(line)
+            if m and m.group("default").strip() not in ('""', "''"):
+                offenders.append(f"{p.name}:{i}")
+    assert offenders == [], (
+        "drive scripts substituting a value for an unset AW_KEY "
+        f"(use `require_key()` or an empty default): {offenders}"
+    )
