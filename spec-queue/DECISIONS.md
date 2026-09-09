@@ -578,6 +578,93 @@ serving four-day-old code.
 
 ## Decided
 
+### Four verdicts, 2026-09-09 morning — and three of them are second answers
+
+**DECIDED 2026-09-09 ~08:55, by the operator, in session**, on a RESUME session's reading of the
+night window's result and of the verification pass immediately below.
+
+**Three of these four had already been decided once.** Each was re-put because checking the verdict
+against the code found something the verdict did not know — which is the verification pass working
+as designed, and the reason a decided-but-unbuilt item is not the same as a closed one.
+
+#### 1. F299 / F300 / F301 — the workspace approver learns to recognise a URL
+
+**DECIDED: teach `_decide` that the run's own Hub address is not a filesystem path.** Raised by the
+night window at iteration 12 and **enlarged the same night** by the `c2-verify` drives, which
+established there is **no posture on this machine on which a `claude` run can use the HTTP form of
+the capability plane under its own power.**
+
+The mechanism, verified in code this morning: `_ABSOLUTE_PATH_RE` (`hub/hub/mcp_server.py:936`)
+matches `(?:[A-Za-z]:[\\/]|/)[^\s"'|;&><)]*`, so the `//127.0.0.1:8010/...` inside a URL is captured
+as an absolute path, checked against the run's workspace, and denied for being outside it. That is
+why `hub_client: "cli"` — documented at `src/agentweave/config.py:714` as *"uncomment if MCP is
+blocked by company policy"* — **restores writes and not access.**
+
+**Why this option and not the other two.** It is the only one that widens nothing: filesystem
+containment is untouched, and what changes is a *misclassification*, not a policy. The rejected
+alternatives, both defensible:
+
+- **Fall back to `acceptEdits` when the plane is unreachable.** It has a rationale already in the
+  code — `DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER = "acceptEdits"`
+  (`hub/hub/runner_commands.py:73`), whose comment says naming an absent approver *"would refuse
+  everything, which is precisely the failure `acceptEdits` was introduced to end."* Rejected because
+  `acceptEdits` **has no path check at all**, so it answers a reachability problem by widening
+  filesystem containment, and `agent-capability-plane` reserves containment to the operator.
+- **Leave the posture and document the workaround.** Rejected: it leaves F299 open and still gives
+  the run no way to reach the plane.
+
+**What the implementing change must not do:** it must not make the approver permissive about URLs in
+general. The recognised case is the run's *own* Hub base URL, which the Hub knows because it minted
+the run's credential. Anything broader is a second decision and is not covered by this verdict.
+
+**Note for whoever specs it.** The Hub cannot today detect that a harness blocks MCP — the config
+declares MCP available and the code believes it. This verdict deliberately does **not** ask for that
+detection; it makes the declared-and-blocked case survivable instead.
+
+#### 2. Entry 19 — re-decided, narrowed to the hazard that still exists
+
+**DECIDED: refuse to start when no profile is named, not when a relative default is used.** The
+original verdict (2026-09-08) was taken against a world repaired by `44a1ae5` on **2026-08-17** —
+`_default_database_url()` has been absolute for three weeks and `hub/data/` does not exist. See the
+verification pass below for the full evidence.
+
+What survives: a bare `uvicorn hub.main:app` with **`DATABASE_URL` unset** still opens
+`~/.agentweave/hub/data/agentweave.db` rather than the profile database everything else uses. Fixed,
+not cwd-dependent, so it can no longer produce a different database per launch directory — a much
+smaller defect, and still one that has cost time. `CLAUDE.md` already treats a reappearing
+`hub/data/` as *"a symptom, not a database to preserve"*, which is this defect leaving a trace.
+
+**The binding constraint on any implementation:** `CLAUDE.md`'s own documented trial-Hub start
+command **is** a bare `uvicorn hub.main:app` from `hub/`, with `DATABASE_URL` set explicitly. The
+refusal must key on the variable being unset and must leave that command working. A change that
+breaks the documented start command has implemented the retired verdict, not this one.
+
+#### 3. `PATCH /queue/settings` — move the reschedule into the PUT, then remove the route
+
+**DECIDED: close the gap first, then delete.** The 2026-09-08 verdict said *remove*; the
+verification pass found the route also re-schedules every queued agent (`inbound_queue.py:104-107`),
+and `schedule_agent` appears **0 times** in `projects.py`. So `PUT /projects/{id}/settings` writes
+the same four columns and **does not reschedule** — a real gap that exists today, independent of
+this route and independent of whether it is removed.
+
+Order matters and is part of the verdict: **the reschedule moves into the PUT before the route
+goes.** Removing first and porting later leaves a window in which neither path reschedules.
+
+Rejected: dropping route and side effect together. It is defensible — the UI never calls the route,
+confirmed independently by `n10`'s no-client-anywhere list — but it would delete a behaviour the
+surviving endpoint lacks, and the operator's standing preference is the cleanest design rather than
+the least work.
+
+#### 4. The overseer artifacts — the logs stay, the OV review page goes
+
+**DECIDED: keep `.claude/autonomous/2026-09-07-overseer-log.md` and `STATE-overseer.json`; delete
+`2026-09-07-sidequest-review.html`.** Raised on 2026-09-08 and unanswered until now.
+
+The split is by *subject*, not by file type. The overseer log and its state are records of a window
+run of **this** repository's own loop, the same class as the day and night logs that stay tracked.
+The sidequest review page is `OV-` content, and the `OV-` series left this repo on 2026-09-08 under
+*"I want only things for agentweave here in this repo."*
+
 ### Verification pass, 2026-09-08 — do the 2026-09-08 verdicts still hold?
 
 At the operator's instruction, *"review all of those works to make sure they still hold."* Every
