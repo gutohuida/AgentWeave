@@ -15,8 +15,28 @@ Agent capability API┘          │
 
 The local operator authenticates with one automatically discovered instance credential; project
 identity is explicit in operator API paths and does not come from authentication. Each running
-agent receives a short-lived run token bound to its project, agent identity, and active run. HTTP,
-MCP, and agent CLI adapters expose the same governed action set.
+agent receives a short-lived run token bound to its project, agent identity, and active run. Two
+adapters — HTTP and MCP — expose the same governed action set; there is no third. Identity is never
+accepted from a request body or header, on either adapter.
+
+## The agent capability plane
+
+The plane is one HTTP contract with two front doors, and a run is told which one it has at turn
+start.
+
+- **HTTP** is the contract. Its operations live under `/api/v1/agent-actions`, the Hub's own
+  address reaches the spawned run as `HUB_URL`, and the run's credential reaches it as
+  `AW_RUN_TOKEN`, presented as `Authorization: Bearer`. Nothing else is needed: a run holding those
+  two environment variables can send messages, create and update tasks, ask the operator a
+  question, record evidence, and submit specification documents.
+- **MCP** is an adapter over that contract, injected into harnesses that accept it. Every tool it
+  serves is one HTTP operation; the tool's arguments are not always spelled the way the route
+  spells them, which is why the two renderings are generated from one description
+  (`hub/hub/api/v1/agents.py`) rather than written twice.
+
+A run whose harness has no MCP is therefore not a run without capability. It is told the HTTP form
+of the same operations — variables named, values never interpolated, because the notice is
+prepended to the durable turn prompt.
 
 ## Project and filesystem boundary
 

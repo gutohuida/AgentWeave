@@ -259,20 +259,20 @@ forever.
 
 ## 5. Docs
 
-- [ ] 5.1 `docs/architecture/overview.md:18-19` claims three adapters (HTTP, MCP, agent CLI). Two
+- [x] 5.1 `docs/architecture/overview.md:18-19` claims three adapters (HTTP, MCP, agent CLI). Two
   exist. Correct it to two and, since HTTP is now genuinely agent-reachable, elaborate the HTTP half
   — it is currently true and explained nowhere.
-- [ ] 5.2 Do **not** touch `.claude/skills/copilot-test-setup/SKILL.md` in this change. It describes
+- [x] 5.2 Do **not** touch `.claude/skills/copilot-test-setup/SKILL.md` in this change. It describes
   a watchdog architecture deleted on 2026-08-03 and needs deleting or rewriting, but it belongs to
   the Copilot change; doing it here would mix the two changes this proposal separated on purpose.
 
 ## 6. Verification — including the two things no round could check
 
-- [ ] 6.1 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
+- [x] 6.1 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
   hub/tests/ tests/`, `mypy src/`. Tests under `py -3.11`, never bare `python`. Say in the log that
   the TypeScript set was not required and why (no UI file changed).
 - [ ] 6.2 `pytest hub/tests/ -v`.
-- [ ] 6.3 **Drive it.** `proposal.md` names two claims that are source readings and nothing more,
+- [x] 6.3 **Drive it.** `proposal.md` names two claims that are source readings and nothing more,
   because this window could not start a Hub. First: that a request to `/api/v1/agent-actions/*`
   carrying `AW_RUN_TOKEN` as a bearer token succeeds **from inside a spawned run's own environment**
   — a real child process, over a real socket, with the `HUB_URL` the Hub computed for it at
@@ -282,12 +282,12 @@ forever.
   covered and this task is not re-proving it. What no test covers is the two things only a spawn
   exercises: that `HUB_URL` names an address the child can actually reach, and that the token in the
   child's environment is the one whose digest the run row holds.
-- [ ] 6.4 Then drive the product, not the argument: start a real run on the `cli` access path
+- [x] 6.4 Then drive the product, not the argument: start a real run on the `cli` access path
   (`hub_client: "cli"` — per `proposal.md` that is the only way to reach this branch today), give it
   work that needs the plane, and read what it does. The question is not whether the notice renders.
   It is whether a model that reads it goes on to make a successful request. Cheap models are the
   standing rule for drives.
-- [ ] 6.5 **Drive the mirror too** (§4). The check that matters for the deployment this change was
+- [x] 6.5 **Drive the mirror too** (§4). The check that matters for the deployment this change was
   written for is a run whose harness will not honour the injected MCP config: it must be told the
   HTTP form, not told to call tools that are not there. If that harness cannot be produced on this
   machine, say so in the log and record what was substituted — a `claude` run launched with the
@@ -297,6 +297,6 @@ forever.
   the harness cannot provide, and `runner_commands.py:245-248` predicts every tool call then fails.
   That prediction is the repository's own and has never been driven. Record what actually happens —
   it decides whether the mirror is a wording defect or a broken run.
-- [ ] 6.6 Record the drive as a finding in `scripts/drive/FINDINGS.md` whether it worked or not. A
+- [x] 6.6 Record the drive as a finding in `scripts/drive/FINDINGS.md` whether it worked or not. A
   drive that confirms the change is as much evidence as one that breaks it, and this repository's
   dominant failure mode is a change that passes its tests and cannot fire in production.

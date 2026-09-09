@@ -22717,6 +22717,12 @@ to the `cli` path, which removes the approver flag along with the injection, and
 (condition B). What the operator is choosing when they do that is `acceptEdits`, and nothing in the
 UI says so.
 
+**Corrected 2026-09-09 by F301.** That last sentence is right about editing and wrong about the
+plane. Driven through the Hub on exactly this configuration, a run on the `cli` path made **zero**
+requests to the capability plane: the harness statically refuses a shell command that interpolates
+`$AW_RUN_TOKEN`, and `acceptEdits` with no approver auto-denies the rest. The workaround restores
+writes, not access.
+
 **Reproduce**
 
 ```bash
@@ -22725,4 +22731,148 @@ claude -p --model haiku --permission-mode manual \
   --permission-prompt-tool mcp__agentweave__approve_tool_call --output-format json \
   "Create a file called written_A.txt containing the single word ok. Use your Write tool." \
   | py -3.11 -c "import json,sys; d=json.load(sys.stdin); print([x['tool_name'] for x in d['permission_denials']]); print(d['result'])"
+```
+
+---
+
+## F300 (A) — the Hub's own workspace approver denies every shell command containing a URL, including the one its own notice instructs
+
+**Status:** open. Driven 2026-09-09 by the night window, tasks §6.3/§6.4 of
+`openspec/changes/2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`, against the trial Hub
+on `127.0.0.1:8010` running from this checkout. Fixture `proj-08e61dec0192` at
+`C:\Users\huida\aw-c2verify`, agent `mcpagent`, runner `claude` / `claude-haiku-4-5-20251001`.
+Raw run in `testbed/scratch/c2verify/driveC.json` (uncommitted).
+
+**What was asked.** A run under the default `workspace` posture, told to POST to
+`$HUB_URL/api/v1/agent-actions/tasks` with `Authorization: Bearer $AW_RUN_TOKEN` using a shell
+command — the exact request `access_path_notice`'s non-MCP branch instructs.
+
+**What happened.** Both shell tools, one denial:
+
+```
+Denied: '/api/v1/agent-actions/tasks' is outside your workspace.
+```
+
+**The mechanism is ours, and it is one regex.** `hub/hub/mcp_server.py:936`:
+
+```python
+_ABSOLUTE_PATH_RE = re.compile(r"(?:[A-Za-z]:[\\/]|/)[^\s\"'|;&><)]*")
+```
+
+`_decide` extracts every absolute-looking path out of a shell command's text and refuses any that
+does not resolve inside `AW_WORKSPACE_DIR`. A URL's path component is absolute-looking: in
+`curl "$HUB_URL/api/v1/agent-actions/tasks"` the regex matches from the `/` after `$HUB_URL` and
+hands `/api/v1/agent-actions/tasks` to `os.path.realpath`, which resolves it against the drive root.
+That is outside the workspace, so the command is denied.
+
+**This is not specific to the capability plane.** Any URL in any shell command is denied the same
+way under `workspace`: `https://example.com/x` yields the candidate `//example.com/x`. An agent on
+the posture this repository chose as its default (`DEFAULT_CLAUDE_PERMISSION_MODE`,
+`runner_commands.py:63`) cannot `curl` anything at all, and is told the reason in the vocabulary of
+the filesystem — which is why the model in the drive concluded *"the endpoint path is being blocked
+as outside the workspace security boundary"* and stopped.
+
+**Why the change did not find this and the tests could not.** `_decide` is tested with filesystem
+paths, which is what its docstring says it is for. Nothing tested it with a URL, because until §1 of
+this change the notice never told an agent to make a request. The change made the instruction true;
+the approver has refused it since long before.
+
+**What it costs.** §1's notice is honest about the contract and unusable by the agent that reads it
+*on this posture*. The plane really is reachable from inside the run — the same environment, on the
+same socket, is what `mcp_server.py` itself uses (see below) — but the run's own tools cannot get
+there.
+
+**Not fixed here.** The fix is a real decision: whether `_decide` should recognise a URL and let it
+through (widening the shell boundary to network egress, which the workspace posture deliberately
+does not permit today), or whether the plane alone should be exempted by address. Both move
+containment, which `agent-capability-plane` reserves for the operator. See F301, which is the same
+wall from the other side.
+
+### Confirmed by the same session — the grounds mechanism works end to end
+
+The positive half, and the first time §4's mechanism has run outside an in-process test.
+`testbed/scratch/c2verify/driveB1.json`, `driveB2.json`.
+
+- **Run 1 of a fresh agent** (`run-7f94b90838b5`): the Hub injected `--mcp-config`, the harness
+  honoured it, the spawned `hub/hub/mcp_server.py` posted
+  `POST /api/v1/agent-actions/mcp-adapter-online` **before serving** — `204 No Content` in the Hub's
+  access log — and `runs.mcp_adapter_online_at` was stamped `2026-09-09 03:37:54`. The run was
+  *told* the HTTP form (no grounds yet) while its MCP tools were in fact present; it found
+  `mcp__agentweave__create_task` anyway and used it, `201`. The one-turn bootstrap cost the design
+  predicted, observed and survived.
+- **Run 2 of the same agent** (`run-14ba2fb78e0e`), asked to quote its own notice verbatim, replied:
+  *"[AgentWeave] Tool access: the `agentweave` MCP tools are available — call send_message /
+  create_task / update_task / ask_user directly."* The grounds earned on run 1 moved the description
+  on run 2, live.
+
+This also settles §6.3's two source-only claims, by the strongest witness available: the adapter is a
+child process of the run, it read `HUB_URL` and `AW_RUN_TOKEN` out of that process environment, and
+the Hub resolved the request to *that run's* row and stamped it. So `HUB_URL` names an address the
+child can reach, and the token in the child's environment is the one whose digest the run row holds.
+What is **not** established is that the model's own tools can do the same — F300 and F301 are exactly
+that gap.
+
+---
+
+## F301 (A) — on the `cli` access path a `claude` run has no tool that can make the request it is told to make
+
+**Status:** open. Same session and fixture as F300; agent `httpagent`, `config.hub_client = "cli"`,
+so no MCP server is injected and the posture falls to
+`DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER = "acceptEdits"`. Raw run in
+`testbed/scratch/c2verify/driveA.json` (uncommitted); `run-dceb35938752`, 2 minutes 14 seconds,
+exit 0, **zero requests reached the Hub** — its access log has no `/api/v1/agent-actions` line for
+that run.
+
+**The notice was read correctly.** The run's first thought quotes the route and the body schema §2
+renders for the HTTP path — *"`POST /api/v1/agent-actions/tasks` (`create_task`) — body `title`*,
+`description`, …"* — and it went straight for a shell command. Nothing about the description failed.
+
+**Fifteen attempts, five distinct refusals, and only the last is ours:**
+
+| Attempts | Tool | Refusal |
+|---|---|---|
+| 1, 3 | PowerShell | `Command contains expandable strings with embedded expressions` |
+| 2, 7 | PowerShell | `Command contains subexpressions $()` |
+| 4, 9 | PowerShell | `Command invokes .NET methods` |
+| 5, 6, 8 | Bash | `Contains simple_expansion` |
+| 10, 11 | Bash (heredoc to python) | `Contains brace with quote character (expansion obfuscation)` |
+| 12, 13, 15 | PowerShell (`curl.exe`) | `contains multiple operations … requires approval` |
+| 14, 15 | Bash / PowerShell | `Permission to use Bash has been denied` |
+
+The first five rows are the harness's own command analyser, not AgentWeave: reading an environment
+variable inside a shell command (`$AW_RUN_TOKEN`, `$env:AW_RUN_TOKEN`) is a shape it refuses
+outright. The last rows are `acceptEdits` with no approver — a command that needs approval is
+auto-denied, because nothing headless can answer.
+
+**So the notice instructs a form of command the harness statically refuses**, and the posture the
+`cli` path forces has nobody who can override it. The run ended by telling the operator it had
+"formulated the correct HTTP request" and needed permission — the honest report, and still a turn
+that did nothing. It also spent four of its fifteen attempts spawning a subagent to try the same
+request, which failed the same way.
+
+**This corrects part of F299.** F299 records `hub_client: "cli"` as the one-line workaround, on the
+strength of condition B — a raw `claude -p --permission-mode acceptEdits` that wrote a file. That
+much stands: the workaround restores the ability to *edit*. It does **not** restore access to the
+capability plane, which is the thing a run is switched to that path in order to reach. Driven
+through the Hub on that exact configuration, the plane was unreachable.
+
+**Read with F300 this is the whole of it:** on `workspace`, our own approver denies the URL (F300);
+on `cli`/`acceptEdits`, the harness refuses the interpolation and then the tool (F301). There is no
+posture on this machine on which a `claude` run reaches the HTTP form of the plane under its own
+power. The MCP adapter reaches it from the same environment, which is why the plane is correctly
+described as reachable — but *reachable* and *reachable by the agent's own tools* are two claims and
+only the first is proven.
+
+**Not fixed here.** Every remedy either moves containment or changes what the notice tells an agent
+to do — for instance instructing a `python -c` request that reads `os.environ` rather than a shell
+interpolation, which the analyser may not refuse (untested). Both belong with the F299 decision
+already in `STATE-night.json`'s `decisions_for_user`; they enlarge it rather than replace it.
+
+**Reproduce**
+
+```bash
+# trial Hub on 8010 from source, per CLAUDE.md; fixture project with a claude/haiku runner
+AW_KEY=$(cat ~/.agentweave/hub/profiles/trial/bootstrap-key.txt) AW_PROJECT=<pid> \
+  py -3.11 testbed/scratch/c2verify/drive.py httpagent driveA \
+  "Create an AgentWeave task titled 'C2V-HTTP-A' ... reply with the HTTP status code and the task id."
 ```
