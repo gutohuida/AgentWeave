@@ -13,21 +13,21 @@ treat the open choice as permission to skip the requirement.
 
 ## 1. The notice tells the truth
 
-- [ ] 1.1 Replace the non-MCP branch of `access_path_notice` (`hub/hub/launchability.py:325-330`).
+- [x] 1.1 Replace the non-MCP branch of `access_path_notice` (`hub/hub/launchability.py:325-330`).
   It currently states that no AgentWeave tool surface is available. The replacement states that the
   capability plane is reachable over HTTP and names four things: the base address (from `HUB_URL`),
   the environment variable holding the credential (`AW_RUN_TOKEN`), the `Authorization: Bearer`
   shape, and the route prefix `/api/v1/agent-actions`.
-- [ ] 1.2 **Name the variables; never interpolate their values.** `design.md` D4 and the delta's
+- [x] 1.2 **Name the variables; never interpolate their values.** `design.md` D4 and the delta's
   "The credential is named and not disclosed" scenario. The notice is prepended to the turn prompt
   at `hub/hub/api/v1/agent_trigger.py:1006-1007` and the prompt is durable. The difference between
   correct and a leak is one f-string.
-- [ ] 1.3 Keep the two true sentences the current branch already carries — that inbound content is
+- [x] 1.3 Keep the two true sentences the current branch already carries — that inbound content is
   already in the turn and needs no retrieval. They were right; only the denial was wrong.
-- [ ] 1.4 Delete the comment at `hub/hub/launchability.py:321-324` or rewrite it. It explains why
+- [x] 1.4 Delete the comment at `hub/hub/launchability.py:321-324` or rewrite it. It explains why
   the branch names no CLI commands, which stays true, but it currently reads as the justification
   for the branch being empty. Leave the history, drop the implication.
-- [ ] 1.5 Test in `hub/tests/` asserting the non-MCP notice names `AW_RUN_TOKEN` and
+- [x] 1.5 Test in `hub/tests/` asserting the non-MCP notice names `AW_RUN_TOKEN` and
   `/api/v1/agent-actions`, and — the half that actually catches the leak — that a notice rendered
   with a known token value does **not** contain that value.
 

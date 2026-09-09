@@ -474,11 +474,51 @@ class TestAccessPath:
     def test_access_path_notice_offers_no_removed_cli_commands(self):
         """The fallback used to instruct `agentweave msg send`, `task create`, `question ask`
         and `agent request`; 2026-08-03-single-runtime left five app-lifecycle commands, so all
-        of those were wrong. Saying no tools are available is better than a false instruction."""
+        of those were wrong. Naming none of them is still right — what changed in
+        `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing` is the conclusion that was
+        drawn from it, which used to be a flat denial of capability."""
         notice = access_path_notice("cli")
-        assert "no AgentWeave tool surface is available" in notice
         for removed in ("agentweave msg", "agentweave task", "agentweave question"):
             assert removed not in notice
+
+    def test_a_run_without_mcp_is_told_the_plane_is_reachable_over_http(self):
+        """Task 1.1: the four things the notice owes a run that cannot use MCP. This assertion
+        replaces one that required the words "no AgentWeave tool surface is available" — a green
+        test pinning the false sentence this change exists to remove."""
+        notice = access_path_notice("cli")
+        assert "HUB_URL" in notice
+        assert "AW_RUN_TOKEN" in notice
+        assert "Authorization: Bearer" in notice
+        assert "/api/v1/agent-actions" in notice
+        assert "no AgentWeave tool surface is available" not in notice
+
+    def test_a_run_without_mcp_is_not_told_it_cannot_act(self):
+        """The delta's first scenario has two halves, and this is the second: the notice must
+        not go on stating the denial in other words. An agent that is authenticated and told it
+        is not will not try."""
+        notice = access_path_notice("cli").lower()
+        for denial in (
+            "no agentweave tool surface",
+            "cannot send messages",
+            "report what you would have sent",
+        ):
+            assert denial not in notice
+
+    def test_the_notice_names_the_credential_variable_and_never_its_value(self, monkeypatch):
+        """Delta scenario "The credential is named and not disclosed", and design D4.
+
+        The notice is prepended to the turn prompt, which is the durable record of the turn, so
+        an interpolated credential is a credential in stored text. The distance between correct
+        and a leak is one f-string, so the test renders with the real environment variables set
+        to known sentinels and asserts neither value appears. Rendering with the variables
+        *unset* would pass against an interpolating implementation."""
+        monkeypatch.setenv("AW_RUN_TOKEN", "aw-run-tok-SENTINEL-2f4b9c")
+        monkeypatch.setenv("HUB_URL", "http://127.0.0.1:65432")
+        notice = access_path_notice("cli")
+        assert "AW_RUN_TOKEN" in notice
+        assert "aw-run-tok-SENTINEL-2f4b9c" not in notice
+        assert "HUB_URL" in notice
+        assert "65432" not in notice
 
     def test_f52_auto_snapshot_notice_says_the_agent_need_not_commit(self):
         """F52 (`scripts/drive/FINDINGS.md`, 2026-08-26): two live runs each spent most of a

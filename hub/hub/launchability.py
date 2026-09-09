@@ -312,21 +312,41 @@ def spec_turn_notice(
 
 
 def access_path_notice(access_path: str) -> str:
-    """One line telling the agent which access path is in use this turn."""
+    """What the agent is told, at turn start, about how it reaches the capability plane.
+
+    Two renderings of one fact, not a capability and a denial: the MCP branch names the tools,
+    and the branch without MCP names the HTTP contract those tools adapt. Neither branch ever
+    interpolates a credential — see the comment on the second branch.
+    """
     if access_path == "mcp":
         return (
             "[AgentWeave] Tool access: the `agentweave` MCP tools are available — call "
             "send_message / create_task / update_task / ask_user directly."
         )
-    # No CLI equivalents are offered any more. This branch used to name `agentweave msg send`,
-    # `task create`, `question ask` and `agent request`; `2026-08-03-single-runtime` reduced the
-    # CLI to five app-lifecycle commands, so every one of those instructions was wrong. Saying so
-    # plainly is better than sending an agent after commands that do not exist.
+    # This branch names no CLI commands, and that part has not changed: it used to instruct
+    # `agentweave msg send`, `task create`, `question ask` and `agent request`, and
+    # `2026-08-03-single-runtime` reduced the CLI to five app-lifecycle commands, so every one of
+    # those instructions was wrong. What was wrong was the conclusion drawn from it — that the
+    # run therefore has no way to reach the plane. It has: the MCP tools are a thin adapter over
+    # the HTTP contract, the run's credential and the Hub's own address are already in the
+    # spawned process's environment (`agent_trigger.py`'s `AW_RUN_TOKEN` / `HUB_URL`), and this
+    # branch is exactly the deployment the equal-capability requirement was written for.
+    #
+    # Variables are NAMED here and their values are NEVER interpolated. This text is prepended to
+    # the turn prompt, which is the durable record of the turn, so a credential written into it is
+    # a credential in stored turn text. The agent can read its own environment, so the name
+    # discloses nothing it does not already hold; the value would be a leak. The difference is one
+    # f-string, which is why the spec states it as a prohibition rather than a preference.
     return (
-        "[AgentWeave] Tool access: no AgentWeave tool surface is available this turn, so you "
-        "cannot send messages, create or update tasks, or ask the operator. Report what you "
-        "would have sent as part of your reply instead. Inbound content is already included in "
-        "this turn; no retrieval is needed."
+        "[AgentWeave] Tool access: no MCP tools this turn — but the AgentWeave capability "
+        "plane is reachable over HTTP, and this run is already authenticated for it. Its base "
+        "address is the value of the `HUB_URL` environment variable, and its operations live "
+        "under the route prefix `/api/v1/agent-actions`, so a request goes to "
+        "`$HUB_URL/api/v1/agent-actions/...`. Authenticate every request with the run "
+        "credential in the `AW_RUN_TOKEN` environment variable, presented as the header "
+        "`Authorization: Bearer $AW_RUN_TOKEN`. Read both values from your own process "
+        "environment; they are deliberately not written here. Inbound content is already "
+        "included in this turn; no retrieval is needed."
     )
 
 
