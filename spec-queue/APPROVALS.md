@@ -57,6 +57,36 @@ does not have to find them):
 does, so the one-bundle-change-per-night constraint is satisfied. Rebuild the bundle through
 `make ui` / `scripts/refresh_ui_bundle.py` so the stamp is written — only that script writes it.
 
+
+### Addendum from the FILL window, 2026-09-09 ~10:55 — no rows, because nothing was specced
+
+**This is not an approval and grants none.** It adds no change, no order and no status token; the
+section above is unchanged and remains the authority for tonight. Written by the day window at the
+end of its queue, per `.claude/loops/day-window.md` D-5.
+
+**There is nothing to approve today.** Per `DIRECTION.md`'s `2026-09-09` section — the operator's
+*"nothing new but finish everything that we have open"* — **no spec loop ran**, so no change was
+proposed and this section has no row per change. The day's slots went to the red CI, a drive of the
+three changes the night built, the whole unclassified half of `FINDINGS.md`, and key hygiene.
+
+The page is `spec-queue/review/review-2026-09-09.html`. It carries **three decisions** —
+`DAY-1` pin `starlette` or keep resolving newest; `DAY-2` whether the no-grounds notice should stop
+asserting `no MCP tools this turn` (new, `F302`); `DAY-3` the posture question on a harness without
+MCP (`F299`, carried and enlarged by `F300`/`F301`).
+
+**One correction to the section above, and it changes a count rather than the plan.** That section
+calls `F142` *"the last open severity-A finding"*. After today's classification the instrument reads
+open severity-A as **three** — `F299`, `F300`, `F301`, all filed by the night of 2026-09-08 — and
+`F142` itself sits in `CONFLICT`, not `OPEN`. The practical meaning survives: those three are the
+`DAY-3` decision and are not buildable unattended, so `F142` is still the only severity-A a night
+window can act on, and the order above stands as written.
+
+**Merge-gate state at the time of writing**, since it is what the morning firing will read: the
+`hub-test` job that concluded `failure` on thirteen consecutive completions was repaired at
+`630473f`, which then concluded `success`. Of the five commits that have completed since, **four are
+green**; the one exception, `2b33a6e`, failed on `F292`'s intermittent `database is locked`,
+occurrence #12. `master` has not moved, so a fast-forward is still available.
+
 ---
 
 ## 2026-09-08
