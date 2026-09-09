@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "755bdad",
     "stop_at": "2026-09-09T17:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-09-09-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "drive",
-    "next_action": "D-1: drive the three night changes together on ONE Hub, as the queue item 'drive' describes. a-dead-connection-is-never-handed-back-out (F295) + an-agent-without-mcp-is-not-told-it-has-nothing + the-conversation-carries-its-own-run-facts (F274). Each was driven singly by the night window; the three together are untested. F274 touches the committed UI bundle, so drive the SCREEN, not only the API. Carry F291's open question and answer it from the operator's side, saying confirm or refute in the log: groupIntoTurns (agentTimelineModel.ts:45-62) partitions on delivery_state and never reads run_id, and agent_trigger.py:2005-2011 commits return_run_entries before broadcasting run_failed. Hub on :8011 from hub/ via uvicorn from source, fresh project, every agent turn claude-haiku-4-5, never :8000, never leave a job enabled. New findings append to scripts/drive/FINDINGS.md with severity, file:line, reproduction, and **Status:** open as the first body line. Before starting, check whether CI has concluded on the D-0 repair commit -- if it is green, the merge gate's condition 3 is satisfiable and the NEXT firing's step 1 may reopen the gate; note the conclusion in the log either way, but do not merge from here.",
+    "current": "classify",
+    "next_action": "D-2: the 119 unclassified findings, part 1. Start from `py -3.11 scripts/classify_findings.py` and take its UNCLASSIFIED list. READ THAT SCRIPT'S HEADER before believing its output -- it documents its own blind spots and was wrong four ways on the day it was written. Write a **Status:** line into each section you read, as the first body line of the entry. Mechanical; the operator has already approved the work. Do NOT write computed counts into FINDINGS.md -- that file is the tool's input and publishing a census into it changed the census (measured at c18cb6f); counts go in ROADMAP.md. Calibration: F109 is fixed (F285's change, 2026-09-04); F77 is open, severity C, never counted by any census. Note that FINDINGS.md grew this iteration (F302 appended, plus dated sections inside F291 and F292), so any line number carried from an earlier firing is stale -- re-grep. Say in the log exactly where part 1 stopped, so D-3 can continue. Do not merge to master from this step; the gate is Iteration 1's alone.",
     "queue": [
         {
             "id": "ci-red",
@@ -23,9 +23,9 @@
         },
         {
             "id": "drive",
-            "status": "open",
+            "status": "done",
             "title": "D-1 -- drive the three night changes together on one Hub",
-            "detail": "Per DIRECTION 2026-09-09. Each was already driven singly by the night window; what is untested is a-dead-connection-is-never-handed-back-out (F295) + an-agent-without-mcp-is-not-told-it-has-nothing + the-conversation-carries-its-own-run-facts (F274) on ONE Hub. F274 touches the committed UI bundle, so drive the SCREEN, not only the API. Carry F291's open question: groupIntoTurns (agentTimelineModel.ts:45-62) partitions on delivery_state and never reads run_id, and agent_trigger.py:2005-2011 commits return_run_entries before broadcasting run_failed -- confirm or refute from the operator's side and say which in the log. Hub :8011 from hub/ via uvicorn from source, fresh project, every agent turn claude-haiku-4-5, never :8000, never leave a job enabled. New findings append to scripts/drive/FINDINGS.md with severity, file:line, reproduction, and **Status:** open as the first body line."
+            "detail": "DONE 2026-09-09 iteration 3. One Hub on :8011, fresh database (Temp/aw0909, head 0102), fresh project proj-dd368932acc8, all agents claude-haiku-4-5. All three changes hold together: the mcp-notice A/B needs two turns of one agent and produced the HTTP rendering on turn 1 and the MCP rendering on turn 2, quoted back by the agent itself; F274 labelled a conversation whose runs sit outside the recent window (2 boundaries, 2 stat lines) and labelled a shutdown-killed run `Turn failed` on screen after restart; F295 answered 30/30 requests under 3s after a mid-flight cancel and shut down in 0.5s with a turn in flight, no settle warning. F291's question CONFIRMED both halves, and its citation corrected: the model is hub/ui/src/lib/agentTimelineModel.ts, not components/agents/. New finding F302 (B): the first turn of every fresh agent is told `no MCP tools this turn` while holding them -- measured, with the operator's hub_client:'mcp' workaround measured too. Hub stopped, jobs and loops empty, :8000 PID 10556 unchanged throughout."
         },
         {
             "id": "classify-1",
@@ -49,7 +49,7 @@
             "id": "review",
             "status": "open",
             "title": "D-5 -- write the review page and today's APPROVALS section",
-            "detail": "spec-queue/review/review-2026-09-09.html, self-contained (no external stylesheets/scripts/fonts), full DOCTYPE/html/head/body wrapper, theme-aware (light on bare :root, dark under @media prefers-color-scheme, explicit body background). Answer in the playbook's order: (1) the branch -- autonomous/2026-09-08-daily, TWO days, and that the merge gate did NOT open on any firing of this cycle, because hub-test concluded failure on 12 consecutive commits -- REPAIRED 2026-09-09 iteration 2, and say what it was: a test reading create_app().routes, a data structure starlette 1.x changed, so it could never pass on CI's 1.6.0 and never fail on this machine's 0.52.1. Say that the gate can only reopen once a commit carrying the repair completes a green run, and that no window has yet observed one. This goes first and must not be skimmable; (2) what the night built and which of it was driven; (3) what the drive found; (4) what was specced -- NOTHING today, and say why (the operator's 'nothing new but finish everything open'); (5) what the night will do if the operator approves nothing; (6) the research, briefly, each candidate ending in what it means for AgentWeave. Carry the open decisions_for_user entry F299-posture-on-a-harness-without-mcp verbatim in substance. Then append today's section to spec-queue/APPROVALS.md with no status tokens -- the operator supplies those."
+            "detail": "spec-queue/review/review-2026-09-09.html, self-contained (no external stylesheets/scripts/fonts), full DOCTYPE/html/head/body wrapper, theme-aware (light on bare :root, dark under @media prefers-color-scheme, explicit body background). Answer in the playbook's order: (1) the branch -- autonomous/2026-09-08-daily, TWO days, and that the merge gate did NOT open on any firing of this cycle, because hub-test concluded failure on 12 consecutive commits -- REPAIRED 2026-09-09 iteration 2, and say what it was: a test reading create_app().routes, a data structure starlette 1.x changed, so it could never pass on CI's 1.6.0 and never fail on this machine's 0.52.1. UPDATED 2026-09-09 iteration 3 -- the repair's own commit 630473f concluded SUCCESS, the first green CI on this branch, so do not write that no window has observed one. Say instead that HEAD (2b33a6e) then concluded failure on a DIFFERENT defect -- F292's intermittent `database is locked`, occurrence #12, the first read since F295 shipped -- so the gate is now waiting on a flake rather than on a certainty, and re-read the CI conclusions before writing the page rather than trusting this sentence. This goes first and must not be skimmable; (2) what the night built and which of it was driven; (3) what the drive found; (4) what was specced -- NOTHING today, and say why (the operator's 'nothing new but finish everything open'); (5) what the night will do if the operator approves nothing; (6) the research, briefly, each candidate ending in what it means for AgentWeave. Carry the open decisions_for_user entry F299-posture-on-a-harness-without-mcp verbatim in substance. Then append today's section to spec-queue/APPROVALS.md with no status tokens -- the operator supplies those."
         },
         {
             "id": "repairs-spare",
@@ -71,6 +71,14 @@
             "id": "F299-posture-on-a-harness-without-mcp",
             "opened": "2026-09-08",
             "carried": "Open from the night window, enlarged 2026-09-09 by F300/F301. Carried to the review page untouched, per the day-window playbook; this window did not touch it."
+        },
+        {
+            "id": "F302-first-turn-asserts-no-mcp",
+            "opened": "2026-09-09",
+            "question": "Should the no-grounds notice stop asserting `no MCP tools this turn`, and should a fresh agent get the MCP rendering on trust?",
+            "measured": "Driven 2026-09-09 on a Hub where the harness honours MCP perfectly. A fresh agent's first turn is told `no MCP tools this turn` while the injected server is running and its tools are callable -- one probe agent called mcp__agentweave__create_task on exactly that turn and the row exists. The requirement the change shipped against ('No grounds means no assertion') asks only that the HTTP form be described and tools not be claimed; it does not ask for the denial. `hub_client: \"mcp\"` fixes it on turn 1 and was measured.",
+            "why_it_is_the_operators": "The cheap half is a wording change inside a shipped requirement. The expensive half is whether absence of evidence should be read as evidence of absence for a brand-new agent, which is the same judgement F299 is already waiting on. Enlarges that decision rather than replacing it.",
+            "not_blocking": "It costs at most one turn per agent and heals on the second."
         }
     ],
     "limits": [

@@ -21310,6 +21310,37 @@ carrying the failure onto the NOT DELIVERED block itself - a product decision, n
 the operator gets today is the abandonment banner, live, with no reload; what they do not get is the
 run's own outcome, and that is unchanged from 2026-09-05.
 
+### Re-driven 2026-09-09 (day window, D-1) — both halves of the open question confirmed, and one citation was wrong
+
+Asked from the operator's side this time, on a Hub carrying all three of the night's changes at
+once, with a fresh project and a fresh pinned-CLI agent. Three deliveries, three `failed` runs
+inside 0.1 s each, all three entries `abandoned`.
+
+**The chat response carries the run facts and the screen still shows no turn.** `GET
+/agent/<agent>/chat` returned `entries=3 runs=3`, every run `status: failed` — F274's server half
+doing exactly what it was built to do. The served bundle on the same conversation: **0 turn
+boundaries, 0 stat lines, 0 terminal labels, and 1 `NOT DELIVERED` block.** So the facts are in the
+payload and nothing renders them, which is the claim, measured rather than argued.
+
+**The two code citations, checked line by line.** `groupIntoTurns` partitions on
+`delivery_state === 'delivered'` at its first two statements and reads `run_id` only *inside* the
+delivered branch, as a grouping key — an abandoned entry cannot reach the turn list at all.
+`agent_trigger.py`'s pre-spawn `except` runs `return_run_entries` → `db.commit()` →
+`_report_abandoned_entries` → `_broadcast_run_lifecycle(..., "run_failed")`, in that order, so the
+commit does precede the broadcast.
+
+**One citation carried in the ledger and in three state files is wrong.** The model is at
+`hub/ui/src/lib/agentTimelineModel.ts:45-62`, not `hub/ui/src/components/agents/`. The line
+numbers are right and the directory is not; anyone opening the stated path finds nothing and has to
+go looking. Corrected here rather than in the older paragraphs, which are dated.
+
+**Still open, and still for the reason the night gave:** the symptom in this entry's heading is
+wrong (there is no silent turn, because there is no turn), and the operator *is* told, by the
+banner, through queue events the chat hooks already listen to. What remains unbuilt is whether an
+abandoned entry should become a labelled turn at all — a product question, not a defect with an
+obvious fix.
+
+
 
 ---
 
@@ -22355,6 +22386,26 @@ the CI rate moves, and must not treat a movement as proof either way.
 and #11 fall after it. Occurrence floor rises from 9 read to **11 read**, against a classified floor
 of 22.
 
+### Occurrence #12 — 2026-09-09, and it is what is holding the merge gate shut now
+
+CI run `34329305198`, commit `2b33a6e` on `autonomous/2026-09-08-daily`, `hub-test` **failure**.
+`sqlite3.OperationalError: database is locked` on `DROP TABLE requirement_drift`, with
+`asyncio.exceptions.CancelledError` in the pool log — the same shape as the earlier occurrences,
+not the starlette defect the day window repaired an hour before it.
+
+Two things follow, both worth keeping.
+
+**F295 shipping did not stop it.** The note above asked a night that built F295 to record whether
+the CI rate moves. This is the first occurrence read after `00d72a8`/`0f06bea` landed, and it says
+the answer is *not obviously*. One occurrence is not a rate; it is recorded here so the next
+window compares against something rather than re-deriving the question.
+
+**And it is now the whole of what the gate is waiting on.** The commit before it, `630473f`,
+concluded **success** — the first green CI on this branch, and the proof that the starlette repair
+was the right one. The gate reads CI at `HEAD`'s sha, so the branch went from *deterministically
+red for a reason nobody had read* to *intermittently red for a reason five windows have read*.
+
+
 
 ---
 
@@ -23236,4 +23287,90 @@ already in `STATE-night.json`'s `decisions_for_user`; they enlarge it rather tha
 AW_KEY=$(cat ~/.agentweave/hub/profiles/trial/bootstrap-key.txt) AW_PROJECT=<pid> \
   py -3.11 testbed/scratch/c2verify/drive.py httpagent driveA \
   "Create an AgentWeave task titled 'C2V-HTTP-A' ... reply with the HTTP status code and the task id."
+```
+
+---
+
+## F302 (B) — an agent's *first* turn is told "no MCP tools this turn" while it is holding them, and one measured turn believed it
+
+**Status:** open. Found 2026-09-09 by the day window's D-1 drive, on a Hub carrying all three of
+the night's changes at once. This is **not** the F299/F300/F301 deployment: the harness here
+honours MCP perfectly. It is the ordinary local one, and the misdescription lands on the first
+turn of every agent created in it.
+
+**The mechanism is documented and deliberate; the sentence it produces is not.**
+`described_access_path` (`hub/hub/launchability.py:263-295`) grants the MCP rendering only on
+grounds, and the only observable ground is `Run.mcp_adapter_online_at` on a **previous** run of the
+same agent (`harness_has_honoured_mcp`, `:232-256`). A brand-new agent has no previous run, so its
+first turn always takes the other branch. The docstring says so in as many words, at `:285-290`:
+
+> The first run against a fresh harness therefore reads the HTTP form while the server is in fact
+> injected and its tools are in the model's tool list. That is deliberate and it is the safe
+> direction of the two: under-describing a surface costs convenience for one turn […]
+
+**What the drive adds is that the branch does not under-describe — it asserts.** The text is
+`access_path_notice`'s second branch (`hub/hub/launchability.py:392-403`) and it opens:
+
+> `[AgentWeave] Tool access: no MCP tools this turn — but the AgentWeave capability plane is
+> reachable over HTTP […]`
+
+`no MCP tools this turn` is a positive claim about the run's own tool list, and on this deployment
+it is false. The requirement the change shipped against does not ask for it: the scenario *"No
+grounds means no assertion"* requires only that the text **describe the HTTP form** and **not state
+that tool-protocol tools are available**. A branch that said the second half and stopped would
+satisfy the requirement without stating a falsehood.
+
+**Measured, on one Hub, on 2026-09-09.** Two agents created fresh, each given exactly one turn:
+
+| agent | turn 1 message | reply | `mcp_adapter_online_at` on that same run |
+|---|---|---|---|
+| `cold094500` | *list every tool whose name begins with `mcp__agentweave__`* | **`NONE-PRESENT`** | `08:42:24`, 5.5 s into the run |
+| `cold2094600` | *create a task, try your `create_task` tool FIRST* | called `ToolSearch`, then **`mcp__agentweave__create_task`**, task `task-f0dcea69c7ac` created | set |
+
+So the tools were there — the second agent used one and a row exists to prove it — and the first
+agent, asked to enumerate rather than directed to act, answered that it had none. **Do not read the
+first row as a controlled measurement of the notice's effect**: that harness defers tool schemas
+behind `ToolSearch`, and an unsearched deferred tool is plausibly absent from what the model can
+enumerate. What the two rows *do* establish together is that the claim in the notice is false while
+the run is being told it, and that the tools are only one `ToolSearch` away from the agent that
+was told it has none.
+
+**Why B and not C.** It costs at most one turn per agent and heals itself on the second — the
+adapter announces at startup, not on first tool call, so the grounds are earned by the same run
+that is misdescribed. But the notice does not merely omit the tools: it names an HTTP path
+instead, and F300/F301 measured that a `claude` run cannot actually use that path under its own
+power on this machine. So the one turn is not steered from a good path to a slower one; on the
+evidence of those two findings it is steered from a working path to a broken one.
+
+**The operator's statement still wins, and that is the workaround — measured, not reasoned.**
+Agent `cold3094700`, created fresh with `config: {"hub_client": "mcp"}` and given the same first
+turn, quoted back:
+
+> `[AgentWeave] Tool access: the `agentweave` MCP tools are available — call send_message /
+> create_task / update_task / ask_user directly.`
+
+which is the *"The operator's own statement is honoured"* scenario driven, on turn 1, with no prior
+run of that agent anywhere.
+
+**Not fixed here, and it is a wording decision inside a shipped requirement**, so it belongs with
+the F299 posture decision already carried to the operator rather than being guessed by a window.
+The cheap end of it is a branch that stops asserting what it cannot know; the expensive end is
+whether a fresh agent should get the MCP rendering on trust.
+
+**Reproduce**
+
+```bash
+# a Hub on 8011 from source, a fresh project, a claude/haiku runner
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=<pid> py -3.11 - <<'PY'
+import sys, time; sys.path.insert(0, "scripts/drive")
+from aw import api, P
+rid = api("GET", f"/projects/{P}/runners")[1][0]["id"]
+NAME = "coldprobe"                      # must not exist: the grounds are per-agent
+api("POST", f"/projects/{P}/agents", {"name": NAME, "runner_id": rid})
+api("PATCH", f"/projects/{P}/agents/{NAME}", {"default_permission_mode": "bypassPermissions"})
+api("POST", f"/projects/{P}/agent/trigger", {"agent": NAME, "message":
+    "Create one AgentWeave task titled COLD-START-PROBE. Try your create_task tool FIRST and "
+    "report verbatim what happens. Do not use Bash, curl or any HTTP request."})
+PY
+# the task exists; the turn was told `no MCP tools this turn`
 ```
