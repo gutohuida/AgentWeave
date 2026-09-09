@@ -11123,7 +11123,12 @@ says which of these held rather than printing four thousand lines of JSON.
 
 ## F142 (A) — a task the operator marks finished can never be reviewed by its flow, and the stall blames the queue instead
 
-**Status: open — FIX SHIPPED `f3a778f` (2026-08-31), AWAITING A DRIVE. Reclassified 2026-09-08.**
+**Status: open — FIX SHIPPED `f3a778f` (2026-08-31). DRIVEN 2026-09-09 and it holds; one arm is
+still uncovered.** The operator-completed leg reached a staffed review and a verdict on a live Hub
+(20/20), and the arm was proved by its own `excluded_because` sentence rather than inferred. What is
+left is **row four** — the operator completes a task no agent ever touched. See *Driven 2026-09-09*
+below. Reclassified 2026-09-08.
+
 It is no longer waiting on an operator decision, and it never was one of two alternatives: **F140
 was fixed and driven before either was put to the operator**, so this finding's "it changes which of
 F140's repairs is worth building" is moot. What is left is a single unmet condition — **nobody has
@@ -11154,6 +11159,70 @@ run — the same shape as CLAUDE.md's *never mark a task complete on the strengt
   content that said the opposite.
 - **Row four, which has no coverage at all**: the operator completes a task **no agent ever
   touched**, and a review is staffed with nobody excluded. That is the widest-exclusion arm.
+
+### Driven 2026-09-09 — the repair holds, and the mode written to prove it no longer can
+
+Hub on `:8011` started from source from `hub/` on `54ed088` (`0 .py` under `hub/hub` or `src/` newer
+than the process start), throwaway projects `proj-4882c91d39e2` and `proj-490d5df86b3d`, Haiku
+turns, no job left enabled. `:8000` and `:8010` untouched; `proj-d85a82bf4216` never a target.
+
+**`AW_COMPLETE_BY=operator` cannot reach this finding's arm any more, so the run the change asked
+for is not the run that proves the repair.** F140's repair 1 shipped in the meantime, so
+`_compose_loop_briefing` now tells the agent *"call `update_task(..., status="completed")` when the
+work is done"* — and it does, 22 seconds into firing 1. By the time section C runs the task is
+already `completed`, and the operator's `PATCH {"status": "completed"}` is answered **`200` while
+writing no transition row at all** (measured on `task-0264ff0ba1cd`: sequences 1–3 are
+`operator/assigned`, `run/in_progress`, **`run/completed` naming the agent**). `completion_attribution`
+therefore reads the *agent's* completion and the walk takes `scheduler.py:1548` — the arm design D6
+calls byte-identical to what shipped. That run is green (19/20; the one `BAD` is this file's own
+stale `in_progress` assertion, now swapped) and it says nothing about F142.
+
+**`AW_COMPLETE_BY=operator_after_agent`, added here, is this finding's world reconstructed**: the
+flow is not fired, the operator walks the task to `in_progress`, an agent does the work on a turn
+**bound to the task** — so `agents_of_runs_bound_to` and `assignee` both name it — and is told not
+to call `update_task`, and the operator makes the `-> completed` transition. Measured on
+`task-9529de5132cd`:
+
+| sequence | from → to | actor_kind | actor_agent |
+|---|---|---|---|
+| 5 | `pending → assigned` | operator | NULL |
+| 6 | `assigned → in_progress` | operator | NULL |
+| 7 | `in_progress → completed` | **operator** | **NULL** ← the defect condition |
+| 8 | `completed → under_review` | operator | NULL ← the flow routing it |
+| 12 | `under_review → approved` | run | `r7bf142b` |
+
+**The repair holds. 20/20.** Firing 2 returned `200`, staffed `r7bf142b` — not the author — and the
+review ran to a verdict: the task reached **`approved`** 84 s after the firing. The `409` carrying
+the status histogram, this finding's whole symptom, did not occur.
+
+**And the arm is proved, not inferred.** On a project whose only bound agent is the author
+(`proj-490d5df86b3d`, second agent unbound, `AW_ALLOW_NO_REVIEWER=1`, 13/13) the firing refuses
+`409`, and the refusal carries `excluded_because` — the only place outside the database where
+`decide_firing`'s two `None`-author arms differ:
+
+> could not staff this step: no agent is free to take it. Every agent on the roster is either
+> running a turn, already holding active work, **or has worked on this task** and so may not
+> review it.
+
+`"has worked on this task"` is `scheduler.py:1575`, the operator arm. `"is the one that completed
+this task"` (`:1555`, the agent arm) is absent. `GET /loops/{id}` reports the same sentence as
+`stall_reason`, so the operator sees it without reading a run response.
+
+**Two observations from the drive, neither a defect and neither reopening this.**
+
+1. The surfaced sentence does **not** contain the task ID. `_stall_reason_from_walk` sets
+   `stall_reason = unstaffed[0][1]` — the reason alone, while the task ID sits in `unstaffed[0][0]`
+   — so *"names the task"* holds in the sense that matters (it is about the task, not about the
+   queue) but not literally. The loop card carries `current_tasks` beside it, so nothing is
+   unidentifiable.
+2. In the `operator` run the reviewer's turn ended without a verdict, and the loop said so by name:
+   *"r7bf142b is named on task-0264ff0ba1cd … as its reviewer and is not reviewing it: no turn is
+   running on that task and none is queued."* The same agent on the same fixture shape did reach
+   `approved` in the `operator_after_agent` run — so that is a turn that ended early, correctly
+   reported, not a staffing failure.
+
+**Row four (`AW_COMPLETE_BY=untouched`) is still undriven** and is this finding's last unmet
+condition.
 
 **A known residual on the adjacent path, already filed: `F167` (B).** F70's `wedged_review` asks
 `task.assignee in agents_that_worked(...)` when `completion_attribution` names nobody, and
@@ -11248,11 +11317,16 @@ is the operator's and a lone diagnostic would read as endorsing the dead end.
 **Reproduce:**
 
 ```
-AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 AW_AGENT=peer \
-    AW_COMPLETE_BY=operator PYTHONIOENCODING=utf-8 py -3.11 -u scripts/drive/t_row12_review_leg.py
+AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=<throwaway> AW_AGENT=<author> \
+    AW_COMPLETE_BY=operator_after_agent PYTHONIOENCODING=utf-8 \
+    py -3.11 -u scripts/drive/t_row12_review_leg.py
 ```
 
-`AW_COMPLETE_BY=agent` drives the working path for comparison. The file leaves no job enabled.
+`operator_after_agent`, **not** `operator` — see *Driven 2026-09-09* above for why that mode now
+lands on the agent arm. Add `AW_ALLOW_NO_REVIEWER=1` on a project whose only bound agent is the
+author to read `excluded_because` off the refusal. `AW_COMPLETE_BY=agent` drives the path where the
+agent completes its own task, for comparison. Build the fixture with
+`scripts/drive/setup_row7.py <dir>`. The file leaves no job enabled.
 
 ---
 

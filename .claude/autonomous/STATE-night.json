@@ -1,40 +1,113 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-08-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "bdb5a79",
-    "stop_at":  "2026-09-10T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-09-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-08-daily",
+    "parent_branch": "master",
+    "parent_sha": "bdb5a79",
+    "stop_at": "2026-09-10T07:00:00+01:00",
+    "iteration": 2,
+    "log_file": ".claude/autonomous/2026-09-09-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "F142-drive-row4-and-close",
+    "next_action": "Drive F142's row four -- the operator completes a task NO agent ever touched -- then close the finding. The :8011 Hub is ALREADY RUNNING (pid 7360, started 2026-09-09T22:37:51Z on 54ed088, DB C:/Users/huida/AppData/Local/Temp/aw-f142-drive/aw.db, AW_KEY=aw_live_f142drive00000000000000000000): reuse it ONLY after confirming no .py under hub/hub or src is newer than that start time, otherwise restart it from source from hub/. Build a fresh fixture with scripts/drive/setup_row7.py (never proj-d85a82bf4216, never :8000, leave :8010 alone) and run scripts/drive/t_row12_review_leg.py with AW_COMPLETE_BY=untouched. Assert what that mode already asserts: assignee never written, the task never left pending, and after the operator walks it the whole way a reviewer is staffed with NOBODY excluded -- any bound agent, the flow's own default agent included. Then close: set F142's Status line in scripts/drive/FINDINGS.md to fixed <sha>, tick task group 7 / DRIVE-1 in openspec/changes/archive/2026-09-01-a-review-a-flow-cannot-staff-is-named/tasks.md on the real evidence, and correct the index paragraph's open severity-A list. Every real agent turn binds claude-haiku-4-5.",
+    "queue": [
+        {
+            "id": "compose",
+            "status": "done",
+            "title": "Compose this window's queue from the playbook",
+            "detail": "Done iteration 1. APPROVALS.md's newest section (## 2026-09-09) carries an ORDER: line, so that line IS tonight's queue verbatim and the default backlog-first shape is ignored. Only one unarchived change exists and it is already on the ORDER line, so the archive-first backlog step is empty."
+        },
+        {
+            "id": "F142-drive-operator-leg",
+            "status": "done",
+            "title": "F142 drive, arm 1: AW_COMPLETE_BY=operator reaches a staffed review",
+            "detail": "Done iteration 2, and the answer has a correction in it. AW_COMPLETE_BY=operator can no longer reach F142's arm: F140's repair 1 shipped, the briefing now names update_task, the agent completes its own task 22s into firing 1, and the operator's PATCH to 'completed' on an already-completed task returns 200 while writing NO transition row -- so completion_attribution reads the AGENT's completion and the walk takes scheduler.py:1548, not the operator arm. A new mode, AW_COMPLETE_BY=operator_after_agent, reconstructs the real world (operator walks the task to in_progress, agent works it on a turn BOUND to the task and is told not to move it, operator makes the -> completed transition). Sequence 7 on task-9529de5132cd is in_progress -> completed, actor_kind='operator', actor_agent NULL. THE REPAIR HOLDS, 20/20: firing 2 returned 200, staffed r7bf142b (not the author), task reached 'approved' in 84s, no status histogram. Proved rather than inferred by a second run with one bound agent (AW_ALLOW_NO_REVIEWER=1, 13/13): the 409 carries excluded_because = 'has worked on this task' (scheduler.py:1575, the operator arm) and NOT 'is the one that completed this task' (:1555, the agent arm)."
+        },
+        {
+            "id": "F142-drive-row4-and-close",
+            "status": "open",
+            "title": "F142 drive, arm 2: row four (no agent ever touched the task), then close the finding",
+            "detail": "The widest-exclusion arm and the one with NO coverage at all: the operator completes a task no agent ever touched, and a review is staffed with nobody excluded. This is the arm where exclude=set() would be a self-approval route, so the code widens to agents_that_may_have_authored. After it: set F142's Status line in scripts/drive/FINDINGS.md to fixed <sha> (or record precisely what the drive disproved), tick task group 7 / DRIVE-1 in the change document on real evidence, and correct the index paragraph's open severity-A list. NOTE the day window's correction of 2026-09-09: after classification the instrument reads open severity-A as THREE (F299/F300/F301, all DAY-3 decision material and not buildable unattended) and F142 itself sits in CONFLICT, not OPEN -- so closing F142 does not take the A-list to zero. Do not write that it does. ADDED iteration 2: the operator_after_agent leg is DONE and recorded in F142's 'Driven 2026-09-09' subsection -- read it before writing the Status line, because it already states what was and was not measured. F142's Status line currently reads 'DRIVEN 2026-09-09 and it holds; one arm is still uncovered'; row four is that arm and closing it is what makes 'fixed <sha>' true. The :8011 Hub is left running with three fixtures (proj-2604d47e1295, proj-4882c91d39e2, proj-490d5df86b3d) and no job enabled; build a FOURTH fixture rather than reusing one, since row four's whole claim is that no record associates any agent with the task."
+        },
+        {
+            "id": "clearing-1-dialog",
+            "status": "open",
+            "title": "2026-09-07-clearing-instructions-asks-first, section 1: the dialog",
+            "detail": "APPROVED (carried forward from 2026-09-08; no new approval granted). 25 tasks, 1 ticked -- 5.2 only, the pre-change drive, closed on real evidence committed at 3078843. THIS IS THE ONE BUNDLE-TOUCHING CHANGE TONIGHT; nothing else on the ORDER line touches hub/hub/static/ui, so the one-bundle-change-per-night constraint is satisfied. Method is openspec-apply-change. Section 1 is tasks.md:10-31."
+        },
+        {
+            "id": "clearing-2-gate",
+            "status": "open",
+            "title": "clearing-instructions, section 2: the gate",
+            "detail": "tasks.md:32-48. This is the section that makes the pre-change measurement (5.2) stop being observable, so read 5.2's recorded evidence before changing behaviour: one PUT carrying a content field of empty string, zero dialogs, the row empty, no undo anywhere on the page, /instructions/history 404."
+        },
+        {
+            "id": "clearing-3-bundle",
+            "status": "open",
+            "title": "clearing-instructions, section 3: the bundle",
+            "detail": "tasks.md:49-59. cd hub/ui && npm run build, then py -3.11 scripts/refresh_ui_bundle.py -- only that script writes ui-build-stamp.json. Commit hub/ui/src and hub/hub/static/ui together."
+        },
+        {
+            "id": "clearing-4-unit",
+            "status": "open",
+            "title": "clearing-instructions, section 4: unit coverage under hub/ui/src/__tests__/",
+            "detail": "tasks.md:60-88. Mutation-check it: delete the line each test exists for and watch a NAMED test fail. A jsdom unit test is NOT the drive and does not substitute for section 5."
+        },
+        {
+            "id": "clearing-5-drive",
+            "status": "open",
+            "title": "clearing-instructions, section 5: the drive -- this is what closes the change",
+            "detail": "tasks.md:89-125. A UI change is driven IN A BROWSER AGAINST THE SERVED BUNDLE or it is not driven -- a transcription into another language is not a drive (that is how F274 survived 29/29 in phases 6 and 7). scripts/drive/d1_aturn_browser.py is the working pattern. 5.1 measures ON THE WIRE, not the DOM's disabled attributes: (a) real stored text, select all, delete, click Save -> ZERO PUTs while the dialog is open, then read the row back over the API byte-identical; (b) Cancel, read back, still byte-identical; (c) Confirm, and only now does the row become empty. 5.3: fresh Hub on a spare port from source from hub/, throwaway project deleted afterwards and confirmed absent, never proj-d85a82bf4216, never :8000, leave :8010 alone; no agent turn needed so nothing binds a model. 5.4: keyboard as well as mouse -- Tab cycles within the panel, Escape cancels, focus returns to Save (useDialogFocus's contract, unprovable in jsdom). 5.5: do NOT fold F296 in."
+        },
+        {
+            "id": "clearing-6-close",
+            "status": "open",
+            "title": "clearing-instructions, section 6: lint, sync-specs, archive",
+            "detail": "tasks.md:126+. 6.1 cd hub/ui && npm run lint and tsc --noEmit; state explicitly that ruff/black/mypy were not required because no file they cover is modified -- do not skip them silently. 6.2 openspec-sync-specs into openspec/specs/project-instructions/spec.md then archive. THE DELTA CARRIES TWO MODIFIED REQUIREMENTS, NOT ONE -- 'Hub UI provides instructions editor' and 'Save cannot write instructions that were never read'. Both scenarios gain the SAME SENTENCE, WORD FOR WORD; a sync that lands one and not the other reinstates exactly the contradiction the second entry exists to remove. Archiving retires the findings the proposal names: set each F-number's Status line in scripts/drive/FINDINGS.md to fixed <sha> IN THE SAME COMMIT."
+        },
+        {
+            "id": "R1-ratchets",
+            "status": "open",
+            "title": "R1 -- three ratchet checks that freeze today's count as a ceiling",
+            "detail": "From DECISIONS.md 'R-1 -- Enforce, as a ratchet', quoted not paraphrased: 'the repo writes a check, and the check freezes today's count as a ceiling that may shrink and may never grow.' LOAD-BEARING: 'Existing instances are not repaired before the check may pass.' DO NOT fix the 35 routes or the 51 surfaces. Three ceilings: route reachability via scripts/drive/n10_route_reachability.py = 35 clientless of 187 declared route+method pairs; query error surface via scripts/drive/n11_query_error_surface.py = 51 operator-reachable MISREPORTs of 54; dependency ceilings = exactly THREE fastmcp>=2.0,<4 declarations and starlette<2.0. CORRECTION TO APPROVALS.md, MEASURED ITERATION 1: that section says 'n10 imports hub.main:app, so its check must live where that import resolves: hub/tests/, not tests/'. That is WRONG. n10 does not import hub.main in-process -- declared_routes() at scripts/drive/n10_route_reachability.py:105-123 spawns a subprocess with cwd=REPO/'hub', so the check resolves the import from ANY test directory. Place it on its merits, not on that note. VERIFIED iteration 1: the three fastmcp declarations are pyproject.toml:47, pyproject.toml:71, hub/pyproject.toml:24, and starlette<2.0 is hub/pyproject.toml:32 -- all four literals correct as written. tests/test_skill_sync.py is the model for a check that must SKIP rather than fail when its subject is absent."
+        },
+        {
+            "id": "R2-archive-collision",
+            "status": "open",
+            "title": "R2 -- a script that warns when two changes modify the same requirement",
+            "detail": "From DECISIONS.md R-2. A script under scripts/, run before archiving, warning when two changes both carry a ## MODIFIED block for the SAME requirement. The motivating incident: archiving the second REVERTED the first, dropping a qualification that had just landed -- one collision in a batch of seven. Its recorded weakness is known and ACCEPTED: 'it only fires if whoever archives remembers to run it.' Build the script; do NOT redesign it into a hook without a decision."
+        },
+        {
+            "id": "R34-model-catalog",
+            "status": "open",
+            "title": "R3.4 -- a scripts/ tool that re-reads the Codex model cache",
+            "detail": "From DECISIONS.md R-3.4. model_catalog.py names ~/.codex/models_cache.json as its source of truth and NOTHING re-reads it. VERIFIED iteration 1: the only mention under hub/ or src/ is the module docstring at hub/hub/model_catalog.py:34, describing how the literal was derived. The cache is per-machine and absent in CI, so this can only be a scripts/ tool or a skip-if-missing check -- that was the verdict and it is why this is NOT a CI gate. scripts/drive/t_d1_catalog_is_the_only_door.py:458 and scripts/drive/t_sweep_row2_runners.py:98-123 already contain the skip-if-missing pattern; reuse it. Verdict's own words: 'Doing nothing is defensible; doing nothing silently is what let a phantom default model sit in the catalog for four weeks.'"
+        },
+        {
+            "id": "DAY1-constraints",
+            "status": "open",
+            "title": "DAY-1 -- a development constraints file pinned to CI's resolution",
+            "detail": "From DECISIONS.md DAY-1. Pin starlette 1.6.0 and fastapi 0.141.1; leave hub/pyproject.toml's PUBLISHED range (starlette<2.0 at :32, fastapi>=0.110 at :12) UNTOUCHED. Two binding conditions from the verdict: it is DEVELOPMENT-ONLY and not a second source of truth for what the Hub supports, and BOTH the CI job AND CLAUDE.md's documented local commands must install through it -- a constraints file nothing installs through is decoration, and the drift it exists to stop returns silently. This is what would have caught the 2026-09-09 starlette defect before a push instead of thirteen commits later. OUT OF SCOPE TONIGHT, DELIBERATELY: the missing guard against a fourth app.routes occurrence -- a naive grep false-positives on the three files whose comments document the trap, hub/tests/_routing.py included. Unowned, and not this window's to invent."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0 (both deleted in the 2026-09-07 clean slate). This repo's own registered project is proj-d85a82bf4216 and must never be a drive target either. Port 8000 is the operator's real usage and must never be touched; :8010 is the other trial Hub and is not this window's. Drive on :8011.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
+        "ONE bundle-touching change per night, and tonight it is 2026-09-07-clearing-instructions-asks-first. Nothing else on the ORDER line touches hub/hub/static/ui.",
+        "A UI change is driven in a browser against the served bundle or it is not driven. A transcription of the component into another language is not a drive.",
+        "The last four ORDER items (R1, R2, R34, DAY1) are LAST for a reason. F142 and the approved change come first and neither may be shortened to reach them. If the window ends with any of the four untouched, that is the CORRECT outcome, not a miss."
+    ]
 }

@@ -31,6 +31,23 @@ fixed behaviour: an operator-completed task reaches a staffed review, with the a
 excluded. Where no eligible reviewer exists, the refusal must name the task and must NOT be the
 status histogram.
 
+**`AW_COMPLETE_BY=operator` no longer reaches the arm it was written for.** Measured 2026-09-09:
+F140's repair 1 shipped, so `_compose_loop_briefing` now tells the agent *"call
+`update_task(..., status="completed")` when the work is done"* -- and it does, on firing 1. The
+task is already `completed` when section C runs, the operator's `PATCH {"status": "completed"}` is
+answered `200` and writes **no transition row**, and `completion_attribution` therefore reads the
+*agent's* completion. That mode now drives the arm at `scheduler.py:1548` (an agent completed it),
+which is the one design D6 says is byte-identical to what shipped. It is kept because it is a real
+operator gesture with a real answer, but it is **not** F142's world.
+
+`AW_COMPLETE_BY=operator_after_agent` is that world, reconstructed: an agent does the work on a
+turn bound to the task -- so `agents_of_runs_bound_to` and `assignee` both name it -- but the
+briefing that tells it to move the task is never delivered, so nothing writes an agent-attributed
+`-> completed` and the operator makes that transition by hand. `AW_ALLOW_NO_REVIEWER=1` runs the
+same fixture with no second bound agent, which is the only way the arm is *provable* from outside:
+`excluded_because` reaches the refusal, and `"has worked on this task"` is the operator arm's
+sentence while `"is the one that completed this task"` is the agent arm's.
+
 `AW_COMPLETE_BY=untouched` is **row four**, added with that change: the operator completes a task no
 agent ever touched, so the exclusion is empty and a review is staffed with nobody excluded -- the arm
 with the widest exclusion behaviour, which had no drive coverage at all. The agent works and records
@@ -57,12 +74,20 @@ RUN = os.environ.get("AW_RUN") or time.strftime("%H%M%S")
 # WHO makes the missing `-> completed` transition, and it turns out to be the whole question.
 #   "operator"  -- the operator does it by hand, which is what F140 leaves them to do.
 #   "agent"     -- the author agent is told to call `update_task`, which is F140's repair 1.
+#   "operator_after_agent" -- F142's actual world since F140's repair shipped: an agent works the
+#                  task on a turn bound to it, is never told to move it, and the operator makes the
+#                  `-> completed` transition. `attribution.actor_kind == "operator"`.
 #   "untouched" -- row four: the operator walks the task the whole way and no run ever binds to it,
 #                  so no record associates any agent with it and the exclusion is empty.
 # `agent_that_completed` reads `TaskTransition.actor_agent` and an operator's transition writes NULL
 # there, so the first two are not interchangeable; `completion_attribution` is what tells the two
 # NULL worlds apart, and "untouched" is the third.
 COMPLETE_BY = (os.environ.get("AW_COMPLETE_BY") or "operator").lower()
+# The refusal variant. `resolve_reviewer` only puts `excluded_because` into a sentence when nobody
+# resolves, and that sentence is the only place outside the database where the two `None`-author
+# arms of `decide_firing` are told apart -- so a project with no second bound agent is not a
+# degraded case here, it is the measurement.
+ALLOW_NO_REVIEWER = os.environ.get("AW_ALLOW_NO_REVIEWER") == "1"
 TARGET = f"reviewleg_{RUN}.py"
 BASE = f"/projects/{P}/project"
 
@@ -173,7 +198,7 @@ def preflight():
         for a in rows
         if a["name"] != AGENT and not a.get("archived") and a.get("runner_id")
     ]
-    if not pool:
+    if not pool and not ALLOW_NO_REVIEWER:
         sys.exit("no second bound agent exists, so no non-author reviewer can ever resolve")
     c, jobs = api("GET", f"/projects/{P}/jobs")
     live = [j for j in (jobs if isinstance(jobs, list) else []) if j.get("enabled")]
@@ -266,6 +291,43 @@ def main():
                   not t.get("assignee"), repr(t.get("assignee")))
             check("...and it never left `pending`", t.get("status") == "pending",
                   repr(t.get("status")))
+        elif COMPLETE_BY == "operator_after_agent":
+            # The flow is never fired, so `_compose_loop_briefing` -- which since F140's repair
+            # tells the agent to call `update_task(..., status="completed")` -- is never composed
+            # and the agent is never asked to move the task. The turn IS bound to the task, so
+            # `agents_of_runs_bound_to` names the agent and the exclusion is non-empty; what is
+            # missing is only the agent-attributed `-> completed`, which is exactly F142's world.
+            head("B. An agent works the task on a bound turn, and is never told to move it")
+            for to in ("assigned", "in_progress"):
+                body = {"status": to}
+                if to == "assigned":
+                    body["assignee"] = AGENT
+                c, _ = call(f"-> {to}", "PATCH", f"/projects/{P}/tasks/{task_id}", body,
+                            expect=200)
+                if c != 200:
+                    return
+            c, b = api("POST", f"/projects/{P}/agent/trigger", {
+                "agent": AGENT,
+                "task_id": task_id,
+                "message": (
+                    f"Create {TARGET} in your working directory containing exactly one function, "
+                    "`triple(a)`, returning a * 3. Change nothing else. Then call "
+                    "mcp__agentweave__record_evidence with identifier='FR-1', "
+                    f"task_id='{task_id}', kind='implementation', locator='{TARGET}', and a "
+                    "one-sentence summary. Do NOT call update_task -- leave the task's status "
+                    "exactly where it is. That is the whole turn."
+                ),
+                "overrides": {"permission_mode": "workspace"},
+            }, timeout=30)
+            print(f"  trigger {AGENT} (bound to the task): {c}")
+            settle()
+            t = next((x for x in mine() if x["id"] == task_id), {})
+            author = t.get("assignee")
+            check("an agent is associated with the task", author == AGENT, repr(author))
+            check("...and it is still in_progress, so no agent completed it",
+                  t.get("status") == "in_progress", repr(t.get("status")))
+            if t.get("status") != "in_progress":
+                return
         else:
             head("B. Firing 1 -- the flow staffs the task and the work gets done")
             call("run job", "POST", f"/projects/{P}/jobs/{job_id}/run", {}, expect=(200, 201))
@@ -273,8 +335,13 @@ def main():
             t = next((x for x in mine() if x["id"] == task_id), {})
             author = t.get("assignee")
             check("the task was staffed", bool(author), repr(author))
-            check("...and is in_progress after the turn, not completed (F140)",
-                  t.get("status") == "in_progress", repr(t.get("status")))
+            # **Swapped 2026-09-09.** This asserted `in_progress` -- F140's broken state, kept
+            # deliberately "so the day it is fixed the line swaps and says so". That day was
+            # `f3a778f`'s neighbourhood: the briefing now names `update_task` and the agent moves
+            # its own task. The consequence for THIS file is that `operator` mode's section C is a
+            # no-op PATCH on an already-`completed` task, so the arm it drives is the agent one.
+            check("F140 fixed: the agent moved its own task to completed, unasked by this file",
+                  t.get("status") == "completed", repr(t.get("status")))
 
         head(f"C. F140's missing transition, made by the {COMPLETE_BY.upper()}")
         if COMPLETE_BY == "untouched":
@@ -303,6 +370,16 @@ def main():
             settle()
             t = next((x for x in mine() if x["id"] == task_id), {})
             check("the AGENT moved its own task to completed",
+                  t.get("status") == "completed", repr(t.get("status")))
+            if t.get("status") != "completed":
+                return
+        elif COMPLETE_BY == "operator_after_agent":
+            c, b = call("in_progress -> completed", "PATCH", f"/projects/{P}/tasks/{task_id}",
+                        {"status": "completed"}, expect=200)
+            if c != 200:
+                return
+            t = next((x for x in mine() if x["id"] == task_id), {})
+            check("the OPERATOR moved a task an agent worked to completed",
                   t.get("status") == "completed", repr(t.get("status")))
             if t.get("status") != "completed":
                 return
@@ -354,11 +431,44 @@ def main():
                 task_id in refusal or "has worked on this task" in refusal,
                 refusal[:220],
             )
-        check(
-            "the firing was accepted rather than skipped as a stalled queue",
-            c in (200, 201),
-            f"{c} {str(b)[:220]}",
-        )
+        if pool:
+            check(
+                "the firing was accepted rather than skipped as a stalled queue",
+                c in (200, 201),
+                f"{c} {str(b)[:220]}",
+            )
+        else:
+            # With nobody eligible the `409` IS the expected answer -- it is the second of the two
+            # outcomes F142 names, and asserting acceptance here would fail the run for behaving as
+            # the finding requires.
+            check(
+                "with nobody eligible the firing refuses, and refuses with a reason",
+                c == 409 and bool(refusal),
+                f"{c} {refusal[:180]}",
+            )
+        if not pool:
+            # No agent can resolve, so `resolve_reviewer` refuses -- and its sentence carries
+            # `excluded_because`, which is the ONLY externally readable difference between
+            # `decide_firing`'s two `None`-author arms. `scheduler.py:1548` says "is the one that
+            # completed this task"; the operator arm at `:1556` says "has worked on this task".
+            # The walk records `unstaffed` rather than failing the firing, so the sentence arrives
+            # on the loop's `stall_reason` and not in the run's response body (D4, "surface the
+            # step, not stop the flow").
+            time.sleep(4)
+            c2, det = api("GET", f"/projects/{P}/loops/{loop_id}")
+            reason = (det or {}).get("stall_reason") or "" if isinstance(det, dict) else ""
+            print("      stall_reason: " + reason[:400])
+            # NOT `task_id in reason`. `_stall_reason_from_walk` surfaces `unstaffed[0][1]` --
+            # the reason alone -- and the rung-3 sentence is about "this task" without naming it.
+            # The claim being tested is that the sentence is about the TASK rather than about the
+            # queue, and the histogram is the string that proves it is not.
+            check("the stall is about this task, not the queue's status histogram",
+                  reason and "no claimable task among" not in reason, reason[:220])
+            check("...and the exclusion is the OPERATOR arm's, by its own sentence",
+                  "has worked on this task" in reason, reason[:220])
+            check("...which is not the agent arm's sentence",
+                  "is the one that completed this task" not in reason, reason[:220])
+            return
         settle()
         t = next((x for x in mine() if x["id"] == task_id), {})
         reviewer = t.get("assignee")
