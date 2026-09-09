@@ -170,10 +170,16 @@ the census, and any later reading of an F292 CI negative, must know it.
   unreachable state deliberately — the replacement is always `__connect()`-fresh in reality — so
   that a later reader does not delete it as dead weight or, worse, treat it as evidence the state
   occurs.
-- [ ] 3.12 **Mutation-check every one of these before believing them.** The night of 2026-09-06 shipped
+- [x] 3.12 **Mutation-check every one of these before believing them.** The night of 2026-09-06 shipped
   eight unit tests of which the day could only account for seven; the standard this repository now
   holds is that a test names which artefact failed when the fix is reverted. Record the count in the
   night's log the way `n3-units` did.
+  **Done: 14 mutations across iterations 4-6 of the night of 2026-09-08; 11 named a victim, and all
+  nine shipped tests are named by at least one. The three that named none are recorded with them:
+  two are lines whose state cannot occur in this suite (the `close_detached` listener, and the
+  non-aiosqlite `getattr` guard), and the third is a real coverage gap -- moving the settle *before*
+  `terminate_all_active_runs()`/`shutdown_scheduler()`, the position task 2.4 argues against, fails
+  nothing.**
 
 ## 4. Reconcile and record
 
