@@ -30,7 +30,7 @@ session; the `ORDER:` line is the operator's, given in session.
 
 - APPROVED  2026-09-07-clearing-instructions-asks-first   DAY-3. 25 tasks, 1 ticked (5.2, the pre-change drive, closed on real evidence committed at `3078843`). **Touches the bundle.** Unchanged from 2026-09-08 — it is the one change on that night's `ORDER:` line the window did not reach, because it is bundle-touching and iteration 16 had already spent that slot.
 
-ORDER: F142, 2026-09-07-clearing-instructions-asks-first
+ORDER: F142, 2026-09-07-clearing-instructions-asks-first, R1-ratchets, R2-archive-collision, R34-model-catalog, DAY1-constraints
 
 **Why the drive leads.** `F142` is the **last open severity-A finding**, and it is not a build: the
 fix shipped at `f3a778f` on 2026-08-31 and the single unmet condition is that **nobody has driven
@@ -56,6 +56,65 @@ does not have to find them):
 **On the change, if the night reaches it.** It touches `hub/hub/static/ui`; nothing else tonight
 does, so the one-bundle-change-per-night constraint is satisfied. Rebuild the bundle through
 `make ui` / `scripts/refresh_ui_bundle.py` so the stamp is written — only that script writes it.
+
+### The last four ORDER items — decided work that needs no proposal
+
+**Added 2026-09-09 ~18:50 on the operator's instruction**, whose stated preference is *finishing the
+roadmap*. These are **not changes** and have no directory under `openspec/changes/`; they are the
+four decided-but-unbuilt items that touch only `scripts/`, `tests/` and packaging config, so the
+round discipline does not gate them — there is no product behaviour to spec. Each closes a
+`ROADMAP.md` row outright.
+
+**They are last for a reason.** F142 and the approved change come first and neither may be shortened
+to reach these. **If the window ends with any of the four untouched, that is the correct outcome**,
+not a miss — each is sized to finish inside one firing, so stopping between them leaves nothing
+half-built. Take them in ORDER sequence.
+
+**`R1-ratchets`** — three checks, from `DECISIONS.md` `### R-1 — Enforce, as a ratchet`. The
+contract is quoted, not paraphrased: *"the repo writes a check, and the check freezes today's count
+as a ceiling that may shrink and may never grow."* And, load-bearing: ***"Existing instances are not
+repaired before the check may pass."*** Do not fix the 35 routes or the 51 surfaces. All three
+promote scripts that already exist and were re-verified 2026-09-08:
+
+| Check | Script | Ceiling to freeze |
+|---|---|---|
+| route reachability | `scripts/drive/n10_route_reachability.py` | **35** clientless of 187 declared route+method pairs |
+| query error surface | `scripts/drive/n11_query_error_surface.py` | **51** operator-reachable MISREPORTs of 54 |
+| dependency ceilings | — | exactly **three** `fastmcp>=2.0,<4` declarations (`pyproject.toml:47`, `:71`, `hub/pyproject.toml:24`) and `starlette<2.0` (`hub/pyproject.toml:32`) |
+
+**Both scripts are static** — no Hub, no database, no network; verified today. **But `n10` imports
+`hub.main:app`**, so its check must live where that import resolves: `hub/tests/`, not `tests/`.
+Confirm that before placing it — a ratchet that cannot import is a ratchet that never runs.
+`tests/test_skill_sync.py` is the model for a check that must skip rather than fail when its subject
+is absent.
+
+**`R2-archive-collision`** — a script under `scripts/`, run before archiving, from `DECISIONS.md`
+`### R-2`. It warns when two changes both carry a `## MODIFIED` block for the **same requirement**.
+The motivating incident is in that verdict: archiving the second **reverted the first**, dropping a
+qualification that had just landed — one collision in a batch of seven. Its recorded weakness is
+known and accepted: *it only fires if whoever archives remembers to run it.* Build the script; do
+not redesign it into a hook without a decision.
+
+**`R34-model-catalog`** — a `scripts/` tool, from `DECISIONS.md` R-3.4. `model_catalog.py` names
+`~/.codex/models_cache.json` as its source of truth and **nothing re-reads it**: the only mention is
+the module docstring at `:34`, describing how the literal was *derived*. The cache is per-machine
+and absent in CI, so this can only be a `scripts/` tool or a skip-if-missing check — that was the
+verdict, and it is why this is not a CI gate. *"Doing nothing is defensible; doing nothing silently
+is what let a phantom default model sit in the catalog for four weeks."*
+
+**`DAY1-constraints`** — from tonight's `DECISIONS.md` verdict, `DAY-1`. Add a development
+constraints file pinned to CI's resolution — **starlette 1.6.0, fastapi 0.141.1** — and leave
+`hub/pyproject.toml`'s published range (`starlette<2.0`, `fastapi>=0.110`) untouched. Two conditions
+from the verdict, both binding: it is **development-only and not a second source of truth** for what
+the Hub supports, and **both the CI job and `CLAUDE.md`'s documented local commands must install
+through it** — a constraints file nothing installs through is decoration, and the drift it exists to
+stop returns silently. This is what would have caught today's starlette defect before a push instead
+of thirteen commits later.
+
+**Out of scope tonight, deliberately:** the missing guard against a fourth `app.routes` occurrence.
+The review page records why a naive grep fails — it false-positives on the three files whose
+comments document the trap, `hub/tests/_routing.py` included. Unowned, and not this window's to
+invent.
 
 
 ### Addendum from the FILL window, 2026-09-09 ~10:55 — no rows, because nothing was specced
