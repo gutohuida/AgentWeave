@@ -24442,7 +24442,10 @@ neither branch fires, and press 1 falls through to the browser's native order. T
 after Save in DOM order is the instructions textarea, which is *behind the scrim*: the operator
 cannot see that it has focus and cannot click it.
 
-**Which dialogs this reaches.** Six components use the hook. Three escape the defect by accident,
+**Which dialogs this reaches.** Six components use the hook. *(The table below lists five — the
+sixth, `TaskDetailDrawer.tsx:167`, was missed, and it is the call site where the hook's Escape
+branch misbehaves. See `F311`, and `F309`/`F310` for what lives there. Enumerate from `grep`, not
+from this table.)* Three escape the defect by accident,
 not by design — they `autoFocus` an input **inside** the panel, so focus is already `first` when the
 first Tab arrives:
 
@@ -24537,5 +24540,142 @@ py -3.11 -m pip install --dry-run -c constraints-dev.txt -e ./hub  # forces CI's
 The first reports `starlette<2.0 … (0.52.1)` already satisfied; the second would install
 `starlette-1.6.0 fastapi-0.141.1`. That difference is the whole value of the file — and the reason
 the alarm it silences was worth something.
+
+---
+
+## F309 (A) — the blocking-reason input never gets focus, so the operator's reason is typed into the status menu and each space re-opens it
+
+**Status:** open — filed 2026-09-10 (day window, `D-1`), **measured in a real browser** against the
+served bundle on a throwaway `:8013` Hub. Not fixed. Pre-existing; nothing the night window built
+touches this screen.
+
+**The gesture.** A ticket in `in_progress`. Open it, open its status menu, choose **Move to
+blocked**. The Hub requires a reason for a hand-set block, so `TaskDetailDrawer` does the right
+thing and asks instead of sending a status that would be refused
+(`hub/ui/src/components/tasks/TaskDetailDrawer.tsx:296-299`). The reason input mounts with
+`autoFocus` (`:409-410`). The operator types their reason.
+
+**What was measured**, `scripts/drive/t_d1_0910_escape_across_the_dialogs.py`, leg `C2c`:
+
+| | |
+|---|---|
+| `document.activeElement` after the reason input mounts | `BUTTON`, `data-testid="task-status-menu-<task-id>"` |
+| the reason field's value after typing `the staging API key` | `''` |
+
+Nineteen keystrokes, none of them in the field. `autoFocus` loses: `RowMenu`'s
+`DropdownMenu.Root` (`hub/ui/src/components/layout/RowMenu.tsx:64`) returns focus to its trigger
+when it closes, and that restore runs after React has mounted the input.
+
+**And then it gets worse, which is why this is A and not B.** The trigger is a `<button>`, so a
+space is a click. `t_d1_0910_rowmenu_leaves_the_page_inert.py`, leg `P5`, one `Space` on the
+focused trigger:
+
+```
+before:  {"body": "auto", "poppers": 0, "menuItems": 0}
+after:   {"body": "none", "poppers": 1, "menuItems": 3}
+```
+
+The status menu re-opens, and because Radix's `DropdownMenu` defaults to `modal: true` it sets
+`pointer-events: none` on `document.body` — the whole page goes unclickable while it is open. *"the
+staging API key"* contains three spaces. So the operator types a sentence into nothing, and their
+own sentence opens and closes the menu they had just finished with, three times, dimming and
+un-dimming the page under their hands.
+
+**Why A.** The reason is mandatory — it is the entire justification for asking rather than sending —
+and the ordinary keyboard path to supplying it does not work at all. Nothing is written wrongly
+(leg `C3` measured zero task writes across the whole sequence), but the operator cannot complete a
+first-class action by the means the screen invites, and the failure is silent: the field stays empty
+and the confirm button stays disabled with no explanation.
+
+**The mouse path is fine and the control is fine.** Leg `C2d` clicks into the input and types the
+same nineteen characters: the field holds `'the staging API key'` and `document.activeElement` is
+the `INPUT`. This is a focus defect, not a broken control — worth stating precisely, because it
+narrows the fix to *when* focus is taken.
+
+**Reproduction:**
+
+```
+py -3.11 scripts/drive/t_d1_0910_escape_across_the_dialogs.py     # leg C2c
+py -3.11 scripts/drive/t_d1_0910_rowmenu_leaves_the_page_inert.py # leg P5
+```
+
+**One measurement that is worth keeping even though it exonerates the code.** Legs `P1`-`P4` were
+built on the hypothesis that the inert page *persisted* — `body: none` with an orphaned popper was
+read once, 1.4 s after the selection, and looked like a leak. Sampled on a clock at
+0/0.5/1/2/5/10 s, across an ordinary move, the blocked move, Escape-with-the-menu-open, and the
+whole eight-gesture sequence replayed, `body` recovers at **+0 ms every time**. Radix cleans up
+correctly. The single sample was reading the menu that the operator's own spaces had just re-opened.
+A severity filed on that first reading would have been filed against the wrong component.
+
+---
+
+## F310 (B) — one Escape dismisses two things: the ticket closes out from under the control the operator was actually cancelling
+
+**Status:** open — filed 2026-09-10 (day window, `D-1`), **measured in a real browser**. Not fixed.
+Same hook as [`F307`], different branch — `F307` is the Tab branch, this is the Escape branch.
+
+**`useDialogFocus` binds Escape on `document`** (`hub/ui/src/hooks/useDialogFocus.ts:23-27`), calls
+`onClose()` and returns. It does not ask whether something nearer the keystroke has already handled
+it. React 18 delegates `onKeyDown` at the root container, which is a *descendant* of `document`, so
+a nested handler and the hook both fire on one keystroke unless someone stops propagation, and
+nobody does. `TaskDetailDrawer` is the only call site that mounts controls owning Escape themselves,
+and it does so twice.
+
+**Both were driven.**
+
+| gesture | what the nested owner does | what the hook also does | leg |
+|---|---|---|---|
+| Escape with the status menu open | Radix closes the menu | closes **the ticket** | `C2` |
+| Escape in the blocking-reason input | `:413-414` cancels the reason | closes **the ticket** | `C3` |
+
+```
+C2   menu closed: True   ticket survived: False
+C3   reason cancelled: True   drawer closed too: True
+```
+
+The second is the sharper one. `TaskDetailDrawer.tsx:413-414` is
+`onKeyDown={(e) => { if (e.key === 'Escape') setBlockingReason(null) }}` — a line written for no
+other purpose than *"Escape cancels the reason"*. It does cancel it, and it has never once been
+observable, because the panel containing it is unmounted by the same keystroke.
+
+**Why B and not A.** Nothing is written: leg `C3` counted zero `PATCH`/`PUT` on `/tasks/` across the
+whole sequence. What is lost is the operator's place and any reason they had managed to get into the
+field, and the recovery is to re-open the ticket and start again. It is also, per `F309`, a field
+they probably could not have typed into anyway — the two findings compound and should be fixed
+together.
+
+**Not a `RowMenu` leak.** Escape-with-the-menu-open was suspected of leaving the page inert as well;
+`t_d1_0910_rowmenu_leaves_the_page_inert.py` leg `P3` sampled `pointer-events` at 0/0.5/1/2/5/10 s
+after it and `body` recovers at **+0 ms**. The only defect in that gesture is that the ticket closes.
+
+**Reproduction:** `py -3.11 scripts/drive/t_d1_0910_escape_across_the_dialogs.py`, legs `C2` and
+`C3`. Both are asserted in the direction of the *correct* behaviour, so the file exits non-zero
+today and will go green when this is fixed.
+
+**Shape of a fix, unproposed.** Either the hook ignores Escape when the active element is inside a
+control that has declared it owns the key, or the two nested handlers call `stopPropagation()`. The
+first is a change to a hook serving six call sites; the second is two lines but leaves the next
+nested control to rediscover the trap. That choice belongs to the round discipline.
+
+---
+
+## F311 (C, bookkeeping) — `F307`'s table of affected dialogs is missing the call site where the hook actually misbehaves
+
+**Status:** open — filed 2026-09-10 (day window, `D-1`).
+
+`F307` says *"Six components use the hook"* and then tabulates **five**:
+`AgentCreateDialog`, `DeleteProjectDialog`, `ProjectManagerModal`, `ArchiveConfirmDialog`,
+`ClearInstructionsDialog`. `grep -rn useDialogFocus hub/ui/src --include=*.tsx` returns six call
+sites; the missing one is `TaskDetailDrawer.tsx:167`.
+
+It is the one that matters. The other five are confirm-shaped panels whose entire content is a
+question and some buttons; `TaskDetailDrawer` is a working surface with a status menu, a select, an
+input and its own Escape handler — and it is where `F309` and `F310` both live. `F307`'s conclusion
+(*"it is exactly the confirm-only dialogs … that fail to hold focus"*) was drawn from a population
+that excluded the counter-example.
+
+Not a defect in the product. Filed because `F307`'s table is what a fix proposal will enumerate from,
+and enumerating five call sites for a six-call-site hook is how the sixth gets a fix that was never
+checked against it.
 
 ---
