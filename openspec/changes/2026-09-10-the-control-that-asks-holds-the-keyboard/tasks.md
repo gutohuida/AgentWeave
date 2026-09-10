@@ -12,13 +12,13 @@ half. A run that closes one and reports the change done has closed half a change
 
 ## 1. The hook stands down when something nearer has answered
 
-- [ ] 1.1 In `hub/ui/src/hooks/useDialogFocus.ts`, the Escape branch (`:24-28`) returns without
+- [x] 1.1 In `hub/ui/src/hooks/useDialogFocus.ts`, the Escape branch (`:24-28`) returns without
   closing when `event.defaultPrevented` is already true. The Tab branch below it is **not** touched —
   that is `F307`, deliberately out of scope (`proposal.md`).
-- [ ] 1.2 Keep the `document` binding and the bubble phase. Both are load-bearing: capture would put
+- [x] 1.2 Keep the `document` binding and the bubble phase. Both are load-bearing: capture would put
   the hook *ahead* of the nested React handlers it is meant to defer to, and a panel binding would
   break Escape on the dialogs where focus never enters the panel (`design.md` D3).
-- [ ] 1.3 Comment it at the point of the condition with *why* the check is sufficient — that a
+- [x] 1.3 Comment it at the point of the condition with *why* the check is sufficient — that a
   bubble-phase `document` listener is structurally the last to see the key — not merely that it
   exists. The next reader's question is "how can you be sure nothing nearer runs after us".
 
@@ -96,23 +96,23 @@ half. A run that closes one and reports the change done has closed half a change
 
 ## 5. The bundle
 
-- [ ] 5.1 `cd hub/ui && npm run build`, then `python scripts/refresh_ui_bundle.py` from the repo root
+- [x] 5.1 `cd hub/ui && npm run build`, then `python scripts/refresh_ui_bundle.py` from the repo root
   (`make ui` is equivalent; `make` is not on PATH in Git Bash on this machine).
-- [ ] 5.2 Commit `hub/ui/src` and `hub/hub/static/ui` **together**, including
+- [x] 5.2 Commit `hub/ui/src` and `hub/hub/static/ui` **together**, including
   `ui-build-stamp.json` — that is what lets `/health` stop reporting `ui_stale`.
 
 ## 6. Unit coverage — what is worth asserting in jsdom, and what is not
 
-- [ ] 6.1 `hub/ui/src/__tests__/taskDetailDrawer.test.tsx:117` (*closes on Escape*) must still pass
+- [x] 6.1 `hub/ui/src/__tests__/taskDetailDrawer.test.tsx:117` (*closes on Escape*) must still pass
   **unchanged**. Nothing nearer owns Escape in that gesture, so a change to that test is a signal
   that §1.1 over-reached.
-- [ ] 6.2 Add a case asserting the hook ignores an Escape whose `defaultPrevented` is already true,
+- [x] 6.2 Add a case asserting the hook ignores an Escape whose `defaultPrevented` is already true,
   and answers one whose is not. That is a property of the hook and is honestly testable in jsdom:
   dispatch a `KeyboardEvent` on `document` with the default already prevented and assert `onClose`
   was not called.
-- [ ] 6.3 **Mutation-check whatever you add** — break §1.1 and watch the new case fail, then restore
+- [x] 6.3 **Mutation-check whatever you add** — break §1.1 and watch the new case fail, then restore
   it. A test that passes against both the fixed and the unfixed hook is decoration.
-- [ ] 6.4 Do **not** write a jsdom test that claims to reproduce `F309` or `F310` end to end. Both
+- [x] 6.4 Do **not** write a jsdom test that claims to reproduce `F309` or `F310` end to end. Both
   depend on real focus and real event phases; jsdom's answer would be evidence about jsdom. The
   acceptance evidence is §7.
 

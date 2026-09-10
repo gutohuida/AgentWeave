@@ -8,18 +8,18 @@
   "parent_branch": "master",
   "parent_sha": "5d928f5",
   "stop_at": "2026-09-11T07:00:00+01:00",
-  "iteration": 1,
+  "iteration": 2,
   "log_file": ".claude/autonomous/2026-09-10-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "n1-hook",
-  "next_action": "n1 - land the F309 hook half and its unit coverage. openspec/changes/2026-09-10-the-control-that-asks-holds-the-keyboard/tasks.md sections 1.1-1.3 (useDialogFocus.ts returns without closing when event.defaultPrevented, document binding and bubble phase kept, commented with WHY a bubble-phase document listener is structurally last), 6.1-6.4 (the existing 'closes on Escape' test at taskDetailDrawer.test.tsx:117 must pass UNCHANGED; add a hook case for defaultPrevented true vs false; mutation-check it by breaking 1.1 and watching the NEW case fail), then 5.1-5.2 (cd hub/ui && npm run build, then py -3.11 scripts/refresh_ui_bundle.py from the repo root) and commit hub/ui/src plus hub/hub/static/ui TOGETHER including ui-build-stamp.json. Do NOT touch TaskDetailDrawer, RowMenu or DirectoryPicker this iteration - n2 needs a bundle with 1.1 landed and 2.2 NOT landed to run its red mutation-check.",
+  "current": "n2-red",
+  "next_action": "n2 - drive the Hub against the bundle just committed, then write S7.4's leg and require it RED. Pick a port with 'netstat -ano | grep LISTEN' first (8011/8012/8013 have all been taken this week; never 8000, never 8010). Start from source, not the console script: cd hub && DATABASE_URL=sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db py -3.11 -m uvicorn hub.main:app --port <free> --host 127.0.0.1. Confirm the served bundle is THIS one - /health should not report ui_stale, and the served index.html must reference index-CYeERp_S.js. S7.2: py -3.11 scripts/drive/t_d1_0910_escape_across_the_dialogs.py (was 30 passed/6 failed) and S7.3: t_d1_0910_rowmenu_leaves_the_page_inert.py (was 18/1) - RECORD ACTUALS, S1.1 may already flip some legs. Watch S7.2a: the D2 block prints 'no project-manager trigger reachable - skipped' and calls no check(), so a skip lowers the count without failing; if D2 skips, S7.4 was not driven either and this item is not done. Then extend ONE of those two harnesses (do NOT start a third file) with S7.4's leg: open the project modal, open the directory browser, press Escape WITHOUT clicking inside the browser first - the 'without clicking' IS the leg. Against this bundle (1.1 landed, 2.2 NOT landed) the modal must CLOSE, i.e. the leg must be RED. That red run is S7.4a's evidence and the only mutation-check for the task two rounds denied was needed. Do not fix DirectoryPicker this iteration - that is n3. Stop whatever Hub you start.",
   "queue": [
     {
       "id": "n1-hook",
-      "status": "open",
+      "status": "done",
       "title": "S1 hook + S6 unit coverage + S5 bundle",
-      "detail": "useDialogFocus.ts Escape branch stands down on defaultPrevented. Add the hook unit case and mutation-check it. Rebuild the bundle and commit src+static together. Nothing else in hub/ui/src is edited - the n2 mutation-check depends on this exact intermediate state."
+      "detail": "useDialogFocus.ts Escape branch stands down on defaultPrevented. Add the hook unit case and mutation-check it. Rebuild the bundle and commit src+static together. Nothing else in hub/ui/src is edited - the n2 mutation-check depends on this exact intermediate state. DONE iteration 2: useDialogFocus.ts returns on defaultPrevented (bubble/document kept, Tab branch untouched); new src/__tests__/useDialogFocus.test.tsx (2 cases) mutation-checked RED then restored; taskDetailDrawer.test.tsx:117 unchanged and green; full UI suite 148 files/1529 tests passed; bundle rebuilt (index-BvtjVm7p -> index-CYeERp_S, defaultPrevented 19->20) and AW_CHECK_UI_BUNDLE=1 stamp tests 18 passed. tasks.md 1.1-1.3, 5.1-5.2, 6.1-6.4 ticked."
     },
     {
       "id": "n2-red",
