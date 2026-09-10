@@ -462,21 +462,112 @@ def subject_two(browser, pid):
     page.close()
 
     print("  D2 — ProjectManagerModal")
+    # The old form of this leg looked for `add-project` on the environment tab and, not finding
+    # it, printed "skipped" and called no `check()` — so a leg that never ran lowered the passed
+    # count without raising the failed one, and the run still read as clean. It was not the
+    # product: `tab=environment` puts the rail into SECTION mode (`rail-section-back` is present,
+    # the project list is not), and the single "Add project" action only renders in the list view.
+    # One click on the rail's back control restores it. The skip is now a `check()` too, so a
+    # trigger that genuinely disappears fails this harness instead of quietly shrinking it.
     page = open_page(browser, pid, "environment")
+    back = page.locator("[data-testid='rail-section-back']")
+    if back.count():
+        back.first.click()
+        page.wait_for_timeout(1000)
     trigger = page.locator("[data-testid='add-project']")
+    check(trigger.count() >= 1, f"the rail's 'Add project' action is reachable ({trigger.count()})")
     opened = False
     if trigger.count():
         trigger.first.click()
         page.wait_for_timeout(1400)
-        opened = page.get_by_role("dialog").count() > 0
-    if not opened:
-        print("    no project-manager trigger reachable — skipped")
-    else:
+        opened = page.locator("[aria-labelledby='project-manager-title']").count() > 0
+    check(opened, "the project manager opened")
+    if opened:
         focus_now(page, "on open")
         page.keyboard.press("Escape")
         page.wait_for_timeout(900)
-        check(page.get_by_role("dialog").count() == 0, "Escape closes the project manager")
+        check(
+            page.locator("[aria-labelledby='project-manager-title']").count() == 0,
+            "Escape closes the project manager",
+        )
         shot(page, "d2-project-manager")
+    page.close()
+
+    print(
+        "  D3 — the directory browser, with Escape pressed where the operator's focus ACTUALLY is"
+    )
+    # §7.4. The point of this leg is the gesture it does NOT make: it never clicks inside the
+    # browser first. `DirectoryPicker` binds its Escape handler with React's `onKeyDown` on its own
+    # root div, so that handler runs only when focus is inside the browser. Opening the browser
+    # leaves focus on the control that opened it, which is OUTSIDE that root — so nothing calls
+    # `preventDefault()`, the modal's `useDialogFocus` sees an unclaimed Escape on `document`, and
+    # the operator loses the whole modal and their typed path when they meant to dismiss a
+    # dropdown. Two review rounds recorded that this component needed no edit; R3 measured that it
+    # does, and this leg is that measurement.
+    #
+    # Asserted in the direction of the CORRECT behaviour, so it is red until §2.2 lands and green
+    # after. Against a bundle carrying §1.1 and not §2.2 it MUST fail — that red run is the only
+    # mutation-check §2.2 gets, because the fix and its evidence cannot both be present at once.
+    page = open_page(browser, pid, "environment")
+    back = page.locator("[data-testid='rail-section-back']")
+    if back.count():
+        back.first.click()
+        page.wait_for_timeout(1000)
+    trigger = page.locator("[data-testid='add-project']")
+    check(trigger.count() >= 1, "the rail's 'Add project' action is reachable for the browser leg")
+    if trigger.count():
+        trigger.first.click()
+        page.wait_for_timeout(1400)
+    modal = "[aria-labelledby='project-manager-title']"
+    picker = "[aria-label='Browse for a directory']"
+    check(page.locator(modal).count() == 1, "the project manager is up")
+    # A path is typed first so the leg can say what an Escape costs, not merely what it closes.
+    typed_path = "C:/some/deliberate/path"
+    path_input = page.locator(modal).locator("input").first
+    path_input.click()
+    page.keyboard.press("Control+A")
+    page.keyboard.type(typed_path)
+    page.wait_for_timeout(300)
+    # The native folder dialog is offered on this host, so the in-Hub browser lives behind the
+    # link beside it. Never click "Browse…" here: that spawns an OS dialog this process cannot
+    # dismiss and the run would hang rather than fail.
+    in_hub = page.get_by_text("Browse within the Hub instead", exact=True)
+    if in_hub.count():
+        in_hub.first.click()
+    else:
+        page.get_by_role("button", name="Open directory browser").first.click()
+    page.wait_for_timeout(1200)
+    check(page.locator(picker).count() == 1, "the in-Hub directory browser opened")
+    shot(page, "d3-picker-open")
+    st = focus_now(page, "browser just opened — nothing clicked inside it")
+    # Not decoration: this records WHY the leg below fails, so a future reader does not have to
+    # re-derive it. Focus is on the opener, which is outside the browser's own root.
+    inside = page.evaluate(
+        "(sel) => { const r = document.querySelector(sel); const a = document.activeElement;"
+        " return !!(r && a && r.contains(a)) }",
+        picker,
+    )
+    print(f"    focus is inside the browser: {inside}   ({st['tag']}, text={st['text']!r})")
+
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(900)
+    shot(page, "d3-after-escape")
+    picker_gone = page.locator(picker).count() == 0
+    modal_alive = page.locator(modal).count() == 1
+    survived_path = path_input.input_value() if modal_alive else "<the modal is gone>"
+    print(
+        f"    browser closed: {picker_gone}   modal survived: {modal_alive}   path: {survived_path!r}"
+    )
+    check(picker_gone, "Escape closes the directory browser")
+    check(
+        modal_alive,
+        "AND THE PROJECT MODAL IS STILL OPEN — one Escape dismisses the dropdown, not the dialog "
+        "behind it",
+    )
+    check(
+        survived_path == typed_path,
+        f"and the path the operator typed is still there ({survived_path!r})",
+    )
     page.close()
 
 

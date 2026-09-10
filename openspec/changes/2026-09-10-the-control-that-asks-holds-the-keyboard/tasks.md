@@ -118,7 +118,7 @@ half. A run that closes one and reports the change done has closed half a change
 
 ## 7. The drive — this is what closes the change
 
-- [ ] 7.1 A real browser against a throwaway Hub serving **the rebuilt bundle** (§5). Check
+- [x] 7.1 A real browser against a throwaway Hub serving **the rebuilt bundle** (§5). Check
   `netstat -ano | grep LISTEN` before choosing a port — `8011`, `8012` and `8013` have all been in
   use by other windows' drives this week — and stop what you start.
 - [ ] 7.2 `py -3.11 scripts/drive/t_d1_0910_escape_across_the_dialogs.py` — **30 passed / 6 failed**
@@ -127,7 +127,7 @@ half. A run that closes one and reports the change done has closed half a change
   add legs to these same two files and would otherwise make the stated total unreachable. A
   different six failing is still not this change landing.
 
-- [ ] 7.2a **A leg that skips is not a leg that passed.** The harness's `D2` block prints
+- [x] 7.2a **A leg that skips is not a leg that passed.** The harness's `D2` block prints
   `no project-manager trigger reachable — skipped` and calls no `check()` at all
   (`t_d1_0910_escape_across_the_dialogs.py:472-473`), so an environment that hides that trigger
   lowers the count without failing anything. If the total comes in under the floor, read the
@@ -146,7 +146,7 @@ half. A run that closes one and reports the change done has closed half a change
   breadcrumb or a folder row first would pass against an unfixed `DirectoryPicker` and prove nothing
   (`design.md` D9). Extend one of the two harnesses rather than starting a third file.
 
-- [ ] 7.4a **Assert the leg fails before §2.2 and passes after.** Run it against a bundle with §1.1
+- [x] 7.4a **Assert the leg fails before §2.2 and passes after.** Run it against a bundle with §1.1
   landed and §2.2 *not* landed: the modal must close, i.e. the leg must be red. That is the
   mutation-check for the one task in this change whose necessity two rounds denied, and it is cheap
   because §1.1 and §2.2 are separate files.
