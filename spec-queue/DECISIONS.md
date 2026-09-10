@@ -757,11 +757,26 @@ one**. A five-month plan whose input grows as it runs is not a plan.
 **Rejected: drain A, then re-measure.** Cheapest, and it defers the same question by about a week
 while the day windows keep proposing from wherever the ledger happens to be read from.
 
-**What this does not decide.** It does not schedule the ratchet checks — those are still Stage 6
-work with no owner, and *a verdict is not an implementation* remains this file's standing gap. It
-does not touch the 8 `CONFLICT` findings, which need a hand read regardless of severity. And it does
+**What this does not decide.** ~~It does not schedule the ratchet checks — those are still Stage 6
+work with no owner~~ — **corrected 2026-09-10: all three were built on the night of 2026-09-09**
+(`6484de4`, `hub/tests/test_surface_ceilings.py` and `test_dependency_ceilings.py`). It does not
+touch the `CONFLICT` findings, which need a hand read regardless of severity. And it does
 not re-open the drain gate's own rule: `.claude/loops/day-window.md` step 6 still governs *whether*
 a day proposes, while this verdict governs *what from*.
+
+> **OPEN — raised 2026-09-10, after the verdict, and it is about this verdict's own mechanism.**
+> **"Ratchet C and D" cites R-1's model, and R-1's model cannot carry these 88 findings.** A ratchet
+> freezes *a count of one homogeneous, countable population* — 35 clientless routes, 52 MISREPORT
+> surfaces, 100 unhandled query sites, the dependency ceilings. Each is a single number that may
+> shrink and may never grow. **The 88 open C, D and unlabelled findings are heterogeneous**: there is
+> no one number to freeze, and no check can assert them.
+>
+> So as built, this verdict means **"stop scheduling them"**, not **"hold a line under them"**. Those
+> are different promises and only the first is currently kept. It may well be the one intended — but
+> the verdict cites R-1, and R-1 promises the second. **The operator should say which**, because the
+> difference decides whether anything at all stops that population growing. The cost noted above
+> lands harder under the first reading: **35 of the 75 read on 2026-09-09 are named nowhere outside
+> `FINDINGS.md`**, so "unscheduled" is very close to "forgotten".
 
 ### The day window's two, 2026-09-09 evening — and one it asked that was already answered
 

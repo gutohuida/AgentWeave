@@ -592,17 +592,29 @@ another repository's and left with the `OV-` series on 2026-09-08.)
 `DECISIONS.md`, *"Verification pass"*. **Seven of eight hold; entry 19 does not**, and R-3.2 holds with a side
 effect the verdict missed. The `Status` column below reflects that pass, not the verdict alone.
 
-| Work | From | Status after the 2026-09-08 verification |
-|---|---|---|
-| Thread F209's `reason` through, or delete the field | R-3 | **HOLDS exactly.** `accept` passes no `reason=`; `reject` three functions away passes it. Unqueued. |
-| **Remove** `PATCH /queue/settings` | R-3 | **HOLDS, with a catch.** Route real, four columns confirmed, no client anywhere — **but it also reschedules every queued agent and the PUT does not.** Drop that knowingly or move it. Unqueued. |
-| A bare `uvicorn hub.main:app` from `hub/` must refuse to start | R-3 | **DOES NOT HOLD.** There is no relative default — fixed `44a1ae5`, 2026-08-17, three weeks before the verdict. **Re-decide narrowed or drop.** |
-| Model-catalog check as a `scripts/` tool | R-3 | **HOLDS.** No runtime read of `models_cache.json`; compile-time literal, cache 10 days stale. Unqueued. |
-| Archive-collision check as a repo script | R-2 | **HOLDS — not built.** Unqueued. |
-| The three R-1 ratchet checks | R-1 | **ALL THREE REPRODUCE EXACTLY** — 35 clientless routes of 187, 51 operator-reachable MISREPORTs, three `fastmcp` ceilings + `starlette<2.0`. Stage 6, unqueued. |
+| Work | From | Status after the 2026-09-08 verification | **Built?** (2026-09-10) |
+|---|---|---|---|
+| Thread F209's `reason` through, or delete the field | R-3 | **HOLDS exactly.** `accept` passes no `reason=`; `reject` three functions away passes it. Unqueued. | **No** |
+| **Remove** `PATCH /queue/settings` | R-3 | **HOLDS, with a catch.** Route real, four columns confirmed, no client anywhere — **but it also reschedules every queued agent and the PUT does not.** Drop that knowingly or move it. Unqueued. | **No** — and the 2026-09-09 verdict makes the *order* binding: move the reschedule into the PUT first, then remove |
+| A bare `uvicorn hub.main:app` from `hub/` must refuse to start | R-3 | **DOES NOT HOLD.** There is no relative default — fixed `44a1ae5`, 2026-08-17, three weeks before the verdict. **Re-decide narrowed or drop.** | **No** — re-decided narrowed 2026-09-09 (refuse when `DATABASE_URL` is *unset*), still unproposed |
+| Model-catalog check as a `scripts/` tool | R-3 | **HOLDS.** No runtime read of `models_cache.json`; compile-time literal, cache 10 days stale. Unqueued. | **YES** — `bb08dc4`: `scripts/check_model_catalog.py` + `tests/test_model_catalog_drift.py` |
+| Archive-collision check as a repo script | R-2 | **HOLDS — not built.** Unqueued. | **YES** — `c128019`: `scripts/check_openspec_collisions.py` + `tests/test_openspec_collisions.py` |
+| The three R-1 ratchet checks | R-1 | **ALL THREE REPRODUCE EXACTLY** — 35 clientless routes of 187, 51 operator-reachable MISREPORTs, three `fastmcp` ceilings + `starlette<2.0`. Stage 6, unqueued. | **YES** — `6484de4`: `hub/tests/test_surface_ceilings.py` + `test_dependency_ceilings.py`. Note the ceilings **moved before they were frozen**: 187→188 routes and 51→52 MISREPORTs |
+
+**Four of the six were built on the night of 2026-09-09 and this table said otherwise for a day.**
+Recorded because the direction is the unusual one: every other staleness this file has caught made
+the project look *more blocked than it was*, and so did this — but here the fix was **already on
+disk with tests beside it**, and a reader planning work from this table would have queued three
+things that exist. **Check `git log` for the row before queueing it**, exactly as the Stage 4
+retirements taught.
 
 **A verdict is not an implementation, and this plan has no stage between the two.** That is the
-structural hole the audit found. **And the verification proves the hole has a cost**: entry 19 sat
+structural hole the audit found, and **it is now half-closed by practice rather than by structure**:
+the four built items reached the night window through an `APPROVALS.md` `ORDER:` line naming work
+that was *not a change* — the worked example is `APPROVALS.md`'s `## 2026-09-09` four-item block.
+That is the missing stage, improvised. **It still has no home in this plan.**
+
+**And the verification proves the hole has a cost**: entry 19 sat
 as a decided-and-unbuilt item for a fix that had already shipped three weeks earlier, and nothing
 would have caught it before somebody started building.
 
