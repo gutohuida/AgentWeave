@@ -29,6 +29,26 @@ export function DirectoryPicker({ startPath, onChoose, onClose }: DirectoryPicke
   const { data: rootsData } = useFilesystemRoots()
   const rootRef = useRef<HTMLDivElement>(null)
 
+  // Hold the keyboard the picker opened with, and hand it back where it came from.
+  //
+  // `handleKeyDown` below claims Escape with `preventDefault()` so the modal that owns this picker
+  // stands down and only the picker closes — but it is a React `onKeyDown` on this root, so it can
+  // only run when focus is already somewhere inside it, and opening the picker leaves focus on the
+  // button outside that opened it (`ProjectManagerModal`). Escape then reached the modal's own
+  // document-level handler unclaimed and destroyed the modal, and the path the operator had typed
+  // with it. Focusing the root is what puts the key inside the subtree that answers it.
+  //
+  // The cleanup is the other half and is not optional: every close path unmounts this component —
+  // Escape, a pointer outside, choosing a directory — and each one would otherwise unmount the
+  // focused element and leave focus on `document.body`, which is the defect this change exists to
+  // remove arriving by a new route. Capture on mount, restore in the same effect's cleanup, exactly
+  // as `useDialogFocus` does.
+  useEffect(() => {
+    const returnFocusTo = document.activeElement as HTMLElement | null
+    rootRef.current?.focus()
+    return () => returnFocusTo?.focus()
+  }, [])
+
   useEffect(() => {
     const closeOnOutsidePointer = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) onClose()

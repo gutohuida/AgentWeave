@@ -24,16 +24,16 @@ half. A run that closes one and reports the change done has closed half a change
 
 ## 2. The nested owners declare that they handled it
 
-- [ ] 2.1 `hub/ui/src/components/tasks/TaskDetailDrawer.tsx:413-415` calls `e.preventDefault()`
+- [x] 2.1 `hub/ui/src/components/tasks/TaskDetailDrawer.tsx:413-415` calls `e.preventDefault()`
   before `setBlockingReason(null)`. This is the line that makes `F310`'s second gesture work, and it
   is the line whose effect has never been observable.
 
-- [ ] 2.1a **This task does not work without §4.1, and that is not obvious.** The handler is bound to
+- [x] 2.1a **This task does not work without §4.1, and that is not obvious.** The handler is bound to
   the `<input>` itself, so it runs only when focus is in the input — which is precisely what `F309`
   denies today. An implementer who lands §1.1 and §2.1 and stops will watch leg `C3` still fail and
   have no reason to suspect the focus work is the cause (`design.md` D9). Land §4.1 before
   concluding anything about this task.
-- [ ] 2.2 **`DirectoryPicker` must hold the keyboard it opened.** R1 and R2 both recorded that this
+- [x] 2.2 **`DirectoryPicker` must hold the keyboard it opened.** R1 and R2 both recorded that this
   file needed no edit because it already calls `preventDefault()` at `:57-62`. R3 measured the
   precondition and it does not hold: that `preventDefault()` sits in a React `onKeyDown` bound to the
   picker's root `div` (`:85-91`), nothing focuses that root, and opening the browser leaves focus on
@@ -42,44 +42,44 @@ half. A run that closes one and reports the change done has closed half a change
   when the picker mounts. Keep `role="dialog"` and `tabIndex={-1}` — they are already there and are
   what makes it focusable.
 
-- [ ] 2.2a **Return focus to the trigger when the picker closes**, on every path — Escape, a click
+- [x] 2.2a **Return focus to the trigger when the picker closes**, on every path — Escape, a click
   outside (`:32-38`), and choosing a directory. Without this, dismissing the browser unmounts the
   focused element and drops focus on `document.body`, which is the shape of `F307` arriving by a new
   route inside a change that is supposed to be reducing it. Capture the previously-focused element on
   mount and restore it in the same effect's cleanup, exactly as `useDialogFocus.ts:22`/`:41-44`
   already does; do not reach for `document.getElementById`.
 
-- [ ] 2.2b **Do not generalise this to the other panels.** "Every panel focuses itself when it opens"
+- [x] 2.2b **Do not generalise this to the other panels.** "Every panel focuses itself when it opens"
   is `F307` and is excluded (`design.md` D8). §2.2 exists because one scenario in this change's own
   `hub-interaction-feedback` delta — *"A panel opened over another panel dismisses only itself"* —
   has no other surface that could demonstrate it. If it starts to look like the general fix, stop and
   queue it (§8.4).
-- [ ] 2.3 Leave the five Escape owners that are *not* inside a `useDialogFocus` panel alone
+- [x] 2.3 Leave the five Escape owners that are *not* inside a `useDialogFocus` panel alone
   (`Composer.tsx:242`, `ModelPicker.tsx:109`, `ConversationRow.tsx:183`, `FilesIndexTab.tsx:42`,
   `SpecDocumentBrowser.tsx:92`). Re-run the grep before believing this list: it is the boundary of
   the change, and `F311` exists because a list like it was trusted instead of re-derived.
 
 ## 3. The menu stands aside for the action that asks
 
-- [ ] 3.1 `RowMenuItem` in `hub/ui/src/components/layout/RowMenu.tsx` gains an optional flag meaning
+- [x] 3.1 `RowMenuItem` in `hub/ui/src/components/layout/RowMenu.tsx` gains an optional flag meaning
   *"choosing this opens a control that will take focus"*. Document it in the interface, in the same
   voice as `reason` and `disabled` above it.
-- [ ] 3.2 `RowMenu` records whether the item last chosen carried the flag, and prevents Radix's
+- [x] 3.2 `RowMenu` records whether the item last chosen carried the flag, and prevents Radix's
   `onCloseAutoFocus` in that case only. Default behaviour — focus returns to the trigger — is
   unchanged for every item that does not carry it.
-- [ ] 3.3 **Clear the record on every close, however the menu closed.** Selection, Escape and a click
+- [x] 3.3 **Clear the record on every close, however the menu closed.** Selection, Escape and a click
   outside all reach `onCloseAutoFocus`, which is where the reset belongs; a flag left set would make
   the *next* dismissal drop focus on `document.body`.
-- [ ] 3.4 In `TaskDetailDrawer.tsx:285-311`, only the `blocked` item carries the flag. Every other
+- [x] 3.4 In `TaskDetailDrawer.tsx:285-311`, only the `blocked` item carries the flag. Every other
   move fires a mutation and leaves nothing on screen to hold focus, so it must keep returning focus
   to the trigger (`design.md` D4).
-- [ ] 3.5 Do **not** add an `onCloseAutoFocus` passthrough prop to `RowMenu`, and do not set
+- [x] 3.5 Do **not** add an `onCloseAutoFocus` passthrough prop to `RowMenu`, and do not set
   `modal={false}`. Both were considered and rejected with reasons (`design.md` D4, D7); the inert
   page disappears when the focus defect does.
 
 ## 4. The reason panel takes focus itself
 
-- [ ] 4.1 **Remove `autoFocus`** from the blocking-reason input (`TaskDetailDrawer.tsx:410`) and
+- [x] 4.1 **Remove `autoFocus`** from the blocking-reason input (`TaskDetailDrawer.tsx:410`) and
   focus it from a ref instead, when the panel becomes visible. One mechanism, not two
   (`design.md` D5).
 - [ ] 4.1a **The focus has to be visible on the keyboard path.** `hub-interaction-feedback` already
@@ -89,9 +89,9 @@ half. A run that closes one and reports the change done has closed half a change
   input shows its focus indicator. Do not "fix" this by forcing a ring on the pointer path; the
   shipped requirement is scoped to keyboard arrival and the pointer path is correct without one.
 
-- [ ] 4.2 Key the effect on *whether* a reason is being collected, not on its value — the state holds
+- [x] 4.2 Key the effect on *whether* a reason is being collected, not on its value — the state holds
   the text, so an effect depending on it would re-focus on every keystroke.
-- [ ] 4.3 No `setTimeout`, no `requestAnimationFrame`, no delay of any kind. After §3.4 nothing else
+- [x] 4.3 No `setTimeout`, no `requestAnimationFrame`, no delay of any kind. After §3.4 nothing else
   is competing for focus, so a scheduled focus would be a timing guess with no race left to win.
 
 ## 5. The bundle

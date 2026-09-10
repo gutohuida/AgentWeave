@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Icon } from '@/components/common/Icon'
 
@@ -9,6 +10,12 @@ export interface RowMenuItem {
   /** Stated under the label when the item is disabled. An unavailable action says why rather
    *  than disappearing, so the menu's shape does not change between rows. */
   reason?: string
+  /** Choosing this item opens a control that will take the keyboard for itself — a field asking
+   *  what a block is waiting for, say. The menu then stands aside instead of pulling focus back
+   *  to the trigger as it closes, which would take the keyboard straight back off the control
+   *  that just asked for an answer. Leave it unset for an action that fires and leaves nothing
+   *  on screen: those must keep returning focus to the trigger. */
+  takesFocus?: boolean
 }
 
 interface RowMenuProps {
@@ -52,7 +59,8 @@ const ITEM_STYLE: React.CSSProperties = {
  * context menu with no visible affordance is the thing this deliberately is not.
  *
  * Radix handles the rest of the keyboard contract: arrow keys move between items, Escape closes,
- * and focus returns to the trigger on dismiss.
+ * and focus returns to the trigger on dismiss — except for an item that declared `takesFocus`,
+ * where the control it opened keeps the keyboard instead.
  */
 export function RowMenu({
   label,
@@ -61,6 +69,10 @@ export function RowMenu({
   persistent = false,
   icon = 'more_horiz',
 }: RowMenuProps) {
+  // Whether the item last chosen said it was opening something that takes the keyboard. A ref, not
+  // state: nothing renders from it, and it has to be readable by `onCloseAutoFocus` in the same
+  // dismissal that set it, before any re-render could have delivered a new value.
+  const yieldFocusOnClose = useRef(false)
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -81,6 +93,18 @@ export function RowMenu({
         <DropdownMenu.Content
           align="start"
           sideOffset={4}
+          onCloseAutoFocus={(event) => {
+            // Radix returns focus to the trigger as the menu closes, which is right for almost
+            // every item and wrong for the one that opened a control asking for an answer: the
+            // control has already taken the keyboard and this would take it back (`F309`).
+            //
+            // Reset here rather than at selection because *every* dismissal reaches this handler —
+            // choosing an item, Escape, a click outside — and only some of them chose anything. A
+            // flag left set by a `takesFocus` selection would make the next dismissal, which
+            // selected nothing and opened nothing, drop focus on `document.body` instead.
+            if (yieldFocusOnClose.current) event.preventDefault()
+            yieldFocusOnClose.current = false
+          }}
           style={{
             minWidth: 200,
             background: 'var(--surface)',
@@ -103,6 +127,7 @@ export function RowMenu({
                   event.preventDefault()
                   return
                 }
+                yieldFocusOnClose.current = item.takesFocus === true
                 item.onSelect()
               }}
             >

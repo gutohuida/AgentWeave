@@ -142,6 +142,10 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   // reason, so a menu that sent the status on its own would offer a move that then fails — the one
   // thing the allowed-transitions endpoint exists to prevent.
   const [blockingReason, setBlockingReason] = useState<string | null>(null)
+  const blockingReasonRef = useRef<HTMLInputElement>(null)
+  // Whether a reason is being collected, not what it says. The state holds the text, so an effect
+  // depending on `blockingReason` itself would re-focus the input on every keystroke.
+  const collectingBlockingReason = blockingReason !== null
 
   const { data: allowed } = useAllowedTransitions()
   const updateTask = useUpdateTask()
@@ -163,6 +167,18 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
     setRefusal(null)
     setBlockingReason(null)
   }, [task?.id])
+
+  // The reason panel takes the keyboard itself when it appears. `autoFocus` used to do this and was
+  // removed: the browser applies it on mount, the row menu's own focus restoration ran afterwards
+  // and took the keyboard straight back to the trigger, and the operator's first keystrokes went to
+  // the menu instead of the field (`F309`). One mechanism, not two — the menu now stands aside
+  // (`RowMenu`, `takesFocus`) and this is the only thing that focuses the input.
+  //
+  // No `setTimeout` and no `requestAnimationFrame`: nothing is competing for focus any more, so a
+  // scheduled focus would be a timing guess with no race left to win.
+  useEffect(() => {
+    if (collectingBlockingReason) blockingReasonRef.current?.focus()
+  }, [collectingBlockingReason])
 
   useDialogFocus(open, panelRef, onClose)
 
@@ -289,6 +305,10 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
               items={moves.map((next) => ({
                 id: next,
                 label: `Move to ${statusLabel(next)}`,
+                // Only this one leaves a control on screen asking for something. Every other move
+                // fires a mutation and leaves nothing to hold the keyboard, so every other move
+                // keeps Radix's default and returns focus to the trigger the operator opened.
+                takesFocus: next === 'blocked',
                 onSelect: () => {
                   setRefusal(null)
                   if (next === 'blocked') {
@@ -407,11 +427,17 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
               What is this waiting for?
             </label>
             <input
-              autoFocus
+              ref={blockingReasonRef}
               value={blockingReason}
               onChange={(e) => setBlockingReason(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Escape') setBlockingReason(null)
+                if (e.key === 'Escape') {
+                  // Say we answered the key. The drawer's Escape handler is a bubble-phase listener
+                  // on `document` (`useDialogFocus`) and would otherwise close the whole ticket as
+                  // well: one Escape has to undo one thing — abandoning this reason — not two.
+                  e.preventDefault()
+                  setBlockingReason(null)
+                }
               }}
               placeholder="e.g. the staging API key"
               className="mt-1 w-full rounded px-2 py-1 text-xs"
