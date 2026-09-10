@@ -7,8 +7,9 @@ not copied from handoffs — several figures the chain was carrying forward were
 **Revised 2026-09-10.** Stages 1, 2 and 4 and `## Honest arithmetic` were rewritten against the
 tree and the classifier; every other section is older and dated where it stands. **What changed:
 Stage 2 is closed, Stage 4's tail is four findings and not `F142 alone`, Stage 1 is the oldest open
-item on the page, and the stage-shaped total is retired in favour of one built on 147 open
-findings — which resolves to a scope question only the operator can answer.** Read
+item on the page, and the stage-shaped total is retired in favour of one built on the open
+findings — which resolved to a scope question the operator answered the same morning
+(`DECISIONS.md`, *"The scope of the drain"*: **drain A and B, ratchet C and D**).** Read
 `## Honest arithmetic` first if you are here to decide something.
 
 This file is a **plan**, not an authority. It cannot approve a change or decide a rule: those are
@@ -270,12 +271,19 @@ point down. This is the same defect class as an approval row that looks right an
 | **F155** | ~~Archived change, never driven.~~ **RETIRED 2026-09-08 — the drive existed.** Fix `0373867` (2026-08-31), driven the same day: `t_f155_conflict_remedy.py`, **23/23**, the harness parsing the branch out of the refusal's own sentence, with the falsifying lane run deliberately. `requirement_gate.py` is byte-identical `0373867`→`HEAD`. Its drive filed **F165 (B)** and **F166 (C)**, which stay open. |
 | **F274, F295** | ~~Already specced — they are Stage 2.~~ **Both `fixed` and driven; Stage 2 is closed.** |
 
-### The live severity-A tail, 2026-09-10 — four open, and not one of them existed when this stage was written
+### The live severity-A tail, 2026-09-10 — six open, and not one of them existed when this stage was written
 
 **`F142 alone` is retired.** F142 resolved on 2026-09-09 and the tail was immediately replaced by
-four findings that the drives of Stages 2 and 4 produced. Measured with
-`py -3.11 scripts/classify_findings.py`, not copied: **53 severity-A sections, 48 `RESOLVED`, 4
+findings that the drives of Stages 2 and 4 produced. Measured with
+`py -3.11 scripts/classify_findings.py`, not copied: **55 severity-A sections, 48 `RESOLVED`, 6
 `OPEN`, 1 `CONFLICT`.**
+
+> **This table was written at 09:30 saying four, and was wrong by 10:00.** F309 was filed by the day
+> window and F312 by the session writing this section, both inside the same morning. **Do not read
+> any count on this page as current** — the classifier is one command and it is the only authority.
+> Recorded rather than quietly patched, because a stale count *in the direction of finished* is the
+> specific failure this whole revision exists to correct, and it recurred within half an hour of
+> being named.
 
 | Finding | What it needs | Owner |
 |---|---|---|
@@ -283,6 +291,8 @@ four findings that the drives of Stages 2 and 4 produced. Measured with
 | **F300 (A)** | **Undecided.** The workspace approver denies every shell command containing a URL — including the request `access_path_notice`'s own non-MCP branch instructs. Measured live on `:8010`. | operator verdict first |
 | **F301 (A)** | **Undecided.** On `hub_client = "cli"` no MCP server is injected, the posture falls to `DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER = "acceptEdits"`, and the run has no tool that can make the request. Measured live: exit 0, **zero requests reached the Hub.** | operator verdict first |
 | **F306 (A)** | **Undecided, and it is a governance hole.** An agent can be staffed to review, and approve, work it recorded evidence for. `requirement_evidence.actor` is not one of `agents_that_may_have_authored`'s three sources (`task_transition_service.py:253-283`), and `_guard_author_is_not_reviewer` (`:286-311`) compares against `agent_that_completed`, which is NULL on an operator completion. **Both defences share the blind spot.** | operator verdict first |
+| **F309 (A)** | **Undecided, filed 2026-09-10** by the day window's D-1 drive. The blocking-reason input never gets focus, so the operator's reason is typed into the status menu and each space re-opens it. Operator-facing, measured in a real browser. | needs a proposal |
+| **F312 (A)** | **Undecided, filed 2026-09-10.** The general form of F300: on the **default** posture a run can make no network request from a shell command at all, because `_ABSOLUTE_PATH_RE` reads a URL as a path — `http://…` yields the candidate `p://…`. **F300's fix cannot close it**, by that verdict's own construction. | operator verdict first |
 | **F52 (A)** | `CONFLICT` — still the bookkeeping close described above. Unchanged since 2026-08-27. | ten minutes |
 
 **F299, F300 and F301 are one subject, not three.** All three are the access-path/approver posture
@@ -290,8 +300,8 @@ seen from three angles, all three were filed by the *same* drive on 2026-09-09, 
 separately is how a posture acquires three inconsistent special cases. **Put them to the operator
 together.**
 
-**None of the four is buildable unattended today**, because three need a verdict and the fourth
-needs a proposal. That is the same shape Stage 0 was built to break, one stage further down: the
+**Not one of the six is buildable unattended today**, because four need a verdict and the other two
+need a proposal. That is the same shape Stage 0 was built to break, one stage further down: the
 tail is no longer short of capacity, it is short of decisions — and this time nobody has written the
 `ORDER:` line that would fix it.
 
@@ -314,13 +324,15 @@ obvious next move."* The search was run on 2026-09-08 and **retired both**: each
 a same-day drive recorded in `FINDINGS.md`, twelve thousand lines below the banner that said no drive
 existed. ~~So the open severity-A tail after F52 is retired and F274/F295 are built is **F142 alone** —
 one finding, blocked on one drive, with no operator decision anywhere in it.~~ **Struck 2026-09-10.**
-F142 resolved, F274 and F295 shipped, and the tail is **F299/F300/F301/F306** — four findings, three
-of them blocked on an operator decision, which is the exact condition this sentence claimed was gone.
-It was true for about thirty hours. See the live table above.
+F142 resolved, F274 and F295 shipped, and the tail is **F299/F300/F301/F306, plus F309 and F312 filed
+the same morning this was written** — six findings, four of them blocked on an operator decision,
+which is the exact condition this sentence claimed was gone. It was true for about thirty hours. See
+the live table above, and run the classifier rather than believing this number either.
 
 **The arithmetic of this one day is the point.** The severity-A count went **six → five → three**
 without a single line of product code being written. **And the full arc, three days on: six → five →
-three → one → four.** Reading retired three; building and driving filed three more. Both halves are
+three → one → four → six**, the last step taken in the single morning this revision was written.
+Reading retired three; building, driving and reading-for-a-verdict filed five more. Both halves are
 real and the second is the one this plan had no term for — see `## Honest arithmetic`. Every one of those retirements was a document
 catching up with evidence that had been on disk for a week. The failure was never capacity — it was
 that three banners asked *"has anyone driven this?"* and nobody grepped this file for the finding's
@@ -393,9 +405,13 @@ daily.** As measured this morning, over **308 sections**:
 
 | | A | B | C | D | ? | total |
 |---|---|---|---|---|---|---|
-| **open** | 4 | 59 | 68 | 14 | 2 | **147** |
+| **open** | 6 | 60 | 68 | 14 | 2 | **150** |
 | conflict | 1 | 4 | 3 | 0 | 0 | 8 |
-| resolved | 48 | 60 | 28 | 6 | 11 | 153 |
+| resolved | 48 | 60 | 29 | 6 | 11 | 154 |
+
+**Re-measured at 10:00 the same morning, and it had already moved: 147 → 150 in half an hour**
+(F309, F310, F312). That is not noise around the estimate — it *is* the source term this section
+exists to name, arriving while the section was being written.
 
 **The two measured rates that price it.** Proposals: **one change per day window** — `D-2/D-3/D-4` is
 R1/R2/R3 on a single change, and the round discipline forbids compressing it. Builds: **one to three
@@ -405,15 +421,16 @@ the wrong unit all along. The unit is **days**.
 
 | Scope | Open findings | At ~1 proposal/day |
 |---|---|---|
-| severity A only | **4** | under a week — *but three are blocked on a verdict, not on a day* |
-| A + B | **63** | ~9 weeks of unbroken daily cycles |
-| everything open | **147** | **~5 months** |
+| severity A only | **6** | ~a week — *but four are blocked on a verdict, not on a day* |
+| A + B | **66** | ~9 weeks of unbroken daily cycles |
+| everything open | **150** | **~5 months** |
 
 **And every one of those figures assumes the ledger stops growing, which it measurably does not.**
 Stage 2 closed two severity-A findings and filed three more plus a B — a **net severity-A drain of
 minus one over the whole stage.** That is n=1 and must not be read as a law; what it does establish
 is that *driving a change is also a defect-finding activity*, so the backlog has a source term this
-plan never modelled. The honest form: **147 is a floor on the work, not an estimate of it.**
+plan never modelled. The honest form: **150 is a floor on the work, not an estimate of it** — and the
+floor rose by three while this section was being written.
 
 ### The scope — **ANSWERED 2026-09-10: drain A and B, ratchet C and D**
 
