@@ -25,6 +25,67 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ---
 
+## 2026-09-11
+
+Written 2026-09-10 evening by a DECIDE session, on the operator's instruction, after four verdicts
+were recorded today. **This section exists because the spec loop now has a queue and no order** —
+five severity-A findings are decided and unproposed, and absent this the window picks one from the
+open ledger on its own reading.
+
+### The spec loop takes `F306`, and only `F306`
+
+`D-2/D-3/D-4` are R1/R2/R3 on **`F306` — an agent can be staffed to review, and approve, work it
+recorded evidence for.** The verdict is `DECISIONS.md`, *"F306 and F312, decided 2026-09-10
+evening"*, and it is binding: **both defences, and every evidence row regardless of
+`review_state`.** Do not re-litigate either half — R1's job is the proposal, not the decision.
+
+Three things the verdict deliberately leaves to R1, so nobody treats them as settled:
+
+- **Whether the reviewer ladder picks deterministically** when several agents are eligible. Unverified
+  in both directions; in the measured run the pool was two and it chose the author. **Measure it;
+  do not assume it either way.**
+- The shape of the guard's fallback when `agent_that_completed` is `NULL`.
+- Whether the fourth source belongs beside the other three in `agents_that_may_have_authored` or as
+  its own function called by it — a style question the existing three answer by example.
+
+**Blast radius, already measured, so R1 need not re-derive it:** `scheduler.py:625`, `scheduler.py:1574`,
+and `hub/tests/test_a_flow_names_what_it_cannot_staff.py`. `RequirementEvidence` already carries
+`task_id`, `actor` and `actor_kind` — **no migration.**
+
+### The order for the days after, so this is not re-decided each morning
+
+All are decided and unproposed. **One per day; the round discipline is not compressible.**
+
+```
+1. F306                     (A)  self-approval -- tomorrow, above
+2. F300 + F312 as ONE       (A)  the _decide URL change; they must agree on what a URL is
+3. F299                     (A)  no grounds, no approver flag
+4. F301's notice change          specced capability -- agent-capability-plane, so it needs the rounds
+5. the three R-3 leftovers       F209's reason; queue/settings port-then-remove; entry 19 narrowed
+```
+
+**`F300 + F312` is one change and not two.** Both edit the same `_decide` path and shipping either
+alone leaves the other's message or capability wrong. Two proposals here would collide.
+
+### Two things that are not the spec loop
+
+- **`D-1` — measure F292's rate.** The `BEGIN IMMEDIATE` mitigation landed at `af69a27` today and
+  **is unproven**: two CI runs carried it and the seven green runs before it did not. Count failures
+  per run over this branch's recent history and **classify each red from its own log** before
+  counting it — `F314` filed today establishes a *second*, non-F292 source of red in the same file
+  family, at about one run in eight on an unmodified tree. A rate quoted without that classification
+  will fold the two together.
+- **The merge gate as usual.** Check it **before** this firing commits anything — that ordering is
+  `8596706`'s fix and it is why the gate opened today.
+
+### Not tonight's leftovers
+
+If the night did not finish `2026-09-10-the-control-that-asks-holds-the-keyboard`, **that is the
+night's to resume, not the day's.** The day window does not implement approved changes
+(`day-window.md`, the D-6 carve-out says so explicitly). Note it in the log and leave it.
+
+---
+
 ## 2026-09-09
 
 Written 08:45 by a RESUME session, on the operator's instruction this morning, after reading the

@@ -578,6 +578,106 @@ serving four-day-old code.
 
 ## Decided
 
+### F306 and F312, decided 2026-09-10 evening — and the scope verdict's mechanism, amended
+
+**DECIDED 2026-09-10 ~18:50, by the operator, in session**, after a code exploration of both
+findings. These were the last two open severity-A findings with no verdict.
+
+#### F306 — an agent may not review work it recorded evidence for
+
+**DECIDED: repair BOTH defences, and count EVERY evidence row regardless of `review_state`.**
+
+`agents_that_may_have_authored` (`hub/hub/task_transition_service.py:253-283`) unions exactly three
+records — transitions, `assignee`, runs bound to the task. A fourth exists and is not a source:
+`requirement_evidence.actor`. In the measured run all three legitimate sources were empty, the
+ladder got `exclude=set()`, and the agent approved its own work — `under_review → approved`,
+`actor_kind='run'`, nothing refused it.
+
+**The function's own docstring decides this**, which is why the verdict is not a close call: *"a
+record associating an agent with a task is sufficient to exclude it, and a source's silence is not
+evidence that the agent did not work it."* That principle was applied to three of four sources, and
+by its own standard the missing one is the **strongest** — the other three are circumstantial
+(moved it / holds it / ran about it), while an `implementation` evidence row is the agent asserting
+*"this is my implementation of this task"*, carrying the commit the reviewer is handed.
+
+**Both defences, not just the ladder.** `_guard_author_is_not_reviewer` (`:286-311`) compares
+`agent_that_completed`, which is `NULL` on an operator completion, so it has nothing to compare and
+permits. Repairing only the ladder leaves the **silent** failure standing: a ladder that cannot
+staff reports *"no reviewer available"* and the operator sees it; a guard that permits a
+self-approval is seen by nobody. The guard falls back to the evidence actors when there is no
+completer.
+
+**Every evidence row, not only `ACCEPTED`.** Rejected: filtering on `review_state == ACCEPTED`.
+An agent whose evidence was rejected, or whose evidence is still awaiting review, still **authored
+the work** — that is what the row records. Filtering by decision would reintroduce the gap one
+status value further along, and it would make the exclusion depend on a review outcome that the
+review being staffed is supposed to produce.
+
+**The cost, accepted knowingly and already priced by the code:** *"the cost of excluding an agent
+that did nothing is a review the flow reports it could not staff, which the operator sees and
+resolves; the cost of including an agent that wrote the work is a self-approval nobody sees."* This
+verdict buys more of the first to eliminate the second.
+
+**Blast radius, measured before deciding:** two call sites (`scheduler.py:625`, `:1574`) and one
+test file (`hub/tests/test_a_flow_names_what_it_cannot_staff.py`). `RequirementEvidence` already
+carries `task_id`, `actor` and `actor_kind`, so the fourth source mirrors
+`agents_of_runs_bound_to` exactly and needs no migration.
+
+**Open and NOT decided here** — flagged so a round picks it up rather than assuming: **whether the
+reviewer ladder picks deterministically** when several agents are eligible. In the measured run the
+pool was two and it chose the author. That is unverified either way and is a question for R1.
+
+#### F312 — the workspace posture and URLs
+
+**DECIDED: allow the run's own Hub URL, and deny every other URL with a reason that names network
+access rather than the filesystem.** This is option C of three, and it composes with — rather than
+replaces — the F300 verdict above.
+
+**What settled it is a measurement, not a preference.** `python -c` reading `os.environ` makes the
+**identical** request to the **identical** address and is **allowed** today, because it puts no
+absolute path in the command text for `_ABSOLUTE_PATH_RE` to find. So the current behaviour is **not
+containment — it is a syntax filter.** It stops the agent that writes a URL plainly and no other,
+and it reports that as `'p://127.0.0.1:9/…' is outside your workspace`, sending the model and the
+operator to debug a filesystem.
+
+Rejected: **allow all URLs** — honest about what is enforceable at this layer, but it grants shell
+egress under the *default* posture, and a porous boundary is not a reason to open it deliberately;
+that is a capability decision, and it is not forced by this defect. Rejected: **deny every URL with
+a true reason** — zero widening and it does fix the message, but it leaves F300's mandatory-path
+failure standing and keeps a filter any `python -c` walks past.
+
+**Not claimed by this verdict:** that egress is now contained. `_decide`'s own docstring says it is
+*"a boundary, not a sandbox"*. Actually containing network access needs a different layer entirely
+and **is not authorised here**. If the operator later wants real egress control, that is a new
+decision and a much larger one.
+
+**F300 and F312 are one change.** Both are edits to the same regex-and-`_decide` path, they must
+agree on what a URL is, and shipping either alone leaves the other's message or capability wrong.
+Whoever writes R1 writes one proposal covering both.
+
+#### The scope verdict's mechanism — amended
+
+**The 2026-09-10 morning verdict *"drain A and B, ratchet C and D"* cites R-1's model, and R-1's
+model cannot express what it was asked to.** A ratchet freezes *a count of one homogeneous,
+countable population* — 35 clientless routes, 52 MISREPORT surfaces, 100 unhandled query sites, the
+dependency ceilings. The 88 open C, D and unlabelled findings are heterogeneous: there is no single
+number, and no check can assert them.
+
+**DECIDED: the citation is dropped and the verdict says what it does — those findings are NOT
+PROPOSED AGAINST.** They stay in `scripts/drive/FINDINGS.md` as recorded history. There is no check,
+no ceiling, and nothing stopping the population growing, and **that is now stated rather than
+implied by a citation that promised otherwise.**
+
+Rejected: **freeze the open C/D count as a ceiling.** It is buildable, but it would go red whenever
+a drive files a new low-severity finding — and filing them is behaviour worth keeping, not
+suppressing. A gate that punishes honest reporting gets worked around. Rejected: **two named
+mechanisms** (ratchet the countable classes, leave the rest unscheduled) — accurate, and rejected as
+more structure than the distinction earns now that it is written down plainly.
+
+**The cost is unchanged and stands:** **35 of the 75** low-severity findings read on 2026-09-09 are
+named nowhere outside `FINDINGS.md`. Under this verdict *unscheduled* is very close to *forgotten*,
+and that was accepted with the wording in front of the operator.
+
 ### The access path, re-decided 2026-09-10 — one verdict reached one of its three findings
 
 **DECIDED 2026-09-10, by the operator, in session**, after the three findings were read together
@@ -720,6 +820,14 @@ as a filesystem escape.
 ledger is in scope at all**, and it governs where every day window points its proposals from now on.
 
 **DECIDED: drain severity A and severity B. Ratchet C, D and the unlabelled under R-1's model.**
+
+> **AMENDED the same evening, 2026-09-10 — the second sentence's mechanism was wrong and is
+> withdrawn.** R-1's model freezes *a count of one homogeneous population*; the 88 open C, D and
+> unlabelled findings have no such number and no check can assert them. **Read that clause as: those
+> findings are not proposed against, and stay in `FINDINGS.md` as recorded history.** There is no
+> ceiling and nothing stops the population growing. The first sentence — drain A and B — is
+> unaffected and is what this verdict is for. Full reasoning and the two rejected alternatives are
+> in `### F306 and F312, decided 2026-09-10 evening`, above.
 
 As measured 2026-09-10 by `py -3.11 scripts/classify_findings.py` — **run it again rather than
 quoting these; they move daily** — the ledger holds **308 sections, 147 open**: 4 A, 59 B, 68 C,
