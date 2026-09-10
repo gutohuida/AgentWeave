@@ -67,6 +67,18 @@ half. A run that closes one and reports the change done has closed half a change
 - [x] 3.2 `RowMenu` records whether the item last chosen carried the flag, and prevents Radix's
   `onCloseAutoFocus` in that case only. Default behaviour — focus returns to the trigger — is
   unchanged for every item that does not carry it.
+- [x] 3.2a **The flagged item's own action runs from `onCloseAutoFocus` too, not from `onSelect`.**
+  Not in the proposal. Added by §7.3's drive on 2026-09-10, after §3.2 and §4.1 had both landed and
+  the reason input was *still* left on `document.body` — the exact `F309` symptom, against a bundle
+  carrying the whole of §3 and §4. Measured in a browser, not reasoned: with the menu open,
+  `focus()` on any element outside it is pulled back to the menu container within the same tick,
+  and Radix flushes an item's `onSelect` synchronously (`dispatchDiscreteCustomEvent` wraps it in
+  `flushSync`), so a control mounted by the selection takes the keyboard while the focus scope is
+  still trapping, loses it at once, and is dropped on `document.body` when the menu unmounts.
+  Standing aside on close is necessary and was not sufficient: the action has to run where the trap
+  is already gone. The risk this creates — a deferred action that never fires — is guarded by
+  `taskDetailDrawer.test.tsx:162`, which fails by name when the deferred call is removed
+  (mutation-checked 2026-09-10).
 - [x] 3.3 **Clear the record on every close, however the menu closed.** Selection, Escape and a click
   outside all reach `onCloseAutoFocus`, which is where the reset belongs; a flag left set would make
   the *next* dismissal drop focus on `document.body`.
@@ -121,7 +133,8 @@ half. A run that closes one and reports the change done has closed half a change
 - [x] 7.1 A real browser against a throwaway Hub serving **the rebuilt bundle** (§5). Check
   `netstat -ano | grep LISTEN` before choosing a port — `8011`, `8012` and `8013` have all been in
   use by other windows' drives this week — and stop what you start.
-- [ ] 7.2 `py -3.11 scripts/drive/t_d1_0910_escape_across_the_dialogs.py` — **30 passed / 6 failed**
+- [x] 7.2 **48 passed / 0 failed**, 2026-09-10, against served bundle `index-7rpxplrH.js`.
+  `py -3.11 scripts/drive/t_d1_0910_escape_across_the_dialogs.py` — **30 passed / 6 failed**
   today, and the six are `F309` and `F310` asserted the right way round. It must reach **zero
   failed, and no fewer than 36 passed** — a floor, not an equality, because §7.4, §7.5 and §7.6 all
   add legs to these same two files and would otherwise make the stated total unreachable. A
@@ -134,11 +147,16 @@ half. A run that closes one and reports the change done has closed half a change
   output for a skip before concluding a leg regressed — and §7.4 depends on that same block
   opening, so a skip there means §7.4 was not driven either.
 
-- [ ] 7.3 `py -3.11 scripts/drive/t_d1_0910_rowmenu_leaves_the_page_inert.py` — **18 passed /
+- [x] 7.3 **22 passed / 0 failed**, same bundle. This is the harness that found §3.2a.
+  `py -3.11 scripts/drive/t_d1_0910_rowmenu_leaves_the_page_inert.py` — **18 passed /
   1 failed** today. It must reach **zero failed and no fewer than 19 passed**, on the same reading
   as §7.2.
 
-- [ ] 7.4 **Drive the third instance, which no harness covers yet, and drive it from the focus state
+- [x] 7.4 Green, and green for the right reason: the probe now prints
+  `focus is inside the browser: True`, the modal survives and the typed path is intact. On
+  2026-09-10 this leg's first assertion passed for the *wrong* reason — the browser was unmounted
+  along with the modal — which is why the other two assertions are what carry it.
+  **Drive the third instance, which no harness covers yet, and drive it from the focus state
   the operator is actually in.** Open the project modal, open the directory browser inside it, and —
   **without clicking anywhere inside the browser** — press Escape: the browser closes and **the modal
   is still open**. The "without clicking inside" is the whole leg, not a detail. R3 measured that the
@@ -151,10 +169,14 @@ half. A run that closes one and reports the change done has closed half a change
   mutation-check for the one task in this change whose necessity two rounds denied, and it is cheap
   because §1.1 and §2.2 are separate files.
 
-- [ ] 7.4b **Then drive the close path.** Escape out of the browser and assert focus is on the
+- [x] 7.4b Green: focus after Escape is `BUTTON 'Browse within the Hub instead'`, the opener.
+  **Then drive the close path.** Escape out of the browser and assert focus is on the
   `Browse…` button, not on `document.body` — §2.2a's evidence, and the leg that would catch the
   picker's fix importing `F307`'s shape.
-- [ ] 7.5 **Drive the ordinary move too, not just the broken one.** Choose a status move that is not
+- [x] 7.5 Green, in `t_d1_0910_rowmenu_leaves_the_page_inert.py`'s `P1`/`P2` pair: an ordinary
+  move ends on `task-status-menu-<id>` and the blocked move ends inside the reason panel. Both
+  directions are asserted in the same leg, because asserting only one is how a fix for the second
+  breaks the first. **Drive the ordinary move too, not just the broken one.** Choose a status move that is not
   `blocked` and assert focus returns to the trigger. §3.2 is the task most able to break something
   that works, and its failure mode is focus on `document.body`, which no assertion about the blocked
   path would notice.
@@ -168,9 +190,12 @@ half. A run that closes one and reports the change done has closed half a change
   Assert §4.1a in the same leg, while the gesture is already keyboard-only: the input carries a
   visible focus indicator when the keyboard arrives in it.
 
-- [ ] 7.7 Re-run `t_d9_clearing_instructions_postchange.py` and the clear-instructions operator legs.
-  `ClearInstructionsDialog` uses the same hook and was driven 21/21 on 2026-09-10; it must still be
-  21/21. Its leg E asserts `F307` is *unchanged*, so it is also the check that §1.1 did not silently
+- [x] 7.7 **59 passed / 0 failed**, and leg E prints `F307 REPRODUCED ... TEXTAREA/'Project
+  instructions'` — unchanged, which is the check that §1.1 left the Tab branch alone.
+  Re-run `t_d9_clearing_instructions_postchange.py` and the clear-instructions operator legs.
+  `ClearInstructionsDialog` uses the same hook; the figure written here on 2026-09-10 was **21/21**
+  and is wrong — the harness carries 59 legs, and the escape harness's own docstring says 59. The
+  acceptance is zero failed, not a total. Its leg E asserts `F307` is *unchanged*, so it is also the check that §1.1 did not silently
   alter the Tab branch.
 
 - [ ] 7.8 **Drive the scenario that no task produced evidence for.** The delta's

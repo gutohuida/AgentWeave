@@ -13,8 +13,10 @@ export interface RowMenuItem {
   /** Choosing this item opens a control that will take the keyboard for itself — a field asking
    *  what a block is waiting for, say. The menu then stands aside instead of pulling focus back
    *  to the trigger as it closes, which would take the keyboard straight back off the control
-   *  that just asked for an answer. Leave it unset for an action that fires and leaves nothing
-   *  on screen: those must keep returning focus to the trigger. */
+   *  that just asked for an answer. `onSelect` also runs *as the menu goes* rather than while it
+   *  is still open, because the open menu traps focus; see `pendingSelect` below. Leave it unset
+   *  for an action that fires and leaves nothing on screen: those must keep returning focus to
+   *  the trigger, and must keep firing immediately. */
   takesFocus?: boolean
 }
 
@@ -69,10 +71,19 @@ export function RowMenu({
   persistent = false,
   icon = 'more_horiz',
 }: RowMenuProps) {
-  // Whether the item last chosen said it was opening something that takes the keyboard. A ref, not
-  // state: nothing renders from it, and it has to be readable by `onCloseAutoFocus` in the same
-  // dismissal that set it, before any re-render could have delivered a new value.
-  const yieldFocusOnClose = useRef(false)
+  // The action of an item that said it was opening something which takes the keyboard, held until
+  // the menu has actually gone. A ref, not state: nothing renders from it, and `onCloseAutoFocus`
+  // has to read it in the same dismissal that set it, before any re-render could have delivered a
+  // new value.
+  //
+  // Held rather than run immediately because Radix traps focus inside the open menu. Measured in a
+  // browser on 2026-09-10: with the menu open, `focus()` on any element outside it is pulled back
+  // to the menu container within the same tick. Radix flushes an item's `onSelect` synchronously
+  // (`dispatchDiscreteCustomEvent` wraps it in `flushSync`), so a control mounted by the selection
+  // takes the keyboard while the trap is still live, loses it again at once, and is left on
+  // `document.body` when the menu unmounts. Running the action from `onCloseAutoFocus` puts it
+  // after the scope has torn down, where the control's own focus sticks.
+  const pendingSelect = useRef<(() => void) | null>(null)
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -94,16 +105,18 @@ export function RowMenu({
           align="start"
           sideOffset={4}
           onCloseAutoFocus={(event) => {
+            const opensAControl = pendingSelect.current
+            // Cleared unconditionally, before anything else can throw: *every* dismissal reaches
+            // this handler — choosing an item, Escape, a click outside — and only some of them
+            // chose anything. An action left here by a `takesFocus` selection would fire again on
+            // the next dismissal, which selected nothing.
+            pendingSelect.current = null
+            if (!opensAControl) return
             // Radix returns focus to the trigger as the menu closes, which is right for almost
-            // every item and wrong for the one that opened a control asking for an answer: the
-            // control has already taken the keyboard and this would take it back (`F309`).
-            //
-            // Reset here rather than at selection because *every* dismissal reaches this handler —
-            // choosing an item, Escape, a click outside — and only some of them chose anything. A
-            // flag left set by a `takesFocus` selection would make the next dismissal, which
-            // selected nothing and opened nothing, drop focus on `document.body` instead.
-            if (yieldFocusOnClose.current) event.preventDefault()
-            yieldFocusOnClose.current = false
+            // every item and wrong for one that is opening a control to ask for an answer: it
+            // would take the keyboard off that control the moment it arrived (`F309`).
+            event.preventDefault()
+            opensAControl()
           }}
           style={{
             minWidth: 200,
@@ -127,7 +140,13 @@ export function RowMenu({
                   event.preventDefault()
                   return
                 }
-                yieldFocusOnClose.current = item.takesFocus === true
+                // An item that opens a control which wants the keyboard runs on close instead of
+                // now; see `pendingSelect`. Everything else fires here, unchanged, and keeps
+                // Radix's focus return to the trigger.
+                if (item.takesFocus === true) {
+                  pendingSelect.current = item.onSelect
+                  return
+                }
                 item.onSelect()
               }}
             >

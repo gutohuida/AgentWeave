@@ -54,6 +54,17 @@ PROBE = """() => ({
   menuItems: document.querySelectorAll('[role="menuitem"]').length,
 })"""
 
+def focus_probe(tid):
+    """Where the keyboard is, and whether that is inside the reason panel this ticket mounts."""
+    return (
+        "() => { const a = document.activeElement; const r = document.querySelector("
+        + json.dumps(f"[data-testid='task-block-reason-{tid}']")
+        + "); return {tag: a ? a.tagName : null,"
+        " testid: a ? (a.getAttribute('data-testid') || '') : '',"
+        " inReason: !!(r && a && r.contains(a))} }"
+    )
+
+
 PASS, FAIL = [], []
 
 
@@ -157,6 +168,7 @@ def main():
                 page.close()
                 continue
 
+            FOCUS = focus_probe(tid)
             base = page.evaluate(PROBE)
             print(f"    baseline (menu never opened): {json.dumps(base)}")
             check(base["body"] != "none", "the page starts clickable")
@@ -172,6 +184,28 @@ def main():
 
             page.locator(f"[data-testid='task-status-menu-{tid}-{item}']").first.click()
             print(f"    selected 'Move to {item}':")
+            # §7.5 / §7.6's mouse half. Where the keyboard ends up is the whole subject of the
+            # change these two paths bracket: an ordinary move leaves nothing on screen to hold
+            # focus and must hand it back to the trigger, and the one move that opens a control
+            # asking for an answer must leave it in that control. The same gesture, two answers,
+            # and asserting only one of them is how a fix for the second breaks the first.
+            page.wait_for_timeout(700)
+            where = page.evaluate(FOCUS)
+            print(f"    focus after the selection: {json.dumps(where)}")
+            if item == "blocked":
+                check(
+                    where["tag"] == "INPUT" and where["inReason"],
+                    "the reason input the selection opened HAS the keyboard ({}, inReason={})".format(
+                        where["tag"], where["inReason"]
+                    ),
+                )
+            else:
+                check(
+                    where["testid"] == f"task-status-menu-{tid}",
+                    "an ordinary move hands the keyboard back to the trigger ({!r})".format(
+                        where["testid"] or where["tag"]
+                    ),
+                )
             seen = watch(page, item)
             page.screenshot(path=os.path.join(SHOTS, f"inert-{item}.png"))
             last = seen[-1][1]
@@ -233,6 +267,23 @@ def main():
                 "with no orphaned menu wrapper left in the DOM ({})".format(last["poppers"]),
             )
             # The decisive one: not a style, a click. The board behind is the whole product.
+            #
+            # The ticket has to be dismissed first, and that is not a concession — it is the
+            # consequence of the assertion two lines above. The drawer now correctly SURVIVES an
+            # Escape aimed at the menu, and it renders over the board, so a click aimed at a card
+            # underneath is intercepted by the ticket the operator still has open. Before this
+            # change the drawer closed and the card was bare, which is the only reason this leg
+            # ever reached the board. Relaxing the assertion instead would have been the wrong fix:
+            # the probe above already reads `body` pointer-events as `auto`, so nothing is wedged
+            # and there is nothing here to excuse.
+            close = page.locator(f"[data-testid='task-drawer-close-{t2}']")
+            if close.count():
+                close.first.click()
+                page.wait_for_timeout(700)
+            check(
+                page.locator(f"[data-testid='task-drawer-{t2}']").count() == 0,
+                "the ticket closes when the operator actually asks it to",
+            )
             board_click = page.locator("[data-testid^='task-open-']")
             landed = True
             if board_click.count():
@@ -262,6 +313,16 @@ def main():
         page.goto(f"{UI}/?project={pid}&tab=tasks", wait_until="domcontentloaded")
         page.wait_for_timeout(4000)
         opener = page.locator(f"[data-testid='task-open-{t2}']")
+
+        def reopen_if_closed():
+            # Before this change, Escape-with-the-menu-open closed the ticket as well as the menu,
+            # so the sibling harness's next gesture was to open it again. It no longer does, and
+            # the ticket is already there — so this gesture is now conditional rather than removed.
+            # Keeping it unconditional would click a card the open drawer covers, and the 30s
+            # timeout that produced would `break` the loop below with no `check()` failing.
+            if page.locator(f"[data-testid='task-drawer-{t2}']").count() == 0:
+                opener.first.click()
+
         steps = [
             ("open the ticket", lambda: opener.first.click()),
             ("Escape on the drawer", lambda: page.keyboard.press("Escape")),
@@ -271,7 +332,7 @@ def main():
                 lambda: page.locator(f"[data-testid='task-status-menu-{t2}']").first.click(),
             ),
             ("Escape with the menu open", lambda: page.keyboard.press("Escape")),
-            ("open it a third time", lambda: opener.first.click()),
+            ("open it a third time, if the Escape closed it", reopen_if_closed),
             (
                 "open the status menu again",
                 lambda: page.locator(f"[data-testid='task-status-menu-{t2}']").first.click(),
@@ -282,11 +343,17 @@ def main():
             ),
         ]
         for name, act in steps:
+            # A refused gesture is a FAILED CHECK, not a `break`. The old form broke out of the
+            # loop, so the last three gestures — including the selection this replay exists to
+            # reach — never ran and nothing failed: the harness quietly shrank instead of going
+            # red. Measured on 2026-09-10, when exactly that hid three gestures behind one 30s
+            # click timeout.
             try:
                 act()
             except Exception as exc:
                 print(f"    [{name}] refused: {str(exc).splitlines()[0][:90]}")
-                break
+                check(False, f"the replayed gesture '{name}' can be performed")
+                continue
             page.wait_for_timeout(900)
             print("    after {:<44} {}".format(name + ":", json.dumps(page.evaluate(PROBE))))
         print("    then, on a clock:")

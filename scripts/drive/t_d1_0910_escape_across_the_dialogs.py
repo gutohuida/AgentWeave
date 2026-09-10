@@ -394,12 +394,19 @@ def subject_two(browser, pid):
             print(f"    the click never landed: {str(exc).splitlines()[0][:120]}")
     check(clickable, "the reason input can then be reached with the mouse")
     if clickable and reason.count():
+        # Read what is already there rather than expecting an empty field. When `C2c` fails — the
+        # keyboard never reached the input — this is `''` and the expectation below is the single
+        # sentence, exactly what this leg asserted when it was written. When `C2c` passes, the
+        # field already holds one copy and typing a second appends to it. Hard-coding the single
+        # sentence would turn `C2c` passing into this leg failing, which is a harness that goes
+        # red when the product is fixed.
+        already = reason.locator("input").first.input_value()
         page.keyboard.type("the staging API key")
         page.wait_for_timeout(300)
         clicked_in = reason.locator("input").first.input_value()
-        print(f"    after clicking into it first: {clicked_in!r}")
+        print(f"    after clicking into it first: {clicked_in!r} (held {already!r} before)")
         check(
-            clicked_in == "the staging API key",
+            clicked_in == already + "the staging API key",
             "the control itself works once focus is put in it by hand",
         )
         st = focus_now(page, "after clicking in")
@@ -567,6 +574,24 @@ def subject_two(browser, pid):
     check(
         survived_path == typed_path,
         f"and the path the operator typed is still there ({survived_path!r})",
+    )
+
+    # §7.4b — where the keyboard went, which is a different question from what closed.
+    # `DirectoryPicker` focuses its own root on mount so that its Escape handler can fire at all
+    # (§2.2); the cost of doing that is that the element holding focus is destroyed on every close
+    # path, and unless something restores it the operator is left on `document.body` with nothing
+    # to Tab from. That is `F307`'s shape, arriving inside the change meant to shrink it, so it is
+    # asserted here rather than assumed from the cleanup existing (§2.2a).
+    back_on_opener = page.evaluate(
+        "() => { const a = document.activeElement;"
+        " if (!a || a.tagName !== 'BUTTON') return {tag: a ? a.tagName : null, text: null};"
+        " return {tag: 'BUTTON', text: (a.textContent || '').trim()} }"
+    )
+    print(f"    focus after Escape: {json.dumps(back_on_opener, ensure_ascii=False)}")
+    check(
+        back_on_opener["text"] in ("Browse within the Hub instead", "Hide the in-Hub browser"),
+        "and the keyboard is back on the control that opened the browser, not on document.body "
+        "({})".format(json.dumps(back_on_opener, ensure_ascii=False)),
     )
     page.close()
 
