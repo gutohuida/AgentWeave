@@ -578,6 +578,121 @@ serving four-day-old code.
 
 ## Decided
 
+### The access path, re-decided 2026-09-10 — one verdict reached one of its three findings
+
+**DECIDED 2026-09-10, by the operator, in session**, after the three findings were read together
+against the spawn path and after a four-shape measurement run for this decision. It **narrows** the
+2026-09-09 verdict rather than replacing it, and adds two verdicts that verdict could not reach.
+
+**Why this was re-put.** The 2026-09-09 verdict is titled *"F299 / F300 / F301"* and its mechanism —
+teach `_decide` about the run's own Hub address — **can only fire in F300's configuration.** `_decide`
+lives behind `approve_tool_call` in `mcp_server.py`, a process spawned only when the Hub emits
+`--mcp-config` *and* the harness honours it. F299 is a harness that ignores it; F301 sets
+`hub_client: "cli"` so it is never emitted. This is the same class as entry 19 and as `F305`: a
+verdict that reads as settled and cannot do what it says.
+
+#### 1a. F300 — the verdict stands, narrowed to this finding
+
+Unchanged and now better evidenced. On `workspace` there **is** an answerer, so `_decide` is the only
+thing between the instructed command and the network — measured below, the harness does not refuse
+that command shape statically. Teaching `_decide` the run's own Hub base URL makes the instructed
+request execute. The 2026-09-09 constraint still binds: **not permissive about URLs in general**, the
+run's *own* Hub base URL only.
+
+#### 1b. F299 — no grounds, no approver flag
+
+**DECIDED: when there are no grounds that the harness honours MCP, do not emit
+`--permission-prompt-tool`.**
+
+The Hub already measures this and already trusts the measurement for a different purpose.
+`harness_has_honoured_mcp` (`hub/hub/launchability.py:232`) is a per-agent, positive-only read of
+`Run.mcp_adapter_online_at`, and `described_access_path` uses it to choose what a run is **told**. It
+does not reach `_build_claude_command`, which decides what a run is **given**. This verdict connects
+the two: same signal, same grain, same conservative direction.
+
+**What it changes, exactly.** From the second run of an agent whose adapter has never come online,
+the run is spawned without an approver flag naming a tool nothing serves. That is F299's own
+**condition C**, which it drove: the model then says *"I need permission to write the file"* instead
+of *"contact your system administrator to resolve this."* **The denials are identical.** Nothing is
+widened — a flag is removed, not a permission granted.
+
+**What it does not do, stated so nobody expects it.** It does **not** restore the run's ability to
+work. On a harness that blocks MCP there may be no posture that gives both containment and
+capability, and this verdict does not pretend otherwise; it stops the run lying about whose fault it
+is. The remaining trade is `hub_client: "cli"`, and **nothing in the UI says what that costs.**
+
+**Corrects the 2026-09-09 verdict's closing note**, which told whoever specs it that *"the Hub cannot
+today detect that a harness blocks MCP."* It cannot detect it **before the first spawn**. From the
+second run it demonstrably can, by the mechanism above — which shipped in the same change that filed
+these three findings.
+
+**Rejected: also drop to `acceptEdits` on no grounds.** That restores capability by removing the path
+check entirely, reversing the 2026-09-09 rejection of the same option. Rejected again for the same
+reason: `agent-capability-plane` reserves containment to the operator.
+
+#### 1c. F301 — the `cli` path has no answerer, and that is the whole finding
+
+**DECIDED after measurement, 2026-09-10.** F301 records fifteen attempts and five refusal classes and
+attributes four of them to the harness's *static* command analyser, concluding that the notice
+instructs a shape the harness refuses outright. **The measurement says otherwise.** Four shapes were
+run twice, once under `acceptEdits` headless and once with the approval gate removed
+(`testbed/scratch/f301shapes/`, Haiku, every request aimed at `127.0.0.1:9` where nothing listens, so
+a connection error proves execution):
+
+| shape | `acceptEdits` headless | approval gate removed | `_decide` |
+|---|---|---|---|
+| `python -c` reading `os.environ` | denied | **executed** | **allow** |
+| PowerShell `curl.exe "$env:HUB_URL/…"` | denied ×4 | **executed** | deny |
+| Bash `curl "$HUB_URL/…"` | denied | **executed** | deny |
+| **control** — literal URL, no variable | **denied** | **executed** | deny |
+
+**Remove the approval gate and every refusal class disappears.** They are the harness's reasons a
+command **needs approval**, not reasons it is forbidden — and on the `cli` path nothing answers, so
+needing approval *is* denial. **The control proves it:** a bare literal `curl` with no variable
+anywhere is denied identically. F301 is one sentence, not five rows, and
+`runner_commands.py:58-60` predicted it on 2026-08-13: *"it still prompts for `Bash`, and headless
+there is nothing to answer that prompt either."*
+
+**So F301 needs no containment decision.** It is F299's problem seen on the other path, and it is
+closed by telling the truth rather than by widening anything. What it does establish is that the
+notice's HTTP branch is **unusable on the `cli` path by construction**, and the notice should stop
+implying otherwise.
+
+#### 1d. The remedy for F300 — both, notice first
+
+**DECIDED: change the notice to instruct the `python -c` shape now, and keep 1a's `_decide` fix as
+the durable half.**
+
+The measurement found a remedy nobody had considered: **`python -c` reading `os.environ` is the one
+shape of the four that `_decide` already allows**, because it puts no absolute path in the command
+text for `_ABSOLUTE_PATH_RE` to find. That is a **prose-only** fix — no code, no containment change,
+works today on `workspace`.
+
+**Why both and not one.** The notice change is shippable immediately and costs nothing; the `_decide`
+change is what makes the plane reachable when an agent improvises a shape rather than following the
+notice literally, which is the ordinary case. Rejected: **notice only** (leaves the obvious `curl`
+form denied, with the false filesystem reason); **`_decide` only** (correct but needs the full round
+discipline before anything improves, and the free half is free).
+
+**Ordering is part of this verdict**: the notice first, because it needs no approver change and
+therefore no proposal round.
+
+#### 1e. The general form is a new finding, not part of any of these
+
+The control row denies a plain `curl http://127.0.0.1:9/...` under the repo's **default** posture,
+with the reason `'p://127.0.0.1:9/…' is outside your workspace` — `_ABSOLUTE_PATH_RE` eating the URL
+scheme. **No agent on the default posture can make any network request from a shell command, and is
+told a filesystem reason for it.** `pip install` from a URL, `gh api`, fetching a schema: all denied
+the same way.
+
+**DECIDED: file it as a new severity-A finding.** It is a capability hole in the product's default,
+measured, with a one-line reproduction, and it lands inside the A+B scope decided this morning.
+Rejected: **folding it into F300** (risks the general claim being closed when F300's narrow fix
+ships — and 1a's verdict explicitly forbids general URL permissiveness, so F300's fix *cannot* close
+it); **filing it as B**; **not filing** on the grounds that denying egress is intended — the posture
+may well be entitled to forbid egress, but it is not entitled to forbid it by accident and report it
+as a filesystem escape.
+
 ### The scope of the drain — A and B are drained, C and D are ratcheted
 
 **DECIDED 2026-09-10, by the operator, in session**, on the finding-shaped arithmetic in
@@ -692,7 +807,17 @@ night window's result and of the verification pass immediately below.
 against the code found something the verdict did not know — which is the verification pass working
 as designed, and the reason a decided-but-unbuilt item is not the same as a closed one.
 
-#### 1. F299 / F300 / F301 — the workspace approver learns to recognise a URL
+#### 1. ~~F299 / F300 / F301~~ **F300 only** — the workspace approver learns to recognise a URL
+
+> **NARROWED 2026-09-10, by the operator.** This verdict is correct and stays — **for F300 alone.**
+> It **cannot fire for F299 or F301**, because in both of those configurations the MCP server that
+> hosts `_decide` never starts: `_decide` is reachable only through `approve_tool_call`, an
+> `@mcp.tool()` in `mcp_server.py`, which is spawned only when `_build_claude_command` emits
+> `--mcp-config` *and* the harness honours it (`runner_commands.py:236-241`). F299 is a harness that
+> ignores the flag; F301 sets `hub_client: "cli"`, so the flag is never emitted at all. Teaching a
+> function about URLs does nothing in a process that does not exist. **The title carried three
+> finding numbers and the mechanism reached one.** See `### The access path, re-decided 2026-09-10`
+> for F299's and F301's own verdicts, and for a measurement that corrects this one's closing note.
 
 **DECIDED: teach `_decide` that the run's own Hub address is not a filesystem path.** Raised by the
 night window at iteration 12 and **enlarged the same night** by the `c2-verify` drives, which
