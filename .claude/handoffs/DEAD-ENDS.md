@@ -579,6 +579,44 @@ separate ways in one afternoon. These are about measuring prose, not about any o
   message contained `` `uvicorn hub.main:app` ``. The ledger entry above was right and was not read
   first. **Use `git commit -F <file>` for any message containing backticks — which, in this
   repository, is most of them.**
+- **A test for a guard is decorative unless the guard's output is the ONLY route to the asserted
+  verdict** *(2026-09-09, found by a surviving mutation)*. Two tests written for
+  `scripts/classify_findings.py`'s quotation stripping asserted `RESOLVED` on a fixture that also
+  carried a `**Status:** fixed` line. `RESOLVED` is decided before `OPEN`, so both passed with
+  `dequote` disabled entirely — the mutation survived and the tests proved nothing. **The fix is in
+  the fixture, not the assertion: remove every competing signal, then assert the weaker claim**
+  (`!= "OPEN"` rather than `== "RESOLVED"`). Generalises past this file: when a function picks a
+  verdict by precedence, a fixture that satisfies a *higher*-precedence branch cannot test a lower
+  one.
+- **Widening a guard can reveal that an incidental property of the old form was load-bearing**
+  *(2026-09-09, cost six verdicts and two wrong diagnoses)*. `NEG_BEFORE` was
+  `\b(not|never|...)\W{0,12}$` — which cannot span a word, so it was **line-local by accident.**
+  Widened to tolerate intervening words, a finding's *title* immediately reached across a blank line
+  to negate its own `**Status:** fixed`, and F16/F27/F46/F58/F95/F100 silently became `UNCLASSIFIED`.
+  Two successive hypotheses about the cause were wrong before the pre-match window was printed.
+  **When widening a pattern, enumerate what the narrow form was incidentally preventing, and state
+  the constraint you intended explicitly** — here, the line bound — rather than inheriting it.
+- **Debug a regex by printing the actual matched text and its pre-window, not by reasoning about the
+  pattern** *(2026-09-09)*. Two plausible explanations for the six lost verdicts were constructed and
+  committed to before the 40 characters preceding the match were printed; both were wrong. One
+  `print(repr(pre))` settled it immediately.
+- **An `ORDER:` line may name work that is neither a change directory nor an `F<n>`, provided the
+  same section defines it** *(2026-09-09, driven)*. Four items — `R1-ratchets`,
+  `R2-archive-collision`, `R34-model-catalog`, `DAY1-constraints` — were appended to the line with a
+  definition block below giving each a target, a done-condition and its source verdict. The night
+  window resolved and completed all four. The format example in `spec-queue/README.md` shows only
+  change names and finding numbers; it is an example, not the grammar. **What the window needs is
+  resolvability, not a registered id.**
+- **A merged branch stops being merged the moment you commit to it again, and
+  `arm-cycle.ps1` reads that at firing time, not at merge time** *(2026-09-09, a prediction made and
+  then falsified by the predictor)*. After fast-forwarding `master` to the cycle branch, the arm was
+  expected to cut a fresh `autonomous/<today>-daily`. A later commit on the branch put it one ahead
+  of `master`, so `git branch --merged master` no longer listed it, `$openCycle` found it, and the
+  night **continued the old branch**. Both behaviours are correct; the state is read at 22:55.
+- **`git rm --cached <path>` followed by `rm <path>` makes a later `git add <path>` fail**
+  *(2026-09-09)*: `fatal: pathspec '<path>' did not match any files`, which aborts an `&&` chain. The
+  deletion is already staged by the `git rm --cached`, so the `git add` is both unnecessary and
+  fatal. To stage a deletion of a tracked file, `git rm <path>` alone is enough.
 
 ## RESOLVED
 
