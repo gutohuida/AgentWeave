@@ -60,10 +60,20 @@ because the panel containing it is unmounted by the same keystroke.
 Grepping the UI for Escape owners returns nine. One of them is inside a panel whose
 `useDialogFocus` is active: `DirectoryPicker.tsx:57-62` (`preventDefault()`, then `onClose()`),
 mounted at `ProjectManagerModal.tsx:157-166` while that modal holds `useDialogFocus(!!mode, …)` at
-`:73`. So Escape in the directory browser closes the browser **and the project modal behind it**, by
-exactly the mechanism `F310` describes. Nobody has driven it. It is listed here because a fix
-enumerated from `F310`'s two measured gestures would leave it standing, and because it is the
-evidence that this is a hook-level defect rather than one screen's mistake.
+`:73`. Escape there loses the operator the project modal, which is the same cost `F310` describes.
+Nobody has driven it. It is listed here because a fix enumerated from `F310`'s two measured gestures
+would leave it standing, and because it is the evidence that this is a hook-level defect rather than
+one screen's mistake.
+
+**R3 corrected the mechanism, and the correction changes what the fix has to be.** R1 and R2 both
+read this as "the browser closes *and* the modal closes" — two dismissals, one keystroke, arbitration
+repairs it for free. It is not that. The picker's Escape handler is a React `onKeyDown` on a root
+`div` that nothing focuses (`:85-91`), and opening the browser leaves focus on the `Browse…` button
+outside it, so **the handler does not run at all**: the modal closes and takes the browser with it,
+and the browser's own `preventDefault()` — like `TaskDetailDrawer`'s cancel line — has never once
+been observable. The visible loss is identical, which is why two rounds reading for outcomes rather
+than for mechanism agreed on the wrong one. Arbitration alone therefore does **not** repair this
+instance; the picker has to hold the keyboard first (`design.md` D9, `tasks.md` §2.2).
 
 ## The mechanism — measured in the dependency's own source, not remembered
 
@@ -89,9 +99,10 @@ available here for free.
 ## What changes
 
 **One.** `useDialogFocus` stands down on an Escape that is already `defaultPrevented`, and every
-control that owns Escape inside a panel declares that it handled it. That is the whole of `F310`,
-plus the `DirectoryPicker` instance, which already calls `preventDefault()` and so is repaired
-without being touched.
+control that owns Escape inside a panel declares that it handled it — **and can be reached by the
+keystroke it claims to own.** That is the whole of `F310`, plus the `DirectoryPicker` instance, which
+costs two small edits rather than none: it focuses the root it already marks `role="dialog"`, and
+returns focus to the trigger when it closes.
 
 **Two.** A menu item that opens a control expecting input says so, and `RowMenu` stops taking focus
 back. Radix `DropdownMenu.Content` accepts `onCloseAutoFocus` (composed at
@@ -174,8 +185,9 @@ and `design.md` D6 carries the measurement and the reasoning.
 - **Source:** `hub/ui/src/hooks/useDialogFocus.ts`, `hub/ui/src/components/layout/RowMenu.tsx`,
   `hub/ui/src/components/tasks/TaskDetailDrawer.tsx`. UI only — **no Python file changes**, so the
   committed bundle at `hub/hub/static/ui` must be rebuilt and the Python lint set is not required.
-- **Behaviour changed for other call sites:** `ProjectManagerModal` + `DirectoryPicker` stops
-  double-dismissing (a repair, and the third instance above). The other four `useDialogFocus`
+- **Behaviour changed for other call sites:** `ProjectManagerModal` + `DirectoryPicker` stops losing
+  the modal to an Escape aimed at the browser (a repair, and the third instance above; per R3 it
+  needs `tasks.md` §2.2 as well as §1.1, and the browser gains a focus it never took). The other four `useDialogFocus`
   dialogs have no nested Escape owner, so their behaviour is unchanged. Every other `RowMenu` call
   site (`AgentTree:186`, `ConversationRow:284`, `PanelShell:184`, `TaskCard:260`) declares no
   focus-moving item, so Radix keeps restoring focus to the trigger there, unchanged.

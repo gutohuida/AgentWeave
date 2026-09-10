@@ -27,9 +27,33 @@ half. A run that closes one and reports the change done has closed half a change
 - [ ] 2.1 `hub/ui/src/components/tasks/TaskDetailDrawer.tsx:413-415` calls `e.preventDefault()`
   before `setBlockingReason(null)`. This is the line that makes `F310`'s second gesture work, and it
   is the line whose effect has never been observable.
-- [ ] 2.2 **Change nothing in `DirectoryPicker.tsx`.** It already calls `preventDefault()` at
-  `:57-62`, so §1.1 repairs the `ProjectManagerModal` double-dismissal without an edit. Verify this
-  by reading, and then verify it by driving (§7.4) — a repair nobody drove is a claim.
+
+- [ ] 2.1a **This task does not work without §4.1, and that is not obvious.** The handler is bound to
+  the `<input>` itself, so it runs only when focus is in the input — which is precisely what `F309`
+  denies today. An implementer who lands §1.1 and §2.1 and stops will watch leg `C3` still fail and
+  have no reason to suspect the focus work is the cause (`design.md` D9). Land §4.1 before
+  concluding anything about this task.
+- [ ] 2.2 **`DirectoryPicker` must hold the keyboard it opened.** R1 and R2 both recorded that this
+  file needed no edit because it already calls `preventDefault()` at `:57-62`. R3 measured the
+  precondition and it does not hold: that `preventDefault()` sits in a React `onKeyDown` bound to the
+  picker's root `div` (`:85-91`), nothing focuses that root, and opening the browser leaves focus on
+  the `Browse…` button *outside* it (`ProjectManagerModal.tsx:153`). The handler never runs, so §1.1
+  alone leaves the third instance broken (`design.md` D9). Focus the root from `rootRef` in an effect
+  when the picker mounts. Keep `role="dialog"` and `tabIndex={-1}` — they are already there and are
+  what makes it focusable.
+
+- [ ] 2.2a **Return focus to the trigger when the picker closes**, on every path — Escape, a click
+  outside (`:32-38`), and choosing a directory. Without this, dismissing the browser unmounts the
+  focused element and drops focus on `document.body`, which is the shape of `F307` arriving by a new
+  route inside a change that is supposed to be reducing it. Capture the previously-focused element on
+  mount and restore it in the same effect's cleanup, exactly as `useDialogFocus.ts:22`/`:41-44`
+  already does; do not reach for `document.getElementById`.
+
+- [ ] 2.2b **Do not generalise this to the other panels.** "Every panel focuses itself when it opens"
+  is `F307` and is excluded (`design.md` D8). §2.2 exists because one scenario in this change's own
+  `hub-interaction-feedback` delta — *"A panel opened over another panel dismisses only itself"* —
+  has no other surface that could demonstrate it. If it starts to look like the general fix, stop and
+  queue it (§8.4).
 - [ ] 2.3 Leave the five Escape owners that are *not* inside a `useDialogFocus` panel alone
   (`Composer.tsx:242`, `ModelPicker.tsx:109`, `ConversationRow.tsx:183`, `FilesIndexTab.tsx:42`,
   `SpecDocumentBrowser.tsx:92`). Re-run the grep before believing this list: it is the boundary of
@@ -58,6 +82,13 @@ half. A run that closes one and reports the change done has closed half a change
 - [ ] 4.1 **Remove `autoFocus`** from the blocking-reason input (`TaskDetailDrawer.tsx:410`) and
   focus it from a ref instead, when the panel becomes visible. One mechanism, not two
   (`design.md` D5).
+- [ ] 4.1a **The focus has to be visible on the keyboard path.** `hub-interaction-feedback` already
+  ships *"Keyboard focus is visible"* — a focus indicator drawn when focus arrives by keyboard — and
+  §4.1 replaces a browser-driven focus with a programmatic one, which is the kind of substitution
+  that silently loses `:focus-visible`. Drive it in §7.6, where the whole gesture is keyboard: the
+  input shows its focus indicator. Do not "fix" this by forcing a ring on the pointer path; the
+  shipped requirement is scoped to keyboard arrival and the pointer path is correct without one.
+
 - [ ] 4.2 Key the effect on *whether* a reason is being collected, not on its value — the state holds
   the text, so an effect depending on it would re-focus on every keystroke.
 - [ ] 4.3 No `setTimeout`, no `requestAnimationFrame`, no delay of any kind. After §3.4 nothing else
@@ -107,10 +138,22 @@ half. A run that closes one and reports the change done has closed half a change
   1 failed** today. It must reach **zero failed and no fewer than 19 passed**, on the same reading
   as §7.2.
 
-- [ ] 7.4 **Drive the third instance, which no harness covers yet.** Open the project modal, open the
-  directory browser inside it, press Escape: the browser closes and **the modal is still open**.
-  Extend one of the two harnesses rather than starting a third file. This is the only evidence that
-  §2.2's "already correct" reading was right.
+- [ ] 7.4 **Drive the third instance, which no harness covers yet, and drive it from the focus state
+  the operator is actually in.** Open the project modal, open the directory browser inside it, and —
+  **without clicking anywhere inside the browser** — press Escape: the browser closes and **the modal
+  is still open**. The "without clicking inside" is the whole leg, not a detail. R3 measured that the
+  picker's Escape handler only fires when focus is already inside its subtree, so a leg that clicks a
+  breadcrumb or a folder row first would pass against an unfixed `DirectoryPicker` and prove nothing
+  (`design.md` D9). Extend one of the two harnesses rather than starting a third file.
+
+- [ ] 7.4a **Assert the leg fails before §2.2 and passes after.** Run it against a bundle with §1.1
+  landed and §2.2 *not* landed: the modal must close, i.e. the leg must be red. That is the
+  mutation-check for the one task in this change whose necessity two rounds denied, and it is cheap
+  because §1.1 and §2.2 are separate files.
+
+- [ ] 7.4b **Then drive the close path.** Escape out of the browser and assert focus is on the
+  `Browse…` button, not on `document.body` — §2.2a's evidence, and the leg that would catch the
+  picker's fix importing `F307`'s shape.
 - [ ] 7.5 **Drive the ordinary move too, not just the broken one.** Choose a status move that is not
   `blocked` and assert focus returns to the trigger. §3.2 is the task most able to break something
   that works, and its failure mode is focus on `document.body`, which no assertion about the blocked
@@ -122,11 +165,28 @@ half. A run that closes one and reports the change done has closed half a change
   Do **not** extend this leg backwards into "reached the ticket without a pointer at any point":
   that path runs through `F307` and this change does not deliver it (`design.md` D6). A leg
   asserting it would fail for a reason this change is not responsible for.
+  Assert §4.1a in the same leg, while the gesture is already keyboard-only: the input carries a
+  visible focus indicator when the keyboard arrives in it.
 
 - [ ] 7.7 Re-run `t_d9_clearing_instructions_postchange.py` and the clear-instructions operator legs.
   `ClearInstructionsDialog` uses the same hook and was driven 21/21 on 2026-09-10; it must still be
   21/21. Its leg E asserts `F307` is *unchanged*, so it is also the check that §1.1 did not silently
   alter the Tab branch.
+
+- [ ] 7.8 **Drive the scenario that no task produced evidence for.** The delta's
+  *"Typing an answer does not operate the menu that asked for it"* had no leg behind it in any round
+  before R3 — §7.2 and §7.3 name floors on harnesses that do not cover it, and §7.6 types without
+  asserting anything about the menu. Type a reason **containing spaces** — `the staging API key`, the
+  same nineteen characters `F309` measured — and assert three things at the end: the field holds the
+  whole string, `document.querySelectorAll('[role=menuitem]').length` is `0`, and `document.body`'s
+  computed `pointer-events` is not `none`. The last two are exactly what `F309`'s leg `P5` measured
+  going wrong, and `t_d1_0910_rowmenu_leaves_the_page_inert.py` already carries the `PROBE` that
+  reads both, so this extends an existing leg rather than building new machinery.
+
+- [ ] 7.8a **`P5` is not this leg and does not become redundant.** `P5` focuses the trigger by hand
+  and presses Space, so it passes both before and after this change: it demonstrates the mechanism,
+  it does not test the fix. Leave it asserting what it asserts, and do not count it as evidence
+  for §7.8.
 
 ## 8. Close it out
 

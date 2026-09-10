@@ -11,7 +11,7 @@ out of the installed dependencies rather than remembered:
 | who | where it binds | phase | when it runs relative to the hook |
 |---|---|---|---|
 | Radix `DismissableLayer` | `document` | **capture** | before the target, so before the hook |
-| a nested React `onKeyDown` | root container (React 18 delegation) | bubble | at the root container, so before the hook |
+| a nested React `onKeyDown` | root container (React 18 delegation) | bubble | at the root container, so before the hook — **but only if focus is inside its own subtree**; see D9 |
 | `useDialogFocus` | `document` | bubble | **last** |
 
 The hook is structurally the last listener to see the key. That is not an accident of this codebase —
@@ -56,9 +56,15 @@ control does not have to rediscover it: **a control that handles Escape marks th
 Two consequences worth writing down.
 
 - `DirectoryPicker.tsx:57-62` already does exactly this — `event.preventDefault()` then `onClose()` —
-  which is why the third instance in `proposal.md` is repaired without being edited. That it was
-  already correct, by an author who was not thinking about this hook, is the argument that the
-  contract is the natural one rather than one invented for this change.
+  and **R3 found that it is not enough on its own.** That handler is a React `onKeyDown` bound to the
+  picker's own root `div` (`:85-91`, `tabIndex={-1}`), and **nothing ever focuses that root.** Opening
+  the browser leaves focus on the `Browse…` button, which is a *sibling* of the picker
+  (`ProjectManagerModal.tsx:153` and `:157-166`), so the synthetic event never travels through the
+  picker's subtree, the handler does not run, `preventDefault()` is never called, and D1's condition
+  is false. The third instance is therefore **not** repaired without an edit. See **D9**, which states
+  the precondition this bullet assumed, and `tasks.md` §2.2, which now carries the edit that
+  satisfies it. That an author could write a correct-looking Escape handler that cannot fire is the
+  argument this contract needs a second half, not a weaker one.
 - The remaining Escape owners in the UI (`Composer.tsx:242`, `ModelPicker.tsx:109`,
   `ConversationRow.tsx:183`, `FilesIndexTab.tsx:42`, `SpecDocumentBrowser.tsx:92`) are **not** inside
   a `useDialogFocus` panel, so nothing about their behaviour changes and none of them is edited.
@@ -219,7 +225,10 @@ change that fixes it is the one that gets to widen this.
 ## D8. What this change does not do
 
 - It does not fix `F307` — the Tab branch and initial focus placement. `proposal.md` states the three
-  reasons and the one dependency that runs the other way.
+  reasons and the one dependency that runs the other way. **One carve-out, added by R3:** §2.2 does
+  place initial focus, in `DirectoryPicker` and nowhere else, because without it a scenario in this
+  change's own delta cannot be demonstrated on any surface (D9). That is one component chosen for a
+  named reason, not the general rule `F307` asks for; §2.2b says so to the implementer.
 - It does not change what `TaskDetailDrawer` sends, when it sends it, or what the Hub accepts. No
   route, schema, migration or API shape is touched. Leg `C3` counted zero task writes across the
   whole failing sequence, and there should still be zero after this change until the operator
@@ -227,3 +236,44 @@ change that fixes it is the one that gets to widen this.
 - It does not add a unit test that *reproduces* either defect. Both depend on real focus and real
   event phases; jsdom's answer to either would be evidence about jsdom. The acceptance evidence is
   the two browser harnesses going green.
+
+## D9. Arbitration presumes the nested owner holds the keyboard — added by R3
+
+D1 says the hook stands down when something nearer has already answered. D2 says a nested owner
+answers by preventing the default. **Neither says what has to be true for the nested owner's handler
+to run at all**, and R3 found the change relying on the missing half in one of its three instances.
+
+The precondition differs by mechanism, and the difference is not cosmetic:
+
+| the nested owner | where its listener lives | runs when |
+|---|---|---|
+| Radix `DismissableLayer` (the menu) | `document`, capture phase | **always**, wherever focus is |
+| a React `onKeyDown` (the reason input, the picker) | root container, dispatched along the React tree from the event target | **only when focus is inside that handler's own subtree** |
+
+So a React `onKeyDown` is not a listener for Escape; it is a listener for *Escape pressed by someone
+standing inside me*. The three instances land differently under that reading:
+
+- **the menu** — capture on `document`, so focus is irrelevant. Works.
+- **the reason input** — the handler is on the `<input>` itself (`TaskDetailDrawer.tsx:409-415`), and
+  §4.1 puts focus in that input. Works, **because of §4.1**: the `F310` half of this change is
+  therefore *dependent on* the `F309` half, not merely fixed alongside it. `tasks.md` §2.1 now says
+  so, because an implementer landing §1.1 and §2.1 without §4.1 would see leg `C3` still fail and
+  would have no reason to suspect the focus work.
+- **the directory browser** — the handler is on a root `div` that nothing focuses, and focus after
+  opening it is on the `Browse…` button outside it. **Does not work**, and §1.1 alone does not make
+  it work.
+
+This is the same fact D3 already argues in the opposite direction. D3 rejects binding the hook on the
+panel because *"focus is frequently not inside the panel at all"* — `F307`, measured. That is exactly
+why the picker's panel-scoped handler is dead. D2's bullet and D3's argument could not both be right;
+D3 is the one that is.
+
+**The repair is on-theme rather than a patch.** A browser the operator has just opened is a control
+that asks — it exists to collect a directory — so it holds the keyboard, and the change's own title
+is the rule that fixes it. The picker already carries `role="dialog"` and `tabIndex={-1}`, which is
+the markup for a panel that intends to be focused and was never told to be. §2.2 focuses it on open
+and returns focus to the trigger on close; nothing about D1's signal changes.
+
+**Not generalised further, deliberately.** "Every panel focuses itself when it opens" is `F307`,
+which D8 excludes with three reasons. This is the one panel that needs it to make a scenario in this
+change's own delta true, and §2.2 is scoped to it.

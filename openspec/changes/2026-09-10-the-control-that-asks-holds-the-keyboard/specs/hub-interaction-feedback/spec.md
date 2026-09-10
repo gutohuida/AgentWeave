@@ -81,4 +81,5 @@ action that asks stands the restoration down.
 
 - **WHEN** the operator types an answer containing spaces into the control a menu action presented
 - **THEN** the menu does not re-open
-- **AND** no part of the surface becomes unresponsive to the pointer while they type
+- **AND** the surface behind that control does not stop answering the pointer because a menu re-opened
+  over it
