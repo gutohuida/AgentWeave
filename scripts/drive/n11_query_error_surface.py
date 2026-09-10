@@ -379,6 +379,33 @@ def call_sites(hooks: list[str], decl_files: set[str]) -> list[dict]:
     return out
 
 
+def unhandled_sites() -> list[dict]:
+    """Every call site outside `api/` that does not bind and use the query's error.
+
+    Split out of `main()` so the ratchet in `hub/tests/test_surface_ceilings.py` counts the same
+    sites the report prints, rather than restating the sweep and drifting from it.
+    """
+    decls = declarations()
+    query_hooks = sorted({d["hook"] for d in decls if d["hook"]})
+    decl_files = {d["file"] for d in decls}
+    sites = [s for s in call_sites(query_hooks, decl_files) if s["file"] not in decl_files]
+    return [s for s in sites if not (s["binds_error"] and s["error_used"])]
+
+
+def operator_reachable_misreports(unhandled: list[dict]) -> list[dict]:
+    """The ceiling R-1 freezes: unhandled sites hand-classified MISREPORT on a live surface.
+
+    `DEAD` is excluded because no operator can reach the surface; `PICKER` is not, because an
+    empty picker is still a lie about why the list is empty.
+    """
+    out = []
+    for s in unhandled:
+        cls, flag, _why = RENDERS.get((s["file"], s["line"]), ("UNCLASSIFIED", "", ""))
+        if cls == "MISREPORT" and flag != "DEAD":
+            out.append(s)
+    return out
+
+
 def main() -> int:
     decls = declarations()
     bodies = hook_bodies()
@@ -429,8 +456,7 @@ def main() -> int:
                 flags[s["flag"]] = flags.get(s["flag"], 0) + 1
         extra = "".join(f", {n} {f}" for f, n in sorted(flags.items()))
         print(f"  {cls:14s} {len(rows):3d}   ({poll_n} poll{extra})")
-    mis = buckets.get("MISREPORT", [])
-    live = [s for s in mis if s["flag"] != "DEAD"]
+    live = operator_reachable_misreports(unbound + bound_unused)
     pickers = [s for s in live if s["flag"] == "PICKER"]
     print(f"\n  MISREPORT on a surface an operator can reach: {len(live)}")
     print(f"    of those, an empty picker rather than a sentence: {len(pickers)}")

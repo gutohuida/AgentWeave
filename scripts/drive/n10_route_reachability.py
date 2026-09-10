@@ -276,13 +276,16 @@ def orphan_hooks(src):
     return found
 
 
-def main():
+def route_rows():
+    """One row per declared route+method: how the UI reaches it, and whether the CLI does.
+
+    Split out of `main()` so the ratchet in `hub/tests/test_surface_ceilings.py` counts the
+    same rows the report prints, rather than restating the classification and drifting from it.
+    """
     routes = declared_routes()
     src = ui_sources()
     calls = ui_calls(src)
     cli = cli_calls()
-    bundle_file = sorted(BUNDLE_DIR.glob("index-*.js"))[0]
-    bundle = bundle_file.read_text(encoding="utf-8", errors="replace")
 
     rows = []
     for method, path in routes:
@@ -309,6 +312,27 @@ def main():
                 "cli": (method, re.sub(r"\{[^}]*\}", "{}", path)) in cli,
             }
         )
+    return rows
+
+
+def clientless_routes(rows):
+    """Operator-facing routes with no client anywhere in the repo -- R-1's ceiling.
+
+    Excludes `/api/v1/agent-actions` (the agent API, whose client is an agent and not a screen)
+    and anything the CLI transport calls, exactly as the report's "no client anywhere" section.
+    """
+    return [
+        r
+        for r in rows
+        if not r["path"].startswith("/api/v1/agent-actions") and r["ui"] != "exact" and not r["cli"]
+    ]
+
+
+def main():
+    rows = route_rows()
+    src = ui_sources()
+    bundle_file = sorted(BUNDLE_DIR.glob("index-*.js"))[0]
+    bundle = bundle_file.read_text(encoding="utf-8", errors="replace")
 
     unresolved = [r for r in rows if r["ui"] == "wildcard"]
     if unresolved:
@@ -321,7 +345,7 @@ def main():
     reached = [r for r in operator if r["ui"] == "exact"]
     unreached = [r for r in operator if r["ui"] != "exact"]
     by_cli = [r for r in unreached if r["cli"]]
-    orphans = [r for r in unreached if not r["cli"]]
+    orphans = clientless_routes(rows)
 
     print(f"declared /api/v1 route+method pairs        {len(rows)}")
     print(f"  under /api/v1/agent-actions (agent API)  {len(rows) - len(operator)}")
