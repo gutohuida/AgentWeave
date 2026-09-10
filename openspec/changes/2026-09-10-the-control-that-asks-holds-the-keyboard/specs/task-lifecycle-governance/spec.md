@@ -13,12 +13,17 @@ A status alone leaves the operator working out what they are holding up, which i
 were already in when the task said work was under way and nothing was happening. The status answers
 "why is nothing moving"; only the statement answers "what do you need from me".
 
-A control that collects the statement SHALL be operable without a pointer. The statement is
-mandatory — it is the entire reason the control asks rather than sending a move that would be
-refused — so a control that can be reached one way and not the other does not make the transition
-harder, it makes it unavailable to an operator working from the keyboard, and it does so without
-reporting anything: the field stays empty and the confirmation stays disabled with nothing on screen
-saying why.
+A control that collects the statement SHALL accept it from the keyboard: once the operator has
+chosen the move, the keyboard SHALL be in that control. The statement is mandatory — it is the
+entire reason the control asks rather than sending a move that would be refused — so a control that
+takes the statement from a pointer and not from the keyboard does not make the transition harder, it
+makes it unavailable to an operator working from the keyboard, and it does so without reporting
+anything: the field stays empty and the confirmation stays disabled with nothing on screen saying
+why.
+
+This says nothing about how the operator *reaches* the control. Where focus starts when a panel
+opens is a general question about panels, it is governed by the interaction requirements rather than
+restated here, and it is not settled today.
 
 #### Scenario: A system-recorded block explains itself
 
@@ -42,8 +47,10 @@ saying why.
 - **WHEN** an operator surface offers a move to the waiting status
 - **THEN** it obtains the statement before requesting the move
 
-#### Scenario: The statement can be given from the keyboard alone
+#### Scenario: The statement is typed into the control that asked for it
 
-- **WHEN** the operator moves a task to the waiting status without using a pointer at any point
-- **THEN** the statement they type is held by the control that asked for it
+- **WHEN** the operator chooses the move to the waiting status from the keyboard
+- **THEN** the keyboard is in the control asking what the task is waiting for, once the menu has
+  closed
+- **AND** what they type next appears in it
 - **AND** the move can be completed with the statement they typed

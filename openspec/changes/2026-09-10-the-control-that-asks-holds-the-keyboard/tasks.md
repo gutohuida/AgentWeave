@@ -91,10 +91,22 @@ half. A run that closes one and reports the change done has closed half a change
   `netstat -ano | grep LISTEN` before choosing a port — `8011`, `8012` and `8013` have all been in
   use by other windows' drives this week — and stop what you start.
 - [ ] 7.2 `py -3.11 scripts/drive/t_d1_0910_escape_across_the_dialogs.py` — **30 passed / 6 failed**
-  today, and the six are `F309` and `F310` asserted the right way round. It must reach **36 passed /
-  0 failed**. Anything else, including a different six, is not this change landing.
+  today, and the six are `F309` and `F310` asserted the right way round. It must reach **zero
+  failed, and no fewer than 36 passed** — a floor, not an equality, because §7.4, §7.5 and §7.6 all
+  add legs to these same two files and would otherwise make the stated total unreachable. A
+  different six failing is still not this change landing.
+
+- [ ] 7.2a **A leg that skips is not a leg that passed.** The harness's `D2` block prints
+  `no project-manager trigger reachable — skipped` and calls no `check()` at all
+  (`t_d1_0910_escape_across_the_dialogs.py:472-473`), so an environment that hides that trigger
+  lowers the count without failing anything. If the total comes in under the floor, read the
+  output for a skip before concluding a leg regressed — and §7.4 depends on that same block
+  opening, so a skip there means §7.4 was not driven either.
+
 - [ ] 7.3 `py -3.11 scripts/drive/t_d1_0910_rowmenu_leaves_the_page_inert.py` — **18 passed /
-  1 failed** today. It must reach **19 / 0**.
+  1 failed** today. It must reach **zero failed and no fewer than 19 passed**, on the same reading
+  as §7.2.
+
 - [ ] 7.4 **Drive the third instance, which no harness covers yet.** Open the project modal, open the
   directory browser inside it, press Escape: the browser closes and **the modal is still open**.
   Extend one of the two harnesses rather than starting a third file. This is the only evidence that
@@ -103,7 +115,15 @@ half. A run that closes one and reports the change done has closed half a change
   `blocked` and assert focus returns to the trigger. §3.2 is the task most able to break something
   that works, and its failure mode is focus on `document.body`, which no assertion about the blocked
   path would notice.
-- [ ] 7.6 Re-run `t_d9_clearing_instructions_postchange.py` and the clear-instructions operator legs.
+- [ ] 7.6 **Drive the narrowed lifecycle scenario exactly as narrowed.** Open the menu, choose
+  **Move to blocked** *with the keyboard* — arrow to the item and press Enter, do not click it —
+  then type without touching the mouse and confirm. Assert what the delta now says: the keyboard
+  is in the reason input once the menu has closed, the text appears there, and the move completes.
+  Do **not** extend this leg backwards into "reached the ticket without a pointer at any point":
+  that path runs through `F307` and this change does not deliver it (`design.md` D6). A leg
+  asserting it would fail for a reason this change is not responsible for.
+
+- [ ] 7.7 Re-run `t_d9_clearing_instructions_postchange.py` and the clear-instructions operator legs.
   `ClearInstructionsDialog` uses the same hook and was driven 21/21 on 2026-09-10; it must still be
   21/21. Its leg E asserts `F307` is *unchanged*, so it is also the check that §1.1 did not silently
   alter the Tab branch.

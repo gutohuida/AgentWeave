@@ -156,10 +156,16 @@ a pointer was already added to `F307` in place.
 The product **is** obeying that today, and `F309` is not a breach of it: the drawer does ask, and the
 confirm button stays disabled until something is typed, so nothing is requested without a statement.
 What is broken is that the operator cannot supply one by keyboard. The delta therefore **modifies**
-that requirement to say the collection must be operable without a pointer, rather than adding a
-second requirement in a second voice that says nearly the same thing. Grepping for the requirement
-before writing the delta is what turned this from an ADDED into a MODIFIED, and it is exactly the
-check the round discipline exists to force.
+that requirement to say the control must accept the statement from the keyboard once the move has
+been chosen, rather than adding a second requirement in a second voice that says nearly the same
+thing. Grepping for the requirement before writing the delta is what turned this from an ADDED
+into a MODIFIED, and it is exactly the check the round discipline exists to force.
+
+**R2 cut that modification back.** R1 wrote the new scenario as *"without using a pointer at any
+point"*, and that is more than this change delivers: reaching the drawer's status menu from the
+keyboard means Tab-walking the board's remaining controls behind the scrim, which is `F307` and is
+excluded below. The scenario now begins where the change begins — the move chosen from the keyboard —
+and `design.md` D6 carries the measurement and the reasoning.
 
 ## Impact
 
@@ -178,4 +184,6 @@ check the round discipline exists to force.
 - **The guard is a drive, not a unit test.** `scripts/drive/t_d1_0910_escape_across_the_dialogs.py`
   (30 pass / 6 fail today) and `scripts/drive/t_d1_0910_rowmenu_leaves_the_page_inert.py`
   (18 pass / 1 fail today) both assert in the direction of the correct behaviour, so **both go green
-  when this ships** and are the change's acceptance evidence.
+  when this ships** and are the change's acceptance evidence. The counts are a floor rather than an
+  equality: `tasks.md` adds legs to both files, and one existing leg skips silently rather than
+  failing when its trigger is absent (`tasks.md` 7.2a).

@@ -32,6 +32,16 @@ renders. If that were not so, this whole decision would be wrong while every fac
 true, which is the failure the round discipline exists to catch — so a later round should re-read
 those two lines rather than re-read this paragraph.
 
+**R2 re-read all four files and every claim in the table above held**, at the exact lines: the
+`{ capture: true }` registration on the owner document, `preventDefault()` at `:64` before
+`onDismiss()` at `:65` inside the `if (!event.defaultPrevented && onDismiss)` at `:63`, and the two
+`onDismiss` suppliers at `:145` and `:160`. It added the link R1 named but did not trace: it is
+`MenuContentImpl` that hands that `onDismiss` down to `DismissableLayer` (`react-menu` `:264-272`),
+so the chain from a `DropdownMenu` to the `preventDefault()` is complete rather than inferred.
+`DismissableLayer` also answers only for the highest layer (`:60-61`), which is not a hazard here —
+our panels are not Radix layers and are not in that stack at all — but it is the reason a *second*
+open Radix layer could not silently take the marking away.
+
 The converse case is also safe: `useEscapeKeydown` lives *inside* `DismissableLayer`, so with no
 layer mounted there is no handler, nothing marks the key, and a panel with nothing open inside it
 dismisses exactly as it does today.
@@ -54,6 +64,15 @@ Two consequences worth writing down.
   a `useDialogFocus` panel, so nothing about their behaviour changes and none of them is edited.
   They are listed here so a later round does not have to re-derive the boundary; the boundary is
   "mounted inside a panel whose `useDialogFocus` is active", and it is two components today.
+
+  **R2 re-derived the boundary from `grep` rather than from this list, and it held.** Seven Escape
+  owners in `src/`, of which two are inside an active `useDialogFocus` panel (`TaskDetailDrawer:414`,
+  `DirectoryPicker:58`) and five are not. The one that needed chasing rather than reading is
+  `SpecDocumentBrowser`: it has two hosts (`SpecDocumentPicker.tsx:96`, `SpecIndexTab.tsx:31`) and
+  the first has two of its own (`ConversationView.tsx:575`, `SpecPage.tsx:136`) — all page level, so
+  it stays outside the boundary. `ModelPicker` was the other candidate worth checking, since a model
+  choice inside `AgentCreateDialog` would have made a seventh instance; it reaches the tree only
+  through `ComposerModelControls.tsx:183` inside `Composer`, which no dialog mounts.
 
 ## D3. The hook keeps its `document` binding
 
@@ -86,6 +105,25 @@ sites that have no focus-moving item at all.
 The flag must be cleared on every close, however the menu closed — selection, Escape, or a click
 outside — so a dismissal that follows a focus-moving selection does not inherit it. Radix runs
 close-auto-focus on every close, which is the one place that reset belongs.
+
+**What `preventDefault()` on that event actually suppresses, read out of the dependency by R2.**
+R1 described the restore loosely, as *"Radix returns focus to the trigger"*. There are two
+mechanisms, not one, and both are suppressed by the same line — which is why this decision works,
+and it is worth stating so an implementer does not go looking for a second lever:
+
+1. `DropdownMenuContent` composes **its own** `onCloseAutoFocus`, which calls
+   `context.triggerRef.current?.focus()` and then `event.preventDefault()`
+   (`@radix-ui/react-dropdown-menu/dist/index.mjs:113-117`). It is composed with
+   `composeEventHandlers(props.onCloseAutoFocus, …)`, and that helper defaults to
+   `checkForDefaultPrevented: true` (`@radix-ui/primitive/dist/index.mjs`) — so a consumer handler
+   that prevents the default stops Radix's own trigger focus from running at all.
+2. `FocusScope` then does `if (!unmountEvent.defaultPrevented) focus(previouslyFocusedElement ?? document.body)`
+   (`@radix-ui/react-focus-scope/dist/index.mjs:89-98`). Prevented, that is skipped too.
+
+One line, both actors, no third one left. And note where that code sits: inside a
+**`setTimeout(…, 0)`** in `FocusScope`'s cleanup. The steal is therefore strictly later than any
+React commit, which is the precise reason `F309` is observable at all and the precise reason D5
+forbids scheduling our own focus — the thing we would be racing runs in a macrotask we do not own.
 
 Rejected: exposing `onCloseAutoFocus` on `RowMenu` as a passthrough. It works, and it puts a Radix
 concept in front of five call sites that should not have to know what Radix is. The item-level flag
@@ -125,11 +163,31 @@ waiting status must collect the statement is already there and is already obeyed
 say is that the collection has to be reachable. Adding a second, nearly identical requirement in a
 different capability is how a corpus ends up with two rules about one control that can drift apart.
 
-**Open for the review rounds.** The generic requirement in `hub-interaction-feedback` already covers
-`F309` mechanically. Whether the `task-lifecycle-governance` modification earns its place — or is
-the same rule restated in a second voice — is a fair challenge, and R2 or R3 should either defend it
-or delete it. The case for keeping it: it is the only one of the three that names what the operator
-actually loses, on a path the Hub makes mandatory.
+**Settled by R2: kept, and narrowed.** The challenge R1 left open was whether the
+`task-lifecycle-governance` modification is the same rule in a second voice. It is not. The generic
+requirement says where the keyboard goes when *a menu action presents a control*; the lifecycle
+requirement says that *this particular statement*, which the Hub refuses the transition without, has
+to be enterable. Delete it and the corpus records that a mandatory field is unreachable nowhere at
+all, because the interaction capability never mentions the waiting status and nobody reading the
+lifecycle capability would find the rule that governs it.
+
+**R2 did find the modification over-claiming, and cut it back.** As R1 wrote it, the scenario read
+*"the operator moves a task to the waiting status **without using a pointer at any point**"* — and
+that is not what this change delivers. The reachability half is `F307`, which D8 deliberately
+excludes, and it was re-measured rather than reasoned about:
+
+| step | what the code does | keyboard? |
+|---|---|---|
+| open the ticket | `TaskCard.tsx:213-214` is `role="button" tabIndex={0}` with an Enter/Space handler | yes |
+| get into the panel | `useDialogFocus` moves focus nowhere on activation, and unlike three of the six dialogs `TaskDetailDrawer` autofocuses nothing at open — so the first Tab falls through to native order | **no** |
+| reach the status menu | `TaskDetailDrawer` is rendered *after* the whole board (`TasksBoard.tsx:428`), so native order walks every remaining board control **behind the scrim** first | **no** |
+| choose the move, type the reason | this change | yes |
+
+So a scenario asserting a pointer-free path end to end would be archived into `openspec/specs/` as
+current behaviour while the product did not have one. The scenario now starts where the change
+starts — *"chooses the move to the waiting status from the keyboard"* — and the requirement says in
+so many words that where focus starts when a panel opens is not settled here. When `F307` lands, the
+change that fixes it is the one that gets to widen this.
 
 ## D7. Alternatives rejected
 
@@ -141,7 +199,9 @@ actually loses, on a path the Hub makes mandatory.
   a case that does not exist. **The case it guards against was checked, not assumed:** no
   `useDialogFocus` panel is mounted inside another today — all six mount at page or `App` level
   (`App.tsx:610`, `App.tsx:620`, `ProjectSettingsPanel.tsx:321`, `InstructionsPage.tsx:155`,
-  `SpecPhaseBar.tsx:217`, and the drawer from the task board). If two are ever simultaneously active,
+  `SpecPhaseBar.tsx:217`, and the drawer — which R2 found mounts at **two** boards, `TasksBoard.tsx:428`
+  and `DependencyBoard.tsx:534`, both at page level; same component, so same behaviour, but the drive
+  exercises one of the two). If two are ever simultaneously active,
   `defaultPrevented` resolves them by registration order, which means the **outer** one wins — the
   wrong answer. That is the residual risk of this decision, it is stated here rather than discovered
   later, and the tasks carry a check that keeps the invariant honest.
