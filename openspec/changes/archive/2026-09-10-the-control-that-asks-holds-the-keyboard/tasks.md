@@ -243,10 +243,44 @@ half. A run that closes one and reports the change done has closed half a change
   findings the new legs added to the harness were fixed so the drive directory's standing
   count (271 at `HEAD`) did not grow. One `N806` remains and is deliberate: `FOCUS` matches
   the identical local the leg above it already uses.
-- [ ] 8.2 Set `**Status:**` on `F309` and `F310` in `scripts/drive/FINDINGS.md` to `fixed <sha>`.
-  Leave `F307` open and `F311` open — `F311` is ratcheted, not drained.
-- [ ] 8.3 Note in `F307` that this change deliberately did not subsume it, so the next reader of that
-  finding does not have to reconstruct why a fix landed in the same hook and left it standing.
-- [ ] 8.4 If any task here turns out to want a decision — in particular anything that would move
-  `useDialogFocus`'s binding off `document`, or change where focus lands when a confirm dialog opens
-  — **stop and queue it**, do not decide it. That is `F307`, and it is the operator's.
+- [x] 8.2 **Done 2026-09-11, and it is two findings and four commits, not two.** `F309`'s
+  `**Status:**` names `7a0e5bc` (the menu hands the keyboard over — `RowMenu.takesFocus`, action
+  deferred to `onCloseAutoFocus`) **and** `beb38d6` (the reason panel takes focus from a ref;
+  `autoFocus` gone); `F310`'s names `9ed1d6d` (the hook stands down on `defaultPrevented`) **and**
+  `beb38d6` (the input's handler now has a `preventDefault()` to call). A single-sha citation would
+  have been wrong in both cases — §2.1a and §4.1a are the tasks that say why, and the ledger now
+  says which commit did which half rather than leaving the next reader to `git log -S`. `F307` is
+  left open and the classifier confirms it. **`F311` is left untouched, and the classifier does not
+  read it as open — it reads `RESOLVED`, and it did so before this change too.** The marker is
+  `NOT A DEFECT`, matched on `F311`'s own sentence *"Not a defect in the product"*, which is `F311`
+  saying the product is fine while its bookkeeping ratchet is still undone. That is the weak arm
+  the script's own header calls untrustworthy, it is pre-existing rather than anything this
+  close-out did, and it was **not** quietly repaired here: editing `F311` to satisfy the instrument
+  would be writing for the instrument, and repairing the instrument is a sweep with its own verdict
+  diff. Recorded for the operator instead.
+- [x] 8.3 **Done 2026-09-11.** A dated note inside `F307`, giving the three reasons in the order they
+  bind: the operator answered `DAY-1` **no** on 2026-09-10 18:30 (`APPROVALS.md`), the Escape branch
+  had a mechanism question and the Tab branch has a design one that is the operator's, and leg E of
+  `t_d9_clearing_instructions_postchange.py` still prints `F307 REPRODUCED … TEXTAREA/Project
+  instructions` against the served bundle that carries this change — so the note is evidence, not
+  assertion.
+- [x] 8.4 **Answered honestly, and the answer is no — nothing here wanted a decision, which is not
+  the same as nothing being decision-shaped.** Both hazards this task names were checked rather than
+  assumed:
+  - **The binding did not move.** `useDialogFocus` is still bound to `document`, still in the bubble
+    phase, and §1.1's comment now records that the phase is load-bearing (`design.md` D3) — capture
+    would put the hook ahead of the owners it defers to. Nothing in the change proposes otherwise.
+  - **Where focus lands when a confirm dialog opens was not changed.** The Tab branch is untouched
+    and `F307` stands. §2.2 does move focus on one panel opening — `DirectoryPicker`'s root — and
+    §2.2b is the task that anticipated this looking like the general fix. It did not: it stayed one
+    call site, chosen because that panel is the only surface in this change's own delta that can
+    demonstrate *"A panel opened over another panel dismisses only itself"*, and no other panel
+    gained a self-focus effect. Re-grepped at close-out.
+
+  **One decision-shaped thing did come out of the drive, and it is queued rather than taken.**
+  `F315` (C), filed 2026-09-11 by §7.6's own leg: the *Mark waiting* / *Move to blocked* button
+  gives no feedback for the 1.5-3 s its mutation takes, stays enabled, and a second press writes the
+  move again. It is deliberately **not** repaired here — every status move in that menu shares the
+  gap, so patching this one button would ship the inconsistency rather than the fix. It belongs to a
+  change that owns optimistic feedback for task mutations, and it is recorded in `FINDINGS.md` and
+  in the night window's notes for the operator, not decided by this change.

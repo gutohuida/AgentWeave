@@ -385,6 +385,40 @@ with a fix shape and no proposal, which makes it day-window material and not thi
 The count is stated here rather than by editing any line above it, for the reason the paragraph two
 above gives.
 
+**Revised 2026-09-11 (night window, `n6-close`): the open severity-A list is five — `F299`, `F300`,
+`F301`, `F306`, `F312`.** Computed with `py -3.11 scripts/classify_findings.py` over 315 sections,
+not read off the paragraph above it. Three things about that line, and only the first is a count.
+
+**`F309` and `F310` are the night's work and neither is on the list.** They were the approved change
+`2026-09-10-the-control-that-asks-holds-the-keyboard`, built and driven across 2026-09-10/11, and
+both sections now carry a `**Status:**` line naming the **two** commits each of them took — the
+split is not bookkeeping, it is the shape of both defects, and a single-commit citation would have
+been wrong in both cases. Every earlier revision on this page had to correct a list that went stale
+between a filing and its repair; this pair was filed on the morning of 2026-09-10 and repaired
+inside the same cycle, so no list above ever had a chance to name them.
+
+**`F312` was never added to any list here, and that is the failure this page keeps having.** The
+paragraph immediately above computes the open set as three plus `F306` — it was written on
+2026-09-09, and `F312` was filed a day later by a different window. Nothing about it was wrong when
+it was written. It simply stopped being true and nobody re-derived it, which is the same shape as
+every banner this file has had to withdraw, only slower. That is why the number above is computed
+in the sentence that states it.
+
+**Below A, one section is newer than every census line on this page: `F315` (C), appended
+2026-09-11 by this window's own drive.** The button that blocks a ticket gives no feedback for the
+1.5-3 s the mutation takes, stays enabled, and a second press writes the move again. It is left
+standing on purpose — every status move in that menu shares the gap, so it wants a change that owns
+optimistic feedback for task mutations rather than a patch to one button.
+
+**This paragraph was written under `F313`'s rule.** Every verdict was captured before a word of this
+close-out was edited and recomputed after, with the requirement that the only sections whose verdict
+moves are the two the night repaired. That held. It is worth saying what the *before* run showed,
+because it is `F313` again and in this file's own hand: one section sat at `CONFLICT` purely because
+last night's new entry wrote *"…the focus defect in the same panel, fixed by the change whose drive
+found this"* on a line naming one finding number. A single-number line about a finding's repair is
+still indistinguishable from a verdict on a different finding, exactly as `F313` says, and the floor
+it describes is where this landed.
+
 ### Two more defects, found the same day by an adversarial review that was told to falsify
 
 **The first three below were found by me. These two were found by an Opus review agent spawned at
@@ -24573,6 +24607,31 @@ until someone checks the other five call sites: move focus to the panel's first 
 activation (and let each dialog order its buttons so the safe one is first), or fall back to
 trapping whenever the active element is *outside* the panel rather than only at its edges.
 
+**2026-09-11 — a change landed in this hook and deliberately did not subsume this.**
+`2026-09-10-the-control-that-asks-holds-the-keyboard` repaired `F309` and `F310`: the **Escape**
+branch of `useDialogFocus` now stands down when a nested owner has already answered the key. It left
+the **Tab** branch exactly as written above, on purpose, and the next reader of this section should
+not have to reconstruct why. Three reasons, in the order they bind:
+
+- **The operator decided it.** `DAY-1`, answered 2026-09-10 18:30, asked whether this should be
+  swallowed by that change. The answer was **no** — the split stands. That is what `APPROVALS.md`
+  records, and it is the reason that outranks the other two.
+- **The two branches do not share a question.** Escape had an *arbitration* defect: a mechanism
+  question with one right answer once you notice the binding is on `document` in the bubble phase.
+  Tab has a *design* question — which control holds the keyboard when a destructive confirmation
+  opens, `Cancel` or the destructive button — and that is the operator's to answer, not a hook
+  author's. A change that swallowed both would have decided the second one silently while fixing
+  the first.
+- **It still reproduces at `HEAD`, which is evidence rather than assertion.**
+  `scripts/drive/t_d9_clearing_instructions_postchange.py` leg E still prints
+  `F307 REPRODUCED ... TEXTAREA/Project instructions`, run 2026-09-11 against served bundle
+  `index-7rpxplrH.js` — the bundle that carries the Escape repair. So the repair demonstrably did
+  not reach this branch by accident either.
+
+A reader who arrives here from a recent commit in `useDialogFocus.ts` should therefore not conclude
+this was handled in passing. It was looked at, scoped out, and wants a review page before anyone
+writes code for it.
+
 **It is kept as a reproduction, not as a red check.** Leg E asserts both halves — that presses 2-5
 cycle within the panel, and that press 1 escapes to `aria-label="Project instructions"` — so the
 drive exits 0 meaning *"the change's own contract holds and F307 is unchanged"*. Fixing F307 will
@@ -24641,9 +24700,25 @@ the alarm it silences was worth something.
 
 ## F309 (A) — the blocking-reason input never gets focus, so the operator's reason is typed into the status menu and each space re-opens it
 
-**Status:** open — filed 2026-09-10 (day window, `D-1`), **measured in a real browser** against the
-served bundle on a throwaway `:8013` Hub. Not fixed. Pre-existing; nothing the night window built
-touches this screen.
+**Status:** fixed — **two commits, and the split is this finding's own shape.** `7a0e5bc` is the
+half the *"`autoFocus` loses"* paragraph below blames: `RowMenu` learns that an item can open a
+control which will take the keyboard (`takesFocus`), and runs such an item's action from
+`onCloseAutoFocus` after `preventDefault()`, so the menu **hands the keyboard over** instead of
+restoring it to its trigger on the way out. `beb38d6` is the other half: the reason panel takes
+focus itself, from a ref in an effect keyed on *whether* a reason is being collected, and
+`autoFocus` — the mechanism that lost the race — is gone. Neither commit works alone, which is why
+both are named: `7a0e5bc` without `beb38d6` leaves nothing to receive the keyboard, and `beb38d6`
+without `7a0e5bc` was measured losing the race a second time (Radix flushes `onSelect`
+synchronously, so the effect focused the input while the menu scope was still trapping).
+
+Filed 2026-09-10 (day window, `D-1`), **measured in a real browser** against the served bundle on a
+throwaway `:8013` Hub. Pre-existing; nothing the night window built touched this screen. Driven
+green 2026-09-11 (night window) against served bundle `index-7rpxplrH.js`:
+`t_d1_0910_escape_across_the_dialogs.py` **48 passed / 0 failed**,
+`t_d1_0910_rowmenu_leaves_the_page_inert.py` **37 passed / 0 failed** — and the keyboard path the
+gesture below describes is now measured rather than inferred (leg `P6`: `ArrowDown` to *Move to
+blocked*, `Enter`, focus lands on the `INPUT`, all 19 characters land, and the Hub's own record
+reads `status='blocked' reason='the staging API key'`).
 
 **The gesture.** A ticket in `in_progress`. Open it, open its status menu, choose **Move to
 blocked**. The Hub requires a reason for a hand-set block, so `TaskDetailDrawer` does the right
@@ -24707,8 +24782,24 @@ A severity filed on that first reading would have been filed against the wrong c
 
 ## F310 (B) — one Escape dismisses two things: the ticket closes out from under the control the operator was actually cancelling
 
-**Status:** open — filed 2026-09-10 (day window, `D-1`), **measured in a real browser**. Not fixed.
-Same hook as [`F307`], different branch — `F307` is the Tab branch, this is the Escape branch.
+**Status:** fixed — **two commits again, and again neither is sufficient.** `9ed1d6d` gives the hook
+the arbitration it never had: `useDialogFocus`'s Escape branch returns without closing when
+`event.defaultPrevented` is already set. That flag is enough — and not merely present — because the
+listener is on `document` in the **bubble** phase, structurally the last handler in the propagation
+path, so every React handler and every capture-phase listener has already run by the time it is
+read. `beb38d6` gives the nested owner something to say: `TaskDetailDrawer.tsx`'s reason input now
+calls `preventDefault()` before `setBlockingReason(null)`, so the line written for *"Escape cancels
+the reason"* — the one the table below records as never once observable — is observable.
+
+**The two gestures needed different amounts of that.** After `9ed1d6d` alone the escape harness went
+**30/6 → 31/5**: the menu-open gesture flipped, because Radix answers Escape with its own
+`preventDefault()` and so had always been saying *"handled"* to a hook that was not listening. The
+reason-input gesture could not flip there and did not — its handler had nothing to say until
+`beb38d6`. Filed 2026-09-10 (day window, `D-1`); driven green 2026-09-11 (night window), both
+gestures, against served bundle `index-7rpxplrH.js`.
+
+Same hook as [`F307`], different branch — `F307` is the Tab branch, this is the Escape branch, and
+the Tab branch was deliberately left standing (see the note in `F307`).
 
 **`useDialogFocus` binds Escape on `document`** (`hub/ui/src/hooks/useDialogFocus.ts:23-27`), calls
 `onClose()` and returns. It does not ask whether something nearer the keystroke has already handled
@@ -24745,13 +24836,20 @@ together.
 after it and `body` recovers at **+0 ms**. The only defect in that gesture is that the ticket closes.
 
 **Reproduction:** `py -3.11 scripts/drive/t_d1_0910_escape_across_the_dialogs.py`, legs `C2` and
-`C3`. Both are asserted in the direction of the *correct* behaviour, so the file exits non-zero
-today and will go green when this is fixed.
+`C3`. Both were asserted in the direction of the *correct* behaviour, ~~so the file exits non-zero
+today and will go green when this is fixed~~ — **and that is what happened**: the file exited
+non-zero on 2026-09-10 and exits 0 on 2026-09-11, 48 passed / 0 failed. It stays as a regression
+check, not as a reproduction.
 
-**Shape of a fix, unproposed.** Either the hook ignores Escape when the active element is inside a
-control that has declared it owns the key, or the two nested handlers call `stopPropagation()`. The
-first is a change to a hook serving six call sites; the second is two lines but leaves the next
-nested control to rediscover the trap. That choice belongs to the round discipline.
+**Shape of the fix, taken.** ~~Unproposed.~~ Two shapes were offered here — the hook ignores Escape
+when the active element is inside a control that has declared it owns the key, or the two nested
+handlers call `stopPropagation()`. **The first was chosen**, and the round discipline changed its
+signal on the way through: not *"is the active element inside such a control"*, which the hook would
+have to compute, but *"has the event's default already been prevented"*, which the control itself
+asserts. That inverts who knows the answer — the nested owner does, and it is the only party that
+can — and it costs the hook one condition instead of a DOM containment test at every call site. The
+second shape was rejected for the reason stated here: it leaves the next nested control to
+rediscover the trap.
 
 ---
 

@@ -61,6 +61,17 @@ is not in question. Deliberately not added: an `ORDER:` line is read **verbatim 
 check**, which is what made the 2026-09-09 section necessary, and one is a liability the moment it
 outlives its day.
 
+**BUILT — written by the FIX window at close-out, 2026-09-11, not by the operator.** The approved
+row above is complete: 41 tasks ticked with actuals, `F309` and `F310` both driven green in a real
+browser against the served bundle (`t_d1_0910_escape_across_the_dialogs.py` 48/0,
+`t_d1_0910_rowmenu_leaves_the_page_inert.py` 37/0), delta specs synced into
+`openspec/specs/hub-interaction-feedback` and `openspec/specs/task-lifecycle-governance`, and the
+change archived. **Verified as two findings, as the row demanded** — each carries its own
+`**Status:**` line in `FINDINGS.md` naming the two commits it took. `DAY-1`'s answer was honoured:
+`F307` is untouched, still reproduces at `HEAD`, and now carries a dated note in its own section
+saying why this change left it standing. One new finding came out of the drive, `F315 (C)`, filed
+and deliberately not repaired — it is a whole-menu gap, not one button's.
+
 ---
 
 ## 2026-09-09

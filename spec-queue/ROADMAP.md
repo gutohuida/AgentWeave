@@ -327,9 +327,47 @@ findings that the drives of Stages 2 and 4 produced. Measured with
 | **F300 (A)** | **DECIDED 2026-09-09, narrowed 2026-09-10 to this finding alone** — teach `_decide` the run's own Hub address. The 2026-09-09 verdict named three findings and its mechanism reached only this one. **Ships with F312 as one change.** | R1/R2/R3 then a night |
 | **F301 (A)** | **DECIDED 2026-09-10 — needs no containment decision.** Measurement overturned its stated mechanism: remove the approval gate and all five of its "refusal classes" execute, so they are reasons a command *needs approval*, not reasons it is forbidden. The `cli` path simply has no answerer. Closed by the notice change. | folds into the notice change |
 | **F306 (A)** | **Undecided, and it is a governance hole.** An agent can be staffed to review, and approve, work it recorded evidence for. `requirement_evidence.actor` is not one of `agents_that_may_have_authored`'s three sources (`task_transition_service.py:253-283`), and `_guard_author_is_not_reviewer` (`:286-311`) compares against `agent_that_completed`, which is NULL on an operator completion. **Both defences share the blind spot.** **DECIDED 2026-09-10 evening: repair BOTH defences, and count EVERY evidence row regardless of `review_state`** — the function's own docstring principle, applied to the fourth source it omits. | R1/R2/R3 — **tomorrow's spec loop** |
-| **F309 (A)** | **Undecided, filed 2026-09-10** by the day window's D-1 drive. The blocking-reason input never gets focus, so the operator's reason is typed into the status menu and each space re-opens it. Operator-facing, measured in a real browser. | needs a proposal |
+| ~~**F309 (A)**~~ | **RESOLVED 2026-09-11.** Filed 2026-09-10 by the day window's `D-1` drive, proposed and approved the same day, built and driven the same night, archived as `2026-09-10-the-control-that-asks-holds-the-keyboard` — **filed to archived inside one cycle**, which no previous A on this page has managed. `F310 (B)` shipped with it. Both took two commits each; `FINDINGS.md` names which did which half. | done |
 | **F312 (A)** | **DECIDED 2026-09-10 evening** — allow the run's own Hub URL, deny every other URL with a reason naming network access, not the filesystem. Settled by measurement: `python -c` already makes the identical request, so today's behaviour is a **syntax filter, not containment**. Explicitly **not** a claim that egress is now contained. | **one change with F300** |
 | **F52 (A)** | `CONFLICT` — still the bookkeeping close described above. Unchanged since 2026-08-27. | ten minutes |
+
+### 2026-09-11 — the first row of that table to close, and what it cost
+
+`2026-09-10-the-control-that-asks-holds-the-keyboard` is **archived**. It carried two findings, not
+one, and the night window was told to verify it as two: **F309 (A)** — the blocking-reason input
+never gets focus, so the operator's reason is typed into the status menu and each space re-opens the
+menu — and **F310 (B)** — one Escape dismisses two things, so the ticket closes out from under the
+control the operator was actually cancelling.
+
+**The severity-A tail is now five: F299, F300, F301, F306, F312.** Measured with
+`py -3.11 scripts/classify_findings.py` over 315 sections at close-out, not copied from the table
+above: **55 severity-A sections, 49 `RESOLVED`, 5 `OPEN`, 1 `CONFLICT`** (F52, the standing
+bookkeeping close). None of the five is buildable unattended — four need a proposal and one is
+`DIRECTION.md`'s spec loop for 2026-09-11 — so the night window that closed this had no successor
+item, which is why it stood down rather than starting one.
+
+**Three things this change establishes that outlast it.**
+
+1. **A fix can span commits and the ledger has to say which did which.** Both findings took two
+   commits, and in both cases either commit alone was measured *not* to work: `7a0e5bc` hands the
+   keyboard over but `beb38d6` is what receives it; `9ed1d6d` lets the outer panel stand down but
+   `beb38d6` is what tells it to. A single-sha `Status:` line would have been wrong twice.
+2. **The drive found what three rounds and a green suite did not.** The first run against the
+   implemented bundle was 45 passed / 2 failed and **the two survivors were the finding itself** —
+   Radix flushes `onSelect` synchronously, so the reason panel's focus effect ran while the menu
+   scope was still trapping. Two browser probes named it; the repair became a task (`§3.2a`) that no
+   round had written.
+3. **A change is allowed to leave its neighbour standing.** `F307` lives in the same hook, one
+   branch over, and the operator answered `DAY-1` **no** on 2026-09-10 18:30: the split stands.
+   `F307`'s section now carries a dated note saying so, with leg E of
+   `t_d9_clearing_instructions_postchange.py` still reproducing it against the bundle that carries
+   this change — evidence that the repair did not reach it by accident either.
+
+**One new finding, deliberately not repaired here.** `F315 (C)`: the *Mark waiting* button gives no
+feedback for the 1.5-3 s its mutation takes, stays enabled, and a second press writes the move again
+(the Hub answers the duplicate `200`; the draft of that finding predicted a refusal and was measured
+wrong, which the entry says). Every status move in that menu shares the gap, so it wants a change
+that owns optimistic feedback for task mutations rather than a patch to one button.
 
 **F299, F300 and F301 are one subject, not three.** All three are the access-path/approver posture
 seen from three angles, all three were filed by the *same* drive on 2026-09-09, and answering them
@@ -344,7 +382,7 @@ verdict** — the first time in this sequence. The tail is short of **proposals*
 
 | | |
 |---|---|
-| **F309** | proposed, approved, **building tonight** |
+| ~~**F309**~~ | **built, driven and archived 2026-09-11** — the only row of this table that has moved |
 | **F306** | decided; **tomorrow's spec loop** (`DIRECTION.md` `## 2026-09-11`) |
 | **F300 + F312** | decided; **one change**, unproposed |
 | **F299** | decided; unproposed |
