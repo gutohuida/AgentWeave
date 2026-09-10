@@ -1,96 +1,40 @@
 {
-    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook": ".claude/loops/day-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-08-daily",
-    "parent_branch": "master",
-    "parent_sha": "755bdad",
-    "stop_at": "2026-09-09T17:00:00+01:00",
-    "iteration": 8,
-    "log_file": ".claude/autonomous/2026-09-09-day-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "done",
-    "next_action": null,
-    "queue": [
-        {
-            "id": "ci-red",
-            "status": "done",
-            "title": "Repair the red hub-test CI job blocking the merge gate",
-            "detail": "DONE 2026-09-09 iteration 2. Not a regression and not a flake: hub/tests/test_mcp_adapter_online.py:159 read create_app().routes directly, and starlette 1.x stopped flattening include_router into app.routes -- it holds _IncludedRouter wrappers whose inner APIRoutes carry relative paths. This machine has starlette 0.52.1 (161 paths, target present); CI resolves 1.6.0 fresh every run (7 paths, target absent, byte-identical to CI's assertion message). The test could never pass on CI and never fail here. Fixed by using api_route_paths from hub/tests/_routing.py, which already existed for this and already named two earlier occurrences. Reproduced and verified in a venv built to CI's exact versions, with a negative control. The route itself was correct throughout."
-        },
-        {
-            "id": "drive",
-            "status": "done",
-            "title": "D-1 -- drive the three night changes together on one Hub",
-            "detail": "DONE 2026-09-09 iteration 3. One Hub on :8011, fresh database (Temp/aw0909, head 0102), fresh project proj-dd368932acc8, all agents claude-haiku-4-5. All three changes hold together: the mcp-notice A/B needs two turns of one agent and produced the HTTP rendering on turn 1 and the MCP rendering on turn 2, quoted back by the agent itself; F274 labelled a conversation whose runs sit outside the recent window (2 boundaries, 2 stat lines) and labelled a shutdown-killed run `Turn failed` on screen after restart; F295 answered 30/30 requests under 3s after a mid-flight cancel and shut down in 0.5s with a turn in flight, no settle warning. F291's question CONFIRMED both halves, and its citation corrected: the model is hub/ui/src/lib/agentTimelineModel.ts, not components/agents/. New finding F302 (B): the first turn of every fresh agent is told `no MCP tools this turn` while holding them -- measured, with the operator's hub_client:'mcp' workaround measured too. Hub stopped, jobs and loops empty, :8000 PID 10556 unchanged throughout."
-        },
-        {
-            "id": "classify-1",
-            "status": "done",
-            "title": "D-2 -- the 119 unclassified findings, part 1",
-            "detail": "DONE 2026-09-09 iteration 4. All 40 unclassified severity-B sections read and given a machine-readable `**Status:**` line as their first body line; the instrument reports 0 unclassified B, down from 40. 38 open, 2 already fixed (F109 by F285's `d9ad1e0`, its own text still carrying the reversed 'the fix is declined'; F159 by `eeab0d3`, fixed in the change that introduced it and never shipped as a defect). The ROADMAP's six-finding sample said the population was unread rather than noisy -- read in full, 95% of it is live, and the plan had been assuming zeroes for 38 real B defects. Seven statuses rest on a code check taken today, one of which sharpened its finding: F178's `useAgentLaunchability` has no non-test caller, so three `__tests__` files mock a hook no component renders. Four sections answered neither open nor fixed (F119/F138 halves, F259 headline struck, F264 half-driven) -- the instrument has no `unverified` bucket, recorded as friction. Placer kept as `scripts/drive/_d2_write_status.py`; counts in ROADMAP.md, never in FINDINGS.md."
-        },
-        {
-            "id": "classify-2",
-            "status": "done",
-            "title": "D-3 -- the 75 remaining unclassified findings, part 2 (C, D, and unlabelled)",
-            "detail": "DONE 2026-09-09 iteration 5. All 75 remaining sections (C 55, D 14, unlabelled 6) read and given a machine-readable `**Status:**` line; the instrument reports UNCLASSIFIED 0 for the whole ledger, which now stands at 144 open / 143 resolved / 9 conflict / 6 resolved-elsewhere over 302 sections. 67 open, 8 already answered: F270 fixed `3b1b8f0` by the side effect it predicted (a-turn-says-how-it-ended task 2.2), F280 fixed `c063e28` in its own filing iteration, F66 and F131 fixed 2026-08-30 (`f5b46e9`, `5958200`), and F137/F144/F145/F148 not product defects at all -- harness records, a species the census had no bucket for. 41 of the 67 open verdicts rest on a code check taken today, cited at file and line; 35 of the 75 are named nowhere outside FINDINGS.md. Every bucket set-diffed against the pre-edit run: no untouched finding moved. Two of the four already-fixed sections declared it in their first body line and were still UNCLASSIFIED (`**FIXED 2026-08-30**` has no `Status:` prefix; `closed` is in-section vocabulary nowhere) -- recorded in ROADMAP.md as the instrument's next round, not fixed here because widening the pattern moves verdicts and would make this pass's bucket diff unreadable. D-2's trap is now a guard in the placer rather than a habit; it did not fire, so the diff was taken anyway."
-        },
-        {
-            "id": "key-hygiene",
-            "status": "done",
-            "title": "D-4 -- recount the aw_live_ literals, then fix",
-            "detail": "DONE 2026-09-09 iteration 6, filed as F303 (B) and fixed in the same commit. The recount returned EXACTLY the stale figure -- 10 real-shaped literals in 8 files -- so nothing was clean for free; what was wrong was the sentence beside the number. ROADMAP 6.3's 'all outside scripts/drive/' was false: four scripts there still defaulted a key into Authorization: Bearer (t_d1_catalog_is_the_only_door:44, t_d4_instructions_failed_load:59, t_n3_runner_model_picker_ui:38, t_n4_runner_refusal_reaches_the_operator:45), invisible to the count AND to tests/test_drive_key_guard.py because the literal was placeholder-shaped (33 chars, non-hex) rather than a real key's shape. A count of disclosed secrets and a guard against a bad practice are different questions and only one is about shape. All four now call require_key(); new gate test_no_drive_script_defaults_the_key_to_anything rejects a non-empty AW_KEY default of any shape, mutation-checked four ways including the exact literal the old gate walked past; each script driven with AW_KEY unset exits 1 before any HTTP, positive control with a key set reaches the next statement. Second half: no database on this machine honours any of the three distinct literals (three dbs checked on copies; :8000 read, never touched), but hub/.env still held the disclosed key and hub/hub/config.py:21 loads .env from the cwd that CLAUDE.md's own launch command uses, and _seed_operator_credential (engine.py:336-341) mints a configured bootstrap key verbatim -- measured, with the documented placeholder as a negative control. So one fresh-database launch from hub/ would have re-minted it. Rotated in hub/.env (untracked, one line, same length). The eight survivors classified and kept: documented placeholder (3), redaction fixtures (3), the historical record (4, incl. an archived mock). tests/ 461 passed; ledger 303 sections, UNCLASSIFIED 0, B RESOLVED 56->57, every other bucket identical; CI lint set clean."
-        },
-        {
-            "id": "review",
-            "status": "done",
-            "title": "D-5 -- write the review page and today's APPROVALS section",
-            "detail": "DONE 2026-09-09 iteration 7. spec-queue/review/review-2026-09-09.html written (42,328 bytes, 705 lines), self-contained (0 hits for http://, https://, <script, <link, @import, src=), full DOCTYPE/html/head/body wrapper, HTMLParser walk closes every tag, and RENDERED in both themes with scripts/uishot.py against a file:// URL -- 9,315px tall each, background sampled dark (22,22,26) and light (251,251,250), the dark capture read as an image. Answers the six questions in order; the CI account was re-read from gh at 10:52 and had MOVED: the red run was the THIRTEENTH not the twelfth (the compose commit ed7d3ef was red too), and c807e4d/99c1368/65caf69 have all concluded success since 2b33a6e's F292 flake, so four of the five completed runs since the repair are green and the gate waits on a run, not a fault. HEAD 6ccb737 was in_progress when the page was written. APPROVALS: a ## 2026-09-09 section ALREADY EXISTED, written 08:45 by a RESUME session and carrying the operator's ORDER line; appending a second same-dated heading would have created two candidates for 'newest section' and could have cost the operator their order. The addendum went INSIDE that section instead, with no line-initial APPROVED/REVISING/REJECTED, no ORDER:, no NOTHING TONIGHT -- verified after writing: one status row, one ORDER line, one 2026-09-09 heading. It carries the one correction today's classification produced: that section calls F142 'the last open severity-A finding' and the instrument now reads open A as three (F299/F300/F301) with F142 in CONFLICT; the plan is unaffected, the count is not."
-        },
-        {
-            "id": "repairs-spare",
-            "status": "done",
-            "title": "D-6 -- one more no-spec repair if the day has room",
-            "detail": "DONE 2026-09-09 iteration 8, closing F298 with `0a0aec3` and filing F304 (C). Chosen against the conditions, each checked: no requirement (`grep -rn 'Unhandled error' openspec/ spec-queue/` and `grep -rln CancelledError openspec/specs/` both empty), no migration, no API shape, no Pydantic schema -- the change is two `logger.exception` call sites routed through a new private helper in the same module, and nothing serialised moves. F277 and F278 were read and rejected as wanting specs (a behaviour change to spec-authoring turns; a change to the credential rule itself), F279 as undiagnosed by its own status. What was wrong: both run handlers catch `(Exception, CancelledError)` and each one's own comment names event-loop teardown as the case it exists for -- then reported it with ERROR and a full traceback on every clean shutdown. `_log_abnormal_run_end` logs a CancelledError at WARNING with no stack trace (WARNING not INFO because AW_LOG_LEVEL defaults to WARNING, and INFO would trade a false alarm for silence); everything else keeps its level, message and traceback byte for byte. The finding's open question -- whether a non-shutdown cancellation deserves the louder message -- is answered by not needing it: the wording says `cancelled`, never `shutdown`. Both transports fixed; only the Claude path driven, Codex being undrivable. DRIVEN: f295_shutdown_drive.py with a real Haiku turn in flight, all six checks PASS where `no traceback after the break` was this morning's one FAIL, and the run row still `failed` with `ended_at` set -- the report changed, the behaviour did not. 3 new tests, mutation-checked three ways, each caught by a named test; 64 passed across the four affected files; CI lint set clean. F304 filed rather than folded in: `str(CancelledError())` is `''`, so a cancelled run stores an empty reason -- identical in both drive databases, so pre-existing, and its consequence bounded honestly (no route found that returns Run.error to a screen). Ledger 304 sections, UNCLASSIFIED 0."
-        }
-    ],
-    "decisions_for_user": [
-        {
-            "id": "pin-starlette-or-keep-resolving-newest",
-            "opened": "2026-09-09",
-            "question": "Should the Hub pin starlette/fastapi, or keep resolving the newest allowed version on every CI run?",
-            "measured": "hub/pyproject.toml constrains only 'starlette<2.0' and 'fastapi>=0.110', so CI resolved starlette 1.6.0 / fastapi 0.141.1 while this machine has 0.52.1 / 0.136.3 -- two majors apart on starlette. That gap is what made today's CI failure invisible locally for 12 commits: the test passed here and could not pass there, and no amount of local running would have said so. Any test that reads a framework data structure is currently unverifiable locally by default.",
-            "why_it_is_the_operators": "It is a trade between two real costs. Pinning makes local and CI agree and makes this class of failure locally reproducible, but freezes the Hub on a version and turns upstream drift into a deliberate, scheduled upgrade. Not pinning keeps catching real incompatibilities early -- which is what happened today -- at the price of catching them only on CI, hours after the commit. Neither is obviously right and the loop should not choose it unattended.",
-            "not_blocking": "The red CI is repaired either way. This decides whether it recurs in a different test."
-        },
-        {
-            "id": "F299-posture-on-a-harness-without-mcp",
-            "opened": "2026-09-08",
-            "carried": "Open from the night window, enlarged 2026-09-09 by F300/F301. Carried to the review page untouched, per the day-window playbook; this window did not touch it."
-        },
-        {
-            "id": "F302-first-turn-asserts-no-mcp",
-            "opened": "2026-09-09",
-            "question": "Should the no-grounds notice stop asserting `no MCP tools this turn`, and should a fresh agent get the MCP rendering on trust?",
-            "measured": "Driven 2026-09-09 on a Hub where the harness honours MCP perfectly. A fresh agent's first turn is told `no MCP tools this turn` while the injected server is running and its tools are callable -- one probe agent called mcp__agentweave__create_task on exactly that turn and the row exists. The requirement the change shipped against ('No grounds means no assertion') asks only that the HTTP form be described and tools not be claimed; it does not ask for the denial. `hub_client: \"mcp\"` fixes it on turn 1 and was measured.",
-            "why_it_is_the_operators": "The cheap half is a wording change inside a shipped requirement. The expensive half is whether absence of evidence should be read as evidence of absence for a brand-new agent, which is the same judgement F299 is already waiting on. Enlarges that decision rather than replacing it.",
-            "not_blocking": "It costs at most one turn per agent and heals on the second."
-        }
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+    "playbook":  ".claude/loops/day-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-08-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "bdb5a79",
+    "stop_at":  "2026-09-10T17:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-10-day-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
