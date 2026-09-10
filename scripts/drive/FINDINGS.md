@@ -22023,6 +22023,13 @@ state never once observed at a failure. The alembic-engine half of H1 is separat
 fixed anyway (a 6x-shorter busy timeout than the main engine; a dispose skipped on any migration
 failure), covered by two new tests, but they are not this finding's fix, and are unrelated to the new
 hang. Filed 2026-09-05 by the day window's D-5 while reading this branch's CI for the review page.
+**Superseding reading, 2026-09-10 (occurrences #13-15, n=3 unanimous):** the per-stage census fired
+for the first time and its early stages came back **empty**, which is the branch `d1c` called the
+strong result. The dispose-before-drop mitigation is confirmed working and cannot be the fix; the
+child-process candidate is demoted (neither erroring file mentions `subprocess`); and the un-awaited
+`asyncio.create_task(_execute_run(...))` at `agent_trigger.py:1190` is promoted to the candidate the
+evidence points at, because all three predecessors are flow-fires-a-review tests. Read the last
+section of this entry before any other part of it.
 **A 2026-09-06 occurrence hung for 3.5 hours instead of failing** -- every occurrence before it, and
 every one this entry originally described, failed within 8-14.5 minutes; "bounded failure only" is
 now a stale characterization. The night N-1 checkout registry **has fired in CI five times and
@@ -23059,6 +23066,91 @@ window compares against something rather than re-deriving the question.
 concluded **success** — the first green CI on this branch, and the proof that the starlette repair
 was the right one. The gate reads CI at `HEAD`'s sha, so the branch went from *deterministically
 red for a reason nobody had read* to *intermittently red for a reason five windows have read*.
+
+### Occurrences #13, #14 and #15 — 2026-09-10, and the per-stage census finally fired: three times, unanimously
+
+`d1c` built the per-stage census and said *"the next occurrence's silence will be informative where
+#9's was not"*, then noted the instrument had **not yet fired** — the six runs after it were green.
+It has now fired three times in one day, on three consecutive CI runs of
+`autonomous/2026-09-08-daily`, and all three printed the same thing.
+
+| # | run | commit | erroring test | predecessor |
+|---|---|---|---|---|
+| 13 | `34423636080` | `bb08dc4` | `test_reviewer_is_not_the_author.py::test_a_wedged_review_is_restaffed_to_a_real_reviewer` | `…::test_a_flow_staffing_its_own_review_is_not_refused` |
+| 14 | `34424369060` | `4937ece` | same test, same file | same predecessor |
+| 15 | `34452397977` | `6e1a054` | `test_flow_fires_a_review_turn.py::test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn` | `…::test_an_unstaffable_review_does_not_stop_the_flow_doing_other_work` |
+
+Each: `4039 passed, 18 skipped, 1 error`, `sqlite3.OperationalError: database is locked` on
+`DROP TABLE requirement_drift` at the `app` fixture's schema reset
+(`hub/tests/conftest.py:713-716`), one `sqlalchemy.pool` ERROR record — `CancelledError` inside
+`_finalize_fairy` → `_reset` → `do_rollback` → `aiosqlite.core.rollback`.
+
+**The census result, identical in all three:**
+
+```
+  [before dispose]  ever-seen: N recorded, M collected, 0 with an OPEN sqlite3 handle
+  [before drop_all] ever-seen: N recorded, M collected, 0 with an OPEN sqlite3 handle
+  [at failure]      ever-seen: …, 1 with an OPEN sqlite3 handle
+  [at failure]      ever-seen:     sqlite3 handle OPEN, idle, worker thread alive, _running=True
+```
+
+(`N/M` = 175/162, 168/156, 32/22 respectively.)
+
+**Read it with `d1c`'s own criterion and it says one thing clearly.** `d1c`'s mutation check
+established that *transaction state distinguishes victim from holder* — a holder reads
+`IN TRANSACTION`, a victim reads `idle` — and that a matching nodeid identifies nothing. The single
+late handle here reads **`idle`**, and its nodeid matches the erroring test's own fixture-setup task,
+which is the task that ran `engine.begin()` for the DROP. So the late handle is the **victim** —
+almost certainly the DROP's own connection, returned to the pool when the `async with` unwound
+before the `except` block sampled (`Connections in pool: 1`, `Checked out: 0` at failure agrees).
+It is not the holder and must not be read as one.
+
+**Which means the early sampling came back empty — three times.** That is the branch `d1c` called
+*"the strong result"*, and it is now measured rather than anticipated. Two consequences.
+
+**The dispose-before-drop mitigation is doing its job and cannot be the fix.** `conftest.py:706`'s
+`await _REAL_ENGINE.dispose()` was written for a previous test leaving a connection checked out.
+At `[before drop_all]` — after the dispose, before the DROP — **zero** connections this process
+opened hold an open handle, in all three runs. The file is clean at that instant and the holder
+arrives afterwards. No amount of tidying earlier helps.
+
+**But the child-process candidate does not survive the neighbourhood, and `d1c` expected it to.**
+`d1c` named a lingering subprocess as *"the candidate class to look at first"* if the early census
+came back empty. Measured now: `grep -c subprocess` over both erroring files returns **0 and 0**,
+and in each of the three runs the immediate predecessor is a test **in the same file**, so no
+subprocess is spawned anywhere in the failing neighbourhood. A child from an earlier test could
+still linger — this does not rule the class out — but it is no longer where to look first.
+
+**What the three predecessors share is the entry's other candidate.** All three are
+flow-fires-a-review tests (`a_flow_staffing_its_own_review`, `an_unstaffable_review_…_other_work`),
+and both erroring files are the scheduler-flow files. That is the shape of
+`agent_trigger.py:1190`'s un-awaited `asyncio.create_task(_execute_run(...))` — a staffed review
+fires a turn, the turn's task outlives its test, and a task torn down at loop close is cancelled,
+which is exactly the `CancelledError` the pool log records. **This promotes that candidate from
+"named so the next reader has a hypothesis" to "the one the evidence now points at"**, and demotes
+the child process. It still names no holder: nothing here attributes the `CancelledError` to a
+specific connection.
+
+**The next instrument follows from the same limitation, for the third time.** Every sample is taken
+either side of the wait, never during it, so a holder that acquires the lock after
+`[before drop_all]` and releases inside the 30-second busy timeout is invisible at all three stages
+— and that is precisely the profile the evidence now describes. Sampling around a wait cannot see a
+holder that lives only inside it. What would: a **concurrent** snapshot taken from a separate task
+while the DROP is blocked, and attributing each `sqlalchemy.pool` ERROR record to a connection
+identity rather than logging it unattributed. Both are `hub/tests/conftest.py`-only.
+
+**Bearing on the merge gate.** Occurrence #12 was recorded as *"what is holding the merge gate shut
+now"*; three more in one day says that is not a passing state. Of the four CI runs concluded on this
+branch across `6484de4..6e1a054`, **three are this finding** and one was cancelled. The day window's
+gate condition 3 reads CI at `HEAD`'s exact sha, so on the present rate the gate is not merely
+racing the window's own commits — the diagnosis iteration 1 reached — it is waiting on a run that is
+more likely than not to conclude `failure` for a reason unrelated to anything either window built.
+**That is now a release-process problem, not only a test-suite one**, and it is the strongest
+argument yet for fixing F292 ahead of feature work.
+
+**Count.** Occurrence floor rises from 11 read to **15 read**. The 20.4 % rate over the 54-run
+window to 2026-09-08T08:26Z is *not* re-derived here, but three failures in three consecutive runs
+sits well above it and a window that needs the real number should re-measure rather than quote it.
 
 
 
