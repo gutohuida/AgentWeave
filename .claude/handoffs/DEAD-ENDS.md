@@ -181,6 +181,18 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 - **`openspec validate` with no target exits "Nothing to validate"** rather than failing. Pass
   `--all --strict` or a named change.
 - **There is no `openspec sync` command** — the skill applies deltas by hand.
+- **`openspec archive` prefixes the archive directory with the *UTC* date** when the change name
+  does not already start with it, so a change archived after local midnight but before UTC midnight
+  gets a **double date**. *(2026-09-10.)* `2026-09-07-clearing-instructions-asks-first` archived at
+  00:59 local / 23:59 UTC and landed as
+  `openspec/changes/archive/2026-09-09-2026-09-07-clearing-instructions-asks-first`. Left as the tool
+  produced it — renaming by hand makes the result unreproducible — but do not read the leading date as
+  the day the work was done.
+- **`openspec archive` updates main specs by default; `--skip-specs` is how a hand-merged sync
+  survives it.** *(2026-09-10.)* The bare command advertises "archive a completed change **and update
+  main specs**", which would put a mechanical update on top of a file whose value is the judgement
+  hand-merged into it. `--skip-specs` and `--no-validate` are **separate** flags, so skipping the spec
+  step still validates. Verified by `md5sum` either side of the archive: byte-identical.
 - **Clearing `testbed/` deletes evidence that live openspec changes cite.** *(2026-09-08.)* The
   2026-09-07 clean slate emptied `testbed/` to its two tracked files; the still-unapproved change
   `2026-09-07-a-dead-connection-is-never-handed-back-out` cites

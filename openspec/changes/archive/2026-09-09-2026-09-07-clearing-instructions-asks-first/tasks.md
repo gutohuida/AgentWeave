@@ -166,9 +166,23 @@ only measurement showed which.
 
 ## 6. Close it out
 
-- [ ] 6.1 `cd hub/ui && npm run lint` and `tsc --noEmit`. State explicitly that `ruff`/`black`/`mypy`
+- [x] 6.1 `cd hub/ui && npm run lint` and `tsc --noEmit`. State explicitly that `ruff`/`black`/`mypy`
   were not required because no file they cover is modified — do not skip them silently.
-- [ ] 6.2 `openspec-sync-specs` into `openspec/specs/project-instructions/spec.md`, then archive.
+
+  **Done 2026-09-10.** `npm run lint` clean and `npx tsc --noEmit` **exit 0**, both run from an
+  absolute `hub/ui` with `pwd` echoed in the same call, because the shell's working directory
+  survives between calls and §4 lost a measurement to exactly that.
+
+  `ruff`/`black`/`mypy` were **not required, and that is measured rather than assumed.** Across the
+  whole change (`git diff --name-only e6da0a0..HEAD`) exactly **one** `.py` file is touched —
+  `scripts/drive/t_d9_clearing_instructions_postchange.py`, §5's drive harness. `ruff` passes on it
+  and CI's exact `ruff check src/ hub/ tests/` passes. `black` **would** reformat it and deliberately
+  is not run over it: CI's black paths are `src/ hub/hub/ hub/tests/ tests/` and `scripts/` is in no
+  path list, and the sibling `t_d8_clearing_instructions_prechange.py` is equally unformatted, so
+  reformatting one would diverge inside the directory. CI-exact `black --check --target-version py311`
+  over its four paths: **558 files unchanged**. `mypy src/` covers no file this change touches — no
+  `src/` file is modified.
+- [x] 6.2 `openspec-sync-specs` into `openspec/specs/project-instructions/spec.md`, then archive.
   **The delta carries two MODIFIED requirements, not one** — *Hub UI provides instructions editor*
   and *Save cannot write instructions that were never read*, the second added by round 3. Both
   scenarios gain the **same sentence, word for word**; a sync that lands one and not the other
@@ -201,3 +215,48 @@ only measurement showed which.
   measured, twice, independently:** `project-environment-settings` needs no edit — rounds 1 and 3
   both derived that, round 3 without carrying round 1's answer forward — and neither does any other
   spec mentioning instructions, all of which concern charter context rather than the editor.
+
+  **Done 2026-09-10.** Hand-merged, by a script whose every replacement asserts it matched exactly
+  once, so a silent no-op could not pass for a sync. All three blocks landed:
+
+  - The **ADDED** requirement is placed immediately **above** *Save cannot write instructions that
+    were never read*, not at the end of the file, because its own prose says "which the requirement
+    below already states" — placed last, that sentence would be false in the shipped file. Its other
+    delta-relative phrase, "The requirement above states this in its own words", is now "The
+    statement above says this…": in the delta nothing sits above it, so the phrase could only have
+    meant its own SHALL line, and with a neighbour above it in the shipped file the old wording would
+    have read as a claim about that neighbour, which does not mention whitespace.
+  - Both **MODIFIED** scenarios gained the condition, and this was checked the way the task demands
+    rather than by eye. A literal grep would have found one and missed the other — the two wrap
+    differently, one long line and one across three — so the check normalises whitespace first.
+    **Shipped file: 2 hits. Delta: 2 hits.** Equal counts is the assertion.
+  - Narration dropped and rationale kept, as instructed: `"in this change"` now occurs **0** times in
+    the shipped spec. *"The save scenario gains a second condition in this change"* became a
+    statement of what the condition is; *"The condition names whitespace explicitly…"* kept its
+    conclusion — identical words, because a requirement is read on its own — and lost the account of
+    how the round found it; *"Only the last scenario changes in this change…"* became a statement
+    about what the last scenario is.
+  - The reworded sentence is **restored to "below"**: the shipped file says *"stated by the two
+    requirements below"*, and the delta's `2026-09-06-an-unread-editor-cannot-overwrite` reference
+    does **not** appear in the synced spec.
+
+  `openspec validate project-instructions --type spec --strict` → **valid**. Each ADDED requirement's
+  `SHALL` is on its first physical line, which is all `--strict` reads.
+
+  **Other specs: none need syncing, measured a third time.** Ten specs under `openspec/specs/` mention
+  instructions; grepping the six non-`project-instructions` hits for the editor surface
+  (`Instructions screen`, `instructions editor`, `instructions textarea`) returns **nothing** — every
+  one is charter context (`agent-charter`, `agent-context-onboarding`, `agent-tool-surface`).
+  `project-environment-settings` does not mention instructions at all.
+
+  **Archived with `--skip-specs`**, per this task's own warning: the specs were already hand-merged,
+  and the bare command advertises "archive a completed change **and update main specs**", which would
+  put a mechanical update on top of a file whose whole value is the judgement in it. Validation still
+  ran — `--skip-specs` and `--no-validate` are separate flags.
+
+  **This change closes zero findings, and that is the honest outcome.** The proposal names F271, F296
+  and F307. F271 was fixed and archived by `2026-09-06-an-unread-editor-cannot-overwrite` and is named
+  here as the dependency this change builds on (`proposal.md:78`: "It is not a second attempt at
+  F271"). F296 is the separate unowned item task 5.5 forbade folding in, and 5.5 was honoured, so it
+  is still open. F307 was **filed by** §5's drive, is pre-existing in `useDialogFocus`, and is not
+  caused by this change. No `fixed <sha>` Status line was written for any of the three.
