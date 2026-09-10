@@ -4,6 +4,13 @@
 but to finish everything that we have open."*** Inventory measured against the tree at `af329f5`,
 not copied from handoffs — several figures the chain was carrying forward were wrong.
 
+**Revised 2026-09-10.** Stages 1, 2 and 4 and `## Honest arithmetic` were rewritten against the
+tree and the classifier; every other section is older and dated where it stands. **What changed:
+Stage 2 is closed, Stage 4's tail is four findings and not `F142 alone`, Stage 1 is the oldest open
+item on the page, and the stage-shaped total is retired in favour of one built on 147 open
+findings — which resolves to a scope question only the operator can answer.** Read
+`## Honest arithmetic` first if you are here to decide something.
+
 This file is a **plan**, not an authority. It cannot approve a change or decide a rule: those are
 `APPROVALS.md` and `DECISIONS.md`, and the tokens there remain the only authority. Where this plan
 says "the operator writes a verdict", it is describing work, not performing it.
@@ -76,7 +83,7 @@ approvable at all.
 
 ---
 
-## Stage 1 — repair the instrument first (1 night)
+## Stage 1 — repair the instrument first (1 night) — **STILL OPEN 2026-09-10, and its headline claim is retired**
 
 **F292 — `sqlite3.OperationalError: database is locked`.** This is not a backlog item; it is
 actively lying to every verification below it. It **failed CI on `master` at `15ce482` today at
@@ -86,8 +93,10 @@ time.~~ **Corrected 2026-09-08 by measurement — the rate is 20.4 %, not half**
 F279's *local* rate borrowed for F292's *CI* rate. Measured over 54 runs since 2026-09-07T00:00Z,
 every failure classified individually from its own log rather than counted as red: **11 failures,
 all F292, 20.4 %**; `master`-only over the last 20 runs, 25 %. The sharper number is that in that
-window **every red CI run is F292 — 11 of 11**, so CI redness on this project currently has
-exactly one cause. Method, three denominators and the 22-occurrence table are in `FINDINGS.md`'s
+window ~~**every red CI run is F292 — 11 of 11**, so CI redness on this project currently has
+exactly one cause~~ — **struck 2026-09-10, see the live block at the foot of this stage; CI redness
+now has at least two causes and the sharper sentence was the first thing to go stale.** Method,
+three denominators and the 22-occurrence table are in `FINDINGS.md`'s
 F292 entry and in `.claude/autonomous/2026-09-08-day-log.md` iteration 4.
 
 ~~Related and probably the same class: **F279** (the two "a stopped run" tests fail about half the
@@ -117,20 +126,91 @@ F292 than the change**, at a measured 20.4 %, and must be classified with
 
 `DIRECTION.md`'s 2026-09-07 section is explicit that F292 must **not** be conflated with F295 — the
 F295 change may or may not resolve the flake, and assuming it will is how the flake survives. Treat
-"did `a-dead-connection` fix F292?" as a measurement to make, not an outcome to expect.
+"did `a-dead-connection` fix F292?" as a measurement to make, not an outcome to expect. **Answered
+2026-09-09: it did not.** F295's change shipped, was driven live and is `fixed`; F292 has fired
+three more times since. Two findings that share a cause of opportunity, exactly as the 2026-09-08
+measurement said.
+
+### Live status, 2026-09-10 — one cause became two, and the instrument finally fired
+
+**CI redness on this project no longer has exactly one cause, and that is the single most
+load-bearing correction on this page.** A second, *deterministic* cause ran for most of 2026-09-09
+and was repaired the same night: `hub/pyproject.toml` constrains only `fastapi>=0.110` and
+`starlette<2.0`, so CI resolved starlette 1.6.0 / fastapi 0.141.1 against this machine's
+0.52.1 / 0.136.3, and `{r.path for r in create_app().routes}` yields **161 paths on one and 7 on the
+other**. A test that **could never pass on CI and never fail locally survived thirteen commits.**
+Repaired by `4937ece` (night of 2026-09-09) with `constraints-dev.txt`, a `-c` on every documented
+and CI install, and `tests/test_dev_constraints.py` gating that the `-c` stays. Read that file's
+header before touching it — it is development-only and is deliberately **not** a second statement of
+what the Hub supports.
+
+**F292 itself: the per-stage census fired, three times in one day, unanimously.** Occurrences
+**#13, #14 and #15** — CI runs on `bb08dc4`, `4937ece` and `6e1a054`, all on this branch, all
+`4039 passed, 18 skipped, 1 error`, all `database is locked` on `DROP TABLE requirement_drift` at
+the `app` fixture's schema reset. The census reads identically in all three, and by the census's own
+mutation-established criterion (*transaction state distinguishes victim from holder*) the single
+late handle is **`idle`** — the victim again, almost certainly the DROP's own connection. The
+dispose-before-drop mitigation is confirmed working and therefore cannot be the fix; the
+child-process candidate is demoted; the un-awaited `asyncio.create_task(_execute_run(...))` at
+`agent_trigger.py:1190` is **promoted to the candidate the evidence points at**, because all three
+predecessors are flow-fires-a-review tests. Full reading in `FINDINGS.md`'s F292 entry, written by
+the day window of 2026-09-10 — **it supersedes every earlier part of that entry and says so at the
+top.**
+
+**The 20.4 % figure is stale and its replacement has not been computed.** Measured 2026-09-10 over
+the last **21 concluded** CI runs on `autonomous/2026-09-08-daily`: **9 failures, 43 %.** That number
+must not be quoted as F292's rate — **the reds in that window have at least two causes and have not
+been classified individually**, which is the discipline this stage itself demands (`gh run view <id>
+--log-failed` before diagnosing anything as a regression). Classifying them is open work; do it
+before the next rate claim, not after.
+
+**So Stage 1 is still open, and it is now the oldest open thing on this page.** Every other stage
+has closed or moved. The holder is still unnamed after five windows have read it; what changed on
+2026-09-10 is that the search space narrowed to one named line of product code, which a day window
+may not repair (`hub/hub/` is out of its scope). **This is a night's work behind a proposal, and no
+proposal exists.**
 
 ---
 
-## Stage 2 — build the four approved changes (5–6 nights)
+## Stage 2 — build the four approved changes ~~(5–6 nights)~~ — **DONE in two nights**
 
-One change per night, in the `ORDER:` line's sequence. The 44-task change is likely two nights.
+~~One change per night, in the `ORDER:` line's sequence. The 44-task change is likely two nights.~~
 
-Nothing in this stage needs a new decision. Each change has been through three rounds, and on the
-last six outings not one round was a no-op — so these are the most-verified artifacts in the repo.
+**CLOSED 2026-09-10.** All four are built, driven and archived, and `openspec/changes/` now contains
+nothing but `archive/` — **the approved queue is empty for the first time in this sequence.** The
+estimate was wrong by a factor of three, in the direction this file's audit says it is always wrong.
 
-**The rule that matters here:** never mark a task complete on the strength of the plan existing.
-And a UI change is not finished until `npm run build` and `make ui` have run and the bundle is
-committed beside `hub/ui/src`.
+| Change | Finding | Tasks | Archived |
+|---|---|---|---|
+| `a-dead-connection-is-never-handed-back-out` | **F295 (A)** | 25 | `37007cd`, 2026-09-09 01:54 |
+| `an-agent-without-mcp-is-not-told-it-has-nothing` | sidequest | 35 | `6557844`, 2026-09-09 04:57 |
+| `the-conversation-carries-its-own-run-facts` | **F274 (A)** | 44 | `1b7a4cb`, 2026-09-09 06:48 |
+| `clearing-instructions-asks-first` | DAY-3 | 25 | `fc9001a`, 2026-09-10 01:02 |
+
+**129 tasks over two build nights** — three in the night of 2026-09-08, the fourth in the night of
+2026-09-09. **F274 and F295 are both `fixed` and both driven live**, so the two severity-A findings
+this stage owned are genuinely closed, not closed on a plan existing.
+
+**The correction that matters is not the schedule — it is that draining produced findings.**
+Building and driving these four filed **three new severity-A findings and one B**, every one of them
+from a *drive*, none from a review:
+
+| New | From |
+|---|---|
+| **F299 (A)** — a `claude` run whose harness has no MCP cannot write a file, and blames the operator's machine | driving `an-agent-without-mcp`, task §4.9 |
+| **F300 (A)** — the workspace approver denies every shell command containing a URL, including the one its own notice instructs | same change, §6.3/§6.4 |
+| **F301 (A)** — on the `cli` access path a `claude` run has no tool that can make the request it is told to make | same session as F300 |
+| **F307 (B)** — a confirmation dialog's first Tab leaves the panel, into the editor behind the scrim | driving `clearing-instructions`, in the shared `useDialogFocus` hook |
+
+Two of the four archive commits say this in their own subjects — *"the finding is half-retired"*,
+*"it closes none of the findings it names"*. **A change reaching `archive/` is not a finding
+reaching `RESOLVED`**, and a plan that counts archived changes as drained findings will read as
+finished while the ledger grows. That is the mechanism behind the arithmetic at the foot of this
+page, and it is why the totals there are built on findings and not on stages.
+
+**The rules that mattered here, both held:** never mark a task complete on the strength of the plan
+existing; and a UI change is not finished until `npm run build` and `make ui` have run and the
+bundle is committed beside `hub/ui/src`.
 
 ---
 
@@ -178,17 +258,48 @@ point down. This is the same defect class as an approval row that looks right an
 
 ---
 
-## Stage 4 — the severity-A tail (after R-1, because R-1 may absorb some of it)
+## Stage 4 — the severity-A tail ~~(after R-1, because R-1 may absorb some of it)~~ — **R-1 decided; the tail is four, not one**
 
 | Finding | What it actually needs |
 |---|---|
 | **F52** | **Close it — bookkeeping only.** Its operator-visibility half shipped (`68459ea`), `0cda570` disproved its central inference, and `57eb92b` drove a full live turn that committed. Its own row says a new git refusal would be a *new* finding. It is counted as open because nobody retired it. |
 | **F140** | ~~One decision with F142, not two.~~ **RETIRED 2026-09-08 — there was no decision here.** Repair 1 shipped `1b4c730` (2026-08-30) and was **driven live 2026-08-31**: both Haiku agents made the `update_task(..., status="completed")` call unprompted, both tasks reached `approved`, both commits verified ancestors of `master`. `_briefing_completion_lines` is byte-identical to the driven version, re-measured this session. The 2026-09-03 banner asked for a re-drive that already existed in `FINDINGS.md` two days earlier. |
-| **F142** | **Not an operator decision — a missing drive.** Its fix shipped `f3a778f` (2026-08-31): the bare `continue` is now three named arms and the operator-completed task is routed for review. Its own change document says group 7 was *"written, compiled, and **not driven**"* and deferred it to `DRIVE-1`, which has not happened. **Queue one drive**: `t_row12_review_leg.py` with `AW_COMPLETE_BY=operator` must reach a staffed review, plus its uncovered row four (the operator completes a task no agent ever touched). `F167` (B) is a known residual on the adjacent `wedged_review` path and does not reopen this. |
+| **F142** | ~~Not an operator decision — a missing drive.~~ **RESOLVED 2026-09-09 — the drive happened.** Driven on a live Hub by the night window: **20/20 on `operator_after_agent`, 19/19 on `untouched`.** Both claims held. The drive's *row four* — the operator completes a task no agent ever touched — is what found **F306** below; that does not reopen F142, it is a second defect inside the same repair. |
 | **F14, F60** | ~~F60 not implemented, blocked on F14's undecided fix shape.~~ **Both `FIXED 2026-08-30`**, shipped together in `a-task-waits-while-its-run-waits`, and `FINDINGS.md` has said so since. Verified in code 2026-09-08: ask-time parking at `agent_actions.py:509-514`, `Question.wait_ended_at` at `models.py:1001`, migration `0099`, drive harness `t_f14_f60_wait_parks_the_task.py`. This table was simply wrong. |
 | **F154** | ~~Archived change, never driven.~~ **RETIRED 2026-09-08 — the drive existed.** Fix `001a07d` (2026-08-31), driven the same day: `t_f154_wedged_review.py`, **18/18** on both the reviewer-wedged and author-wedged populations, re-driven 18/18 later. `run_task_binding.py` and `scheduler.py` are byte-identical `001a07d`→`HEAD`. |
 | **F155** | ~~Archived change, never driven.~~ **RETIRED 2026-09-08 — the drive existed.** Fix `0373867` (2026-08-31), driven the same day: `t_f155_conflict_remedy.py`, **23/23**, the harness parsing the branch out of the refusal's own sentence, with the falsifying lane run deliberately. `requirement_gate.py` is byte-identical `0373867`→`HEAD`. Its drive filed **F165 (B)** and **F166 (C)**, which stay open. |
-| **F274, F295** | Already specced — they are Stage 2. |
+| **F274, F295** | ~~Already specced — they are Stage 2.~~ **Both `fixed` and driven; Stage 2 is closed.** |
+
+### The live severity-A tail, 2026-09-10 — four open, and not one of them existed when this stage was written
+
+**`F142 alone` is retired.** F142 resolved on 2026-09-09 and the tail was immediately replaced by
+four findings that the drives of Stages 2 and 4 produced. Measured with
+`py -3.11 scripts/classify_findings.py`, not copied: **53 severity-A sections, 48 `RESOLVED`, 4
+`OPEN`, 1 `CONFLICT`.**
+
+| Finding | What it needs | Owner |
+|---|---|---|
+| **F299 (A)** | **Decided, unproposed.** Teach `_decide` that the run's own Hub URL is not a filesystem path (`DECISIONS.md`, 2026-09-09). Rejected there: falling back to `acceptEdits`. | R1/R2/R3 then a night |
+| **F300 (A)** | **Undecided.** The workspace approver denies every shell command containing a URL — including the request `access_path_notice`'s own non-MCP branch instructs. Measured live on `:8010`. | operator verdict first |
+| **F301 (A)** | **Undecided.** On `hub_client = "cli"` no MCP server is injected, the posture falls to `DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER = "acceptEdits"`, and the run has no tool that can make the request. Measured live: exit 0, **zero requests reached the Hub.** | operator verdict first |
+| **F306 (A)** | **Undecided, and it is a governance hole.** An agent can be staffed to review, and approve, work it recorded evidence for. `requirement_evidence.actor` is not one of `agents_that_may_have_authored`'s three sources (`task_transition_service.py:253-283`), and `_guard_author_is_not_reviewer` (`:286-311`) compares against `agent_that_completed`, which is NULL on an operator completion. **Both defences share the blind spot.** | operator verdict first |
+| **F52 (A)** | `CONFLICT` — still the bookkeeping close described above. Unchanged since 2026-08-27. | ten minutes |
+
+**F299, F300 and F301 are one subject, not three.** All three are the access-path/approver posture
+seen from three angles, all three were filed by the *same* drive on 2026-09-09, and answering them
+separately is how a posture acquires three inconsistent special cases. **Put them to the operator
+together.**
+
+**None of the four is buildable unattended today**, because three need a verdict and the fourth
+needs a proposal. That is the same shape Stage 0 was built to break, one stage further down: the
+tail is no longer short of capacity, it is short of decisions — and this time nobody has written the
+`ORDER:` line that would fix it.
+
+~~**This whole table was stale, and in the direction that costs most.**~~ **It was stale again by
+2026-09-10, and this time in the *opposite* direction — it read finished when four A-findings were
+open.** Both directions have now been observed on this one table, which retires the comfortable
+reading of the paragraph below: the documents do not lag the evidence *pessimistically*, they simply
+lag it. The 2026-09-08 text is kept as written.
 
 **This whole table was stale, and in the direction that costs most.** Three of its four original rows
 described operator decisions that did not exist, which is how the severity-A tail read as
@@ -201,11 +312,16 @@ a more current one.**
 here used to end *"F154 and F155 have not been re-checked the way F140 was, and that search is the
 obvious next move."* The search was run on 2026-09-08 and **retired both**: each had a fix commit and
 a same-day drive recorded in `FINDINGS.md`, twelve thousand lines below the banner that said no drive
-existed. So the open severity-A tail after F52 is retired and F274/F295 are built is **F142 alone** —
-one finding, blocked on one drive, with no operator decision anywhere in it.
+existed. ~~So the open severity-A tail after F52 is retired and F274/F295 are built is **F142 alone** —
+one finding, blocked on one drive, with no operator decision anywhere in it.~~ **Struck 2026-09-10.**
+F142 resolved, F274 and F295 shipped, and the tail is **F299/F300/F301/F306** — four findings, three
+of them blocked on an operator decision, which is the exact condition this sentence claimed was gone.
+It was true for about thirty hours. See the live table above.
 
 **The arithmetic of this one day is the point.** The severity-A count went **six → five → three**
-without a single line of product code being written. Every one of those retirements was a document
+without a single line of product code being written. **And the full arc, three days on: six → five →
+three → one → four.** Reading retired three; building and driving filed three more. Both halves are
+real and the second is the one this plan had no term for — see `## Honest arithmetic`. Every one of those retirements was a document
 catching up with evidence that had been on disk for a week. The failure was never capacity — it was
 that three banners asked *"has anyone driven this?"* and nobody grepped this file for the finding's
 own number. **Grep before believing a banner that says no drive exists**; it costs ten seconds and it
@@ -252,24 +368,88 @@ them off one at a time is exactly the behaviour R-1 exists to decide about.
 
 ## Honest arithmetic
 
-| Stage | Whose time | Cost |
+### The stage-shaped total, kept and retired
+
+| Stage | Whose time | Cost | Outcome |
+|---|---|---|---|
+| 0 | Operator | **done 2026-09-08 01:30** | closed |
+| 1 | One night | 1 window | **still open 2026-09-10** — and the estimate was never tested, because no window has ever been given it |
+| 2 | Nights | ~~5–6 windows~~ | **closed in 2** |
+| 3 | Operator | ~1 hour | closed — all three decided 2026-09-08 |
+| 4 | Nights | ~~**~1 drive**, F142 alone~~ | **the drive happened and the tail grew to four** |
+| 5 | — | **REMOVED 2026-09-08** | not this repo's |
+| 6 | One window | 1 window | closed 2026-09-08, re-closed 2026-09-09 |
+
+~~**Total, if R-1 answers "enforce": roughly three to four weeks of nights.**~~ **RETIRED
+2026-09-10.** Five of the seven rows have resolved and the total was wrong in both directions at
+once: Stage 2 cost a third of its estimate, Stage 4 cost more than its estimate and *grew*, and the
+whole figure was computed while assuming the 119 then-unclassified findings were zeroes. **They were
+89–95 % live.** A stage-shaped total cannot survive that, so what follows replaces it.
+
+### The finding-shaped total, 2026-09-10
+
+Run `py -3.11 scripts/classify_findings.py` for current numbers — **do not quote these; they move
+daily.** As measured this morning, over **308 sections**:
+
+| | A | B | C | D | ? | total |
+|---|---|---|---|---|---|---|
+| **open** | 4 | 59 | 68 | 14 | 2 | **147** |
+| conflict | 1 | 4 | 3 | 0 | 0 | 8 |
+| resolved | 48 | 60 | 28 | 6 | 11 | 153 |
+
+**The two measured rates that price it.** Proposals: **one change per day window** — `D-2/D-3/D-4` is
+R1/R2/R3 on a single change, and the round discipline forbids compressing it. Builds: **one to three
+changes per night** (3 on 2026-09-08, 1 on 2026-09-09). **So the binding constraint is proposals, not
+build capacity** — the opposite of the assumption this file opened with, and the reason "nights" was
+the wrong unit all along. The unit is **days**.
+
+| Scope | Open findings | At ~1 proposal/day |
 |---|---|---|
-| 0 | Operator | **done 2026-09-08 01:30** |
-| 1 | One night | 1 window |
-| 2 | Nights | 5–6 windows |
-| 3 | Operator | ~1 hour, resizes everything after it |
-| 4 | Nights | **~1 drive.** No operator decision — F140/F154/F155 all retired 2026-09-08 on drives that already existed, leaving F142 alone |
-| 5 | — | **REMOVED 2026-09-08** — it scheduled work in two other repositories. Not this plan's. |
-| 6 | One window | 1 window |
+| severity A only | **4** | under a week — *but three are blocked on a verdict, not on a day* |
+| A + B | **63** | ~9 weeks of unbroken daily cycles |
+| everything open | **147** | **~5 months** |
 
-**Total, if R-1 answers "enforce": roughly three to four weeks of nights.** R-1 answered *enforce*
-(2026-09-08 00:30), so this is the live number.
+**And every one of those figures assumes the ledger stops growing, which it measurably does not.**
+Stage 2 closed two severity-A findings and filed three more plus a B — a **net severity-A drain of
+minus one over the whole stage.** That is n=1 and must not be read as a law; what it does establish
+is that *driving a change is also a defect-finding activity*, so the backlog has a source term this
+plan never modelled. The honest form: **147 is a floor on the work, not an estimate of it.**
 
-Both numbers assume the day window stops producing new changes. **That assumption is now enforced by
-the playbook rather than by an operator remembering**: `.claude/loops/day-window.md` step 6 counts
-unbuilt specced changes and runs no spec loop at 2 or more, releasing itself when the nights catch
-up (decided 2026-09-08, `DECISIONS.md`). Stage 0.1's dated `DIRECTION.md` section covered 2026-09-08
-only and expired at midnight; the gate is what carries it from 2026-09-09 on.
+### What this means, stated as a choice rather than made
+
+**"Fix every open finding" is not a plan the operator has agreed to, and at ~5 months it is probably
+not one they want.** This file must not quietly adopt it by arithmetic. Three scopes are available
+and **the choice is the operator's**:
+
+1. **Drain A and B, ratchet C and D.** 63 findings scheduled; the other 84 get R-1's treatment —
+   freeze a count as a ceiling that may shrink and may never grow, with the cost taken knowingly that
+   they stay wrong behind a passing check. This is the only option that reuses a decision already
+   made, and it is the recommendation.
+2. **Drain everything.** ~5 months of daily cycles, and honest only if the source term is accepted.
+3. **Drain A, then stop and re-measure.** Cheapest, and it defers the real question by about a week.
+
+**Whichever is chosen, the immediate blocker is the same and is not capacity:** F300, F301 and F306
+need operator verdicts, F299 needs a proposal behind its verdict, and Stage 1 needs a proposal at
+all. **Five items, none buildable unattended, all of them ahead of any total on this page.**
+
+**Every total above assumes the day window produces changes at exactly the rate the nights consume
+them, and that is now a governed quantity rather than a hope**: `.claude/loops/day-window.md` step 6
+counts unbuilt specced changes and runs no spec loop at 2 or more, releasing itself when the nights
+catch up (decided 2026-09-08, `DECISIONS.md`). Stage 0.1's dated `DIRECTION.md` section covered
+2026-09-08 only and expired at midnight; the gate is what carries it from 2026-09-09 on.
+
+**The gate has now released twice, and the first release had to be overridden by hand — which is a
+measurement of what the gate cannot see.** On **2026-09-09** it released at a count of 1 and would
+have produced a fifth proposal; the operator overrode it with a dated `DIRECTION.md` section, because
+**the gate counts *specced* work and was blind to a 119-finding backlog that had no spec.** On
+**2026-09-10** it released at 0 and was correctly left to run — `openspec/changes/` held nothing but
+`archive/`, and the day window composed a spec loop without anybody having to remember to turn
+proposing back on.
+
+So the gate is sound for what it measures and **is not a scheduler**: it answers *are the nights
+behind?*, never *is this the right change to propose?* From 2026-09-10 the proposal tap is open at
+~1/day, and **nothing but the scope choice above decides where those proposals point.** Left
+unanswered, the day windows will keep pointing them wherever the ledger happens to be read from.
 
 ---
 
@@ -393,8 +573,11 @@ excluded set cannot be treated as noise, and **nobody has ever classified it.**
 missing stage is added — and Stage 0 being closed means it can start tonight without anything
 further from the operator.
 
-**As a plan to a fully functioning AgentWeave, no**, and the gap is §3. Every severity-A defect being
-gone is a real milestone and is close: after Stage 2 and one drive, it is **zero**. But a product
+**As a plan to a fully functioning AgentWeave, no**, and the gap is §3. ~~Every severity-A defect being
+gone is a real milestone and is close: after Stage 2 and one drive, it is **zero**.~~ **Struck
+2026-09-10 — Stage 2 shipped and the drive happened, and the count is four, not zero.** Stage 2's
+own drives filed three of them. The rest of this answer stands and is sharpened by that: a plan that
+priced only the A-list would have declared victory in the week the A-list grew. But a product
 whose A-list is empty while ~147 unclassified B/C/D findings sit behind it — four of four sampled
 being genuine, including a governance hole and two operator-facing dead ends — is not the same thing
 as a product that works.
