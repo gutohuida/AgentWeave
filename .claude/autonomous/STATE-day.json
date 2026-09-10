@@ -8,33 +8,76 @@
     "parent_branch":  "master",
     "parent_sha":  "bdb5a79",
     "stop_at":  "2026-09-10T17:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
     "log_file":  ".claude/autonomous/2026-09-10-day-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "current":  "D-0",
+    "next_action":  "D-0 -- retry the merge gate. Iteration 1 measured all four conditions and only CI failed, because the run on 6e1a054 was still in_progress at 09:02. Re-check ALL FOUR from scratch (do not trust iteration 1's three passes; the tree has moved since): (1) branch is not master and `git rev-list --count HEAD..master` is 0; (2) `git status --short` empty and `git rev-parse HEAD` equals `git rev-parse @{u}`; (3) `gh run list --branch autonomous/2026-09-08-daily --limit 20 --json headSha,conclusion,workflowName,status` shows conclusion `success` for the CI workflow at HEAD's exact sha -- in_progress, queued, failure or absent is NOT a pass, and there IS a stale green four commits back at c128019 that must not be accepted; (4) the newest dated section of spec-queue/DIRECTION.md carries no line-initial `HOLD MERGE`. All four true: `git merge --ff-only` master to this branch and push master, then log exactly what landed. Any one false: name the failed condition in the log and move straight on to D-1 in the same firing, since D-0 is small. If CI is still running, leave D-0 open and retry at the next firing, but do D-1 as well rather than spending a whole firing on a poll.",
     "queue":  [
                   {
-                      "id":  "compose",
+                      "id":  "D-0",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "Retry the merge gate on 6e1a054",
+                      "detail":  "Only condition 3 (CI success at HEAD's exact sha) failed at iteration 1, and only because the run was still in_progress. Re-measure all four. Never accept a green from an earlier commit -- two of the four CI runs across 6484de4..4937ece concluded failure."
+                  },
+                  {
+                      "id":  "D-1",
+                      "status":  "open",
+                      "title":  "Scoped e2e drive of what the night built",
+                      "detail":  "Use the e2e-loop skill, scoped -- NOT a full-surface sweep. scripts/drive/SURVEY.md:144 is the authority: the 17-row sweep is COMPLETE (measured 2026-09-04), and spec-queue/ROADMAP.md:283 says 'No sweeps.' Drive Hub 8011, started from hub/ with uvicorn from source, never `agentweave --port`. Fresh project; never proj-5e960453 or proj-18e5d4e0; never touch 8000. Every real agent turn binds claude-haiku-4-5. Never leave a job enabled. Subject: last night's clear-instructions confirm dialog driven as a real operator (the night drove 59/59 legs itself, so look for what a scripted leg cannot see -- what the operator sees when the dialog is dismissed, re-opened, or raced), and F307's escape-key hook across all six dialogs it serves, three of which dodge it by accident. New findings append to scripts/drive/FINDINGS.md with a severity, a file:line, a reproduction, and `**Status:** open` as the first line of the body."
+                  },
+                  {
+                      "id":  "D-2",
+                      "status":  "open",
+                      "title":  "Spec loop R1 -- explore and propose",
+                      "detail":  "The drain count is 0, so the spec loop runs. Priority order for what to spec: a defect D-1's drive just produced; then an open ledger finding with no proposal (145 are open and, since yesterday, all classified -- F307 and F308 are both live candidates the night window explicitly declined to propose against); then a ranked candidate from spec-queue/research/2026-09-10.md. Real defects outrank market ideas. Write openspec/changes/<name>/ with proposal.md, design.md, tasks.md and specs/<capability>/spec.md deltas. `openspec new change` refuses a name starting with a digit. `openspec validate --strict <name>` must pass, and it reads only a requirement's FIRST PHYSICAL LINE for the modal, so SHALL goes on line 1. Specs live in openspec, never also in the Hub."
+                  },
+                  {
+                      "id":  "D-3",
+                      "status":  "open",
+                      "title":  "Spec loop R2 -- re-derive against the code",
+                      "detail":  "Independently re-derive R1's argument against what the code actually does. NOT a re-read of R1's reasoning. Fix the proposal where the code disagrees. An argument can be wrong while everything it argues about is right, and only a round that re-derives the argument finds that. If the round changes nothing, record that -- a round that finds nothing is a real outcome and hiding it makes the next one look cheaper than it is. Re-run `openspec validate --strict`."
+                  },
+                  {
+                      "id":  "D-4",
+                      "status":  "open",
+                      "title":  "Spec loop R3 -- re-derive again, independently",
+                      "detail":  "Same instruction as D-3, fresh. On 2026-08-28 round 3 caught rounds 1 and 2 both breaching a requirement that had shipped four days earlier, so grep openspec/specs/ for the capability's existing requirements before believing the delta is additive. Re-run `openspec validate --strict`."
+                  },
+                  {
+                      "id":  "D-5",
+                      "status":  "open",
+                      "title":  "The review page",
+                      "detail":  "Write spec-queue/review/review-2026-09-10.html -- self-contained HTML, no external stylesheets, scripts or fonts (the Artifact runtime blocks them), full DOCTYPE/html/head/body wrapper, light colours on bare :root redefined under @media (prefers-color-scheme: dark), explicit body background. Six sections in order: (1) the branch -- autonomous/2026-09-08-daily, 15 unmerged commits spanning 2026-09-09 and 2026-09-10, and what the merge gate did, including which condition failed if it did not open; (2) what the night built and which of it was DRIVEN rather than only tested -- the F142 change was driven 59/59, the four repairs were tested only; (3) what D-1's drive found, severity, one sentence, file:line; (4) what was specced -- the problem, the argument in a paragraph, what R2 and R3 each changed about R1's version, and the cost, saying so explicitly if a round changed nothing; (5) what the night window will do if the operator approves nothing, named in order; (6) the research, last and briefly, each candidate ending in what it would mean for AgentWeave. Then append today's section to spec-queue/APPROVALS.md, a row per specced change, no status token -- the operator supplies those."
+                  },
+                  {
+                      "id":  "D-6",
+                      "status":  "open",
+                      "title":  "Repairs that need no spec, if the day has room",
+                      "detail":  "Only after the real queue is done, and only if all three hold: it touches no requirement in openspec/specs/ (grep the capability before believing it), no migration and no API/Pydantic shape change the UI reads, and it is fully described by an existing finding with a reproduction. Then the ordinary rules apply in full: DRIVE it before closing the item, run CI's lint set over CI's paths, mutation-check any test added, and set the finding's `**Status:**` line to `fixed <sha>`. If it turns out to want a spec, stop and queue it for tomorrow. Candidate hygiene item measured at iteration 1: 30 of the ledger's 269 status lines are unusable -- 22 blank and 8 whose first word is prose (`not`, `partially`, `the`, `filed`) -- which is why the ledger's own summary of what is open has twice been measurably wrong."
                   }
               ],
     "decisions_for_user":  [
 
                            ],
+    "notes":  [
+                  "The 17-row coverage sweep is COMPLETE (scripts/drive/SURVEY.md:144, measured 2026-09-04). D-1's 'full-surface if the last sweep is 7 days stale' criterion reads as if it fires today; it does not. Two row-numbering systems disagree in the ledger (19-row matrix vs 17-row inventory), so a bare 'row N' anywhere is ambiguous.",
+                  "spec-queue/DIRECTION.md's newest dated section is 2026-09-09 and its instruction was explicitly for that day only. Absence is not an instruction.",
+                  "Ledger measured 2026-09-10 09:02: 269 status lines -- 145 open, 94 fixed, 22 blank, 8 malformed."
+              ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
+                   "This window FILLS. It does not implement. Nothing under hub/hub/ or src/agentweave/ may be edited; a drive harness under scripts/drive/ is the one exception.",
+                   "The hub suite runs 15-47 minutes and exceeds the 600s command cap. Do not run it whole in this window unless something done here could plausibly have broken it."
                ]
 }
