@@ -324,22 +324,37 @@ findings that the drives of Stages 2 and 4 produced. Measured with
 | Finding | What it needs | Owner |
 |---|---|---|
 | **F299 (A)** | **Decided, unproposed.** Teach `_decide` that the run's own Hub URL is not a filesystem path (`DECISIONS.md`, 2026-09-09). Rejected there: falling back to `acceptEdits`. | R1/R2/R3 then a night |
-| **F300 (A)** | **Undecided.** The workspace approver denies every shell command containing a URL — including the request `access_path_notice`'s own non-MCP branch instructs. Measured live on `:8010`. | operator verdict first |
-| **F301 (A)** | **Undecided.** On `hub_client = "cli"` no MCP server is injected, the posture falls to `DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER = "acceptEdits"`, and the run has no tool that can make the request. Measured live: exit 0, **zero requests reached the Hub.** | operator verdict first |
-| **F306 (A)** | **Undecided, and it is a governance hole.** An agent can be staffed to review, and approve, work it recorded evidence for. `requirement_evidence.actor` is not one of `agents_that_may_have_authored`'s three sources (`task_transition_service.py:253-283`), and `_guard_author_is_not_reviewer` (`:286-311`) compares against `agent_that_completed`, which is NULL on an operator completion. **Both defences share the blind spot.** | operator verdict first |
+| **F300 (A)** | **DECIDED 2026-09-09, narrowed 2026-09-10 to this finding alone** — teach `_decide` the run's own Hub address. The 2026-09-09 verdict named three findings and its mechanism reached only this one. **Ships with F312 as one change.** | R1/R2/R3 then a night |
+| **F301 (A)** | **DECIDED 2026-09-10 — needs no containment decision.** Measurement overturned its stated mechanism: remove the approval gate and all five of its "refusal classes" execute, so they are reasons a command *needs approval*, not reasons it is forbidden. The `cli` path simply has no answerer. Closed by the notice change. | folds into the notice change |
+| **F306 (A)** | **Undecided, and it is a governance hole.** An agent can be staffed to review, and approve, work it recorded evidence for. `requirement_evidence.actor` is not one of `agents_that_may_have_authored`'s three sources (`task_transition_service.py:253-283`), and `_guard_author_is_not_reviewer` (`:286-311`) compares against `agent_that_completed`, which is NULL on an operator completion. **Both defences share the blind spot.** **DECIDED 2026-09-10 evening: repair BOTH defences, and count EVERY evidence row regardless of `review_state`** — the function's own docstring principle, applied to the fourth source it omits. | R1/R2/R3 — **tomorrow's spec loop** |
 | **F309 (A)** | **Undecided, filed 2026-09-10** by the day window's D-1 drive. The blocking-reason input never gets focus, so the operator's reason is typed into the status menu and each space re-opens it. Operator-facing, measured in a real browser. | needs a proposal |
-| **F312 (A)** | **Undecided, filed 2026-09-10.** The general form of F300: on the **default** posture a run can make no network request from a shell command at all, because `_ABSOLUTE_PATH_RE` reads a URL as a path — `http://…` yields the candidate `p://…`. **F300's fix cannot close it**, by that verdict's own construction. | operator verdict first |
+| **F312 (A)** | **DECIDED 2026-09-10 evening** — allow the run's own Hub URL, deny every other URL with a reason naming network access, not the filesystem. Settled by measurement: `python -c` already makes the identical request, so today's behaviour is a **syntax filter, not containment**. Explicitly **not** a claim that egress is now contained. | **one change with F300** |
 | **F52 (A)** | `CONFLICT` — still the bookkeeping close described above. Unchanged since 2026-08-27. | ten minutes |
 
 **F299, F300 and F301 are one subject, not three.** All three are the access-path/approver posture
 seen from three angles, all three were filed by the *same* drive on 2026-09-09, and answering them
 separately is how a posture acquires three inconsistent special cases. **Put them to the operator
-together.**
+together.** — **Done 2026-09-10**, and reading them together is what found that the 2026-09-09
+verdict named three findings and its mechanism could fire for only one. The grouping was right and
+the answer was three different mechanisms, not one.
 
-**Not one of the six is buildable unattended today**, because four need a verdict and the other two
-need a proposal. That is the same shape Stage 0 was built to break, one stage further down: the
-tail is no longer short of capacity, it is short of decisions — and this time nobody has written the
-`ORDER:` line that would fix it.
+~~**Not one of the six is buildable unattended today**, because four need a verdict and the other two
+need a proposal.~~ **Superseded 2026-09-10 evening: every open severity-A finding now has a
+verdict** — the first time in this sequence. The tail is short of **proposals**, not decisions:
+
+| | |
+|---|---|
+| **F309** | proposed, approved, **building tonight** |
+| **F306** | decided; **tomorrow's spec loop** (`DIRECTION.md` `## 2026-09-11`) |
+| **F300 + F312** | decided; **one change**, unproposed |
+| **F299** | decided; unproposed |
+| **F301** | decided; folds into the notice change, unproposed |
+| **F52** | `CONFLICT`, bookkeeping only |
+
+**At one proposal per day window that is four more days before the A-list can be empty**, and the
+round discipline is not compressible. The order is fixed in `DIRECTION.md` so it is not re-decided
+each morning. **Stage 0's shape is finally broken here** — this stage is short of neither capacity
+nor decisions now, only of the three rounds each change owes.
 
 ~~**This whole table was stale, and in the direction that costs most.**~~ **It was stale again by
 2026-09-10, and this time in the *opposite* direction — it read finished when four A-findings were
@@ -480,24 +495,31 @@ is that *driving a change is also a defect-finding activity*, so the backlog has
 plan never modelled. The honest form: **158 is a floor on the work, not an estimate of it** — and the
 floor rose by three while this section was being written.
 
-### The scope — **ANSWERED 2026-09-10: drain A and B, ratchet C and D**
+### The scope — **ANSWERED 2026-09-10: drain A and B; C and D are not proposed against**
 
 **"Fix every open finding" was never a plan the operator had agreed to, and this file must not adopt
 one by arithmetic.** It was put to them and answered the same morning.
 
 **The verdict is in `DECISIONS.md`, `### The scope of the drain`, and that is the authority — this is
 a pointer, not a second copy.** In short: **the open A and B findings are in scope** (70 as of late afternoon,
-~10 weeks at one proposal per day window) and **the open C, D and unlabelled findings are ratcheted** (88) under
-R-1's already-decided model — today's count frozen as a ceiling that may shrink and may never grow,
-with existing instances deliberately not repaired.
+~10 weeks at one proposal per day window) and **the open C, D and unlabelled findings (88) are not
+proposed against.**
+
+> **The word "ratcheted" stood here for a day and was wrong — amended the evening of 2026-09-10.**
+> The verdict originally cited R-1's model, and R-1 freezes *a count of one homogeneous, countable
+> population*: 35 clientless routes, 52 MISREPORT surfaces. **The 88 are heterogeneous — there is no
+> number to freeze and no check can assert them.** So there is no ceiling, and **nothing stops that
+> population growing.** A count ceiling was considered and rejected: it would go red whenever a drive
+> files a new low-severity finding, and a gate that punishes honest reporting gets worked around.
 
 Rejected there: draining everything (~5 months, and dishonest unless the minus-one source term is
 accepted), and draining A then re-measuring (defers the same question by a week while the day
 windows keep proposing from wherever the ledger is read from).
 
-**Read the cost before quoting the plan as finished.** 35 of the 75 low-severity findings read on
-2026-09-09 are named nowhere outside `FINDINGS.md`; ratcheting those is the moment they stop being
-tracked work and become recorded history. That was the trade and it was made deliberately.
+**Read the cost before quoting the plan as finished, and it is larger under the amended wording.**
+35 of the 75 low-severity findings read on 2026-09-09 are named nowhere outside `FINDINGS.md`. With
+no ceiling behind them, **unscheduled is very close to forgotten** — that was put to the operator in
+those words and accepted deliberately.
 
 **Two things this verdict does not do.** It does not schedule the three R-1 ratchet checks — still
 Stage 6, still unowned, and *a verdict is not an implementation* is this plan's oldest structural
