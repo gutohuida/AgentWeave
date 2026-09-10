@@ -248,6 +248,48 @@ F5 was RETIRED by this change.
     assert got[5] == "CONFLICT"
 
 
+def test_a_line_naming_several_findings_is_bookkeeping_not_a_verdict():
+    """Blind spot 8: six of the ledger's eight CONFLICTs, and four of them self-inflicted.
+
+    The corrections table blind spot 5 wrote to record its own wrong verdicts is the exact
+    shape below. `| **F65** | RESOLVED | **OPEN** | F67's resolution |` says F65 was WRONGLY
+    read as resolved, and the cross-section arm read it as F65 being resolved -- so F65, F68,
+    F149 and F168 were flagged CONFLICT by the one table that says they are open. A
+    heading-format list did it to F296 and F266, and a sentence about how the word
+    "superseded" had been used did it to F185 and F272.
+
+    The rule is about a line naming two findings, not about tables: the sentence form
+    ("markers -- F65, F68, F149 -- were being counted as resolved") did the same damage.
+    """
+    got = verdicts("""
+## F65 (C) — a finding
+**Status:** open
+
+## F90 (C) — the census corrections, 2026-09-08
+| | Was | Now | It had been reading |
+|---|---|---|---|
+| **F65** | RESOLVED | **OPEN** | F67's resolution |
+
+Three findings with explicit open markers — F65, F68, F149 — were counted as resolved.
+""")
+    assert got[65] == "OPEN", "the table that records the wrong verdict must not restate it"
+
+
+def test_a_single_finding_line_still_carries_its_verdict():
+    """The guard above must stay narrow. F52 and F292 are the two conflicts that really are
+    about their own finding, and both hang on a one-number line -- the summary row at the top
+    of the ledger, and a sentence contrasting F292 with an unrelated fix.
+    """
+    got = verdicts("""
+## F52 (A) — a finding
+**Status:** open
+
+## F91 (B) — the summary table
+| **F52** — the posture never sees a git command | **fixed** `68459ea` |
+""")
+    assert got[52] == "CONFLICT", "a one-number line is still evidence a human must reconcile"
+
+
 def test_a_finding_with_no_resolution_language_is_unclassified_not_resolved():
     """The 119. `UNCLASSIFIED` must mean "nobody has read this", never "probably fine" --
     four of the six ever sampled were real and unfixed.

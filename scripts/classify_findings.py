@@ -99,6 +99,23 @@ WEAK_PAT = [
 ]
 RESOLVED_PAT = STRONG_PAT + WEAK_PAT
 EXT_WORD = re.compile(r"\b(RETIRED|RETRACTED|FIXED|SUPERSEDED|WITHDRAWN|closed|resolved)\b", re.I)
+# BLIND SPOT 8, found 2026-09-10 by reading the EVIDENCE behind every CONFLICT rather than the
+# count of them. Seven of the ledger's eight conflicts were false, and six had one cause: a line
+# that names SEVERAL finding numbers is bookkeeping ABOUT the ledger, not a verdict about any one
+# finding in it. The cross-section arm read such a line as evidence for every number on it.
+#
+# The worst case is self-inflicted. The corrections table that blind spot 5 produced,
+#     | **F65** | RESOLVED | **OPEN** | F67's resolution |
+# is a record that F65 was WRONGLY read as resolved -- and the scanner read it as F65 being
+# resolved. Four sections (F65, F68, F149, F168) were flagged CONFLICT by the very table that
+# says they are open; a heading-format list did it to F296, and one line of a severity note to
+# F273. A verdict word on such a line belongs to at most one of the numbers and the scanner
+# cannot tell which, so it must attribute it to none.
+#
+# Single-number lines are untouched, which is why F52 and F292 -- the two conflicts that really
+# are about their own finding -- still flag. The direction of the error is also the safe one:
+# suppressing a lead can only move a section toward OPEN or UNCLASSIFIED, never toward resolved.
+MULTI_F = re.compile(r"\bF\d+\b")
 OPEN_PAT = [
     (re.compile(r"Status[^\n]{0,80}\bopen\b", re.I), "Status: open"),
     (re.compile(r"\bfiled,? not fixed\b", re.I), "filed not fixed"),
@@ -279,6 +296,9 @@ def classify(lines):
             if any(lo <= i < hi for lo, hi in own) or not npat.search(ln):
                 continue
             cln = dequote(ln)
+            # blind spot 8: a line naming more than one finding is bookkeeping, not a verdict.
+            if len(set(MULTI_F.findall(cln))) > 1:
+                continue
             m = EXT_WORD.search(cln)
             if not m or NEG_BEFORE.search(cln[max(0, m.start() - 40) : m.start()]):
                 continue
