@@ -45,6 +45,26 @@ are both available.
 
 ---
 
+**DECIDED by the operator, in session, 2026-09-10 18:30**, on the review page published at
+`https://claude.ai/code/artifact/a762970b-f7a4-4919-bdcf-263abaa54554`. Both answers below are the
+operator's; the notes are the reading they were given.
+
+- APPROVED  2026-09-10-the-control-that-asks-holds-the-keyboard   F309 (A) + F310 (B), 40 tasks, 0 ticked. **UI only** — no route, schema, migration or API shape — and **touches the committed bundle**, so §5 (`npm run build` then `make ui`) is not optional and the Python lint set is not required (say so in the log rather than passing over it). `openspec validate --strict` passes, re-run 2026-09-10 18:20. **Verify it as two findings**: a run that closes one and reports the change done has closed half a change. Note the dependency R3 established — **the F310 half depends on the F309 half**, because arbitration by `defaultPrevented` presumes the nested owner actually holds the keyboard, and `DirectoryPicker`'s handler is bound where focus never goes (`design.md` D9, `tasks.md` §2.2).
+
+**`DAY-1` — answered: NO, the split stands.** The change is **not** widened to swallow `F307`. The
+operator's reason is the proposal's second: `F307`'s fix requires deciding where focus lands in a
+*destructive* confirmation — its first focusable is Cancel, its last is the destructive button — and
+`F307` declines to guess. **That decision is a review page's, not a window's**, and widening would
+put a severity-A keyboard repair on a path the Hub makes mandatory behind a design question about
+five dialogs that are not broken in this way. `F307` stays open and is not queued tonight.
+
+**No `ORDER:` line.** The default queue applies and this is the only approved change, so the order
+is not in question. Deliberately not added: an `ORDER:` line is read **verbatim and with no date
+check**, which is what made the 2026-09-09 section necessary, and one is a liability the moment it
+outlives its day.
+
+---
+
 ## 2026-09-09
 
 **Why this section exists: the 2026-09-08 `ORDER:` line below is now a trap.** The night window
