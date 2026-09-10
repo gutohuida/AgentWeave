@@ -674,8 +674,28 @@ notice literally, which is the ordinary case. Rejected: **notice only** (leaves 
 form denied, with the false filesystem reason); **`_decide` only** (correct but needs the full round
 discipline before anything improves, and the free half is free).
 
-**Ordering is part of this verdict**: the notice first, because it needs no approver change and
-therefore no proposal round.
+**Ordering is part of this verdict**: the notice first, because it needs no approver change and is
+therefore the smaller and safer of the two.
+
+> **CORRECTED within the hour, 2026-09-10, by checking the carve-out I had just invoked.** The line
+> above originally read *"and therefore no proposal round"* — **wrong.** `day-window.md`'s D-6
+> carve-out requires that the change *"touches no requirement in `openspec/specs/` — grep the
+> capability before believing this."* The notice **is** specified, by
+> `agent-capability-plane`'s *"A run whose harness cannot use MCP is told how to reach the plane"*,
+> whose scenarios pin what the text must identify — including **how the credential is presented on
+> a request**, which is exactly what changing the instructed shape changes. **So the notice change
+> needs R1/R2/R3 like anything else**; what it does not need is the approver change. Filed against
+> myself rather than left: a verdict that waives the round discipline on a specced capability is the
+> same defect as a verdict whose mechanism cannot fire, one paragraph later.
+
+**And the requirement itself now carries a false mechanism**, inherited from F301 and shipped into
+the corpus on 2026-09-09: *"the `cli` path's `acceptEdits` has no approver to overrule a harness that
+**statically refuses** an interpolated credential (F301)."* The measurement in 1c says the harness
+does not statically refuse it — with the approval gate removed, that exact command executes. The
+requirement's **conclusion** holds (unreachable on `cli`, and for the reason the sentence's first
+half gives), so this is a wording repair, not a reopened requirement. It must be corrected in the
+same delta that carries the notice change, and **not by the day window on its own** — the corpus is
+openspec's and a spec edit is the spec loop's.
 
 #### 1e. The general form is a new finding, not part of any of these
 
