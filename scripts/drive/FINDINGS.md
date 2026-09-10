@@ -24679,3 +24679,100 @@ and enumerating five call sites for a six-call-site hook is how the sixth gets a
 checked against it.
 
 ---
+
+## F312 (A) — the default posture forbids every network request a shell command can make, and calls it a filesystem escape
+
+**Status:** open — filed 2026-09-10 by a RESUME session, **measured**, not inferred. Found while
+reading F299/F300/F301 together for an operator verdict; it is the general form of F300's mechanism
+and is deliberately **not** folded into it (see *"Why this is not F300"* below).
+
+**The claim.** On `workspace` — `DEFAULT_CLAUDE_PERMISSION_MODE` (`hub/hub/runner_commands.py:63`),
+the posture this repository chose as its default and the one every ordinary run gets — a `claude`
+run cannot make **any** network request from a shell command. Not `curl`, not `pip install` from a
+URL, not `gh api`, not fetching a schema. And the reason it is given names the filesystem.
+
+**The mechanism is one regex doing a job it was never given.** `_ABSOLUTE_PATH_RE`
+(`hub/hub/mcp_server.py:936`) reads absolute-looking paths out of a shell command's text so `_decide`
+can check them against `AW_WORKSPACE_DIR`:
+
+```python
+_ABSOLUTE_PATH_RE = re.compile(r"(?:[A-Za-z]:[\\/]|/)[^\s\"'|;&><)]*")
+```
+
+A URL is absolute-looking, and the regex has no concept of a scheme. Measured against `_decide`
+directly, with `AW_WORKSPACE_DIR` set to a real directory:
+
+| command | `_decide` | reason returned |
+|---|---|---|
+| `curl -s -X POST http://127.0.0.1:9/api/v1/agent-actions/tasks` | **deny** | `'p://127.0.0.1:9/api/v1/agent-actions/tasks' is outside your workspace` |
+| `curl -s -X POST "$HUB_URL/api/v1/agent-actions/tasks" -H "Authorization: Bearer $AW_RUN_TOKEN"` | **deny** | `'/api/v1/agent-actions/tasks' is outside your workspace` |
+| `curl.exe -s -X POST "$env:HUB_URL/api/v1/..." -H "..."` | **deny** | `'/api/v1/agent-actions/tasks' is outside your workspace` |
+| `python -c "import os,urllib.request; ..."` | **allow** | `inside your workspace` |
+
+**Read the first row's reason.** The candidate is `p://127.0.0.1:9/...` — the regex's
+`[A-Za-z]:[\\/]` arm matched the `p:` of `http:` as a Windows drive letter and swallowed the rest.
+`os.path.realpath` then resolved it against a `p:` drive, `commonpath` raised `ValueError` for
+"different drives", and the run was told its request was outside its workspace. **The message names
+a containment boundary that was never consulted about network access, because the boundary has no
+term for network access.**
+
+**The last row is the whole shape of it.** `python -c "import os,urllib.request; ..."` makes the
+identical request to the identical address and is **allowed**, because it puts no absolute path in
+the command text. So the posture does not forbid egress — it forbids *writing a URL down where the
+regex can see it*. Two commands with the same effect get opposite answers on a syntactic accident.
+Whatever containment this is, it is not the one the comment above the constant describes.
+
+**This is not a theory about severity, it is the posture's own stated purpose.**
+`runner_commands.py:62-65` argues `workspace` is the right default because *"each request is checked
+against the run's own workspace by `_decide`"* and it *"permits the execution an agent needs to
+produce evidence about its own work."* An agent that cannot fetch anything cannot produce evidence
+about work that involves a network — and it is not told that; it is told its machine's filesystem
+refused.
+
+### Why this is not F300, and must not be closed by F300's fix
+
+F300 is this mechanism seen at one address: the run's own Hub URL. Its verdict
+(`spec-queue/DECISIONS.md`, 2026-09-09, narrowed 2026-09-10) is explicit that the fix **must not**
+make the approver permissive about URLs in general — *"The recognised case is the run's own Hub base
+URL… Anything broader is a second decision and is not covered by this verdict."*
+
+So F300's fix **cannot** close this finding, by that verdict's own construction: after it ships,
+`curl https://example.com/x` is still denied, still for a filesystem reason. Folding the two would
+produce a change that closes a finding it does not fix — which is the failure the 2026-09-10 archive
+commit `fc9001a` already recorded in its own subject (*"it closes none of the findings it names"*).
+
+### What this does NOT claim
+
+- **Not that the posture should permit egress.** It may well be right to forbid it — a contained run
+  reaching the network is a real decision and it belongs to the operator, as
+  `agent-capability-plane` reserves it. The defect is that the posture forbids egress **by accident,
+  through a path regex**, and reports it in a vocabulary that sends the model and the operator
+  looking at the filesystem. A posture entitled to say no is not entitled to say no for a false
+  reason.
+- **Not that `_decide` is wrong about paths.** It is doing its documented job. Its docstring and the
+  comment at the `command` branch both say it reads *paths* out of shell text and that it is *"a
+  boundary, not a sandbox"*. Nothing there claims to govern network access, in either direction.
+- **Not measured end to end through a live Hub.** The `_decide` column above is the function driven
+  directly with a real `AW_WORKSPACE_DIR`; F300's live drive on `:8010` is the end-to-end evidence
+  for the same mechanism at one address, and this finding generalises the mechanism, not the drive.
+
+**Reproduce** — no Hub, no network, no credential:
+
+```bash
+cd hub && py -3.11 -c "
+import os, importlib.util
+os.environ['AW_WORKSPACE_DIR'] = os.getcwd()
+spec = importlib.util.spec_from_file_location('m', 'hub/mcp_server.py')
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+for c in ['curl -s http://127.0.0.1:9/a', 'curl -s https://example.com/x', 'python -c \"import urllib.request\"']:
+    print(c, '->', m._decide('Bash', {'command': c}))
+"
+```
+
+**Related:** F300 (the same mechanism at the Hub's own address), F301 (the other access path, where
+the block is the absent answerer rather than this regex), F299 (the blocked-harness case). The three
+were read together on 2026-09-10 and their verdicts are in `spec-queue/DECISIONS.md`,
+*"The access path, re-decided 2026-09-10"*. **This finding was the part of that reading that no
+verdict covered**, and the operator's instruction on it was to file it rather than fold it.
+
+---
