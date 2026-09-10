@@ -25021,3 +25021,58 @@ the time, on an unmodified tree"*). **F279 and this are the same species and nei
 bisected**; whoever takes one should take both.
 
 ---
+
+## F315 (C) — the button that blocks a ticket says nothing for the two seconds it takes, and a second press writes the move again
+
+**Status:** open — filed 2026-09-11, measured on both the keyboard and the mouse path.
+**Pre-existing and outside `2026-09-10-the-control-that-asks-holds-the-keyboard`**, which is why it
+is filed rather than fixed: that change moves the keyboard into this panel and does not touch the
+mutation behind it. Found by §7.6's drive, when a fixed 1.5s wait turned out not to be long enough
+for an assertion that had nothing to do with focus.
+
+**What was measured.** Two throwaway probes against the trial Hub on `:8013` serving bundle
+`index-7rpxplrH.js`, a local SQLite database, one ticket, no load. Type `the staging API key` into
+the blocking-reason panel and press **Mark waiting** (`TaskDetailDrawer.tsx:450-474`), then sample
+the drawer on a clock:
+
+| after the press | reason panel | drawer's Status field |
+|---|---|---|
+| +0ms | still mounted | In Progress |
+| +300ms | still mounted | In Progress |
+| +700ms | still mounted | In Progress |
+| +1500ms | still mounted | In Progress |
+| **+3000ms** | gone | **Blocked** |
+
+Between **1.5s and 3s on an idle local Hub, nothing on screen changes at all** — and the same timing
+on the keyboard path (arrow, Enter, type, Tab, Enter), so this is the round trip and the refetch
+behind it, not an artefact of how the button was pressed. Note the panel is still mounted at +400ms
+**after the PATCH has already come back 200**, so the wait is the invalidation, not the write.
+
+**What a second press does.** During that window the button is still enabled and still reads
+`Mark waiting`: `disabled={!blockingReason.trim()}` is the only condition on it and
+`updateTask.isPending` is not consulted. A second press at +400ms is accepted, and the network log
+shows **two identical `PATCH … {"status":"blocked","blocked_reason":"the staging API key"}`
+requests**. The Hub answers the second **200**, not a refusal — `blocked → blocked` is not rejected
+the way an illegal move would be — so `task-status-refusal-<id>` stays empty and the operator sees
+nothing wrong. *(An earlier draft of this entry predicted a refusal on the second press. It was an
+inference, it was measured, and it was wrong: the cost is a duplicate write, not a spurious error.)*
+
+**So the severity is what it is.** No data is corrupted and no operator is misled — the ticket ends
+blocked with the right reason either way. What is missing is any acknowledgement that a press was
+received, on the one control in this panel whose whole job is to answer a question the product
+asked.
+
+**Not fixed here, deliberately.** The shape is obvious — consult the mutation's pending state for
+the label and the `disabled` — but every other status move in the same menu has the same gap, and
+fixing it for this one button would leave the inconsistency it is an instance of. It belongs with
+whatever change owns optimistic feedback for task mutations.
+
+**Reproduce.** Open a ticket in `in_progress`, choose *Move to blocked*, type any reason, press
+*Mark waiting*, and watch. Or read the timing off `P6` in
+`scripts/drive/t_d1_0910_rowmenu_leaves_the_page_inert.py`, which prints
+`the reason panel goes at: <ms>` because a fixed sleep there was a guess.
+
+**Related:** `F309` (the focus defect in the same panel, fixed by the change whose drive found
+this), `F310`.
+
+---

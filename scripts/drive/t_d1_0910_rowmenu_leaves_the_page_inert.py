@@ -65,6 +65,36 @@ def focus_probe(tid):
     )
 
 
+# The nineteen characters `F309` measured, placeholder text and all. Kept as a constant because
+# two legs below depend on it being the same string, and on it containing spaces: a space delivered
+# to a focused button is a click, which is what `P5` demonstrates and what §7.8 exists to deny.
+REASON = "the staging API key"
+
+
+def indicator_probe(tid):
+    """Is a focus indicator actually DRAWN on the reason input, and does it match :focus-visible?
+
+    `hub-interaction-feedback` ships *"Keyboard focus is visible"*, and §4.1 replaced a
+    browser-driven `autoFocus` with a programmatic `.focus()` — the substitution that most often
+    loses `:focus-visible` silently. Reading the matcher alone would be a claim about the engine's
+    heuristic; reading the computed outline and box-shadow alongside it is what says the operator
+    can see where the keyboard is.
+    """
+    return (
+        "() => { const r = document.querySelector("
+        + json.dumps(f"[data-testid='task-block-reason-{tid}']")
+        + "); const el = r && r.querySelector('input'); if (!el) return {found: false};"
+        " const cs = getComputedStyle(el);"
+        " const w = parseFloat(cs.outlineWidth) || 0;"
+        " const outlined = cs.outlineStyle !== 'none' && w > 0;"
+        " const shadowed = cs.boxShadow && cs.boxShadow !== 'none';"
+        " return {found: true, focusVisible: el.matches(':focus-visible'),"
+        " outlineStyle: cs.outlineStyle, outlineWidth: cs.outlineWidth,"
+        " boxShadow: (cs.boxShadow || '').slice(0, 60),"
+        " drawn: !!(outlined || shadowed), value: el.value} }"
+    )
+
+
 PASS, FAIL = [], []
 
 
@@ -148,7 +178,9 @@ def main():
 
     t1 = new_task("P1 - an ordinary move")
     t2 = new_task("P2 - the move that asks a question")
-    if not t1 or not t2:
+    t3 = new_task("P6 - the same move, chosen with the keyboard")
+    t4 = new_task("P7 - a reason with spaces in it")
+    if not t1 or not t2 or not t3 or not t4:
         return 2
 
     with sync_playwright() as p:
@@ -399,6 +431,182 @@ def main():
                 after["menuItems"] > 0 and after["body"] == "none",
                 "ONE SPACE re-opens the status menu and makes the page inert — and the reason an "
                 "operator types contains spaces",
+            )
+        page.close()
+
+        # ------------------------------------------------------------------ P6
+        # §7.6 and §4.1a. Every green leg above selected the item with a MOUSE, and the fix that
+        # made them green defers a `takesFocus` item's action to `onCloseAutoFocus` (§3.2a). Radix
+        # fires that handler on the keyboard path too, so it *should* hold — which is an inference,
+        # and this is where it gets a measurement. The menu is opened from the keyboard, the item is
+        # reached with ArrowDown and taken with Enter, and the reason is typed without the mouse
+        # being touched between the trigger and the confirmation.
+        #
+        # Deliberately NOT extended backwards into "reached the ticket without a pointer at any
+        # point": that path runs through `F307`, which this change does not deliver (`design.md`
+        # D6), so a leg asserting it would fail for something this change is not responsible for.
+        print("\n=== P6 the same move, chosen with the keyboard rather than the mouse ===")
+        page = browser.new_page(viewport={"width": 1500, "height": 1000})
+        page.add_init_script(seed_script(pid))
+        page.goto(f"{UI}/?project={pid}&tab=tasks", wait_until="domcontentloaded")
+        page.wait_for_timeout(4000)
+        active_id = (
+            "() => (document.activeElement && document.activeElement"
+            ".getAttribute('data-testid')) || ''"
+        )
+        if not open_ticket(page, t3):
+            check(False, "P6: the ticket opens at all")
+        else:
+            FOCUS = focus_probe(t3)
+            page.locator(f"[data-testid='task-status-menu-{t3}']").first.focus()
+            page.keyboard.press("Enter")
+            page.wait_for_timeout(700)
+            st = page.evaluate(PROBE)
+            check(
+                st["menuItems"] > 0,
+                "Enter on the focused trigger opens the menu — no pointer yet",
+            )
+
+            # Arrow until the active item IS the blocked one. Counting presses would encode the
+            # order of the legal-move map, which is not this change's subject and would rot.
+            want = f"task-status-menu-{t3}-blocked"
+            reached = page.evaluate(active_id) == want
+            for _ in range(8):
+                if reached:
+                    break
+                page.keyboard.press("ArrowDown")
+                page.wait_for_timeout(150)
+                reached = page.evaluate(active_id) == want
+            print(f"    arrowed to: {page.evaluate(active_id)!r}")
+            check(reached, f"ArrowDown reaches 'Move to blocked' ({want})")
+
+            page.keyboard.press("Enter")
+            page.wait_for_timeout(900)
+            where = page.evaluate(FOCUS)
+            after = page.evaluate(PROBE)
+            print(f"    after Enter: focus={json.dumps(where)} page={json.dumps(after)}")
+            check(after["menuItems"] == 0, "the menu closed on Enter")
+            check(
+                where["tag"] == "INPUT" and where["inReason"],
+                "THE KEYBOARD PATH TOO: the reason input has the keyboard ({}, inReason={})".format(
+                    where["tag"], where["inReason"]
+                ),
+            )
+
+            # §4.1a — the focus has to be SEEN, not merely held.
+            ind = page.evaluate(indicator_probe(t3))
+            print(f"    focus indicator: {json.dumps(ind)}")
+            check(ind.get("found") is True, "the reason input is on screen to be looked at")
+            check(
+                ind.get("focusVisible") is True,
+                "the input matches :focus-visible after a programmatic focus on the keyboard path",
+            )
+            check(
+                ind.get("drawn") is True,
+                "and an indicator is actually drawn (outline {} {}, shadow {!r})".format(
+                    ind.get("outlineStyle"), ind.get("outlineWidth"), ind.get("boxShadow")
+                ),
+            )
+
+            page.keyboard.type(REASON)
+            page.wait_for_timeout(400)
+            typed = page.evaluate(indicator_probe(t3))
+            check(
+                typed.get("value") == REASON,
+                "typing without touching the mouse lands in the input ({!r})".format(
+                    typed.get("value")
+                ),
+            )
+
+            # Confirm from the keyboard as well. The input has no submit-on-Enter, so the operator
+            # tabs to the button — and Tab inside the drawer is `useDialogFocus`'s branch that §1.1
+            # was required to leave alone, so this is incidentally its evidence too.
+            page.keyboard.press("Tab")
+            page.wait_for_timeout(250)
+            landed_on = page.evaluate(active_id)
+            print(f"    Tab from the input reaches: {landed_on!r}")
+            check(
+                landed_on == f"task-block-confirm-{t3}",
+                f"Tab from the reason input reaches its confirm button ({landed_on!r})",
+            )
+            page.keyboard.press("Enter")
+            # Poll rather than sleep a guess. The panel is dismissed from the mutation's
+            # `onSuccess`, so "once the move is made" is a condition, not a duration — and the
+            # duration is not this change's: measured 2026-09-11, the panel and the status badge
+            # both settle between +1.5s and +3s on the MOUSE path too (`F315`), which is the
+            # mutation's own round trip and predates every task here.
+            panel = page.locator(f"[data-testid='task-block-reason-{t3}']")
+            gone_at = None
+            waited = 0
+            for m in (0, 500, 1500, 3000, 5000, 8000):
+                page.wait_for_timeout(m - waited)
+                waited = m
+                if panel.count() == 0:
+                    gone_at = m
+                    break
+            went = gone_at if gone_at is not None else "NEVER within 8s"
+            print(f"    the reason panel goes at: {went}")
+            page.screenshot(path=os.path.join(SHOTS, "inert-keyboard.png"))
+            check(
+                gone_at is not None,
+                f"the reason panel is dismissed once the move is made (at +{gone_at}ms)",
+            )
+            code, t = call("GET", f"/projects/{pid}/tasks/{t3}")
+            print(
+                "    the Hub's own record: [{}] status={!r} reason={!r}".format(
+                    code, t.get("status"), t.get("blocked_reason")
+                )
+            )
+            check(t.get("status") == "blocked", "AND THE MOVE COMPLETED — the Hub has it blocked")
+            check(
+                (t.get("blocked_reason") or "") == REASON,
+                "with the sentence the operator actually typed ({!r})".format(
+                    t.get("blocked_reason")
+                ),
+            )
+        page.close()
+
+        # ------------------------------------------------------------------ P7
+        # §7.8 — *"Typing an answer does not operate the menu that asked for it"*, the delta
+        # scenario no round produced evidence for. `P5` is NOT this leg (§7.8a): it focuses the
+        # trigger by hand and presses Space, so it passes before and after the change and
+        # demonstrates the mechanism rather than testing the fix. This one takes the operator's
+        # actual path — select with the mouse, then type — and reads the same two things `P5`
+        # measured going wrong, on the far side of a sentence with three spaces in it.
+        print("\n=== P7 a reason containing spaces, typed where the operator types it ===")
+        page = browser.new_page(viewport={"width": 1500, "height": 1000})
+        page.add_init_script(seed_script(pid))
+        page.goto(f"{UI}/?project={pid}&tab=tasks", wait_until="domcontentloaded")
+        page.wait_for_timeout(4000)
+        if not open_ticket(page, t4):
+            check(False, "P7: the ticket opens at all")
+        else:
+            page.locator(f"[data-testid='task-status-menu-{t4}']").first.click()
+            page.wait_for_timeout(800)
+            page.locator(f"[data-testid='task-status-menu-{t4}-blocked']").first.click()
+            page.wait_for_timeout(900)
+            # No click of any kind between the selection and the typing. That is the leg.
+            page.keyboard.type(REASON)
+            page.wait_for_timeout(500)
+            ind = page.evaluate(indicator_probe(t4))
+            st = page.evaluate(PROBE)
+            print("    field={} page={}".format(json.dumps(ind.get("value")), json.dumps(st)))
+            page.screenshot(path=os.path.join(SHOTS, "inert-spaces.png"))
+            check(
+                ind.get("value") == REASON,
+                "all {} characters, spaces and all, are in the field ({!r})".format(
+                    len(REASON), ind.get("value")
+                ),
+            )
+            check(
+                st["menuItems"] == 0,
+                "and not one of those spaces re-opened the menu ({} menuitems)".format(
+                    st["menuItems"]
+                ),
+            )
+            check(
+                st["body"] != "none",
+                "and the page behind is not inert ({!r})".format(st["body"]),
             )
         page.close()
 

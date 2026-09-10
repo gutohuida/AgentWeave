@@ -94,7 +94,13 @@ half. A run that closes one and reports the change done has closed half a change
 - [x] 4.1 **Remove `autoFocus`** from the blocking-reason input (`TaskDetailDrawer.tsx:410`) and
   focus it from a ref instead, when the panel becomes visible. One mechanism, not two
   (`design.md` D5).
-- [ ] 4.1a **The focus has to be visible on the keyboard path.** `hub-interaction-feedback` already
+- [x] 4.1a **Measured 2026-09-11 on the keyboard path**: after §4.1's programmatic focus the
+  reason input matches `:focus-visible` and draws a ring (`outline auto 1px`,
+  `box-shadow none`), read from `getComputedStyle` in `P6`. The engine matches
+  `:focus-visible` on a focused text field whatever moved the focus there, so this is not a
+  keyboard-versus-pointer discriminator and does not need to be: what §4.1a is exposed to is
+  a *programmatic* focus losing the indicator, and that is exactly what is measured.
+  **The focus has to be visible on the keyboard path.** `hub-interaction-feedback` already
   ships *"Keyboard focus is visible"* — a focus indicator drawn when focus arrives by keyboard — and
   §4.1 replaces a browser-driven focus with a programmatic one, which is the kind of substitution
   that silently loses `:focus-visible`. Drive it in §7.6, where the whole gesture is keyboard: the
@@ -180,7 +186,15 @@ half. A run that closes one and reports the change done has closed half a change
   `blocked` and assert focus returns to the trigger. §3.2 is the task most able to break something
   that works, and its failure mode is focus on `document.body`, which no assertion about the blocked
   path would notice.
-- [ ] 7.6 **Drive the narrowed lifecycle scenario exactly as narrowed.** Open the menu, choose
+- [x] 7.6 **Green, 2026-09-11, in `P6` — and it is the keyboard, not the mouse.** Enter on the
+  focused trigger opens the menu, `ArrowDown` reaches `task-status-menu-<id>-blocked` (found
+  by reading `document.activeElement` rather than by counting presses, so the leg does not
+  encode the legal-move map's order), `Enter` takes it. The menu closes, the reason input
+  **has the keyboard** (`INPUT`, `inReason=True`), the nineteen typed characters land in it,
+  `Tab` reaches `task-block-confirm-<id>`, `Enter` confirms, and the Hub's own record reads
+  `status='blocked' reason='the staging API key'`. So §3.2a's deferral to `onCloseAutoFocus`
+  holds on both paths — which iteration 5 could only infer.
+  **Drive the narrowed lifecycle scenario exactly as narrowed.** Open the menu, choose
   **Move to blocked** *with the keyboard* — arrow to the item and press Enter, do not click it —
   then type without touching the mouse and confirm. Assert what the delta now says: the keyboard
   is in the reason input once the menu has closed, the text appears there, and the move completes.
@@ -198,7 +212,10 @@ half. A run that closes one and reports the change done has closed half a change
   acceptance is zero failed, not a total. Its leg E asserts `F307` is *unchanged*, so it is also the check that §1.1 did not silently
   alter the Tab branch.
 
-- [ ] 7.8 **Drive the scenario that no task produced evidence for.** The delta's
+- [x] 7.8 **Green, 2026-09-11, in `P7`** — select with the mouse, then type with no click of
+  any kind in between: the field holds all 19 characters (`'the staging API key'`),
+  `[role=menuitem]` count is `0`, and `document.body`'s computed `pointer-events` is `auto`.
+  **Drive the scenario that no task produced evidence for.** The delta's
   *"Typing an answer does not operate the menu that asked for it"* had no leg behind it in any round
   before R3 — §7.2 and §7.3 name floors on harnesses that do not cover it, and §7.6 types without
   asserting anything about the menu. Type a reason **containing spaces** — `the staging API key`, the
@@ -208,15 +225,24 @@ half. A run that closes one and reports the change done has closed half a change
   going wrong, and `t_d1_0910_rowmenu_leaves_the_page_inert.py` already carries the `PROBE` that
   reads both, so this extends an existing leg rather than building new machinery.
 
-- [ ] 7.8a **`P5` is not this leg and does not become redundant.** `P5` focuses the trigger by hand
+- [x] 7.8a **Honoured.** `P5` was not touched and is not counted: §7.8's evidence is `P7`, a
+  separate leg on a separate ticket that reaches the field the way the operator does.
+  **`P5` is not this leg and does not become redundant.** `P5` focuses the trigger by hand
   and presses Space, so it passes both before and after this change: it demonstrates the mechanism,
   it does not test the fix. Leave it asserting what it asserts, and do not count it as evidence
   for §7.8.
 
 ## 8. Close it out
 
-- [ ] 8.1 `cd hub/ui && npm run lint`, and `npx tsc --noEmit` if the project offers it. Record in the
-  log that the Python lint set was **not** required and why, rather than omitting it.
+- [x] 8.1 **Both clean, 2026-09-11**: `npm run lint` (eslint, `--max-warnings 0`) and
+  `npx tsc --noEmit` in `hub/ui`. **The Python lint set was not required**, and the reason is
+  the same one §0 gives: this change edits no file CI lints. CI runs
+  `ruff check src/ hub/ tests/` and `black --check src/ hub/hub/ hub/tests/ tests/`; the only
+  Python this change touches is `scripts/drive/`, which neither path list covers. It was run
+  anyway — `ruff check src/ hub/ tests/` passes on this tree, and the two `UP032`/long-line
+  findings the new legs added to the harness were fixed so the drive directory's standing
+  count (271 at `HEAD`) did not grow. One `N806` remains and is deliberate: `FOCUS` matches
+  the identical local the leg above it already uses.
 - [ ] 8.2 Set `**Status:**` on `F309` and `F310` in `scripts/drive/FINDINGS.md` to `fixed <sha>`.
   Leave `F307` open and `F311` open — `F311` is ratcheted, not drained.
 - [ ] 8.3 Note in `F307` that this change deliberately did not subsume it, so the next reader of that
