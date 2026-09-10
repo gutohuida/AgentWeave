@@ -14066,7 +14066,19 @@ trusting a 2026-08-05 snapshot. The effort control was re-checked the same way a
 the cache's intersection across listed models is still `low, medium, high, xhigh`, exactly what the
 catalog declares.
 
+**Re-measured 2026-09-10, and the drift is unchanged eight days on.** The night window built
+`scripts/check_model_catalog.py` (R-3.4's verdict: *a `scripts/` tool, not a test*), which needs no
+Hub, no project and no fixture — it loads `hub/hub/model_catalog.py` by path and diffs it against
+the cache. Against the real cache (`fetched_at 2026-08-29T10:33:58Z`, `client_version 0.146.0`,
+still four listed models) it reports **3 drifts, EXIT 1**: the default `gpt-5.6-sol` is not a model
+the cache lists, and `gpt-5.4` and `gpt-5.6-sol` are declared but gone. Same three facts the sweep
+measured, now reachable in one command. **The catalog was not edited** — removing two models and
+moving the default changes which model a Codex runner takes by default, which is a product call and
+not this window's to make; and Codex is undrivable by standing decision, so no run could confirm the
+consequence either way.
+
 **Reproduction:**
+`py -3.11 scripts/check_model_catalog.py` — no Hub required; EXIT 1 with the three drifts named.
 `py -3.11 scripts/drive/t_sweep_row2_runners.py <project>` — the two `(F174)` assertions.
 
 ---
@@ -19258,6 +19270,17 @@ fixture directory `~/Documents/drive-0902-d1`; it opens its own project and dele
 shape of a fix is a real design question — read the provider's cache at runtime, ship a catalog
 refresh route, honour aliases (F221), or accept the literal and add a staleness check — and picking
 between those is what a spec loop is for.
+
+**The last of those four is now decided and built, 2026-09-10 — and it does not close this.** The
+operator's R-3.4 verdict took *accept the literal and add a staleness check*, in the specific shape
+of a `scripts/` tool rather than a test (*"a command that diffs catalog against cache has nothing to
+skip in CI and is the shape that actually gets run when someone suspects the catalog is wrong"*).
+`scripts/check_model_catalog.py` is that command, gated by `tests/test_model_catalog_drift.py`
+(23 tests, seven script mutations each killed by a named test). **What that changes is that the
+drift is now findable in one command; what it does not change is that the catalog is still a literal
+behind a closed door, still stale, and still refreshed only by a Python edit and a release.** The
+tool makes the staleness *visible*; F267 is about it being *unfixable without a release*, and no
+line of that has moved. Both halves of the drift stay open — see F174's 2026-09-10 re-measurement.
 
 ## F268 (B) — the runner-binding select renders `name (cli)`, so the spec's own "second runner with a different model" is unpickable
 
