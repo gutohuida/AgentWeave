@@ -6,8 +6,9 @@ not copied from handoffs — several figures the chain was carrying forward were
 
 **Revised 2026-09-10.** Stages 1, 2 and 4 and `## Honest arithmetic` were rewritten against the
 tree and the classifier; every other section is older and dated where it stands. **What changed:
-Stage 2 is closed, Stage 4's tail is four findings and not `F142 alone`, Stage 1 is the oldest open
-item on the page, and the stage-shaped total is retired in favour of one built on the open
+Stage 2 is closed, Stage 4's tail is six findings and not `F142 alone`, Stage 1 was diagnosed and
+mitigated the same day (`FINDINGS.md` F292, *"The reset was never one transaction"*), and the
+stage-shaped total is retired in favour of one built on the open
 findings — which resolved to a scope question the operator answered the same morning
 (`DECISIONS.md`, *"The scope of the drain"*: **drain A and B, ratchet C and D**).** Read
 `## Honest arithmetic` first if you are here to decide something.
@@ -170,6 +171,41 @@ has closed or moved. The holder is still unnamed after five windows have read it
 2026-09-10 is that the search space narrowed to one named line of product code, which a day window
 may not repair (`hub/hub/` is out of its scope). **This is a night's work behind a proposal, and no
 proposal exists.**
+
+### Superseded the same afternoon — the reset was never one transaction
+
+**Every reading above, and every instrument in F292's entry, assumed the failing `DROP` was inside a
+transaction. It never was.** Measured 2026-09-10: SQLAlchemy's pysqlite/aiosqlite dialect emits no
+`BEGIN` until a **DML** statement, and DDL is not DML — so `driver_connection.in_transaction` reads
+**`False`** after the first `DROP` inside `async with engine.begin()`, and the ~90 drops in
+`Base.metadata.drop_all` are **~90 independent autocommit write transactions**. A foreign connection
+was measured **taking the write lock between two of them**, after which the next `DROP` failed
+`database is locked` on the full busy timeout — CI's exact signature, reproduced in isolation, with
+no dead worker thread, no subprocess, and nothing holding the file for thirty seconds.
+
+That retires the two things this entry kept calling blind spots. **`[before drop_all]`'s census was
+never blind** — it samples once, and the vulnerable window opens ninety times *after* it. And the
+failure landing on `requirement_drift` rather than the first table, unexplained under a
+one-transaction model, is the expected shape when the sequence runs until it loses a race.
+
+**Mitigated by one line** — `BEGIN IMMEDIATE` before `drop_all`, so the lock is taken once and held;
+the same foreign writer is then refused. Gated by
+`hub/tests/test_schema_reset_holds_the_write_lock.py`, mutation-checked three ways, **and the first
+version of that test failed its own mutation check and then failed the full suite** — both recorded
+in the test rather than quietly fixed.
+
+**Stage 1 is mitigated, not closed, and the distinction is the point.** F292 was not reproduced in
+CI and a ~20–40 % race cannot be asserted by a test. What is closed is a race with this exact
+signature that was reachable on every reset. **If F292 survives, that is itself informative**: the
+holder would then arrive *before* the reset rather than during it, which is far narrower than
+anything this entry has carried. The next window measures the rate; it does not assume the answer.
+
+Two things fell out of the control measurement and are filed separately: **F314 (B)** — the flow
+files fail about **one run in eight** under random ordering **on an unmodified tree**, at the same
+rate with and without this fix, so it is a *second* non-F292 source of CI red in the very file
+family F292 clusters in. And this entry has been carrying **two failure modes under one heading** —
+an unbounded hang with no `busy_timeout` involved, and a `database is locked` that *is* a
+busy-timeout expiry.
 
 ---
 
@@ -405,13 +441,25 @@ daily.** As measured this morning, over **308 sections**:
 
 | | A | B | C | D | ? | total |
 |---|---|---|---|---|---|---|
-| **open** | 6 | 60 | 68 | 14 | 2 | **150** |
-| conflict | 1 | 4 | 3 | 0 | 0 | 8 |
-| resolved | 48 | 60 | 29 | 6 | 11 | 154 |
+| **open** | 6 | 64 | 72 | 14 | 2 | **158** |
+| conflict | 1 | 1 | 0 | 0 | 0 | 2 |
+| resolved | 48 | 58 | 26 | 5 | 11 | 148 |
+| unclassified | 0 | 1 | 3 | 1 | 0 | 5 |
 
-**Re-measured at 10:00 the same morning, and it had already moved: 147 → 150 in half an hour**
-(F309, F310, F312). That is not noise around the estimate — it *is* the source term this section
-exists to name, arriving while the section was being written.
+**Measured four times in one day — 147 → 150 → 157 → 158 — and the moves have different
+causes.** The first was real: F309, F310 and F312 were filed while this section was being written,
+which is the source term this section exists to name. The last was real too — **F314, filed by the
+control measurement of a fix, which is the source term again and from a new direction: not driving,
+not reading, but *checking whether a repair broke anything*.** **The middle move changed no finding
+at all.**
+`dee508c` repaired `classify_findings.py` (a table recording a wrong verdict was being read as
+*making* one), and the repair re-bucketed the ledger: `CONFLICT` fell 8 → 2, and **`UNCLASSIFIED`
+returned to 5** after the 2026-09-09 milestone of zero.
+
+**So a count on this page can go stale without anybody touching the ledger**, because the instrument
+is under active repair too. That is the sharper reason not to quote any number here: not merely that
+findings arrive, but that *what counts as open is itself being corrected*. `UNCLASSIFIED: 0` is no
+longer true and the sections celebrating it below are dated accordingly.
 
 **The two measured rates that price it.** Proposals: **one change per day window** — `D-2/D-3/D-4` is
 R1/R2/R3 on a single change, and the round discipline forbids compressing it. Builds: **one to three
@@ -422,14 +470,14 @@ the wrong unit all along. The unit is **days**.
 | Scope | Open findings | At ~1 proposal/day |
 |---|---|---|
 | severity A only | **6** | ~a week — *but four are blocked on a verdict, not on a day* |
-| A + B | **66** | ~9 weeks of unbroken daily cycles |
-| everything open | **150** | **~5 months** |
+| A + B | **70** | ~10 weeks of unbroken daily cycles |
+| everything open | **158** | **~5 months** |
 
 **And every one of those figures assumes the ledger stops growing, which it measurably does not.**
 Stage 2 closed two severity-A findings and filed three more plus a B — a **net severity-A drain of
 minus one over the whole stage.** That is n=1 and must not be read as a law; what it does establish
 is that *driving a change is also a defect-finding activity*, so the backlog has a source term this
-plan never modelled. The honest form: **150 is a floor on the work, not an estimate of it** — and the
+plan never modelled. The honest form: **158 is a floor on the work, not an estimate of it** — and the
 floor rose by three while this section was being written.
 
 ### The scope — **ANSWERED 2026-09-10: drain A and B, ratchet C and D**
@@ -438,8 +486,8 @@ floor rose by three while this section was being written.
 one by arithmetic.** It was put to them and answered the same morning.
 
 **The verdict is in `DECISIONS.md`, `### The scope of the drain`, and that is the authority — this is
-a pointer, not a second copy.** In short: **the 63 open A and B findings are in scope** (~9 weeks at
-one proposal per day window) and **the 84 open C, D and unlabelled findings are ratcheted** under
+a pointer, not a second copy.** In short: **the open A and B findings are in scope** (70 as of late afternoon,
+~10 weeks at one proposal per day window) and **the open C, D and unlabelled findings are ratcheted** (88) under
 R-1's already-decided model — today's count frozen as a ceiling that may shrink and may never grow,
 with existing instances deliberately not repaired.
 

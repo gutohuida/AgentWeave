@@ -725,6 +725,14 @@ As measured 2026-09-10 by `py -3.11 scripts/classify_findings.py` — **run it a
 quoting these; they move daily** — the ledger holds **308 sections, 147 open**: 4 A, 59 B, 68 C,
 14 D, 2 unlabelled, plus 8 in `CONFLICT`.
 
+> **The counts below moved twice the same day; the verdict did not.** By late morning the ledger
+> read **313 sections, 157 open** — 6 A, 63 B, 72 C, 14 D, 2 unlabelled — so *in scope* is **69**
+> and *ratcheted* is **88**. Three of the seven new ones were filed that morning; the rest moved
+> because `dee508c` **repaired the classifier**, which re-bucketed the ledger and returned
+> `UNCLASSIFIED` to 5. **This verdict is severity-based, not count-based** — it says *A and B are
+> drained, C and D are ratcheted* — so a moving census resizes the work it implies and changes
+> nothing about the decision. The figures above are kept as they stood when it was made.
+
 - **In scope: the 63 open A and B findings.** At the measured rate of one proposal per day window,
   ~9 weeks of unbroken daily cycles. Proposals come from this population and from nowhere else.
 - **Out of scope: the 84 open C, D and unlabelled findings.** They get **R-1's already-decided
