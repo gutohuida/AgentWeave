@@ -712,6 +712,34 @@ async def app(monkeypatch):
     assert_engine_is_disposable()
     try:
         async with engine.begin() as connection:
+            # `engine.begin()` does NOT hold the write lock across this block, and every
+            # F292 instrument so far has assumed it does. Measured 2026-09-10, three ways:
+            #
+            #   * `driver_connection.in_transaction` is **False** after the first `DROP` —
+            #     SQLAlchemy's pysqlite/aiosqlite dialect emits no `BEGIN` until a DML
+            #     statement, and DDL is not DML. No `BEGIN` reaches the driver at all.
+            #   * so each of the ~90 `DROP`s runs in **autocommit**, taking and releasing
+            #     the write lock ~90 times rather than once.
+            #   * a foreign connection opened mid-block **took the write lock between two
+            #     `DROP`s**, and the next `DROP` then failed `database is locked` after the
+            #     full busy timeout — the exact CI signature, reproduced in isolation.
+            #
+            # That is why CI fails on `DROP TABLE requirement_drift` rather than on the
+            # first table, and why `[before drop_all]`'s census is structurally unable to
+            # see the holder: the vulnerable window opens ~90 times *after* that sample is
+            # taken, and a holder only has to arrive in one of them.
+            #
+            # `BEGIN IMMEDIATE` takes the write lock up front and keeps it for the whole
+            # reset, so there is one window instead of ninety and a competing writer waits
+            # for us rather than us for it. Measured: with it, the same foreign connection
+            # is refused the lock and the remaining `DROP`s proceed cleanly.
+            #
+            # This does not name what writes during the reset, and it is not a claim to
+            # have done so — it removes the race those writes have to win. If F292 survives
+            # this, the holder arrives before the reset rather than during it, which is a
+            # different finding and a much narrower one.
+            if connection.dialect.name == "sqlite":
+                await connection.exec_driver_sql("BEGIN IMMEDIATE")
             await connection.run_sync(Base.metadata.drop_all)
             await connection.run_sync(Base.metadata.create_all)
     except Exception:

@@ -22001,7 +22001,18 @@ obvious fix.
 
 ## F292 (B) - the fix for F285 traded a deterministic rollback for an intermittent lock, and the mitigation written for it did not hold
 
-**Status:** open. Root cause not fixed, but the mechanism now has a concrete, code-level, forced-
+**Status:** open — **mitigated 2026-09-10, root cause still unnamed.** Read
+*"The reset was never one transaction"* at the foot of this entry before any other part of it: the
+`app` fixture's `async with engine.begin()` was **never one transaction**, the ~90 `DROP`s ran in
+autocommit, and a competing writer taking the write lock between two of them reproduces CI's exact
+signature with no dead worker thread and nothing holding the file for 30 seconds. Fixed by
+`BEGIN IMMEDIATE`, gated and mutation-checked. That section also records **two hypotheses tested and
+refuted** (a second synchronous engine; `SQLITE_BUSY_SNAPSHOT`) so nobody pays for them again, and
+notes that this entry has been carrying **two different failure modes under one heading** — an
+unbounded hang with no `busy_timeout` involved, and a `database is locked` that *is* a busy-timeout
+expiry. The paragraph below describes the first; CI fails with the second.
+
+Root cause not fixed, but the mechanism now has a concrete, code-level, forced-
 reproduction-backed candidate: an `aiosqlite` connection's dedicated worker thread crashes (and dies
 permanently) if it tries to report a result back to an event loop that has already closed, and any
 later reuse of that same connection then awaits a `Future` nothing will ever resolve -- unbounded, no
@@ -23151,6 +23162,91 @@ argument yet for fixing F292 ahead of feature work.
 **Count.** Occurrence floor rises from 11 read to **15 read**. The 20.4 % rate over the 54-run
 window to 2026-09-08T08:26Z is *not* re-derived here, but three failures in three consecutive runs
 sits well above it and a window that needs the real number should re-measure rather than quote it.
+
+### The reset was never one transaction — measured 2026-09-10, and it removes the need for a holder that lives 30 seconds
+
+**Every instrument in this entry has looked for a connection holding the file when the DROP runs,
+and every one has assumed the DROP is inside a transaction. It is not.** Measured this session
+against SQLAlchemy 2.0 / aiosqlite on the suite's own shape, three separate ways:
+
+| measured | result |
+|---|---|
+| `driver_connection.in_transaction` immediately after the first `DROP` inside `async with engine.begin()` | **`False`** |
+| `BEGIN` statements reaching the driver during that block | **none** |
+| a foreign `sqlite3` connection asking for the write lock between two `DROP`s of one block | **it got it** |
+
+SQLAlchemy's pysqlite/aiosqlite dialect emits no `BEGIN` until a **DML** statement, and `DROP TABLE`
+is DDL. So `async with engine.begin()` around `Base.metadata.drop_all` provides **no mutual
+exclusion at all**: the ~90 drops are ~90 independent autocommit write transactions, each taking and
+releasing SQLite's write lock. Reproduced end to end in isolation — foreign writer takes the lock
+mid-sequence, the next `DROP` fails `database is locked` after the full busy timeout. That is the CI
+signature, produced without a dead worker thread, without a subprocess, and without anything holding
+the file for thirty seconds.
+
+**This explains the two things the entry has repeatedly called blind spots, and they were not blind
+spots — they were the wrong model.**
+
+- **Why `[before drop_all]`'s census is always empty.** It samples once, before the sequence starts.
+  The vulnerable window opens **ninety times after that sample**, and a competing writer only has to
+  win one of them. No sampling either side of the sequence can see it; the instrument was correct
+  and the question was wrong.
+- **Why the failure lands on `DROP TABLE requirement_drift` and not on the first table.** Under a
+  one-transaction model that ordering is unexplained. Under ninety independent transactions it is
+  the expected shape: the sequence runs until it loses a race, and where it loses is arbitrary.
+
+**Fix, and it is one line** (`hub/tests/conftest.py`, the `app` fixture's reset): issue
+`BEGIN IMMEDIATE` before `drop_all`, so the write lock is taken once and held for the whole reset.
+Measured with the same foreign writer: it is **refused** the lock, and the remaining drops proceed
+cleanly. One window instead of ninety.
+
+Gated by `hub/tests/test_schema_reset_holds_the_write_lock.py` — two tests, **mutation-checked three
+ways, and the first form of one test did not survive its own mutation.** Removing the line kills test
+one; making the demonstration helper ignore its flag kills test two; **moving `BEGIN IMMEDIATE` to
+after `drop_all` survived the original test**, because that test compared statement indices behind an
+"if any DROP was seen" guard and on a fresh database `drop_all` emits no DROP at all. Replaced with a
+per-statement `in_transaction` sample, which kills it. The residual gap — a first-`app`-test-of-
+session cannot catch the line being *moved*, only deleted — is stated in the test's own docstring.
+
+**What this does NOT claim.**
+
+- **Not that F292 is fixed.** It was not reproduced in CI and a ~20-40 % race cannot be asserted by a
+  test. What is established is that a race with this exact signature **exists**, is reachable on
+  every reset, and is now closed. Whether it was *the* one shows up as a rate change, and the next
+  window should measure the rate rather than assume the answer either way.
+- **Not that the holder is named.** It removes the race competing writes have to win rather than
+  identifying what writes. **If F292 survives this, that is informative**: it means the holder
+  arrives *before* the reset rather than during it, which is a narrower finding than anything this
+  entry has carried.
+- **Not a refutation of the `agent_trigger.py:1190` candidate.** That call site remains an un-awaited
+  background task and a real defect. Note though that the mechanism this entry's `**Status:**`
+  paragraph describes is an **unbounded hang with no `busy_timeout` involved**, while CI's failure is
+  `database is locked`, which *is* a busy-timeout expiry. Those are two different failure modes and
+  the entry has been carrying them under one heading.
+
+### Two hypotheses tested and refuted on the way, recorded so nobody pays for them twice
+
+**1. A second engine — refuted.** `JobScheduler._get_sync_engine` (`hub/hub/scheduler.py:2354-2366`)
+builds a **separate synchronous** engine on the same SQLite file for APScheduler's jobstore. Its
+connections are in a different pool, so no `connect`/`checkout` event fires on the listened engine
+and they are **invisible to `_EVER_SEEN` at all three census stages** — which would explain an empty
+census perfectly. `hub/hub/api/v1/jobs.py:498-517` already documents the *mirror* of F292 on those
+two engines in production: a request holding a transaction open makes the jobstore's own INSERT fail
+`database is locked`. Same file, same two engines, same error string. **It is still wrong: no test
+calls `JobScheduler.start()`**, which is the only caller of `_get_sync_engine`, so that engine is
+never constructed during the suite. Verified by grep across `hub/tests/`.
+
+**2. `SQLITE_BUSY_SNAPSHOT` — refuted for this code path, and worth knowing anyway.** In WAL, a
+connection that has taken a read snapshot and then asks to upgrade to a write is refused
+**immediately, with `busy_timeout` ignored and nothing holding the file** — SQLite returns
+`database is locked` rather than risk deadlock. Measured: **0.000 s with `busy_timeout=30 s`
+ignored**, against **2.234 s honoured** for a genuine holder. Had F292 been this, an empty census
+would have been the *correct* reading rather than a blind spot, and no holder would ever have
+existed to find. `drop_all(checkfirst=True)` does read before it drops (~90 `PRAGMA table_info`
+calls), and `PRAGMA table_info` **does** take a snapshot in raw `sqlite3` — but through SQLAlchemy
+those reads run in autocommit, so no snapshot is held and the mechanism cannot fire here. **The
+discriminator is one number nobody has ever recorded: how long the failing `DROP` waited.** Under a
+held-lock model it is ~30 s; sub-second would mean this entry is chasing a holder that does not
+exist. Worth adding to the diagnostic regardless of the fix above.
 
 
 
@@ -24866,5 +24962,62 @@ The generalisation worth carrying: **a ledger that records its own corrections b
 the instrument that made them**, so every self-describing line is a line the instrument must be
 tested against. Filed and fixed in the same window; `tests/test_classify_findings.py` gained the
 guard and a narrowness pin, both mutation-checked in both directions.
+
+---
+
+## F314 (B) — `test_flow_holds_the_loop_requirements.py` fails about one run in eight under random ordering, on an unmodified tree
+
+**Status:** open — filed 2026-09-10, **measured, on an unmodified tree**, and separate from F292.
+Found while establishing whether F292's `BEGIN IMMEDIATE` mitigation caused a regression; it did
+not, and this is what the control measurement found instead.
+
+**What was measured.** A five-file flow subset — `test_flow_holds_the_loop_requirements.py`,
+`test_flow_fires_a_review_turn.py`, `test_flow_chain_end_to_end.py`, `test_flow_width.py`,
+`test_a_review_nobody_is_doing.py`, 63 tests — run repeatedly under `pytest-randomly`'s default
+random ordering, on this machine, Python 3.11.
+
+| tree | runs | failures |
+|---|---|---|
+| **unmodified (no `BEGIN IMMEDIATE`)** | 12 | **1** |
+| with F292's mitigation | 8 | **1** |
+
+**~1 in 8, and the same rate on both trees** — which is the finding twice over: the flakiness is
+pre-existing, and F292's fix neither causes nor cures it. Two different tests failed across the two
+observed failures, both in the same file:
+
+- `test_one_turn_finishing_answers_for_itself_and_not_for_its_siblings`
+- `test_a_wide_flows_state_is_still_one_call`
+
+**Both pass when run alone**, deterministically. So this is order dependence, not a broken
+assertion.
+
+**Why it matters more than a 1-in-8 flake usually would.** The full Hub suite's CI failures have
+been attributed to F292 essentially wholesale — *"every red CI run is F292 — 11 of 11"* was this
+ledger's standing claim until 2026-09-10, when a deterministic starlette resolution defect retired
+it. **This is a second non-F292 source of red**, in the same file family F292's occurrences cluster
+in (`test_flow_fires_a_review_turn.py` is occurrence #15's erroring file), which is precisely the
+neighbourhood where a misattribution is most likely. **Any future F292 rate measurement must
+classify a flow-file failure from its own log before counting it**, or it will fold this in.
+
+**Not diagnosed.** No hypothesis is offered here and none should be inferred from the file's name.
+What is established is the rate, the two affected tests, the order dependence, and the independence
+from F292's mitigation. The obvious next step is to find the seed and bisect the ordering, which is
+bounded work and was not done because it is not what this session was doing.
+
+**Reproduce** (expect roughly one failure in eight):
+
+```bash
+for i in $(seq 1 8); do
+  py -3.11 -m pytest hub/tests/test_flow_holds_the_loop_requirements.py \
+    hub/tests/test_flow_fires_a_review_turn.py hub/tests/test_flow_chain_end_to_end.py \
+    hub/tests/test_flow_width.py hub/tests/test_a_review_nobody_is_doing.py -q \
+    | grep -E '^[0-9]+ (passed|failed)'
+done
+```
+
+**Related:** F292 (the schema-reset lock, same file family, different mechanism), F279 (a different
+pair of order-dependent failures, also undiagnosed — *"the two 'a stopped run' tests fail about half
+the time, on an unmodified tree"*). **F279 and this are the same species and neither has been
+bisected**; whoever takes one should take both.
 
 ---

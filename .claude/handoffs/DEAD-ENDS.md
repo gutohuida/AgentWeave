@@ -243,6 +243,24 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 
 ## SQLAlchemy and Hub test patterns
 
+- **`async with engine.begin()` does NOT put DDL in a transaction on SQLite** *(measured
+  2026-09-10, and five F292 windows had assumed the opposite)*. SQLAlchemy's pysqlite/aiosqlite
+  dialect emits no `BEGIN` until a **DML** statement, and `DROP TABLE`/`CREATE TABLE` are DDL. So
+  `driver_connection.in_transaction` reads **`False`** after the first `DROP` inside the block, no
+  `BEGIN` ever reaches the driver, and each of the ~90 drops in `Base.metadata.drop_all` is its own
+  autocommit write transaction — taking and releasing SQLite's write lock ninety times, with a
+  window between each for any other connection to take it. **Do not reason about "the transaction"
+  around a `drop_all`; there isn't one.** If you need the sequence to be atomic, issue
+  `await connection.exec_driver_sql("BEGIN IMMEDIATE")` first, which is what `hub/tests/conftest.py`
+  now does. Verify with `in_transaction`, not by reading the `async with`.
+- **`database is locked` has two mechanisms and only elapsed time tells them apart** *(measured
+  2026-09-10)*. A genuine holder makes you wait out `busy_timeout` and then fail. But in WAL, a
+  connection that took a read snapshot and then asks to upgrade to a write is refused
+  **immediately, `busy_timeout` ignored, with nothing holding the file** — SQLite returns
+  `SQLITE_BUSY` rather than risk deadlock. Measured side by side: **0.000 s** (snapshot, 30 s
+  timeout ignored) vs **2.234 s** (real holder, 2 s timeout honoured). **Before hunting for a
+  holder, record how long the failing statement waited** — sub-second means there may be no holder
+  to find, and every instrument that samples for one will come back empty and look broken.
 - **`session.get(Conversation, "conv-…")` silently never matches** — the primary key is not what
   you think it is. Query explicitly.
 - **`session.delete()` refuses a never-flushed object.**
@@ -361,6 +379,29 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   one operation per tool call, or the Bash tool's `rm`/`git` instead of PowerShell, or writing the
   file with the Write tool so the risky text never appears in a shell command. Do not read these as
   "the operation is forbidden" — the same operations succeeded individually and immediately.
+
+- **Driving `claude -p` from Python: pass the prompt on stdin, never as an argv element**
+  *(2026-09-10, cost one full four-run measurement)*. `shutil.which("claude")` on this machine
+  resolves to `C:\Users\huida\AppData\Roaming\npm\claude.CMD` — an npm **batch-file** shim. Two
+  traps follow, and the second is silent:
+  - `subprocess.run(["claude", ...])` raises `FileNotFoundError: [WinError 2]` because
+    `CreateProcess` will not resolve a bare name to `.CMD`. Fix: `shutil.which` it first. Loud, so
+    harmless.
+  - **A multi-line prompt passed as an argument is truncated at its first newline**, because a
+    batch file ends its line there. The run still succeeds, exit 0, valid JSON — and every model
+    replied *"I don't see a command in your message."* Four runs, four plausible-looking results,
+    all measuring nothing. **Read a result that says the model did not see your input as a
+    delivery failure, not a model failure.** Fix: `subprocess.run([...], input=prompt)` with no
+    positional prompt — `claude -p` reads stdin — which also sidesteps every quoting problem in a
+    prompt full of `$`, quotes and backslashes.
+- **`--dangerously-skip-permissions` is the discriminator between a *static* refusal and an
+  *approval* refusal** *(2026-09-10)*. The harness's `permission_denials` records carry a
+  `tool_name` and the `tool_input`, and **no reason field** — so "the command analyser rejected
+  this shape" and "`acceptEdits` had nobody to answer" look identical, and the model's own
+  narration about which one happened is unreliable prose. Re-run the same shape with the approval
+  gate removed: what still fails is static, what now executes never was. This is what showed F301's
+  five "refusal classes" to be reasons a command *needs approval* rather than reasons it is
+  forbidden.
 
 ## The installed CLI (`agentweave` from PyPI, outside this repo)
 
