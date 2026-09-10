@@ -578,6 +578,48 @@ serving four-day-old code.
 
 ## Decided
 
+### The scope of the drain — A and B are drained, C and D are ratcheted
+
+**DECIDED 2026-09-10, by the operator, in session**, on the finding-shaped arithmetic in
+`ROADMAP.md` `## Honest arithmetic`. This is the first verdict in this file about **how much of the
+ledger is in scope at all**, and it governs where every day window points its proposals from now on.
+
+**DECIDED: drain severity A and severity B. Ratchet C, D and the unlabelled under R-1's model.**
+
+As measured 2026-09-10 by `py -3.11 scripts/classify_findings.py` — **run it again rather than
+quoting these; they move daily** — the ledger holds **308 sections, 147 open**: 4 A, 59 B, 68 C,
+14 D, 2 unlabelled, plus 8 in `CONFLICT`.
+
+- **In scope: the 63 open A and B findings.** At the measured rate of one proposal per day window,
+  ~9 weeks of unbroken daily cycles. Proposals come from this population and from nowhere else.
+- **Out of scope: the 84 open C, D and unlabelled findings.** They get **R-1's already-decided
+  treatment** (`### R-1 — Enforce, as a ratchet`, 2026-09-08): freeze today's count as a ceiling that
+  may shrink and may never grow. **Existing instances are not repaired before the check may pass.**
+
+**Why this option.** It is the only one of the three that reuses a decision already made rather than
+inventing a second policy for the same problem. R-1 settled *conventions are enforced, instances are
+not repaired* for the ratchet checks; the low-severity tail is the same question at a larger scale,
+and answering it differently would leave the repo with two philosophies about the same ledger.
+
+**The cost, taken knowingly and stated so nobody rediscovers it as a surprise:** those 84 findings
+stay wrong, with a passing check blessing them, until something touches them on its own merits. **35
+of the 75 read on 2026-09-09 are named nowhere outside `FINDINGS.md`** — for those the ledger is the
+only copy, so ratcheting them is the point at which they stop being tracked work and become recorded
+history. That is the trade; it was not made by accident.
+
+**Rejected: drain everything open.** ~5 months of daily cycles, and dishonest unless the source term
+is accepted — Stage 2 closed two severity-A findings and filed three more, a **net drain of minus
+one**. A five-month plan whose input grows as it runs is not a plan.
+
+**Rejected: drain A, then re-measure.** Cheapest, and it defers the same question by about a week
+while the day windows keep proposing from wherever the ledger happens to be read from.
+
+**What this does not decide.** It does not schedule the ratchet checks — those are still Stage 6
+work with no owner, and *a verdict is not an implementation* remains this file's standing gap. It
+does not touch the 8 `CONFLICT` findings, which need a hand read regardless of severity. And it does
+not re-open the drain gate's own rule: `.claude/loops/day-window.md` step 6 still governs *whether*
+a day proposes, while this verdict governs *what from*.
+
 ### The day window's two, 2026-09-09 evening — and one it asked that was already answered
 
 **DECIDED 2026-09-09 ~17:45, by the operator, in session**, from

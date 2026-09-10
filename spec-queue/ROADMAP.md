@@ -415,20 +415,30 @@ minus one over the whole stage.** That is n=1 and must not be read as a law; wha
 is that *driving a change is also a defect-finding activity*, so the backlog has a source term this
 plan never modelled. The honest form: **147 is a floor on the work, not an estimate of it.**
 
-### What this means, stated as a choice rather than made
+### The scope — **ANSWERED 2026-09-10: drain A and B, ratchet C and D**
 
-**"Fix every open finding" is not a plan the operator has agreed to, and at ~5 months it is probably
-not one they want.** This file must not quietly adopt it by arithmetic. Three scopes are available
-and **the choice is the operator's**:
+**"Fix every open finding" was never a plan the operator had agreed to, and this file must not adopt
+one by arithmetic.** It was put to them and answered the same morning.
 
-1. **Drain A and B, ratchet C and D.** 63 findings scheduled; the other 84 get R-1's treatment —
-   freeze a count as a ceiling that may shrink and may never grow, with the cost taken knowingly that
-   they stay wrong behind a passing check. This is the only option that reuses a decision already
-   made, and it is the recommendation.
-2. **Drain everything.** ~5 months of daily cycles, and honest only if the source term is accepted.
-3. **Drain A, then stop and re-measure.** Cheapest, and it defers the real question by about a week.
+**The verdict is in `DECISIONS.md`, `### The scope of the drain`, and that is the authority — this is
+a pointer, not a second copy.** In short: **the 63 open A and B findings are in scope** (~9 weeks at
+one proposal per day window) and **the 84 open C, D and unlabelled findings are ratcheted** under
+R-1's already-decided model — today's count frozen as a ceiling that may shrink and may never grow,
+with existing instances deliberately not repaired.
 
-**Whichever is chosen, the immediate blocker is the same and is not capacity:** F300, F301 and F306
+Rejected there: draining everything (~5 months, and dishonest unless the minus-one source term is
+accepted), and draining A then re-measuring (defers the same question by a week while the day
+windows keep proposing from wherever the ledger is read from).
+
+**Read the cost before quoting the plan as finished.** 35 of the 75 low-severity findings read on
+2026-09-09 are named nowhere outside `FINDINGS.md`; ratcheting those is the moment they stop being
+tracked work and become recorded history. That was the trade and it was made deliberately.
+
+**Two things this verdict does not do.** It does not schedule the three R-1 ratchet checks — still
+Stage 6, still unowned, and *a verdict is not an implementation* is this plan's oldest structural
+hole. And it does not touch the **8 `CONFLICT`** findings, which need a hand read at any severity.
+
+**The scope verdict does not unblock the front of the queue, and the blocker is not capacity:** F300, F301 and F306
 need operator verdicts, F299 needs a proposal behind its verdict, and Stage 1 needs a proposal at
 all. **Five items, none buildable unattended, all of them ahead of any total on this page.**
 
