@@ -43,8 +43,6 @@ does not, for three stated reasons, and the reversal is yours. No answer means t
 If you approve nothing, the FIX window falls to the default queue. `ORDER:` and `NOTHING TONIGHT`
 are both available.
 
----
-
 **DECIDED by the operator, in session, 2026-09-10 18:30**, on the review page published at
 `https://claude.ai/code/artifact/a762970b-f7a4-4919-bdcf-263abaa54554`. Both answers below are the
 operator's; the notes are the reading they were given.
