@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave daily review — 2026-09-10</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --panel-2: #f4f4f2;
+    --ink: #1c1c1a;
+    --ink-dim: #5c5c56;
+    --ink-faint: #85857d;
+    --rule: #e0e0da;
+    --rule-strong: #c9c9c1;
+    --accent: #6b4fbb;
+    --sev-a: #b3261e;
+    --sev-a-bg: #fbe9e7;
+    --sev-b: #a8590a;
+    --sev-b-bg: #fdf0e0;
+    --sev-c: #4d6a1f;
+    --sev-c-bg: #eef4e2;
+    --sev-d: #4a5568;
+    --sev-d-bg: #eceef2;
+    --ok: #2f6b3a;
+    --ok-bg: #e8f3ea;
+    --warn-bg: #fdf6e0;
+    --warn-rule: #d9b84a;
+    --code-bg: #f2f2ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --panel: #1e1e23;
+      --panel-2: #26262c;
+      --ink: #e9e9e6;
+      --ink-dim: #b0b0a8;
+      --ink-faint: #86867e;
+      --rule: #33333a;
+      --rule-strong: #4a4a52;
+      --accent: #b09aec;
+      --sev-a: #ff9c92;
+      --sev-a-bg: #3a1f1d;
+      --sev-b: #f0b878;
+      --sev-b-bg: #392a17;
+      --sev-c: #b3d67a;
+      --sev-c-bg: #26301a;
+      --sev-d: #b4c0d4;
+      --sev-d-bg: #24282f;
+      --ok: #8fd39c;
+      --ok-bg: #1c2c20;
+      --warn-bg: #322a14;
+      --warn-rule: #8a7527;
+      --code-bg: #24242a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    padding: 2.2rem 1.25rem 5rem;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  header.page { border-bottom: 2px solid var(--rule-strong); padding-bottom: 1.1rem; margin-bottom: 1.6rem; }
+  header.page h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -0.015em; }
+  header.page .sub { color: var(--ink-dim); font-size: .95rem; }
+  h2 {
+    font-size: 1.22rem; letter-spacing: -0.01em;
+    margin: 2.6rem 0 .5rem; padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: .5rem; }
+  h3 { font-size: 1.02rem; margin: 1.5rem 0 .4rem; }
+  h4 { font-size: .93rem; margin: 1.1rem 0 .3rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .8rem; padding-left: 1.35rem; }
+  li { margin: .3rem 0; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .875em;
+  }
+  code { background: var(--code-bg); padding: .1em .34em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule);
+    border-radius: 6px; padding: .75rem .9rem; overflow-x: auto; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0 1rem; font-size: .93rem; }
+  th, td { text-align: left; padding: .48rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); border-bottom: 1px solid var(--rule-strong); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0; }
+  .note { border-left: 3px solid var(--warn-rule); background: var(--warn-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .note strong:first-child { display: block; margin-bottom: .2rem; }
+  .sev { display: inline-block; min-width: 1.35rem; text-align: center; font-weight: 700; font-size: .78rem; padding: .1rem .38rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+  .sev.a { color: var(--sev-a); background: var(--sev-a-bg); }
+  .sev.b { color: var(--sev-b); background: var(--sev-b-bg); }
+  .sev.c { color: var(--sev-c); background: var(--sev-c-bg); }
+  .sev.d { color: var(--sev-d); background: var(--sev-d-bg); }
+  .pill { display: inline-block; font-size: .76rem; font-weight: 600; letter-spacing: .03em; padding: .12rem .5rem; border-radius: 999px; border: 1px solid var(--rule-strong); color: var(--ink-dim); }
+  .pill.ok, .pill.driven { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .pill.tested { color: var(--sev-b); background: var(--sev-b-bg); border-color: transparent; }
+  .fid { font-family: ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
+  .loc { font-family: ui-monospace, monospace; font-size: .82em; color: var(--ink-faint); white-space: nowrap; }
+  .lede { font-size: 1.02rem; color: var(--ink-dim); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .28rem 1rem; font-size: .93rem; margin: .6rem 0; }
+  .kv dt { color: var(--ink-faint); }
+  .kv dd { margin: 0; }
+  .ask { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1.1rem; margin: 1rem 0; background: var(--panel); }
+  .ask h4 { color: var(--accent); margin-top: 0; }
+  .ok-banner { border-left: 3px solid var(--ok); background: var(--ok-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  a:visited { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  footer.page { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .85rem; }
+  .small { font-size: .88rem; color: var(--ink-dim); }
+  .measured { color: var(--ink-faint); font-size: .82rem; font-style: italic; }
+  @media (max-width: 34rem) {
+    body { padding: 1.4rem .8rem 3rem; font-size: 15px; }
+    table { font-size: .86rem; }
+    .kv { grid-template-columns: 1fr; gap: .1rem .5rem; }
+    .kv dd { margin-bottom: .45rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>Daily review — 2026-09-10</h1>
+  <div class="sub">
+    Branch <code>autonomous/2026-09-08-daily</code> · two days, <strong>29 commits</strong> ·
+    <strong>the merge gate opened</strong> and <code>master</code> is now <code>5d928f5</code> ·
+    <strong>one change specced</strong>, 40 tasks, three rounds and none of them empty ·
+    three findings filed from a live drive
+  </div>
+</header>
+
+<div class="ok-banner">
+  <strong>The cycle landed.</strong> On this window's seventh firing all four gate conditions held at
+  once for the first time today, and <code>master</code> was fast-forwarded
+  <code>bdb5a79&nbsp;&rarr;&nbsp;5d928f5</code> — 29 commits spanning 2026-09-09 and 2026-09-10,
+  including everything the last two night windows built. Nothing on this page is about stranded work.
+  §1 says what finally opened it, because the diagnosis moved three times today and only one of the
+  three turned out to be the operative one.
+</div>
+
+<p class="lede">
+  What this page needs from you is small: <strong>one change to approve, reject or revise</strong>
+  (§4), and <strong>one scoping question inside it</strong> that a window should not answer alone —
+  whether the change should be widened to swallow <code>F307</code>. §5 says exactly what tonight
+  does if you approve nothing, measured rather than guessed, and the honest answer is
+  <em>less than you would like</em>.
+</p>
+
+<!-- ============================== 1 ============================== -->
+<h2 id="s1"><span class="num">1</span>The branch, and the gate that opened on the seventh try</h2>
+
+<div class="card">
+  <dl class="kv">
+    <dt>Branch</dt><dd><code>autonomous/2026-09-08-daily</code> — the name is older than its contents; what it carried was 2026-09-09 and 2026-09-10 only</dd>
+    <dt>Span</dt><dd><strong>29 commits</strong>, two calendar days: last night's FIX window (<code>bd5f3f8</code>…<code>4937ece</code>, 14 commits) plus today's day and decide windows (15)</dd>
+    <dt>Merge gate</dt><dd><span class="pill ok">OPENED</span> at this window's iteration 7</dd>
+    <dt>What landed</dt><dd><code>git merge --ff-only</code>, <code>bdb5a79&nbsp;&rarr;&nbsp;5d928f5</code>, pushed to <code>origin/master</code>. A genuine fast-forward: no merge commit, no conflict resolution, nothing invented</dd>
+    <dt>Branch kept</dt><dd>Deliberately <strong>not</strong> cut anew mid-day — a second window commits on this branch and would have been stranded by a switch. It is now identical to <code>master</code>, so the next gate still works</dd>
+  </dl>
+</div>
+
+<h3>The four conditions, measured this firing rather than assumed</h3>
+
+<table>
+  <thead><tr><th>#</th><th>Condition</th><th>Measurement</th><th></th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>not on <code>master</code>, <code>git rev-list --count HEAD..master</code> is 0</td><td><code>0</code></td><td><span class="pill ok">pass</span></td></tr>
+    <tr><td>2</td><td><code>git status --short</code> empty, <code>HEAD</code> equals <code>@{u}</code></td><td>empty; both <code>5d928f5</code></td><td><span class="pill ok">pass</span></td></tr>
+    <tr><td>3</td><td>CI concluded <code>success</code> for <em>this exact sha</em></td><td><code>5d928f5</code>, workflow CI, created <code>09:30:06Z</code>, <code>completed</code> / <code>success</code></td><td><span class="pill ok">pass</span></td></tr>
+    <tr><td>4</td><td>newest dated <code>DIRECTION.md</code> section has no line-initial <code>HOLD MERGE</code></td><td>no match</td><td><span class="pill ok">pass</span></td></tr>
+  </tbody>
+</table>
+
+<h3>It refused six times first, and the reason it gave changed three times</h3>
+
+<table>
+  <thead><tr><th>Firing</th><th>Failed on</th><th>Because</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>condition 3</td><td><code>6e1a054</code>'s run was <code>in_progress</code>. A stale green four commits back was available, and correctly refused</td></tr>
+    <tr><td>2</td><td>condition 3</td><td>The three most recent <em>concluded</em> runs had all concluded <code>failure</code> — all three <code>F292</code></td></tr>
+    <tr><td>3</td><td>condition 2</td><td>An uncommitted <code>ROADMAP.md</code> edit — <strong>another window's dirt</strong>, not this one's</td></tr>
+    <tr><td>4</td><td>conditions 2 and 3</td><td>Same again, plus a run still in flight</td></tr>
+    <tr><td>5</td><td>condition 3</td><td><code>c3ef45e</code> pushed at 09:03, still running at measurement</td></tr>
+    <tr><td>6</td><td>condition 3</td><td><code>d783eb2</code> started <code>09:18:05Z</code>, still running; the two runs before it were both green</td></tr>
+    <tr><td>7</td><td>—</td><td><span class="pill ok">opened</span></td></tr>
+  </tbody>
+</table>
+
+<p>
+  Three diagnoses were written today, in this order, and it is worth being precise about which one was
+  load-bearing, because two of them are still true and neither was sufficient.
+</p>
+
+<ol>
+  <li><strong>"The gate races the window's own commits."</strong> Every firing ends by committing and
+  pushing, and condition 3 demands CI success at <code>HEAD</code>'s <em>exact</em> sha — so a busy
+  window can only ever land on a firing whose <code>HEAD</code> has been still long enough for CI to
+  finish. True, and the repair was ordering rather than relaxation: <strong>measure the gate first in a
+  firing, before that firing commits anything</strong> (<code>8596706</code>). <strong>This is the one
+  that opened it.</strong></li>
+  <li><strong>"It is waiting on a coin flip, not a clock."</strong> At iteration 2 the last three
+  concluded runs were all <code>failure</code>, all on <code>F292</code> — so a still <code>HEAD</code>
+  would not have been enough either. True when written. It stopped being true during the day.</li>
+  <li><strong>"Latency, not redness."</strong> By iterations 5 and 6 the runs either side of
+  <code>HEAD</code> were concluding green and only the sha under measurement was unfinished. Also true,
+  and the closest to the shape of the whole day.</li>
+</ol>
+
+<p>
+  <strong>Stated plainly, because it is the fact the schedule turns on:</strong> CI concludes more
+  slowly than two windows commit. A run takes on the order of ten to fifteen minutes; today's firings
+  landed commits at roughly the same spacing. The gate is therefore structurally a <em>race</em>, and it
+  opens on a firing that happens to arrive into a gap. Ordering the check first buys one such gap per
+  firing instead of none — which is the whole difference between six refusals and today's landing.
+</p>
+
+<div class="note">
+  <strong>This answers a question the loop was about to put to you.</strong>
+  Iteration 2 called the gate <em>"the strongest argument yet for putting <code>F292</code> ahead of
+  feature work"</em>, and that was going to be an ask on this page. The measurements no longer support
+  it. <strong>A scheduling change landed the cycle; an <code>F292</code> fix would not have.</strong>
+  The gate refused six times today and exactly <em>zero</em> of those refusals was a red run at
+  <code>HEAD</code> — five were unfinished runs, one was a dirty tree. <code>F292</code> is still real
+  (occurrences #13, #14 and #15 all fired today, and the day's diagnostic work on it is recorded in the
+  ledger), but it is a test-suite problem, not the release-process problem it was briefly promoted to.
+  <strong>No decision is needed from you on this.</strong>
+</div>
+
+<h4>CI on this branch today</h4>
+<p class="small">
+  20 CI runs, recounted from <code>gh run list</code> at the time of writing:
+  <strong>12 success, 7 failure, 1 cancelled</strong>. Five of the six most recent concluded runs are
+  green (<code>5d928f5</code>, <code>d783eb2</code>, <code>c3ef45e</code>, <code>889d1e2</code>,
+  <code>f0b121e</code>; <code>09e189f</code> failed). The board is not flaky-red any more — the failures
+  cluster in the morning.
+</p>
+
+<!-- ============================== 2 ============================== -->
+<h2 id="s2"><span class="num">2</span>What the night built — and which of it was <em>driven</em></h2>
+
+<p>
+  Thirteen iterations, splitting cleanly in two. The distinction that matters here is not "did the tests
+  pass" but <strong>did anything operate the product</strong>, because this repository's dominant failure
+  mode is a fix that passes its tests and cannot fire in production.
+</p>
+
+<table>
+  <thead><tr><th>What</th><th>Iterations</th><th>Evidence</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>The change <code>2026-09-07-clearing-instructions-asks-first</code></strong> — a confirmation dialog for clearing an agent's instructions, its self-approval arm, the UI bundle refresh, and six mutations against the new coverage</td>
+      <td>2–9</td>
+      <td><span class="pill driven">DRIVEN</span> <strong>59/59 legs</strong> on a live Hub in a real browser, iteration 8. Archived at iteration 9 — which states plainly that it closes <strong>zero</strong> findings</td>
+    </tr>
+    <tr>
+      <td><strong>Four repairs that needed no spec</strong> — three measured ratchets, a session-collision check, a model-catalog drift check (which found real drift on its first run), and <code>constraints-dev.txt</code> pinning <code>starlette</code>/<code>fastapi</code> to CI's resolution with eight named mutation deaths behind it</td>
+      <td>10–13</td>
+      <td><span class="pill tested">TESTED ONLY</span> — 508 passed / 3 skipped, lint and types clean. Not driven, and correctly so: these are scripts and CI config with no operator-facing surface to drive. The night log labels this itself</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>It left two things open and named both.</strong>
+  <span class="fid">F307</span> <span class="sev b">B</span> — the keyboard leg of its own drive found
+  that the Escape-key hook serves six dialogs and three dodge the defect by accident.
+  <span class="fid">F308</span> <span class="sev b">B</span> — filed by the iteration that caused it:
+  both CI jobs that run tests now resolve <em>pinned</em>, so an upstream release that breaks
+  <em>behaviour</em> is caught by nothing. Three shapes are costed in the finding and none was built,
+  because a new CI job is a decision, not a repair.
+</p>
+
+<p class="small">
+  One thing the night deliberately did <strong>not</strong> do: it never actually upgraded this machine
+  to the pinned resolution. Every check was <code>--dry-run</code>. Moving the environment that every
+  window and every drive runs in, mid-night, with the 27-minute Hub suite unrun against it, is yours to
+  do awake — <code>make install-all</code>, or the two commands now in <code>CLAUDE.md</code>.
+</p>
+
+<!-- ============================== 3 ============================== -->
+<h2 id="s3"><span class="num">3</span>What today's drive found</h2>
+
+<p>
+  Scoped, not a sweep — the 17-row coverage sweep is complete and four days old. Two new harnesses
+  against a real browser and a throwaway Hub on <code>:8013</code>. Two subjects: last night's dialog
+  under an operator, and <code>F307</code>'s hook across the call sites it actually reaches.
+</p>
+
+<table>
+  <thead><tr><th></th><th>Finding</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="sev a">A</span></td>
+      <td><span class="fid">F309</span> — <strong>a ticket cannot be blocked from the keyboard.</strong> Choosing <em>Move to blocked</em> mounts the mandatory reason input with <code>autoFocus</code>, but the menu returns focus to its trigger after React has mounted it, so nineteen keystrokes go into a <code>&lt;button&gt;</code> — and because a space on a button is a click, the operator's own sentence re-opens the menu and dims the page three times while they type</td>
+      <td><span class="loc">TaskDetailDrawer.tsx:296-299, :409-411</span><br><span class="loc">RowMenu.tsx:65</span></td>
+    </tr>
+    <tr>
+      <td><span class="sev b">B</span></td>
+      <td><span class="fid">F310</span> — <strong>one Escape dismisses two things.</strong> <code>useDialogFocus</code> binds <code>keydown</code> on <code>document</code> and closes unconditionally, never asking whether something nearer the keystroke already handled it. Escape with the status menu open closes the <em>ticket</em>; Escape in the reason field cancels the reason <em>and</em> closes the ticket — so the two-line handler written for "Escape cancels the reason" has never once been observable</td>
+      <td><span class="loc">useDialogFocus.ts:24-28, :42</span><br><span class="loc">TaskDetailDrawer.tsx:413-415</span></td>
+    </tr>
+    <tr>
+      <td><span class="sev c">C</span></td>
+      <td><span class="fid">F311</span> — bookkeeping. <code>F307</code> says "six components use the hook" and then tabulates <strong>five</strong>. The missing one is the only one that is not a confirm-shaped panel, and it is where both findings above live — so <code>F307</code>'s conclusion was drawn from a population that excluded its own counter-example</td>
+      <td><span class="loc">TaskDetailDrawer.tsx:167</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Two things the drive <em>confirmed</em> rather than broke</h3>
+
+<ul>
+  <li><strong>Last night's dialog holds up under an operator — 21/21.</strong> Escape dismisses it with
+  zero <code>PUT</code>s and restores focus to <em>Save</em>; re-opening is identical; a double-click on
+  the destructive button is <strong>one</strong> write, not two. This is what a driven change looks like
+  a day later, and it is the reason §2's distinction is worth keeping.</li>
+  <li><strong><code>F307</code>'s wrong write reached the database for the first time.</strong> Leg
+  <code>A4</code>: Tab once out of the dialog, type behind the scrim, Escape, Save — and the row reads
+  <code>TYPED BEHIND THE SCRIM</code>. Until today <code>F307</code> was a focus observation; it is now a
+  measured wrong write.</li>
+</ul>
+
+<div class="note">
+  <strong>One candidate <span class="sev a">A</span> was measured away rather than filed</strong>, and it
+  belongs on this page because the review should show the discipline working and not only its output.
+  Legs <code>P1</code>–<code>P4</code> were built on the hypothesis that the page <em>stays</em> inert
+  after a status change — <code>pointer-events: none</code> with an orphaned popper had been read once,
+  1.4&nbsp;s after a selection, and looked like a leak. Sampled on a clock at 0/0.5/1/2/5/10&nbsp;s across
+  four gestures, <code>body</code> recovers at <strong>+0&nbsp;ms every time</strong>. Radix cleans up
+  correctly; the single sample had been reading the menu that the operator's own spaces had just
+  re-opened. <strong>A severity filed on that first reading would have been filed against the wrong
+  component.</strong>
+</div>
+
+<!-- ============================== 4 ============================== -->
+<h2 id="s4"><span class="num">4</span>What was specced — and what three rounds cost, and bought</h2>
+
+<div class="card">
+  <dl class="kv">
+    <dt>Change</dt><dd><code>2026-09-10-the-control-that-asks-holds-the-keyboard</code></dd>
+    <dt>Retires</dt><dd><span class="fid">F309</span> <span class="sev a">A</span> and <span class="fid">F310</span> <span class="sev b">B</span> — both inside this cycle's drain scope</dd>
+    <dt>Deltas</dt><dd><strong>3</strong> across two capabilities: <code>hub-interaction-feedback</code> (2 ADDED requirements), <code>task-lifecycle-governance</code> (1 MODIFIED)</dd>
+    <dt>Cost</dt><dd><strong>40 tasks</strong> — 32 after R1 and R2, 40 after R3. <code>openspec validate --strict</code> passes</dd>
+    <dt>Touches</dt><dd><code>hub/ui/src</code> and the committed bundle only. <strong>No route, schema, migration or API shape.</strong> Leg <code>C3</code> counted zero task writes across the failing sequence, and there must still be zero after the fix</dd>
+  </dl>
+</div>
+
+<h3>The argument</h3>
+
+<p>
+  <code>F309</code> and <code>F310</code> read as two defects on one screen. They are one failure:
+  <strong>two mechanisms act on one keystroke, and the one further from the operator wins.</strong> In
+  <code>F310</code> a nested control answers Escape and a hook bound on <code>document</code> answers it
+  again; in <code>F309</code> a menu's focus-restore — scheduled after React has mounted the very input
+  the menu's own selection asked for — wins over that input's <code>autoFocus</code>. Neither is a broken
+  control: the mouse path works perfectly in both cases. So the fix is not new behaviour but
+  <strong>arbitration</strong>, in both halves: the hook stands down on an Escape that has already been
+  <code>defaultPrevented</code>, and a menu item that opens a control expecting input tells the menu not
+  to take focus back. The signal is <code>event.defaultPrevented</code> and nothing else, and there is no
+  <code>setTimeout</code> anywhere in the design — the ordering was read in the dependency's own source
+  rather than remembered.
+</p>
+
+<h3>What each round changed — and none of the three came back empty</h3>
+
+<p>
+  <strong>Lead with this one, because it is the clearest evidence the round discipline earns its
+  keep.</strong> R1 found a third instance of <code>F310</code> that nobody has ever driven: the directory
+  browser inside the project modal (<code>DirectoryPicker.tsx</code>, mounted in
+  <code>ProjectManagerModal.tsx</code> whose <code>useDialogFocus</code> is active). R1 concluded it was
+  <strong>repaired for free</strong> by the hook change, because the picker already calls
+  <code>preventDefault()</code>. <strong>R2 re-read the same file and agreed.</strong> The task list said,
+  in as many words, <em>"Change nothing in <code>DirectoryPicker.tsx</code>."</em>
+</p>
+
+<p>
+  <strong>R3 found that the handler cannot run at all.</strong> It is a React <code>onKeyDown</code> bound
+  to the picker's own root <code>div</code>, and nothing in the file ever focuses that root — opening the
+  browser leaves focus on the <em>Browse…</em> button, a <em>sibling</em> of the picker. React dispatches
+  a synthetic event along the React tree from the target, so the keystroke never travels through the
+  picker's subtree, <code>preventDefault()</code> never runs, and the arbitration condition is false. The
+  modal closes and takes the browser with it. <strong>The cost is identical to <code>F310</code>; the
+  mechanism is not — which is exactly why two rounds reading for outcomes agreed on the wrong one.</strong>
+  The change's own design had already argued this point in the opposite direction, three sections earlier,
+  and could not have been right both times.
+</p>
+
+<table>
+  <thead><tr><th>Round</th><th>What it changed</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>R1</strong><br><span class="measured">explore and propose</span></td>
+      <td>Wrote the proposal, the design and 30 tasks; found the third undriven instance; and turned an ADDED delta into a <strong>MODIFIED</strong> one by grepping the capability first — <code>task-lifecycle-governance</code> already ships a requirement that the control offering the waiting status collects the statement, and the product obeys it. One link was deliberately left unmeasured (whether <code>autoFocus</code> fires and is overridden, or never fires at all), with the fix specified so that the answer cannot matter.</td>
+    </tr>
+    <tr>
+      <td><strong>R2</strong><br><span class="measured">re-derive against the code</span></td>
+      <td><strong>Caught a delta claiming more than the change delivers.</strong> R1's modified requirement read <em>"the operator moves a task to the waiting status without using a pointer at any point"</em> — untrue: reaching the drawer's status menu from the keyboard means Tab-walking the board's controls behind the scrim, which is <code>F307</code>, which this change deliberately excludes. Archiving it would have written a false current-behaviour statement into the shipped specs. Narrowed, and given a task that drives exactly the narrowed claim while forbidding an implementer from re-widening it. Also: read the focus-steal out of the dependency's source instead of describing it loosely — two actors, one <code>preventDefault</code> suppresses both, and the steal runs inside a <code>setTimeout(0)</code>, which is the precise reason the design forbids one. Also: turned a self-contradictory exact-count acceptance contract into floors, naming the harness leg that skips <em>silently</em> without failing.</td>
+    </tr>
+    <tr>
+      <td><strong>R3</strong><br><span class="measured">re-derive again, independently</span></td>
+      <td>The <code>DirectoryPicker</code> finding above, written up as a design decision: arbitration by <code>defaultPrevented</code> presumes the nested owner <strong>holds the keyboard</strong>, and the precondition differs by mechanism — Radix binds <code>document</code> in the capture phase and is focus-independent, while a React <code>onKeyDown</code> is not a listener for Escape but for <em>Escape pressed by someone standing inside me</em>. Consequence: the reason input's handler works only <em>because</em> of the focus task, so the <code>F310</code> half now <strong>depends on</strong> the <code>F309</code> half rather than merely sitting beside it. Plus the second finding below, plus a guard for a shipped "keyboard focus is visible" requirement that the change was one implementation away from breaching. Eight new tasks.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>R3's second finding: a scenario falsified by <em>correct</em> behaviour</h3>
+
+<p>
+  One scenario in the deltas — <em>"typing an answer does not operate the menu"</em> — had no task
+  producing its evidence in any round, and its second clause read <em>"no part of the surface becomes
+  unresponsive to the pointer while they type."</em> That is <strong>false of the correctly fixed
+  product</strong>: the drawer renders a <code>position: fixed; inset: 0</code> scrim that deliberately
+  makes the board behind it unresponsive, and the drawer's own click-outside listener depends on it.
+  Archiving that sentence would have recorded a shipped, intentional behaviour as a defect. Narrowed to
+  <em>"does not stop answering the pointer <strong>because a menu re-opened over it</strong>"</em>, and
+  given evidence by a new task that extends a probe already reading both facts.
+</p>
+
+<div class="note">
+  <strong>The general form, worth reusing — this is what a third round is actually for.</strong>
+  A proposal can be <em>right about the code</em> and still write a delta that <strong>claims more than
+  the change delivers</strong> (R2's finding, and R3's picker) or that <strong>a shipped behaviour
+  contradicts</strong> (R3's scrim). Neither over-claim rides in on a statement about the source, so a
+  round that only re-checks line citations cannot see either — R2 re-derived every one of R1's citations
+  and they all held. The test that catches both is two questions:
+  <strong>name the task that produces this scenario's evidence, and ask whether it <em>can</em></strong>;
+  then, if it can, <strong>ask what already-shipped behaviour would make the scenario false.</strong>
+</div>
+
+<p class="small">
+  A corollary the loop should keep: a round that re-reads what the previous round already re-read is the
+  low-yield round. R3 was told what to <em>attack</em> rather than told to be thorough, and it found the
+  change's largest defect inside a file R2 had also opened.
+</p>
+
+<div class="ask">
+  <h4>DAY-1 — should this change swallow <code>F307</code>?</h4>
+  <p>
+    It deliberately does not, and this is a scoping decision you may want to reverse. <code>F307</code> is
+    the <strong>Tab</strong> branch of the same hook — focus never moves into the panel on activation, so
+    the first Tab escapes to whatever follows in DOM order, measured landing in the instructions textarea
+    behind the scrim and driven all the way to a wrong write today (§3). The three reasons for leaving it
+    out:
+  </p>
+  <ol>
+    <li><strong>It is a different question.</strong> <code>F307</code> asks <em>where focus starts</em>;
+    this change asks <em>who answers a keystroke</em>. Neither answer constrains the other.</li>
+    <li><strong>Its fix needs a decision no window should make alone.</strong> Moving focus into the panel
+    means focusing the panel's first focusable — which in a destructive confirmation is <em>Cancel</em> —
+    or its last, which is the destructive button itself. <code>F307</code> says so in its own words and
+    declines to guess. <strong>That is a decision for this page, not for a proposal.</strong></li>
+    <li><strong>It reaches five dialogs this drive never opened.</strong> This change touches the sixth.
+    Widening it would put a keyboard repair on a mandatory path behind a design question about five
+    screens that are not broken in this way.</li>
+  </ol>
+  <p>
+    <strong>What holds either way:</strong> if <code>F307</code> is later fixed by binding Escape on the
+    panel instead of on <code>document</code>, this change's arbitration rule still holds — it is about
+    <em>who</em> answers, not about <em>where</em> focus is. And one carve-out already exists: the change
+    <em>does</em> place initial focus in the directory picker, because without it R3's finding cannot be
+    demonstrated on any surface. That is one component chosen for a named reason, and the tasks say so to
+    the implementer.
+  </p>
+  <p class="small">
+    <strong>Answer only if you want to change it.</strong> No answer means the split above stands and
+    <code>F307</code> stays open for a change of its own.
+  </p>
+</div>
+
+<!-- ============================== 5 ============================== -->
+<h2 id="s5"><span class="num">5</span>If you approve nothing, here is what tonight does</h2>
+
+<p>
+  Named in order, walked against the night playbook's default queue and measured just now rather than
+  guessed. An empty or absent approvals section is <em>normal</em> and needs no apology — the whole window
+  goes to the backlog. The honest problem is that the backlog is thinner than it looks.
+</p>
+
+<ol>
+  <li>
+    <strong>Unarchived changes that are implemented and only need archiving</strong> — the cheapest work in
+    the repository. <strong>None.</strong> <code>openspec/changes/</code> holds exactly one non-archive
+    directory, today's, and it stands at <strong>0 of 40 tasks</strong>. The last survivor was built and
+    archived last night.
+  </li>
+  <li>
+    <strong>Open findings, severity A before B before C</strong> — but the playbook's own rule is that
+    <em>a finding with no proposal needs the day window first</em>, so it is queued as a note to tomorrow
+    rather than built tonight. Measured now by <code>scripts/classify_findings.py</code>: 312 sections,
+    <strong>150 open</strong> — <strong>6 A</strong>, 60 B, 68 C, 14 D, 2 unlabelled, plus 8 in conflict.
+    The six open A findings are <code>F299</code>, <code>F300</code>, <code>F301</code>, <code>F306</code>,
+    <code>F309</code> and <code>F312</code>. <strong>Exactly one of them has a proposal</strong> — and it is
+    <code>F309</code>, the change on this page. So this route mostly produces <em>notes back to tomorrow's
+    day window</em>, not shipped work.
+  </li>
+  <li>
+    <strong>Approved rows.</strong> None, by hypothesis.
+  </li>
+</ol>
+
+<div class="note">
+  <strong>So the realistic unapproved night is a thin one:</strong> a few ratchet and instrument items, and
+  a set of pointers back into tomorrow. The one substantial thing it could legitimately take without you is
+  the <code>F292</code> instrument — the next diagnostic has to sample <em>concurrently</em>, from a
+  separate task while the <code>DROP</code> is blocked, and attribute each pool error to a connection
+  identity, because every sample so far has been taken either side of the 30-second busy-timeout wait and
+  never inside it. That is <code>conftest.py</code>-only, so it needs no spec. It is worth roughly one
+  iteration, and it will not land a feature.
+</div>
+
+<p class="small">
+  Both control tokens are available as always: <code>ORDER:</code> to set tonight's queue verbatim, and
+  <code>NOTHING TONIGHT</code> to pause the window entirely.
+</p>
+
+<!-- ============================== 6 ============================== -->
+<h2 id="s6"><span class="num">6</span>The research, briefly</h2>
+
+<p class="small">
+  Delivered 07:26, copied byte-identical to <code>spec-queue/research/2026-09-10.md</code>. Three ranked
+  candidates. None was taken today — the drive produced its own severity-A defect, which outranks a
+  candidate. They are here as material, and each ends in what it would mean for AgentWeave.
+</p>
+
+<table>
+  <thead><tr><th>#</th><th>Candidate</th><th>What it would mean here</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><strong>Give the Codex adapter a version floor it checks, rather than a version it remembers in a comment.</strong> <code>codex</code> cut <code>rust-v0.154.0</code> <strong>GA</strong> yesterday after nine alphas, and used the cut to <em>remove</em> a deprecated entry point</td>
+      <td>Every <code>app-server</code> protocol shape AgentWeave depends on was measured against <strong>CLI 0.146.0</strong>; that number lives in prose at six sites, and nothing at spawn or in <code>doctor</code> compares it to what is installed. This machine still has 0.146.0 — the assumptions hold <em>by accident of not upgrading</em>, eight minor versions later. The release establishes that OpenAI now removes surfaces at a GA cut, which is precisely the class of change a version-blind adapter cannot survive. <span class="small">(Codex is undrivable here by an earlier decision; this is about the adapter refusing cleanly, not about driving it.)</span></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>Move the loop stop-condition refusal out of the tool and into the contract.</strong> "A loop that cannot stop is not created" is stated to the model and enforced in the MCP wrapper — and absent from the HTTP route the same run can reach</td>
+      <td>A shipped <strong>MUST NOT</strong> in <code>agent-capability-plane</code> says an adapter may not hold a governance rule the contract does not impose on every caller. This is a measured instance of exactly that: the MCP tool refuses a loop with no stop condition, while <code>POST /agent/jobs</code> accepts a purpose alone and builds a loop that never stops itself — which the loops capability separately documents as a thing that happens. Cheap, and it closes a rule the repository already made.</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>Let a reviewer re-run the thing the evidence names.</strong> Every evidence locator may be "a path, a command, a run id", and the Hub has never executed one</td>
+      <td>AgentWeave is firmly in the strongest enforcement mode on <em>authority</em> — rigor gates, minted identifiers, operator-only approval — and in the weakest on <em>verification</em>: <code>record_evidence</code>'s own docstring says <em>"what you record is a claim"</em>, and every evidence kind is something an agent asserts. The Hub's only subprocesses are agent CLIs, <code>git</code>, the conversation titler and the native dialog; nothing in it runs a project's tests. This is the largest single gap between what the product promises and what it checks — and the most expensive item on the page.</td>
+    </tr>
+  </tbody>
+</table>
+
+<footer class="page">
+  Written by the FILL window, 2026-09-10, on <code>autonomous/2026-09-08-daily</code> at
+  <code>5d928f5</code> — which is now also <code>master</code>. Every number on this page was measured
+  today or re-read from <code>gh</code> and <code>scripts/classify_findings.py</code> today; anything that
+  was not is labelled. This window does not implement: nothing under <code>hub/hub/</code> or
+  <code>src/agentweave/</code> was touched. Approvals go in <code>spec-queue/APPROVALS.md</code>, today's
+  section.
+</footer>
+
+</div>
+</body>
+</html>

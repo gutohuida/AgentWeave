@@ -16,6 +16,35 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-10
+
+Written by the FILL window, 2026-09-10, from `review/review-2026-09-10.html`. **No status token is
+supplied below — that is the operator's to write.** A row with no token is not an approval and the
+FIX window builds nothing from it.
+
+**Note for whoever reads this at 23:00:** this section is now the newest, so the 2026-09-09
+`ORDER:` line below is out of scope and no longer read. There is deliberately **no `ORDER:` line
+here** — absent an operator decision the default queue applies, and section 5 of today's review page
+walks what that produces (measured: thin, because only one open severity-A finding has a proposal
+and it is the one below).
+
+`2026-09-10-the-control-that-asks-holds-the-keyboard` — F309 (A) and F310 (B), retired together.
+A ticket cannot be blocked from the keyboard, and one Escape dismisses two things; both are the same
+failure of arbitration, where two mechanisms act on one keystroke and the one further from the
+operator wins. 40 tasks across the hook, the two nested owners, the menu, the reason panel, the
+bundle, unit coverage and two browser drives. UI only — no route, schema, migration or API shape.
+**Touches the committed bundle**, so it is the one bundle-touching change if it is taken. All three
+rounds changed it; R3 found that the third instance R1 and R2 both called "repaired for free" cannot
+be repaired that way at all — the argument is section 4 of the review page.
+
+**One question on the page**, `DAY-1`: should this change be widened to swallow F307? It deliberately
+does not, for three stated reasons, and the reversal is yours. No answer means the split stands.
+
+If you approve nothing, the FIX window falls to the default queue. `ORDER:` and `NOTHING TONIGHT`
+are both available.
+
+---
+
 ## 2026-09-09
 
 **Why this section exists: the 2026-09-08 `ORDER:` line below is now a trap.** The night window
