@@ -881,8 +881,8 @@ right while the count beside them is wrong.
 
 ## F12 (A) — `stop_when_queue_empties` waits for a human, and burns a firing a minute meanwhile
 
-**Status:** the severity-A half is **fixed** `5237ec5` (2026-08-24), which never named this
-finding — see the correction at the end of this section. The residual is by design. Was recorded
+**Status:** fixed `5237ec5` (2026-08-24) — the severity-A half, by a commit that never named this
+finding; see the correction at the end of this section. The residual is by design. Was recorded
 as "open (no commit references it)" and queued as F12-SPEC/F12-IMPL on 2026-08-27; that status was
 wrong, and how it got that way is worth more than the correction.
 
@@ -3030,7 +3030,7 @@ as a finding because it was not driven deliberately or reproduced.
 
 ## F53 (B) — archiving a loop that never fired still permanently, irrevocably claims its spec document; the tasks it "adopted" have no recovery path
 
-**Status:** partially fixed 2239f38 (option (a) only — an archived loop's document claim no longer blocks a new loop); the `_adopt_document_tasks` orphaning half is open and queued as Q4-SPEC
+**Status:** open — partially fixed 2239f38 (option (a) only — an archived loop's document claim no longer blocks a new loop); the `_adopt_document_tasks` orphaning half is open and queued as Q4-SPEC
 
 Found 2026-08-26 driving Q4, self-inflicted and then traced to the code rather than dismissed as
 operator error — the whole value of finding it is that a real operator could do the exact same
@@ -11940,7 +11940,7 @@ the `finally` that denies leftover cards and closes the drive's task.
 
 ## F149 (C) — `job_fired` publishes a JobRun id under the key `run_id`, next to real run ids on the same stream
 
-**Status:** filed, not fixed. The fix is a rename on a published event payload, which is a
+**Status:** open — filed, not fixed. The fix is a rename on a published event payload, which is a
 compatibility decision (D5).
 
 Found by reading the activity log as an operator during F148's drive, and being misled by it. These
@@ -21992,7 +21992,7 @@ go looking. Corrected here rather than in the older paragraphs, which are dated.
 **Still open, and still for the reason the night gave:** the symptom in this entry's heading is
 wrong (there is no silent turn, because there is no turn), and the operator *is* told, by the
 banner, through queue events the chat hooks already listen to. What remains unbuilt is whether an
-abandoned entry should become a labelled turn at all — a product question, not a defect with an
+abandoned entry should become a labelled turn at all — a product question, and not one with an
 obvious fix.
 
 
@@ -24774,5 +24774,97 @@ the block is the absent answerer rather than this regex), F299 (the blocked-harn
 were read together on 2026-09-10 and their verdicts are in `spec-queue/DECISIONS.md`,
 *"The access path, re-decided 2026-09-10"*. **This finding was the part of that reading that no
 verdict covered**, and the operator's instruction on it was to file it rather than fold it.
+
+---
+
+## F313 (C, harness) — the table recording a wrong verdict was read as making it, and six of the ledger's eight conflicts were false
+
+**Status:** fixed dee508c (2026-09-10) — the rule and its test are in that commit
+
+Found 2026-09-10 (day window, D-6) by reading the **evidence behind** every `CONFLICT` rather than
+the count of them. `scripts/classify_findings.py` reported eight. Seven were false, and six of the
+seven had one cause.
+
+**The mechanism.** The script's cross-section arm scans every line *outside* a finding's own
+section for that finding's number standing near a verdict word, and treats a hit as a lead that the
+finding was resolved somewhere else. A line naming *several* findings satisfies that test for every
+number on it. So a line of bookkeeping **about** the ledger was read as a verdict **in** it.
+
+**The sharpest instance is self-inflicted.** Blind spot 5 (2026-09-08) ended by writing a
+corrections table into this file, recording the seven verdicts it had just found were wrong. One row:
+
+| | Was | Now | It had been reading |
+|---|---|---|---|
+| **F65** | RESOLVED | **OPEN** | F67's resolution |
+
+The row records a verdict that had been **wrong**. The scanner read the row as making it: the
+"Was" column is a claim being withdrawn, and it was counted as a claim being made. Four sections
+were flagged as conflicting by the one table in this file that says they are open, and two more by
+a list of heading formats and a sentence about how one verdict word had been used. The instrument's
+own confession was its next false positive.
+
+**What moved, measured over 312 sections:**
+
+| | before | after |
+|---|---|---|
+| `CONFLICT` | 8 | **2** |
+| `OPEN` | 150 | **156** |
+| `RESOLVED` | 148 | 148 |
+| `RESOLVED_ELSEWHERE` | 6 | **1** |
+| `UNCLASSIFIED` | 0 | **5** |
+
+Eleven verdicts move and **not one becomes resolved** — 148 is unchanged. Six go from conflicting
+to open; five stop being leads and become unclassified, which in this script means *nobody has read
+this*, the conservative reading.
+
+**The corroboration is that the ledger already knew the answers.** For five of the eleven, the
+"Now" column of that same corrections table states the verdict this fix produces — open for three
+of them, unclassified for two. The instrument now agrees with the record of its own correction.
+
+**Reproduce** — no Hub, no network:
+
+```bash
+py -3.11 -c "
+import importlib.util, subprocess, collections
+def mod(src, name):
+    p = '.aw-tmp-' + name + '.py'
+    open(p, 'w', encoding='utf-8').write(src)
+    s = importlib.util.spec_from_file_location(name, p); m = importlib.util.module_from_spec(s)
+    s.loader.exec_module(m); return m
+old = mod(subprocess.run(['git','show','6351c09:scripts/classify_findings.py'],
+                         capture_output=True, text=True, encoding='utf-8').stdout, 'old')
+new = mod(open('scripts/classify_findings.py', encoding='utf-8').read(), 'new')
+lines = old.load('scripts/drive/FINDINGS.md')
+A = {r['num']: r['verdict'] for r in old.classify(lines)}
+B = {r['num']: r['verdict'] for r in new.classify(lines)}
+print(sorted((n, A[n], B[n]) for n in A if A[n] != B[n]))
+print(collections.Counter(A.values()), collections.Counter(B.values()))
+"
+```
+
+**Not** a defect in the corrections table, which is accurate history and stays as written. The
+defect is an instrument that cannot tell a sentence *making* a claim from one *reporting* that the
+claim was withdrawn — which is blind spot 3 again, at a granularity `dequote()` cannot see, because
+a table cell is neither a quotation nor a strike-through.
+
+**The two conflicts that survive are the two that should.** Both hang on a line naming one finding:
+the summary row at the top of this file, and a sentence contrasting a finding with an unrelated fix.
+Those are for a human, and this fix leaves them flagged.
+
+**Writing this entry reproduced the defect once, which is the strongest evidence in it.** The first
+draft of the paragraph four above said *"a record that F65 was wrongly read as resolved"* — one
+finding number, one verdict word, one line — and re-running the classifier showed F65 back at
+`CONFLICT`, this time on the sentence *describing* the fix. The multi-number rule did not fire
+because the sentence names only one. So the rule is a floor and not a cure: **prose about a single
+finding's past verdict is still indistinguishable from prose about its present one**, and the only
+defence is the one used here — re-run the instrument after appending to the file it reads, and
+require that no existing verdict moves. That check is cheap, it caught this in one run, and it is
+the check no previous entry in this ledger has performed.
+
+**Related:** blind spot 3 (quotation is not assertion) and blind spot 5 (the table this defect ate).
+The generalisation worth carrying: **a ledger that records its own corrections becomes an input to
+the instrument that made them**, so every self-describing line is a line the instrument must be
+tested against. Filed and fixed in the same window; `tests/test_classify_findings.py` gained the
+guard and a narrowness pin, both mutation-checked in both directions.
 
 ---
