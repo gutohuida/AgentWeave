@@ -5,15 +5,18 @@
 # The Hub first: agentweave-ai depends on agentweave-hub, and installing the CLI alone would
 # send pip to PyPI for a version that may not be released yet.
 install-cli: install-hub
-	pip install -e ".[dev]"
+	pip install -c constraints-dev.txt -e ".[dev]"
 
 test-cli:
 	pytest tests/ -v --cov=agentweave --cov-report=term-missing
 
 # ── Hub (hub/) ───────────────────────────────────────────────────────────────
 
+# `-c constraints-dev.txt` on both installs: it pins what CI resolves, so a local environment
+# built through these targets sees the same starlette/fastapi CI does. Development-only; it
+# narrows nothing about what the Hub supports. See the file's header.
 install-hub:
-	pip install -e "hub/[dev]"
+	pip install -c constraints-dev.txt -e "hub/[dev]"
 
 test-hub:
 	pytest hub/tests/ -n auto

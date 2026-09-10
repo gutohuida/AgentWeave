@@ -24388,3 +24388,62 @@ drive exits 0 meaning *"the change's own contract holds and F307 is unchanged"*.
 fail that file loudly, which is the right moment to revisit it.
 
 ---
+
+## F308 (B) — pinning CI to the resolution buys agreement by spending the drift alarm, and nothing replaced it
+
+**Status:** open — filed 2026-09-10 (night window, iteration 13), by the iteration that *created* it.
+Not a defect in `constraints-dev.txt`, which does exactly what the `DAY-1` verdict asked for. It is
+the cost side of that verdict, measured, so that it is a known trade rather than a surprise later.
+
+**What changed.** `constraints-dev.txt` pins `starlette==1.6.0` and `fastapi==0.141.1`, and both CI
+jobs that build a test environment now install through it (`.github/workflows/ci.yml`, `test` and
+`hub-test`). Before this, every CI run resolved those two fresh from PyPI.
+
+**What that costs, in the verdict's own words.** `DECISIONS.md`'s `DAY-1` keeps the published range
+loose *"so upstream incompatibilities still surface early — which is exactly what happened today and
+is worth keeping."* That surfacing happened **because CI resolved fresh**. With `-c` on both jobs,
+the next `starlette` release inside `<2.0` is no longer installed by any job that runs a test, so
+the mechanism that produced the 2026-09-09 signal cannot produce the next one. The warning arrives
+when a human bumps the pin, which is the *conscious upgrade* half of the verdict working — but there
+is now nothing that tells them to.
+
+**What is left, measured rather than assumed.** Three install paths still resolve the published
+range fresh:
+
+| path | resolves fresh? | what it would catch |
+|---|---|---|
+| `hub/Dockerfile:17` (`pip install --no-cache-dir .`), via `hub-image.yml` | yes | an install/import break only — the image build runs **no tests** |
+| `.github/workflows/docs.yml` (`pip install -e ./hub`) | yes | an install break during a docs build |
+| `publish.yml` | builds an sdist/wheel; installs nothing from the range | nothing |
+
+And `hub-image.yml` is triggered only by pushes to **master** and `v*` tags, path-filtered to
+`hub/**` — so on the cycle branch where all this work happens it never runs at all. The residual
+signal is: an upstream release that breaks *importing* the Hub would fail a Docker build on master.
+An upstream release that breaks *behaviour* — which is the class the starlette route-shape defect
+belongs to — is caught by nothing.
+
+**Why B and not C.** Nothing behaves wrongly; what is misleading is the meaning of a green board. As
+of this commit, CI passing means *"the pinned resolution passes"*, and it used to mean *"a fresh
+resolution of the published range passes"*. `pyproject.toml` still advertises the loose range to
+users, and no run tests it. That is a claim the repository makes and no longer checks.
+
+**Not fixed here, deliberately, and it is not a one-liner.** The obvious shape — a scheduled
+unconstrained job, weekly, allowed to fail without gating — is a new CI job and a new answer to
+*"what happens when it goes red on nobody's commit"*, which is the operator's call and belongs to
+the round discipline. Two other shapes exist and are worth costing at the same time: one matrix leg
+of the existing `test` job that drops `-c` (cheap, but it re-splits local from CI for that leg), or
+a `scripts/` tool like `check_model_catalog.py` that compares the pins against what PyPI currently
+offers and reports drift without gating.
+
+**One-command reproduction of the trade, on this machine:**
+
+```
+py -3.11 -m pip install --dry-run -e ./hub                        # keeps whatever is installed
+py -3.11 -m pip install --dry-run -c constraints-dev.txt -e ./hub  # forces CI's resolution
+```
+
+The first reports `starlette<2.0 … (0.52.1)` already satisfied; the second would install
+`starlette-1.6.0 fastapi-0.141.1`. That difference is the whole value of the file — and the reason
+the alarm it silences was worth something.
+
+---

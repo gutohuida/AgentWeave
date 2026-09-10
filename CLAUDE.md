@@ -179,9 +179,18 @@ single source of truth; version numbers repeated in prose go stale.
 
 ### Development Setup
 
+**Install through `constraints-dev.txt`, always.** It pins the two packages whose resolution CI and
+this machine disagreed about — `starlette`, `fastapi` — to what CI resolves, so a test that reads a
+framework data structure fails here before it fails there. It is **development-only** and is not a
+second source of truth for what the Hub supports; the published ranges in `pyproject.toml` and
+`hub/pyproject.toml` remain that and stay deliberately loose. `tests/test_dev_constraints.py` fails
+if a documented install here or a CI step stops passing `-c`, because a constraints file nothing
+installs through is decoration.
+
 ```bash
-# CLI (editable install)
-pip install -e ".[dev,mcp]"
+# CLI (editable install) — the Hub first, then the CLI, as CI does
+pip install -c constraints-dev.txt -e ./hub
+pip install -c constraints-dev.txt -e ".[dev,mcp]"
 
 # Verify the editable install resolves (safe at the repo root — reads no project state)
 agentweave --help

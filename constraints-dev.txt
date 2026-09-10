@@ -1,0 +1,36 @@
+# Development constraints. NOT a statement of what the Hub supports.
+#
+# WHAT THIS IS. The versions CI resolves, written down, so that a local `pip install` lands on the
+# same ones. Every install that builds a *test* environment passes this file with `-c`, so local and
+# CI resolve identically and a test that reads a framework data structure can be trusted locally.
+#
+# WHY IT EXISTS, measured. `hub/pyproject.toml` constrains only `fastapi>=0.110` and
+# `starlette<2.0`, so on 2026-09-09 CI resolved starlette 1.6.0 / fastapi 0.141.1 against this
+# machine's 0.52.1 / 0.136.3. `{r.path for r in create_app().routes}` yields 161 paths on one and 7
+# on the other, and a test that could never pass on CI and never fail locally survived thirteen
+# commits. See openspec/explorations/2026-08-17-the-hub-suite-has-never-run-clean.md and
+# hub/tests/_routing.py, which handles both route shapes.
+#
+# WHAT THIS IS NOT. It is not a second source of truth for the versions AgentWeave supports.
+# `hub/pyproject.toml` and `pyproject.toml` are that, their ranges stay deliberately loose, and
+# nothing here may be read as narrowing them. A user installing `agentweave-ai` from PyPI never
+# sees this file; it is not packaged, and the wheel's metadata does not mention it.
+#
+# WHY TWO LINES AND NOT A LOCKFILE. Only the packages whose *observable shape* the suite reads are
+# pinned. A full lockfile would have to be regenerated on every upstream release of anything, would
+# be stale within days, and would freeze the transitive set the product is deliberately loose about.
+# Add a line here when a test starts depending on some package's internal structure, not before.
+#
+# WHERE IT IS USED, and it is worth nothing if it is not. `.github/workflows/ci.yml` (`test` and
+# `hub-test`), `Makefile` (`install-cli`, `install-hub`) and CLAUDE.md's Development Setup all pass
+# `-c constraints-dev.txt`. `tests/test_dev_constraints.py` asserts that they still do; a constraints
+# file nothing installs through is decoration, and the drift it exists to stop returns silently.
+# Deliberately NOT used by `hub/Dockerfile` (`pip install .`, hence hub-image.yml) or publish.yml:
+# those resolve the published range fresh, which is what a user gets and the one place left where an
+# upstream incompatibility still turns something red.
+#
+# HOW TO UPDATE. Read the resolution from a green CI run rather than guessing:
+#   gh run view <run-id> --log | grep "Successfully installed"
+# and bump the pins to match. Below is CI run 34418974316, read 2026-09-10.
+starlette==1.6.0
+fastapi==0.141.1

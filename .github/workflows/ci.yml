@@ -38,8 +38,13 @@ jobs:
         # demand a version that only exists after this commit is released, so CI would need
         # the release to pass and the release would need CI to pass. Installing the local
         # copy first satisfies the requirement before pip ever looks outward.
-        pip install -e ./hub
-        pip install -e ".[dev]"
+        # `-c constraints-dev.txt` is what makes this job's resolution reproducible on a
+        # developer's machine. Without it, `starlette<2.0` let CI resolve 1.6.0 while dev ran
+        # 0.52.1, and a test reading `create_app().routes` saw 7 paths here and 161 there. The
+        # file is development-only and narrows nothing about what the Hub supports -- see its
+        # header, and `tests/test_dev_constraints.py`, which fails if this flag is dropped.
+        pip install -c constraints-dev.txt -e ./hub
+        pip install -c constraints-dev.txt -e ".[dev]"
 
     - name: Verify environment
       # `pip install` succeeding is not the same as the packages under test being importable
@@ -97,9 +102,11 @@ jobs:
         python-version: "3.11"
 
     - name: Install Hub dependencies
+      # `../` because `working-directory: hub` is this job's default and the constraints file
+      # lives at the repo root. Same rationale as the `test` job above.
       run: |
         python -m pip install --upgrade pip
-        pip install -e ".[dev]"
+        pip install -c ../constraints-dev.txt -e ".[dev]"
 
     - name: Install the CLI package
       # `working-directory: hub` is a job default, so this step overrides it to reach the repo
@@ -114,7 +121,7 @@ jobs:
       # version that does not exist until this commit ships.
       working-directory: .
       run: |
-        pip install -e .
+        pip install -c constraints-dev.txt -e .
 
     - name: Verify environment
       # Same rationale as the `test` job's step of the same name. This job runs from `hub/`
