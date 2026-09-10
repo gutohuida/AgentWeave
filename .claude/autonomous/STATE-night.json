@@ -1,40 +1,72 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-08-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "5d928f5",
-    "stop_at":  "2026-09-11T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-10-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+  "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+  "playbook": ".claude/loops/night-window.md",
+  "runner": "claude",
+  "model": "opus",
+  "permission_mode": "unattended-full-access",
+  "branch": "autonomous/2026-09-08-daily",
+  "parent_branch": "master",
+  "parent_sha": "5d928f5",
+  "stop_at": "2026-09-11T07:00:00+01:00",
+  "iteration": 1,
+  "log_file": ".claude/autonomous/2026-09-10-night-log.md",
+  "findings_file": "scripts/drive/FINDINGS.md",
+  "approvals_file": "spec-queue/APPROVALS.md",
+  "current": "n1-hook",
+  "next_action": "n1 - land the F309 hook half and its unit coverage. openspec/changes/2026-09-10-the-control-that-asks-holds-the-keyboard/tasks.md sections 1.1-1.3 (useDialogFocus.ts returns without closing when event.defaultPrevented, document binding and bubble phase kept, commented with WHY a bubble-phase document listener is structurally last), 6.1-6.4 (the existing 'closes on Escape' test at taskDetailDrawer.test.tsx:117 must pass UNCHANGED; add a hook case for defaultPrevented true vs false; mutation-check it by breaking 1.1 and watching the NEW case fail), then 5.1-5.2 (cd hub/ui && npm run build, then py -3.11 scripts/refresh_ui_bundle.py from the repo root) and commit hub/ui/src plus hub/hub/static/ui TOGETHER including ui-build-stamp.json. Do NOT touch TaskDetailDrawer, RowMenu or DirectoryPicker this iteration - n2 needs a bundle with 1.1 landed and 2.2 NOT landed to run its red mutation-check.",
+  "queue": [
+    {
+      "id": "n1-hook",
+      "status": "open",
+      "title": "S1 hook + S6 unit coverage + S5 bundle",
+      "detail": "useDialogFocus.ts Escape branch stands down on defaultPrevented. Add the hook unit case and mutation-check it. Rebuild the bundle and commit src+static together. Nothing else in hub/ui/src is edited - the n2 mutation-check depends on this exact intermediate state."
+    },
+    {
+      "id": "n2-red",
+      "status": "open",
+      "title": "S7.1 drive Hub + S7.2/7.3 baselines + write the S7.4 leg and require it RED",
+      "detail": "netstat -ano | grep LISTEN before picking a port; 8011/8012/8013 have all been taken by other windows this week. Never 8000 (operator) and never 8010. Start from source: cd hub && DATABASE_URL=sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db py -3.11 -m uvicorn hub.main:app --port <free> --host 127.0.0.1 - never 'agentweave --port'. Confirm no .py under hub/hub or src is newer than process start. Run t_d1_0910_escape_across_the_dialogs.py (was 30 passed/6 failed) and t_d1_0910_rowmenu_leaves_the_page_inert.py (was 18/1) and RECORD ACTUALS - n1 may already flip some. Then extend ONE of those two harnesses (do not start a third file) with S7.4's leg: open project modal, open the directory browser, press Escape WITHOUT clicking inside the browser first - the 'without clicking' is the leg, not a detail. Against this bundle the modal must CLOSE, i.e. the leg must be RED. That red run IS S7.4a's evidence and is the only mutation-check for the one task two rounds denied was needed. Watch for S7.2a: the D2 block prints 'no project-manager trigger reachable - skipped' and calls no check(), so a skip lowers the count without failing - if D2 skips, S7.4 was not driven either and this item is not done."
+    },
+    {
+      "id": "n3-components",
+      "status": "open",
+      "title": "S2 + S3 + S4 - the three nested owners, the menu, the reason panel",
+      "detail": "2.1 preventDefault before setBlockingReason(null) in TaskDetailDrawer.tsx:413-415. 2.2 DirectoryPicker focuses its root from rootRef on mount (R3 measured that its existing preventDefault never runs - focus is on the Browse button outside it). 2.2a restore focus to the trigger on EVERY close path - Escape, click-outside, choosing a directory - via the capture/cleanup pattern useDialogFocus.ts:22,:41-44 already uses, not document.getElementById. 2.2b do NOT generalise to other panels (that is F307). 2.3 RE-RUN THE GREP over the five out-of-scope Escape owners rather than trusting the list - F311 exists because a list like it was trusted. 3.1-3.5 RowMenuItem flag + onCloseAutoFocus suppression cleared on every close; only the 'blocked' item carries it; no passthrough prop and no modal={false}. 4.1-4.3 remove autoFocus, focus from a ref keyed on WHETHER a reason is being collected not its value, and no setTimeout/rAF. Rebuild the bundle and commit src+static together."
+    },
+    {
+      "id": "n4-drive-core",
+      "status": "open",
+      "title": "The drive turns green - S7.2, S7.3, S7.4, S7.4b, S7.5, S7.7",
+      "detail": "Against the rebuilt bundle: t_d1_0910_escape_across_the_dialogs.py to ZERO failed and >=36 passed (a floor, not an equality); t_d1_0910_rowmenu_leaves_the_page_inert.py to zero failed and >=19 passed. S7.4 now green. S7.4b: Escape out of the directory browser and assert focus is on the Browse button, not document.body. S7.5: choose a status move that is NOT blocked and assert focus returns to the trigger - this is the leg that catches S3.2 breaking what already worked. S7.7: t_d9_clearing_instructions_postchange.py must still be 21/21, and its leg E is the check that 1.1 did not alter the Tab branch."
+    },
+    {
+      "id": "n5-drive-legs",
+      "status": "open",
+      "title": "S7.6 and S7.8 - the two scenarios no round produced evidence for, then S8.1 lint",
+      "detail": "7.6: open the menu, arrow to 'Move to blocked' and press Enter (KEYBOARD, not a click), type without touching the mouse, confirm. Assert the keyboard is in the reason input once the menu closed, the text appears, the move completes, AND (4.1a) the input carries a visible focus indicator on the keyboard path. Do not extend this leg backwards into 'reached the ticket without a pointer at any point' - that runs through F307. 7.8: type a reason CONTAINING SPACES - 'the staging API key', the same nineteen characters F309 measured - and assert three things: the field holds the whole string, document.querySelectorAll('[role=menuitem]').length is 0, and document.body computed pointer-events is not none. Extend the rowmenu harness's existing PROBE. 7.8a: leave P5 alone and do NOT count it as evidence for 7.8 - it passes before and after. Then 8.1: cd hub/ui && npm run lint and npx tsc --noEmit; RECORD IN THE LOG that the Python lint set was not required and why, rather than omitting it."
+    },
+    {
+      "id": "n6-close",
+      "status": "open",
+      "title": "S8.2/8.3 ledger, then archive the change",
+      "detail": "Set **Status:** on F309 AND F310 in scripts/drive/FINDINGS.md to 'fixed <sha>' - verified as two findings, not one. Leave F307 and F311 open, and add the 8.3 note inside F307 saying this change deliberately did not subsume it. Correct the index paragraph's open severity-A list. Then openspec-archive-change, and update spec-queue/ROADMAP.md. Re-run py -3.11 scripts/classify_findings.py AFTER editing the ledger and require that no OTHER verdict moved - that defence is F313's, learned 2026-09-10 when writing a finding reproduced the finding."
+    }
+  ],
+  "decisions_for_user": [],
+  "limits": [
+    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+    "Every claim is measured or labelled unverified.",
+    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+    "Tests under py -3.11, never bare python. black needs --target-version py311.",
+    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+  ],
+  "notes_for_tomorrow": [
+    "The five remaining open severity-A findings are all decided-but-unproposed and are the DAY window's: F299 (unproposed), F300+F312 (one unproposed change), F301 (folds into the unproposed notice change), F306 (explicitly tomorrow's spec loop, DIRECTION.md 2026-09-11). This window does not write proposals.",
+    "F307 stays open by the operator's 2026-09-10 18:30 answer to DAY-1, and needs a review page to decide where focus lands in a destructive confirmation."
+  ]
 }
