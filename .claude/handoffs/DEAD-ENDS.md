@@ -261,6 +261,14 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   timeout ignored) vs **2.234 s** (real holder, 2 s timeout honoured). **Before hunting for a
   holder, record how long the failing statement waited** — sub-second means there may be no holder
   to find, and every instrument that samples for one will come back empty and look broken.
+- **A session-wide SQLAlchemy event listener is a session-wide assertion** *(2026-09-10, cost one
+  full-suite run)*. `@event.listens_for(engine.sync_engine, "before_cursor_execute")` registered at
+  a test module's import fires for **every statement in the whole session**, not only the ones the
+  test caused. A gate asserting *"every `DROP TABLE` ran inside a transaction"* therefore also
+  judged `test_migrations.py`'s own `drop_all`, which is supposed to run unguarded — so it **passed
+  run alone and failed in the full suite**, which is the direction that gets a test deleted rather
+  than fixed. Bound it with a fixture that clears the recorder and is **named before** the fixture
+  under test in the signature; pytest sets fixtures up in signature order.
 - **`session.get(Conversation, "conv-…")` silently never matches** — the primary key is not what
   you think it is. Query explicitly.
 - **`session.delete()` refuses a never-flushed object.**
@@ -433,6 +441,17 @@ checkout — the dev-repo traps are in "The Hub at runtime" above and still appl
 
 ## The `spec-queue/` contract — three ways a correct-looking document does nothing, or lies
 
+- **Never write a `---` inside a dated section of `APPROVALS.md` or `DIRECTION.md`** *(2026-09-10,
+  written and caught the same evening, only because the operator asked for a review of the night's
+  setup)*. In both files `---` is the **inter-section delimiter**: every one of them sits
+  immediately before a `## YYYY-MM-DD` heading and nowhere else. `night-window.md` iteration 1
+  step 2 reads *"the newest day section only"*, so a rule placed mid-section can end that section
+  early — leaving the prose above it and orphaning the `APPROVED` row below. The window then finds
+  no token, falls through to the default backlog, **builds nothing, and reports that nothing was
+  approved.** Silent, and indistinguishable from a night the operator genuinely did not sit down.
+  **Verify by parsing, not by reading**: slice the file from the first `## 20..` heading to the
+  second and assert the token you just wrote is inside the slice. Same class as the stale `ORDER:`
+  line — a correct-looking approvals file that does nothing.
 - **A dated section's *premises* are not protected by the newest-section-only contract — only its
   *instruction* is** *(2026-09-08, found by the day window reconciling its own log)*. A
   `DIRECTION.md` or `ROADMAP.md` section is read as both an order and a description of the world,
