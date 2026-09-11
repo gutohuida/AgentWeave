@@ -68,6 +68,45 @@ classifier repair. Neither lands a feature. `ORDER:` and `NOTHING TONIGHT` are b
 Two things on the page are **not** work and want no row here: the research-task question, and the
 merge-gate rule change — both are the operator's to act on outside this file.
 
+**DECIDED by the operator, in session, 2026-09-11 evening**, after an adversarial Opus review
+commissioned specifically before approving — *"Before approving ask a opus model to review
+everything."* That review is recorded as **R4** and it found a defect all three rounds missed. The
+change was repaired at `67bebb6` before this row was written; **the row approves the repaired
+change, not the one the review page describes.**
+
+- APPROVED  an-agent-that-recorded-the-evidence-is-the-author   F306 (A) + F316 (A), **42 tasks**, 0 ticked. Python only — no migration, no schema, no API shape, **no UI bundle**, so the Python lint set *is* required (§6) and `make ui` is not. `openspec validate --strict` passes, re-run 2026-09-11 19:55. **Verify it as two findings** — §7.0 and §7.1 each set their own `Status:` line; a run that closes one and reports the change done has closed half a change. **And verify it as five call sites, not four**: the R4 repair added a fifth defence (§3.4) and a run that stops at §3.3 ships the wedge described below.
+
+**What R4 changed, and why the night must not treat §3.4 as optional.** Sections 1–3.3 teach
+`_guard_author_is_not_reviewer` that an evidence author is an author. `_guard_reviewer_is_not_the_author`
+sits fifteen lines below it on the same edge of the same review, and §3.4 previously said to leave it
+alone — every round checked whether that guard was *in scope* and none asked what §3.1 did *to* it.
+It refuses only when a completer is recorded; an operator completion records none, so an operator
+`PATCH` carrying `{assignee: <evidence author>, status: under_review}` is permitted, and §3.1 then
+refuses that agent every review outcome. Entry permitted plus every exit refused is a task no actor
+can move, held by an agent no transition names, which the flow reports as a review genuinely in
+progress and never restaffs. **That is the F45/F70/F161 shape, manufactured by the change whose
+subject is removing it.** §3.4 is reversed and carries a fourth MODIFIED requirement, because the
+base spec's *"a task whose completer is unknown may enter review"* scenario is exactly what breaks.
+
+**§5 is kept — the three live drives are in scope.** Rejected: the smaller cut (§1–§4 plus §6). The
+change's own history is the argument: R2 and R3 each found what a green suite hid, and §5.1's
+misread-a-green trap is now closed — it names a `git worktree`, **forbids `git stash`**, and requires
+the approving transition row as the only acceptable proof of the reproduction. A drive that cannot
+show that row leaves §5.2 unticked and says so, rather than reporting a pair.
+
+**`DAY-1`-equivalent, decision 6 — answered: NO, `F316` is not split out.** It stays folded in as
+task 2.4, which is where R2 filed it and where §7.0 closes it. Splitting it would put a second
+change in a night already carrying 42 tasks, and F316 is a one-term edit to the same function.
+
+**Read the mutation-hygiene block at the top of §4 before starting §4.7.** Nine tasks require a tree
+with the fix deliberately removed, and this window commits and pushes every firing. Commit the
+implementation first; keep each mutation and its restore inside one firing; require
+`git status --short` empty after every restore; stop *before* a mutation rather than partway through
+one. A boundary landing mid-cycle pushes the hole reopened under a message saying it is closed.
+
+**No `ORDER:` line.** This is the only approved change, so the order is not in question, and an
+`ORDER:` line is read verbatim with no date check — a liability the moment it outlives its day.
+
 ---
 
 ## 2026-09-10
