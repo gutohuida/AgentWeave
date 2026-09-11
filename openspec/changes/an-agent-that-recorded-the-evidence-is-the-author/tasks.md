@@ -6,14 +6,22 @@ only verified implementation closes a task.
 **This change is Python-only.** No UI file is modified, so the committed bundle in
 `hub/hub/static/ui` is **not** rebuilt — and the Python lint set *is* required (§6).
 
-**It repairs two defences across four call sites, and must be verified as all four.** The ladder
+**It repairs three defences across five call sites, and must be verified as all five.** The ladder
 half (§1, §2) is what the operator sees; the guard half (§3) is the one nobody sees. R1 believed the
 two `scheduler.py` call sites were the whole of it; R2 found two more — `review_dispatch_refusal`
 (§3.5) and `_answer_failed_review` (§2.4) — and each of those is a place where the guard's new
-refusal would otherwise arrive *after* a review turn has already run. A run that closes §1–§3.4 and
+refusal would otherwise arrive *after* a review turn has already run. A run that closes §1–§3.3 and
 reports the change done has left the change breaching two requirements that shipped before it
 (`design.md` D8). The half it is most tempting to skip is the guard, because no test fails for its
 absence today.
+
+**The fifth call site was added by R4 and reverses what all three rounds agreed on** (`design.md`
+D14): `_guard_reviewer_is_not_the_author` (§3.4) guards the *entry* to `under_review`, so it sat
+outside D8's resolver-shaped frame and every round ruled it out of scope without asking what §3.1
+did to it. Permitting the entry while refusing every exit strands the task permanently, held by an
+agent no transition names, reported as a review in progress and never restaffed. **§3.4 is not
+optional and it is not polish: without it this change manufactures the failure class it exists to
+remove.**
 
 ## 1. The fourth source
 
@@ -88,8 +96,25 @@ absence today.
   of untruth `agent-flows`' surfaced-reason requirement already forbids one layer up.
 - [ ] 3.3 Keep the operator exempt and keep `_REVIEW_OUTCOMES` as the gate. Both are the existing
   first two lines of the guard; the fallback goes **after** them, not before.
-- [ ] 3.4 Do not touch `_guard_reviewer_is_not_the_author`. It is a different rule about a different
-  fact (the state the move produces, binding the operator too) and is out of scope.
+- [ ] 3.4 **`_guard_reviewer_is_not_the_author` takes the same fallback** — reversed after R3
+  (`design.md` D14). Where `agent_that_completed` returns `None` and `task.assignee` recorded
+  evidence for the task, refuse the move to `under_review`. It is still a different rule about a
+  different fact — the state the move produces, binding the operator too — and it keeps its own
+  message and its own shape. What changed is that its permissive `None` branch stopped being safe
+  the moment §3.1 began refusing the same agent's verdict: entry permitted plus every exit refused
+  is a task no actor can move, held by an agent no transition names, which the flow reports as a
+  review in progress and never restaffs. Fail-closed at the entry is the whole point of the guard.
+- [ ] 3.4a The fallback is `agents_that_recorded_evidence_for` **alone**, exactly as §3.1's is, and
+  for the same reason: the union would refuse the flow's own reviewer on every operator-completed
+  task. It cannot refuse the flow's path — §2.1 guarantees the staffed reviewer is never an
+  evidence author — and it binds the operator, which is this guard's existing character and is the
+  right outcome: the operator is told before a turn is spent, and the remedy is the one the
+  existing message already names. Keep the two permissive cases the requirement keeps: no assignee,
+  and a no-completer task whose assignee recorded nothing.
+- [ ] 3.4b Amend the guard's docstring. Its "**No recorded completer**" bullet currently states the
+  refuse-to-offer/permit-to-act asymmetry as unconditional; it is now conditional on the assignee
+  having recorded no evidence, and the docstring must say why — acting is no longer possible for an
+  evidence author, so permitting the entry strands the task rather than freeing it.
 - [ ] 3.5 **`hub/hub/api/v1/agent_trigger.py` — `review_dispatch_refusal` takes the same fallback**
   (`design.md` D8). Where `agent_that_completed` returns `None` and the named reviewer recorded
   evidence for the task, return `403` with a sentence naming the evidence. After the status and
@@ -103,6 +128,19 @@ absence today.
   a fallback added to one and not the other is that drift arriving by the door the docstring names.
 
 ## 4. Tests, mutation-checked because nothing existing fails today
+
+> **Mutation hygiene — read before §4.7, and before any other task that reverts code.** This window
+> commits and pushes at the end of every firing, and §4.7, §4.9, §4.10, §4.10a and §5.1 all require
+> a tree with the fix deliberately removed. An iteration boundary or a context death landing inside
+> one of those cycles pushes the hole reopened, under a commit message saying it is closed — on a
+> change whose entire subject is a failure nobody can see.
+>
+> So: **commit the complete implementation before the first mutation.** Perform every mutation and
+> its restore **inside a single firing** — never across one. After each restore, run
+> `git status --short` and require it empty before anything else happens; if it is not empty, the
+> restore is incomplete and nothing may be committed until it is. If a firing is running out of
+> room, stop *before* starting the next mutation rather than partway through one, and record in the
+> log which mutations remain.
 
 The blast-radius measurement over the **whole** suite (`proposal.md`) found **one** existing test
 whose expectation changes (§4.11) and nothing else — 1 failed, 4044 passed. Read that as a warning
@@ -128,10 +166,19 @@ do not treat a green file list as evidence of anything here.
 - [ ] 4.6 The `review_state` leg: evidence in `awaiting` and evidence in `rejected` each exclude
   their author. This is the operator's verdict in executable form, and the thing a future
   simplification is most likely to break.
+- [ ] 4.6a **The entry leg** (§3.4): an operator-completed task, an agent-authored evidence row, and
+  a single `PATCH` setting `assignee` to that evidence author and `status` to `under_review`.
+  Assert `ActorNotPermittedError`, that the status is unchanged, and that the refusal does not claim
+  any agent completed the task. Then the permissive half in the same leg: the same move with a
+  **different** agent as assignee succeeds, which is the flow's own path and must not be refused.
+  This leg fails against a tree carrying §1–§3.3 alone — that is the wedge D14 exists for, so run it
+  against that tree as well as the finished one and record both.
 - [ ] 4.7 **Mutation-check every leg.** Revert each of §1–§3 in turn and record which legs fail:
   remove the union term (4.2 must fail), remove the guard fallback (4.3 must fail), change the
   fallback to the union (4.4 must fail), drop the `actor_kind` filter (4.5 must fail), add
-  `review_state == 'accepted'` (4.6 must fail). A leg that survives its own mutation is not
+  `review_state == 'accepted'` (4.6 must fail), remove the §3.4 entry fallback (4.6a must fail),
+  and change **that** fallback to the union (4.6a's permissive half must fail, because the flow's
+  own reviewer would then be refused at the entry). A leg that survives its own mutation is not
   testing what it claims — fix the fixture, do not weaken the claim. Write the table into the log.
 - [ ] 4.8 Re-run the whole Hub suite, not a file list: `py -3.11 -m pytest tests/ -q` from `hub/`.
   R1 measured 15 files and 210 tests against a prototype and concluded no existing expectation
@@ -184,6 +231,19 @@ do not treat a green file list as evidence of anything here.
   `AW_COMPLETE_BY=untouched`. Read `task_transitions` and `requirement_evidence` from the drive
   database — `F306`'s own note says the drive's assertion passes either way and only those two
   tables tell the states apart.
+
+  **"Before the fix" is not where this run is standing, and this task is ordered after §1–§4.** Get
+  a pre-fix tree explicitly rather than hoping: `git worktree add ../aw-f306-prefix <sha>` at the
+  commit **before** §1's, drive there, and remove the worktree afterwards. Do **not** use
+  `git stash` in this window — a stash that survives a context death is invisible to the next
+  firing, which will find a clean tree with the fix missing and no record of why.
+
+  **The green here is the trap.** The drive's assertion passes on both trees, so a run that
+  accidentally drives the *fixed* tree gets exactly the result it expects and records a
+  reproduction that never happened. The only proof is the two tables: on the pre-fix tree the
+  approving transition exists and its `actor_agent` is the evidence author. If you cannot show that
+  row, you have not reproduced it — say so in the log and leave 5.2 unticked rather than reporting
+  a pair.
 - [ ] 5.2 Re-run it after the fix. The flow staffs the other agent, and the author's approval is
   refused if attempted by hand. Record the sequence numbers, not a summary.
 - [ ] 5.3 Drive the **operator-sees-it** half: a project where the author is the only other agent.
@@ -196,7 +256,9 @@ do not treat a green file list as evidence of anything here.
 
 - [ ] 6.1 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
   --target-version py311`, `mypy src/`. The CI path list, not a narrower one.
-- [ ] 6.2 `py -3.11 -m pytest hub/tests/ -q` from `hub/`. Under `py -3.11`, never bare `python`.
+- [ ] 6.2 `py -3.11 -m pytest hub/tests/ -q` from the **repo root** — or `tests/` from `hub/`, which
+  is the same suite. `hub/hub/tests` does not exist, so `hub/tests/` from `hub/` errors. Under
+  `py -3.11`, never bare `python`.
 - [ ] 6.3 `openspec validate --strict an-agent-that-recorded-the-evidence-is-the-author` after every
   delta edit, not only at the end.
 - [ ] 6.4 No migration is added, and `hub/tests/test_migrations.py` head assertions are **not**

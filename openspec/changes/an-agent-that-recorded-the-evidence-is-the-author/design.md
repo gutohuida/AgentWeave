@@ -238,6 +238,56 @@ the repair in here rather than leaving `F316` to its own change is the cheaper o
 creep: after this change the call site breaches a shipped requirement, so a change that leaves it
 alone does not close.
 
+## D14 — The sibling guard takes the fallback too, and §3.4 is reversed (R4)
+
+**Three rounds said "do not touch `_guard_reviewer_is_not_the_author`". That was wrong, and the
+reason it survived three rounds is instructive: every round checked whether the guard was *in
+scope*, and none checked what §3.1 did *to* it.** D8 enumerated four places that decide who may
+review and repaired the three that resolve or dispatch a reviewer. The fourth defence is not a
+resolver — it guards the *entry* to `under_review` — so it sat outside D8's frame and was ruled out
+of scope on a distinction that is real and, after §3.1, no longer sufficient.
+
+**The residue this change would otherwise manufacture.** `_guard_reviewer_is_not_the_author` refuses
+only when `completing_agent is not None and completing_agent == task.assignee`
+(`task_transition_service.py:354-357`). An operator completion records no agent, so the `None` branch
+permits. An operator `PATCH /tasks/{id}` carrying `{"assignee": "<evidence author>", "status":
+"under_review"}` is therefore accepted — and `api/v1/tasks.py:1266-1275` writes the assignee
+*before* the transition is judged (deliberately, per the F70 fix), so the assignee is already in
+place when the guard runs.
+
+The task is now in `under_review`, held by the evidence author. §3.1 refuses that agent `approved`,
+`rejected` **and** `revision_needed`. No transition on the task names it — the operator did them
+all — so `task-lifecycle-governance:384-389` has the flow report it as a review genuinely in
+progress and never restaff it. **The task is unmovable by any actor and invisible as a problem.**
+
+Before this change that route produced a silent self-approval. After it, the same route produces a
+silent permanent stall. Fail-closed is better than fail-open, but it is still the `F45`/`F70`/`F161`
+shape — the exact shape D8 uses as its own argument for §3.5 — manufactured on the one route §3.4
+declined to look at. A change whose subject is *a silent wrong outcome* may not ship a new one.
+
+**Why the fallback is safe here.** It is the evidence term alone, as in D3, and for the same reason:
+the union would refuse the flow's own reviewer. It cannot fire on the flow's path at all, because
+§2.1 has already ensured the ladder never staffs an evidence author — so the only mover it refuses
+is a hand-written one. And it binds the operator, which is this guard's existing and deliberate
+character (*"Nobody is exempt because the rule is not about who is asking"*). That is the right
+outcome rather than a cost: the operator is refused **before** a turn is spent, with a remedy the
+existing message already states, which is precisely the property §3.5 is in this change for.
+
+**What is given up.** The base requirement's *"A task whose completer is unknown may enter review"*
+becomes conditional. That permission existed to avoid stranding tasks completed before transitions
+were recorded — an asymmetry the offer rule shares: refuse to *offer* work whose author cannot be
+ruled out, permit an actor to *act* on it. **The asymmetry is sound only while acting remains
+possible.** For an evidence author on an operator-completed task, §3.1 removes acting, so permitting
+the entry no longer frees the task — it strands it. Every other unattributable case keeps the old
+permission untouched, including the historical tasks the rule was written for, which have no
+evidence rows at all.
+
+**Rejected: naming the residue in D7 instead.** That was the cheaper option and it is what an
+earlier draft of this note did. It is wrong here because the residue is not theoretical — it is
+reachable today by one ordinary operator request, it is silent, and it is unrecoverable without a
+database edit. D7 is for what this change honestly does not reach; it is not a place to file a
+defect the change itself creates.
+
 ## D9 — The author refusal precedes the evidence-acceptance refusal, and that ordering is kept
 
 Measured, not chosen: `apply_transition` runs its actor-entitlement guards at `:516-527` and the
