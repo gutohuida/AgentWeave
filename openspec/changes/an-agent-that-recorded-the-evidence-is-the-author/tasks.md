@@ -148,22 +148,22 @@ rather than a reassurance: near enough the whole of this change's coverage is ne
 that would pass against the unfixed tree is worth nothing. R1's narrower measurement found zero, so
 do not treat a green file list as evidence of anything here.
 
-- [ ] 4.1 New file `hub/tests/test_the_evidence_names_the_author.py`, with `F306`'s live
+- [x] 4.1 New file `hub/tests/test_the_evidence_names_the_author.py`, with `F306`'s live
   reproduction in its module docstring including the run and task ids.
-- [ ] 4.2 The ladder leg: an operator-completed task, one agent-authored evidence row naming a
+- [x] 4.2 The ladder leg: an operator-completed task, one agent-authored evidence row naming a
   commit, two free agents with the author sorting **first** by name. Assert the flow staffs the
   other agent. The name order is load-bearing — `design.md` D6 — and a fixture where the author
   sorts second passes against the unfixed tree.
-- [ ] 4.3 The guard leg: the same shape, with the author moving the task to `approved` directly.
+- [x] 4.3 The guard leg: the same shape, with the author moving the task to `approved` directly.
   Assert `ActorNotPermittedError`, that the task's status is unchanged, and that no transition was
   recorded.
-- [ ] 4.4 The reviewer-is-not-refused leg: the agent the flow staffed records `approved` and is
+- [x] 4.4 The reviewer-is-not-refused leg: the agent the flow staffed records `approved` and is
   **accepted**, with `task.assignee` equal to that reviewer at the moment it does. This is the
   regression test for `design.md` D3, and it is the one that fails if a later change "simplifies"
   the fallback to the union.
-- [ ] 4.5 The operator-evidence leg: evidence recorded with `actor_kind='operator'` leaves every
+- [x] 4.5 The operator-evidence leg: evidence recorded with `actor_kind='operator'` leaves every
   agent eligible. `F306`'s own untouched-task carve-out, and the test for the `actor_kind` filter.
-- [ ] 4.6 The `review_state` leg: evidence in `awaiting` and evidence in `rejected` each exclude
+- [x] 4.6 The `review_state` leg: evidence in `awaiting` and evidence in `rejected` each exclude
   their author. This is the operator's verdict in executable form, and the thing a future
   simplification is most likely to break.
 - [ ] 4.6a **The entry leg** (§3.4): an operator-completed task, an agent-authored evidence row, and
