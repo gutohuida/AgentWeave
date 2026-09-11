@@ -200,6 +200,15 @@ signature that was reachable on every reset. **If F292 survives, that is itself 
 holder would then arrive *before* the reset rather than during it, which is far narrower than
 anything this entry has carried. The next window measures the rate; it does not assume the answer.
 
+> **Measured 2026-09-11 (day `D-1`), and it survived.** F292 reproduced on the mitigated tree at
+> `f51ec21` (run `34576656234`), same `database is locked` signature, same file. Classified rate:
+> **1 red in 17 runs with the mitigation against 11 in 41 without** — one-sided `p ≈ 0.036` for "no
+> change", with a 95% interval on 1/17 that still contains the old 26.8%. So the mitigation is
+> **confirmed as a mitigation and refuted as a fix**, and the informative branch above is the one
+> that fired: **the holder arrives before the reset begins.** Per-run classification, the F314 and
+> starlette confounders counted out, and the caveats are in `FINDINGS.md`'s F292 entry, last
+> section.
+
 Two things fell out of the control measurement and are filed separately: **F314 (B)** — the flow
 files fail about **one run in eight** under random ordering **on an unmodified tree**, at the same
 rate with and without this fix, so it is a *second* non-F292 source of CI red in the very file

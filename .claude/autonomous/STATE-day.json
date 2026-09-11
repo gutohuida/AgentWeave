@@ -1,77 +1,79 @@
 {
-    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook":  ".claude/loops/day-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-08-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "5d928f5",
-    "stop_at":  "2026-09-11T17:00:00+01:00",
-    "iteration":  1,
-    "log_file":  ".claude/autonomous/2026-09-11-day-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "D-0",
-    "next_action":  "D-0 then D-1, in this one firing. D-0: re-check all four merge-gate conditions (day-window.md iteration 1 step 1) BEFORE this firing commits anything -- at iteration 1 only condition 3 failed, CI was in_progress on f51ec21; the other three held. If CI now reads success for the sha at HEAD and DIRECTION's newest dated section still has no line-initial HOLD MERGE, fast-forward master with 'git merge --ff-only' and push it, then continue on this branch. If it did not open, name the failed condition in the log and carry on. D-1 in the same firing: measure F292's failure rate, as DIRECTION 2026-09-11 instructs. The BEGIN IMMEDIATE mitigation landed at af69a27 on 2026-09-10 and is UNPROVEN -- only two CI runs carry it. Count failures per run over this branch's recent CI history and classify EVERY red from its own log before counting it, because F314 (FINDINGS.md:25066) establishes a second, non-F292 source of red in the same test-file family at about one run in eight on an unmodified tree. A rate quoted without that classification folds the two together and is worthless. Append the measurement to F292 (FINDINGS.md:22036) as a dated note, not as a new finding.",
-    "queue":  [
-                  {
-                      "id":  "D-0",
-                      "status":  "open",
-                      "title":  "Merge gate retry, then D-1 in the same firing",
-                      "detail":  "At iteration 1 three of four conditions held: HEAD..master was 0, the tree was clean and level with the upstream, and DIRECTION's 2026-09-11 section carries no line-initial HOLD MERGE. Condition 3 failed only because CI was still in_progress for f51ec21 (queued 07:55Z). Every earlier sha on the branch concluded success. Do not accept a stale green from an earlier commit -- the sha must match HEAD."
-                  },
-                  {
-                      "id":  "D-1",
-                      "status":  "open",
-                      "title":  "Measure F292's failure rate, classifying each red from its own log",
-                      "detail":  "DIRECTION 2026-09-11 names this instead of a scoped drive. Runs with the mitigation: af69a27 onward. F314 is the confounder. The output is a dated note appended to F292 in FINDINGS.md with the counts and the per-run classification, plus the count of runs the mitigation has actually survived."
-                  },
-                  {
-                      "id":  "D-2",
-                      "status":  "open",
-                      "title":  "Spec loop R1 on F306 -- explore the code and write the proposal",
-                      "detail":  "F306 (A), FINDINGS.md:24444 -- an agent can be staffed to review, and approve, work it recorded evidence for. The verdict in DECISIONS.md ('F306 and F312, decided 2026-09-10 evening') is BINDING and covers both defences and every evidence row regardless of review_state; R1 writes the proposal, it does not re-litigate the decision. Blast radius already measured, so do not re-derive it: scheduler.py:625, scheduler.py:1574, hub/tests/test_a_flow_names_what_it_cannot_staff.py. RequirementEvidence already carries task_id, actor and actor_kind -- NO migration. Three things the verdict deliberately leaves to R1: (a) whether the reviewer ladder picks deterministically when several agents are eligible -- MEASURE it, it is unverified in both directions and in the one measured run the pool was two and it chose the author; (b) the shape of the guard's fallback when agent_that_completed is NULL; (c) whether the fourth source sits beside the other three inside agents_that_may_have_authored or becomes its own function called by it. Write proposal.md, design.md, tasks.md and the specs/<capability>/spec.md deltas into openspec/changes/<name>/. 'openspec new change' refuses a name starting with a digit. SHALL goes on a requirement's first physical line. 'openspec validate --strict <name>' must pass before the round is done."
-                  },
-                  {
-                      "id":  "D-3",
-                      "status":  "open",
-                      "title":  "Spec loop R2 on F306 -- re-derive the argument against the code",
-                      "detail":  "Independently re-derive, not re-read R1's reasoning. Open the actual code and compare. An argument can be wrong while everything it argues about is right, and only a round that re-derives finds that. Fix the proposal where the code disagrees. If the round changed nothing, that is a real outcome and the review page must say so. Re-run 'openspec validate --strict'."
-                  },
-                  {
-                      "id":  "D-4",
-                      "status":  "open",
-                      "title":  "Spec loop R3 on F306 -- re-derive again, independently of R2",
-                      "detail":  "Same instruction as D-3 and deliberately redundant with it. On 2026-08-28 round 3 caught rounds 1 and 2 both breaching a requirement that had shipped four days earlier. Re-run 'openspec validate --strict'."
-                  },
-                  {
-                      "id":  "D-5",
-                      "status":  "open",
-                      "title":  "Write the review page and append the APPROVALS row",
-                      "detail":  "spec-queue/review/review-2026-09-11.html, self-contained, theme-aware, answering day-window.md D-5's six questions in order: the branch and what the merge gate did; what the night built and what of it was driven; what D-1 measured; what was specced and what R2 and R3 each changed; the night's default queue if the operator approves nothing; and the research, last -- which today must say the research file is MISSING and why. Then append today's section to spec-queue/APPROVALS.md with a row per specced change and NO status token."
-                  },
-                  {
-                      "id":  "D-6",
-                      "status":  "open",
-                      "title":  "One no-spec repair, only if the day has room",
-                      "detail":  "The D-6 carve-out in day-window.md, all three conditions. Drive it before closing it, run the CI lint set, mutation-check any test added, set the finding's Status line to 'fixed <sha>'. If it turns out to want a spec, STOP and queue it for tomorrow."
-                  }
-              ],
-    "decisions_for_user":  [
-                               "The AgentWeaveResearch scheduled task did not run this morning and there is no research file for 2026-09-11. This is not the usual quiet day -- the task never started. Measured at 09:05: the task is Enabled, StartWhenAvailable=True, WakeToRun=True, the machine booted at 03:05 so it was awake at 07:10, LastTaskResult is 0, and yet LastRunTime is still 2026-09-10T07:10 and NextRunTime has advanced to 2026-09-12T07:10. The scheduler skipped the 2026-09-11 occurrence outright. Cause unverified; no log exists for today to read. The day carries on without a candidate list, which is what the playbook says to do, but a second skipped morning would cost the loop its whole research input and that is worth a look while awake."
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
-                   "This window does NOT implement approved changes. If the night left 2026-09-10-the-control-that-asks-holds-the-keyboard unfinished, that is the night's to resume -- note it and leave it. (Checked at iteration 1: it is finished and archived, so there is nothing to leave.)"
-               ]
+    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+    "playbook": ".claude/loops/day-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-08-daily",
+    "parent_branch": "master",
+    "parent_sha": "5d928f5",
+    "stop_at": "2026-09-11T17:00:00+01:00",
+    "iteration": 2,
+    "log_file": ".claude/autonomous/2026-09-11-day-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "D-2",
+    "next_action": "D-2: spec loop R1 on F306 -- explore the code and write the proposal into openspec/changes/<name>/ (proposal.md, design.md, tasks.md, specs/<capability>/spec.md deltas). The queue item carries the full instruction including the three sub-questions the DECISIONS.md verdict deliberately left open; read it, do not re-derive the verdict. Finish the firing by (a) running 'openspec validate --strict <name>' and (b) re-checking the four merge-gate conditions immediately BEFORE committing -- not at the start of the firing. Iteration 2 measured why: AgentWeaveDayLoop fires on PT5M and every firing commits, so at a firing's START HEAD is under five minutes old while ci.yml's hub-test job takes 10-15 minutes, and the gate finds an in-flight run every time. At the END of a long round the previous commit has had the whole firing to build. At iteration 2 conditions 1, 2 and 4 held and condition 3 failed on a real RED: f51ec21's CI concluded failure (F292). Do not accept a stale green from an earlier commit.",
+    "queue": [
+        {
+            "id": "D-0",
+            "status": "done",
+            "title": "Merge gate retry, then D-1 in the same firing",
+            "detail": "CLOSED at iteration 2, gate did NOT open. Conditions 1, 2 and 4 held; condition 3 failed because f51ec21's CI concluded FAILURE at 08:12Z and HEAD's own run (6f7e486) was still in flight. Iteration 1's refusal to accept 5d43a40's stale green was right for a better reason than it gave: accepting it would have landed a red commit on master. Superseded by the gate re-check folded into the tail of D-2/D-3/D-4 -- see next_action for why the check must run at a firing's END."
+        },
+        {
+            "id": "D-1",
+            "status": "done",
+            "title": "F292's rate, measured -- and the BEGIN IMMEDIATE mitigation is refuted as a fix",
+            "detail": "CLOSED at iteration 2. F292 REPRODUCED on the mitigated tree at f51ec21 (run 34576656234), same 'database is locked' signature, in test_reviewer_is_not_the_author.py. Classified rate: 1 red in 17 completed runs with the mitigation against 11 in 41 without (one-sided p ~ 0.036 for 'no change'; the 95% interval on 1/17 still contains 26.8%). The rate is the less useful half -- the mitigation's own section had written down that surviving would mean the holder arrives BEFORE the reset rather than during it, and that branch has now fired. Confounders classified out per-run: F314 (2/41, and it gained a CI signature -- RuntimeError 'bound to a different event loop' on test_a_wide_flows_state_is_still_one_call) and a deterministic starlette route defect fixed at 630473f (2/41). Written to FINDINGS.md as a dated section on F292, a cross-reference on F314, and a block quote under ROADMAP.md's 'Stage 1 is mitigated' paragraph."
+        },
+        {
+            "id": "D-2",
+            "status": "open",
+            "title": "Spec loop R1 on F306 -- explore the code and write the proposal",
+            "detail": "F306 (A), FINDINGS.md:24444 -- an agent can be staffed to review, and approve, work it recorded evidence for. The verdict in DECISIONS.md ('F306 and F312, decided 2026-09-10 evening') is BINDING and covers both defences and every evidence row regardless of review_state; R1 writes the proposal, it does not re-litigate the decision. Blast radius already measured, so do not re-derive it: scheduler.py:625, scheduler.py:1574, hub/tests/test_a_flow_names_what_it_cannot_staff.py. RequirementEvidence already carries task_id, actor and actor_kind -- NO migration. Three things the verdict deliberately leaves to R1: (a) whether the reviewer ladder picks deterministically when several agents are eligible -- MEASURE it, it is unverified in both directions and in the one measured run the pool was two and it chose the author; (b) the shape of the guard's fallback when agent_that_completed is NULL; (c) whether the fourth source sits beside the other three inside agents_that_may_have_authored or becomes its own function called by it. Write proposal.md, design.md, tasks.md and the specs/<capability>/spec.md deltas into openspec/changes/<name>/. 'openspec new change' refuses a name starting with a digit. SHALL goes on a requirement's first physical line. 'openspec validate --strict <name>' must pass before the round is done."
+        },
+        {
+            "id": "D-3",
+            "status": "open",
+            "title": "Spec loop R2 on F306 -- re-derive the argument against the code",
+            "detail": "Independently re-derive, not re-read R1's reasoning. Open the actual code and compare. An argument can be wrong while everything it argues about is right, and only a round that re-derives finds that. Fix the proposal where the code disagrees. If the round changed nothing, that is a real outcome and the review page must say so. Re-run 'openspec validate --strict'."
+        },
+        {
+            "id": "D-4",
+            "status": "open",
+            "title": "Spec loop R3 on F306 -- re-derive again, independently of R2",
+            "detail": "Same instruction as D-3 and deliberately redundant with it. On 2026-08-28 round 3 caught rounds 1 and 2 both breaching a requirement that had shipped four days earlier. Re-run 'openspec validate --strict'."
+        },
+        {
+            "id": "D-5",
+            "status": "open",
+            "title": "Write the review page and append the APPROVALS row",
+            "detail": "spec-queue/review/review-2026-09-11.html, self-contained, theme-aware, answering day-window.md D-5's six questions in order: the branch and what the merge gate did; what the night built and what of it was driven; what D-1 measured; what was specced and what R2 and R3 each changed; the night's default queue if the operator approves nothing; and the research, last -- which today must say the research file is MISSING and why. Then append today's section to spec-queue/APPROVALS.md with a row per specced change and NO status token."
+        },
+        {
+            "id": "D-6",
+            "status": "open",
+            "title": "One no-spec repair, only if the day has room",
+            "detail": "The D-6 carve-out in day-window.md, all three conditions. Drive it before closing it, run the CI lint set, mutation-check any test added, set the finding's Status line to 'fixed <sha>'. If it turns out to want a spec, STOP and queue it for tomorrow."
+        }
+    ],
+    "decisions_for_user": [
+        "The AgentWeaveResearch scheduled task did not run this morning and there is no research file for 2026-09-11. This is not the usual quiet day -- the task never started. Measured at 09:05: the task is Enabled, StartWhenAvailable=True, WakeToRun=True, the machine booted at 03:05 so it was awake at 07:10, LastTaskResult is 0, and yet LastRunTime is still 2026-09-10T07:10 and NextRunTime has advanced to 2026-09-12T07:10. The scheduler skipped the 2026-09-11 occurrence outright. Cause unverified; no log exists for today to read. The day carries on without a candidate list, which is what the playbook says to do, but a second skipped morning would cost the loop its whole research input and that is worth a look while awake.",
+        "F292's BEGIN IMMEDIATE mitigation is measured and REFUTED AS A FIX (iteration 2): it reproduced on the mitigated tree at f51ec21, 1 red in 17 runs against 11 in 41 without. The finding is five weeks old, it is the single largest source of CI red on this project, and the measurement bought a genuinely new narrowing -- the holder is present BEFORE the schema reset begins, which is strictly narrower than anything the entry has carried. DIRECTION's 2026-09-11 section fixes the spec-loop order (F306; then F300+F312 as one; then F299; then F301's notice; then the three R-3 leftovers) and today's window is following it rather than re-deciding. Whether F292 should displace something in that order now that the mitigation is known not to hold is the operator's call, not this window's.",
+        "The merge gate has opened once ever, and iteration 2 measured a structural reason why: the loop fires every 5 minutes and every firing commits, so a gate check at a firing's START always finds an in-flight CI run (HEAD < 5 min old, hub-test takes 10-15 min). Checking at the END of a long firing works and is what this window now does. If the gate is meant to be reliable rather than lucky, day-window.md step 1 should say 'at the end of the firing, immediately before committing' rather than 'before this firing commits anything' -- a playbook edit, so it is the operator's."
+    ],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
+        "This window does NOT implement approved changes. If the night left 2026-09-10-the-control-that-asks-holds-the-keyboard unfinished, that is the night's to resume -- note it and leave it. (Checked at iteration 1: it is finished and archived, so there is nothing to leave.)"
+    ]
 }

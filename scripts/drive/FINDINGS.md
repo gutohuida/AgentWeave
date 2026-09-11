@@ -22035,7 +22035,12 @@ obvious fix.
 
 ## F292 (B) - the fix for F285 traded a deterministic rollback for an intermittent lock, and the mitigation written for it did not hold
 
-**Status:** open — **mitigated 2026-09-10, root cause still unnamed.** Read
+**Status:** open — **mitigated 2026-09-10, and as of 2026-09-11 the mitigation is measured and
+REFUTED AS A FIX: F292 reproduced on the mitigated tree at `f51ec21`. The classified rate is 1 in 17
+runs with it against 11 in 41 without, which disfavours "it changed nothing" at one-sided p ~ 0.036
+and establishes nothing stronger. The useful result is not the rate: the holder arrives BEFORE the
+schema reset begins, which is what surviving `BEGIN IMMEDIATE` means. See the last section, *"The
+rate, measured 2026-09-11"*.** Read
 *"The reset was never one transaction"* at the foot of this entry before any other part of it: the
 `app` fixture's `async with engine.begin()` was **never one transaction**, the ~90 `DROP`s ran in
 autocommit, and a competing writer taking the write lock between two of them reproduces CI's exact
@@ -23281,6 +23286,130 @@ those reads run in autocommit, so no snapshot is held and the mechanism cannot f
 discriminator is one number nobody has ever recorded: how long the failing `DROP` waited.** Under a
 held-lock model it is ~30 s; sub-second would mean this entry is chasing a holder that does not
 exist. Worth adding to the diagnostic regardless of the fix above.
+
+### The rate, measured 2026-09-11 (day `D-1`) — and the mitigation is not a fix
+
+`DIRECTION.md`'s 2026-09-11 section spent the day's drive slot on this instead of a scoped drive,
+because the `BEGIN IMMEDIATE` mitigation (`af69a27`, 2026-09-10) shipped with **two** runs behind it
+and was therefore unproven. **It has now failed one.** `F292` reproduced on the mitigated tree at
+`f51ec21`, run `34576656234`, queued 2026-09-11T07:55Z and concluded 08:12Z:
+
+```
+ERROR tests/test_reviewer_is_not_the_author.py::test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted
+  - sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked
+===== 4041 passed, 18 skipped, 238 warnings, 1 error in 909.23s (0:15:09) ======
+```
+
+Same signature, same file, and a test already in this finding's pre-mitigation set. **The
+`BEGIN IMMEDIATE` section above is confirmed as a mitigation and refuted as a fix.**
+
+**That was the outcome that section itself named as informative.** It reads, in its list of what the
+change is not: *"**If F292 survives this, that is informative**: it means the holder arrives
+*before* the reset rather than during it, which is a narrower finding than anything this entry has
+carried."* It has survived. Wrapping the ~90 `DROP`s in one transaction removes the window in which
+a competing writer can take the lock *between* two of them; a writer that already holds the file
+when the transaction opens is unaffected, and `BEGIN IMMEDIATE` will simply wait out its
+`busy_timeout` and raise the same error. **The holder is present before the reset begins.** That is
+the narrowing this measurement buys, and it is worth more than the rate.
+
+**The rates, every red classified from its own log.**
+
+| window | completed `ci.yml` runs | F292 | F314 | other | any red |
+|---|---|---|---|---|---|
+| **with the mitigation** — `af69a27`…`f51ec21`, 2026-09-10T12:55Z → 2026-09-11T08:12Z | **17** | **1 (5.9%)** | 0 | 0 | 1 |
+| without it — `b3f4ba2`…`5da3d55`, 2026-09-09T08:11Z → 2026-09-10T10:17Z | 41 | **11 (26.8%)** | 2 (4.9%) | 2 (4.9%) | 15 (36.6%) |
+
+**What that licenses, stated carefully, because 1 in 17 is a small number.** Under the
+pre-mitigation rate, one or fewer failures in 17 runs has probability
+`0.732^17 + 17 × 0.268 × 0.732^16 ≈ 0.036`. So *"the mitigation changed nothing"* is disfavoured at
+one-sided **p ≈ 0.036** — suggestive, at the edge, and **not** a result to build on. In the other
+direction the exact 95% interval on 1/17 runs from about **0.1% to 28.7%**, which contains the
+pre-mitigation 26.8% outright. **Both readings are live: this is consistent with a real 4-5x
+reduction and equally consistent with no reduction at all.** What is no longer live is "fixed".
+Separating a halved rate from an unchanged one needs on the order of a hundred runs, which this
+branch will not produce; the useful next step is the mechanism the paragraph above narrows to, not
+more counting.
+
+**Scope.** `af69a27` is on `autonomous/2026-09-08-daily` and **is not an ancestor of `master`**
+(`git merge-base --is-ancestor af69a27 master` → no), so "runs carrying the mitigation" means
+exactly this branch at or after that sha. `ci.yml` has **no path filter** — `on.push.branches` is
+`[master, 'autonomous/**']` and nothing else — so a docs-only commit runs the full hub suite like
+any other. Confirmed per-run rather than assumed: all 17 `hub-test` jobs ran to completion in
+10–15 minutes, which is full-suite length. One `cancelled` run (`6484de4`) is excluded from both
+rows. One run was still in flight at close (`6f7e486`, queued 08:03Z) and is excluded from both the
+numerator and the denominator. The pre-mitigation window's lower edge is the 60-row listing limit,
+not a chosen date.
+
+**A method note that cost this measurement its first conclusion.** It was written up as
+**16 of 16 green** and was wrong for about twenty minutes, because the mitigated window's two
+in-flight runs had been excluded as *unknown* — correctly — and then one of them concluded `failure`
+before the iteration committed. **An in-flight run is not a green and it is not a null; it is a
+pending observation that can invert the finding.** Re-read `gh run list` immediately before writing
+a rate down.
+
+**Why the per-run classification is the whole point, stated as the numbers it changes.** An
+unclassified count of the pre-mitigation window would have read **15 in 41 = 36.6%**, and `F314`
+alone would have inflated the F292 figure by nearly a fifth. Each verdict below comes from that
+run's own `short test summary info`:
+
+| run | sha | signature | verdict |
+|---|---|---|---|
+| `34576656234` | `f51ec21` | `ERROR test_reviewer_is_not_the_author.py` — `database is locked` | **F292, mitigated tree** |
+| `34457272005` | `09e189f` | `ERROR test_flow_fires_a_review_turn.py` — `database is locked` | F292 |
+| `34455127011` | `f563815` | `ERROR test_reviewer_is_not_the_author.py` — `database is locked` | F292 |
+| `34454842948` | `a779891` | `ERROR test_flow_fires_a_review_turn.py` — `database is locked` | F292 |
+| `34452397977` | `6e1a054` | `ERROR test_flow_fires_a_review_turn.py` — `database is locked` | F292 |
+| `34424369060` | `4937ece` | `ERROR test_reviewer_is_not_the_author.py` — `database is locked` | F292 |
+| `34423636080` | `bb08dc4` | `ERROR test_reviewer_is_not_the_author.py` — `database is locked` | F292 |
+| `34419532531` | `fc9001a` | `FAILED test_flow_holds_the_loop_requirements.py::test_a_wide_flows_state_is_still_one_call` — `RuntimeError: <asyncio.locks.Lock …> is bound to a different event loop` | **F314** |
+| `34417742169` | `32fb7f4` | `ERROR test_flow_fires_a_review_turn.py` — `database is locked` | F292 |
+| `34417119378` | `3aa43f1` | `ERROR test_reviewer_is_not_the_author.py` — `database is locked`, `[SQL: DROP TABLE requirement_drift]` | F292 |
+| `34415761664` | `cd78e17` | both files — `database is locked` (2 errors) | F292 |
+| `34414764597` | `e6da0a0` | `FAILED …::test_a_wide_flows_state_is_still_one_call` — same `RuntimeError` | **F314** |
+| `34409508004` | `54ed088` | `ERROR test_flow_fires_a_review_turn.py` — `database is locked` | F292 |
+| `34329305198` | `2b33a6e` | both files — `database is locked` (2 errors) | F292 |
+| `34328330013` | `ed7d3ef` | `FAILED test_mcp_adapter_online.py::…_is_one_the_app_mounts` — `AssertionError` on `create_app().routes` | **starlette, deterministic** |
+| `34327744562` | `b3f4ba2` | same | **starlette, deterministic** |
+
+Three things fall out of that table that no aggregate rate would have carried:
+
+- **`F314` has a CI signature, and it is not an assertion.** That entry filed it as an order
+  dependence measured *locally* at ~1 in 8, with two affected tests named. Both CI occurrences are
+  one of those two — `test_a_wide_flows_state_is_still_one_call` — and both present as
+  `RuntimeError: <asyncio.locks.Lock object …> is bound to a different event loop`, not as the
+  failed assertion the name suggests. So `F314` is identifiable in a log at a glance, it does fire
+  on Linux CI and not only on this machine, and its CI rate here (2/41 = 4.9%) is lower than the
+  local ~12.5% rather than equal to it. That last comparison is weak — 2 events — but it is the
+  first CI measurement that entry has.
+- **The two `test_mcp_adapter_online.py` reds are not flakes at all.** They are consecutive
+  (`b3f4ba2` 08:11Z, `ed7d3ef` 08:17Z) and the very next run is green at `630473f`, *"fix(ci): the
+  route was mounted all along; the test was reading a structure starlette deleted"*. A deterministic
+  defect present at two shas and fixed at the third. They stay in the denominator — the suite ran to
+  the end in both, so F292 had its chance — and out of the numerator.
+- **F292's occurrences are narrower than "the flow family".** All 12, the mitigated one included,
+  land in exactly **two files and three tests**:
+  `test_flow_fires_a_review_turn.py::test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn`
+  (7 runs), `test_reviewer_is_not_the_author.py::test_a_wedged_review_is_restaffed_to_a_real_reviewer`
+  (5), and `…::test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted` (2, one of
+  them the mitigated-tree occurrence). 14 error rows across 12 runs. Every one of the three is a
+  flow-fires-a-review test, which is the same neighbourhood the `agent_trigger.py:1190` candidate
+  was promoted from.
+
+**One control this measurement does not have.** `master`'s newest `ci.yml` run is `5d928f5` at
+2026-09-10T09:46Z, *before* the mitigation, so there is **no unmitigated run anywhere in the
+mitigated window**. Nothing here separates the mitigation's effect from a concurrent change in the
+hosted runners. Recorded rather than argued away; the next `master` run is the control, whenever one
+happens.
+
+**Method**, so it can be repeated without re-deriving it:
+
+```bash
+gh run list --branch autonomous/2026-09-08-daily --workflow ci.yml --limit 60 \
+  --json headSha,conclusion,status,createdAt,databaseId \
+  --jq '.[] | [.createdAt, .headSha[0:7], .status, .conclusion, (.databaseId|tostring)] | @tsv'
+# then, for every run whose conclusion is `failure` -- and only those, never one still in progress:
+gh run view <id> --log-failed | awk '/short test summary info/{f=1} f' | grep -E '(FAILED|ERROR) '
+```
 
 
 
@@ -25112,6 +25241,15 @@ for i in $(seq 1 8); do
     | grep -E '^[0-9]+ (passed|failed)'
 done
 ```
+
+**It has a CI signature, measured 2026-09-11** (F292's day-`D-1` rate measurement, which had to
+classify this out to count that one). Two of the 41 pre-mitigation `ci.yml` runs on
+`autonomous/2026-09-08-daily` are this finding — `fc9001a` (run `34419532531`) and `e6da0a0` (run
+`34414764597`) — **2/41 = 4.9%**, against the ~12.5% measured locally. Both are
+`test_a_wide_flows_state_is_still_one_call`, one of the two tests named above, and **both present as
+`RuntimeError: <asyncio.locks.Lock object ...> is bound to a different event loop`, not as a failed
+assertion** — so this is identifiable in a CI log at a glance, and it is not confined to this
+machine. Two events is too few to call the CI/local difference real.
 
 **Related:** F292 (the schema-reset lock, same file family, different mechanism), F279 (a different
 pair of order-dependent failures, also undiagnosed — *"the two 'a stopped run' tests fail about half
