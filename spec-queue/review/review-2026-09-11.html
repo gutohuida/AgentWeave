@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave daily review — 2026-09-11</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --panel-2: #f4f4f2;
+    --ink: #1c1c1a;
+    --ink-dim: #5c5c56;
+    --ink-faint: #85857d;
+    --rule: #e0e0da;
+    --rule-strong: #c9c9c1;
+    --accent: #6b4fbb;
+    --sev-a: #b3261e;
+    --sev-a-bg: #fbe9e7;
+    --sev-b: #a8590a;
+    --sev-b-bg: #fdf0e0;
+    --sev-c: #4d6a1f;
+    --sev-c-bg: #eef4e2;
+    --sev-d: #4a5568;
+    --sev-d-bg: #eceef2;
+    --ok: #2f6b3a;
+    --ok-bg: #e8f3ea;
+    --warn-bg: #fdf6e0;
+    --warn-rule: #d9b84a;
+    --code-bg: #f2f2ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --panel: #1e1e23;
+      --panel-2: #26262c;
+      --ink: #e9e9e6;
+      --ink-dim: #b0b0a8;
+      --ink-faint: #86867e;
+      --rule: #33333a;
+      --rule-strong: #4a4a52;
+      --accent: #b09aec;
+      --sev-a: #ff9c92;
+      --sev-a-bg: #3a1f1d;
+      --sev-b: #f0b878;
+      --sev-b-bg: #392a17;
+      --sev-c: #b3d67a;
+      --sev-c-bg: #26301a;
+      --sev-d: #b4c0d4;
+      --sev-d-bg: #24282f;
+      --ok: #8fd39c;
+      --ok-bg: #1c2c20;
+      --warn-bg: #322a14;
+      --warn-rule: #8a7527;
+      --code-bg: #24242a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    padding: 2.2rem 1.25rem 5rem;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  header.page { border-bottom: 2px solid var(--rule-strong); padding-bottom: 1.1rem; margin-bottom: 1.6rem; }
+  header.page h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -0.015em; }
+  header.page .sub { color: var(--ink-dim); font-size: .95rem; }
+  h2 {
+    font-size: 1.22rem; letter-spacing: -0.01em;
+    margin: 2.6rem 0 .5rem; padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: .5rem; }
+  h3 { font-size: 1.02rem; margin: 1.5rem 0 .4rem; }
+  h4 { font-size: .93rem; margin: 1.1rem 0 .3rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .8rem; padding-left: 1.35rem; }
+  li { margin: .3rem 0; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .875em;
+  }
+  code { background: var(--code-bg); padding: .1em .34em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule);
+    border-radius: 6px; padding: .75rem .9rem; overflow-x: auto; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0 1rem; font-size: .93rem; }
+  th, td { text-align: left; padding: .48rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); border-bottom: 1px solid var(--rule-strong); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0; }
+  .note { border-left: 3px solid var(--warn-rule); background: var(--warn-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .note strong:first-child { display: block; margin-bottom: .2rem; }
+  .sev { display: inline-block; min-width: 1.35rem; text-align: center; font-weight: 700; font-size: .78rem; padding: .1rem .38rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+  .sev.a { color: var(--sev-a); background: var(--sev-a-bg); }
+  .sev.b { color: var(--sev-b); background: var(--sev-b-bg); }
+  .sev.c { color: var(--sev-c); background: var(--sev-c-bg); }
+  .sev.d { color: var(--sev-d); background: var(--sev-d-bg); }
+  .pill { display: inline-block; font-size: .76rem; font-weight: 600; letter-spacing: .03em; padding: .12rem .5rem; border-radius: 999px; border: 1px solid var(--rule-strong); color: var(--ink-dim); }
+  .pill.ok, .pill.driven { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .pill.tested { color: var(--sev-b); background: var(--sev-b-bg); border-color: transparent; }
+  .fid { font-family: ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
+  .loc { font-family: ui-monospace, monospace; font-size: .82em; color: var(--ink-faint); white-space: nowrap; }
+  .lede { font-size: 1.02rem; color: var(--ink-dim); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .28rem 1rem; font-size: .93rem; margin: .6rem 0; }
+  .kv dt { color: var(--ink-faint); }
+  .kv dd { margin: 0; }
+  .ask { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1.1rem; margin: 1rem 0; background: var(--panel); }
+  .ask h4 { color: var(--accent); margin-top: 0; }
+  .ok-banner { border-left: 3px solid var(--ok); background: var(--ok-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  a:visited { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  footer.page { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .85rem; }
+  .small { font-size: .88rem; color: var(--ink-dim); }
+  .measured { color: var(--ink-faint); font-size: .82rem; font-style: italic; }
+  @media (max-width: 34rem) {
+    body { padding: 1.4rem .8rem 3rem; font-size: 15px; }
+    table { font-size: .86rem; }
+    .kv { grid-template-columns: 1fr; gap: .1rem .5rem; }
+    .kv dd { margin-bottom: .45rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>Daily review — 2026-09-11</h1>
+  <div class="sub">
+    Branch <code>autonomous/2026-09-08-daily</code> · <strong>26 commits unmerged</strong>, spanning
+    2026-09-10 and 2026-09-11 · <strong>the merge gate did not open</strong>, and today found a
+    fourth cause that is not a timing bug · <strong>one change specced</strong>, 39 tasks, 0 ticked,
+    three rounds and all three changed it · two findings filed, one of them severity A
+  </div>
+</header>
+
+<div class="note">
+  <strong>The cycle did not land, and today the reason changed category.</strong>
+  <code>master</code> is still <code>5d928f5</code>, where yesterday's gate left it, and the branch
+  is 26 commits ahead. Three of today's four gate checks failed on <em>timing</em> — a diagnosis
+  §1 now states completely. The fourth did not: at 11:20 the gate failed because
+  <strong>CI went red on a documentation-only commit</strong>, which is <code>F292</code>, the
+  five-week-old flake this same window measured this morning. <strong>No <code>HEAD</code>-shaped
+  gate rule can work while <code>F292</code> stands</strong>, including the fix this page proposed
+  yesterday. That is the sharper half of the problem and it is yours to act on — see
+  <a href="#d3">decision 3</a>.
+</div>
+
+<p class="lede">
+  What this page needs from you: <strong>one change to approve, reject or revise</strong> (§4) and
+  <strong>six decisions</strong>, listed immediately below so none of them is buried. There was no
+  drive today — the spec loop took the whole day by design, so §3 is what <code>D-1</code>
+  <em>measured</em> rather than what a drive found. §6 is shorter than it should be: the research
+  file for today <strong>does not exist</strong>, and that is decision 1.
+</p>
+
+<!-- ============================== decisions ============================== -->
+<div class="ask">
+  <h4>Six things only you can decide</h4>
+  <ol>
+    <li id="d1">
+      <strong>The research task did not run this morning, and there is no file for 2026-09-11.</strong>
+      Not the usual quiet day — the task never started. Measured at 09:05: <code>Enabled</code>,
+      <code>StartWhenAvailable=True</code>, <code>WakeToRun=True</code>, the machine booted 03:05 so
+      it was awake at 07:10, <code>LastTaskResult=0</code> — and yet <code>LastRunTime</code> is
+      still <strong>2026-09-10T07:10</strong> while <code>NextRunTime</code> has advanced to
+      <strong>2026-09-12T07:10</strong>. The scheduler skipped the occurrence outright. Cause
+      unverified; there is no log for today to read. The day carried on without a candidate list,
+      which is what the playbook says to do — but a second skipped morning costs the loop its whole
+      research input, and it is worth ten minutes while you are awake.
+    </li>
+    <li id="d2">
+      <strong><code>F292</code>'s mitigation is measured and refuted as a fix</strong> (§3), and it
+      is not in the spec-loop order. <code>DIRECTION.md</code>'s 2026-09-11 section fixes that order
+      — <code>F306</code>, then <code>F300+F312</code> as one, then <code>F299</code>, then
+      <code>F301</code>'s notice, then the three R-3 leftovers — and today's window followed it
+      rather than re-deciding it. Whether <code>F292</code> should now displace something in that
+      order is yours. It is the single largest source of CI red on this project, and per decision 3
+      it is also what is holding the merge gate shut.
+    </li>
+    <li id="d3">
+      <strong>The merge gate needs a rule change, and it is a <code>day-window.md</code> edit, so
+      it is yours.</strong> The diagnosis is complete (§1). Gating on <em>the newest sha on the
+      branch with a concluded green run</em> instead of on <code>HEAD</code> repairs the three
+      timing failures — but it would not have opened the gate today, because the newest concluded
+      run was <code>8d227de</code>'s and it was red for a reason unrelated to the commit. Both
+      halves want deciding together.
+    </li>
+    <li id="d4">
+      <strong>The finding ledger's "shape of a fix" suggestions are being read as a head start, and
+      two of <code>F306</code>'s three were wrong.</strong> Kind-scoping is unimplementable against
+      a free-form field, and the guard fallback the entry named would have refused <em>every</em>
+      flow-staffed review. Both read as plausible; neither had been run. Nothing broke — a round
+      caught both, which is what rounds are for — but if later windows treat those lists as
+      pre-work, they want a pass labelling them unverified sketches.
+    </li>
+    <li id="d5">
+      <strong>What "blast radius" should mean in a proposal.</strong> R1 measured it over 15 files
+      chosen by fixture style, got 210 green, and wrote <em>zero</em>. R2 ran the whole Hub suite and
+      found one failure — in the file whose fixture <em>is</em> the defect. R3 then measured 88 green
+      across five suites, and that green is what hid its own finding. The whole suite is 26 minutes
+      on this machine, affordable inside a 5-minute-firing loop only if backgrounded at the top of a
+      firing. Not changed unilaterally: the rounds are already expensive and this lengthens one.
+    </li>
+    <li id="d6">
+      <strong>Should <code>F316</code> be split out of this change?</strong> It was filed by a
+      spec-loop round rather than by a drive, and its repair is folded in as task 2.4 rather than
+      given its own change. <em>For:</em> after <code>F306</code>'s guard change that call site
+      breaches <code>agent-flows:220-222</code>, so a change that leaves it alone does not close.
+      <em>Against:</em> it grows a change you scoped to "repair both defences" into one that repairs
+      four call sites, and <code>F316</code> is reachable today independently of <code>F306</code>.
+      Task 2.4 lifts out cleanly if you want it separate. No answer means it stays folded in.
+    </li>
+  </ol>
+</div>
+
+<!-- ============================== 1 ============================== -->
+<h2 id="s1"><span class="num">1</span>The branch, and the gate that stayed shut — now with a complete diagnosis</h2>
+
+<div class="card">
+  <dl class="kv">
+    <dt>Branch</dt><dd><code>autonomous/2026-09-08-daily</code></dd>
+    <dt>Unmerged</dt><dd><strong>26 commits</strong>, spanning 2026-09-10 and 2026-09-11 — the night window's build and today's spec loop</dd>
+    <dt><code>master</code></dt><dd><code>5d928f5</code>, unchanged since yesterday's gate opened. <strong>0 commits ahead</strong> of the branch, so nothing has diverged</dd>
+    <dt>Gate</dt><dd><strong>did not open</strong>, checked at four separate iterations today</dd>
+  </dl>
+</div>
+
+<p>
+  The gate has four conditions. It has opened <strong>once ever</strong> — yesterday, on that day's
+  seventh firing. Today it was checked every iteration, the reason it refused moved three times, and
+  the fourth reason is a different kind of thing from the first three.
+</p>
+
+<table>
+  <thead><tr><th>Checked</th><th>What failed</th><th>What it told us</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Iteration 2, at the firing's <strong>start</strong></td>
+      <td>Condition 3 — <code>f51ec21</code> concluded <code>failure</code> at 08:12Z, and HEAD's own run was still in flight</td>
+      <td>Checking at the start finds a run that has not finished. Iteration 1's refusal to accept the previous day's stale green was right, for a better reason than it gave: accepting it would have landed a red commit on <code>master</code>.</td>
+    </tr>
+    <tr>
+      <td>Iteration 3, at the firing's <strong>end</strong></td>
+      <td>Condition 3 again</td>
+      <td>Checking at the end only helps if the firing outlasts the build. A 25-minute firing does not.</td>
+    </tr>
+    <tr>
+      <td>Iteration 4</td>
+      <td>Condition <strong>2</strong> — condition 3 held for the first time ever (<code>35cdd38</code> green)</td>
+      <td>The structural one. A firing that has done its work has a dirty tree <em>by definition</em>; one that has committed has moved <code>HEAD</code> to a sha CI has not built yet. <strong>The gate as written can only pass in a gap that no firing occupies.</strong></td>
+    </tr>
+    <tr>
+      <td>Iteration 5, 11:20</td>
+      <td>Condition 3 — <code>8d227de</code> concluded <strong><code>failure</code></strong></td>
+      <td><strong>Not a timing failure at all.</strong> See directly below.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>The fourth reason: CI went red on a commit that contains no code</h3>
+
+<p>
+  Run <code>34583319728</code> on <code>8d227de</code>: <code>4041 passed, 18 skipped, 1 error</code>
+  — the error <code>sqlalchemy.exc.OperationalError: database is locked</code> at <em>setup</em> of
+  <code>test_reviewer_is_not_the_author.py</code>, the same file as this morning's
+  <code>F292</code> reproduction. <strong><code>8d227de</code> is a documentation-only commit.</strong>
+  Its diff touches no Python. Nothing about the tree under test explains the failure.
+</p>
+
+<div class="note">
+  <strong>This is why the rule change proposed yesterday is not sufficient on its own.</strong>
+  Gating on <em>the newest sha with a concluded green run</em> rather than on <code>HEAD</code>
+  repairs all three timing failures. It would still have skipped <code>8d227de</code> today, for a
+  reason that has nothing to do with that commit. <strong>A branch whose CI goes red on
+  documentation at some rate cannot fast-forward onto <code>master</code> under any
+  <code>HEAD</code>-shaped rule until <code>F292</code> is fixed.</strong> The two decisions belong
+  together.
+</div>
+
+<p class="small">
+  Condition 1 (branch ≠ <code>master</code>, <code>HEAD..master</code> = 0) and condition 4 (no
+  line-initial <code>HOLD MERGE</code> in <code>DIRECTION.md</code>) held at every check today.
+  Nothing was landed and <code>master</code> was not touched by any step.
+</p>
+
+<!-- ============================== 2 ============================== -->
+<h2 id="s2"><span class="num">2</span>What the night built — and which of it was <em>driven</em></h2>
+
+<p>
+  The night window ran seven iterations and finished its change:
+  <code>2026-09-10-the-control-that-asks-holds-the-keyboard</code> — <code>F309</code> (A) and
+  <code>F310</code> (B) — built, driven and archived, <strong>41 tasks ticked</strong>. It is the
+  change you approved yesterday, and the row's demand that it be verified <em>as two findings</em>
+  was honoured: each carries its own <code>Status:</code> line naming <strong>which commit did which
+  half</strong>, because either half alone was measured not to work.
+</p>
+
+<table>
+  <thead><tr><th>Built</th><th>Evidence</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>useDialogFocus</code> returns on <code>defaultPrevented</code>; three nested owners, the row menu and the reason panel rebuilt around it</td>
+      <td><span class="pill driven">driven</span> in a real browser against the served bundle — the <code>escape</code> harness <strong>48/0</strong> and <code>rowmenu</code> <strong>37/0</strong>, both from a red start (30/6 and 18/1)</td>
+    </tr>
+    <tr>
+      <td>The keyboard path to blocking a ticket — the thing <code>F309</code> says is impossible</td>
+      <td><span class="pill driven">driven</span>, probe P6: Enter opens the menu, ArrowDown until focus is on <code>task-status-menu-&lt;id&gt;-blocked</code>, Enter takes it, focus lands on the <code>INPUT</code>, 19 characters land, Tab reaches the confirm button, and the Hub's record reads <code>status='blocked' reason='the staging API key'</code></td>
+    </tr>
+    <tr>
+      <td><code>RowMenu</code> defers a focus-taking item's action to <code>onCloseAutoFocus</code></td>
+      <td><span class="pill driven">driven</span> and <span class="pill tested">mutation-checked</span> — and this was <em>not</em> in the plan. The first run against the built bundle was 45/2 and both survivors were <code>F309</code> itself; two browser probes named the cause (Radix flushes <code>onSelect</code> synchronously, so the panel focused its input while the menu scope still trapped)</td>
+    </tr>
+    <tr>
+      <td>Unit coverage, lint, and the committed UI bundle</td>
+      <td><span class="pill tested">tested only</span> — full UI suite 148 files / 1529 tests, <code>AW_CHECK_UI_BUNDLE=1</code> 18 passed, <code>eslint</code> and <code>tsc</code> clean</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>One thing it found and deliberately did not fix.</strong> <code>F315</code> (C): the block
+  button says nothing for the 1.5–3 s the mutation takes, stays enabled, and a second press writes
+  the move again — which the Hub answers <code>200</code>. The draft had predicted a refusal; the
+  measurement says otherwise, and the entry records that its own prediction was wrong. Left standing
+  on purpose: every status move in that menu shares the gap, so it wants a change that owns
+  optimistic feedback for task mutations, not a patch to one button.
+</p>
+
+<p class="small">
+  <code>DAY-1</code> from yesterday's page was honoured: <code>F307</code> is untouched, still
+  reproduces at <code>HEAD</code> — leg E of the drive reproduces it against the very bundle that
+  carries the fix — and it now carries a dated note saying why this change left it standing.
+</p>
+
+<!-- ============================== 3 ============================== -->
+<h2 id="s3"><span class="num">3</span>What <code>D-1</code> measured — <code>F292</code>'s mitigation does not hold</h2>
+
+<p>
+  There was no drive today: the playbook spent the drive slot on this instead, on
+  <code>DIRECTION.md</code>'s instruction. <code>F292</code> is the <code>database is locked</code>
+  failure that has been the project's largest source of CI red for five weeks. A
+  <code>BEGIN IMMEDIATE</code> mitigation landed yesterday at <code>af69a27</code> and was unproven —
+  two runs carried it.
+</p>
+
+<div class="card">
+  <p style="margin-top:0">
+    <strong><span class="sev a">A</span> It reproduced on the mitigated tree.</strong>
+    <code>f51ec21</code>, run <code>34576656234</code>, 08:12Z — the same
+    <code>database is locked</code> signature, in <code>test_reviewer_is_not_the_author.py</code>.
+    Then <strong>again</strong> at 09:16Z on <code>8d227de</code>, run <code>34583319728</code>, same
+    file. <strong>The mitigation is refuted as a fix.</strong>
+  </p>
+</div>
+
+<h3>The rate is the less useful half, and today it was corrected against itself</h3>
+
+<table>
+  <thead><tr><th>Tree</th><th>Completed runs</th><th>Red, attributed to <code>F292</code></th></tr></thead>
+  <tbody>
+    <tr><td>Without the mitigation</td><td>41</td><td><strong>11</strong></td></tr>
+    <tr><td>With the mitigation (iteration 2's count)</td><td>17</td><td><strong>1</strong></td></tr>
+    <tr><td>With the mitigation (iteration 5, after the second reproduction)</td><td>18</td><td><strong>2</strong></td></tr>
+  </tbody>
+</table>
+
+<p>
+  Iteration 2 recorded <em>one-sided p ≈ 0.036 for "no change"</em> without naming its test.
+  Iteration 5 recomputed it by <strong>Fisher exact, one-sided</strong>: <strong>p = 0.069</strong>
+  for 1/17 and <strong>p = 0.159</strong> for 2/18. The earlier figure is left standing rather than
+  overwritten, because the disagreement is about method — but <strong>the rate half should now be
+  read as consistent with no effect</strong>. Every red was classified from its own log before being
+  counted: <code>F314</code> (2 of 41, and it gained a CI signature today — <code>RuntimeError:
+  bound to a different event loop</code>) and a deterministic starlette route defect fixed at
+  <code>630473f</code> (2 of 41) were attributed out rather than folded in.
+</p>
+
+<div class="note">
+  <strong>The genuinely new thing is not the rate.</strong> The mitigation's own section had written
+  down what surviving it would mean: <em>the lock holder arrives <strong>before</strong> the schema
+  reset rather than during it</em>. That branch has now fired, twice. That is strictly narrower than
+  anything the five-week-old entry has carried, and it is what the next diagnostic should aim at —
+  sampling <em>concurrently</em>, from a separate task while the <code>DROP</code> is blocked, and
+  attributing each pool error to a connection identity. Every sample so far was taken either side of
+  the 30-second busy-timeout wait and never inside it.
+</div>
+
+<p class="small">
+  Written up in <code>FINDINGS.md</code> as a dated section on <code>F292</code>, a cross-reference
+  on <code>F314</code>, and a block quote under <code>ROADMAP.md</code>'s "Stage 1 is mitigated"
+  paragraph — which was, until today, the only place a reader would have learned that the mitigation
+  was thought to work.
+</p>
+
+<h3>Two findings were filed today, both by rounds rather than by a drive</h3>
+
+<table>
+  <thead><tr><th>#</th><th></th><th>What it is</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="fid">F316</td><td><span class="sev a">A</span></td>
+      <td>The reviewer picked after a <em>silent</em> review excludes only the completer, so on operator-completed work it can pick the author. Filed by R2 from the code; <strong>reproduced</strong> by R3 at unit level. Reachable today, independently of <code>F306</code>.</td>
+      <td class="loc">run_divergence.py:415-421</td>
+    </tr>
+    <tr>
+      <td class="fid">F317</td><td><span class="sev b">B</span></td>
+      <td>The finding classifier reads a domain verb in a section's own <em>title</em> as a status verdict, so it printed the open severity-A count one short — it could not see <code>F316</code>. Mutation-checked: change the one word and the count is six.</td>
+      <td class="loc">scripts/classify_findings.py:101,284-290,307</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="small">
+  <code>F317</code> matters mainly because <strong>that count is what both scheduled windows steer
+  by</strong> — the night's default queue and the day's spec-loop order are drawn from it. The
+  open severity-A set is <strong>six</strong>: <code>F299</code>, <code>F300</code>,
+  <code>F301</code>, <code>F306</code>, <code>F312</code>, <code>F316</code>. The instrument prints
+  five, and <code>FINDINGS.md</code> now carries a correction paragraph saying so until it is
+  repaired.
+</p>
+
+<!-- ============================== 4 ============================== -->
+<h2 id="s4"><span class="num">4</span>What was specced — and what each of the three rounds changed</h2>
+
+<div class="card">
+  <dl class="kv">
+    <dt>Change</dt><dd><code>an-agent-that-recorded-the-evidence-is-the-author</code></dd>
+    <dt>Retires</dt><dd><code>F306</code> <span class="sev a">A</span> and <code>F316</code> <span class="sev a">A</span></dd>
+    <dt>Size</dt><dd><strong>39 tasks, 0 ticked</strong> · 6 MODIFIED requirements across <code>agent-flows</code> and <code>task-lifecycle-governance</code> · <strong>no migration</strong>, no new column, no API shape change</dd>
+    <dt>State</dt><dd><strong>proposal-complete and not implemented.</strong> <code>openspec validate --strict</code> passes, re-run just now</dd>
+  </dl>
+</div>
+
+<h3>The problem, in one line</h3>
+
+<p>
+  On 2026-09-09 agent <code>r7af142d</code> recorded an <code>implementation</code> evidence row
+  against a task, you walked that task <code>pending → in_progress → completed</code> by hand, the
+  flow fired, and the flow staffed <strong><code>r7af142d</code> as the reviewer of its own
+  code</strong>. Sequence 19 of that task's history is <code>under_review → approved</code>,
+  <code>actor_kind='run'</code>, <code>actor_agent='r7af142d'</code>. Nothing refused it and nothing
+  recorded that it had happened.
+</p>
+
+<p>
+  <code>agents_that_may_have_authored</code> is the union of exactly <strong>three</strong> records —
+  transitions, <code>assignee</code>, runs bound to the task. A <strong>fourth</strong> exists and is
+  not a source: <code>requirement_evidence.actor</code>. When the <em>operator</em> completes the
+  work, all three legitimate sources are legitimately empty, the ladder gets
+  <code>exclude=set()</code>, and the function's own docstring has already ruled that value out. By
+  the function's own stated principle the missing source is the <strong>strongest</strong> of the
+  four: the other three are circumstantial, while an <code>implementation</code> evidence row is the
+  agent asserting <em>this is my implementation of this task</em>, carrying the very commit the
+  reviewer is then handed.
+</p>
+
+<h3>What each round changed — and none of the three came back empty</h3>
+
+<h4>R1 — the proposal, and it answered its three open questions by measurement</h4>
+<p>
+  Your verdict deliberately left three things to R1, and R1 <em>ran</em> all three rather than
+  arguing them. <strong>The ladder is deterministic</strong>: <code>_agents_that_are_free</code>
+  orders by <code>Agent.name</code> and rung 2 takes the first eligible candidate — measured stable
+  across repeats and independent of insertion order — so <code>F306</code> is
+  <strong>systematic, not a coin flip</strong>, and the finding's "how often" question has no
+  frequency answer. <strong>The fallback is the evidence term alone</strong>, and
+  <code>FINDINGS.md</code>'s own suggestion of falling back to the full union is
+  <strong>refuted</strong>: <code>enter_selected_task</code> sets <code>assignee</code> to the
+  reviewer <em>before</em> the <code>under_review</code> transition, so the union at approval time
+  measured <code>{'zz-reviewer-g'}</code> — a union fallback would refuse every flow-staffed review
+  of an operator-completed task. R1 also found that <code>agent-flows:221-224</code>
+  <strong>already requires</strong> the ladder half, so repairing only the guard would breach a
+  shipped requirement.
+</p>
+
+<h4>R2 — three of its four checks changed the proposal</h4>
+<p>
+  R2 re-derived from the code rather than re-reading R1, and it moved the change substantially.
+  <strong>R1's "no existing test's expectation changes" was false.</strong> The whole Hub suite
+  against a prototype gave <strong>1 failed / 4044 passed / 86 skipped</strong>, and the failure is
+  <code>test_approval_refuses_unaccepted_evidence.py::test_the_agent_plane_sees_the_refusal</code> —
+  whose fixture <em>is</em> <code>F306</code> (operator-walked task, agent-recorded evidence, that
+  same agent asking for <code>approved</code>, asserting <code>409</code>); it now answers
+  <code>403</code> author-first. R1 missed it because its file-selection rule was "suites seeding
+  evidence through <code>review_evidence.py</code>", and this file has its own helper. R2 also found
+  that <strong>the two scheduler call sites are not the only two</strong>:
+  <code>review_dispatch_refusal</code> (<code>agent_trigger.py:452-490</code>) and
+  <code>_answer_failed_review</code> (<code>run_divergence.py:415-421</code>) both compose the
+  exclusion from <code>agent_that_completed</code> alone — so without them the change would
+  <em>breach</em> <code>task-lifecycle-governance:1719-1722</code> ("refused <strong>before</strong>
+  a turn is started"). That is where <code>F316</code> came from. And the kind-scoping conclusion
+  survived while <strong>its argument was wrong</strong>: <code>db.models.EVIDENCE_KINDS</code> does
+  exist, with six values, and is simply unenforced — so the argument was replaced with two corpus
+  prohibitions. The change grew from 3 MODIFIED requirements to 6.
+</p>
+
+<h4>R3 — four of five attacks confirmed R2, and the fifth found a defect in R2's own addition</h4>
+<p>
+  R3's finding is the one this page would most like you to read. R2's new task 2.4 gives
+  <code>_answer_failed_review</code> the wider exclusion term — but it calls
+  <code>resolve_reviewer</code> <strong>without <code>excluded_because</code></strong>, so the reason
+  shown to you defaults to <em>"is the one that completed this task"</em>. That clause is true of the
+  term the call site passes <em>today</em> and <strong>false</strong> of the term 2.4 makes it pass.
+  <code>agent-flows:552-558</code> forbids exactly this, in terms, with its own shipped scenario, and
+  call site 2 switches the clause at <code>scheduler.py:1555/1575</code> for precisely this reason.
+  Measured, not argued: against the prototype, a task <em>the operator completed</em> produced a
+  <code>run_diverged</code> event, <code>severity="warn"</code>, reading
+  <em>"…or is the one that completed this task and so may not review it"</em>. So
+  <strong>a change written against telling you an untruth would have told you one.</strong>
+  Repaired as tasks 2.4a and 4.10a, plus a sentence in the modified requirement and a scenario under
+  it.
+</p>
+
+<div class="note">
+  <strong>The 88 green is what hid it.</strong> R3 measured the blast radius of tasks 2.4 and 3.5 for
+  the first time — <strong>88 passed, 0 failed</strong> across the five suites that cover this code,
+  102 s. Every one stayed green while the sentence shown to the operator became untrue, because
+  nothing asserts on it. This is the same shape as R2's finding one layer down, and it is
+  <a href="#d5">decision 5</a>.
+</div>
+
+<p>
+  R3's other three attacks confirmed R2 <em>by measurement rather than by reading</em>, which is why
+  running them was not wasted: the trap R2 worried about does not reach 2.4 (the union's only
+  contaminant is already barred twice); <code>F316</code> <strong>reproduces</strong>, so its status
+  line moved from "derived, not driven"; and all six MODIFIED headers match
+  <code>openspec/specs/</code> character for character, with scenario counts going 8→11, 5→7, 10→12,
+  5→10, 9→11, 6→6 and <strong>no shipped scenario dropped</strong> — checked mechanically, not by
+  eye.
+</p>
+
+<p class="small">
+  In one sentence: <strong>R1 got the union right and missed two call sites; R2 got the two call
+  sites right and missed that one of them composes a second thing; R3 found that.</strong> Three
+  rounds, three real changes, and the discipline is now at six consecutive outings with a finding.
+</p>
+
+<!-- ============================== 5 ============================== -->
+<h2 id="s5"><span class="num">5</span>If you approve nothing, here is what tonight does</h2>
+
+<p>
+  Walked against the night playbook's default queue and measured just now, not guessed. An empty or
+  absent approvals section is <em>normal</em>. The honest answer tonight is
+  <strong>almost nothing</strong>, and it is worth a minute of your attention because it is thinner
+  than yesterday's.
+</p>
+
+<ol>
+  <li>
+    <strong>Unarchived changes that are implemented and only need archiving</strong> — the cheapest
+    work in the repository. <strong>None.</strong> <code>openspec/changes/</code> holds exactly one
+    non-archive directory, the one on this page, and it stands at <strong>0 of 39 tasks</strong>.
+    The night window archived the last survivor at 00:32.
+  </li>
+  <li>
+    <strong>Open findings, severity A before B before C</strong> — but the playbook's own rule is
+    that <em>a finding with no proposal needs the day window first</em>, so it is queued as a note to
+    tomorrow rather than built tonight. The six open A findings are <code>F299</code>,
+    <code>F300</code>, <code>F301</code>, <code>F306</code>, <code>F312</code> and
+    <code>F316</code>. <strong>Exactly one has a proposal — the change on this page — and
+    <code>F316</code> is inside it.</strong> So this route produces notes back to tomorrow's day
+    window and no shipped work.
+  </li>
+  <li>
+    <strong>Approved rows.</strong> None, by hypothesis.
+  </li>
+</ol>
+
+<div class="note">
+  <strong>So an unapproved night has no substantial build in front of it.</strong> What it could
+  legitimately take without you is instrument work: the <code>F292</code> concurrent sampler
+  described in §3 (<code>conftest.py</code>-only, needs no spec, worth about one iteration), and the
+  <code>F317</code> classifier repair (one narrowed pattern, a test, and a re-census). Neither lands
+  a feature. <strong>If you want the night to build, §4 is the thing to approve.</strong>
+</div>
+
+<p class="small">
+  Both control tokens are available as always: <code>ORDER:</code> sets tonight's queue verbatim, and
+  <code>NOTHING TONIGHT</code> stops the window entirely.
+</p>
+
+<!-- ============================== 6 ============================== -->
+<h2 id="s6"><span class="num">6</span>The research — there is none today, and that is the point</h2>
+
+<div class="note">
+  <strong>No research file exists for 2026-09-11.</strong> <code>spec-queue/research/</code> ends at
+  <code>2026-09-10.md</code>. This is <em>not</em> the familiar case of a quiet morning producing a
+  thin list — the <code>AgentWeaveResearch</code> task never started. The evidence is in
+  <a href="#d1">decision 1</a>: every property that would explain a skip reads the way it should,
+  <code>LastTaskResult</code> is <code>0</code>, and the scheduler simply advanced
+  <code>NextRunTime</code> past today.
+</div>
+
+<p>
+  Why it matters rather than being bookkeeping: research is the <em>only</em> input to this loop that
+  does not come from the loop itself. The day window drives the product and reads its own ledger; the
+  night window builds what the day specced. Candidates from outside — an upstream release that
+  invalidates an adapter assumption, a protocol change, a practice this repository has not met — only
+  ever arrive through that file. A loop that loses it does not stop; it quietly narrows to auditing
+  its own output, and nothing in the machinery reports that as a failure. Today that happened once.
+  <strong>Twice would be a pattern, and the loop cannot diagnose it from inside, because the process
+  that would notice is the one that did not run.</strong>
+</p>
+
+<p class="small">
+  Today's window carried on without a candidate list, which is what the playbook says to do:
+  <code>DIRECTION.md</code> had already fixed the day's work to <code>F306</code>, so nothing was
+  actually blocked. The cost was not paid today. It would be paid on the first morning the direction
+  file runs out of decided items.
+</p>
+
+<footer class="page">
+  Written by the FILL window, 2026-09-11, on <code>autonomous/2026-09-08-daily</code> at
+  <code>51dc41f</code>. Sources: <code>.claude/autonomous/2026-09-11-day-log.md</code> (iterations
+  1–5), <code>.claude/autonomous/2026-09-10-night-log.md</code>,
+  <code>scripts/drive/FINDINGS.md</code>, <code>spec-queue/DIRECTION.md</code>, and
+  <code>openspec/changes/an-agent-that-recorded-the-evidence-is-the-author/</code>. Every number on
+  this page was measured by the iteration that reports it; where two iterations disagreed (§3's
+  p-value) both are shown. Your decisions go in <code>spec-queue/APPROVALS.md</code>, which now
+  carries a 2026-09-11 section with one row and no status token.
+</footer>
+
+</div>
+</body>
+</html>

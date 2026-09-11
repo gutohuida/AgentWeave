@@ -410,6 +410,16 @@ in the sentence that states it.
 standing on purpose — every status move in that menu shares the gap, so it wants a change that owns
 optimistic feedback for task mutations rather than a patch to one button.
 
+**Corrected 2026-09-11 (day window, `D-5`): the open severity-A count is SIX, and the instrument
+prints five.** The revision above is right about its method and wrong about its number, through no
+fault of the window that wrote it — `F316 (A)` was filed by the day window hours later. But
+recomputing does not surface it either: `classify_findings.py` still prints five, because that
+finding's title contains the domain verb for picking a reviewer and the script's own-heading arm
+reads the participle as a verdict about the finding. Filed as `F317 (B)`, mutation-checked — change
+the one word and the count is six. Until that is repaired, **the computed severity-A count is a
+floor and this sentence is the correction**, which is the arrangement the paragraph below spends
+its length arguing against. Both numbers are stated so neither can be quoted alone.
+
 **This paragraph was written under `F313`'s rule.** Every verdict was captured before a word of this
 close-out was edited and recomputed after, with the requirement that the only sections whose verdict
 moves are the two the night repaired. That held. It is worth saying what the *before* run showed,
@@ -25412,5 +25422,67 @@ that change ships, this is closed by it and the entry should say which commit.
 
 **Related:** `F306` (the same blind spot, one source over), `F142` (the widening that did not reach
 this call site), `F167`.
+
+---
+
+
+## F317 (B) — the finding classifier reads a domain verb in a section's own title as a status verdict, and prints the open severity-A count one short
+
+**Status:** open — filed 2026-09-11 (day window, `D-5`), found while computing the open severity-A
+count for the review page instead of copying the night's. Mutation-checked; the cause is proved and
+is one word.
+
+**The measurement.** `py -3.11 scripts/classify_findings.py` prints `severity A: OPEN=5` and names
+five sections. `F316 (A)` was filed earlier the same day, carries an explicit open status marker on
+the line below its own title, and is in none of them. Its record reads `verdict=RESOLVED` on
+evidence the script labels "own heading", quoting the title itself.
+
+**The cause.** `EXT_WORD` (line 101) matches seven resolution words case-insensitively — the five
+upper-case ones this file uses to retire a section, plus the two lower-case participles:
+
+> `EXT_WORD = re.compile(r"\b(RETIRED|RETRACTED|FIXED|SUPERSEDED|WITHDRAWN|closed|resolved)\b", re.I)`
+
+The own-heading arm at lines 284–290 searches it against the first line of every range belonging to
+the finding. `F316`'s title is "the reviewer resolved after a silent review excludes only the
+completer" — and there the participle is the **domain verb for picking a reviewer**, the same word
+`scheduler.resolve_reviewer` is named for. It is the subject of the defect, not a claim about the
+defect's state. The verdict block at lines 307–314 then reads `if in_res: v = "RESOLVED"`
+**unconditionally**, so an in-section marker outranks the section's own status line without even
+producing the `CONFLICT` that blind spot 4 exists to put in front of a human.
+
+**Mutation check.** Replacing that one participle with "chosen" in that one title, in memory, with
+nothing else changed: the verdict moves to open on its own status-line evidence, and the severity-A
+set comes back as six. Restoring the word restores five. Nothing else in the file moves.
+
+**Blast radius, measured over the whole file.** Five sections take their verdict from the
+own-heading arm. Four are true positives: two titles end in a literal status token (lines 12102 and
+12207) and two are the continuation headings the arm was written for, which its own code comment
+names. `F316` is the only false positive, and it is the only severity-A one.
+
+**Why this is a B and not a C.** The number this arm corrupted is the number both scheduled windows
+steer by. The night window's default queue is *open findings, severity A before B before C*, and the
+day window's spec-loop order is drawn from the same list; a finding invisible to the census is
+queued by neither. `F316` stayed safe today only because a hand-written paragraph names it four
+lines above the census — which is exactly the hand-maintained list this instrument was built to
+replace, and the reason its header insists the numbers be computed in the sentence that states them.
+
+**Shape of a fix, not decided here, and two of the three shapes are worse than they look.**
+Narrowing the heading arm's vocabulary to *structurally* status-shaped forms — a trailing token
+after an em dash, a leading token, an "is …" predicate — keeps both true-positive families and drops
+this one; the arm already justifies itself as structural evidence, so demanding structure is in
+character. Routing to `CONFLICT` when a section carries both this evidence and an explicit status
+line would surface it to a human rather than silently deciding, but it changes the verdict of every
+self-narrating section and wants its own measurement first. Banning the word from titles is not a
+fix at all: it turns the instrument's blind spot into a rule for the people it measures, which is
+the failure `F313` is about.
+
+**This entry is written around its own finding.** Every literal status token above sits inside a
+quotation or a blockquote, because `dequote()` blanks those before matching and nothing else would
+stop this section from classifying itself as done. The first draft did not: it printed the
+alternation above as ordinary prose, and promptly took a done verdict from the first upper-case
+token in it — found, reproduced and repaired inside ten minutes, inside the entry that describes the
+defect.
+
+**Related:** `F313`.
 
 ---

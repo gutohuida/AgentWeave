@@ -16,6 +16,60 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-11
+
+Written by the FILL window, 2026-09-11, from `review/review-2026-09-11.html`. **No status token is
+supplied below — that is the operator's to write.** A row with no token is not an approval and the
+FIX window builds nothing from it.
+
+**Note for whoever reads this at 23:00:** this section is now the newest, so the 2026-09-10 section
+below is out of scope and the token on its row is history, not an instruction. There is deliberately
+**no `ORDER:` line here** — absent an operator decision the default queue applies, and section 5 of
+today's review page walks what that produces. Measured: **it produces no substantial build.**
+`openspec/changes/` holds one non-archive directory, the change below, at 0 of 39 tasks; nothing is
+waiting to be archived; and of the six open severity-A findings exactly one has a proposal, which is
+that same change.
+
+`an-agent-that-recorded-the-evidence-is-the-author` — F306 (A) and F316 (A), retired together. An
+agent that recorded the evidence for a task was staffed to review, and approved, its own work,
+because the exclusion set reads three record sources and the evidence table is a fourth it does not
+read. 39 tasks across the union function, four call sites, the approval guard, six MODIFIED
+requirements in `agent-flows` and `task-lifecycle-governance`, and new coverage including a mutation
+table. **No migration, no new column, no API shape change, and it does not touch the UI bundle.**
+`openspec validate --strict` passes, re-run 2026-09-11 10:52. All three rounds changed it — the
+argument is section 4 of the review page, and R3's finding is that R2's own repair would have shown
+the operator a sentence that is untrue of the task in front of them.
+
+**Six decisions on the page**, all of them in one box near the top so none is buried. Two want an
+answer before tonight and four are about how the loop works:
+
+- **Decision 6 on the page** — should `F316` be split out into its own change? It is folded in as
+  task 2.4, which lifts out cleanly. **No answer means it stays folded in**, which is the only one
+  of the six that changes what tonight builds.
+- **Decision 1 on the page** — the research task did not run this morning and there is no file for
+  2026-09-11. The scheduler skipped the occurrence; cause unverified and no log exists to read.
+  Nothing was blocked today, but this is the loop's only input from outside itself.
+- The other four: whether `F292` should displace something in the spec-loop order now that its
+  mitigation is measured and refuted; the merge-gate rule change, which is a `day-window.md` edit
+  and so the operator's; whether the ledger's "shape of a fix" lists should be labelled unverified
+  after two of `F306`'s three were measured wrong; and what "blast radius" should mean in a
+  proposal, after three rounds measured it three different ways and the widest one found the defect.
+
+**The merge gate did not open today** and `master` is still `5d928f5`, 26 commits behind. Three of
+today's four checks failed on timing — that diagnosis is now complete — and the fourth failed
+because CI went red on a **documentation-only** commit, which is `F292`. **No `HEAD`-shaped gate rule
+can work while `F292` stands**, so the rule change proposed yesterday is necessary and not
+sufficient. Section 1 of the page has the four checks side by side.
+
+If you approve nothing, the FIX window falls to the default queue, which tonight is thin enough to
+be worth naming: the `F292` concurrent sampler (`conftest.py`-only, no spec) and the `F317`
+classifier repair. Neither lands a feature. `ORDER:` and `NOTHING TONIGHT` are both available.
+
+Two things on the page are **not** work and want no row here: the research-task question, and the
+merge-gate rule change — both are the operator's to act on outside this file.
+
+---
+
 ## 2026-09-10
 
 Written by the FILL window, 2026-09-10, from `review/review-2026-09-10.html`. **No status token is
