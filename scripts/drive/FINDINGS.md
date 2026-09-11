@@ -410,15 +410,27 @@ in the sentence that states it.
 standing on purpose — every status move in that menu shares the gap, so it wants a change that owns
 optimistic feedback for task mutations rather than a patch to one button.
 
-**Corrected 2026-09-11 (day window, `D-5`): the open severity-A count is SIX, and the instrument
-prints five.** The revision above is right about its method and wrong about its number, through no
-fault of the window that wrote it — `F316 (A)` was filed by the day window hours later. But
-recomputing does not surface it either: `classify_findings.py` still prints five, because that
-finding's title contains the domain verb for picking a reviewer and the script's own-heading arm
-reads the participle as a verdict about the finding. Filed as `F317 (B)`, mutation-checked — change
-the one word and the count is six. Until that is repaired, **the computed severity-A count is a
-floor and this sentence is the correction**, which is the arrangement the paragraph below spends
-its length arguing against. Both numbers are stated so neither can be quoted alone.
+**Corrected 2026-09-11 (day window, `D-5`), half-repaired the same day at `D-6` (`cb7c86b`): the
+open severity-A set has SIX members, and the instrument prints `OPEN=5  CONFLICT=2`.** The revision
+above is right about its method and wrong about its number, through no fault of the window that
+wrote it — `F316 (A)` was filed by the day window hours later. But recomputing did not surface it
+either, and `F317 (B)` says why: that finding's title contains the domain verb for choosing a
+reviewer, and the classifier's own-heading arm read the participle as a verdict about the finding
+rather than as a description of it. `D-6` repaired that arm and drove the repair over this file, so
+the first half of the correction is now structural rather than a sentence: the B, C, D and `?`
+census lines did not move at all, and `F316` left the done bucket.
+
+**It did not land on `OPEN`, and the difference matters to anything that queues.** A second and
+independent defect holds it at `CONFLICT` — `F318 (B)`, filed the same hour: the cross-section arm
+strips quotation one line at a time, so the quotation of `F316`'s title inside `F317`'s own body,
+which wraps, is read as a sentence about `F316`. So the reading of record is this. **The open
+severity-A set is `F299`, `F300`, `F301`, `F306`, `F312` and `F316`. The instrument prints five of
+them under `OPEN` and the sixth under `CONFLICT`.** That is the escalation blind spot 4 exists to
+produce and is far better than the silent done verdict it replaced — a human scanning the output
+sees the number now — but a window that queues *`OPEN`, A before B before C* and reads no further
+will still walk past it. Until `F318` is repaired, **both numbers stay stated here so neither can be
+quoted alone**, which is the arrangement the paragraph below spends its length arguing against and
+which has now earned two consecutive days of its keep.
 
 **This paragraph was written under `F313`'s rule.** Every verdict was captured before a word of this
 close-out was edited and recomputed after, with the requirement that the only sections whose verdict
@@ -23435,6 +23447,39 @@ gh run view <id> --log-failed | awk '/short test summary info/{f=1} f' | grep -E
 
 
 
+### A third reproduction the same day, and the statement that fails is the mitigation's own
+
+Recorded at `D-6` while checking the merge gate, so the denominator above is not re-derived here —
+only the event and the one thing about it that is new.
+
+`7970930` is the day window's `D-5` commit and it touches **nothing but documentation**: the review
+page, `APPROVALS.md`, this file, the state file and the log. Its CI run `34586826361` concluded
+`failure` at 2026-09-11 10:13Z on the familiar signature, in the familiar file:
+
+```
+ERROR tests/test_reviewer_is_not_the_author.py::test_a_wedged_review_is_restaffed_to_a_real_reviewer
+  sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked
+  [SQL: BEGIN IMMEDIATE]
+```
+
+Two things this adds to the section above, neither of them a rate.
+
+**The failing statement is `BEGIN IMMEDIATE` itself.** The section above reasoned its way to this —
+surviving the mitigation *had* to mean the holder arrives before the reset rather than during it —
+but reasoned it from which test failed and when. Here the traceback names the mitigation's own
+statement as the one that cannot acquire. That is the same conclusion arriving as direct evidence
+instead of inference, and it retires the remaining reading in which the mitigation fires correctly
+and something later in the fixture is the loser.
+
+**All three of today's reproductions are in one test file.** `f51ec21`, `8d227de` and now `7970930`
+each failed in `tests/test_reviewer_is_not_the_author.py`, and two of the three commits changed no
+code at all. A fault that is genuinely a global race should not concentrate like that. Whether the
+concentration is the fixture's (what that file's setup holds open, and for how long) or merely its
+position in the run order is **unmeasured** — but it is a far cheaper thing to look at than another
+week of rate estimation, and it is the first lead this finding has had that points at a place rather
+than at a probability.
+
+
 ---
 
 ## F293 (B) — the F126 guard is on the predecessor's lifecycle, so following the refusal's own advice mints the duplicate successor it was built to prevent
@@ -25428,9 +25473,13 @@ this call site), `F167`.
 
 ## F317 (B) — the finding classifier reads a domain verb in a section's own title as a status verdict, and prints the open severity-A count one short
 
-**Status:** open — filed 2026-09-11 (day window, `D-5`), found while computing the open severity-A
-count for the review page instead of copying the night's. Mutation-checked; the cause is proved and
-is one word.
+**Status:** fixed `cb7c86b` (day window, `D-6`, driven 2026-09-11 over this file) — filed earlier
+the same day (day window, `D-5`), found while computing the open severity-A count for the review
+page instead of copying the night's. Mutation-checked; the cause is proved and is one word. The
+repair is the first of the three shapes below, narrowed further than that sketch: four positions
+rather than three, each one taken from a heading that really is in this file. **It does not on its
+own restore the count to six** — a second and independent defect, `F318 (B)`, holds the section at
+`CONFLICT` instead. See the block at the end of this entry.
 
 **The measurement.** `py -3.11 scripts/classify_findings.py` prints `severity A: OPEN=5` and names
 five sections. `F316 (A)` was filed earlier the same day, carries an explicit open status marker on
@@ -25484,5 +25533,92 @@ token in it — found, reproduced and repaired inside ten minutes, inside the en
 defect.
 
 **Related:** `F313`.
+
+---
+
+### `F317` repaired — what the drive produced, which is not quite what the entry predicted
+
+The repair went in at `cb7c86b` as the first shape above: the own-heading arm now requires its token
+to sit in a structurally status-shaped position rather than merely to occur anywhere in the title.
+Four positions, each taken from a heading that really is in this file — a trailing declaration after
+a dash or comma, a leading one straight after the reference, one inside the reference's own
+parenthetical where severity lives, and a copula whose subject is the finding itself.
+
+**Driven over this file, not merely tested.** The whole census was captured before and after, and
+the requirement was exactly the movement this entry predicted and nothing else. What actually
+happened, verbatim from the two runs:
+
+> severity A: total  56   CONFLICT=1  OPEN=5  RESOLVED=50   *(before)*
+> severity A: total  56   CONFLICT=2  OPEN=5  RESOLVED=49   *(after)*
+
+The B, C, D and `?` lines are byte-identical across the two runs. All four true positives of the
+own-heading arm survive and still take their verdict from it — the two titles ending in a status
+token and the two continuation headings its code comment names. The one false positive is gone.
+
+**The prediction was still wrong, and the gap is a second defect.** This entry expected the count to
+come back as six. It did not: the section left a done verdict as designed and stopped at `CONFLICT`
+rather than `OPEN`, because a second and independent arm is also wrong about it. That is `F318 (B)`,
+filed rather than folded in — it has a different cause, a different fix, and a hazard that today's
+green run structurally cannot see. The census reading of record is now the paragraph in the index,
+which states the set and says which bucket the sixth is printed under.
+
+**Two tests, both mutation-checked.** One asserts a prose verb in a heading is not a verdict; one
+asserts a trailing status token still is, which is the guard against over-correction rather than
+under. Reverting the narrowing kills the first and only the first; deleting the trailing-declaration
+rule kills the second and only the second.
+
+---
+
+## F318 (B) — the cross-section arm strips quotation one line at a time, so a quotation that wraps is read as prose
+
+**Status:** open — filed 2026-09-11 (day window, `D-6`), found by driving `F317`'s repair over the
+real ledger and requiring the exact movement that entry predicted. The movement did not arrive, and
+the gap was the finding. Not argued: this is the difference between two captured census runs.
+
+**The measurement.** After `cb7c86b` the severity-A census line reads
+`total 56  CONFLICT=2  OPEN=5  RESOLVED=49`, against `CONFLICT=1  OPEN=5  RESOLVED=50` before it.
+The B, C, D and `?` lines did not move at all. The section that moved was expected to land on an
+open verdict on the strength of its own status line; it landed on `CONFLICT`, on one piece of
+external evidence, and the script names the line the evidence sits on.
+
+**The cause.** `dequote()` blanks blockquotes and quoted spans, and three of its four patterns carry
+`re.S` — they are written to span lines. Every own-section arm honours that, calling it once over a
+whole joined body. The cross-section arm does not. It calls it inside the per-line loop:
+
+> `cln = dequote(ln)`
+
+A quotation that wraps therefore reaches the vocabulary check with its two quote marks on different
+lines, where nothing can pair them, and the continuation line is read as an ordinary sentence.
+
+**The live instance is in this file, one entry above.** `F317`'s body quotes the title of the
+finding it is about; the quotation wraps; and the second line of it names one finding number and
+carries a lower-case participle. That is indistinguishable, to this arm, from a verdict.
+
+**Why this is not simply `F313` again.** `F313` is about a line that genuinely is prose, where no
+convention could have helped the author. This one is about a line the author *did* mark as
+quotation, using the convention the script itself implements and honours everywhere else. The
+evidence was correctly formatted and the reader's scope was wrong — which is the better kind of
+defect to have, because it is fixable in the instrument rather than in the prose of everyone who
+writes here.
+
+**Measured shape of a fix, and why it was not taken at `D-6`.** Dequoting the whole document once
+and indexing that result by line moves **exactly one verdict** in this ledger — the expected one —
+giving `severity A: total 56  CONFLICT=1  OPEN=6  RESOLVED=49` with every other severity line
+unchanged. That is the predicted census, out of a one-line change, and it was measured before this
+entry was written. It was still not taken, for a reason that green run structurally cannot see: the
+third quotation pattern pairs any two quote characters within 600 characters of each other, and at
+document scope that pairing crosses section boundaries. Whether it swallows a real status
+declaration depends on the quote parity of the whole file, which changes every time a finding is
+appended — so a clean run today is weak evidence about tomorrow, and this instrument's entire
+history is of changes that were clean on the day. A bounded window, or pairing that refuses to cross
+a blank line, is the likelier shape. It wants its own round, which is why this is filed rather than
+finished.
+
+**Direction of the error is the safe one.** This defect suppresses nothing and invents evidence, so
+it can only move a section toward a done verdict or toward `CONFLICT`, never away from one. It costs
+reads rather than missed defects — except in the case that produced it, where it lands on `CONFLICT`
+and the consumer reads only `OPEN`.
+
+**Related:** `F313`, `F317`.
 
 ---
