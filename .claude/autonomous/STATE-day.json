@@ -1,105 +1,40 @@
 {
-    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook": ".claude/loops/day-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-08-daily",
-    "parent_branch": "master",
-    "parent_sha": "5d928f5",
-    "stop_at": "2026-09-10T17:00:00+01:00",
-    "iteration": 8,
-    "log_file": ".claude/autonomous/2026-09-10-day-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "D-0",
-            "status": "done",
-            "title": "The merge gate -- OPENED at iteration 7; master is 5d928f5",
-            "detail": "DONE, iteration 7. All four conditions held at once for the first time today, measured BEFORE this firing committed anything -- which is the ordering 8596706 introduced and the reason it worked. git merge --ff-only, bdb5a79 -> 5d928f5, pushed to origin/master: 29 commits spanning 2026-09-09 and 2026-09-10 (last night's FIX window bd5f3f8..4937ece, plus today's day and decide windows). The branch was deliberately NOT re-cut -- a mid-day switch would strand the decide window that commits here; the branch is now identical to master and tomorrow's arming does the cut. THE DIAGNOSIS THAT MATTERED: 'the gate races the window's own commits' (iteration 1), repaired by ordering. The other two ('waiting on a coin flip' / 'latency not redness') were true and not sufficient. Six refusals today and ZERO of them was a red run at HEAD -- five unfinished runs, one dirty tree -- so the 'does F292 outrank feature work' ask was RETIRED rather than put to the operator: a scheduling change landed the cycle, an F292 fix would not have. CI today: 20 runs, 12 success, 7 failure, 1 cancelled."
-        },
-        {
-            "id": "D-1",
-            "status": "done",
-            "title": "Scoped e2e drive of what the night built",
-            "detail": "DONE, iteration 3. Two new harnesses, both against a real browser and a throwaway Hub on 8013 (8011 AND 8012 were already occupied by the night window's leftovers -- check before assuming a port is free). Subject 1: last night's ClearInstructionsDialog holds up under an operator -- 21/21, Escape dismisses with zero PUTs and restores focus to Save, re-open is identical, a double-click on the destructive button is ONE write. Leg A4 drove F307's wrong write to the database for the first time: Tab once, type behind the scrim, Escape, Save -> the row is 'TYPED BEHIND THE SCRIM'. Subject 2 produced F309 (A), F310 (B) and F311 (C), all in TaskDetailDrawer, the sixth useDialogFocus call site F307's table omitted."
-        },
-        {
-            "id": "D-2",
-            "status": "done",
-            "title": "Spec loop R1 -- explore and propose",
-            "detail": "DONE, iteration 4. openspec/changes/2026-09-10-the-control-that-asks-holds-the-keyboard/ -- proposal.md, design.md, tasks.md, and deltas against TWO capabilities: hub-interaction-feedback (2 ADDED requirements -- Escape arbitration, and focus after a menu selection) and task-lifecycle-governance (1 MODIFIED requirement). openspec validate --strict passes; openspec list reads 3 deltas / 30 tasks. The argument: F309 and F310 are one failure -- two mechanisms act on one keystroke and the one further from the operator wins. The fix is arbitration in both halves: useDialogFocus stands down on an Escape that is already defaultPrevented, and a RowMenu item that opens a control expecting input tells the menu not to take focus back. R1 found a THIRD instance of F310 nobody has driven (DirectoryPicker.tsx:57-62 inside ProjectManagerModal.tsx:157-166, whose useDialogFocus is active at :73), and it turned an ADDED delta into a MODIFIED one by grepping first: task-lifecycle-governance already ships 'A control offering the waiting status collects the statement' and the product obeys it. F307 is explicitly NOT subsumed, with the three reasons and the one reverse dependency written into the proposal. One link was deliberately not measured (whether autoFocus fires and is overridden, or never fires) and the fix is specified so the answer does not matter."
-        },
-        {
-            "id": "D-3",
-            "status": "done",
-            "title": "Spec loop R2 -- re-derive against the code",
-            "detail": "DONE, iteration 5, and it did not come back empty. THE FINDING: R1's task-lifecycle-governance delta added a scenario reading 'the operator moves a task to the waiting status without using a pointer at any point', which is more than the change delivers -- reaching the drawer's status menu from the keyboard means Tab-walking the board's remaining controls behind the scrim, which is F307, and design.md D8 excludes F307 deliberately. Archiving that delta would have written a false current-behaviour statement into openspec/specs/. The requirement is KEPT (D6 settled: it is the only rule that names what the operator loses on a path the Hub makes mandatory) but NARROWED to 'the keyboard is in the control asking what the task is waiting for, once the menu has closed', and tasks.md 7.6 drives exactly that while forbidding an implementer from re-widening it. ALSO: the focus-steal mechanism was read out of the dependency instead of described loosely -- there are TWO actors (DropdownMenuContent's own composed onCloseAutoFocus at react-dropdown-menu:113-117, and FocusScope's restore at react-focus-scope:89-98), one preventDefault suppresses both because composeEventHandlers defaults to checkForDefaultPrevented: true, and the steal runs inside a setTimeout(0), which is the precise reason D5's 'no setTimeout' is right. ALSO: tasks.md 7.2/7.3's exact-count acceptance contract was self-contradictory (7.4 and 7.5 add legs to the same two harnesses) and the harness's D2 leg skips silently without failing -- both counts are now floors, with 7.2a naming the skip hazard. Confirmed unchanged: the capture-flag ordering at exact lines, the seven-Escape-owner boundary re-derived by grep, the six call sites and six mount sites, and the MODIFIED requirement's byte-fidelity. Three of R1's line citations were off by a few lines and were corrected."
-        },
-        {
-            "id": "D-4",
-            "status": "done",
-            "title": "Spec loop R3 -- re-derive again, independently",
-            "detail": "DONE, iteration 6, and it did not come back empty either -- three rounds, three rounds that changed the proposal. THE FINDING: R1 and R2 both concluded that the third instance of F310 (DirectoryPicker inside ProjectManagerModal) was repaired by task 1.1 without an edit, because the picker already calls preventDefault() at :57-62. It cannot be. That handler is a React onKeyDown bound to the picker's root div (:85-91, tabIndex=-1) and nothing in the file ever focuses that root; opening the browser leaves focus on the Browse... button, a SIBLING of the picker (ProjectManagerModal.tsx:153 vs :157-166), so React never dispatches through the picker's subtree, preventDefault() never runs, and 1.1's defaultPrevented condition is false. The modal closes and takes the browser with it -- same visible cost as F310, different mechanism, which is why two rounds reading for outcome agreed on the wrong one. The change's own D3 had already argued exactly this in the opposite direction ('focus is frequently not inside the panel at all'). Written up as design.md D9: arbitration by defaultPrevented presumes the nested owner HOLDS THE KEYBOARD, and the precondition differs by mechanism -- Radix binds document/capture and is focus-independent, while a React onKeyDown only fires for a target inside its own subtree. Consequence for the other instance: the reason input's handler works only because task 4.1 focuses it, so the F310 half DEPENDS ON the F309 half -- now task 2.1a, because an implementer landing 1.1 and 2.1 alone would watch leg C3 still fail with no reason to suspect the focus work. Fix chosen over narrowing the scenario: 2.2 focuses the picker root on open (it already carries role=dialog and tabIndex=-1), 2.2a returns focus to the trigger on close so the repair does not import F307's shape, and 2.2b plus a D8 carve-out stop it being read as the general F307 fix. SECOND FINDING: the delta scenario 'Typing an answer does not operate the menu' had NO task producing its evidence in any round, and its second clause ('no part of the surface becomes unresponsive to the pointer') is FALSE of the correctly fixed product -- TaskDetailDrawer renders a fixed inset-0 scrim at :195-209 that deliberately makes the board unresponsive and that its own click-outside listener depends on. Narrowed to 'does not stop answering the pointer BECAUSE A MENU RE-OPENED over it', and given evidence by a new task 7.8 (the rowmenu harness's PROBE already reads both facts); 7.8a records that leg P5 is NOT that evidence, because it focuses the trigger by hand and passes before and after. ALSO: 7.4 rewritten to name the focus state it must drive FROM -- without clicking inside the browser first, since a leg that clicks a breadcrumb would pass against an unfixed picker; 7.4a added as the mutation-check for the task two rounds denied was needed; 7.4b drives 2.2a. ALSO (b): six existing hub-interaction-feedback requirements, not five, all read as bodies -- R2's 'all about appearance' verdict survives and neither ADDED requirement collides, but 'Keyboard focus is visible' is a shipped requirement that 4.1's swap from autoFocus to a programmatic .focus() is one implementation away from breaching, so 4.1a guards it and 7.6 drives it. openspec validate --strict passes; openspec list reads 0/40 tasks, up from 32."
-        },
-        {
-            "id": "D-5",
-            "status": "done",
-            "title": "The review page",
-            "detail": "DONE, iteration 7. spec-queue/review/review-2026-09-10.html, 38,133 bytes. Self-contained by measurement: grep for http://, https://, <link, <script, @import and src= returns nothing; html.parser tag-stack parse is clean (0 unclosed, 0 mismatches); six <h2 id=sN> sections in the contract's order; dark-mode override present; explicit body background. Section 4 leads with R3's DirectoryPicker finding, carries R3's scrim finding, generalises both plus R2's into one reusable test, states the cost as 32 -> 40, and says each of the three rounds changed the proposal (no round came back empty, so the 'a round changed nothing' sentence is absent by measurement). F307's non-subsumption is DAY-1, the page's only ask. APPROVALS.md: today's section inserted above ## 2026-09-09, one row, change name verified with test -d, NO status token and NO ORDER: line, both stated in the section so a 23:00 reader cannot misread them -- which also retires the 2026-09-09 ORDER: line."
-        },
-        {
-            "id": "D-6",
-            "status": "done",
-            "title": "Repairs that need no spec -- DONE at iteration 8: F313, the ledger's confession read as a verdict",
-            "detail": "DONE, iteration 8, and measuring first changed the target. The named candidate ('status lines that are blank or whose first word is prose') measured SMALLER than stated: 273 Status declarations, 149 leading 'open', 108 some spelling of 'fixed', 12 prose, and ZERO blank -- day-1's '22 blank' had counted headings with no status line, almost all of which the classifier merges into their parent at no cost. So I read the EVIDENCE behind every CONFLICT instead of the count of them. F313: seven of the eight conflicts were false and four were SELF-INFLICTED -- the corrections table blind spot 5 wrote on 2026-09-08 to record its own wrong verdicts was read as MAKING them, because the cross-section arm credits a verdict word to every finding number on the line. Fix dee508c: a line naming more than one finding number is bookkeeping about the ledger, not a verdict in it. 11 verdicts move over 312 sections, NONE toward resolved; for five of the eleven the new verdict is the one that table's own 'Now' column already records. Mutation-checked both directions (disable -> new guard fails; widen to >=1 -> narrowness pin AND the pre-existing CONFLICT test fail). SECOND, separate defect, 2dd6807: F291's status line reads '**still open**' and the census counted it RESOLVED, because in_res outranks in_open and the weak arm fired on 'not a defect with an obvious fix' -- a clause about the FIX. Reworded, F291 is OPEN. F12/F53/F149 given leading tokens the classifier reads off the declaration. The eight 'not a defect' lines left alone on purpose: promoting them to a STRONG token would inflate the arm the script's own header calls not fully trustworthy. THE LESSON, and it is in the entry: writing F313 REPRODUCED F313 -- one draft sentence naming F65 beside 'resolved' put F65 back to CONFLICT, so the rule is a floor and not a cure. The defence is to re-run the classifier after appending and require that no existing verdict moves."
-        }
-    ],
-    "decisions_for_user": [
-        {
-            "id": "DAY-1",
-            "question": "Should 2026-09-10-the-control-that-asks-holds-the-keyboard be widened to subsume F307 (the Tab branch of the same hook), or does F307 stay open for a change of its own?",
-            "why_not_a_window_call": "F307's fix requires deciding where focus lands when a dialog activates -- the panel's first focusable, which in a destructive confirmation is Cancel, or its last, which is the destructive button. F307 says so in its own words and declines to guess. It also reaches five dialogs today's drive never opened.",
-            "default_if_unanswered": "The split stands: the change ships as specced and F307 remains open. Nothing is blocked by silence.",
-            "where": "spec-queue/review/review-2026-09-10.html, section 4"
-        }
-    ],
-    "notes": [
-        "THE GATE OPENED at iteration 7 and master is now 5d928f5 -- the 2026-09-09/2026-09-10 cycle is landed, 29 commits. The branch was deliberately not re-cut mid-day (a concurrent decide window commits here); it is now identical to master, so HEAD..master is 0 and a later gate still works. Tomorrow's arming cuts the new branch.",
-        "What opened it was ORDERING -- measure the gate before the firing commits (8596706) -- not any change to CI. Six refusals today, zero of them a red run at HEAD. The 'does F292 outrank feature work' ask is RETIRED, not deferred: a scheduling change landed the cycle and an F292 fix would not have. Do not re-raise it without new evidence.",
-        "Ledger re-measured 2026-09-10 at iteration 8, AFTER dee508c and 2dd6807: 313 sections, 157 OPEN, 148 RESOLVED, 5 UNCLASSIFIED, 2 CONFLICT (F52, F292 -- both genuine, both a human's call), 1 RESOLVED_ELSEWHERE. Open by severity is no longer the iteration-7 split; recompute rather than quoting. UNCLASSIFIED went 0 -> 5 (F135, F164, F185, F266, F272) and in this script that means NOBODY HAS READ THIS, not 'probably fine' -- four of the six ever sampled were real and unfixed. Those five are the best-value ratchet candidates for a later window.",
-        "CI on this branch, recounted at iteration 7 over today's runs only: 20 runs -- 12 success, 7 failure, 1 cancelled. Five of the six most recent concluded runs are green. F292 still exists (#13-#15 all fired today) and a red hub-test job should still be checked for 'database is locked' on DROP TABLE requirement_drift -- 4039 passed / 1 error is the signature -- BEFORE suspecting your own work.",
-        "The 17-row coverage sweep is COMPLETE (scripts/drive/SURVEY.md:144, measured 2026-09-04). D-1's 'full-surface if the last sweep is 7 days stale' criterion reads as if it fires today; it does not. Two row-numbering systems disagree in the ledger (19-row matrix vs 17-row inventory), so a bare 'row N' anywhere is ambiguous.",
-        "spec-queue/DIRECTION.md's newest dated section is 2026-09-09 and its instruction was explicitly for that day only. Absence is not an instruction.",
-        "F292's diagnostic output only lives as long as GitHub retains the run logs. A window that finds a fresh occurrence should read and record the census in the same firing rather than deferring it.",
-        "PORTS: 8011 and 8012 were both still LISTENING this morning from the night window's drives (PIDs 7360, 21880). Iteration 3 used 8013 and stopped it afterwards. Check `netstat -ano | grep LISTEN` before assuming a drive port is free, and do not kill another window's listener -- you cannot tell whether it is a kept reproduction.",
-        "This checkout's migration head is 0102, not the 0101 CLAUDE.md still names. Minor doc drift, not worth a finding on its own; fold it into the next change that touches CLAUDE.md.",
-        "CONCURRENCY: a separate 'decide' window commits on this same branch and has moved HEAD during three consecutive day firings (4161ea2 -> d29b9d5 at iteration 3; 09e189f -> 889d1e2 during iteration 4). It touches spec-queue/DECISIONS.md, ROADMAP.md and FINDINGS.md only, and has not yet clobbered anything this window wrote. Consequences: a merge-gate measurement is valid ONLY for the HEAD it was taken at, conditions 2 and 3 can be invalidated by a window this one does not control, and a dirty spec-queue/ROADMAP.md at the start of a firing is probably NOT this window's dirt -- leave it, do not commit it, and do not read it as a breach of 'never end an iteration with a dirty tree'.",
-        "DECISIONS.md f563815 (2026-09-10): \"drain severity A and severity B; ratchet C, D and the unlabelled.\" F309 is A and F310 is B, both in drain scope and both now specced together; F311 is C and is ratcheted.",
-        "R1's ordering claim about the two dependencies was re-read at exact lines by R2 and HELD in full: `{ capture: true }` on the owner document in react-use-escape-keydown; preventDefault() at react-dismissable-layer:64 before onDismiss() at :65, inside the `if (!event.defaultPrevented && onDismiss)` at :63; onDismiss supplied at react-menu:145 and :160 and handed to DismissableLayer at :264-272. R3 does not need to read these a third time -- it needs to attack the deltas, per next_action.",
-        "The trap R2 found is worth generalising, and D-5 should describe its shape: a proposal can be right about the code and still write a DELTA THAT CLAIMS MORE THAN THE CHANGE DELIVERS. The over-claim rides in on a scenario's WHEN clause rather than on any statement about the code, so a round that only re-checks source citations cannot see it. The test that catches it is: name the task that produces this scenario's evidence, then ask whether it can.",
-        "R3 (iteration 6) generalised the trap R2 found, and D-5 should state the general form once: a proposal can be right about the code and still write a delta that CLAIMS MORE THAN THE CHANGE DELIVERS (R2's finding, and R3's DirectoryPicker finding) or that a SHIPPED BEHAVIOUR CONTRADICTS (R3's scrim finding). Neither rides in on a statement about the code, so a round that only re-checks source citations cannot see either. The test that catches both: name the task that produces this scenario's evidence and ask whether it CAN -- then, if the answer is yes, ask what already-shipped behaviour would make the scenario false.",
-        "A round that re-reads what the previous round already re-read is the low-yield round. R2 re-derived R1's source citations and they held; R3 was told not to repeat that and to attack the deltas instead, and found the change's largest defect inside a file R2 had also opened. The instruction that produced it was specific about WHAT TO ATTACK, not about being thorough.",
-        "hub-interaction-feedback has SIX requirements, not five -- next_action said five at iteration 6. grep '^### Requirement:' returns six, at lines 13, 38, 56, 66, 82 and 101.",
-        "The review page's only ask is DAY-1: should the specced change be widened to swallow F307? Recorded in decisions_for_user. A window must not answer it -- F307's fix requires choosing whether a destructive confirmation focuses Cancel or the destructive button, and F307 itself declines to guess.",
-        "F313 (2026-09-10) generalises past this ledger: A DOCUMENT THAT RECORDS ITS OWN CORRECTIONS BECOMES AN INPUT TO THE INSTRUMENT THAT MADE THEM. Every self-describing line is a line the instrument must be tested against. The cheap defence, which caught a live regression in one run while the entry was being written: append, re-run the classifier, and require that no EXISTING verdict moves.",
-        "scripts/ is NOT in CI's lint paths and is dirty at scale -- 270 ruff errors and 93 black reformats as of 2026-09-10. Running ruff/black over scripts/ produces noise, not a gate. Lint the individual file you edited, and run CI's own path lists for the gate."
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
-        "This window FILLS. It does not implement. Nothing under hub/hub/ or src/agentweave/ may be edited; a drive harness under scripts/drive/ is the one exception.",
-        "The hub suite runs 15-47 minutes and exceeds the 600s command cap. Do not run it whole in this window unless something done here could plausibly have broken it."
-    ]
+    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+    "playbook":  ".claude/loops/day-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-08-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "5d928f5",
+    "stop_at":  "2026-09-11T17:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-11-day-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
