@@ -110,18 +110,33 @@ a Python transcription of the React component, and passed 29/29 — then the nex
 loaded the real bundle in Chromium and found **F274** in a single session: the very symptom F190 was
 filed for, still live, against the change that closed F190. A transcription can only confirm what
 the person who wrote it already believed, so it cannot find a defect that lives in the gap between
-the transcription and the component. Rebuild the bundle, restart 8011 from the implementing code,
-and look at the page. `scripts/drive/d1_aturn_browser.py` is the working pattern.
+the transcription and the component. Rebuild the bundle, restart the drive Hub from the
+implementing code, and look at the page. `scripts/drive/d1_aturn_browser.py` is the working pattern.
 
-- Restart the drive Hub on **8011** from the implementing code first, and confirm no `.py` under
-  `hub/hub` or `src` is newer than the process start time. A stale build is the most expensive
-  failure mode there is: the window attributes its behaviour to code it just wrote.
+- Restart the drive Hub from the implementing code first, and confirm no `.py` under `hub/hub` or
+  `src` is newer than the process start time. A stale build is the most expensive failure mode
+  there is: the window attributes its behaviour to code it just wrote.
+- **The drive port is chosen each night, not fixed.** Pick one only after
+  `netstat -ano | grep LISTENING` shows it free — on 2026-09-10 both 8011 and 8012 were already
+  listening. **Never 8000** (the operator's real usage) **and never 8010** (the trial Hub). Record
+  the port you chose in the log; every later step that talks to the drive Hub uses that port.
+- **The drive database is a fresh per-night profile**, `profiles/drive<MMDD>/agentweave.db`
+  (e.g. `drive0912`); the launch creates the directory and migrates it (`init_db`,
+  `hub/hub/db/engine.py`). Do not reuse another night's profile, and do not point at `beta`: that
+  profile was deleted on 2026-09-07, with the others CLAUDE.md lists.
+- **Name the operator key on the first launch.** A source launch writes no `bootstrap-key.txt`. It
+  mints a random credential into the database unless `AW_BOOTSTRAP_API_KEY` is set, so set it, to
+  `aw_live_` plus 32 hex characters, and keep it for the night.
   ```
-  cd hub && DATABASE_URL="sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/beta/agentweave.db" \
-    py -3.11 -m uvicorn hub.main:app --port 8011 --host 127.0.0.1
+  cd hub && DATABASE_URL="sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/drive<MMDD>/agentweave.db" \
+    AW_BOOTSTRAP_API_KEY="aw_live_<32 hex>" \
+    py -3.11 -m uvicorn hub.main:app --port <drive port> --host 127.0.0.1
   ```
-  From `hub/`, from source. **Never `agentweave --port`** — the console script's bundled migrations
+  From `hub/`, from source. **Never `agentweave --port`**: the console script's bundled migrations
   lag this checkout and it dies with `Can't locate revision identified by '00NN'`.
+- **Export `AW_HUB` before any `scripts/drive/` harness runs.** `aw.py` defaults it to
+  `http://127.0.0.1:8010`, which is the trial Hub, not the drive Hub. Set
+  `AW_HUB=http://127.0.0.1:<drive port>` and `AW_KEY=<that key>` explicitly on every run.
 - **8010 is the other trial Hub. 8000 is the operator's real usage — never touch it, never probe it,
   never start anything on it.**
 - Reuse the harnesses in `scripts/drive/`; several already exist per area. `scripts/drive/aw.py` is

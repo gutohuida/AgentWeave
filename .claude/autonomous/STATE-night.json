@@ -8,14 +8,14 @@
   "parent_branch": "master",
   "parent_sha": "6f7e486",
   "stop_at": "2026-09-12T07:00:00+01:00",
-  "iteration": 5,
+  "iteration": 6,
   "log_file": ".claude/autonomous/2026-09-11-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
   "change": "openspec/changes/an-agent-that-recorded-the-evidence-is-the-author",
   "prefix_sha": "37b8226",
-  "current": "n5-playbook",
-  "next_action": "Queue item n5-playbook: doc-only repair of .claude/loops/night-window.md's drive-Hub recipe (lines ~113-121). It names profiles/beta/agentweave.db (beta was deleted 2026-09-07, per CLAUDE.md's trial-Hub section) and a fixed port 8011 (8011 and 8012 were both already LISTENING on 2026-09-10). Replace with: a fresh per-night profile path (~/.agentweave/hub/profiles/drive<MMDD>/agentweave.db, created by the launch itself), a port chosen only after `netstat -ano | grep LISTENING` shows it free, never 8000 (operator's real usage) or 8010 (trial Hub), started from hub/ with py -3.11 -m uvicorn (not the agentweave console script). Keep the surrounding 'restart from the implementing code, confirm no .py newer than process start' instruction; only the profile and port change, and every '8011' reference in that section becomes 'the drive port'. Read the whole section first so no other line still names beta or 8011. No code, no test. Log, state (n5 done, next_action = n6-drive-prefix with its detail), commit, push.",
+  "current": "n6-drive-prefix",
+  "next_action": "Queue item n6-drive-prefix (S5.1): reproduce F306 on the PRE-FIX tree and prove it from the tables. Follow the repaired recipe in .claude/loops/night-window.md, under Driving. (1) `git worktree add ../aw-f306-prefix 37b8226` (prefix_sha). NEVER git stash. From ../aw-f306-prefix/hub run `py -3.11 -c \"import hub; print(hub.__file__)\"` and require a path inside the worktree before trusting anything. (2) `netstat -ano | grep LISTENING`, then pick a free drive port (never 8000/8010) and record it in the log. Launch from the worktree's hub/ with DATABASE_URL=.../profiles/drive0912p/agentweave.db (p = prefix; n7 uses drive0912) and AW_BOOTSTRAP_API_KEY=aw_live_<32 hex>, via py -3.11 -m uvicorn, backgrounded. (3) Create a fresh project (working directory under testbed/ or %TEMP%, never this repo root) and two agents bound to a claude runner with model claude-haiku-4-5. Export AW_HUB=http://127.0.0.1:<port> (aw.py defaults to 8010!), AW_KEY, AW_PROJECT, AW_AGENT=<the author agent>, AW_COMPLETE_BY=untouched, then run scripts/drive/t_row12_review_leg.py. (4) Its own assertion passes on BOTH trees, so it is not the proof. The proof is sqlite on drive0912p: task_transitions for the task shows the under_review->approved row with actor_agent == requirement_evidence.actor for that task. Record the sequence numbers and ids. If there is no such row, say so and leave 5.1 unticked; do not reason it into existence. (5) Stop the Hub by PID, `git worktree remove ../aw-f306-prefix`, confirm no job is enabled, and tick 5.1 in tasks.md only if proven. Log, state (n6 done, next_action = n7-drive-fixed with its detail), commit, push.",
   "queue": [
     {
       "id": "compose",
@@ -49,9 +49,9 @@
     },
     {
       "id": "n5-playbook",
-      "status": "open",
+      "status": "done",
       "title": "Repair night-window.md's drive-Hub recipe: the beta profile does not exist",
-      "detail": ".claude/loops/night-window.md:120 still names ~/.agentweave/hub/profiles/beta/agentweave.db. beta was deleted 2026-09-07 (CLAUDE.md); the 2026-09-10 night log (line 122) recorded this and did not repair it - the exact 'recorded is not fixed' pattern the playbook's Limits forbid. Also: it says port 8011, and last night 8011 and 8012 were both already LISTENING. Replace with: a fresh per-night profile (e.g. profiles/drive<MMDD>), a port chosen after netstat shows it free, and never 8000/8010. Small doc-only commit; do it before n6 so the drive runs from a correct instruction."
+      "detail": "DONE iteration 6, doc-only. night-window.md Driving: the drive port is chosen per night after netstat, never 8000/8010, and recorded in the log. The profile is a fresh profiles/drive<MMDD>. AW_BOOTSTRAP_API_KEY is set at first launch, because a source launch writes no bootstrap-key.txt. AW_HUB and AW_KEY must be exported, because aw.py:14 defaults AW_HUB to 8010, the trial Hub. day-window.md:182 and daily-review SKILL.md:113 carried the same fixed 8011 and were repaired too. Recipe driven twice on 8013: the missing dir was created and migrated to 0102, the known key got 200, a wrong key got 401. Probe stopped and scratch removed. ORIGINAL: .claude/loops/night-window.md:120 still names ~/.agentweave/hub/profiles/beta/agentweave.db. beta was deleted 2026-09-07 (CLAUDE.md); the 2026-09-10 night log (line 122) recorded this and did not repair it - the exact 'recorded is not fixed' pattern the playbook's Limits forbid. Also: it says port 8011, and last night 8011 and 8012 were both already LISTENING. Replace with: a fresh per-night profile (e.g. profiles/drive<MMDD>), a port chosen after netstat shows it free, and never 8000/8010. Small doc-only commit; do it before n6 so the drive runs from a correct instruction."
     },
     {
       "id": "n6-drive-prefix",

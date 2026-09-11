@@ -179,10 +179,12 @@ reading missed.
 - Every real agent turn binds **Haiku** (`claude-haiku-4-5`). Standing operator directive; there is
   no token-budget gate on it.
 - **Never drive against `proj-5e960453` (this repo) or `proj-18e5d4e0`.** Make a fresh project.
-- The drive Hub is **8011**, started from `hub/` with uvicorn **from source**, never
+- The drive Hub runs on a port chosen that day, only after `netstat -ano | grep LISTENING` shows
+  it free, against a fresh `profiles/drive<MMDD>/agentweave.db`. The recipe is in
+  `night-window.md`, under Driving. Start it from `hub/` with uvicorn **from source**, never
   `agentweave --port`. Restart it from the branch's code before drawing any conclusion, and confirm
-  no `.py` under `hub/hub` or `src` is newer than the process start time. **8010 is the other trial
-  Hub; 8000 is the operator's real usage and must never be touched.**
+  no `.py` under `hub/hub` or `src` is newer than the process start time. **8010 is the trial Hub;
+  8000 is the operator's real usage and must never be touched.**
 - **Never leave a job enabled.**
 - New findings append to `scripts/drive/FINDINGS.md` with a severity, a `file:line`, a reproduction,
   **and a `**Status:** open` line as the first line of the body.** A finding without a reproduction

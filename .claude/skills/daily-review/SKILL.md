@@ -110,4 +110,5 @@ past reading. Offer the merge; do not perform it unasked.
 - Stage explicit paths, never `git add -A`.
 - `openspec validate --strict <name>` must pass before any row is marked `APPROVED`.
 - Never mark a task complete on the strength of a plan existing.
-- Do not touch port 8000. 8010 and 8011 are the trial Hubs.
+- Do not touch port 8000. 8010 is the trial Hub; the windows' drive Hub uses a port chosen that
+  night, which the window's log records.
