@@ -25622,3 +25622,58 @@ and the consumer reads only `OPEN`.
 **Related:** `F313`, `F317`.
 
 ---
+
+## F319 (B) — a review refused on the scheduler path leaves the refused reviewer holding the task
+
+**Status:** open — filed 2026-09-12 (night window, iteration 4), measured at unit level on the tree
+at `40bd429`. No proposal; it wants the day window's spec loop.
+
+**How it surfaced.** The night's mutation table for `an-agent-that-recorded-the-evidence-is-the-author`
+removed the dispatch route's evidence refusal and ran the dispatch leg. `POST /agent/trigger` still
+answered `403`, with the entry guard's sentence naming the evidence, and nothing was provisioned.
+The leg failed on one assertion only — the task read back `("completed", "ev-author")`. A refusal
+had written the refused reviewer into `assignee`.
+
+**The mechanism.** `trigger_agent_directly` stages a review by calling `enter_selected_task`, which
+writes `task.assignee = agent` *before* its transition (`agent_trigger.py:835-845`). When the entry
+guard refuses that transition, `TriggerAgentError` propagates. The comment above it
+(`agent_trigger.py:788-793`) says the staffing is pending state in the dispatch's transaction, so a
+refusal abandons it. That holds only for a caller that discards the session. `turn_scheduler`
+catches the error, writes its detail onto each entry's `waiting_reason`, and calls
+`await db.commit()` on **the same session** (`turn_scheduler.py:349`) — committing the assignee
+write alongside the reason.
+
+**Measured on the unmodified tree** with a scratch test, run once and not kept: an operator-completed
+task with one agent-authored evidence row, an operator queue entry for that author carrying
+`review_task_id`, then `schedule_agent`. Result: `ScheduleResult.waiting_reason` is the entry
+guard's sentence; the entry stays `queued` with that sentence as its `waiting_reason`;
+`prepare_review_turn` was not called; the task reads back `("completed", "ev-author")` — a finished
+task, held by the agent whose review of it was just refused.
+
+**Reach — what is established and what is not.**
+
+- Through `POST /agent/trigger` on the current tree: **not reached** for the refusals the route
+  asks first. `review_dispatch_refusal` restates the entry guard, and the dispatch leg asserts the
+  holder stays empty. It **is** reached the moment the two drift, and the operator then sees a
+  correct-looking `403` while the task is left held — which is what the mutation was.
+- The other producers of review entries (`run_divergence.py:266`, `:467`; `scheduler.py:2864`,
+  `:3194`) pick their reviewer through the resolver or staff it before scheduling. None is shown to
+  reach a refused `enter_selected_task`. **Unverified either way.**
+- A refusal raised *after* `enter_selected_task` succeeds — `ReviewTurnRefused` from
+  `prepare_review_turn` (`agent_trigger.py:855-858`) — would, on this path, commit the whole staging,
+  the `under_review` transition included: a task in review, held, with no turn. **Unverified**: not
+  driven, and whether any `ReviewTurnRefused` condition survives the route's `commit_for_task_review`
+  check is not established. If it does, this is severity A.
+- Whether the still-`queued` entry is retried on every scheduling pass is not measured.
+
+**The test that looked like it covered this does not.**
+`test_the_direct_dispatch_refuses_the_evidence_author_before_the_checkout` asserts the holder is
+empty after `trigger_agent_directly` refuses — true only because that test's session closes without a
+commit. It proves the refusal lands before provisioning, not that the product's path discards the
+staging. Its docstring now says so.
+
+**Shape of a repair, not proposed:** roll back before recording `waiting_reason`, or stage the review
+inside a savepoint that a refusal releases. Either has to keep the reason durable, which is the
+reason that commit exists (F97).
+
+---

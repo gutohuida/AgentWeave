@@ -166,20 +166,26 @@ do not treat a green file list as evidence of anything here.
 - [x] 4.6 The `review_state` leg: evidence in `awaiting` and evidence in `rejected` each exclude
   their author. This is the operator's verdict in executable form, and the thing a future
   simplification is most likely to break.
-- [ ] 4.6a **The entry leg** (§3.4): an operator-completed task, an agent-authored evidence row, and
+- [x] 4.6a **The entry leg** (§3.4): an operator-completed task, an agent-authored evidence row, and
   a single `PATCH` setting `assignee` to that evidence author and `status` to `under_review`.
   Assert `ActorNotPermittedError`, that the status is unchanged, and that the refusal does not claim
   any agent completed the task. Then the permissive half in the same leg: the same move with a
   **different** agent as assignee succeeds, which is the flow's own path and must not be refused.
   This leg fails against a tree carrying §1–§3.3 alone — that is the wedge D14 exists for, so run it
   against that tree as well as the finished one and record both.
-- [ ] 4.7 **Mutation-check every leg.** Revert each of §1–§3 in turn and record which legs fail:
+  *Measured 2026-09-12:* green on the finished tree; with the §3.4 fallback removed it fails at the
+  refusal (`DID NOT RAISE`); with that fallback read through the union it fails at the permissive
+  half (`ev-reviewer` refused, `403`).
+- [x] 4.7 **Mutation-check every leg.** Revert each of §1–§3 in turn and record which legs fail:
   remove the union term (4.2 must fail), remove the guard fallback (4.3 must fail), change the
   fallback to the union (4.4 must fail), drop the `actor_kind` filter (4.5 must fail), add
   `review_state == 'accepted'` (4.6 must fail), remove the §3.4 entry fallback (4.6a must fail),
   and change **that** fallback to the union (4.6a's permissive half must fail, because the flow's
   own reviewer would then be refused at the entry). A leg that survives its own mutation is not
   testing what it claims — fix the fixture, do not weaken the claim. Write the table into the log.
+  *Measured 2026-09-12, ten mutations in one firing, tree clean after each restore:* every target
+  leg failed under its own mutation and none survived, so no fixture changed. Table in
+  `.claude/autonomous/2026-09-11-night-log.md`, iteration 4.
 - [ ] 4.8 Re-run the whole Hub suite, not a file list: `py -3.11 -m pytest tests/ -q` from `hub/`.
   R1 measured 15 files and 210 tests against a prototype and concluded no existing expectation
   changes; R2 re-measured over the whole suite (`proposal.md`, R2-D). A file list chosen by name is
@@ -195,12 +201,15 @@ do not treat a green file list as evidence of anything here.
   and §3.5). Read it the way R2 taught: **88 green is the reassurance that hid 2.4a.** The sentence
   the operator is shown became untrue and every one of those suites stayed green, because no test
   asserts on it. A whole-suite run is still required here; five files are not a suite.
-- [ ] 4.9 **The dispatch leg** (3.5): `POST /agent/trigger` naming the evidence author as reviewer
+- [x] 4.9 **The dispatch leg** (3.5): `POST /agent/trigger` naming the evidence author as reviewer
   of an operator-completed task answers `403`, the task's status and holder are unchanged, and **no
   checkout was created** — `task-lifecycle-governance`'s *"A refused review leaves nothing
   provisioned"*. Mutation: remove the 3.5 fallback and this leg must fail; if it passes, it is
   asserting the status code and not the ordering.
-- [ ] 4.10 **The silent-review leg** (2.4): an operator-completed task, an agent that worked it
+  *Measured 2026-09-12:* it fails, and **only on the holder** — the `403`, the evidence sentence and
+  the unprovisioned checkout all survive the mutation, because the scheduler's own refusal is
+  answered as `403` (F108) and its session commits the staged assignee (filed as F319).
+- [x] 4.10 **The silent-review leg** (2.4): an operator-completed task, an agent that worked it
   without moving it, a staffed reviewer whose turn ends with no verdict. Assert the re-resolution
   does **not** pick the worker. This is `F316` in executable form and it fails against today's tree
   as well as against a tree with only §1–§3 applied — so run it against both and record which.
@@ -208,11 +217,17 @@ do not treat a green file list as evidence of anything here.
   divergence is `restaffed`, `task.assignee` becomes the worker and a `divergence` entry is queued
   to it; against the prototype the divergence is `surfaced`, the assignee stays the silent reviewer
   and nothing is queued. Assert those, not merely that the worker is absent from a list.
-- [ ] 4.10a **The reason leg** (2.4a): the same fixture with nobody left to staff. Assert the
+  *Measured 2026-09-12:* with `_answer_failed_review` restored to its pre-fix composition
+  (`agent_that_completed` alone, default reason) the outcome is `restaffed`. "Today's tree" cannot
+  be run literally — the file does not import at `37b8226` — so that restoration on the fixed tree is
+  the stand-in for both halves: nothing else in the fixed tree reaches this exclusion.
+- [x] 4.10a **The reason leg** (2.4a): the same fixture with nobody left to staff. Assert the
   `run_diverged` event's `reason` says the excluded agents **worked on** the task and does **not**
   say any agent completed it. Mutation: drop the `excluded_because` argument and this leg must
   fail. It is the only leg that fails for 2.4a's absence — R3 ran the five obvious suites against a
   prototype **without** it and got 88 passed, so nothing existing defends this sentence.
+  *Measured 2026-09-12:* with the argument dropped the reason reads *"…or is the one that completed
+  this task and so may not review it"* and the leg fails on `has worked on this task`.
 - [x] 4.11 **Repair the one existing test whose expectation this change moves**, and repair it the
   right way. `tests/test_approval_refuses_unaccepted_evidence.py::test_the_agent_plane_sees_the_refusal`
   walks a task to `under_review` with the **operator's** key, has `builder` record the evidence, and

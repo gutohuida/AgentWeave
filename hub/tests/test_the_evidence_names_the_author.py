@@ -466,12 +466,18 @@ async def test_dispatching_the_evidence_author_as_reviewer_is_refused_before_the
     """4.9, §3.5. `POST /agent/trigger` naming the evidence author as the reviewer.
 
     `task-lifecycle-governance`: a review that cannot be staffed is refused before a turn is
-    started, and a refused review leaves nothing provisioned. Without the route's refusal the
-    request is *queued* and answered `200` — the turn is then refused by the entry guard inside
-    `trigger_agent_directly` and the refusal is buried in the entry's `waiting_reason` (design D11 of
-    the change that added the route check). So the status code is asserted, and so are the three
-    things a refusal must leave alone: the task, the queue, and the checkout — the provisioning is
-    patched and must never have been called. Must fail with the §3.5 fallback removed.
+    started, and a refused review leaves nothing provisioned. So the status code is asserted, and
+    so are the three things a refusal must leave alone: the task, the queue, and the checkout — the
+    provisioning is patched and must never have been called. Must fail with the §3.5 fallback
+    removed.
+
+    **The holder is the assertion that carries it, measured 2026-09-12.** With §3.5 removed the
+    request is queued, the scheduler's turn is refused by the entry guard (§3.4) inside
+    `trigger_agent_directly`, and F108's path answers that refusal as `403` with the guard's own
+    sentence — so the status code, the sentence and the provisioning all still pass. What fails is
+    the task: it reads back `("completed", "ev-author")`, because the scheduler commits the session
+    `enter_selected_task` wrote the assignee into (F319). The route's refusal is what keeps that
+    write from ever being staged.
     """
     await _roster(app, auth_headers, bind_runner, AUTHOR, OTHER)
     async with async_session_factory() as db:
@@ -506,7 +512,12 @@ async def test_the_direct_dispatch_refuses_the_evidence_author_before_the_checko
     """The route's check is the operator's answer; `trigger_agent_directly` is the authority, and
     the flow reaches it without passing through the route. There the refusal is the entry guard's
     (§3.4) — `enter_selected_task` writes the reviewer into `assignee` before it transitions — and
-    it must land before `prepare_review_turn`, leaving the staged staffing abandoned."""
+    it must land before `prepare_review_turn`.
+
+    What this does **not** show is that the staged assignee is abandoned on the product's path. It
+    reads back `None` here because this session closes without a commit; `turn_scheduler` commits
+    its session after the same refusal, and the write lands (F319, measured 2026-09-12). This test
+    asserts the ordering, not the rollback."""
     await _roster(app, auth_headers, bind_runner, AUTHOR, OTHER)
     async with async_session_factory() as db:
         _loop, task = await _f306(db, suffix="direct")
