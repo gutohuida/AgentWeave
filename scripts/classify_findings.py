@@ -98,7 +98,8 @@ WEAK_PAT = [
     (re.compile(r"\bno longer reproduces\b", re.I), "no longer reproduces"),
 ]
 RESOLVED_PAT = STRONG_PAT + WEAK_PAT
-EXT_WORD = re.compile(r"\b(RETIRED|RETRACTED|FIXED|SUPERSEDED|WITHDRAWN|closed|resolved)\b", re.I)
+_EXT_WORDS = r"RETIRED|RETRACTED|FIXED|SUPERSEDED|WITHDRAWN|closed|resolved"
+EXT_WORD = re.compile(rf"\b({_EXT_WORDS})\b", re.I)
 # BLIND SPOT 8, found 2026-09-10 by reading the EVIDENCE behind every CONFLICT rather than the
 # count of them. Seven of the ledger's eight conflicts were false, and six had one cause: a line
 # that names SEVERAL finding numbers is bookkeeping ABOUT the ledger, not a verdict about any one
@@ -116,6 +117,65 @@ EXT_WORD = re.compile(r"\b(RETIRED|RETRACTED|FIXED|SUPERSEDED|WITHDRAWN|closed|r
 # are about their own finding -- still flag. The direction of the error is also the safe one:
 # suppressing a lead can only move a section toward OPEN or UNCLASSIFIED, never toward resolved.
 MULTI_F = re.compile(r"\bF\d+\b")
+
+# BLIND SPOT 9 (F317, found 2026-09-11 while computing the one number the review page could
+# not get wrong). `EXT_WORD` is the CROSS-SECTION vocabulary, and out in the body of the
+# ledger the assumption behind it holds: a line that names exactly one finding and says
+# `resolved` is a statement about that finding. Inside a finding's OWN HEADING the
+# assumption fails, because a heading is a SENTENCE ABOUT THE DEFECT and these are ordinary
+# English verbs. `F316`'s title contains the domain verb for choosing a reviewer -- *the
+# reviewer __resolved__ after a silent review* -- and the arm read that participle as a
+# verdict. The verdict block is `if in_res: RESOLVED`, UNCONDITIONAL, so it outranked the
+# section's own `**Status:** open` and did not even raise the CONFLICT that blind spot 4
+# exists to put in front of a human. It cost the census a severity-A finding, and that count
+# is what BOTH scheduled windows steer by: the night queues open findings A before B before
+# C, and the day draws its spec-loop order from the same list. A finding the census cannot
+# see is queued by neither.
+#
+# The repair requires the token to sit in a STRUCTURALLY status-shaped position rather than
+# merely to occur. Four shapes, each taken from a heading that really is in this file, and
+# each checked against the two true-positive families the arm exists for: titles that end in
+# a status token (F151, F152) and continuation headings that declare a close (F161, F162,
+# F163). Two alternatives were rejected and the reasons are in F317 -- routing this to
+# CONFLICT instead would change every self-narrating section and wants its own measurement,
+# and banning the vocabulary from titles is F313's failure, an instrument dictating prose.
+#
+# Direction of the remaining error is the safe one, as with blind spot 8: a heading that is a
+# real declaration in some fifth shape now contributes nothing, which can only move a section
+# toward OPEN or UNCLASSIFIED, never toward resolved.
+_REF = r"#{1,4}\s+F\d+\S*"
+_SEP = "[-–—:,]"
+HEAD_STATUS = [
+    # Trailing declaration -- `## F151 -- ... -- FIXED`, `### F271's unit tests - ..., closed`.
+    # A space after the separator is required so `a well-closed door` at line end is not one.
+    re.compile(rf"{_SEP}\s+\**\s*({_EXT_WORDS})\**\s*\.?\s*$", re.I),
+    # Leading declaration, straight after the reference -- `### F45 -- fixed 2026-08-25`,
+    # `## F173 (A) -- RETIRED 2026-09-02`.
+    re.compile(rf"^{_REF}\s*(?:\([^)]*\))?\s*{_SEP}?\s*\**\s*({_EXT_WORDS})\b", re.I),
+    # Inside the reference's own parenthetical, where severity lives and a retraction is
+    # often recorded beside it -- `## F290 (RETRACTED, was B) - ...`.
+    re.compile(rf"^{_REF}\s*\([^)]*\b({_EXT_WORDS})\b[^)]*\)", re.I),
+    # A copula whose subject IS the finding -- `### F162 is closed, measured ...`. This is the
+    # shape blind spot 6's fix moved inside the section, and the reason this arm exists.
+    re.compile(rf"^{_REF}(?:\s*\([^)]*\))?\s+(?:is|was|are|were)\s+\**({_EXT_WORDS})\b", re.I),
+]
+
+
+def head_status(head_line):
+    """The status token declared by a finding's own heading, or None.
+
+    Unlike `EXT_WORD.search`, an occurrence is not enough: the token must sit in one of the
+    positions `HEAD_STATUS` describes. `group(1)` is the token, and `start()` is its offset in
+    the line so the caller's `NEG_BEFORE` guard still reads the text in front of it.
+    """
+    line = head_line.rstrip()
+    for pat in HEAD_STATUS:
+        m = pat.search(line)
+        if m:
+            return m
+    return None
+
+
 OPEN_PAT = [
     (re.compile(r"Status[^\n]{0,80}\bopen\b", re.I), "Status: open"),
     (re.compile(r"\bfiled,? not fixed\b", re.I), "filed not fixed"),
@@ -283,7 +343,7 @@ def classify(lines):
         # why it may be trusted where the same words in a sentence may not.
         for lo, _hi in s["ranges"]:
             head_line = dequote(lines[lo])
-            m = EXT_WORD.search(head_line)
+            m = head_status(head_line)
             if m and not NEG_BEFORE.search(head_line[max(0, m.start() - 40) : m.start()]):
                 in_res.append(
                     ("own heading: " + m.group(1).upper(), lo + 1, lines[lo].strip()[:200])

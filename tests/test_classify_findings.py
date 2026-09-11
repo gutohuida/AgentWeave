@@ -205,6 +205,37 @@ The drive ran.
     assert got[162] == "RESOLVED"
 
 
+def test_a_prose_verb_in_a_heading_is_not_a_verdict():
+    """Blind spot 9, F317, found 2026-09-11 while computing the open severity-A count for the
+    review page. The own-heading arm searched the whole heading for the cross-section
+    vocabulary, and a heading is a SENTENCE ABOUT THE DEFECT, so ordinary English verbs read
+    as verdicts. It cost F316 -- a severity-A finding whose title carries the domain verb
+    `scheduler.resolve_reviewer` is named for -- which classified RESOLVED over its own
+    `**Status:** open`, and did not even raise CONFLICT, because the verdict block takes
+    `in_res` unconditionally. The census is what both scheduled windows queue from, so the
+    finding was queued by neither.
+    """
+    got = verdicts("""
+## F316 (A) — the reviewer resolved after a silent review excludes only the completer
+
+**Status:** open — filed 2026-09-11.
+""")
+    assert got[316] == "OPEN"
+
+
+def test_a_trailing_status_token_in_a_heading_is_still_a_verdict():
+    """The other half of blind spot 9's repair, and the reason it is a narrowing rather than a
+    deletion. F151 and F152 declare their close by ending the title in a status token, and
+    neither has a `**Status:**` line to fall back on -- so a narrowing that dropped this shape
+    would trade one false negative for two. Guards against over-correction, not under.
+    """
+    got = verdicts("""
+## F151 — running migrations at startup silences the Hub's logging for the life of the process — FIXED
+The repair shipped.
+""")
+    assert got[151] == "RESOLVED"
+
+
 # --- negation ---------------------------------------------------------------------------
 
 
