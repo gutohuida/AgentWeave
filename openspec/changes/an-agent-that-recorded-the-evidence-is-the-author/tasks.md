@@ -53,6 +53,22 @@ absence today.
   agent completed. Keep the silent reviewers and `run.agent` as they are — those are facts about
   the review, not about authorship. **Call the union; do not add a fourth term here.** Four call
   sites composing the same question three ways is what made this change need two of them edited.
+- [ ] 2.4a **Pass `excluded_because="has worked on this task"` on that same branch** — R3, and it is
+  the half of 2.4 that reaches the operator. `_answer_failed_review` calls `resolve_reviewer`
+  without the argument, so it takes the default *"is the one that completed this task"*. Widening
+  the exclusion without widening the reason makes the ladder surface that sentence about a task the
+  **operator** completed, which `agent-flows:552-558` forbids in terms — *"A surfaced reason SHALL
+  NOT state that an excluded agent completed the task where no agent completed it … Where the
+  exclusion is the set of agents that worked the task, the reason SHALL say so"* — and which that
+  requirement's own shipped scenario (*"The surfaced reason does not claim an agent completed the
+  work"*) already tests one call site along. `resolve_reviewer`'s `excluded_because` parameter
+  exists for exactly this and says so (*"it is a parameter because it is not always the same
+  reason"*, design D13 of the change that added it); call site 2 switches it at
+  `scheduler.py:1555/1575` and call site 4 never learned to. Measured against a prototype of 2.4 without it: the
+  `run_diverged` event carried *"…or is the one that completed this task and so may not review
+  it"* on an operator-completed task, at `severity="warn"`, which is the whole of what the operator
+  is shown. Keep the default on the `attribution.agent is not None` branch, where an agent really
+  did complete it.
 - [ ] 2.5 Correct that function's docstring, which currently asserts the invariant this breaks:
   *"an escalation target that authored the work is a guaranteed 403 from `agent_that_completed` —
   cannot arise here at all, because the resolver already excludes the author by construction."* The
@@ -123,9 +139,15 @@ do not treat a green file list as evidence of anything here.
   a guess about which suites reach this code, and the two call sites R1 missed are what that kind of
   guess costs. **What R2's whole-suite run did NOT cover:** its prototype was §1–§3.4
   only. The blast radius of §2.4 (`run_divergence`) and §3.5 (`review_dispatch_refusal`) is
-  **unmeasured** — `hub/tests/test_review_dispatch_staffs_the_task.py` and the divergence suites are
-  the obvious places to look, and the implementing run measures it rather than assuming R2's number
-  covers code R2 did not patch.
+  **unmeasured** by R2 — `hub/tests/test_review_dispatch_staffs_the_task.py` and the divergence
+  suites are the obvious places to look, and the implementing run measures it rather than assuming
+  R2's number covers code R2 did not patch. **R3 measured that gap and it is 88 passed, 0 failed**
+  (`test_review_dispatch_staffs_the_task.py`, `test_run_divergence.py`,
+  `test_review_divergence.py`, `test_flow_divergence_regime.py`,
+  `test_a_flow_names_what_it_cannot_staff.py`, 102s, against a prototype of §1, §2.1, §2.4, §3.1
+  and §3.5). Read it the way R2 taught: **88 green is the reassurance that hid 2.4a.** The sentence
+  the operator is shown became untrue and every one of those suites stayed green, because no test
+  asserts on it. A whole-suite run is still required here; five files are not a suite.
 - [ ] 4.9 **The dispatch leg** (3.5): `POST /agent/trigger` naming the evidence author as reviewer
   of an operator-completed task answers `403`, the task's status and holder are unchanged, and **no
   checkout was created** — `task-lifecycle-governance`'s *"A refused review leaves nothing
@@ -135,6 +157,15 @@ do not treat a green file list as evidence of anything here.
   without moving it, a staffed reviewer whose turn ends with no verdict. Assert the re-resolution
   does **not** pick the worker. This is `F316` in executable form and it fails against today's tree
   as well as against a tree with only §1–§3 applied — so run it against both and record which.
+  **Both halves were driven by R3 and the numbers are the target:** against today's tree the
+  divergence is `restaffed`, `task.assignee` becomes the worker and a `divergence` entry is queued
+  to it; against the prototype the divergence is `surfaced`, the assignee stays the silent reviewer
+  and nothing is queued. Assert those, not merely that the worker is absent from a list.
+- [ ] 4.10a **The reason leg** (2.4a): the same fixture with nobody left to staff. Assert the
+  `run_diverged` event's `reason` says the excluded agents **worked on** the task and does **not**
+  say any agent completed it. Mutation: drop the `excluded_because` argument and this leg must
+  fail. It is the only leg that fails for 2.4a's absence — R3 ran the five obvious suites against a
+  prototype **without** it and got 88 passed, so nothing existing defends this sentence.
 - [ ] 4.11 **Repair the one existing test whose expectation this change moves**, and repair it the
   right way. `tests/test_approval_refuses_unaccepted_evidence.py::test_the_agent_plane_sees_the_refusal`
   walks a task to `under_review` with the **operator's** key, has `builder` record the evidence, and

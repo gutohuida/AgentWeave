@@ -235,6 +235,13 @@ exactly as the resolution that staffed the review did. A second resolution that 
 reviewer who said nothing offers the work to an agent the first resolution had already excluded as
 its author, and the silence of one reviewer is not a fact about who wrote the work.
 
+**Where that second resolution can staff nobody, the reason it surfaces SHALL describe the
+exclusion it actually applied.** Widening who is excluded without widening the sentence that
+explains the exclusion produces a reason stating that an excluded agent completed the task on a
+task no agent completed — which this capability already forbids for the first resolution, and the
+second one surfaces its reason to the same operator through the same event. The two resolutions
+SHALL NOT come to different accounts of one task.
+
 **The Hub SHALL NOT resolve, as a task's reviewer, an agent that could not record a verdict on it.**
 An agent is barred from judging work it completed, so naming it would produce a review refused on
 arrival; the resolution SHALL exclude it rather than discover the refusal afterwards.
@@ -245,6 +252,13 @@ arrival; the resolution SHALL exclude it rather than discover the refusal afterw
   recording a verdict, and the Hub resolves a replacement
 - **THEN** an agent that any record associates with that task is not selected
 - **AND** the agent that gave no verdict is not selected
+
+#### Scenario: The second resolution's surfaced reason does not claim an agent completed the work
+
+- **WHEN** a reviewer staffed for a task the operator moved to `completed` ends its turn without
+  recording a verdict, and no agent is left for the Hub to resolve
+- **THEN** the surfaced reason states that the excluded agents worked on the task
+- **AND** it does not state that any of them completed it
 
 #### Scenario: A declared reviewer that resolves is used
 

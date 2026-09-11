@@ -174,6 +174,77 @@ the exclusion is `{A}` alone, so an agent `B` that recorded evidence for that ta
 staffed to review it and its approval is not refused. That is outside `F306`'s scope and outside the
 operator's verdict, and it is the obvious next question a reader will ask.
 
+### What R3 changed: the call site R2 repaired composes a second thing, and R2 repaired one of them
+
+R3 re-derived the change from the code a third time, independently of both rounds, and was sent at
+five claims. **Four survived — three of them by measurement rather than by reading — and one broke.**
+The one that broke is R2's own addition, which is the condition the round exists for: §2.4 had had
+exactly one pair of eyes on it.
+
+**R3-A — §2.4 widens *who* is excluded and leaves *why* behind, and the operator is the one who
+reads it.** `_answer_failed_review` calls `resolve_reviewer` without `excluded_because`, so it takes
+the default *"is the one that completed this task"*. That clause is true of the term the call site
+passes **today** and false of the term §2.4 makes it pass: every agent any record associates with a
+task the **operator** completed. Call site 2 switches the clause at `scheduler.py:1555/1575` for
+precisely this reason, and the corpus requires it — *"A surfaced reason SHALL NOT state that an
+excluded agent completed the task where no agent completed it … Where the exclusion is the set of
+agents that worked the task, the reason SHALL say so"* (`agent-flows:552-558`), with its own shipped
+scenario. Measured, not argued: a prototype of §1, §2.1, §2.4, §3.1 and §3.5 was applied and an
+operator-completed task driven to a silent review with nobody left to staff. The `run_diverged`
+event, `severity="warn"`, carried
+
+> could not staff this step: no agent is free to take it. Every agent on the roster is either
+> running a turn, already holding active work, or **is the one that completed this task** and so
+> may not review it.
+
+about a task the operator completed. So a change whose subject is *not telling the operator
+something untrue about who wrote the work* would have shipped telling the operator something untrue
+about who finished it. Repaired as §2.4a, §4.10a, a sentence in the MODIFIED resolution requirement
+and a scenario under it. The asymmetry was in the proposal rather than in the code: R2 gave call
+site 3 its reason obligation explicitly (*"SHALL name the evidence as its reason and SHALL NOT state
+that any agent completed the task"*) and gave call site 4 none.
+
+**R3-B — the blast radius of §2.4 and §3.5, which `tasks.md` 4.8 recorded as unmeasured, is
+measured: 88 passed, 0 failed.** A prototype of §1, §2.1, §2.4, §3.1 and §3.5 against the five
+suites that cover this code (`test_review_dispatch_staffs_the_task`, `test_run_divergence`,
+`test_review_divergence`, `test_flow_divergence_regime`, `test_a_flow_names_what_it_cannot_staff`),
+102s. **And that green is how R3-A stayed hidden**: the sentence the operator is shown became untrue
+and every one of those suites passed, because nothing asserts on it. Five files are not a suite and
+§4.8's whole-suite requirement stands.
+
+**R3-C — `F316` is no longer derived. It reproduces.** R2 filed it from reading and said so. R3 ran
+it: an operator-completed task, `aa-author` associated with it by a **bound run alone** — on no
+transition, never its assignee — and `critic` staffed and silent. `evaluate_run_end` recorded
+`restaffed`, moved `task.assignee` to `aa-author` and queued it the review checkout. No evidence row
+is involved, so `F316` is reachable today independently of `F306`, exactly as R2 argued. The same
+fixture against the prototype records `surfaced` and queues nothing, which is the evidence §2.4
+closes it. `FINDINGS.md`'s Status line is corrected.
+
+**R3-D — the three claims R3 was sent to break and could not.**
+
+- ***Does `design.md` D3's trap catch §2.4 one function along?*** `next_action` called this the most
+  likely finding: D3 refuted a union fallback for the *guard* because `task.assignee` is the
+  reviewer by then, and §2.4 hands the union to a resolution taken at a moment when the task is
+  assigned to the reviewer that just went silent. **Measured at exactly that moment**, on an
+  operator-completed task with `critic` staffed and silent: `attribution` is
+  `(recorded=True, actor_kind='operator', agent=None)`, and the union is `{'aa-author', 'critic'}`.
+  The contaminant is `critic` — and `critic` is already in `barred` twice over, by
+  `_reviewers_that_gave_no_verdict` and by `barred.add(run.agent)`. The union at re-resolution grows
+  over the union at first staffing by exactly the agents this call site bars anyway, so §2.4 is
+  identical in effect to call site 2 and D3 does not reach it. The asymmetry D3 names is real and it
+  is about *refusing a verdict*, not about *resolving a reviewer*.
+- ***Is the prose R2 edited true, and did anything else become false?*** Both edited requirements
+  were read scenario by scenario. The rewritten sentence under *"A review a flow cannot staff is not
+  reported as staffed"* is true as written, and the two shipped scenarios most exposed to it —
+  *"A review started by hand leaves the reviewer able to record a verdict"* and *"A review that
+  cannot be staffed is refused before the turn starts"* — are both phrased on **author** rather than
+  on **completer**, so widening what "author" means leaves them true and makes them stronger.
+- ***Are all six MODIFIED headers and every shipped scenario intact?*** Checked mechanically rather
+  than by eye, which is the gap R2 left (it diffed two of the three it added). All six headers match
+  `openspec/specs/` character for character. Scenario counts: 8→11, 5→7, 10→12, 5→10, 9→11, 6→6.
+  **No shipped scenario is dropped from any of the six bodies.** `openspec validate --strict`
+  passes.
+
 ## What Changes
 
 - A **fourth source** of authorship: the agents that recorded evidence against the task. Its own
@@ -194,7 +265,8 @@ operator's verdict, and it is the obvious next question a reader will ask.
 
 ## Impact
 
-- **Capabilities:** six MODIFIED requirements, three of them added by R2. `agent-flows`: the source
+- **Capabilities:** six MODIFIED requirements, three of them added by R2, and none added by R3 —
+  R3's repair is a sentence and a scenario inside one R2 already opened. `agent-flows`: the source
   enumeration behind claimability, the operator-finished staffing arm, and — **R2** — the resolution
   that answers a review which gave no verdict, whose second pass must exclude the author by the same
   determination as the first. `task-lifecycle-governance`: the self-approval guard gains its

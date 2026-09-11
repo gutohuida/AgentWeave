@@ -22036,9 +22036,21 @@ obvious fix.
 ## F292 (B) - the fix for F285 traded a deterministic rollback for an intermittent lock, and the mitigation written for it did not hold
 
 **Status:** open — **mitigated 2026-09-10, and as of 2026-09-11 the mitigation is measured and
-REFUTED AS A FIX: F292 reproduced on the mitigated tree at `f51ec21`. The classified rate is 1 in 17
-runs with it against 11 in 41 without, which disfavours "it changed nothing" at one-sided p ~ 0.036
-and establishes nothing stronger. The useful result is not the rate: the holder arrives BEFORE the
+REFUTED AS A FIX: F292 reproduced on the mitigated tree at `f51ec21`, and again at `8d227de`
+(run 34583319728, 2026-09-11 09:16Z). The classified rate was 1 in 17 runs with the mitigation
+against 11 in 41 without, which iteration 2 reported as disfavouring "it changed nothing" at
+one-sided p ~ 0.036; **the second reproduction takes it to 2 in 18, and the rate half of this
+measurement should now be read as consistent with no effect.** Iteration 5 recomputed both by
+**Fisher exact, one-sided** and got p = 0.069 for 1/17 and p = 0.159 for 2/18 — so even the first
+number was weaker than recorded under this test, and the second is not evidence of anything.
+Iteration 2 did not state which test produced 0.036; its figure is left standing rather than
+overwritten, because the disagreement is about method and the arithmetic of only one of them is on
+the record. **Either way the conclusion is the one the section below reaches on other grounds**, and
+it does not rest on the rate. What the second
+reproduction does add is a repeat, not a rate: it is the **same test file** as the first
+(`test_reviewer_is_not_the_author.py`, `ERROR at setup`, `4041 passed, 18 skipped, 1 error`), on a
+**documentation-only commit** whose diff touches no Python at all — so nothing about the tree under
+test explains it, and the fixture pair is the same one both times. The useful result is not the rate: the holder arrives BEFORE the
 schema reset begins, which is what surviving `BEGIN IMMEDIATE` means. See the last section, *"The
 rate, measured 2026-09-11"*.** Read
 *"The reset was never one transaction"* at the foot of this entry before any other part of it: the
@@ -25315,9 +25327,20 @@ this), `F310`.
 
 ## F316 (A) — the reviewer resolved after a *silent* review excludes only the completer, so on operator-completed work it can pick the author
 
-**Status:** open — filed 2026-09-11 (day window, iteration 4, spec-loop R2 on `F306`). **Derived
-from the code, not driven**: every line quoted below is in the tree at `35cdd38`, and the route has
-not been exercised on a live Hub. Treat the reachability argument as unverified until it is.
+**Status:** open — filed 2026-09-11 (day window, iteration 4, spec-loop R2 on `F306`).
+**REPRODUCED 2026-09-11** (iteration 5, spec-loop R3) at unit level against the tree at `8d227de`;
+it was filed as derived-from-the-code and the reachability argument is no longer unverified. Still
+not driven on a live Hub, which would be the stronger evidence and is not what closes it.
+
+**The reproduction.** An operator-completed task (`in_progress` and `completed` both taken by
+`operator()`), agent `aa-author` associated with it by a **bound run only** — named on no
+transition, never its assignee — and reviewer `critic` staffed and ending its turn with no verdict.
+`evaluate_run_end` recorded the divergence `outcome='restaffed'`, moved `task.assignee` from
+`critic` to `aa-author`, and queued `aa-author` a `divergence` entry carrying the review checkout:
+**the agent that worked the task made the reviewer of its own work.** No evidence row was involved,
+so this is reachable today, independently of `F306`. The same fixture against a prototype of
+`F306`'s change records `outcome='surfaced'`, leaves the assignee on `critic` and queues nothing —
+which is the evidence that `an-agent-that-recorded-the-evidence-is-the-author` task 2.4 closes it.
 
 **Where.** `run_divergence._answer_failed_review` (`hub/hub/run_divergence.py:374-421`) is the third
 place in the Hub that resolves a reviewer, and the only one `F142`'s widening never reached. It

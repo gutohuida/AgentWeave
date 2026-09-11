@@ -191,7 +191,46 @@ free to drift, and the two walks disagreeing about one task is the failure this 
 docstring is about."* There are three compositions. This is the one that drifted, and reducing it to
 a call is what stops a fifth source ever needing four edits.
 
-**This call site is broken today, before this change, and it is filed as `F316` (A).** An agent that
+**R3 — and the recomposition has a second half that is not the exclusion.** Reducing the exclusion
+to a call fixes *who* is barred and leaves *why* behind. `_answer_failed_review` calls
+`resolve_reviewer` without `excluded_because`, so it takes the default *"is the one that completed
+this task"* — which is true of the term it passes today (a completer, where one exists) and false
+of the term §2.4 makes it pass (every agent any record associates with an **operator**-completed
+task). Call site 2 already switches that clause for exactly this reason and the corpus already
+requires it: *"A surfaced reason SHALL NOT state that an excluded agent completed the task where no
+agent completed it … Where the exclusion is the set of agents that worked the task, the reason
+SHALL say so"* (`agent-flows:552-558`), with its own scenario.
+
+Measured rather than argued. A prototype of §1, §2.1, §2.4, §3.1 and §3.5 was applied and an
+operator-completed task was driven to a silent review with nobody left to restaff. The
+`run_diverged` event the operator is shown carried:
+
+> could not staff this step: no agent is free to take it. Every agent on the roster is either
+> running a turn, already holding active work, or **is the one that completed this task** and so
+> may not review it.
+
+The operator completed that task. Passing `excluded_because="has worked on this task"` on the same
+branch produces the sentence the requirement asks for, and the five suites that cover this code
+(`test_review_dispatch_staffs_the_task`, `test_run_divergence`, `test_review_divergence`,
+`test_flow_divergence_regime`, `test_a_flow_names_what_it_cannot_staff`) were **88 passed, 0
+failed** against the prototype **without** it. Nothing existing defends the sentence, which is why
+§2.4a carries its own leg (§4.10a) and its own mutation.
+
+The shape is worth naming because it is this change's own lesson arriving one layer down: R1 got
+the union right and missed two call sites; R2 got the two call sites right and missed that one of
+them composes a *second* thing. `review_dispatch_refusal` (call site 3) was given its reason
+obligation explicitly in the delta — *"SHALL name the evidence as its reason and SHALL NOT state
+that any agent completed the task"* — and call site 4 was not. The asymmetry was in the proposal,
+not in the code.
+
+**This call site is broken today, before this change, and it is filed as `F316` (A) — and R3 drove
+it rather than leaving it derived.** Against today's tree: an operator-completed task, agent
+`aa-author` bound to it by a run and named on no transition, reviewer `critic` staffed and silent.
+`evaluate_run_end` recorded the divergence `restaffed`, moved `task.assignee` to `aa-author`, and
+queued it a `divergence` entry carrying the review checkout — the agent that worked the task made
+the reviewer of its own work, with no evidence row involved, so `F316` is reachable independently
+of `F306` exactly as R2 claimed. Against the prototype the same fixture records `surfaced`, leaves
+the assignee on `critic` and queues nothing. An agent that
 worked an operator-completed task — named on its transitions, or by a bound run — is excluded from
 the *first* resolution by call site 2 and eligible for the *second* by call site 4, and its approval
 is permitted because no completer is recorded. `F142` widened two of the three compositions. Folding
