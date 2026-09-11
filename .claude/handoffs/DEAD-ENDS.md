@@ -601,6 +601,27 @@ session is sitting in, on a cycle branch, every few minutes.*
   in the scratchpad with the Write tool, then `git commit -F <that path>`.** Costs one extra tool
   call and never loses a composed message.
 
+- **`git push origin <sha>:master` updates the REMOTE ref and leaves the LOCAL `master` ref stale
+  — and the merge gate reads the local one** *(2026-09-11, done, and it produced a false claim)*.
+  Pushing a ref directly is the right way to merge while a window owns the working tree, because it
+  needs no `git checkout` and so cannot yank the branch out from under a running iteration. But
+  `day-window.md`'s gate condition is `git rev-list --count HEAD..master`, which resolves the
+  **local** ref. After a direct push the local ref still points at the old sha, so the gate — and
+  any window reading it — believes the merge never happened. Today's review page reported `master`
+  as `5d928f5`, 26 commits behind, hours after it had been fast-forwarded to `6f7e486`. **Always
+  follow a direct push with `git fetch origin master:master`**, which updates the local ref without
+  touching the working tree either.
+- **The merge gate cannot open while a window is running, and this is structural, not bad luck**
+  *(measured by the day window 2026-09-11)*. The loop fires on `PT5M` and every firing ends in a
+  commit, so at the start of any firing `HEAD` is at most ~5 minutes old; `ci.yml`'s `hub-test` job
+  takes 10–15 minutes. A gate that requires a concluded green run **for HEAD's exact sha** therefore
+  finds an in-flight run essentially always, no matter how many days pass. It has opened once ever.
+  Checking at the *end* of a long firing helps only if the firing outlasts the build, which a
+  25-minute firing does not. **Practical consequence: the gate opens in the gaps between windows, so
+  an awake operator is the reliable path** — check the four conditions by hand and push the ref.
+  And note the deeper half, measured the same day: **no `HEAD`-shaped rule of any kind can work
+  while `F292` stands**, because a documentation-only commit can go red at ~6%.
+
 ## Measuring this repository's own documents
 
 *Added 2026-09-08, after an instrument that read `scripts/drive/FINDINGS.md` was wrong four
