@@ -8,33 +8,70 @@
     "parent_branch":  "master",
     "parent_sha":  "5d928f5",
     "stop_at":  "2026-09-11T17:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
     "log_file":  ".claude/autonomous/2026-09-11-day-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "current":  "D-0",
+    "next_action":  "D-0 then D-1, in this one firing. D-0: re-check all four merge-gate conditions (day-window.md iteration 1 step 1) BEFORE this firing commits anything -- at iteration 1 only condition 3 failed, CI was in_progress on f51ec21; the other three held. If CI now reads success for the sha at HEAD and DIRECTION's newest dated section still has no line-initial HOLD MERGE, fast-forward master with 'git merge --ff-only' and push it, then continue on this branch. If it did not open, name the failed condition in the log and carry on. D-1 in the same firing: measure F292's failure rate, as DIRECTION 2026-09-11 instructs. The BEGIN IMMEDIATE mitigation landed at af69a27 on 2026-09-10 and is UNPROVEN -- only two CI runs carry it. Count failures per run over this branch's recent CI history and classify EVERY red from its own log before counting it, because F314 (FINDINGS.md:25066) establishes a second, non-F292 source of red in the same test-file family at about one run in eight on an unmodified tree. A rate quoted without that classification folds the two together and is worthless. Append the measurement to F292 (FINDINGS.md:22036) as a dated note, not as a new finding.",
     "queue":  [
                   {
-                      "id":  "compose",
+                      "id":  "D-0",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "Merge gate retry, then D-1 in the same firing",
+                      "detail":  "At iteration 1 three of four conditions held: HEAD..master was 0, the tree was clean and level with the upstream, and DIRECTION's 2026-09-11 section carries no line-initial HOLD MERGE. Condition 3 failed only because CI was still in_progress for f51ec21 (queued 07:55Z). Every earlier sha on the branch concluded success. Do not accept a stale green from an earlier commit -- the sha must match HEAD."
+                  },
+                  {
+                      "id":  "D-1",
+                      "status":  "open",
+                      "title":  "Measure F292's failure rate, classifying each red from its own log",
+                      "detail":  "DIRECTION 2026-09-11 names this instead of a scoped drive. Runs with the mitigation: af69a27 onward. F314 is the confounder. The output is a dated note appended to F292 in FINDINGS.md with the counts and the per-run classification, plus the count of runs the mitigation has actually survived."
+                  },
+                  {
+                      "id":  "D-2",
+                      "status":  "open",
+                      "title":  "Spec loop R1 on F306 -- explore the code and write the proposal",
+                      "detail":  "F306 (A), FINDINGS.md:24444 -- an agent can be staffed to review, and approve, work it recorded evidence for. The verdict in DECISIONS.md ('F306 and F312, decided 2026-09-10 evening') is BINDING and covers both defences and every evidence row regardless of review_state; R1 writes the proposal, it does not re-litigate the decision. Blast radius already measured, so do not re-derive it: scheduler.py:625, scheduler.py:1574, hub/tests/test_a_flow_names_what_it_cannot_staff.py. RequirementEvidence already carries task_id, actor and actor_kind -- NO migration. Three things the verdict deliberately leaves to R1: (a) whether the reviewer ladder picks deterministically when several agents are eligible -- MEASURE it, it is unverified in both directions and in the one measured run the pool was two and it chose the author; (b) the shape of the guard's fallback when agent_that_completed is NULL; (c) whether the fourth source sits beside the other three inside agents_that_may_have_authored or becomes its own function called by it. Write proposal.md, design.md, tasks.md and the specs/<capability>/spec.md deltas into openspec/changes/<name>/. 'openspec new change' refuses a name starting with a digit. SHALL goes on a requirement's first physical line. 'openspec validate --strict <name>' must pass before the round is done."
+                  },
+                  {
+                      "id":  "D-3",
+                      "status":  "open",
+                      "title":  "Spec loop R2 on F306 -- re-derive the argument against the code",
+                      "detail":  "Independently re-derive, not re-read R1's reasoning. Open the actual code and compare. An argument can be wrong while everything it argues about is right, and only a round that re-derives finds that. Fix the proposal where the code disagrees. If the round changed nothing, that is a real outcome and the review page must say so. Re-run 'openspec validate --strict'."
+                  },
+                  {
+                      "id":  "D-4",
+                      "status":  "open",
+                      "title":  "Spec loop R3 on F306 -- re-derive again, independently of R2",
+                      "detail":  "Same instruction as D-3 and deliberately redundant with it. On 2026-08-28 round 3 caught rounds 1 and 2 both breaching a requirement that had shipped four days earlier. Re-run 'openspec validate --strict'."
+                  },
+                  {
+                      "id":  "D-5",
+                      "status":  "open",
+                      "title":  "Write the review page and append the APPROVALS row",
+                      "detail":  "spec-queue/review/review-2026-09-11.html, self-contained, theme-aware, answering day-window.md D-5's six questions in order: the branch and what the merge gate did; what the night built and what of it was driven; what D-1 measured; what was specced and what R2 and R3 each changed; the night's default queue if the operator approves nothing; and the research, last -- which today must say the research file is MISSING and why. Then append today's section to spec-queue/APPROVALS.md with a row per specced change and NO status token."
+                  },
+                  {
+                      "id":  "D-6",
+                      "status":  "open",
+                      "title":  "One no-spec repair, only if the day has room",
+                      "detail":  "The D-6 carve-out in day-window.md, all three conditions. Drive it before closing it, run the CI lint set, mutation-check any test added, set the finding's Status line to 'fixed <sha>'. If it turns out to want a spec, STOP and queue it for tomorrow."
                   }
               ],
     "decisions_for_user":  [
-
+                               "The AgentWeaveResearch scheduled task did not run this morning and there is no research file for 2026-09-11. This is not the usual quiet day -- the task never started. Measured at 09:05: the task is Enabled, StartWhenAvailable=True, WakeToRun=True, the machine booted at 03:05 so it was awake at 07:10, LastTaskResult is 0, and yet LastRunTime is still 2026-09-10T07:10 and NextRunTime has advanced to 2026-09-12T07:10. The scheduler skipped the 2026-09-11 occurrence outright. Cause unverified; no log exists for today to read. The day carries on without a candidate list, which is what the playbook says to do, but a second skipped morning would cost the loop its whole research input and that is worth a look while awake."
                            ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled.",
+                   "This window does NOT implement approved changes. If the night left 2026-09-10-the-control-that-asks-holds-the-keyboard unfinished, that is the night's to resume -- note it and leave it. (Checked at iteration 1: it is finished and archived, so there is nothing to leave.)"
                ]
 }
