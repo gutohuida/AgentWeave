@@ -8,14 +8,14 @@
   "parent_branch": "master",
   "parent_sha": "6f7e486",
   "stop_at": "2026-09-12T07:00:00+01:00",
-  "iteration": 4,
+  "iteration": 5,
   "log_file": ".claude/autonomous/2026-09-11-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
   "change": "openspec/changes/an-agent-that-recorded-the-evidence-is-the-author",
   "prefix_sha": "37b8226",
-  "current": "n4-gate",
-  "next_action": "Queue item n4-gate: S4.8 + S6.1-6.4. From hub/, background `py -3.11 -m pytest tests/ -q -p no:cacheprovider` to a scratch file outside the repo (15-47 min, far over the 600s cap; wait on the background notification, do not poll with sleep). This is the FIRST whole-suite measurement of R4's S3.4 blast radius: any failure refused by _guard_reviewer_is_not_the_author at a fixture's own under_review move is the 4.11a class - repair the fixture the 4.11a way (operator evidence or a non-author assignee), record it in tasks.md as a new 4.11x, never relax the guard. F314 (test_flow_holds_the_loop_requirements.py ~1 in 8) and F292 (test_reviewer_is_not_the_author.py setup ERROR) are known intermittents - re-run in isolation before attributing, write the attribution down either way. Then lint CI's exact set (py -3.11 -m ruff check src/ hub/ tests/; py -3.11 -m black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; py -3.11 -m mypy src/ - bare `ruff` is not on PATH in Git Bash), 6.4 `git diff 37b8226.. -- hub/hub/migrations` empty, 6.3 openspec validate --strict. Tick 4.8 and S6 items only on measured green. Log, state, commit, push.",
+  "current": "n5-playbook",
+  "next_action": "Queue item n5-playbook: doc-only repair of .claude/loops/night-window.md's drive-Hub recipe (lines ~113-121). It names profiles/beta/agentweave.db (beta was deleted 2026-09-07, per CLAUDE.md's trial-Hub section) and a fixed port 8011 (8011 and 8012 were both already LISTENING on 2026-09-10). Replace with: a fresh per-night profile path (~/.agentweave/hub/profiles/drive<MMDD>/agentweave.db, created by the launch itself), a port chosen only after `netstat -ano | grep LISTENING` shows it free, never 8000 (operator's real usage) or 8010 (trial Hub), started from hub/ with py -3.11 -m uvicorn (not the agentweave console script). Keep the surrounding 'restart from the implementing code, confirm no .py newer than process start' instruction; only the profile and port change, and every '8011' reference in that section becomes 'the drive port'. Read the whole section first so no other line still names beta or 8011. No code, no test. Log, state (n5 done, next_action = n6-drive-prefix with its detail), commit, push.",
   "queue": [
     {
       "id": "compose",
@@ -43,9 +43,9 @@
     },
     {
       "id": "n4-gate",
-      "status": "open",
+      "status": "done",
       "title": "S4.8 whole Hub suite + S6.1-6.4 gate",
-      "detail": "This run is the FIRST measurement of R4's S3.4 blast radius (the proposal's '1 failed, 4044 passed' predates R4; iteration 2 found a second moved test by chunk). Any further failure refused by _guard_reviewer_is_not_the_author at a fixture's own under_review move is the same class: repair the fixture the 4.11a way, record it, never relax the guard. From hub/: py -3.11 -m pytest tests/ -q, backgrounded to a scratch file (15-47 min; far over the 600s cap). F314 (test_flow_holds_the_loop_requirements.py ~1 in 8) and F292 (test_reviewer_is_not_the_author.py setup ERROR) are known intermittents on an unmodified tree - a failure there is re-run in isolation before being attributed, and the attribution is written down either way. Lint exactly CI's set: ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/. 6.4: git diff 37b8226.. -- hub/hub/migrations must be empty. 6.3 openspec validate --strict."
+      "detail": "DONE iteration 5 on 99d64fc: whole Hub suite 4057 passed, 86 skipped, 0 failed, 0 errors, 27m06s. R4's S3.4 moved nothing beyond 4.11/4.11a, and F314/F292 did not fire. ruff/black(py311)/mypy clean over CI's paths, migrations diff empty, openspec validate --strict valid. Ticked 4.8, 6.1-6.4 (36/43). ORIGINAL: This run is the FIRST measurement of R4's S3.4 blast radius (the proposal's '1 failed, 4044 passed' predates R4; iteration 2 found a second moved test by chunk). Any further failure refused by _guard_reviewer_is_not_the_author at a fixture's own under_review move is the same class: repair the fixture the 4.11a way, record it, never relax the guard. From hub/: py -3.11 -m pytest tests/ -q, backgrounded to a scratch file (15-47 min; far over the 600s cap). F314 (test_flow_holds_the_loop_requirements.py ~1 in 8) and F292 (test_reviewer_is_not_the_author.py setup ERROR) are known intermittents on an unmodified tree - a failure there is re-run in isolation before being attributed, and the attribution is written down either way. Lint exactly CI's set: ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/. 6.4: git diff 37b8226.. -- hub/hub/migrations must be empty. 6.3 openspec validate --strict."
     },
     {
       "id": "n5-playbook",

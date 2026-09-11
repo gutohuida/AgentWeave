@@ -186,7 +186,7 @@ do not treat a green file list as evidence of anything here.
   *Measured 2026-09-12, ten mutations in one firing, tree clean after each restore:* every target
   leg failed under its own mutation and none survived, so no fixture changed. Table in
   `.claude/autonomous/2026-09-11-night-log.md`, iteration 4.
-- [ ] 4.8 Re-run the whole Hub suite, not a file list: `py -3.11 -m pytest tests/ -q` from `hub/`.
+- [x] 4.8 Re-run the whole Hub suite, not a file list: `py -3.11 -m pytest tests/ -q` from `hub/`.
   R1 measured 15 files and 210 tests against a prototype and concluded no existing expectation
   changes; R2 re-measured over the whole suite (`proposal.md`, R2-D). A file list chosen by name is
   a guess about which suites reach this code, and the two call sites R1 missed are what that kind of
@@ -201,6 +201,10 @@ do not treat a green file list as evidence of anything here.
   and §3.5). Read it the way R2 taught: **88 green is the reassurance that hid 2.4a.** The sentence
   the operator is shown became untrue and every one of those suites stayed green, because no test
   asserts on it. A whole-suite run is still required here; five files are not a suite.
+  *Measured 2026-09-12 on `99d64fc`, the finished tree:* **4057 passed, 86 skipped, 0 failed, 0
+  errors**, 27m06s. So R4's §3.4 reversal moved no expectation beyond 4.11 and 4.11a, and neither
+  known intermittent (`F314`, `F292`) fired this run. The count agrees with the proposal's arithmetic
+  (4044 + 1 repaired + 12 new = 4057). That is consistent with, not proof of, an unchanged suite.
 - [x] 4.9 **The dispatch leg** (3.5): `POST /agent/trigger` naming the evidence author as reviewer
   of an operator-completed task answers `403`, the task's status and holder are unchanged, and **no
   checkout was created** — `task-lifecycle-governance`'s *"A refused review leaves nothing
@@ -283,16 +287,24 @@ do not treat a green file list as evidence of anything here.
 
 ## 6. The gate
 
-- [ ] 6.1 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
+- [x] 6.1 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
   --target-version py311`, `mypy src/`. The CI path list, not a narrower one.
-- [ ] 6.2 `py -3.11 -m pytest hub/tests/ -q` from the **repo root** — or `tests/` from `hub/`, which
+  *Measured 2026-09-12 on `99d64fc`, all under `py -3.11 -m`:* ruff `All checks passed!`, black
+  `565 files would be left unchanged`, mypy `no issues found in 22 source files`. The change touches
+  no `hub/ui` file, so CI's `npm run lint` is not in this change's reach.
+- [x] 6.2 `py -3.11 -m pytest hub/tests/ -q` from the **repo root** — or `tests/` from `hub/`, which
   is the same suite. `hub/hub/tests` does not exist, so `hub/tests/` from `hub/` errors. Under
   `py -3.11`, never bare `python`.
-- [ ] 6.3 `openspec validate --strict an-agent-that-recorded-the-evidence-is-the-author` after every
+  *Measured 2026-09-12:* the same run as 4.8 (`tests/` from `hub/`), 4057 passed, 0 failed.
+- [x] 6.3 `openspec validate --strict an-agent-that-recorded-the-evidence-is-the-author` after every
   delta edit, not only at the end.
-- [ ] 6.4 No migration is added, and `hub/tests/test_migrations.py` head assertions are **not**
+  *Measured 2026-09-12:* `is valid`. No delta has been edited since the approval. §7.2 runs it
+  again, with `--specs --strict`, after the hand sync.
+- [x] 6.4 No migration is added, and `hub/tests/test_migrations.py` head assertions are **not**
   bumped. If a migration appears in the diff, something has gone wrong: `RequirementEvidence`
   already carries all three columns this change reads.
+  *Measured 2026-09-12:* `git diff 37b8226.. -- hub/hub/migrations` is empty, and so is the diff of
+  `test_migrations.py` and `test_project_persistence.py`.
 
 ## 7. Close it out
 
