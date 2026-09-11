@@ -259,7 +259,7 @@ do not treat a green file list as evidence of anything here.
 
 ## 5. Drive it — the proposal is an argument, a drive is the product
 
-- [ ] 5.1 Reproduce `F306` on a live Hub **before** the fix and keep the transcript: a throwaway
+- [x] 5.1 Reproduce `F306` on a live Hub **before** the fix and keep the transcript: a throwaway
   port, a fresh project, two Haiku agents, `scripts/drive/t_row12_review_leg.py` with
   `AW_COMPLETE_BY=untouched`. Read `task_transitions` and `requirement_evidence` from the drive
   database — `F306`'s own note says the drive's assertion passes either way and only those two
@@ -277,6 +277,20 @@ do not treat a green file list as evidence of anything here.
   approving transition exists and its `actor_agent` is the evidence author. If you cannot show that
   row, you have not reproduced it — say so in the log and leave 5.2 unticked rather than reporting
   a pair.
+
+  **Done 2026-09-12 (night iteration 7), proven from the tables, on the second of two attempts.**
+  Pre-fix worktree at `37b8226` (`hub` imported from inside it, `agents_that_recorded_evidence_for`
+  absent), port 8014, profile `drive0912p`, Haiku. **Attempt 2**, `proj-34d006e2f3e5`,
+  `task-9ba36b0bd788`: seq 5–7 `pending→in_progress→completed→under_review` all
+  `actor_kind='operator'`, `actor_agent` NULL; **seq 8 `under_review→approved`, `actor_kind='run'`,
+  `actor_agent='r7af306q'`, `run-bb80909c0e15`**; `ev-4d13beb472c4` `implementation`, `accepted`,
+  **`actor='r7af306q'`**, recorded on `run-1a7f8b790e34` whose `task_id` is NULL. The drive printed
+  19/19, as predicted. **Attempt 1** (`proj-7a9ec0f070ba`, `task-11fd55c52ee1`) did **not**
+  reproduce the approval: the flow staffed the evidence author `r7af306p` as reviewer
+  (`run-b9d360b2d62c`), which ran `ToolSearch` for `update_task` twice and never called it; the
+  silent review was restaffed (`div-c524b3378859`, `restaffed`) and seq 4 `under_review→approved` is
+  `r7bf306p`'s. Staffing reproduced 2/2, approval 1/2. Transcripts beside the kept database in
+  `profiles/drive0912p/n6-transcripts/`.
 - [ ] 5.2 Re-run it after the fix. The flow staffs the other agent, and the author's approval is
   refused if attempted by hand. Record the sequence numbers, not a summary.
 - [ ] 5.3 Drive the **operator-sees-it** half: a project where the author is the only other agent.
