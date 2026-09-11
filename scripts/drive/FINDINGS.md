@@ -25312,3 +25312,82 @@ whatever change owns optimistic feedback for task mutations.
 this), `F310`.
 
 ---
+
+## F316 (A) — the reviewer resolved after a *silent* review excludes only the completer, so on operator-completed work it can pick the author
+
+**Status:** open — filed 2026-09-11 (day window, iteration 4, spec-loop R2 on `F306`). **Derived
+from the code, not driven**: every line quoted below is in the tree at `35cdd38`, and the route has
+not been exercised on a live Hub. Treat the reachability argument as unverified until it is.
+
+**Where.** `run_divergence._answer_failed_review` (`hub/hub/run_divergence.py:374-421`) is the third
+place in the Hub that resolves a reviewer, and the only one `F142`'s widening never reached. It
+builds the exclusion itself and hands it to the shared ladder:
+
+```python
+author = await agent_that_completed(session, task.id)
+barred = await _reviewers_that_gave_no_verdict(session, task)
+barred.add(run.agent)
+if author:
+    barred.add(author)
+
+choice = await resolve_reviewer(session, task, project_id=run.project_id, exclude=barred)
+```
+
+`agent_that_completed` returns `None` for an operator completion, so `if author:` is false and
+`barred` holds **only the agents that reviewed and said nothing**. The agent that *produced* the
+work is not among them.
+
+**The other two call sites do not compose it this way, and one of them says so.**
+`task_is_claimable_by` (`scheduler.py:615-625`) and the review-staffing arm (`scheduler.py:1567-1574`)
+both branch on `completion_attribution` and fall back to `agents_that_may_have_authored` where no
+agent completed the work. `task_is_claimable_by`'s own comment is explicit about why that matters:
+
+> **The same set the review arm excludes, called rather than recomposed** — two compositions of the
+> same three terms are free to drift, and the two walks disagreeing about one task is the failure
+> this function's whole docstring is about.
+
+There are three compositions, not two. This is the third, and it is the one that drifted.
+
+**The route, stated exactly.** An operator-completed task is staffed for review by the flow, which
+correctly excludes every agent any record associates with the task. That reviewer's turn ends
+without recording a verdict. `_answer_failed_review` then resolves a replacement, barring only the
+silent reviewer — so an agent that worked the task, is named on its transitions or by a bound run,
+and was excluded from the *first* resolution for exactly that reason, is eligible for the second.
+It is then reassigned the task and dispatched. `_guard_author_is_not_reviewer` permits its approval,
+because no agent is recorded as completing the work. Self-approval, silently, on a path whose first
+step did the exclusion correctly.
+
+**Not the same finding as `F306`, and not fixed by fixing it.** `F306` is a missing *source* in the
+union (`requirement_evidence.actor`); this is a call site that does not use the union at all. Adding
+a fourth source to `agents_that_may_have_authored` changes nothing here, because nothing here calls
+it. `F306`'s fix makes this worse rather than better: once the guard refuses an evidence author, a
+replacement reviewer resolved from `barred` can be an agent whose verdict is then refused on
+arrival — which is precisely what `agent-flows` already forbids the Hub to resolve:
+
+> **The Hub SHALL NOT resolve, as a task's reviewer, an agent that could not record a verdict on
+> it.** … the resolution SHALL exclude it rather than discover the refusal afterwards.
+> (`openspec/specs/agent-flows/spec.md:221-224`)
+
+**Its own docstring states the invariant this breaks.** Four lines above the code:
+
+> D6's problem — an escalation target that authored the work is a guaranteed 403 from
+> `agent_that_completed` — cannot arise here at all, because the resolver already excludes the
+> author by construction.
+
+The resolver excludes what its caller passes. On the operator-completed arm this caller passes
+nothing about the author, so the sentence is true only where an agent is *recorded* as completing
+the task — the same blind spot `F142` was filed for and `F306` found again one source over. Three
+findings, one shape: **a rule keyed on the recorded completer is silent wherever the operator
+finished the work.**
+
+**Shape of a fix, not decided here.** The obvious one is to give this call site the same two-branch
+derivation the other two use — `completion_attribution`, then `agents_that_may_have_authored` where
+no agent completed — which would also pick up `F306`'s fourth source for free, since it would then
+be calling the union rather than recomposing it. The round writing `F306`'s proposal folded this in
+on that argument (`openspec/changes/an-agent-that-recorded-the-evidence-is-the-author/`, R2); if
+that change ships, this is closed by it and the entry should say which commit.
+
+**Related:** `F306` (the same blind spot, one source over), `F142` (the widening that did not reach
+this call site), `F167`.
+
+---

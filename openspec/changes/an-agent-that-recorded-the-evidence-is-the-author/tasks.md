@@ -6,10 +6,14 @@ only verified implementation closes a task.
 **This change is Python-only.** No UI file is modified, so the committed bundle in
 `hub/hub/static/ui` is **not** rebuilt — and the Python lint set *is* required (§6).
 
-**It repairs two defences and must be verified as two.** The ladder half (§1, §2) is what the
-operator sees; the guard half (§3) is the one nobody sees. A run that closes one and reports the
-change done has closed half a change, and the half it is most tempting to skip is the guard, because
-no test fails for its absence today.
+**It repairs two defences across four call sites, and must be verified as all four.** The ladder
+half (§1, §2) is what the operator sees; the guard half (§3) is the one nobody sees. R1 believed the
+two `scheduler.py` call sites were the whole of it; R2 found two more — `review_dispatch_refusal`
+(§3.5) and `_answer_failed_review` (§2.4) — and each of those is a place where the guard's new
+refusal would otherwise arrive *after* a review turn has already run. A run that closes §1–§3.4 and
+reports the change done has left the change breaching two requirements that shipped before it
+(`design.md` D8). The half it is most tempting to skip is the guard, because no test fails for its
+absence today.
 
 ## 1. The fourth source
 
@@ -26,11 +30,12 @@ no test fails for its absence today.
   is what keeps the operator's own evidence out of an exclusion of agents and what preserves the
   untouched-task case, and that `review_state` is deliberately *not* filtered. A reader's first
   instinct will be to add `review_state == 'accepted'`; the docstring is what stops them.
-- [ ] 1.4 State in the docstring that this term has **two** consumers and that the second one uses
-  it alone (`design.md` D1/D3). Without that sentence the next reader folds it into the union and
-  deletes the function.
+- [ ] 1.4 State in the docstring that this term has **three** consumers — the union (§2.1), the
+  transition guard (§3.1) and the dispatch refusal (§3.5) — and that the last two use it **alone**,
+  never through the union (`design.md` D1/D3/D8). Without that sentence the next reader folds it
+  into the union and deletes the function.
 
-## 2. The union, and the two call sites that inherit the fix
+## 2. The union, the two call sites that inherit the fix, and the one that does not
 
 - [ ] 2.1 `agents_that_may_have_authored` unions the new term with the existing three.
 - [ ] 2.2 Update that function's docstring table — it enumerates three sources by name and says
@@ -41,6 +46,18 @@ no test fails for its absence today.
   (`task_is_claimable_by`) and `hub/hub/scheduler.py:1574` (the review-staffing arm) both call the
   union and need **no edit**. If either turns out to recompose the terms, stop: that is the drift
   the union's own comment says must not exist, and it is a finding.
+- [ ] 2.4 **`hub/hub/run_divergence.py` — the third composition, which is the drift 2.3 looks for
+  and finds somewhere else** (`design.md` D8, `F316`). `_answer_failed_review` builds its own
+  exclusion from `agent_that_completed` alone. Replace that one term with the two-branch derivation
+  call sites 1 and 2 share: `completion_attribution`, then `agents_that_may_have_authored` where no
+  agent completed. Keep the silent reviewers and `run.agent` as they are — those are facts about
+  the review, not about authorship. **Call the union; do not add a fourth term here.** Four call
+  sites composing the same question three ways is what made this change need two of them edited.
+- [ ] 2.5 Correct that function's docstring, which currently asserts the invariant this breaks:
+  *"an escalation target that authored the work is a guaranteed 403 from `agent_that_completed` —
+  cannot arise here at all, because the resolver already excludes the author by construction."* The
+  resolver excludes what its caller passes, and until 2.4 this caller passed nothing about the
+  author on the operator-completed arm. Say what it passes now and why.
 
 ## 3. The guard, falling back to the evidence actors alone
 
@@ -57,12 +74,25 @@ no test fails for its absence today.
   first two lines of the guard; the fallback goes **after** them, not before.
 - [ ] 3.4 Do not touch `_guard_reviewer_is_not_the_author`. It is a different rule about a different
   fact (the state the move produces, binding the operator too) and is out of scope.
+- [ ] 3.5 **`hub/hub/api/v1/agent_trigger.py` — `review_dispatch_refusal` takes the same fallback**
+  (`design.md` D8). Where `agent_that_completed` returns `None` and the named reviewer recorded
+  evidence for the task, return `403` with a sentence naming the evidence. After the status and
+  holder checks, in place of the completer comparison's silent `None` branch, so the ordering of
+  refusals an operator meets is unchanged. **This is not optional polish:**
+  `task-lifecycle-governance:1719-1722` requires a review that cannot be staffed to be refused
+  *before a turn is started*, and without it the turn runs and the verdict is refused afterwards.
+- [ ] 3.6 Check, and state in the commit, that the refusal at 3.5 and the refusal at 3.1 read as
+  two statements of one rule rather than two rules. `review_dispatch_refusal`'s docstring says it is
+  *"the read-only half"* of what the transition layer would refuse and *"must not drift from it"*;
+  a fallback added to one and not the other is that drift arriving by the door the docstring names.
 
 ## 4. Tests, mutation-checked because nothing existing fails today
 
-The blast-radius measurement (`proposal.md`) found **zero** existing tests whose expectation
-changes. That is a warning, not a reassurance: it means the whole of this change's coverage is new,
-and a new test that would pass against the unfixed tree is worth nothing.
+The blast-radius measurement over the **whole** suite (`proposal.md`) found **one** existing test
+whose expectation changes (§4.11) and nothing else — 1 failed, 4044 passed. Read that as a warning
+rather than a reassurance: near enough the whole of this change's coverage is new, and a new test
+that would pass against the unfixed tree is worth nothing. R1's narrower measurement found zero, so
+do not treat a green file list as evidence of anything here.
 
 - [ ] 4.1 New file `hub/tests/test_the_evidence_names_the_author.py`, with `F306`'s live
   reproduction in its module docstring including the run and task ids.
@@ -87,9 +117,34 @@ and a new test that would pass against the unfixed tree is worth nothing.
   fallback to the union (4.4 must fail), drop the `actor_kind` filter (4.5 must fail), add
   `review_state == 'accepted'` (4.6 must fail). A leg that survives its own mutation is not
   testing what it claims — fix the fixture, do not weaken the claim. Write the table into the log.
-- [ ] 4.8 Re-run the 15 files from the blast-radius measurement, as the real run rather than a
-  prototype: the 7 using `hub/tests/review_evidence.py` and the 8 review/guard/staffing suites
-  named in `proposal.md`. 210 tests, all green, or the change is not done.
+- [ ] 4.8 Re-run the whole Hub suite, not a file list: `py -3.11 -m pytest tests/ -q` from `hub/`.
+  R1 measured 15 files and 210 tests against a prototype and concluded no existing expectation
+  changes; R2 re-measured over the whole suite (`proposal.md`, R2-D). A file list chosen by name is
+  a guess about which suites reach this code, and the two call sites R1 missed are what that kind of
+  guess costs. **What R2's whole-suite run did NOT cover:** its prototype was §1–§3.4
+  only. The blast radius of §2.4 (`run_divergence`) and §3.5 (`review_dispatch_refusal`) is
+  **unmeasured** — `hub/tests/test_review_dispatch_staffs_the_task.py` and the divergence suites are
+  the obvious places to look, and the implementing run measures it rather than assuming R2's number
+  covers code R2 did not patch.
+- [ ] 4.9 **The dispatch leg** (3.5): `POST /agent/trigger` naming the evidence author as reviewer
+  of an operator-completed task answers `403`, the task's status and holder are unchanged, and **no
+  checkout was created** — `task-lifecycle-governance`'s *"A refused review leaves nothing
+  provisioned"*. Mutation: remove the 3.5 fallback and this leg must fail; if it passes, it is
+  asserting the status code and not the ordering.
+- [ ] 4.10 **The silent-review leg** (2.4): an operator-completed task, an agent that worked it
+  without moving it, a staffed reviewer whose turn ends with no verdict. Assert the re-resolution
+  does **not** pick the worker. This is `F316` in executable form and it fails against today's tree
+  as well as against a tree with only §1–§3 applied — so run it against both and record which.
+- [ ] 4.11 **Repair the one existing test whose expectation this change moves**, and repair it the
+  right way. `tests/test_approval_refuses_unaccepted_evidence.py::test_the_agent_plane_sees_the_refusal`
+  walks a task to `under_review` with the **operator's** key, has `builder` record the evidence, and
+  asserts `builder`'s `approved` request answers `409` (evidence not accepted). After §3.1 it
+  answers `403` (author) first. **Give the approval to a second agent that recorded no evidence**;
+  do not relax the guard, do not special-case the fixture, and do not change the assertion to `403`
+  — the test exists to prove the *evidence* refusal reaches the agent plane, and an assertion on a
+  different refusal proves nothing about that. Leave a comment saying why the approver is not the
+  agent that recorded the evidence, naming `F306`: the fixture as written **is** `F306`'s
+  precondition, and the next person to simplify it will put the author back.
 
 ## 5. Drive it — the proposal is an argument, a drive is the product
 
@@ -111,12 +166,17 @@ and a new test that would pass against the unfixed tree is worth nothing.
 - [ ] 6.1 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
   --target-version py311`, `mypy src/`. The CI path list, not a narrower one.
 - [ ] 6.2 `py -3.11 -m pytest hub/tests/ -q` from `hub/`. Under `py -3.11`, never bare `python`.
-- [ ] 6.3 No migration is added, and `hub/tests/test_migrations.py` head assertions are **not**
+- [ ] 6.3 `openspec validate --strict an-agent-that-recorded-the-evidence-is-the-author` after every
+  delta edit, not only at the end.
+- [ ] 6.4 No migration is added, and `hub/tests/test_migrations.py` head assertions are **not**
   bumped. If a migration appears in the diff, something has gone wrong: `RequirementEvidence`
   already carries all three columns this change reads.
 
 ## 7. Close it out
 
+- [ ] 7.0 Set `F316`'s Status line to `fixed <sha>` as well, and say which task closed it (2.4).
+  It was filed by this change's R2 and is closed by it; a finding left open because it was fixed
+  inside somebody else's change is how the ledger grows entries nobody can resolve.
 - [ ] 7.1 Set `F306`'s Status line in `scripts/drive/FINDINGS.md` to `fixed <sha>`, and correct the
   two statements R1 measured false: the *"Unverified: whether ordering is deterministic"* note
   (`design.md` D6) and the `kind`-scoping suggestion in its shape-of-a-fix list (`design.md` D5).

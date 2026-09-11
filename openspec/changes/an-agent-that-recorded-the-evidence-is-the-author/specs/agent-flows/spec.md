@@ -204,3 +204,102 @@ say so.
 
 - **WHEN** a task the operator moved to `completed` has no evidence naming a commit
 - **THEN** the surfaced reason is that there is nothing to check out for review
+
+### Requirement: A flow resolves a reviewer by declaration, then by availability
+
+Where a task declares a reviewer, the Hub SHALL attempt to resolve that declaration to an agent in
+this project, and SHALL do so by the same resolution the rest of the product already uses for a
+declared reviewer, never a second one.
+
+**Where a declaration exists and does not resolve, the Hub SHALL NOT substitute a different agent.**
+It SHALL surface the declaration and the reason it failed, and the review falls to the operator. A
+declaration that named someone is not the same fact as no declaration at all: quietly running the
+review under a different name tells the operator that the agent they named checked the work when it
+did not.
+
+Where **no** reviewer is declared, the Hub SHALL select any agent that is not running a turn and
+holds no task in an active status.
+
+Where no declaration exists and no agent is available, the flow SHALL surface that it could not
+staff the step, naming the task. The flow's job SHALL remain enabled and SHALL remain scheduled.
+
+**This resolution SHALL also answer a review that was staffed and then gave no verdict**, so that a
+failed review is met by the same rule that staffed it rather than by a second mechanism. Where the
+reviewer that failed had been **declared**, the Hub SHALL surface it and SHALL NOT substitute
+another agent — the reasoning above does not weaken because the declared agent ran and said nothing.
+Where the reviewer that failed had been selected by **availability**, the Hub SHALL resolve again,
+excluding the agent that failed. **That second resolution SHALL exclude the work's author by the
+same determination the first one used**, and SHALL NOT substitute a narrower one: where no agent is
+recorded as completing the task, it SHALL exclude every agent any record associates with the task,
+exactly as the resolution that staffed the review did. A second resolution that rules out only the
+reviewer who said nothing offers the work to an agent the first resolution had already excluded as
+its author, and the silence of one reviewer is not a fact about who wrote the work.
+
+**The Hub SHALL NOT resolve, as a task's reviewer, an agent that could not record a verdict on it.**
+An agent is barred from judging work it completed, so naming it would produce a review refused on
+arrival; the resolution SHALL exclude it rather than discover the refusal afterwards.
+
+#### Scenario: The author is not offered the work by the second resolution either
+
+- **WHEN** a reviewer staffed for a task the operator moved to `completed` ends its turn without
+  recording a verdict, and the Hub resolves a replacement
+- **THEN** an agent that any record associates with that task is not selected
+- **AND** the agent that gave no verdict is not selected
+
+#### Scenario: A declared reviewer that resolves is used
+
+- **WHEN** a task declares a reviewer that resolves to an eligible agent
+- **THEN** that agent is fired for the review
+
+#### Scenario: An unresolvable declaration is surfaced, never substituted
+
+- **WHEN** a task declares a reviewer that resolves to no agent in this project
+- **THEN** no other agent is fired for that review
+- **AND** the declared name and the reason it did not resolve are surfaced to the operator
+
+#### Scenario: An undeclared review falls back to availability
+
+- **WHEN** a task declares no reviewer at all
+- **THEN** an agent that is not running and holds no active task is fired for the review
+
+#### Scenario: A busy agent is not selected
+
+- **WHEN** an otherwise eligible agent is running a turn, or holds a task in an active status
+- **THEN** it is not selected while another eligible agent is available
+
+#### Scenario: No eligible agent surfaces rather than stalling silently
+
+- **WHEN** no agent can be resolved or found for a task
+- **THEN** the operator is notified, naming the task
+- **AND** the flow's job remains enabled and scheduled
+
+#### Scenario: A single-agent project reaches the same outcome by the same rule
+
+- **WHEN** a flow's project holds only the agent that completed the task, and no reviewer is
+  declared
+- **THEN** the flow surfaces that it could not staff the review
+- **AND** no special-case path is taken to reach that outcome
+
+#### Scenario: A declared reviewer that gave no verdict is surfaced, not replaced
+
+- **WHEN** a review by a declared reviewer ends without recording a verdict
+- **THEN** no other agent is fired for that review
+- **AND** the operator is told which declared reviewer gave no verdict, naming the task
+
+#### Scenario: An availability-picked reviewer that gave no verdict is replaced
+
+- **WHEN** a review by an agent selected on availability ends without recording a verdict
+- **THEN** the reviewer is resolved again by the same rule
+- **AND** the agent that gave no verdict is not selected
+
+#### Scenario: A second failure with nobody left surfaces
+
+- **WHEN** an availability-picked review gives no verdict and no other eligible agent exists
+- **THEN** the flow surfaces that it could not staff the review, naming the task
+- **AND** the flow's job remains enabled and scheduled
+
+#### Scenario: The agent that completed the work is never resolved as its reviewer
+
+- **WHEN** a reviewer is resolved for a task
+- **THEN** the agent that moved that task to completed is not selected
+- **AND** this holds whether the reviewer is being resolved for the first time or after a failure

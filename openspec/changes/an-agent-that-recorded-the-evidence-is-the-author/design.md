@@ -36,7 +36,11 @@ line:
 - **`review_state` must NOT be filtered.** The operator's verdict, and its reasoning is recorded
   there rather than repeated here: filtering by a review decision would reintroduce the gap one
   status value along, and would make the exclusion depend on the outcome of the review being
-  staffed.
+  staffed. R2 adds the corpus agreeing with it from the other direction:
+  `requirement-traceability`'s *"producing evidence is open, and **accepting** it is the controlled
+  act"* (`:141-145`) means the produced row is the agent's own claim and the decision is somebody
+  else's — so an exclusion keyed on the claim is keyed on the only part of the row the agent owns,
+  and one keyed on the decision would be keyed on the part it does not.
 
 ## D3 — The guard falls back to the evidence source **alone**, never to the union
 
@@ -86,19 +90,33 @@ is the same principle the exclusion already states, applied one layer down.
 `FINDINGS.md` proposed scoping by `kind` *"so a reviewer's own evidence does not exclude the reviewer
 that produced it"*. Two measurements retire it:
 
-- **There is no closed vocabulary.** `record_evidence`'s documented contract is *"`kind`: What sort
-  of thing this is — `test_result`, `manual_observation`, and so on. **Not a closed list**; use a
-  word that describes it"* (`hub/hub/mcp_server.py:1365-1366`), and `record()` stores the string
-  unvalidated. Any scoping rule would be a guess about free-form agent-authored text, and would fail
-  open on the first synonym — a rule that reads as a safeguard and forbids nothing is the failure
-  mode this repository names most often.
+- **The corpus forbids closing the vocabulary** (R2; R1 argued this from a docstring and missed the
+  requirements). `requirement-traceability:123-125`: *"The set of kinds SHALL be open to additions,
+  because constraining evidence to what was imaginable at design time is how the record stops
+  describing what was actually done."* And `agent-capability-plane:850`: *"Constrained values SHALL
+  be constrained identically on both surfaces, and **open ones SHALL stay open**."* Scoping the
+  exclusion by `kind` needs a closed set to scope by; producing one is prohibited, not merely
+  awkward.
+- **A partial vocabulary exists and is unenforced, which R1 stated too strongly.** R1 wrote *"there
+  is no vocabulary to scope by"*. There is: `db.models.EVIDENCE_KINDS` — `test_result`,
+  `screenshot`, `artifact_diff`, `review_record`, `manual_observation`, `external_reference`.
+  Nothing validates against it; `mcp_server.py:1132` says so in its own words (*"`kind` is
+  deliberately **not** constrained here: `db.models.EVIDENCE_KINDS` is open at the edges"*), and
+  `F306`'s own live reproduction recorded `kind='implementation'` — not one of the six — and it
+  stored fine. So the conclusion survives and the sentence does not: there **is** a vocabulary, it
+  is advisory by requirement, and scoping on it would fail open on the first word outside it.
+  `record_evidence`'s contract says the same to the agent: *"Not a closed list; use a word that
+  describes it"* (`hub/hub/mcp_server.py:1365-1366`).
 - **The product does not ask a reviewer for evidence.** `_briefing_evidence_lines` returns `[]` when
   `is_review`, with the comment *"A reviewer records a verdict, not evidence for work it did not
   do"* (`hub/hub/scheduler.py:2103-2104`). The review briefing tells the reviewer to end with
   `update_task`, not to record anything.
 
-**The residue, stated:** an agent that reviews a task *and* calls `record_evidence` against it
-anyway — the tool is available in a review turn — becomes excluded from a later review of that same
+**The residue, stated** — and it is marginally more reachable than R1 implied, because
+`review_record` is one of the six suggested kinds, which is to say the product's own advisory
+vocabulary anticipates a reviewer recording something. It appears nowhere else in the tree: no code
+writes it, no briefing asks for it, and no test uses it. **The residue:** an agent that reviews a
+task *and* calls `record_evidence` against it anyway — the tool is available in a review turn — becomes excluded from a later review of that same
 task, and on a two-agent project a second round of review would then be reported as unstaffable.
 That is the verdict's accepted direction of error (a review the operator is told about, rather than a
 self-approval nobody sees), it needs an agent to act outside its briefing to reach, and it is
@@ -121,6 +139,84 @@ than another agent when both are eligible."* The answer is that it is not a freq
 author whose name sorts first among the free agents reviews its own work on every firing for every
 task it authored, deterministically, forever.
 
+## D8 — There are **four** places that decide who may review, and R1 found two (R2)
+
+R1's Impact section said *"No other module changes"*, naming `scheduler.py:625` and `:1574`. Both are
+correct and neither needs an edit. The claim that they are the only two is false, and the two it
+missed are the two where the guard's new refusal arrives **after** something irreversible has
+already happened.
+
+| # | where | what it decides | composes the exclusion from | R1 |
+|---|---|---|---|---|
+| 1 | `scheduler.py:615-625` `task_is_claimable_by` | may this agent be *offered* the review | `completion_attribution`, then the union | named |
+| 2 | `scheduler.py:1507-1577` the staffing arm | who the flow staffs | `completion_attribution`, then the union | named |
+| 3 | `agent_trigger.py:452-490` `review_dispatch_refusal` | may the operator dispatch this reviewer by hand | `agent_that_completed` **alone** | missed |
+| 4 | `run_divergence.py:415-421` `_answer_failed_review` | who replaces a reviewer that said nothing | `agent_that_completed` **alone**, plus the silent reviewers | missed |
+
+**3 — the hand-dispatch route, and the shipped requirement it would breach.** Without an edit here,
+an operator may dispatch the evidence author onto an operator-completed task: the dispatch check
+finds no completer and permits, `enter_selected_task` finds no completer and permits, the review
+turn runs, and the verdict is refused by the new fallback. `task-lifecycle-governance:1719-1722`
+already rules that out in terms this change cannot argue with — *"A review that cannot be staffed
+SHALL be refused **before a turn is started** … Refusing after a turn has begun is not sufficient:
+the cost of the turn has already been paid and the reviewer's conclusion has nowhere to go."*
+
+And the residue is not merely a wasted turn. The task is left in `under_review` assigned to an agent
+that **no transition on it names** — the operator did every transition — which
+`task-lifecycle-governance:384-389` specifies SHALL be reported as a review genuinely in progress
+and SHALL NOT be restaffed. So the flow will never recover it and nothing will report it: the exact
+shape of `F45`, `F70` and `F161`, manufactured by a change whose whole subject is preventing a
+silent wrong outcome.
+
+So `review_dispatch_refusal` takes the same fallback, at the same place in its sequence (after the
+status and holder checks, in place of the completer comparison's `None` branch), and returns 403 —
+the code it already uses for the completer case, because this is the same authority refusal reached
+by a different record. It stays the *read-only half* of what the transition layer would refuse,
+which is what its own docstring says it must be.
+
+**4 — the silent-review re-resolution.** `_answer_failed_review` hands the ladder an exclusion it
+builds itself: the reviewers that gave no verdict, this run's agent, and the completer *if one is
+recorded*. On an operator-completed task that last term is empty, so the ladder may resolve the
+evidence author — and `agent-flows:220-222`, the same sentence R1 used to compel the ladder half,
+compels this one identically: *"The Hub SHALL NOT resolve, as a task's reviewer, an agent that could
+not record a verdict on it … the resolution SHALL exclude it rather than discover the refusal
+afterwards."* A resolution is a resolution whichever function performs it.
+
+The fix is not to add a term to this call site's recomposition — it is to **stop recomposing**. It
+takes the two-branch derivation call sites 1 and 2 already share (`completion_attribution`, then
+`agents_that_may_have_authored` where no agent completed), unioned with the silent reviewers and this
+run's agent, which are facts about the *review* rather than about authorship and stay local.
+`task_is_claimable_by`'s own comment is the argument: *"two compositions of the same three terms are
+free to drift, and the two walks disagreeing about one task is the failure this function's whole
+docstring is about."* There are three compositions. This is the one that drifted, and reducing it to
+a call is what stops a fifth source ever needing four edits.
+
+**This call site is broken today, before this change, and it is filed as `F316` (A).** An agent that
+worked an operator-completed task — named on its transitions, or by a bound run — is excluded from
+the *first* resolution by call site 2 and eligible for the *second* by call site 4, and its approval
+is permitted because no completer is recorded. `F142` widened two of the three compositions. Folding
+the repair in here rather than leaving `F316` to its own change is the cheaper order and not scope
+creep: after this change the call site breaches a shipped requirement, so a change that leaves it
+alone does not close.
+
+## D9 — The author refusal precedes the evidence-acceptance refusal, and that ordering is kept
+
+Measured, not chosen: `apply_transition` runs its actor-entitlement guards at `:516-527` and the
+evidence gate later, so an agent that may not review at all is told *that* rather than told its
+evidence is unaccepted. R2's whole-suite run surfaced this as the one existing expectation that
+moves — `test_the_agent_plane_sees_the_refusal` asserts `409` on a request that now answers `403`
+(`tasks.md` 4.11).
+
+The ordering is right and is not up for discussion in this change. *"Your evidence has not been
+accepted"* states a remedy the asker can act on — get it accepted — and handing that sentence to an
+agent that may not record a verdict on this task under any circumstances is a false instruction. The
+authority question is answered first because it is the one whose answer does not change when the
+other is resolved.
+
+What follows for the implementing run is only that the **fixture** moves, never the rule: the test
+keeps asserting that the evidence refusal reaches the agent plane, with an approver that is not the
+work's author. A run that changes the assertion to `403` has deleted the test and left the file.
+
 ## D7 — What this change does not claim
 
 - **It does not make an agent's authorship provable.** The determination stays over-inclusive by
@@ -128,6 +224,13 @@ task it authored, deterministically, forever.
 - **It does not touch who may *decide* evidence.** `requirement_evidence.may_accept` is untouched,
   and an agent accepting its own evidence is a different question on a different path.
 - **It does not address `F167`**, the adjacent residual on the same repair, which fails closed.
+- **It leaves the agent-completed arm exactly as it is** (R2). Where agent `A` is recorded as
+  completing a task, both the ladder and the guard compare against `{A}` alone, so an agent `B`
+  that recorded evidence for that same task may still be staffed to review it and its verdict is
+  not refused. That is outside `F306` and outside the verdict, and the code says so deliberately —
+  *"where the product has a decided answer to who the author is, the whole corpus is keyed on it
+  and this change does not widen it"* (`scheduler.py:1550-1553`). It is written here because it is
+  the first question a reader asks after reading D2, and an unanswered one gets re-proposed.
 - **It adds no defence against an agent that records no evidence at all.** An agent that works a
   task, is never bound to it, takes no transition, is never assigned, and records nothing is still
   invisible to all four sources. There is no record left to read, which is the honest end of this
