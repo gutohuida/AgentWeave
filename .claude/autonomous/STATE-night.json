@@ -1,76 +1,40 @@
 {
-  "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-  "playbook": ".claude/loops/night-window.md",
-  "runner": "claude",
-  "model": "opus",
-  "permission_mode": "unattended-full-access",
-  "branch": "autonomous/2026-09-08-daily",
-  "parent_branch": "master",
-  "parent_sha": "5d928f5",
-  "stop_at": "2026-09-11T07:00:00+01:00",
-  "iteration": 7,
-  "log_file": ".claude/autonomous/2026-09-10-night-log.md",
-  "findings_file": "scripts/drive/FINDINGS.md",
-  "approvals_file": "spec-queue/APPROVALS.md",
-  "current": null,
-  "next_action": null,
-  "queue": [
-    {
-      "id": "n1-hook",
-      "status": "done",
-      "title": "S1 hook + S6 unit coverage + S5 bundle",
-      "detail": "DONE iteration 2: useDialogFocus.ts returns on defaultPrevented (bubble/document kept, Tab branch untouched); new src/__tests__/useDialogFocus.test.tsx (2 cases) mutation-checked RED then restored; taskDetailDrawer.test.tsx:117 unchanged and green; full UI suite 148 files/1529 tests passed; bundle rebuilt (index-BvtjVm7p -> index-CYeERp_S, defaultPrevented 19->20) and AW_CHECK_UI_BUNDLE=1 stamp tests 18 passed. tasks.md 1.1-1.3, 5.1-5.2, 6.1-6.4 ticked."
-    },
-    {
-      "id": "n2-red",
-      "status": "done",
-      "title": "S7.1 drive Hub + S7.2/7.3 baselines + write the S7.4 leg and require it RED",
-      "detail": "DONE iteration 3: Hub on :8014 from source against profile drive0910 (STATE said 'beta' - there is no beta profile; it was deleted 2026-09-07 and the path was stale). Served bundle confirmed index-CYeERp_S.js; /health carries no ui_stale field on this build, so the served hash is the evidence. Escape harness 30/6 -> 31/5. Rowmenu 18/1 -> 18/1 but a DIFFERENT leg. D2's skip diagnosed as harness, not product, and the skip is now a check(). D3 added: modal -> type a path -> 'Browse within the Hub instead' -> Escape with focus still on the opener; modal closes and the typed path is destroyed. 38 passed / 7 failed - RED as 7.4a demands. Tasks 7.1, 7.2a, 7.4a ticked."
-    },
-    {
-      "id": "n3-components",
-      "status": "done",
-      "title": "S2 + S3 + S4 - the three nested owners, the menu, the reason panel",
-      "detail": "DONE iteration 4: 2.3 grep re-derived first - all five out-of-scope line numbers still match. 2.1 preventDefault() before setBlockingReason(null). 2.2/2.2a one mount effect in DirectoryPicker: capture activeElement, rootRef.focus(), restore in cleanup. 2.2b honoured. 3.1-3.5 RowMenuItem.takesFocus, onCloseAutoFocus suppression cleared unconditionally, only 'blocked' carries it, no passthrough prop, no modal={false}. 4.1 autoFocus removed, ref focused from an effect keyed on collectingBlockingReason, no timers. tsc/lint clean; UI suite 148 files/1529 tests; bundle -> index-DKUq9Er8; AW_CHECK_UI_BUNDLE=1 18 passed. 4.1a and 8.1 left open."
-    },
-    {
-      "id": "n4-drive-core",
-      "status": "done",
-      "title": "The drive turns green - S7.2, S7.3, S7.4, S7.4b, S7.5, S7.7",
-      "detail": "DONE iteration 5: the first run against n3's bundle was 45/2 and the two survivors were F309 ITSELF. Two browser probes named the cause: Radix flushes onSelect synchronously (flushSync), so S4's effect focused the input while the menu scope was still trapping. FIX: RowMenu's ref holds the pending action and a takesFocus item's onSelect runs from onCloseAutoFocus after preventDefault - new ticked S3.2a, mutation-checked (void-ing the deferred call fails taskDetailDrawer.test.tsx by name). Harness: P3 dismisses the ticket before clicking the board; P4's break is a check(); C2d reads the field's existing value first. Against index-7rpxplrH: escape 48/0, rowmenu 22/0, d9 59/0 with leg E still reproducing F307. 7.2/7.3/7.4/7.4b/7.5/7.7 ticked."
-    },
-    {
-      "id": "n5-drive-legs",
-      "status": "done",
-      "title": "S7.6 and S7.8 - the two scenarios no round produced evidence for, then S8.1 lint",
-      "detail": "DONE iteration 6, Hub on :8013 from source, profile drive0910, served bundle index-7rpxplrH.js. P6 added: Enter on the focused trigger opens the menu, ArrowDown until document.activeElement IS task-status-menu-<id>-blocked, Enter takes it; focus is INPUT, 19 chars land, Tab reaches task-block-confirm-<id>, Enter confirms, and the Hub's record reads status='blocked' reason='the staging API key'. SO S3.2a's deferral HOLDS ON THE KEYBOARD PATH. 4.1a measured: focusVisible true, outline auto 1px. P7 added for 7.8: mouse-select then type with no click between. ONE FAILURE diagnosed not papered over: the reason panel takes 1.5-3s to dismiss on BOTH paths and a second press sends a duplicate PATCH the Hub answers 200 - filed F315 (C), and the draft's predicted refusal was measured WRONG, which the entry says. 8.1 eslint+tsc clean. Re-runs: escape 48/0, rowmenu 37/0. Hub stopped, 8013 released."
-    },
-    {
-      "id": "n6-close",
-      "status": "done",
-      "title": "S8.2/8.3/8.4 ledger, then archive the change",
-      "detail": "DONE iteration 7, no Hub needed and none started. Pre-edit classifier capture taken FIRST (F313's rule) and it paid immediately: F309 sat at CONFLICT, not OPEN, because iteration 6's own F315 'Related:' line named F309 beside the word 'fixed' with F310 on the NEXT physical line - blind spot 8's multi-number suppression could not fire. 8.2: F309 -> fixed 7a0e5bc + beb38d6, F310 -> fixed 9ed1d6d + beb38d6, each saying which commit carried which half, because either half alone was MEASURED not to work; F310's two stale paragraphs (exits non-zero / shape unproposed) corrected. 8.3: dated note inside F307 with three reasons and leg E still reproducing it against the bundle that carries the fix. Index: new 2026-09-11 revision, open severity-A tail re-derived as FIVE - F299 F300 F301 F306 F312 - F312 had never appeared on any list here; F315 named. 8.4 answered no: binding did not move, Tab branch untouched, 2.2b honoured (one call site), F315 queued not decided. Delta specs synced by hand into hub-interaction-feedback (2 ADDED) and task-lifecycle-governance (1 MODIFIED); openspec validate --specs --strict 43/0; change git mv'd into archive/. ROADMAP.md F309 row struck + dated section; APPROVALS.md gains a BUILT note labelled as not the operator's. Step 6: classifier re-run, EXACTLY two verdicts moved (F309 CONFLICT->RESOLVED, F310 OPEN->RESOLVED), A totals 48/5/2 -> 49/5/1, 315 sections both runs; tests/test_classify_findings.py 17 passed. ONE CLAIM WITHDRAWN: the first draft of 8.2 said F311 was 'verified still open' - it reads RESOLVED, and did so BEFORE this iteration, on the weak NOT A DEFECT arm matching F311's own 'Not a defect in the product'. Not repaired: that is writing for the instrument. Recorded in the tick and in notes_for_tomorrow."
-    }
-  ],
-  "decisions_for_user": [],
-  "limits": [
-    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-    "Every claim is measured or labelled unverified.",
-    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-  ],
-  "notes_for_tomorrow": [
-    "QUEUE FINISHED 2026-09-11. next_action is null so the driver unregisters. The change 2026-09-10-the-control-that-asks-holds-the-keyboard is built, driven, spec-synced and archived; F309 (A) and F310 (B) are both closed with two commits each.",
-    "The open severity-A tail is FIVE and none of it is buildable unattended: F299 (decided, unproposed), F300+F312 (decided, ONE unproposed change), F301 (folds into the unproposed notice change), F306 (decided; DIRECTION.md names it as the 2026-09-11 spec loop). All are the DAY window's - this window does not write proposals. F52 remains the standing CONFLICT (bookkeeping, ten minutes).",
-    "F307 stays open by the operator's 2026-09-10 18:30 answer to DAY-1, and now carries a dated note in FINDINGS.md saying why this change left it standing. It needs a review page to decide where focus lands in a destructive confirmation - its first focusable is Cancel and its last is the destructive button.",
-    "F315 was filed 2026-09-11 (C): the 'Mark waiting' button gives no feedback for the 1.5-3s the mutation takes, stays enabled, and a second press sends a duplicate PATCH the Hub answers 200. NOT fixed, deliberately - every status move in the same menu shares the gap, so it wants a change that owns optimistic feedback for task mutations rather than a patch to one button.",
-    "INSTRUMENT NOTE for whoever next audits the ledger, found 2026-09-11 and deliberately not acted on: classify_findings.py reads F311 as RESOLVED on the weak NOT A DEFECT arm, matching F311's own sentence 'Not a defect in the product' - which is F311 saying the PRODUCT is fine while its own bookkeeping ratchet is undone. Pre-existing, not caused by this window. Repairing it is a weak-arm sweep with its own verdict diff, and editing F311 to satisfy the instrument would be writing for the instrument. There may be more instances of the same shape.",
-    "F313's floor was reproduced by this window inside a day: iteration 6's F315 'Related:' line put F309 beside the word 'fixed' with F310 on the NEXT line, so multi-number suppression could not fire and F309 flipped to CONFLICT. When appending to FINDINGS.md, keep every finding number that shares a thought on the SAME physical line, or keep resolution words off single-number lines."
-  ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-08-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "6f7e486",
+    "stop_at":  "2026-09-12T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-11-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
