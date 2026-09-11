@@ -460,10 +460,22 @@ async def review_dispatch_refusal(
     the flow path never passes through the route -- and this must not drift from it.
 
     Design D8, D9 and D5, in the order they become knowable.
+
+    **Where no agent is recorded as completing the task, an agent that recorded evidence for it is
+    its author, and is refused here too** (F306). This is the same rule the transition guards state
+    — `_guard_author_is_not_reviewer` refuses that agent's verdict and
+    `_guard_reviewer_is_not_the_author` refuses entering review with it as the holder — read from
+    the same record through the same function, `agents_that_recorded_evidence_for`, alone and never
+    the union. Without it the dispatch finds no completer and permits, the turn runs, and the
+    verdict is refused afterwards: a turn paid for whose conclusion has nowhere to go
+    (`task-lifecycle-governance`: a review that cannot be staffed is refused before a turn starts).
     """
     # Imported here, not at module scope: this module is imported back by `task_transitions`'s
     # neighbours, and the service imports nothing from the API layer.
-    from ...task_transition_service import agent_that_completed
+    from ...task_transition_service import (
+        agent_that_completed,
+        agents_that_recorded_evidence_for,
+    )
 
     if task.status not in (REVIEWABLE_LOOP_TASK_STATUSES + WITH_REVIEWER_LOOP_TASK_STATUSES):
         return (
@@ -489,6 +501,16 @@ async def review_dispatch_refusal(
             f"Cannot review task {task.id} as {reviewer!r}: that is the agent recorded as "
             f"completing it, so the review would claim its own author is reviewing it. Dispatch a "
             f"different reviewer, or clear the assignee to review it yourself.",
+        )
+    if completing_agent is None and reviewer in await agents_that_recorded_evidence_for(
+        session, task.id
+    ):
+        return (
+            status.HTTP_403_FORBIDDEN,
+            f"Cannot review task {task.id} as {reviewer!r}: that agent recorded evidence for this "
+            f"task, which claims the work as its own, and no agent is recorded as completing it, "
+            f"so the evidence is the record of who wrote it. Its verdict would be refused, so the "
+            f"review could never end. Dispatch a different reviewer, or review it yourself.",
         )
     return None
 

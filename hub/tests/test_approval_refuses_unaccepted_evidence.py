@@ -927,9 +927,17 @@ async def test_a_commit_this_task_already_merged_is_not_attempted_again(
 
 
 @pytest.mark.asyncio
-async def test_the_agent_plane_sees_the_refusal(app, auth_headers, builder, tmp_path):
+async def test_the_agent_plane_sees_the_refusal(app, auth_headers, builder, reviewer, tmp_path):
     """This change's entire premise is that a refusal reaches the agent that has to act on it, so
-    it is asserted rather than reasoned about from `update_task_for_actor` being shared."""
+    it is asserted rather than reasoned about from `update_task_for_actor` being shared.
+
+    **The approver is `reviewer`, not `builder`, and must stay that way** (F306). `builder` recorded
+    the evidence and the operator walked every transition, so no agent is recorded as completing
+    the task — which is exactly F306's precondition, and `builder` asking for `approved` is an
+    evidence author approving its own work. That is refused as an author (403) before the evidence
+    gate is reached, so an approval by `builder` would prove nothing about the gate's refusal
+    reaching the agent plane. Putting `builder` back as the approver deletes this test and leaves
+    the file."""
     make_repo(tmp_path)
     await make_document(app, auth_headers, builder)
     await set_main_branch("main")
@@ -943,7 +951,7 @@ async def test_the_agent_plane_sees_the_refusal(app, auth_headers, builder, tmp_
     assert walked.status_code == 200, walked.text
 
     refused = await app.patch(
-        f"/api/v1/agent-actions/tasks/{task}", json={"status": "approved"}, headers=builder
+        f"/api/v1/agent-actions/tasks/{task}", json={"status": "approved"}, headers=reviewer
     )
     assert refused.status_code == 409, refused.text
     detail = refused.json()["detail"]

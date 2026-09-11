@@ -129,7 +129,7 @@ async def _task(db, loop, *, suffix, status="pending", assignee=None):
     return task
 
 
-async def _evidence(db, task_id, *, suffix, commit="c" * 40, agent=WORKER):
+async def _evidence(db, task_id, *, suffix, commit="c" * 40, agent=WORKER, actor_kind="agent"):
     """Evidence naming a commit, so the review arm's `commit_for_task_review` gate is satisfied.
 
     The gate is checked **before** a reviewer is resolved and stays there (design D9), so a fixture
@@ -157,7 +157,7 @@ async def _evidence(db, task_id, *, suffix, commit="c" * 40, agent=WORKER):
             task_id=task_id,
             digest="d" * 64,
             kind="commit",
-            actor_kind="agent",
+            actor_kind=actor_kind,
             actor=agent,
             summary="all green",
         )
@@ -782,12 +782,20 @@ async def test_an_operator_completed_task_wedged_in_review_is_restaffed(
 ):
     """5.3 / 1.6 inverted. Before this change it landed in `_cannot_staff` — *"a reviewer holds
     this"* — which was false: nobody was reviewing it and its assignee was counted busy forever.
+
+    **The evidence is the operator's, and must not be put back as `WORKER`'s** (F306, design D14
+    of `an-agent-that-recorded-the-evidence-is-the-author`). An assignee that recorded evidence for
+    an operator-completed task is its author, so the operator's hand move into `under_review` below
+    is refused at the entry and this wedge can no longer be built that way — which is the point of
+    that guard. The wedge that can still form is the one this branch recovers: an assignee named on
+    the task's transitions that recorded nothing. The operator's evidence gives the review its
+    commit and names no agent.
     """
     await _roster(app, auth_headers, bind_runner, WORKER, REVIEWER)
     async with async_session_factory() as db:
         _job, loop = await _flow(db, suffix="wedge")
         b = await _fixture_b(db, loop)
-        await _evidence(db, b.id, suffix="wedge")
+        await _evidence(db, b.id, suffix="wedge", agent="operator", actor_kind="operator")
         fresh = await db.get(Task, b.id)
         await apply_transition(db, fresh, "under_review", operator())
         await db.commit()

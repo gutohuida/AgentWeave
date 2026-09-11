@@ -24,7 +24,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import Run, Task, TaskTransition
+from .db.models import RequirementEvidence, Run, Task, TaskTransition
 from .task_transitions import (
     STATUS_BLOCKED,
     Actor,
@@ -250,19 +250,67 @@ async def agents_of_runs_bound_to(session: AsyncSession, task_id: str) -> "set[s
     return {agent for agent in rows.scalars().all() if agent}
 
 
+async def agents_that_recorded_evidence_for(session: AsyncSession, task_id: str) -> "set[str]":
+    """The agents that recorded **evidence** for this task — each one asserting it did the work.
+
+    Found live 2026-09-09 (F306): an operator-completed task whose only agent-side trace was an
+    evidence row naming the commit was reviewed and approved by the agent that wrote the row. The
+    transitions named nobody (the operator made every move), the run that did the work was never
+    bound, and the ladder resolved the author because nothing it read associated it with the task.
+
+    Each filter is there for a reason a reader will be tempted to undo:
+
+    * **`actor_kind == 'agent'`.** The same table holds the operator's own evidence (`POST
+      /spec/evidence` records it as an operator actor). An operator's name in an exclusion of
+      *agents* is a category error, and where an operator credential and an agent share a name it
+      would silently un-staff a legitimate reviewer. It is also what keeps a truly untouched task
+      reviewable: an operator may supply the evidence naming the commit and every agent stays
+      eligible.
+    * **A non-empty `actor`.** `requirement_evidence.record` writes `actor.name or ""`, and `''` in
+      an exclusion set is a member that matches no agent but is not nothing. The other two terms
+      drop falsy values for the same reason.
+    * **`review_state` is deliberately NOT filtered** — do not add `review_state == 'accepted'`.
+      Producing evidence is the agent's own claim and accepting it is somebody else's decision
+      (`requirement-traceability`), so an exclusion keyed on the claim is keyed on the only part of
+      the row the agent owns. Keyed on the decision, evidence still awaiting review — which is
+      exactly the evidence a reviewer is being staffed to judge — would exclude nobody, and the
+      exclusion would depend on the outcome of the review it is staffing.
+
+    **Three consumers, and two of them use this term alone.** The union
+    `agents_that_may_have_authored` folds it in with the other three sources, for the *offer*. The
+    transition guards (`_guard_author_is_not_reviewer`, `_guard_reviewer_is_not_the_author`) and
+    the dispatch refusal (`api/v1/agent_trigger.review_dispatch_refusal`) fall back to it **alone**
+    where no agent completed the task, for the *refusal* — because by the time a reviewer records
+    its verdict it is the task's assignee and its run is bound to it, so the union names the
+    reviewer itself and would refuse the flow's every staffed review of an operator-completed task.
+    Of the four sources, only an evidence row is an authorship claim that reviewing does not
+    manufacture. That is why this is a function and not an expression inlined in the union: do not
+    fold it back in.
+    """
+    rows = await session.execute(
+        select(RequirementEvidence.actor)
+        .where(RequirementEvidence.task_id == task_id)
+        .where(RequirementEvidence.actor_kind == "agent")
+        .where(RequirementEvidence.actor != "")
+        .distinct()
+    )
+    return {agent for agent in rows.scalars().all() if agent}
+
+
 async def agents_that_may_have_authored(session: AsyncSession, task: Task) -> "set[str]":
     """*"Might this agent be the author of this task's work?"* — the exclusion a reviewer ladder gets.
 
     Every agent **any** record associates with the task: the transitions that moved it, the agent it
-    is assigned to, and the runs recorded as bound to it. Three sources for one question is not
-    elegant, and the reason it is nonetheless right is that each names a different fact and each is
-    individually incomplete:
+    is assigned to, the runs recorded as bound to it, and the agents that recorded evidence for it.
+    Four sources for one question is not elegant, and the reason it is nonetheless right is that
+    each names a different fact and each is individually incomplete:
 
     | source | names | misses |
     |---|---|---|
     | transitions | every agent that **moved** it | one that worked it without moving it |
     | `assignee` | the agent that **holds** it now | every previous holder, and everyone after the first |
     | bound runs | every agent whose run was **about** it | runs predating the column, and runs never bound |
+    | evidence | every agent that **asserted authorship** of it | work nobody recorded evidence for |
 
     Used where no completion names an agent, which is the case where *the author is not provable
     from anything* — so the narrowest set that provably contains the author does not exist, and this
@@ -280,7 +328,8 @@ async def agents_that_may_have_authored(session: AsyncSession, task: Task) -> "s
     """
     worked = await agents_that_worked(session, task.id)
     bound = await agents_of_runs_bound_to(session, task.id)
-    return worked | bound | ({task.assignee} if task.assignee else set())
+    evidenced = await agents_that_recorded_evidence_for(session, task.id)
+    return worked | bound | evidenced | ({task.assignee} if task.assignee else set())
 
 
 async def _guard_author_is_not_reviewer(
@@ -295,9 +344,21 @@ async def _guard_author_is_not_reviewer(
     The comparison is on **agent**, so it holds across turns. An earlier version compared runs and
     was found in live use to forbid nothing, because a new turn is a new run.
 
+    **Where no agent is recorded as completing the task, the agent that recorded evidence for it is
+    its author** (F306). An operator completion writes no agent, so a completer comparison alone
+    permits every agent's verdict — including the one whose evidence row names the commit under
+    review. The fallback reads `agents_that_recorded_evidence_for` **alone and never the union**:
+    by the time a reviewer records its verdict it is the task's assignee and its run is bound to the
+    task, so `agents_that_may_have_authored` names the reviewer itself and would refuse the flow's
+    every staffed review of an operator-completed task. It fires in both worlds `None` stands for —
+    an operator completion and no completion at all — because it does not block over a *missing*
+    record, which is what the permissive default protects; it blocks over a *present* one.
+
     What it still does not claim: two *different* agents belonging to the same operator can review
     each other freely, which is the intended shape rather than a gap. Nor does it reason about
-    whether the review was diligent — that is B4's evidence gates.
+    whether the review was diligent — that is B4's evidence gates. And where an agent **is**
+    recorded as completing the task, that agent alone is compared: another agent's evidence row on
+    the same task does not widen a decided answer to who the author is.
     """
     if actor.is_operator or to_status not in _REVIEW_OUTCOMES:
         return
@@ -308,6 +369,18 @@ async def _guard_author_is_not_reviewer(
             f"task's move to 'completed', and approving, rejecting or requesting revision of work "
             f"requires a different actor. Another agent or the operator must review it. Starting a "
             f"new run does not make you a different actor."
+        )
+    if (
+        completing_agent is None
+        and actor.agent
+        and actor.agent in await agents_that_recorded_evidence_for(session, task.id)
+    ):
+        raise ActorNotPermittedError(
+            f"Cannot move task {task.id} to {to_status!r}: agent {actor.agent!r} recorded "
+            f"evidence for this task, which claims the work as its own, and approving, rejecting "
+            f"or requesting revision of work requires a different actor. No agent is recorded as "
+            f"completing it, so the evidence is the record of who wrote it. Another agent or the "
+            f"operator must review it. Starting a new run does not make you a different actor."
         )
 
 
@@ -337,14 +410,30 @@ async def _guard_reviewer_is_not_the_author(
     * **No assignee.** Nobody is claimed to hold it, so nothing is false and nothing wedges — the
       scheduler's branch records an in-flight holder only `if task.assignee`. This is the operator
       taking a task off the agents' board to look at themselves.
-    * **No recorded completer.** The same asymmetry `_guard_author_is_not_reviewer` documents and
-      `task_is_claimable_by` explains at length: refuse to *offer*, permit to *act*. A guard that
-      blocked every move it could not attribute would stop legitimate work over a missing history
-      row, and a task completed before the transition table existed has no completer to compare.
+    * **No recorded completer, and an assignee that recorded no evidence for the task.** The same
+      asymmetry `_guard_author_is_not_reviewer` documents and `task_is_claimable_by` explains at
+      length: refuse to *offer*, permit to *act*. A guard that blocked every move it could not
+      attribute would stop legitimate work over a missing history row, and a task completed before
+      the transition table existed has no completer to compare.
+
+    **That second case used to be unconditional, and it is not any more** (F306, design D14). The
+    asymmetry is sound only while *acting* remains possible, and for an agent that recorded
+    evidence for an operator-completed task `_guard_author_is_not_reviewer` now refuses every
+    verdict. Permitting the entry would then strand the task rather than free it: `under_review`,
+    held by an agent that may not approve, reject or return it, which no transition names — so the
+    flow reports a review genuinely in progress and never restaffs it. Unmovable by any actor and
+    invisible as a problem. So where no agent completed the task and the assignee recorded evidence
+    for it, the entry is refused here, before a turn is spent. The fallback is
+    `agents_that_recorded_evidence_for` **alone**, for the reason that guard gives: the union
+    names whoever is assigned, which here is the reviewer being entered, and would refuse the flow's
+    every review of operator-completed work. Every other unattributable case keeps the old
+    permission, including the historical tasks it was written for, which carry no evidence rows.
 
     The flow's own path satisfies this by construction — `enter_selected_task` writes the
     reviewer into `assignee` before it transitions, which it must, or the flow would refuse itself
-    here on every review it staffs.
+    here on every review it staffs. And where no agent is recorded as completing the task — the
+    only case the evidence fallback reads — the reviewer it writes is never an evidence author,
+    because the ladder's exclusion on that arm (`agents_that_may_have_authored`) contains every one.
 
     **`actor` is deliberately unread**, and keeping it in the signature is the point rather than an
     oversight: this is one of the three actor-entitlement guards `apply_transition` calls in a row,
@@ -361,6 +450,17 @@ async def _guard_reviewer_is_not_the_author(
             f"own author is reviewing it. Assign a different reviewer, or clear the assignee to "
             f"review it yourself. Left as is, the task is claimable by nobody and "
             f"{task.assignee!r} counts as busy for every other review in this project."
+        )
+    if completing_agent is None and task.assignee in await agents_that_recorded_evidence_for(
+        session, task.id
+    ):
+        raise ActorNotPermittedError(
+            f"Cannot move task {task.id} to 'under_review': it is assigned to "
+            f"{task.assignee!r}, which recorded evidence for this task and so claims the work as "
+            f"its own. No agent is recorded as completing it, so the evidence is the record of "
+            f"who wrote it, and the move would claim its own author is reviewing it — an author "
+            f"may not approve, reject or return its own work, so the review could never end. "
+            f"Assign a different reviewer, or clear the assignee to review it yourself."
         )
 
 

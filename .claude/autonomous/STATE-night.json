@@ -8,14 +8,14 @@
   "parent_branch": "master",
   "parent_sha": "6f7e486",
   "stop_at": "2026-09-12T07:00:00+01:00",
-  "iteration": 1,
+  "iteration": 2,
   "log_file": ".claude/autonomous/2026-09-11-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
   "change": "openspec/changes/an-agent-that-recorded-the-evidence-is-the-author",
   "prefix_sha": "37b8226",
-  "current": "n1-source",
-  "next_action": "Queue item n1-source: implement tasks.md sections 1, 2 (2.1-2.5 incl. 2.4a) and 3 (3.1-3.6 incl. 3.4/3.4a/3.4b) of openspec/changes/an-agent-that-recorded-the-evidence-is-the-author, plus the 4.11 repair of tests/test_approval_refuses_unaccepted_evidence.py (give the approval to a second agent; do NOT change the assertion to 403). Read proposal.md and design.md (D1/D2/D3/D8/D14) first. Run the baseline chunk (command in the n1-source detail) and require it green except for nothing; tick only what is implemented and read. Commit and push. Do NOT start any mutation this firing.",
+  "current": "n2-tests",
+  "next_action": "Queue item n2-tests: write hub/tests/test_the_evidence_names_the_author.py covering tasks.md 4.1-4.6a, 4.9, 4.10, 4.10a of openspec/changes/an-agent-that-recorded-the-evidence-is-the-author, green against the n1 implementation (committed in iteration 2). Read the n2-tests detail for the load-bearing fixture shapes (author sorts FIRST; reviewer is assignee when it approves; awaiting AND rejected; 4.9 asserts no checkout; 4.10 exact restaffed/surfaced numbers; 4.10a reason says 'worked on'). Existing fixtures to reuse: tests/test_approval_refuses_unaccepted_evidence.py (builder/reviewer run fixtures, a_task_with_awaiting_evidence), tests/test_review_dispatch_staffs_the_task.py (dispatch + checkout assertions), tests/test_run_divergence.py (silent review). Tick only 4.1-4.6/4.9/4.10/4.10a legs that are written AND green; 4.6a/4.10 also require their 'against the S1-S3.3 / S1-S3 tree' halves, which are n3's mutations - leave those two unticked until n3 records them. Commit and push. NO mutations this firing.",
   "queue": [
     {
       "id": "compose",
@@ -25,9 +25,9 @@
     },
     {
       "id": "n1-source",
-      "status": "open",
+      "status": "done",
       "title": "S1 + S2 + S3 source edits, five call sites, plus the S4.11 fixture repair",
-      "detail": "task_transition_service.py: agents_that_recorded_evidence_for (1.1-1.4), union term (2.1-2.2), _guard_author_is_not_reviewer fallback on the evidence term ALONE (3.1-3.3), _guard_reviewer_is_not_the_author entry fallback (3.4/3.4a/3.4b - NOT optional, R4). scheduler.py:625 and :1574 read-only confirmation (2.3). run_divergence.py _answer_failed_review two-branch derivation + excluded_because='has worked on this task' on the operator-completed branch (2.4/2.4a/2.5). api/v1/agent_trigger.py review_dispatch_refusal fallback, after status/holder checks (3.5/3.6 - state in the commit that 3.1 and 3.5 read as one rule). 4.11: second agent approves. Baseline chunk (from hub/): py -3.11 -m pytest -q -p no:cacheprovider tests/test_launchability.py tests/test_agent_trigger.py tests/test_a_task_waits_while_its_run_waits.py tests/test_a_flow_names_what_it_cannot_staff.py tests/test_reviewer_is_not_the_author.py tests/test_one_action_lands_the_work.py tests/test_approval_waits_for_the_turn.py tests/test_actor_aware_claimability.py tests/test_a_loop_does_not_staff_its_own_review.py tests/test_approval_refuses_unaccepted_evidence.py tests/test_briefing_names_its_contract.py tests/test_loop_lands_its_work.py tests/test_operator_is_told_the_truth.py tests/test_review_divergence.py tests/test_requirement_evidence.py tests/test_agent_evidence_grant.py tests/test_mcp_body_contract.py tests/test_review_dispatch_staffs_the_task.py tests/test_run_divergence.py tests/test_flow_divergence_regime.py - background it, ~10 min. 6.3 openspec validate --strict if any delta is touched (none should be)."
+      "detail": "DONE iteration 2: 20/43 ticked (S1, S2, S3, 4.11, and new 4.11a - R4's S3.4 reversal moved a SECOND existing test, test_a_flow_names_what_it_cannot_staff.py wedge test; fixture repaired to operator evidence). Chunk green on the final tree (see log). ORIGINAL: task_transition_service.py: agents_that_recorded_evidence_for (1.1-1.4), union term (2.1-2.2), _guard_author_is_not_reviewer fallback on the evidence term ALONE (3.1-3.3), _guard_reviewer_is_not_the_author entry fallback (3.4/3.4a/3.4b - NOT optional, R4). scheduler.py:625 and :1574 read-only confirmation (2.3). run_divergence.py _answer_failed_review two-branch derivation + excluded_because='has worked on this task' on the operator-completed branch (2.4/2.4a/2.5). api/v1/agent_trigger.py review_dispatch_refusal fallback, after status/holder checks (3.5/3.6 - state in the commit that 3.1 and 3.5 read as one rule). 4.11: second agent approves. Baseline chunk (from hub/): py -3.11 -m pytest -q -p no:cacheprovider tests/test_launchability.py tests/test_agent_trigger.py tests/test_a_task_waits_while_its_run_waits.py tests/test_a_flow_names_what_it_cannot_staff.py tests/test_reviewer_is_not_the_author.py tests/test_one_action_lands_the_work.py tests/test_approval_waits_for_the_turn.py tests/test_actor_aware_claimability.py tests/test_a_loop_does_not_staff_its_own_review.py tests/test_approval_refuses_unaccepted_evidence.py tests/test_briefing_names_its_contract.py tests/test_loop_lands_its_work.py tests/test_operator_is_told_the_truth.py tests/test_review_divergence.py tests/test_requirement_evidence.py tests/test_agent_evidence_grant.py tests/test_mcp_body_contract.py tests/test_review_dispatch_staffs_the_task.py tests/test_run_divergence.py tests/test_flow_divergence_regime.py - background it, ~10 min. 6.3 openspec validate --strict if any delta is touched (none should be)."
     },
     {
       "id": "n2-tests",
@@ -45,7 +45,7 @@
       "id": "n4-gate",
       "status": "open",
       "title": "S4.8 whole Hub suite + S6.1-6.4 gate",
-      "detail": "From hub/: py -3.11 -m pytest tests/ -q, backgrounded to a scratch file (15-47 min; far over the 600s cap). F314 (test_flow_holds_the_loop_requirements.py ~1 in 8) and F292 (test_reviewer_is_not_the_author.py setup ERROR) are known intermittents on an unmodified tree - a failure there is re-run in isolation before being attributed, and the attribution is written down either way. Lint exactly CI's set: ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/. 6.4: git diff 37b8226.. -- hub/hub/migrations must be empty. 6.3 openspec validate --strict."
+      "detail": "This run is the FIRST measurement of R4's S3.4 blast radius (the proposal's '1 failed, 4044 passed' predates R4; iteration 2 found a second moved test by chunk). Any further failure refused by _guard_reviewer_is_not_the_author at a fixture's own under_review move is the same class: repair the fixture the 4.11a way, record it, never relax the guard. From hub/: py -3.11 -m pytest tests/ -q, backgrounded to a scratch file (15-47 min; far over the 600s cap). F314 (test_flow_holds_the_loop_requirements.py ~1 in 8) and F292 (test_reviewer_is_not_the_author.py setup ERROR) are known intermittents on an unmodified tree - a failure there is re-run in isolation before being attributed, and the attribution is written down either way. Lint exactly CI's set: ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/. 6.4: git diff 37b8226.. -- hub/hub/migrations must be empty. 6.3 openspec validate --strict."
     },
     {
       "id": "n5-playbook",

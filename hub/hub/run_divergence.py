@@ -392,15 +392,30 @@ async def _answer_failed_review(
 
     `task.escalation_agent` is deliberately not consulted on either branch. It would be a *second*
     reviewer resolution, and D6's problem — an escalation target that authored the work is a
-    guaranteed 403 from `agent_that_completed` — cannot arise here at all, because the resolver
-    already excludes the author by construction.
+    guaranteed 403 from the transition guard — does not arise here, because the resolver excludes
+    whatever this caller passes it, and this caller passes the author.
+
+    **What it passes, and why it is the flow's own derivation rather than one built here.** The
+    silent reviewers and this run's agent are facts about the *review* and stay local. Authorship is
+    not: it is `completion_attribution`, then `agents_that_may_have_authored` where no agent is
+    recorded as completing — the two branches `task_is_claimable_by` and the flow's staffing arm
+    already share, called rather than recomposed. Until F316 this caller excluded the completer
+    *if one was recorded* and nothing else, so on an operator-completed task the ladder could hand
+    the review to the agent that did the work — measured against that tree (F316): the silent review
+    was `restaffed` onto the agent bound to the task, with the review checkout queued to it. That
+    was the claim this docstring used to make — *"the resolver already excludes the author by
+    construction"* — failing on the arm where there is no completer to name.
+
+    The reason travels with the exclusion. On the operator-completed branch the excluded agents
+    *worked on* the task and none of them completed it, so the resolver is told so; its default
+    sentence says an excluded agent *completed* it, which is true only on the other branch
+    (`agent-flows`: a surfaced reason does not claim an agent completed work no agent completed).
     """
-    # Local imports, matching `scheduler._task_is_claimable_by`'s own call of
-    # `agent_that_completed`: this module is imported by the trigger path that `scheduler` also
-    # reaches, and the module docstring's line about keeping the deciding half free of the spawning
-    # half is what these keep true.
+    # Local imports, matching `scheduler._task_is_claimable_by`'s own: this module is imported by
+    # the trigger path that `scheduler` also reaches, and the module docstring's line about keeping
+    # the deciding half free of the spawning half is what these keep true.
     from .scheduler import resolve_reviewer
-    from .task_transition_service import agent_that_completed
+    from .task_transition_service import agents_that_may_have_authored, completion_attribution
 
     if await _review_was_declared(session, run, task):
         return (
@@ -412,13 +427,23 @@ async def _answer_failed_review(
             f"reviewer, reviewing it yourself, or asking this one again is the way forward.",
         )
 
-    author = await agent_that_completed(session, task.id)
     barred = await _reviewers_that_gave_no_verdict(session, task)
     barred.add(run.agent)
-    if author:
-        barred.add(author)
+    attribution = await completion_attribution(session, task.id)
+    if attribution.agent is not None:
+        barred.add(attribution.agent)
+        excluded_because = "is the one that completed this task"
+    else:
+        barred |= await agents_that_may_have_authored(session, task)
+        excluded_because = "has worked on this task"
 
-    choice = await resolve_reviewer(session, task, project_id=run.project_id, exclude=barred)
+    choice = await resolve_reviewer(
+        session,
+        task,
+        project_id=run.project_id,
+        exclude=barred,
+        excluded_because=excluded_because,
+    )
     if choice.agent is None:
         # Rung 3, or a declaration that appeared since. Either way nobody is fired and the reason
         # comes from the resolver unchanged, so the operator reads why rather than that something

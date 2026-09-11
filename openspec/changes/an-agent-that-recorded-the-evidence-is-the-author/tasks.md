@@ -25,43 +25,43 @@ remove.**
 
 ## 1. The fourth source
 
-- [ ] 1.1 In `hub/hub/task_transition_service.py`, add
+- [x] 1.1 In `hub/hub/task_transition_service.py`, add
   `agents_that_recorded_evidence_for(session, task_id) -> set[str]`, immediately before
   `agents_that_may_have_authored`, beside the other two term functions. Select
   `RequirementEvidence.actor` distinct, filtered to `task_id == task_id`,
   `actor_kind == "agent"`, and a non-empty `actor`; drop falsy values on the way out as the other
   two terms do.
-- [ ] 1.2 Add `RequirementEvidence` to the existing `from .db.models import …` line. Confirm no
+- [x] 1.2 Add `RequirementEvidence` to the existing `from .db.models import …` line. Confirm no
   import cycle appears (`py -3.11 -c "import hub.task_transition_service"`): `db.models` is already
   imported by this module, so this is a name on an existing import, not a new edge.
-- [ ] 1.3 Docstring it with **why each filter is there**, from `design.md` D2 — that `actor_kind`
+- [x] 1.3 Docstring it with **why each filter is there**, from `design.md` D2 — that `actor_kind`
   is what keeps the operator's own evidence out of an exclusion of agents and what preserves the
   untouched-task case, and that `review_state` is deliberately *not* filtered. A reader's first
   instinct will be to add `review_state == 'accepted'`; the docstring is what stops them.
-- [ ] 1.4 State in the docstring that this term has **three** consumers — the union (§2.1), the
+- [x] 1.4 State in the docstring that this term has **three** consumers — the union (§2.1), the
   transition guard (§3.1) and the dispatch refusal (§3.5) — and that the last two use it **alone**,
   never through the union (`design.md` D1/D3/D8). Without that sentence the next reader folds it
   into the union and deletes the function.
 
 ## 2. The union, the two call sites that inherit the fix, and the one that does not
 
-- [ ] 2.1 `agents_that_may_have_authored` unions the new term with the existing three.
-- [ ] 2.2 Update that function's docstring table — it enumerates three sources by name and says
+- [x] 2.1 `agents_that_may_have_authored` unions the new term with the existing three.
+- [x] 2.2 Update that function's docstring table — it enumerates three sources by name and says
   *"Three sources for one question is not elegant"*. A fourth row: **evidence** names *every agent
   that asserted authorship of it*, and misses *work nobody recorded evidence for*. The docstring is
   the load-bearing statement of the principle this change extends, not decoration.
-- [ ] 2.3 Confirm by reading, not by assuming, that `hub/hub/scheduler.py:625`
+- [x] 2.3 Confirm by reading, not by assuming, that `hub/hub/scheduler.py:625`
   (`task_is_claimable_by`) and `hub/hub/scheduler.py:1574` (the review-staffing arm) both call the
   union and need **no edit**. If either turns out to recompose the terms, stop: that is the drift
   the union's own comment says must not exist, and it is a finding.
-- [ ] 2.4 **`hub/hub/run_divergence.py` — the third composition, which is the drift 2.3 looks for
+- [x] 2.4 **`hub/hub/run_divergence.py` — the third composition, which is the drift 2.3 looks for
   and finds somewhere else** (`design.md` D8, `F316`). `_answer_failed_review` builds its own
   exclusion from `agent_that_completed` alone. Replace that one term with the two-branch derivation
   call sites 1 and 2 share: `completion_attribution`, then `agents_that_may_have_authored` where no
   agent completed. Keep the silent reviewers and `run.agent` as they are — those are facts about
   the review, not about authorship. **Call the union; do not add a fourth term here.** Four call
   sites composing the same question three ways is what made this change need two of them edited.
-- [ ] 2.4a **Pass `excluded_because="has worked on this task"` on that same branch** — R3, and it is
+- [x] 2.4a **Pass `excluded_because="has worked on this task"` on that same branch** — R3, and it is
   the half of 2.4 that reaches the operator. `_answer_failed_review` calls `resolve_reviewer`
   without the argument, so it takes the default *"is the one that completed this task"*. Widening
   the exclusion without widening the reason makes the ladder surface that sentence about a task the
@@ -77,7 +77,7 @@ remove.**
   it"* on an operator-completed task, at `severity="warn"`, which is the whole of what the operator
   is shown. Keep the default on the `attribution.agent is not None` branch, where an agent really
   did complete it.
-- [ ] 2.5 Correct that function's docstring, which currently asserts the invariant this breaks:
+- [x] 2.5 Correct that function's docstring, which currently asserts the invariant this breaks:
   *"an escalation target that authored the work is a guaranteed 403 from `agent_that_completed` —
   cannot arise here at all, because the resolver already excludes the author by construction."* The
   resolver excludes what its caller passes, and until 2.4 this caller passed nothing about the
@@ -85,18 +85,18 @@ remove.**
 
 ## 3. The guard, falling back to the evidence actors alone
 
-- [ ] 3.1 In `_guard_author_is_not_reviewer`, where `agent_that_completed` returns `None` and the
+- [x] 3.1 In `_guard_author_is_not_reviewer`, where `agent_that_completed` returns `None` and the
   actor is an agent, refuse when that agent appears in `agents_that_recorded_evidence_for`.
   **The fallback is that term alone and never `agents_that_may_have_authored`** — `design.md` D3
   and the measurement in `proposal.md` §3. Falling back to the union refuses the flow's own
   reviewer on every operator-completed task.
-- [ ] 3.2 The refusal names the evidence as the reason. The existing message pattern in this
+- [x] 3.2 The refusal names the evidence as the reason. The existing message pattern in this
   module states the record it read and what the asker must do instead; match it, and do not reuse
   the completion sentence — no agent completed this task, and a message saying one did is the class
   of untruth `agent-flows`' surfaced-reason requirement already forbids one layer up.
-- [ ] 3.3 Keep the operator exempt and keep `_REVIEW_OUTCOMES` as the gate. Both are the existing
+- [x] 3.3 Keep the operator exempt and keep `_REVIEW_OUTCOMES` as the gate. Both are the existing
   first two lines of the guard; the fallback goes **after** them, not before.
-- [ ] 3.4 **`_guard_reviewer_is_not_the_author` takes the same fallback** — reversed after R3
+- [x] 3.4 **`_guard_reviewer_is_not_the_author` takes the same fallback** — reversed after R3
   (`design.md` D14). Where `agent_that_completed` returns `None` and `task.assignee` recorded
   evidence for the task, refuse the move to `under_review`. It is still a different rule about a
   different fact — the state the move produces, binding the operator too — and it keeps its own
@@ -104,25 +104,25 @@ remove.**
   the moment §3.1 began refusing the same agent's verdict: entry permitted plus every exit refused
   is a task no actor can move, held by an agent no transition names, which the flow reports as a
   review in progress and never restaffs. Fail-closed at the entry is the whole point of the guard.
-- [ ] 3.4a The fallback is `agents_that_recorded_evidence_for` **alone**, exactly as §3.1's is, and
+- [x] 3.4a The fallback is `agents_that_recorded_evidence_for` **alone**, exactly as §3.1's is, and
   for the same reason: the union would refuse the flow's own reviewer on every operator-completed
   task. It cannot refuse the flow's path — §2.1 guarantees the staffed reviewer is never an
   evidence author — and it binds the operator, which is this guard's existing character and is the
   right outcome: the operator is told before a turn is spent, and the remedy is the one the
   existing message already names. Keep the two permissive cases the requirement keeps: no assignee,
   and a no-completer task whose assignee recorded nothing.
-- [ ] 3.4b Amend the guard's docstring. Its "**No recorded completer**" bullet currently states the
+- [x] 3.4b Amend the guard's docstring. Its "**No recorded completer**" bullet currently states the
   refuse-to-offer/permit-to-act asymmetry as unconditional; it is now conditional on the assignee
   having recorded no evidence, and the docstring must say why — acting is no longer possible for an
   evidence author, so permitting the entry strands the task rather than freeing it.
-- [ ] 3.5 **`hub/hub/api/v1/agent_trigger.py` — `review_dispatch_refusal` takes the same fallback**
+- [x] 3.5 **`hub/hub/api/v1/agent_trigger.py` — `review_dispatch_refusal` takes the same fallback**
   (`design.md` D8). Where `agent_that_completed` returns `None` and the named reviewer recorded
   evidence for the task, return `403` with a sentence naming the evidence. After the status and
   holder checks, in place of the completer comparison's silent `None` branch, so the ordering of
   refusals an operator meets is unchanged. **This is not optional polish:**
   `task-lifecycle-governance:1719-1722` requires a review that cannot be staffed to be refused
   *before a turn is started*, and without it the turn runs and the verdict is refused afterwards.
-- [ ] 3.6 Check, and state in the commit, that the refusal at 3.5 and the refusal at 3.1 read as
+- [x] 3.6 Check, and state in the commit, that the refusal at 3.5 and the refusal at 3.1 read as
   two statements of one rule rather than two rules. `review_dispatch_refusal`'s docstring says it is
   *"the read-only half"* of what the transition layer would refuse and *"must not drift from it"*;
   a fallback added to one and not the other is that drift arriving by the door the docstring names.
@@ -213,7 +213,7 @@ do not treat a green file list as evidence of anything here.
   say any agent completed it. Mutation: drop the `excluded_because` argument and this leg must
   fail. It is the only leg that fails for 2.4a's absence — R3 ran the five obvious suites against a
   prototype **without** it and got 88 passed, so nothing existing defends this sentence.
-- [ ] 4.11 **Repair the one existing test whose expectation this change moves**, and repair it the
+- [x] 4.11 **Repair the one existing test whose expectation this change moves**, and repair it the
   right way. `tests/test_approval_refuses_unaccepted_evidence.py::test_the_agent_plane_sees_the_refusal`
   walks a task to `under_review` with the **operator's** key, has `builder` record the evidence, and
   asserts `builder`'s `approved` request answers `409` (evidence not accepted). After §3.1 it
@@ -223,6 +223,20 @@ do not treat a green file list as evidence of anything here.
   different refusal proves nothing about that. Leave a comment saying why the approver is not the
   agent that recorded the evidence, naming `F306`: the fixture as written **is** `F306`'s
   precondition, and the next person to simplify it will put the author back.
+- [x] 4.11a **The second moved expectation, which R2's "exactly one" could not see** (added by the
+  implementing night run, 2026-09-11). R2's whole-suite number was measured against a prototype of
+  §1–§3.4 when §3.4 still read *"do not touch `_guard_reviewer_is_not_the_author`"*; R4 reversed
+  §3.4 into a fallback and did not re-measure, so R4's blast radius was unmeasured. The 20-file
+  baseline chunk found it: `tests/test_a_flow_names_what_it_cannot_staff.py::
+  test_an_operator_completed_task_wedged_in_review_is_restaffed` built its wedge with an operator
+  hand move into `under_review` while the task was assigned to `builder` — and `builder` had also
+  recorded the task's evidence, so §3.4 now refuses that entry (`ActorNotPermittedError` at the
+  fixture's own `apply_transition`, 1 failed / 439 passed). That refusal is D14 working. The test's
+  claim is the wedged-review branch's *recovery*, and the wedge that can still form is an assignee
+  named on the transitions that recorded nothing — so the evidence became the **operator's**
+  (`_evidence` gained an `actor_kind` keyword) and the claim is unchanged, with a docstring naming
+  `F306` so the author is not put back. File green, 24 passed. §4.8's whole-suite run is still the
+  measurement of record; this is one chunk's finding, not a census.
 
 ## 5. Drive it — the proposal is an argument, a drive is the product
 
