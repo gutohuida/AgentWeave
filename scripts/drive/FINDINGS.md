@@ -25715,10 +25715,67 @@ and the consumer reads only `OPEN`.
 
 ---
 
-## F319 (B) — a review refused on the scheduler path leaves the refused reviewer holding the task
+## F319 (A) — a review refused on the scheduler path leaves the refused reviewer holding the task
 
-**Status:** open — filed 2026-09-12 (night window, iteration 4), measured at unit level on the tree
-at `40bd429`. No proposal; it wants the day window's spec loop.
+**Status:** open — raised from B to **A** 2026-09-12 (day window, D-1): both unverified legs were reached live through `POST /agent/trigger` on a correct tree, and the after-staging leg leaves a task `under_review`, held, with no turn. Filed 2026-09-12 (night window, iteration 4), measured at unit level on the tree at `40bd429`. No proposal; it wants the day window's spec loop.
+
+**Measured live, 2026-09-12 (day window, D-1).** Drive Hub on **8016**, from `hub/` with uvicorn
+from source at `50bd12e`, a fresh profile `drive0912d`, fresh fixture project `proj-e594aacf615a`
+(a git repository under `testbed/scratch/d0912d/fixture`), agents on `claude-haiku-4-5-20251001`.
+No `.py` under `hub/hub` or `src` was newer than the process start. Harness
+`scripts/drive/t_d1_0912_f319_reach.py`; every row below is read back from the drive database
+(`tasks`, `task_transitions`, `runs`, `inbound_queue_entries`), not from a response.
+
+| leg | how it is reached, operator-side only | operator is told | the task afterwards |
+|---|---|---|---|
+| **B1** after staging | operator evidence names a commit on a side branch; the task is walked to `completed`; the branch is deleted and `git gc --prune=now` removes the commit; a non-author is dispatched | `409` "commit … is not present in this repository, so there is nothing to check out for review" | `under_review`, assignee the refused reviewer, a `completed -> under_review` transition row (seq 3, `actor_kind` **operator**), no run |
+| **B2** after staging | the reviewer's `.agentweave/reviews/<agent>` is a plain directory, not a registered worktree | `409` "could not prepare …'s review checkout: refusing existing path …" | the same: `under_review`, held by the refused reviewer, transition row seq 6, no run |
+| **A** the entry guard, no drift | a review is queued for agent X on an operator-completed task **while X's own turn runs**; the route asks `review_dispatch_refusal` then, and X is not yet an author; X's turn then records evidence for that task (`awaiting`) | `200 queued`, `waiting_reason: "agent is already running"` | after X's turn ends the entry is retried and refused by the entry guard; the task reads `("completed", X)`, no transition, no second run |
+
+So both bullets below that said **unverified** are now answered:
+
+- `ReviewTurnRefused` **does** survive the route's check. The route asks `commit_for_task_review`,
+  which reads the database; three of `prepare_review_turn`'s refusals read the *repository* — the
+  commit is absent (`review_turn.py:212-218`), the project is not a git repository (`:201-205`), the
+  checkout path is obstructed (`worktrees.py:599-604`) — and none of them is asked before
+  `enter_selected_task` stages the task. `turn_scheduler.py:349` commits that staging. The operator
+  reads a correct refusal; the board says a review is in progress.
+- A public route **does** reach the entry guard on the scheduler path without the two drifting: the
+  gap is time, not logic. `review_dispatch_refusal` is asked when the entry is queued, the entry
+  guard when it is delivered, and an entry queued behind a running turn is delivered later.
+
+**The stranded state blocks its own recovery.** Dispatching the same reviewer again answers the same
+`409`, measured; by the code it passes the route's D9 check (the holder *is* that reviewer), is
+staged again and committed again. Dispatching a **different** reviewer is
+refused by D9: *"Task … is already under review by 'revb2'. Reassign the task if 'revcb2' should
+take it over"* — a review that never started is now the reason no other review can.
+
+**The transition is attributed to the operator.** Seq 3 and seq 6 read `actor_kind='operator'`,
+`origin='actor'`: the append-only history says the operator moved the task into review, when what
+happened is that a refused dispatch did.
+
+**The last unverified bullet, answered:** the still-`queued` entry *is* retried on every scheduling
+pass. Leg A's entry reached `delivery_attempts=3` within 30 s (the author's run ending, then two
+passes triggered by another agent's run ending and a divergence), and was then abandoned
+(`state='withdrawn'`, `abandoned_reason` "delivery failed 3 times (…); the Hub stopped retrying").
+Each attempt takes the same staging-then-commit path (read from the code; the table state was the
+same after the first attempt and after the third). Abandoning the entry does not release the task:
+it still reads `("completed", X)`. And the pass that abandoned it left the entry queued behind
+it undelivered, which is **F320**.
+
+**What the operator sees** (served bundle on 8016, Chromium, `scripts/drive/t_d1_0912_f319_ui.py`,
+08:32 UTC, ten minutes after the refusals). The Tasks board shows B1 and B2 in **Under Review** as
+`Under Review · Medium · @revb2 · Idle` and `… · @revbb2 · Idle`, exactly the card an ordinary
+review in progress gets, with no marker of any kind. Task A shows under **Completed** with
+`@autha1`, the agent whose review of it was refused. The `409` the operator received is the only
+record that no review happened, and it is gone once they look away. (The route's answer is seen
+only by whoever made the request; the drive made it through the API, so what the UI's own dispatch
+control renders for the `409` was not captured.)
+
+**4.6 and 4.5 of the F306/F316 change, live, as a side effect.** Leg A is 4.6 driven: X's evidence
+was `awaiting`, never accepted, and it still refused X the review. Leg C (a task whose only evidence
+is operator-kind, reviewed by a fresh agent) is 4.5 driven: the review was staffed and a real Haiku
+review run bound to the task ran (`run-1a4df5c4750d`).
 
 **How it surfaced.** The night's mutation table for `an-agent-that-recorded-the-evidence-is-the-author`
 removed the dispatch route's evidence refusal and ran the dispatch leg. `POST /agent/trigger` still
@@ -25767,5 +25824,68 @@ staging. Its docstring now says so.
 **Shape of a repair, not proposed:** roll back before recording `waiting_reason`, or stage the review
 inside a savepoint that a refusal releases. Either has to keep the reason durable, which is the
 reason that commit exists (F97).
+
+---
+
+## F320 (B) — the scheduling pass that abandons a refused head returns, and the entry queued behind it is never delivered
+
+**Status:** open — filed 2026-09-12 (day window, D-1), measured live on the drive Hub (8016, `50bd12e`, profile `drive0912d`, project `proj-e594aacf615a`). No proposal.
+
+**How it surfaced.** Found while driving F319, and not what that drive was looking for. Leg C
+dispatched a fresh reviewer (`revca1`) to an operator-completed task; the Haiku review turn ended
+without a verdict, and the divergence response restaffed the review, as designed, to the one
+eligible agent left: `autha1`, which at that moment had F319's stranded review entry at the head of
+its queue. `run_divergence.py:458` wrote `task.assignee = 'autha1'`, `_queue_response` queued a
+`divergence` entry for it with `review_task_id` set, and `:840` called `schedule_agent`.
+
+**What the tables say** (`event_logs`, `inbound_queue_entries`, `tasks`, `runs`):
+
+| time (UTC) | what happened |
+|---|---|
+| 08:21:37 | `autha1`'s own run ends; F319's entry (`entry-8354ef8d5d17`, older, another conversation) is tried: attempt 1, refused by the entry guard |
+| 08:22:06.441 | divergence: task `task-103b7a6fbad7` reassigned to `autha1`, `entry-e22b0a4d1454` queued (`origin_type='divergence'`) |
+| 08:22:06.447 | `run_diverged`, `outcome: restaffed`, `response_agent: autha1` |
+| 08:22:06.503 | `run_completed` for `revca1` |
+| 08:22:06.558 | `queue_entry_abandoned` for F319's entry, `attempts: 3` |
+| after | `entry-e22b0a4d1454` stays `queued`, `delivery_attempts=0`, `waiting_reason=NULL`; the task stays `under_review`, assignee `autha1`, `assignee_status: idle`; no run for `autha1` |
+
+**The mechanism.** `schedule_agent` builds its turn from the oldest eligible entry
+(`turn_scheduler.py:272`) and selects only entries of that entry's conversation (`:293-303`). When
+that head is refused non-transiently, the refusal branch counts the attempt, abandons the head at
+`DELIVERY_ATTEMPT_LIMIT` (`inbound_queue.py:178`, `turn_scheduler.py:460-471`), and **returns**
+(`:512`). It never asks again. The comment above that branch gives abandonment's purpose as *"so a
+permanently wrong entry stops wedging the whole queue"*, but the pass that abandons the head is the
+last pass anything makes, and there is no tick (`agent_trigger.py:2433`: *"There is no tick"*). The
+entries behind the head are released in principle and wait in practice, until some unrelated event
+calls `schedule_agent` for that agent.
+
+Which two passes at 08:22:06 made attempts 2 and 3 (the divergence's own `schedule_agent`, the
+run-end re-drain, or both) is inferred from the event order, not measured. That the last of them
+abandoned the head and left the divergence entry undelivered is measured.
+
+**What the operator sees.** `GET /queue/autha1/status` answers
+`{"waiting_count": 1, "running": false, "waiting_reason": null, "delivery_attempts": 0}`: an entry
+waiting for no stated reason, on an idle agent. The task card says a review by `autha1` is in
+progress. The one event that names anything is `queue_entry_abandoned`, and it is about the *other*
+entry.
+
+**Reach.** The trigger here was F319's stranded head, but the mechanism does not need F319. Any
+head refused non-transiently three times (a review target with no commit, an archived agent, a task
+the project no longer has, the F56 list) leaves the entry behind it undelivered after the abandoning
+pass. How long it waits depends on what happens next for that agent. A divergence restaff is the
+bad case, because the restaffed task is already held by the agent the entry is waiting for.
+
+**How long it waits, measured as far as the drive went:** still `queued` with no run at 08:31:58,
+9 min 52 s after it was queued, and still `queued` after the served UI was loaded and the Tasks board
+opened at 08:32 (loading the page does not re-drain). On that board, task C is the only card of the
+four carrying a marker, **Stalled**, and that comes from `has_open_divergence`, not from the entry.
+Nothing says a review turn is owed and not coming. **Not measured:** whether an explicit project
+open, a settings save or a relocate (the `projects.py` callers of `redrain_queued_agents`; the
+others are run-end paths in `agent_trigger.py`, which need some *other* agent's run to end) delivers
+it, or how long it would otherwise wait.
+
+**Shape of a repair, not proposed:** after abandoning, loop back and schedule again (the head is
+gone, so the next pass selects the next entry); or have the abandonment branch fall through to the
+next conversation's entries in the same pass.
 
 ---
