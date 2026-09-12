@@ -609,6 +609,18 @@ refusal comes from the §3.4 entry-guard fallback added at `4929ea0`, and before
 same sequence ended in a self-review. The fix is right, and it left a stall where the self-review
 was.
 
+- DECIDED   F327-scope  **Option (a): `a-refused-review-leaves-nothing-behind` ships as scoped, and
+  F327 stays open.** The operator decided it in session, 2026-09-12 ~19:20, answering R2's OPERATOR
+  QUESTION. The change fixes the dispatch's own staging, on the route and the scheduler, and F320.
+  A review a flow (or a divergence restaff) staffed *before* its dispatch, and which the dispatch
+  then refuses, is **F327 (B)** and waits for its own spec loop. R3 measured that every row of
+  F327's table is unchanged on the fixed tree, so the change makes no flow worse. R3 also scoped the
+  delta's scenarios so they no longer reach flows. Rejected: **(b)**, moving the flow's staging
+  into the dispatch, which is unexamined by any round and, per R3, larger than R2 estimated,
+  because the divergence restaff collides with D9. **(c)**, a compensating `under_review ->
+  completed` edge, because it leaves transition rows the verdict forbids. **(d)**, exempting flows
+  in the main requirement, because it would define the verdict's intent away.
+
 ### F306 and F312, decided 2026-09-10 evening — and the scope verdict's mechanism, amended
 
 **DECIDED 2026-09-10 ~18:50, by the operator, in session**, after a code exploration of both
