@@ -190,32 +190,81 @@ its rule exists.
 Nothing existing fails for the absence of most of these rules. So each is mutated once, and a
 named row must fail. Record which row failed, then restore.
 
-- [ ] 5.1 Delete rule 6 (the backstop). G1–G4 must fail.
-- [ ] 5.2 Delete the `HUB_URL` count condition. H10 must fail.
-- [ ] 5.3 Delete the remainder condition (`/ ? #`). H8 must fail.
-- [ ] 5.4 Delete the userinfo condition. H13 must fail.
-- [ ] 5.5 Treat rule 3's words as plain relative. R4, R5 and G5 must fail.
-- [ ] 5.6 Resolve rule 5's relative words without joining them to the root. R1–R3 must fail.
-- [ ] 5.7 Make quotes delimit words instead of being removed and joined, which was R1's reader.
+- [x] 5.1 Delete rule 6 (the backstop). G1–G4 must fail.
+- [x] 5.2 Delete the `HUB_URL` count condition. H10 must fail.
+- [x] 5.3 Delete the remainder condition (`/ ? #`). H8 must fail.
+- [x] 5.4 Delete the userinfo condition. H13 must fail.
+- [x] 5.5 Treat rule 3's words as plain relative. R4, R5 and G5 must fail.
+- [x] 5.6 Resolve rule 5's relative words without joining them to the root. R1–R3 must fail.
+- [x] 5.7 Make quotes delimit words instead of being removed and joined, which was R1's reader.
   **E1 and E2 must fail.** Then stop splitting arguments at surviving whitespace. **H1 must
   fail**: the quoted `Content-Type` header becomes one non-plain word, refused as `'/json'`. Also
   pin J5, `python -c "open('/etc/x','w')"`, as refused. It is refused under every split, and it
   guards the backstop rather than the split.
-- [ ] 5.8 Drop `\` from the Windows separators. X1b and X1c must fail (on Windows).
-- [ ] 5.9 Drop the bound. §2.4's long-URL test must fail. Then bound the word before rendering
+- [x] 5.8 Drop `\` from the Windows separators. X1b and X1c must fail (on Windows).
+- [x] 5.9 Drop the bound. §2.4's long-URL test must fail. Then bound the word before rendering
   instead of after. §2.4's non-printable test must fail.
-- [ ] 5.10 Stop judging an accepted own-Hub word as a path. E4, E5 and E6 must fail.
-- [ ] 5.11 Drop the "continues" flag, judging every word as it stands. E15 and E16 must fail.
-- [ ] 5.12 Read the `PowerShell` tool's command in the bash dialect. X1c must fail (on Windows).
+- [x] 5.10 Stop judging an accepted own-Hub word as a path. E4, E5 and E6 must fail.
+- [x] 5.11 Drop the "continues" flag, judging every word as it stands. E15 and E16 must fail.
+- [x] 5.12 Read the `PowerShell` tool's command in the bash dialect. X1c must fail (on Windows).
   Read the `Bash` tool's command in the PowerShell dialect. J2 must fail (on Windows).
-- [ ] 5.13 Look for rule 3's expansion only at a word's start. G6 must fail its reason assertion:
+- [x] 5.13 Look for rule 3's expansion only at a word's start. G6 must fail its reason assertion:
   it is still refused, but as `'/$X/stray.txt'` outside, through the backstop, and not as *cannot
   be checked*.
-- [ ] 5.14 Stop recursing into substitutions. S2 must fail.
-- [ ] 5.15 Allow an expansion after a reference. E13 must fail.
-- [ ] 5.16 On Windows, drop the bare `\` from rule 6's backstop (use today's drive-letter-only
+- [x] 5.14 Stop recursing into substitutions. S2 must fail.
+- [x] 5.15 Allow an expansion after a reference. E13 must fail.
+- [x] 5.16 On Windows, drop the bare `\` from rule 6's backstop (use today's drive-letter-only
   regex there). **Z1 and Z2 must fail.** This is the R3 gap: a backslash traversal glued to an
   option reaches the backstop, and the drive-letter-only regex lets it through.
+
+- [x] 5.17 (added at S2, design D11a) Remove the `_LITERAL_DOLLAR` sentinel from `_lex`, at both
+  places it is appended, so a quoted or escaped `$` becomes a plain one again. **E20, E21 and E22
+  must fail.**
+
+  **Done at S5 (night 2026-09-13, `u4-mutations`), measured on Windows.** Each mutation was applied
+  alone by `testbed/scratch/night0912/u4/mutate.py` (UTF-8 in and out, every edit asserted to match
+  exactly once). The whole of `hub/tests/test_permission_approver.py` then ran, and the file was
+  restored by `git checkout` from the committed tree. `git status --short` was empty after every
+  restore. Unmutated, the file gives 178 passed and 1 skipped. No named row survived its mutation,
+  and no test was changed.
+
+  | task | mutation | named rows: all failed | everything else that failed |
+  |---|---|---|---|
+  | 5.1 | rule 6 deleted | G1 G2 G3 G4 | H11 N5 N6 X5 X6 X8 E11 E18 J5 Z1 Z2 Z3 |
+  | 5.2 | `HUB_URL` count condition deleted | H10 | none |
+  | 5.3 | remainder condition (`/ ? #`) deleted | H8 | E7 E8 |
+  | 5.4 | userinfo condition deleted | H13 | none |
+  | 5.5 | rule 3's words judged as plain relative | R4 R5 G5 | H17 G6 X7 E9 E10 X2p X3p, the cap test |
+  | 5.6 | relative words left unresolved (the pre-fix reading) | R1 R2 R3 | E1 E2 E12 E15 E16 E17 E19 X1b X1c E3, the cap test |
+  | 5.6′ | relative words resolved against the process's own directory (`abspath`, no join) | none of R1–R3; see below | W1–W6 H1 N3 E15 E16 J1 J2 J3 J4 J7 J8 H2p, the cap test |
+  | 5.7a | quotes delimit arguments (R1's reader) | E1 E2 | E7 E19 Z1 Z2 Z3 |
+  | 5.7b | no split at surviving whitespace | H1, refused as `'/json'` | E16 J1 J2 J3 J4 J7 H2p |
+  | 5.8 | `\` dropped from the Windows separators | X1b X1c | X2p X3p Z1 Z2 Z3 |
+  | 5.9a | bound dropped | `test_a_long_url_is_refused_within_the_cap` | the cap test, the rendered-bound test |
+  | 5.9b | word bounded before rendering | `test_the_bound_is_on_the_rendered_quotation_not_the_word` | the cap test |
+  | 5.10 | accepted own-Hub word not judged as a path (rules 1 and 2) | E4 E5 E6 | E6b |
+  | 5.11 | "continues" always false | E15 E16 | E17 E18, the cap test |
+  | 5.12a | `PowerShell` tool read as bash | X1c | H2 H17 H2p X2p X3p |
+  | 5.12b | `Bash` tool read as PowerShell | J2 | R11 H1 H3 X1a X2b X3b E4 E5 E7 E14 J1 J3 E3, the own-Hub wire test |
+  | 5.13 | rule 3's expansion sought only at a word's start | G6, refused as `'/$X/stray.txt'` outside, not *cannot be checked* | none |
+  | 5.14 | substitutions not recursed into | S2 | S3, the nested-past-the-bound test |
+  | 5.15 | an expansion allowed after a reference | E13 | none |
+  | 5.16 | Windows backstop without the bare `\` | Z1 Z2 | Z3 |
+  | 5.17 | `_LITERAL_DOLLAR` sentinel removed at both sites | E20 E21 E22 | none |
+
+  "The cap test" is `test_no_refusal_is_longer_than_the_hub_records`. J5 was still refused under
+  both 5.7 mutations, as 5.7 requires.
+
+  Two readings needed saying:
+  - **5.6.** Read literally ("resolve against the process's own directory"), the mutation cannot
+    fail R1–R3 under pytest. Its directory is `hub/`, which is itself outside the fixture's
+    workspace, so `../stray.txt` is refused either way. It is killed by W1–W6 instead, whose inside
+    paths land in `hub/` and are refused. When the process's directory is the workspace, that
+    mutation gives the same answer as joining, so no row could separate them. R1–R3 fail under
+    the reading 5.6 means: relative words not resolved at all.
+  - **5.12b.** J2 fails, but on its first word: `$HUB_URL` is no reference in PowerShell. H1 fails
+    the same way. The mutation is killed, but J2 does not show the body's `\"` being lexed
+    differently. That is not a gap: the reference rule kills the mutation first.
 
 ## 6. Drive it — the table is an argument, and a drive is the product
 

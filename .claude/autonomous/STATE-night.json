@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 4,
+  "iteration": 5,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "u4-mutations",
-  "next_action": "Queue item u4-mutations: a-url-is-not-a-path tasks 5.1-5.16 plus the 17th (remove the _LITERAL_DOLLAR sentinel in _lex, both append sites -> E20/E21/E22 fail), one firing, from the clean committed tree. Mutate with py -3.11 (utf-8 read/write), NEVER PowerShell Get-Content/WriteAllText; restore with git checkout from the committed tree and check git status --short is clean after EACH restore. Record which NAMED row failed for each into the log as a table. A row that survives its mutation means fix the test (commit), never weaken the claim. If the firing runs short, stop BEFORE a mutation and record which remain.",
+  "current": "u5-gate",
+  "next_action": "Queue item u5-gate: a-url-is-not-a-path S8 gate. 8.1 CI lint set (ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/). 8.2 whole Hub suite from hub/ (py -3.11 -m pytest tests/ -q -p no:cacheprovider), backgrounded with output to testbed/scratch/night0912/ (15-47 min); F292 (database is locked setup ERROR) and F314 (test_a_wide_flows_state_is_still_one_call) are known intermittents - re-run in isolation before attributing, write the attribution down. 8.4 git diff c12a7d3.. -- hub/hub/migrations hub/hub/api hub/ui must be empty. Tick 8.1/8.2/8.4 in tasks.md with measured notes.",
   "queue": [
     {
       "id": "compose",
@@ -48,9 +48,9 @@
     },
     {
       "id": "u4-mutations",
-      "status": "open",
+      "status": "done",
       "title": "a-url-is-not-a-path S5: sixteen mutation checks, each killed by a NAMED row",
-      "detail": "5.1-5.16, one firing, from a clean committed tree. After EACH restore, git status --short must be empty (or show only the scratch log). Record which named row failed for each into the log as a table. If a row survives its mutation, fix the test (commit), never weaken the claim. Windows-only legs (5.8, 5.12, 5.16) run here. If the firing runs short, stop BEFORE a mutation and record which remain. FROM u2: add a 17th check: remove the _LITERAL_DOLLAR sentinel in _lex (both append sites) -> E20, E21, E22 must fail (already measured once in u2: all three failed). MUTATE WITH py -3.11 (utf-8), NEVER a PowerShell Get-Content/WriteAllText round trip: it mojibakes the file's em dashes (DEAD-ENDS, 2026-09-12). Restore with git checkout only from a committed tree."
+      "detail": "DONE iteration 5. 17 mutations via testbed/scratch/night0912/u4/mutate.py (utf-8, newline='', each edit asserted once, restore by git checkout, git status clean after every one). Every named row failed; no test changed. Table in tasks.md under 5.17 and in the log. 5.6 run in two readings: literal cwd-resolution is killed by W1-W6 (pytest cwd hub/ is itself outside the workspace, so R1-R3 cannot separate it); unresolved-relative kills R1-R3. 5.12b's J2 dies on its $HUB_URL word, not its body. Windows only."
     },
     {
       "id": "u5-gate",
