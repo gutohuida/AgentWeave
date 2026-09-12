@@ -4,37 +4,82 @@
     "runner":  "claude",
     "model":  "opus",
     "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-08-daily",
+    "branch":  "autonomous/2026-09-12-daily",
     "parent_branch":  "master",
-    "parent_sha":  "6f7e486",
+    "parent_sha":  "eac213c",
     "stop_at":  "2026-09-12T17:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
     "log_file":  ".claude/autonomous/2026-09-12-day-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "current":  "d1-drive",
+    "next_action":  "D-1: the scoped drive. Read the queue item d1-drive's detail in full first. One firing: F319's unverified reach through real routes, then the night's tested-not-driven legs, on a fresh drive Hub (free port after netstat, fresh profiles/drive0912d, from hub/ with uvicorn from source, never 8000/8010). Haiku for every real turn, no job left enabled. New findings append to scripts/drive/FINDINGS.md with **Status:** open as the first body line.",
     "queue":  [
                   {
                       "id":  "compose",
+                      "status":  "done",
+                      "title":  "Compose this window's queue from the playbook",
+                      "detail":  "DONE iteration 1. The merge gate opened: all four conditions were measured at eac213c after its CI concluded success, from a clean tree. master was fast-forwarded 6f7e486..eac213c (21 commits, 29 files) and pushed, and autonomous/2026-09-12-daily was cut from it. Drain is 0, so the spec loop runs. DIRECTION.md has no 2026-09-12 section, so its 2026-09-11 fixed order applies and position 2 is F300 + F312 as ONE change. Research 2026-09-12 was copied; 2026-09-11 turned out to be late, not skipped, and was copied as 2026-09-11-late-0922.md."
+                  },
+                  {
+                      "id":  "d1-drive",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "D-1 drive: F319's unverified reach, live, then the night's tested-not-driven legs of F306/F316",
+                      "detail":  "Method: .claude/loops/night-window.md 'Driving' recipe (free port chosen after netstat -ano | grep LISTENING, never 8000/8010; fresh ~/.agentweave/hub/profiles/drive0912d/agentweave.db; AW_BOOTSTRAP_API_KEY set at first launch; export AW_HUB and AW_KEY because scripts/drive/aw.py:14 defaults to 8010; start from hub/ with py -3.11 -m uvicorn hub.main:app from source; fresh project; two Haiku agents). Confirm no .py under hub/hub or src is newer than the process start. PRIORITY 1 - F319 (scripts/drive/FINDINGS.md, heading '## F319 (B)'): (a) is there ANY public route (operator queue, flow, job, divergence restaff) that puts a review queue entry for the evidence author onto the turn_scheduler path, so that the enter_selected_task staging is committed by turn_scheduler.py:349 after the entry guard refuses? Try it live; read task.assignee back from the tables. (b) the ReviewTurnRefused-after-staging leg (agent_trigger.py:855-858): does any ReviewTurnRefused condition survive the route's commit_for_task_review check? If it is reachable live, the task is left under_review, held, with no turn, and F319 becomes severity A. Update F319's Status line with what was measured either way; if it is A, say so in decisions_for_user (the operator may reorder DIRECTION for 2026-09-13). PRIORITY 2 - the night's 'tested, not driven' legs, live if they are reachable: unaccepted (rejected/awaiting) agent evidence still excluding its author from review staffing (4.6); operator-kind evidence leaving every agent eligible (4.5). Read the proof from task_transitions and requirement_evidence, not from a harness pass count, because Haiku is an unreliable actor. PRIORITY 3 if time: what the operator SEES for the refusal in the UI (scripts/uishot.py --url against the drive port). Known harness gap: scripts/drive/t_row12_review_leg.py section E expects an origin_type='job' queue entry that a restaffed reviewer lacks (15/19 on a correct tree); do not misread it as a product failure. Afterwards: stop the Hub, keep the profile, and leave no job enabled. Findings go into FINDINGS.md with **Status:** open as the first body line, plus severity, file:line and a reproduction."
+                  },
+                  {
+                      "id":  "d2-r1",
+                      "status":  "open",
+                      "title":  "D-2 spec R1: F300 + F312 as ONE change - the workspace approver learns the run's own Hub URL, and refuses every other URL for a network reason",
+                      "detail":  "The verdicts are binding; R1 writes the proposal and does not re-litigate them. spec-queue/DECISIONS.md: F312 '#### F312 - the workspace posture and URLs' (~:630-656, option C: allow the run's own Hub URL, deny every other URL with a reason that names network access and not the filesystem; NOT a claim that egress is contained); F300 '#### 1a' (~:694, the verdict is narrowed to F300; the run's OWN Hub base URL only, not permissive about URLs in general) and '#### 1d. The remedy for F300 - both, notice first' (~:761); 'F300 and F312 are one change' (~:654). Findings: scripts/drive/FINDINGS.md '## F300 (A)' and '## F312 (A)' (F312's python -c table is the key measurement). Code: hub/hub/mcp_server.py _ABSOLUTE_PATH_RE (~:936), _decide and its docstring ('pure and total', 'a boundary, not a sandbox', the relative-path comment ~:969-973). Constraints: mcp_server.py may import only stdlib + fastmcp; approve_tool_call has NO return annotation. MEASURE how the spawned approver can learn the run's own Hub base URL (which env var the spawn already carries) rather than assuming it. RESEARCH INPUTS, as data (spec-queue/research/2026-09-12.md): section 1 - five real parent-dir escapes (echo hi > ../stray.txt; | tee ../stray.txt; cp notes.md ../../stray.md; > ~/stray.txt; > \"$HOME/stray.txt\") are denied today only because the regex matches mid-token, and a token-anchored fix silently allows all five. R1 must re-measure that table itself, pin each row as a _decide test BEFORE the regex moves, and write down the decided answer for each, allow or deny with a true reason. The existing shell tests are only hub/tests/test_permission_approver.py:103-110. Section 2 - on Codex, decide_approval accepts a command by cwd alone (codex_appserver.py:280-283); the proposal must STATE what the workspace posture means for network on Codex (scope and non-goal, or in scope), and label any Codex claim unverified (Codex is undrivable). Deliverable: openspec/changes/<name>/ with proposal.md, design.md, tasks.md and specs/<capability>/spec.md deltas (grep openspec/specs for the capability that owns the workspace approver/_decide before choosing). tasks.md must carry the agent-verifiable vs human-only split and a user test guide. openspec new change refuses a name starting with a digit; the archived changes are date-prefixed, so check how 2026-09-11 created theirs. openspec validate --strict must pass, with SHALL on each requirement's FIRST physical line."
+                  },
+                  {
+                      "id":  "d3-r2",
+                      "status":  "open",
+                      "title":  "D-3 spec R2: re-derive the F300+F312 proposal against the code, independently",
+                      "detail":  "Not a re-read of R1. Compare every claim in proposal/design/tasks/deltas against what hub/hub/mcp_server.py, the spawn path that launches it, and the tests actually do. Re-run the accidental-refusal table and the python -c equivalence yourself. Ask what the HTTP/MCP surface RETURNS when _decide refuses (the F108 lesson). Check that every requirement header in the deltas matches openspec/specs character for character, and that scenario counts drop nothing. Fix the proposal where the code disagrees, and log what changed and what did not. openspec validate --strict."
+                  },
+                  {
+                      "id":  "d4-r3",
+                      "status":  "open",
+                      "title":  "D-4 spec R3: re-derive again, independently of R2",
+                      "detail":  "Independent of both R1 and R2; attack R2's own additions hardest, since they have had one pair of eyes. Re-derive the argument, not only the outcomes. An argument can be wrong while everything it argues about is right. If this round changes nothing, say so plainly in the log. openspec validate --strict."
+                  },
+                  {
+                      "id":  "d5-review",
+                      "status":  "open",
+                      "title":  "D-5 review page review-2026-09-12.html + the APPROVALS row",
+                      "detail":  "Per day-window.md D-5: self-contained, theme-aware HTML at spec-queue/review/review-2026-09-12.html. Order: (1) the branch - autonomous/2026-09-12-daily, fresh, one day, and the merge gate OPENED: 6f7e486..eac213c landed on master (21 commits, 29 files), the 2026-09-08 cycle fully landed; (2) what the night built (F306+F316) and what was driven vs tested; (3) today's drive findings; (4) the F300+F312 change, and what R2 and R3 each changed (say so if nothing); (5) what the night does if nothing is approved; (6) the research, briefly, including the 2026-09-11 late-not-skipped correction. Then append a 2026-09-12 section to spec-queue/APPROVALS.md with a row per specced change and no status token."
+                  },
+                  {
+                      "id":  "d6-repair",
+                      "status":  "open",
+                      "title":  "D-6 repair: F318 - the classifier's cross-section arm dequotes per line",
+                      "detail":  "Only if the day has room, and only if the carve-out holds: touches no openspec/specs requirement (grep first), no migration, no API/schema change, and the finding carries a reproduction. scripts/classify_findings.py: the cross-section arm calls dequote() inside the per-line loop, so a re.S quotation that wraps is read as prose (FINDINGS.md '## F318 (B)'). Drive it by running the classifier over the real ledger and requiring the exact census movement the finding predicts. Do not write computed counts into FINDINGS.md (it is the tool's input). Mutation-check any test added. Set the Status line to fixed <sha>. If it turns out to want a spec, stop and queue it."
+                  },
+                  {
+                      "id":  "d7-ledger",
+                      "status":  "open",
+                      "title":  "D-7 ledger: verify research 2026-09-12 section 3 (Codex charter delivery) against the code and file it as a finding",
+                      "detail":  "Reading only; Codex is undrivable. Claims to check: runner_commands.py:229-230 (Claude --append-system-prompt-file), :311-312 (Codex exec -c model_instructions_file, which overrides Codex's built-in instructions), codex_appserver.py:955-983 thread/start and :998-1001 turn/start carrying no charter, and agents.py:1602-1604 assuming the context is already delivered as the system prompt. File one FINDINGS.md entry with **Status:** open first, a severity, file:line, and 'live reproduction: not possible, Codex undrivable' stated. No proposal."
                   }
               ],
     "decisions_for_user":  [
-
+                               "CLAUDE.md's trial-Hub section says the trial DB was 'migrated to head 0101' and 'this checkout is at 0101'. Carried from the 2026-09-11 night: the branch head is 0102 (three fresh profiles migrated 0101->0102 on 2026-09-12), and since today's gate landing, master is at 0102 as well. CLAUDE.md is the operator's file and was not edited: update the two sentences, or authorise a window to.",
+                               "Merge gate note, one sample, not a playbook edit: the gate opened today because iteration 1 waited for the arming commit's CI (~10 min) BEFORE writing anything, then measured all four conditions from a clean tree. That suggests yesterday's proposed rule change (gate on HEAD~1 or the newest green sha) is unnecessary: 'compose waits for the arming commit's CI before writing' is enough. Whether to write that into day-window.md step 1 is the operator's call.",
+                               "Ordering: the 2026-09-11 night recommended F319 as the day's first spec-loop candidate. Today followed DIRECTION.md's fixed order (F300 + F312 at position 2), because F319 has no verdict. If today's D-1 measures F319 as severity A, put it in a 2026-09-13 DIRECTION section to move it ahead of F299.",
+                               "Correction: the 2026-09-11 day log's item that the research scheduler SKIPPED 2026-09-11 is wrong. The run started at 09:04:33 and finished at 09:22:46 with rc=0 (2026-09-11_090433.log): late by ~1h54m, not skipped. Why it started late is unverified. Today's run started on time at 07:10."
                            ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
                    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
                ]
 }
