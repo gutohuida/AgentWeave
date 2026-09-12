@@ -321,6 +321,43 @@ def test_a_single_finding_line_still_carries_its_verdict():
     assert got[52] == "CONFLICT", "a one-number line is still evidence a human must reconcile"
 
 
+def test_a_quotation_that_wraps_is_still_quotation_in_another_section():
+    """Blind spot 10 (F318). The cross-section arm dequoted one line at a time, so a quotation
+    that wraps had its two marks on different lines and nothing paired them. F317's body quotes
+    F316's title across a line break, and the quoted participle `resolved` flagged F316 --
+    `**Status:** open`, severity A -- as CONFLICT, which the consumer reading only OPEN missed.
+    """
+    got = verdicts("""
+## F316 (A) — a finding
+**Status:** open
+
+## F317 (B) — the classifier reads a verb in a title as a verdict
+The own-heading arm searches the first line of every range. `F316`'s title is "the reviewer resolved
+after a silent review excludes only the completer" -- there the participle is a domain verb.
+""")
+    assert got[316] == "OPEN", "a wrapped quotation of F316's title is not a verdict about it"
+
+
+@pytest.mark.parametrize("boundary", ["", "## F92 (B) — the next finding"])
+def test_a_stray_quote_mark_does_not_reach_past_its_paragraph(boundary):
+    """Why blind spot 10 dequotes paragraphs and not the document, which F318 measured giving
+    the right census on the day and rejected: the third QUOTED pattern pairs any two quote
+    marks within 600 characters, so at document scope a stray mark -- an inch sign, a quote
+    in a code span -- pairs with the next one ACROSS a paragraph or a section and blanks a
+    real verdict between them. Both boundaries markdown gives a block must stop it.
+    """
+    got = verdicts(f"""
+## F52 (A) — a finding
+**Status:** open
+
+## F91 (B) — a note
+The old screen was 12" wide.
+{boundary}
+F52 is **fixed** in `68459ea`, see "the summary table".
+""")
+    assert got[52] == "CONFLICT", "a quote mark in another paragraph must not hide this line"
+
+
 def test_a_finding_with_no_resolution_language_is_unclassified_not_resolved():
     """The 119. `UNCLASSIFIED` must mean "nobody has read this", never "probably fine" --
     four of the six ever sampled were real and unfixed.

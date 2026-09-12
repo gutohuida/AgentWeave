@@ -223,6 +223,35 @@ def dequote(text):
     return out
 
 
+# BLIND SPOT 10 (F318, found 2026-09-11 by driving blind spot 9's repair and getting a census
+# that differed from the one predicted). Three of the four QUOTED patterns carry `re.S`
+# because a quotation wraps, and every own-section arm honours that by dequoting a whole
+# joined body. The cross-section arm dequoted ONE LINE at a time, so a wrapped quotation
+# reached it with its two marks on different lines, where nothing could pair them. F317's
+# body quotes F316's title across a line break, and the arm read the quoted participle
+# `resolved` as evidence about F316.
+#
+# The unit is the paragraph, not the document. Dequoting the whole document was measured to
+# give the right census on the day, and was rejected anyway: the third pattern pairs any two
+# quote characters within 600 characters, so at document scope it pairs ACROSS SECTIONS, and
+# whether it swallows a real declaration depends on the quote parity of the entire ledger --
+# which changes every time a finding is appended. A paragraph is the unit markdown itself
+# lets an inline span occupy: emphasis and strike-through cannot cross a blank line, and a
+# heading is a block of its own. That bounds a stray quote mark's reach to its own paragraph.
+def dequote_lines(lines):
+    """`dequote()` over each paragraph of `lines`, returned as one entry per input line."""
+    out, block = [], []
+    for ln in lines + [""]:
+        if ln.strip() and not ln.lstrip().startswith("#"):
+            block.append(ln)
+            continue
+        if block:
+            out.extend(dequote("\n".join(block)).split("\n"))
+            block = []
+        out.append(dequote(ln))
+    return out[:-1]
+
+
 def load(path=PATH):
     return open(path, encoding="utf-8", errors="replace").read().splitlines()
 
@@ -299,6 +328,7 @@ def classify(lines):
             {"num": num, "sev": sev, "inner": inner or "", "start": i, "ranges": ranges[num]}
         )
     span = {s["num"]: s["ranges"] for s in sections}
+    dequoted = dequote_lines(lines)  # blind spot 10: the cross-section arm reads paragraphs
 
     def hits(text, pats):
         out = []
@@ -355,7 +385,7 @@ def classify(lines):
         for i, ln in enumerate(lines):
             if any(lo <= i < hi for lo, hi in own) or not npat.search(ln):
                 continue
-            cln = dequote(ln)
+            cln = dequoted[i]
             # blind spot 8: a line naming more than one finding is bookkeeping, not a verdict.
             if len(set(MULTI_F.findall(cln))) > 1:
                 continue
