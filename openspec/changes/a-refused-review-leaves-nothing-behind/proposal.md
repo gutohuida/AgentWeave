@@ -1,3 +1,6 @@
+> **ANSWERED 2026-09-12 ~19:20: option (a).** See `spec-queue/DECISIONS.md` row `F327-scope`. The
+> change ships as scoped, and F327 stays open. The question is kept below as the record.
+>
 > ## OPERATOR QUESTION (R2): does *"whichever path"* reach a review a flow staffed before it dispatched it?
 >
 > **Answer it in `DECISIONS.md` before approving this change.** Tasks §6.3 blocks on it.
@@ -226,11 +229,42 @@ against *"the operator is told"*; the rollback's expired-attribute hazards; the 
 not made worse (measured); D5's route behaviour; the drive plan; and file isolation. Tasks number
 52, up from 50 (1.8b and 8.5a). The scenario counts are unchanged, at 8 and 7.
 
+## What the pre-approval review found, and what it changed
+
+An adversarial Opus review ran after R3, as the operator requires before any approval. Its
+verdict was **approve with repairs, all doc-only.**
+
+**Measured on R3's prototype, and standing:**
+- All five F319 legs leave the task as it was, through both the route and the scheduler.
+- Nothing inside the dispatch commits before a refusal: zero commits by any session, across all
+  five legs.
+- A second refusal in the same pass does not undo the first give-up.
+- Leg A closes, and the §3.4 guard still refuses with its own sentence.
+- The 57-file path suite gave 1 failed, 747 passed. The one failure is D6's.
+
+**The false claim.** The `state == "queued"` re-read **narrows F328, and does not retire it.** A
+review dispatch holds the database write lock while it records the reviewer. The operator's
+withdrawal waits on that lock and commits after the re-read, so the filter never sees it (test O2,
+measured identical on both trees). R3's leg WD and task 1.8b use a mock trigger that takes no lock,
+which is why they pass. The filter stays, because it is harmless and catches the earlier window.
+F328 stays open, with its durable fix named in D3. Task 8.5a is rewritten accordingly.
+
+**Smaller repairs:**
+- The stop list in the `agent-conversation-workspace` delta and in D4 now names the case the filter
+  creates: every input the attempt carried was withdrawn during the dispatch.
+- D5 records a residual. A later attempt of the loop can start input that another request has just
+  queued, and that request is answered `queued` while its input runs.
+- Task 7.4's must-be-unchanged diff now covers `task_transition_service.py`, `scheduler.py` and
+  `run_divergence.py`.
+- Task 5.5 matches the model with `LIKE 'claude-haiku-4-5%'`.
+- The operator-question banner is marked answered.
+
 ## What Changes
 
 - **`turn_scheduler.schedule_agent`, refusal branch.** On `TriggerAgentError`, first
   `await db.rollback()`. Then re-read the selected entries by the ids captured before the call,
-  taking only those still `queued` (R3, F328), and re-read the agent's queued entries. Use the conversation id captured before the call. Then record
+  taking only those still `queued` (R3; this narrows F328 and does not retire it, see the
+  pre-approval review above), and re-read the agent's queued entries. Use the conversation id captured before the call. Then record
   `waiting_reason`, count and abandon, and emit exactly as today. A rollback expires every loaded row.
   Without the re-read, five tests of the workspace-counting branch fail with `MissingGreenlet`
   (measured, D3).
@@ -300,5 +334,6 @@ not made worse (measured); D5's route behaviour; the drive plan; and file isolat
 - **Harness:** `scripts/drive/t_d1_0912_f319_reach.py` gains a fixed-tree mode, and an F320 leg that
   uses only operator routes.
 - **No** migration, no API or schema change, no UI change.
-- **Findings:** closes F319 and F320 when built and driven, and F328 (D, R3) with task 2.1's
-  filter. F326 (D, R1) and F327 (B, R2) stay open, F327 unless the operator's answer brings it in.
+- **Findings:** closes F319 and F320 when built and driven. It **narrows** F328 (D, R3) with task
+  2.1's filter and does not close it. F326 (D, R1), F327 (B, R2; out of scope by the operator's
+  answer, option (a)) and F328 stay open.

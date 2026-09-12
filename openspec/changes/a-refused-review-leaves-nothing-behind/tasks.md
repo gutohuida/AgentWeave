@@ -155,7 +155,10 @@ that must fail it.
   `abandoned_reason`, and no `queue_entry_abandoned` row (xfail §2). Measured today and on R2's
   prototype: `attempts=3`, `abandoned_reason` *"delivery failed 3 times (refused); the Hub stopped
   retrying"*, one `queue_entry_abandoned`. With 2.1's `state == "queued"` filter: `attempts=2`, no
-  reason, no event.
+  reason, no event. **The docstring must say this covers only a dispatch that holds no database
+  lock.** A real review dispatch holds the write lock while it records the reviewer, so a
+  withdrawal lands after the re-read and is still counted (pre-approval review, test O2). F328 is
+  narrowed, not closed (8.5a).
 - [ ] 1.9 Run §1 against the unmodified tree. Every xfail must xfail and every pin must pass.
   **Any other outcome means the test is wrong, not the code.** Stop, re-measure with
   `testbed/scratch/r1f319/test_zz_r1f319_scratch.py`, and record what differed here. Commit §1 alone,
@@ -312,7 +315,8 @@ the process. Export `AW_HUB` and `AW_KEY` before every harness run.
   against the served bundle) on the fixed-tree Hub. The B1 and B2 cards are not in **Under
   Review**. A's card does not name X. The bundle is unchanged by this change. This checks the
   symptom F319 recorded on the board.
-- [ ] 5.5 Confirm that every run in the profile joined to `claude-haiku-4-5-20251001`, and that
+- [ ] 5.5 Confirm that every run in the profile joined to a Haiku runner (`model LIKE
+  'claude-haiku-4-5%'`), and that
   `GET /jobs` is empty or every job is disabled. Stop the Hub. Remove any worktree the drive made.
 
 ## 6. Verification only a human can do
@@ -336,7 +340,9 @@ the process. Export `AW_HUB` and `AW_KEY` before every harness run.
   background (it exceeds the 600 s command cap). Use `py -3.11`, never bare `python`.
 - [ ] 7.3 `openspec validate --strict a-refused-review-leaves-nothing-behind` after every delta
   edit.
-- [ ] 7.4 `git diff <base>.. -- hub/hub/migrations hub/ui hub/hub/mcp_server.py` is empty, and
+- [ ] 7.4 `git diff <base>.. -- hub/hub/migrations hub/ui hub/hub/mcp_server.py
+  hub/hub/task_transition_service.py hub/hub/scheduler.py hub/hub/run_divergence.py` is empty (the
+  last three make the non-goals mechanical: no guard weakened, no flow staging moved), and
   `git diff <base>.. -- hub/hub/api` is the comment hunk of §2.3 only.
 
 ## 8. Close it out
@@ -351,8 +357,11 @@ the process. Export `AW_HUB` and `AW_KEY` before every harness run.
 - [ ] 8.5 File the escaped `run_divergence_resolved` broadcast (`design.md` D8, 1.8a) as a finding,
   severity D, with 1.8a as its reproduction. It exists only once §2 has landed, which is why it is
   filed here and not earlier.
-- [ ] 8.5a Set F328's `**Status:**` line to `fixed <sha>`, naming 2.1's `state == "queued"` filter
-  and 1.8b (R3).
+- [ ] 8.5a **F328 stays open. Do not set it `fixed`.** 2.1's `state == "queued"` filter narrows it,
+  and a withdrawal that waits on a real review dispatch's write lock still lands after the re-read
+  (pre-approval review, test O2 in `testbed/scratch/opusf319/test_zz_opusf319.py`). Append one
+  dated line to F328's section naming the commit that narrowed it, and say in the close-out commit
+  that F328 stays open.
 - [ ] 8.6 `openspec validate --strict a-refused-review-leaves-nothing-behind`, then archive with the
   `openspec-archive-change` skill. After syncing, confirm that the main requirement *"Dispatching a
   review staffs the task, whichever path dispatched it"* is **byte-identical** to before. This

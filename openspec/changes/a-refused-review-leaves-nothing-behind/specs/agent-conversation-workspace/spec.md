@@ -16,8 +16,9 @@ shows the review in progress and nothing is working on it.
 The pass SHALL go on only where it gave up on input. It SHALL stop, as it does without this
 requirement, where the attempt started a turn, where the refusal is one that clears on its own,
 where the refusal prevents the agent from running at all, where the attempt was refused and gave up
-on nothing (whether it counted an attempt, or every input it carried had already been counted in
-this pass), and where there was nothing to attempt. Going on after any of those would repeat the
+on nothing (whether it counted an attempt, every input it carried had already been counted in
+this pass, or every input it carried was withdrawn while the attempt was being made), and where
+there was nothing to attempt. Going on after any of those would repeat the
 same refusal, or would spend the allowance of input nobody gave up on. Spending that allowance in
 one pass destroys the input that the allowance exists to protect. Input queued behind input that
 was refused and not given up on waits for the next pass, exactly as it does without this

@@ -229,7 +229,12 @@ So the implementation does not rely on the incidental reload.
 - After the rollback, it re-reads `selected` with `InboundQueueEntry.id.in_(selected_ids)`, in
   the captured order, **taking only rows still `queued`** (R3, D13 item 4: without that filter this
   re-read is not load-bearing, and with it an entry withdrawn during the dispatch is not counted,
-  F328).
+  F328). **This narrows F328 and does not retire it** (pre-approval review, measured, test O2). A
+  review dispatch holds the database write lock while it records the reviewer. An operator's
+  withdrawal waits on that lock and commits after the rollback *and* after this re-read, so the
+  filter never sees it. The filter stays because it is harmless and catches a withdrawal that
+  commits before the rollback. The durable repair is a counting write conditioned on
+  `state = 'queued'`, or a re-read inside the same write transaction. It is not this change's.
 - It re-reads `entries` with `queued_entries(db, project_id, agent)`.
 - It passes `conversation_id` wherever `conversation.id` was read.
 
@@ -258,6 +263,9 @@ the head has left the queue. Every other outcome would repeat identically, or ha
   `queued`.
 - An **early return** (queue empty, hop budget, token budget, no conversation, conversation
   unavailable) has nothing to try.
+- An attempt whose carried input was **all withdrawn during the dispatch** (the `queued`-only
+  re-read in D3 finds nothing) gave up on nothing, so the pass stops. The rule above already
+  covers this. It is named here because the list otherwise reads as complete (pre-approval review).
 
 **Rejected alternatives.**
 - **Fall through to the next conversation inside the same attempt.** That is a second copy of the
@@ -344,6 +352,11 @@ on, which is the true answer. The last attempt's result is therefore reported.
 answers `200 running` after two calls. A plain job firing's `JobRun` is `failed` today, carrying the
 head's reason, a head the firing never queued. With the prototype it is `in_progress`. D5 stands as
 R1 wrote it.
+
+**A known residual (pre-approval review, inferred).** A later attempt of the loop can start input
+that another request queued a moment earlier. That request is answered `200 queued` while its
+input is already running. The window existed before, and the loop widens it. Nothing is lost:
+the input runs, and its conversation shows it running.
 
 ## D6 — The one existing test whose expectation changes
 
@@ -630,7 +643,10 @@ deleted after its run.
    `state == "queued"` (`turn_scheduler.r3filter.py`) leaves it at `LIMIT - 1` with no reason and
    no event. Filed as **F328 (D)**. Task 2.1 now filters, 1.8b pins it, and mutation 4.4b drops the
    filter. **This is R3's one addition to the mechanism, and so the one part of this change only
-   one pair of eyes has seen.**
+   one pair of eyes has seen.** *Pre-approval review, measured:* the filter **narrows** F328 and
+   does not retire it. WD's mock trigger takes no database lock. A real review dispatch holds the
+   write lock while it records the reviewer, so the withdrawal lands after the re-read (test O2).
+   See D3.
 5. **Mutation 4.5's stated reason could not be the failure.** With 3.1a in place no entry is counted
    twice in a pass, so *"B is counted more than once"* cannot happen. What the mutation costs is the
    same refusal repeated to the loop bound, and the guard `RuntimeError` is what fails. Reworded.

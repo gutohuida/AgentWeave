@@ -26306,7 +26306,7 @@ edge the lifecycle does not declare and leaves two transition rows.
 
 ## F328 (D) — input the operator withdraws while its turn is being dispatched is counted, given up on, and announced as dropped by the Hub
 
-**Status:** open. Filed 2026-09-12 by R3 of `a-refused-review-leaves-nothing-behind`, measured at unit level on `895aad9`. That change's task 2.1 (as R3 amended it) closes it: the re-read after the rollback takes only entries that are still `queued`.
+**Status:** open. Filed 2026-09-12 by R3 of `a-refused-review-leaves-nothing-behind`, measured at unit level on `895aad9`. That change's task 2.1 (as R3 amended it) **narrows it and does not retire it** — corrected 2026-09-12 evening by the pre-approval Opus review. The `state == "queued"` re-read catches a withdrawal that commits before the rollback. But a review dispatch holds the database write lock while it records the reviewer, so an operator's withdrawal waits on that lock and commits *after* the re-read. Test O2 (`testbed/scratch/opusf319/test_zz_opusf319.py`, delay 0.3 s) measured the DELETE succeeding and the entry still ending `('withdrawn', 3)`, with the Hub's "delivery failed 3 times" reason and one `queue_entry_abandoned`. The result was identical on the unmodified tree. The durable repair is a counting write conditioned on `state = 'queued'`, or a re-read inside the same write transaction.
 
 **The claim.** `schedule_agent` loads the entries of a turn, calls `trigger_agent_directly`, and on
 a refusal writes `waiting_reason`, counts the attempt and gives up at the limit
