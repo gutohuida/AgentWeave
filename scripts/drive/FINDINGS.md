@@ -25663,7 +25663,12 @@ rule kills the second and only the second.
 
 ## F318 (B) — the cross-section arm strips quotation one line at a time, so a quotation that wraps is read as prose
 
-**Status:** open — filed 2026-09-11 (day window, `D-6`), found by driving `F317`'s repair over the
+**Status:** fixed `92c1481` (day window, `D-6`, driven 2026-09-12). The cross-section arm now
+reads a dequote computed per paragraph, with blank lines and headings as the block boundaries,
+the bound this entry proposed below. Replayed over this file as it stood at `cb7c86b`, the old
+code reproduces the census below and the fix gives the predicted one, with every other severity
+line unchanged. Two tests and four mutations, each mutation killed by its intended test. Filed
+2026-09-11 (day window, `D-6`), found by driving `F317`'s repair over the
 real ledger and requiring the exact movement that entry predicted. The movement did not arrive, and
 the gap was the finding. Not argued: this is the difference between two captured census runs.
 
@@ -26050,5 +26055,34 @@ path in a single command, which is what the scenario says is refused.
 
 **Related:** F321 (the same regex, the opposite error), F300 and F312. It is closed by
 `a-url-is-not-a-path` once built and driven (tasks §6.1 ask 4, §6.2).
+
+---
+
+## F324 (C) — four form feeds in F304's body shift every line number the classifier prints after it
+
+**Status:** open. Filed 2026-09-12 (day window, `D-6`), found while repairing `F318`: the
+classifier reported that finding's live instance at line 25591, and an editor shows it at 25587.
+
+**Reproduction.** `scripts/drive/FINDINGS.md:24612` (editor numbering) sits inside `F304`'s section
+and carries four `U+000C` form feeds. The line was written with `%TEMP%` followed by a backslash
+and `f295drive020814`, and the backslash-`f` became a control character. It arrived in `5e942ec`
+(2026-09-09). `scripts/classify_findings.py:255`, `load()`, reads the file with
+`str.splitlines()`, which splits on `U+000C` as well as `\n`:
+
+    py -3.11 -c "t=open('scripts/drive/FINDINGS.md',encoding='utf-8').read(); print(len(t.splitlines()), len(t.split(chr(10))))"
+
+This prints two counts four apart, excluding the trailing empty string that `split` returns. Every
+`F<n>@<line>` and every evidence line number the script prints for a line below 24612 is four
+higher than the line an editor or `Read` shows. That covers `F304` onward, including four of
+the seven open severity-A findings: F312, F319, F321 and F323. Verdicts are unaffected: no fragment the split produces
+begins with `#` or `>`, measured on today's ledger.
+
+**Two defects, one repair each.** The reader should split on `\n` only, so that a control
+character in a finding cannot move the numbering again. The ledger should get its path back: the
+kept databases exist at `%TEMP%` + backslash + `f295drive020814` + backslash + `f295.db` and
+`…f295drive110952…`, both listed 2026-09-12. As the line reads now, the path cannot be copied.
+Neither repair needs a spec.
+
+**Related:** F304, F318.
 
 ---

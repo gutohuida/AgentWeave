@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "eac213c",
     "stop_at": "2026-09-12T17:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-12-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d6-repair",
-    "next_action": "D-6: repair F318 in scripts/classify_findings.py, only if the carve-out holds. First grep openspec/specs for any requirement it touches (none expected); no migration, no API/schema change; the finding must carry a reproduction (FINDINGS.md '## F318 (B)', ~:25668). Bug: the cross-section arm calls dequote() inside the per-line loop, so a re.S quotation that wraps lines is read as prose. Before editing, run the classifier over the real ledger and write down the census; state the exact movement F318 predicts; fix (dequote over the whole section before the per-line scan, or equivalent); re-run and require exactly that movement and no other. Add a test in tests/ (find the classifier's existing test file) and mutation-check it (revert the fix, watch the named test fail, restore, git status clean). Do NOT write computed counts into FINDINGS.md (it is the tool's input). Set F318's Status line to 'fixed <sha>' in a follow-up edit after the fix commit. ruff/black(--target-version py311) on touched files. If it turns out to want a spec, stop and queue it. Then D-7 (Codex charter delivery finding) is next.",
+    "current": "d7-ledger",
+    "next_action": "D-7: verify research 2026-09-12 section 3 (Codex charter delivery) against the code, reading only - Codex is undrivable. Claims to check (spec-queue/research/2026-09-12.md section 3): runner_commands.py:229-230 (Claude --append-system-prompt-file), :311-312 (Codex exec -c model_instructions_file, which overrides Codex's built-in instructions), codex_appserver.py:955-983 thread/start and :998-1001 turn/start carrying no charter, and agents.py:1602-1604 assuming the context is already delivered as the system prompt. Line numbers are the research's: re-find each by content, and record any that moved. File ONE FINDINGS.md entry (next number is F325) with **Status:** open as the first body line, a severity, file:line, and 'live reproduction: not possible, Codex undrivable' stated; claims about Codex's own behaviour (what model_instructions_file overrides) are labelled unverified unless the repo pins them. No proposal. If the claims do not hold against the code, file nothing and log why. Then D-8 (F324 repair).",
     "queue": [
         {
             "id": "compose",
@@ -56,15 +56,22 @@
         },
         {
             "id": "d6-repair",
-            "status": "open",
+            "status": "done",
             "title": "D-6 repair: F318 - the classifier's cross-section arm dequotes per line",
-            "detail": "Only if the day has room, and only if the carve-out holds: touches no openspec/specs requirement (grep first), no migration, no API/schema change, and the finding carries a reproduction. scripts/classify_findings.py: the cross-section arm calls dequote() inside the per-line loop, so a re.S quotation that wraps is read as prose (FINDINGS.md '## F318 (B)'). Drive it by running the classifier over the real ledger and requiring the exact census movement the finding predicts. Do not write computed counts into FINDINGS.md (it is the tool's input). Mutation-check any test added. Set the Status line to fixed <sha>. If it turns out to want a spec, stop and queue it."
+            "detail": "Only if the day has room, and only if the carve-out holds: touches no openspec/specs requirement (grep first), no migration, no API/schema change, and the finding carries a reproduction. scripts/classify_findings.py: the cross-section arm calls dequote() inside the per-line loop, so a re.S quotation that wraps is read as prose (FINDINGS.md '## F318 (B)'). Drive it by running the classifier over the real ledger and requiring the exact census movement the finding predicts. Do not write computed counts into FINDINGS.md (it is the tool's input). Mutation-check any test added. Set the Status line to fixed <sha>. If it turns out to want a spec, stop and queue it.",
+            "result": "DONE iteration 7. Fixed 92c1481: the cross-section arm reads a per-paragraph dequote (dequote_lines; blank lines and headings are boundaries). Document scope rejected for F318's reason, measured: 784 ledger lines read differently between the scopes, 32 naming a finding. Driven: today's ledger - only F316's ext list moves ([25591] -> []), census byte-identical (F316 is since fixed on its own Status line, so the verdict-level prediction is no longer observable here); ledger at cb7c86b - old code reproduces F318's A: CONFLICT=2 OPEN=5 RESOLVED=49, fix gives exactly A: CONFLICT=1 OPEN=6 RESOLVED=49, other lines identical. Two tests, four mutations (per-line, document scope, no heading break, no blank break), each killed by its intended test. F318 Status -> fixed 92c1481. Filed F324 (C): four U+000C form feeds at FINDINGS.md:24612 (F304's body) shift every classifier line number after it by 4, because load() uses splitlines(); queued as D-8. Own-section arms at paragraph scope move no verdict today - observation, not filed."
         },
         {
             "id": "d7-ledger",
             "status": "open",
             "title": "D-7 ledger: verify research 2026-09-12 section 3 (Codex charter delivery) against the code and file it as a finding",
             "detail": "Reading only; Codex is undrivable. Claims to check: runner_commands.py:229-230 (Claude --append-system-prompt-file), :311-312 (Codex exec -c model_instructions_file, which overrides Codex's built-in instructions), codex_appserver.py:955-983 thread/start and :998-1001 turn/start carrying no charter, and agents.py:1602-1604 assuming the context is already delivered as the system prompt. File one FINDINGS.md entry with **Status:** open first, a severity, file:line, and 'live reproduction: not possible, Codex undrivable' stated. No proposal."
+        },
+        {
+            "id": "d8-repair",
+            "status": "open",
+            "title": "D-8 repair: F324 - the classifier's line numbers drift after four form feeds in F304's body",
+            "detail": "No-spec carve-out (grep openspec/specs first; D-6 found no requirement naming the classifier). Two repairs, one finding: (1) scripts/classify_findings.py load() (~:255) uses str.splitlines(), which also splits on U+000C/U+000B/U+001C-1E/U+0085/U+2028/2029 - split on '\n' only (mind the trailing empty string and any '\r'); (2) restore FINDINGS.md:24612 (editor numbering, F304's section) - the four U+000C are a backslash-f that became a control character; the intended text is %TEMP% + backslash + f295drive020814 + backslash + f295.db (and ...f295drive110952...), both dirs exist. Drive: before/after per-section dumps (testbed/scratch/d6f318/dump.py) must show verdicts unchanged and every line number from F304 on shifted by exactly -4, with none before it moving; then compare a reported line against Read. Add a test (a fixture with a form feed inside a line: section boundaries and reported line numbers must match the '\n' numbering) and mutation-check it by reverting to splitlines. Do not write computed counts into FINDINGS.md. Status -> fixed <sha> in a follow-up edit."
         }
     ],
     "decisions_for_user": [
