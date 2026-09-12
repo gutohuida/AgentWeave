@@ -25830,6 +25830,17 @@ staging. Its docstring now says so.
 inside a savepoint that a refusal releases. Either has to keep the reason durable, which is the
 reason that commit exists (F97).
 
+**R1 of `a-refused-review-leaves-nothing-behind` found two more reaches of the same mechanism
+(2026-09-12).** Measured at unit level on `87dfbf4`, with one `schedule_agent` per leg, in
+`testbed/scratch/r1f319/test_zz_r1f319_scratch.py`. **B0** is a project that is not a git
+repository (`review_turn.py:201-205`). It leaves `('under_review', reviewer)`, one new
+transition, and no run. **T** is a *transient* refusal raised after the staging: the Hub does not
+yet know its own address (`agent_trigger.py:1146`). It leaves `('under_review', reviewer)`, one
+new transition, and the entry still `queued` at 0 attempts. So a deferral commits the staging
+too. In the prototype of that change's D1, the scheduler rolls back before it records the
+refusal. With that in place, every leg (B0, B1, B2, A and T) leaves the task as it was, and the
+entry keeps the refusal's sentence as its `waiting_reason`.
+
 ---
 
 ## F320 (B) — the scheduling pass that abandons a refused head returns, and the entry queued behind it is never delivered
@@ -26186,5 +26197,46 @@ no charter.
 
 **Related:** F322 (the other Codex-only defect filed today, same basis), F306 (the right agent
 reviews; on Codex app-server that agent does not get the review block).
+
+---
+
+## F326 (D) — a review turn refused after its checkout is provisioned leaves the checkout registered
+
+**Status:** open. Filed 2026-09-12 by R1 of `a-refused-review-leaves-nothing-behind`, and measured at unit level on `87dfbf4`. It is outside that change's verdict, which is about the task and not the checkout, and nothing proposes a fix.
+
+**The claim.** Where a review turn is refused *after* `prepare_review_turn` has provisioned
+`.agentweave/reviews/<reviewer>`, the refusal leaves that checkout on disk and registered with git.
+That breaches the main scenario `task-lifecycle-governance` *"A refused review leaves no checkout
+behind"*: *"WHEN a review is requested and refused for any reason THEN no checkout has been
+created for the reviewer"*. It also breaches design D10 of
+`2026-08-28-a-review-started-by-hand-can-finish`: *"a request which is going to be refused SHALL
+NOT leave a workspace behind"*.
+
+**The mechanism (read).** `trigger_agent_directly` calls `prepare_review_turn`
+(`agent_trigger.py:848`). That call provisions through `worktrees.ensure_review_checkout`
+(`review_turn.py:213`, `worktrees.py:580-617`). Three refusals come after it, and none releases the
+checkout:
+- the canonical context cannot be written (`agent_trigger.py:1049`, `OSError`);
+- `UnsupportedRunnerError` (`:1105`);
+- the Hub does not know its own address (`:1146`, transient).
+
+**Measured.** `testbed/scratch/r1f319/test_zz_r1f319_ckout.py` sets up a `tmp_path` repository
+and an operator-completed task whose evidence names `HEAD`. It restores the real
+`ensure_review_checkout`, deletes `HUB_URL`, makes `bound_address.get()` return `None`, and calls
+`schedule_agent` once. The refusal is transient. `.agentweave/reviews/rv-reviewer` exists, and
+`existing_review_checkout` finds it registered. (The task also reads
+`('under_review', 'rv-reviewer')`. That is F319's defect, which the same change addresses.)
+
+**Reach, and why D.** `:1146` fires at the startup re-drain, before any request has been served
+(`agent_trigger.py:1152-1157`). There the refusal is a deferral, and the checkout it leaves is
+the one the retry will re-point (`worktrees.py:599-605`), so it costs nothing in practice. `:1049`
+needs a filesystem failure. `:1105` is probably unreachable behind the `SUPPORTED_RUNNERS` check at
+`:678`; that is inferred and not driven. The directory is disposable, one per reviewer, and bounded
+by the roster. It waits for that reviewer's next review. It is filed because the spec says *"for
+any reason"*, and the ledger should record where that is not true.
+
+**A possible repair, not proposed.** Move the address check and `build_command` above the review
+block, since neither depends on the review checkout (inferred). Or release the review checkout on
+a non-transient refusal raised after provisioning.
 
 ---
