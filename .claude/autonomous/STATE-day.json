@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "eac213c",
     "stop_at": "2026-09-12T17:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-09-12-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d8-repair",
-    "next_action": "D-8: repair F324, no spec (grep openspec/specs first; D-6 found no requirement naming the classifier). (1) scripts/classify_findings.py load() (~:255) uses str.splitlines(), which also splits on U+000C/U+000B/U+001C-1E/U+0085/U+2028/2029 - split on '\n' only (mind the trailing empty string and any '\r'). (2) restore F304's line (editor ~24612, 'grep -n $(printf \"\f\")' finds it): the four U+000C are backslash-f turned into a control character; the intended text is %TEMP% + backslash + f295drive020814 + backslash + f295.db (and ...f295drive110952...), both dirs exist. Drive: before/after per-section dumps (testbed/scratch/d6f318/dump.py) must show verdicts unchanged and every line number from F304 on shifted by exactly -4, none before it moving (F325@26094 -> 26090); then compare a reported line against Read. Add a test (fixture with a form feed inside a line: section boundaries and reported line numbers match '\n' numbering), mutation-check it by reverting to splitlines. Do not write computed counts into FINDINGS.md. Status -> fixed <sha> in a follow-up edit. After D-8 the queue is empty: set next_action to null.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -70,9 +70,10 @@
         },
         {
             "id": "d8-repair",
-            "status": "open",
+            "status": "done",
             "title": "D-8 repair: F324 - the classifier's line numbers drift after four form feeds in F304's body",
-            "detail": "No-spec carve-out (grep openspec/specs first; D-6 found no requirement naming the classifier). Two repairs, one finding: (1) scripts/classify_findings.py load() (~:255) uses str.splitlines(), which also splits on U+000C/U+000B/U+001C-1E/U+0085/U+2028/2029 - split on '\n' only (mind the trailing empty string and any '\r'); (2) restore FINDINGS.md:24612 (editor numbering, F304's section) - the four U+000C are a backslash-f that became a control character; the intended text is %TEMP% + backslash + f295drive020814 + backslash + f295.db (and ...f295drive110952...), both dirs exist. Drive: before/after per-section dumps (testbed/scratch/d6f318/dump.py) must show verdicts unchanged and every line number from F304 on shifted by exactly -4, with none before it moving; then compare a reported line against Read. Add a test (a fixture with a form feed inside a line: section boundaries and reported line numbers must match the '\n' numbering) and mutation-check it by reverting to splitlines. Do not write computed counts into FINDINGS.md. Status -> fixed <sha> in a follow-up edit."
+            "detail": "No-spec carve-out (grep openspec/specs first; D-6 found no requirement naming the classifier). Two repairs, one finding: (1) scripts/classify_findings.py load() (~:255) uses str.splitlines(), which also splits on U+000C/U+000B/U+001C-1E/U+0085/U+2028/2029 - split on '\n' only (mind the trailing empty string and any '\r'); (2) restore FINDINGS.md:24612 (editor numbering, F304's section) - the four U+000C are a backslash-f that became a control character; the intended text is %TEMP% + backslash + f295drive020814 + backslash + f295.db (and ...f295drive110952...), both dirs exist. Drive: before/after per-section dumps (testbed/scratch/d6f318/dump.py) must show verdicts unchanged and every line number from F304 on shifted by exactly -4, with none before it moving; then compare a reported line against Read. Add a test (a fixture with a form feed inside a line: section boundaries and reported line numbers must match the '\n' numbering) and mutation-check it by reverting to splitlines. Do not write computed counts into FINDINGS.md. Status -> fixed <sha> in a follow-up edit.",
+            "result": "DONE iteration 9. Fixed 8f9e5d1: load() splits on '\\n' alone (trailing empty entry dropped), and FINDINGS.md:24612's four U+000C are backslash-f again, line count unchanged. Driven: new reader on the unrepaired ledger - 325 verdicts unchanged, 44 numbers after the form-feed line shift exactly -4, 727 before it do not move (F325 26094->26090, Read agrees at F312:25147 and F319:25723); on the repaired ledger the old and new readers dump byte-identically. One test, two mutants (splitlines; no trailing pop), each killed by it alone. F324 Status -> fixed 8f9e5d1 (first wording named F304 beside 'fixed' and the classifier flagged F304 CONFLICT - reworded; final diff: only F324 moves, OPEN -> RESOLVED). Measured and filed in DEAD-ENDS.md: a doubled backslash sent through the Bash tool arrives single, even single-quoted, so b\"\\\\f\" in a heredoc writes a form feed - plausibly F324's origin, unverified. Queue finished."
         }
     ],
     "decisions_for_user": [

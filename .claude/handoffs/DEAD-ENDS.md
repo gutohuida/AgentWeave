@@ -47,6 +47,14 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   Backticks, apostrophes inside Python string literals, and `\n` escapes are all eaten. Use the
   Write/Edit tools for anything longer than a few lines, and `git commit -F <file>` for commit
   messages. *(Confirmed 2026-09-04 — this file was written with Write for exactly this reason.)*
+- **A doubled backslash reaches bash as a single one, at any length, even inside single quotes.**
+  *Measured 2026-09-12 (day window, F324):* `printf '%s\n' 'a\\b' | od -c` prints `a \ b`, and a
+  three-line quoted heredoc carrying `x\\fy` delivers `x\fy`. So `b"\\f"` in Python source sent
+  through a heredoc arrives as `b"\f"`, a **form feed**, and a repair meant to put a backslash
+  back into `FINDINGS.md` silently rewrote the same U+000C (the file came out byte-identical).
+  A single backslash survives, which is why `"\n"` in a commit message looks fine. Anything
+  whose meaning depends on a backslash goes in a file written with Write, and a byte-level
+  change is spelled as `bytes([0x5C, 0x66])`, not as an escape.
 - **Backticks in a double-quoted commit message execute.** `git commit -m "... `foo` ..."` runs
   `foo`. Use `git commit -F <file>`.
 - **`git merge -F -` does not read stdin.** Write the message to a file first.

@@ -26060,8 +26060,12 @@ path in a single command, which is what the scenario says is refused.
 
 ## F324 (C) — four form feeds in F304's body shift every line number the classifier prints after it
 
-**Status:** open. Filed 2026-09-12 (day window, `D-6`), found while repairing `F318`: the
-classifier reported that finding's live instance at line 25591, and an editor shows it at 25587.
+**Status:** fixed `8f9e5d1`. Both repairs: `load()` splits on `\n` alone, and the two kept
+database paths quoted below have their backslashes back. Filed 2026-09-12 (day window, `D-6`),
+found while repairing `F318`: the classifier reported that finding's live instance at line 25591,
+and an editor shows it at 25587. A plausible origin, unverified: during the repair, a doubled
+backslash sent through the Bash tool arrived as a single one, even inside single quotes, so
+`b"\\f"` in a Python heredoc wrote U+000C again.
 
 **Reproduction.** `scripts/drive/FINDINGS.md:24612` (editor numbering) sits inside `F304`'s section
 and carries four `U+000C` form feeds. The line was written with `%TEMP%` followed by a backslash
