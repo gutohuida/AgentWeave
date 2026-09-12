@@ -110,7 +110,18 @@ Only the first firing of the window does this. It ends by writing a full `queue`
 
    - **2 or more → there is no spec loop today.** No D-2/D-3/D-4, no new proposal. The day's slots
      go to the draining column below.
-   - **0 or 1 → the spec loop runs**, exactly as it always has.
+   - **1 → one spec loop runs**, exactly as it always has.
+   - **0 → two spec loops run**, one after the other (decided by the operator 2026-09-12). The
+     nights are no longer the slow half: the 2026-09-11 night built a 43-task change in about 2.5
+     hours of an 8-hour window, and with only one proposal a day it went idle. The second loop is a
+     full three rounds of its own. It is queued as `D-2b/D-3b/D-4b` **after** the first loop's R3, so
+     a window that stops anywhere leaves complete changes and never two half-written proposals.
+     It takes the next item in `DIRECTION.md`'s order, **only if its blast radius shares no file
+     with the first change's.** Two proposals that edit the same lines collide. That is why F300 and
+     F312 became one change. If the next item collides, take the one after it, or run one loop and
+     say why in the log. The review page gets one section 4 per change, and `APPROVALS.md` gets one
+     row per change. The drain count throttles this automatically: a night that leaves one change
+     unbuilt drops the next day back to one loop.
 
    **The gate releases itself.** Nobody has to remember to turn proposing back on when the nights
    catch up, and nobody has to remember to turn it off when they fall behind — which is the whole
@@ -126,6 +137,9 @@ Only the first firing of the window does this. It ends by writing a full `queue`
    D-5  review    write the review page                  review   same
    D-6  repairs   if the day has room                    repairs  same
    ```
+
+   At a drain count of **0** the clear column gains `D-2b/D-3b/D-4b` (the second loop's R1/R2/R3),
+   queued between `D-4` and `D-5`, so the review page covers both changes.
 
    **The draining column is not filler.** A drive finds in one request what three rounds of reading
    miss, the full-surface sweep is the only thing that ever covers a feature nobody touched, and
