@@ -13,7 +13,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 try:
     from fastmcp import FastMCP
@@ -896,6 +896,12 @@ OPERATOR_POSTURE = "operator"
 MIN_WAITING_SECONDS = 10
 MAX_WAITING_SECONDS = 600
 
+# The longest `reason` the Hub records for a decision (`PermissionDecisionCreate` in
+# `api/v1/agent_actions.py`). Restated here for the same reason `OPERATOR_POSTURE` is; a test
+# asserts the two agree. A longer reason is rejected by that schema, `_report_decision` swallows the
+# rejection, and the refusal goes unrecorded.
+MAX_REASON_CHARS = 1000
+
 
 def _configured_wait(env_name: str, default: int) -> int:
     """Read a per-agent wait from the environment, falling back to the default.
@@ -932,8 +938,364 @@ QUESTION_POLL_SECONDS = 2
 # Input keys whose value is a filesystem path across Claude's built-in tools.
 _PATH_KEYS = ("file_path", "path", "notebook_path")
 
-# Absolute paths appearing anywhere in a shell command: POSIX (/x) and Windows (C:\x, C:/x).
-_ABSOLUTE_PATH_RE = re.compile(r"(?:[A-Za-z]:[\\/]|/)[^\s\"'|;&><)]*")
+# --- Reading a shell command (a-url-is-not-a-path, design D1) ------------------------------------
+#
+# A shell command declares no path, so its text is read the way its shell will read it: lexed in
+# the tool's dialect (quotes removed, what they join joined, substitutions marked), split into
+# words at the characters that survive, and each word judged by the first of six rules that
+# matches it. `shlex` is not used: it raises on an unbalanced quote, and every input must get an
+# answer.
+
+# `\` separates path components where the platform says so: on Windows `..\x` is a traversal, on
+# POSIX it is a file name with a backslash in it. `os.path` answers the same way.
+_SEPARATORS = "/\\" if os.sep == "\\" else "/"
+
+# Rule 6's backstop, and now its only use: a path glued to something no other rule accounts for
+# (`-o/tmp/x`, `@/etc/passwd`, `host:/x`) is read out of one word at a time, the way whole commands
+# once were. POSIX (/x) and Windows (C:\x, C:/x). On Windows a candidate also opens at a bare `\`,
+# or a backslash traversal glued to an option (`sort -o"..\x"`) would pass unseen.
+_ABSOLUTE_PATH_RE = re.compile(
+    (r"(?:[A-Za-z]:[\\/]|[\\/])" if os.sep == "\\" else r"(?:[A-Za-z]:[\\/]|/)")
+    + r"[^\s\"'|;&><)]*"
+)
+
+_URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*://")
+# Word characters, `.`, `+`, `-` and separators, not starting with `-`, and `:` only after the
+# first separator: a colon in the first segment is where a host (`host:/x`) or a revision
+# (`HEAD:x`) goes, and those are left to the backstop.
+_PLAIN_RELATIVE_RE = re.compile(rf"^[\w.+][\w.+\-]*(?:[{re.escape(_SEPARATORS)}][\w.+\-:]*)+$")
+_CMD_VARIABLE_RE = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*%")
+_WORD_SPLIT_RE = re.compile(r"[\s=,]+")
+_WORD_TRIM = "\"'`{}[]()<>|;&:"
+_ARGUMENT_ENDS = "|;&<>()"
+
+# A reference to the run's own Hub, in the spelling the tool's shell expands to the environment's
+# value. Bash's variables are case-sensitive and PowerShell's are not, and a bare `$HUB_URL` in
+# PowerShell is a shell variable that expands to nothing. `%HUB_URL%` is a reference in neither.
+_HUB_REFERENCE_RE = {
+    "bash": re.compile(r"^(?:\$HUB_URL(?![A-Za-z0-9_])|\$\{HUB_URL\})"),
+    "powershell": re.compile(r"^(?i:\$env:HUB_URL)(?![A-Za-z0-9_])"),
+}
+# The dialect a tool's `command` is lexed in. Any other tool is read both ways, and refused if
+# either reading refuses.
+_TOOL_DIALECTS = {"Bash": ("bash",), "PowerShell": ("powershell",)}
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+# What a lexed argument holds where the shell substitutes a command's output when it runs, and in
+# place of a `$` the shell will not expand because it is quoted or escaped. The second keeps a
+# literal `'$HUB_URL'/../../x` from being read as a reference, which would judge a longer path
+# than the one the shell writes to. It still counts as an expansion for rule 3, and a refusal
+# renders it back as `$`.
+_SUBSTITUTION = "$(…)"
+_LITERAL_DOLLAR = "\ue024"
+_MAX_NESTING = 8
+
+# A refusal quotes at most this many characters, as rendered. `repr` expands what it cannot print
+# (a NUL becomes four characters, some code points ten), so bounding the word before rendering
+# would not bound the reason. The longest fixed wording is under 200 characters, so every reason
+# stays well under `MAX_REASON_CHARS`.
+_QUOTATION_MAX = 200
+
+_OUTSIDE = "is outside your workspace"
+_UNRESOLVED = "could not be resolved"
+_NETWORK = (
+    "is a network address. Under this posture a shell command may name only this run's own Hub "
+    "($HUB_URL); if the task needs another address, ask the operator with ask_user"
+)
+_UNCHECKED = (
+    "contains a variable, '~' or a command substitution that the shell expands when it runs, so "
+    "where it points cannot be checked against your workspace; write a path relative to your "
+    "workspace instead"
+)
+
+
+def _quote(text: str) -> str:
+    """`text` as a refusal quotes it: rendered by `repr`, then cut to `_QUOTATION_MAX`."""
+    shown = repr(text.replace(_LITERAL_DOLLAR, "$"))
+    return shown if len(shown) <= _QUOTATION_MAX else shown[: _QUOTATION_MAX - 1] + "…"
+
+
+def _refuse(text: str, why: str) -> Dict[str, Any]:
+    return {"allow": False, "reason": f"{_quote(text)} {why}"}
+
+
+def _where(path: str, root: str) -> Optional[str]:
+    """Why `path` is not inside the workspace, or None when it is.
+
+    A relative path is joined to the workspace root, which is where the run started. Total: a path
+    the platform cannot resolve (on POSIX, a NUL byte raises `ValueError`) is refused, not raised.
+    """
+    absolute = path if os.path.isabs(path) else os.path.join(root, path)
+    try:
+        resolved = os.path.realpath(absolute)
+    except (OSError, ValueError):
+        return _UNRESOLVED
+    # `commonpath` compares path components, so it cannot be fooled the way a string prefix
+    # can (`/work-other` does not start inside `/work`). Both sides are already real paths,
+    # so `..` and symlinks have been collapsed before this comparison.
+    try:
+        shared = os.path.commonpath([root, resolved])
+    except ValueError:  # different drives on Windows
+        return _OUTSIDE
+    if os.path.normcase(shared) != os.path.normcase(root):
+        return _OUTSIDE
+    return None
+
+
+def _judge_path(
+    path: str, root: str, shown: str, argument: str, continues: bool
+) -> Optional[Dict[str, Any]]:
+    """Refuse `path` if it lands outside the workspace, quoting `shown`.
+
+    A word its argument carries on past is also judged with its last name extended: `../ws` in
+    `../ws=y/z` is the workspace, but the shell's path is `../ws=y/z`, a sibling of it. A refusal
+    only the extension finds quotes the whole argument, because that is the path the shell uses.
+    """
+    why = _where(path, root)
+    if why:
+        return _refuse(shown, why)
+    if continues:
+        why = _where(path + "_", root)
+        if why:
+            return _refuse(argument, why)
+    return None
+
+
+def _expands(text: str) -> bool:
+    """Whether `text` holds anything the shell may substitute when it runs: a `$` (or one it will
+    not expand -- conservatively, still counted), a command substitution, a leading `~`, or a
+    `%NAME%` that a nested `cmd /c` would expand."""
+    return (
+        "$" in text
+        or _LITERAL_DOLLAR in text
+        or text.startswith("~")
+        or bool(_CMD_VARIABLE_RE.search(text))
+    )
+
+
+def _effective_port(parts: urllib.parse.SplitResult) -> Optional[int]:
+    return parts.port if parts.port is not None else _DEFAULT_PORTS.get(parts.scheme.lower())
+
+
+def _is_own_hub(url: str) -> bool:
+    """Whether a URL names the run's own Hub: the approver's `HUB_URL` scheme (ignoring case), host
+    and effective port, with no userinfo.
+
+    Any path, query or fragment is permitted: the Hub authenticates each request by the run's
+    token, which reaches only the agent-action surface. `localhost` is not equated with
+    `127.0.0.1`; that would be a DNS claim this cannot check.
+    """
+    base = os.environ.get("HUB_URL", "").strip()
+    if not base:
+        return False
+    try:
+        named, own = urllib.parse.urlsplit(url), urllib.parse.urlsplit(base)
+        return (
+            named.scheme.lower() == own.scheme.lower()
+            and named.hostname is not None
+            and named.hostname == own.hostname
+            and _effective_port(named) == _effective_port(own)
+            and named.username is None
+            and named.password is None
+        )
+    except ValueError:  # a port that does not parse, or a malformed IPv6 host
+        return False
+
+
+def _judge_url(word: str, root: str, argument: str, continues: bool) -> Optional[Dict[str, Any]]:
+    """Rule 1. A `file:` URL is judged as the path it names. The run's own Hub may be named, and is
+    still judged as the relative path it spells, because the shell does not know it is a URL
+    (`echo hi > http://hub/../../x` writes through a directory called `http:`). Any other address
+    is refused as what it is."""
+    try:
+        parts = urllib.parse.urlsplit(word)
+    except ValueError:
+        return _refuse(word, _NETWORK)
+    if parts.scheme.lower() == "file":
+        if parts.netloc.lower() not in ("", "localhost"):
+            return _refuse(word, _OUTSIDE)
+        try:
+            path = urllib.request.url2pathname(parts.path)
+        except (OSError, ValueError):
+            return _refuse(word, _UNRESOLVED)
+        return _judge_path(path, root, word, argument, continues)
+    if not _is_own_hub(word):
+        return _refuse(word, _NETWORK)
+    if _expands(word):
+        return _refuse(word, _UNCHECKED)
+    return _judge_path(word, root, word, argument, continues)
+
+
+def _judge_word(
+    word: str, argument: str, continues: bool, root: str, dialect: str, trusted: bool
+) -> Optional[Dict[str, Any]]:
+    """Judge one word by the first of the six rules that matches it; None when it may stand."""
+    if _URL_SCHEME_RE.match(word):  # 1: a URL
+        return _judge_url(word, root, argument, continues)
+    reference = _HUB_REFERENCE_RE[dialect].match(word)
+    if reference:  # 2: a reference to the run's own Hub
+        rest = word[reference.end() :]
+        base = os.environ.get("HUB_URL", "").strip()
+        if trusted and base and (not rest or rest[0] in "/?#") and not _expands(rest):
+            # Also the path it spells, once the shell has put the approver's value in its place.
+            return _judge_path(base + rest, root, word, argument, continues)
+        return _refuse(word, _UNCHECKED)
+    has_separator = any(separator in word for separator in _SEPARATORS)
+    if has_separator and _expands(word):  # 3: where it points is decided when the shell runs
+        return _refuse(word, _UNCHECKED)
+    if not has_separator:  # 4: not a path
+        return None
+    if os.path.isabs(word) or _PLAIN_RELATIVE_RE.match(word):  # 5: a path, resolved
+        return _judge_path(word, root, word, argument, continues)
+    for match in _ABSOLUTE_PATH_RE.finditer(word):  # 6: the backstop
+        candidate, at_end = match.group(), match.end() == len(word)
+        refusal = _judge_path(candidate, root, candidate, argument, continues and at_end)
+        if refusal:
+            return refusal
+    return None
+
+
+def _substitution(text: str, start: int, closer: str) -> Tuple[str, int]:
+    """The command text of a substitution opened just before `start`, and where lexing resumes.
+    Unbalanced, it runs to the end of the text."""
+    depth, index = 1, start
+    while index < len(text):
+        char = text[index]
+        if closer == ")" and char == "(":
+            depth += 1
+        elif char == closer:
+            depth -= 1
+            if depth == 0:
+                return text[start:index], index + 1
+        index += 1
+    return text[start:], len(text)
+
+
+def _lex(command: str, bash: bool) -> Tuple[List[str], List[str]]:
+    """The arguments the shell will produce from `command`, and its substitutions' command texts.
+
+    Bash: single quotes are literal; inside double quotes a backslash escapes only `$`, a
+    backtick, `"`, a backslash and a newline, and is kept before anything else; outside quotes
+    `\\c` is `c`. PowerShell: single quotes are literal (`''` is one quote), and the escape is a
+    backtick, not a backslash. Unquoted whitespace and `| ; & < > ( )` end an argument. Total: an
+    unbalanced quote runs to the end of the text, and nothing raises.
+    """
+    escape = "\\" if bash else "`"
+    arguments: List[str] = []
+    nested: List[str] = []
+    current: List[str] = []
+    started = False
+    quote: Optional[str] = None
+    index = 0
+    while index < len(command):
+        char, following = command[index], command[index + 1 : index + 2]
+        if quote == "'":
+            if char == "'" and not bash and following == "'":
+                current.append("'")
+                index += 2
+                continue
+            if char == "'":
+                quote = None
+            else:
+                current.append(_LITERAL_DOLLAR if char == "$" else char)
+            index += 1
+            continue
+        if char == "$" and following == "(":
+            text, index = _substitution(command, index + 2, ")")
+            nested.append(text)
+            current.append(_SUBSTITUTION)
+            started = True
+            continue
+        if bash and char == "`":
+            text, index = _substitution(command, index + 1, "`")
+            nested.append(text)
+            current.append(_SUBSTITUTION)
+            started = True
+            continue
+        if char == escape:
+            if bash and quote == '"' and following not in ("$", "`", '"', "\\", "\n"):
+                current.append(char)
+                index += 1
+            else:
+                if not (bash and following == "\n"):  # a bash line continuation leaves nothing
+                    current.append(_LITERAL_DOLLAR if following == "$" else following)
+                index += 2
+            started = True
+            continue
+        if quote == '"':
+            if char == '"' and not bash and following == '"':
+                current.append('"')
+                index += 2
+                continue
+            if char == '"':
+                quote = None
+            else:
+                current.append(char)
+            index += 1
+            continue
+        if char in "'\"":
+            quote, started = char, True
+            index += 1
+            continue
+        if char.isspace() or char in _ARGUMENT_ENDS:
+            if started:
+                arguments.append("".join(current))
+            current, started = [], False
+            index += 1
+            continue
+        current.append(char)
+        started = True
+        index += 1
+    if started:
+        arguments.append("".join(current))
+    return arguments, nested
+
+
+def _words(arguments: List[str]) -> List[Tuple[str, str, bool]]:
+    """Each argument's words, as (word, its argument, whether the argument carries on past it).
+
+    Split only at what stays in the string -- the whitespace, `=` and `,` that survived lexing --
+    and trimmed of delimiters at both ends. A quote in the middle of a word is not split there:
+    `sh -c "echo > '.'./x"` hands its inner shell `'.'./x`, which that shell joins into `../x`.
+    """
+    words: List[Tuple[str, str, bool]] = []
+    for argument in arguments:
+        pieces = _WORD_SPLIT_RE.split(argument)
+        for position, piece in enumerate(pieces):
+            word = piece.strip(_WORD_TRIM)
+            if word:
+                continues = position < len(pieces) - 1 or piece.rstrip(_WORD_TRIM) != piece
+                words.append((word, argument, continues))
+    return words
+
+
+def _read_command(
+    command: str, root: str, dialect: str, depth: int = 0
+) -> Optional[Dict[str, Any]]:
+    """The first refusal that reading `command` in `dialect` finds, or None."""
+    if depth > _MAX_NESTING:
+        # Nested past what is lexed: the backstop over the whole text, which is how every command
+        # was once read, so nesting cannot hide a path from both readings.
+        for match in _ABSOLUTE_PATH_RE.finditer(command):
+            refusal = _judge_path(match.group(), root, match.group(), command, False)
+            if refusal:
+                return refusal
+        return None
+    arguments, nested = _lex(command, dialect == "bash")
+    words = _words(arguments)
+    references = sum(1 for word, _, _ in words if _HUB_REFERENCE_RE[dialect].match(word))
+    # A reference is trusted only when the command names `HUB_URL` nowhere else. That refuses
+    # every way of reassigning it first (`HUB_URL=`, `export`, `$env:HUB_URL =`) without a list.
+    trusted = 0 < references == len(re.findall(r"(?i)HUB_URL", command))
+    for word, argument, continues in words:
+        refusal = _judge_word(word, argument, continues, root, dialect, trusted)
+        if refusal:
+            return refusal
+    for inner in nested:
+        refusal = _read_command(inner, root, dialect, depth + 1)
+        if refusal:
+            return refusal
+    return None
 
 
 def _decide(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
@@ -942,6 +1304,13 @@ def _decide(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
     Mirrors `codex_appserver.decide_approval`'s contract for the Codex side — an unanswered
     request does not fail a turn, it suspends it forever, so there is no path here that declines
     to answer. Anything unrecognised denies rather than allows.
+
+    A file tool's path is resolved against the workspace. A shell command's text is read as the
+    tool's shell will read it, then word by word: a path is resolved against the workspace root,
+    which is where the run started, and a URL may name only the run's own Hub. A `cd` in an
+    earlier call is not seen, and a path built at run time never appears as a word, so this is a
+    boundary, not a sandbox. Nor does it govern network access: it rules only on which address a
+    shell command's text may name, and a fetch tool's URL is not read at all.
     """
     if tool_name.startswith("mcp__agentweave__"):
         return {"allow": True, "reason": "the Hub's own tools"}
@@ -956,37 +1325,24 @@ def _decide(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
         }
     try:
         root = os.path.realpath(workspace)
-    except OSError:
+    except (OSError, ValueError):
         return {"allow": False, "reason": "your workspace directory could not be resolved"}
 
-    candidates: List[str] = []
     for key in _PATH_KEYS:
         value = tool_input.get(key)
         if isinstance(value, str) and value:
-            candidates.append(value)
+            why = _where(value, root)
+            if why:
+                return _refuse(value, why)
     command = tool_input.get("command")
     if isinstance(command, str) and command:
-        # A shell command carries no declared path argument, so absolute paths are read out of
-        # the command text. Relative paths are left alone: they resolve against the run's cwd,
-        # which is the workspace. This does not make shell escape impossible -- a command can
-        # still build a path at runtime -- and is a boundary, not a sandbox.
-        candidates.extend(_ABSOLUTE_PATH_RE.findall(command))
-
-    for candidate in candidates:
-        absolute = candidate if os.path.isabs(candidate) else os.path.join(root, candidate)
-        try:
-            resolved = os.path.realpath(absolute)
-        except OSError:
-            return {"allow": False, "reason": f"{candidate!r} could not be resolved"}
-        # `commonpath` compares path components, so it cannot be fooled the way a string prefix
-        # can (`/work-other` does not start inside `/work`). Both sides are already real paths,
-        # so `..` and symlinks have been collapsed before this comparison.
-        try:
-            shared = os.path.commonpath([root, resolved])
-        except ValueError:  # different drives on Windows
-            return {"allow": False, "reason": f"{candidate!r} is outside your workspace"}
-        if os.path.normcase(shared) != os.path.normcase(root):
-            return {"allow": False, "reason": f"{candidate!r} is outside your workspace"}
+        # A shell command declares no path, so its text is read in the tool's dialect and judged
+        # word by word (the reader above). Relative words resolve against the workspace root,
+        # which is where the run started; the shell's current directory is not seen.
+        for dialect in _TOOL_DIALECTS.get(tool_name, ("bash", "powershell")):
+            refusal = _read_command(command, root, dialect)
+            if refusal:
+                return refusal
 
     return {"allow": True, "reason": "inside your workspace"}
 

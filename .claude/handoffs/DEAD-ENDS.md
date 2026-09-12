@@ -83,6 +83,13 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   `--target-version py311` or it refuses with a safety-check warning.
 - **`py -3.11 -c` printing `→` or `—` dies with `UnicodeEncodeError`** — stdout is cp1252. Set
   `PYTHONIOENCODING=utf-8` or avoid the characters.
+- **A PowerShell mutate-and-restore corrupts every non-ASCII character in the file** *(2026-09-12,
+  u2-reader)*. `Get-Content -Raw` in Windows PowerShell 5.1 reads a BOM-less UTF-8 file as cp1252,
+  and `[IO.File]::WriteAllText` writes UTF-8 back: each `—` became `â€"`, 92 characters in
+  `mcp_server.py`, the tests still passed, and only `git diff --stat` (586 lines for a ~330-line
+  change) showed it. Mutate with `py -3.11` (`open(..., encoding="utf-8")`), and restore with
+  `git checkout -- <file>` **only** when the working copy is committed. If it happens anyway,
+  `testbed/scratch/night0912/enc_fix.py <file>` reverses the round trip exactly.
 - **`py -3.11` cannot open a Git Bash `/tmp/...` path.** Use a Windows path.
 - **`py -3.11 -c "import hub.main"` from the repo root fails** with an ImportError — this repo's
   `hub/` directory shadows the installed `hub` package. See the Hub section.

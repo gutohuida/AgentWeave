@@ -76,7 +76,7 @@ its rule exists.
 
 ## 2. The reader
 
-- [ ] 2.1 In `hub/hub/mcp_server.py`, beside `_decide`, add the reader of D1 in its two stages.
+- [x] 2.1 In `hub/hub/mcp_server.py`, beside `_decide`, add the reader of D1 in its two stages.
   - **The lexer**, a small state machine in the tool's dialect: `Bash`, `PowerShell`, or both for
     any other tool name. It handles the quote states, the escape character, the substitutions
     `$(…)` and `` `…` `` (recursed into, with depth bounded), and the argument-ending characters.
@@ -90,7 +90,7 @@ its rule exists.
   `\`-aware pattern where `os.sep == "\\"`, and today's exact regex on POSIX. Without this, Z1 (an
   escape today) and Z2 (a regression) pass. `_decide`'s `command` branch calls the reader with
   `tool_name`. The `_PATH_KEYS` branch for file tools is **unchanged**. `shlex` is not used (D8(c)).
-- [ ] 2.2 The run's-own-Hub test of D4. For a URL: `urllib.parse.urlsplit`, schemes compared
+- [x] 2.2 The run's-own-Hub test of D4. For a URL: `urllib.parse.urlsplit`, schemes compared
   ignoring case, `hostname` equal, effective ports equal (80 and 443 by default), `username` and
   `password` both `None`, and any `ValueError` treated as "not own". For a reference, all of these
   hold:
@@ -102,9 +102,9 @@ its rule exists.
   **Then judge the accepted word as a path**. A literal URL is judged as it stands. A reference is
   judged with the approver's `HUB_URL` value in place of the reference. Refuse if it resolves
   outside (E4–E6b).
-- [ ] 2.3 The three refusal texts of D5, verbatim from `design.md`. An edit to their wording is an
+- [x] 2.3 The three refusal texts of D5, verbatim from `design.md`. An edit to their wording is an
   edit to the design, so record it there.
-- [ ] 2.4 The bound. A reason's **rendered** quotation (after `repr`, or whatever renders it) is at
+- [x] 2.4 The bound. A reason's **rendered** quotation (after `repr`, or whatever renders it) is at
   most 200 characters, with `…` where it cuts. Bounding the word before rendering is the defect D5
   records. Restate the Hub's cap as a module constant beside `MIN_WAITING_SECONDS`, with the same
   kind of comment. Add a test asserting that the longest possible reason is at or under
@@ -115,17 +115,50 @@ its rule exists.
   **Also** pin two things: a 1,200-character URL now gives a reason within that cap (today it gives
   1,224), and so does a URL followed by 400 characters of `"\U000e0001"`. Today the second gives
   well over the cap, and under R1's bound it gave 2,000 or more (D5, table row L1).
-- [ ] 2.5 Totality. Catch `(OSError, ValueError)` around `realpath` and `commonpath`, and refuse.
+- [x] 2.5 Totality. Catch `(OSError, ValueError)` around `realpath` and `commonpath`, and refuse.
   Add a test with a NUL byte in a path word that asserts a decision is **returned** (either
   answer), so that it runs meaningfully on CI's Linux, where it raises today (D5).
-- [ ] 2.6 Rewrite `_decide`'s docstring and the comment at its `command` branch (D9). It reads
+- [x] 2.6 Rewrite `_decide`'s docstring and the comment at its `command` branch (D9). It reads
   shell text as the tool's shell will, then word by word. Relative words are resolved against the workspace root, which is where
   the run started. A `cd` in an earlier call is not seen. It is a boundary, not a sandbox. It does
   not govern network access, only which address a shell command's text may name. **Delete** the
   sentence *"Relative paths are left alone: they resolve against the run's cwd, which is the
   workspace."*
-- [ ] 2.7 Remove every §1.4 `xfail` marker. The whole table is green, with no marker left, and
+- [x] 2.7 Remove every §1.4 `xfail` marker. The whole table is green, with no marker left, and
   `grep -n xfail hub/tests/test_permission_approver.py` shows none of this change's.
+
+  **Done at S2 (night 2026-09-12, `u2-reader`), measured.**
+  - `grep -c xfail hub/tests/test_permission_approver.py` is 0. `_MOVES`, `_MOVES_ON_WINDOWS` and
+    `moves=` are gone.
+  - The file on Windows: **176 passed, 1 skipped** (the symlink test). The baseline chunk: **285
+    passed, 1 skipped**.
+  - Under WSL Ubuntu with `posix_stubs.py`: 170 passed, 1 skipped, 2 failed. The skip is the
+    §2.4 cap test, which cannot import the Hub's API there. The two failures are
+    `test_generated_context_does_not_advertise_the_approver` and `test_codex_posture_mapping`.
+    Both fail on the stub environment's missing `sse_starlette.event`, and neither reaches
+    `_decide`.
+  - `why_each_row.py`: 0 disagreements on both platforms (98 rows on Linux).
+  - Every row that was xfail on Windows at S1 passed before its marker came off. That is 59 of
+    59, printed by the same checker.
+  - The fixed wordings measure 197 (cannot be checked), 168 (network) and 26 (outside)
+    characters with the leading space. Those are D5's figures.
+
+  **The implementation departs from R2's reader in four places.** D11a records each, with its
+  measurement.
+  - A `$` that the shell will not expand is not a reference. New rows **E20, E21 and E22**
+    wrote outside the workspace in Git Bash, and R2's and R3's readers both allowed them.
+  - References follow the tool's dialect. New row **H17**.
+  - A continuing word's refusal quotes the whole argument only when the extension is what
+    found it. So H11 keeps D2's *"unchanged"* reason.
+  - Nesting past the bound falls back to the backstop over the whole text.
+
+  New tests beside the table:
+  - the §2.4 cap agreement, and the longest reason of every kind;
+  - the 1,200-character URL;
+  - the rendered-bound row L1;
+  - four NUL-byte cases (§2.5);
+  - an 18-case totality sweep;
+  - a path nested past the bound.
 
 ## 3. The wire shape
 

@@ -128,17 +128,12 @@ def test_a_decision_is_reached_even_when_reporting_fails(workspace, monkeypatch)
 
 # --- The decided table (a-url-is-not-a-path, design D2) ---------------------------------------
 #
-# Every row of D2, pinned against `_decide` before the reader changes it. A row whose answer, or
-# whose reason, the reader is to change is a strict xfail: it may not change before its rule
-# exists. The ids are D2's labels, so a failure names its row.
+# Every row of D2, with its decided answer and, where D2 names one, its reason. The rows were
+# pinned against the regex that read whole commands before the reader replaced it; the rows that
+# moved are D2's, and no other. The ids are D2's labels, so a failure names its row.
 
 _WINDOWS = os.sep == "\\"
 _HUB = "http://127.0.0.1:8016"
-_MOVES = pytest.mark.xfail(strict=True, reason="a-url-is-not-a-path §2")
-# Today's regex reads a URL's `s://` or `p://` as a drive-prefixed path. On Windows that is
-# rooted, so it is outside; on POSIX it is relative, so it resolves inside and the URL is allowed.
-# A row that is `allow` on POSIX both today and after carries this mark instead of `moves`.
-_MOVES_ON_WINDOWS = pytest.mark.xfail(_WINDOWS, strict=True, reason="a-url-is-not-a-path §2")
 
 _H1 = (
     'curl -s -X POST "$HUB_URL/api/v1/agent-actions/tasks" -H "Authorization: Bearer '
@@ -165,82 +160,77 @@ def _outside(word: str) -> tuple:
     return ("outside", repr(word))
 
 
-def _row(label, command, allow, reason=None, *, tool="Bash", moves=False, marks=()):
+def _row(label, command, allow, reason=None, *, tool="Bash"):
     """One row: the tool whose `command` is read, and D2's answer and reason *after*."""
-    return pytest.param(
-        tool, command, allow, reason, id=label, marks=[*marks, *([_MOVES] if moves else [])]
-    )
+    return pytest.param(tool, command, allow, reason, id=label)
 
 
 _TABLE = [
     # The research's rows.
-    _row("R1", "echo hi > ../stray.txt", False, _outside("../stray.txt"), moves=True),
-    _row("R2", "echo hi | tee ../stray.txt", False, _outside("../stray.txt"), moves=True),
-    _row("R3", "cp notes.md ../../stray.md", False, _outside("../../stray.md"), moves=True),
-    _row("R4", "echo hi > ~/stray.txt", False, _UNCHECKED, moves=True),
-    _row("R5", 'echo hi > "$HOME/stray.txt"', False, _UNCHECKED, moves=True),
+    _row("R1", "echo hi > ../stray.txt", False, _outside("../stray.txt")),
+    _row("R2", "echo hi | tee ../stray.txt", False, _outside("../stray.txt")),
+    _row("R3", "cp notes.md ../../stray.md", False, _outside("../../stray.md")),
+    _row("R4", "echo hi > ~/stray.txt", False, _UNCHECKED),
+    _row("R5", 'echo hi > "$HOME/stray.txt"', False, _UNCHECKED),
     _row("R6", "D=/tmp; echo hi > $D/stray.txt", False, _outside("/tmp")),
     _row("R7", "echo hi > /tmp/stray.txt", False, _outside("/tmp/stray.txt")),
     _row("R8", "cd .. && echo hi > stray.txt", True),
     _row("R9", "git -C .. status", True),
-    _row("R10", "curl -s https://example.com/x", False, _NETWORK, moves=True),
-    _row("R11", 'curl "$HUB_URL/api/v1/agent-actions/tasks"', True, moves=True),
+    _row("R10", "curl -s https://example.com/x", False, _NETWORK),
+    _row("R11", 'curl "$HUB_URL/api/v1/agent-actions/tasks"', True),
     # F321: paths inside the workspace.
-    _row("W1", "python sub/hello.py", True, moves=True),
-    _row("W2", "git add sub/hello.py", True, moves=True),
-    _row("W3", "pytest sub/test_x.py::test_a", True, moves=True),
-    _row("W4", "git diff origin/main...HEAD", True, moves=True),
-    _row("W5", "python sub/../hello.py", True, moves=True),
+    _row("W1", "python sub/hello.py", True),
+    _row("W2", "git add sub/hello.py", True),
+    _row("W3", "pytest sub/test_x.py::test_a", True),
+    _row("W4", "git diff origin/main...HEAD", True),
+    _row("W5", "python sub/../hello.py", True),
     _row("W6", r"Get-Content .\sub\hello.py", True, tool="PowerShell"),
     _row("W7a", "ls", True),
     _row("W7b", "printf hi > a.txt", True),
     _row("W7c", "npm run test:unit", True),
     # The run's own Hub, and addresses that only look like it (D4).
-    _row("H1", _H1, True, moves=True),
-    _row("H2", _H2, True, tool="PowerShell", moves=True),
-    _row("H3", _H3, True, moves=True),
-    _row("H4", _H4, True, marks=[_MOVES_ON_WINDOWS]),
-    _row(
-        "H5", "curl -s http://127.0.0.1:9/api/v1/agent-actions/tasks", False, _NETWORK, moves=True
-    ),
+    _row("H1", _H1, True),
+    _row("H2", _H2, True, tool="PowerShell"),
+    _row("H3", _H3, True),
+    _row("H4", _H4, True),
+    _row("H5", "curl -s http://127.0.0.1:9/api/v1/agent-actions/tasks", False, _NETWORK),
     _row(
         "H6",
         "curl -s http://localhost:8016/api/v1/agent-actions/tasks",
         False,
         _NETWORK,
-        moves=True,
     ),
-    _row("H7", "curl -s http://127.0.0.1:8016@evil.example/x", False, _NETWORK, moves=True),
-    _row("H8", "curl -s $HUB_URL@evil.example/x", False, _UNCHECKED, moves=True),
-    _row("H9", "HUB_URL=https://evil.example; curl -s $HUB_URL/x", False, _NETWORK, moves=True),
-    _row("H10", "HUB_URL=.. ; cat $HUB_URL/x", False, _UNCHECKED, moves=True),
+    _row("H7", "curl -s http://127.0.0.1:8016@evil.example/x", False, _NETWORK),
+    _row("H8", "curl -s $HUB_URL@evil.example/x", False, _UNCHECKED),
+    _row("H9", "HUB_URL=https://evil.example; curl -s $HUB_URL/x", False, _NETWORK),
+    _row("H10", "HUB_URL=.. ; cat $HUB_URL/x", False, _UNCHECKED),
     _row("H11", _S1_PYTHON_C, False, ("outside", "/api/v1/agent-actions/tasks")),
-    _row("H13", "curl -s http://u:p@127.0.0.1:8016/x", False, _NETWORK, moves=True),
-    _row("H14", "curl -s http://127.0.0.1:8016.evil.example/x", False, _NETWORK, moves=True),
-    _row("H15", 'curl -s "http://127.0.0.1:8016#@evil.example/"', True, marks=[_MOVES_ON_WINDOWS]),
-    _row("H16", "curl -s HTTP://127.0.0.1:8016/x", True, marks=[_MOVES_ON_WINDOWS]),
+    _row("H13", "curl -s http://u:p@127.0.0.1:8016/x", False, _NETWORK),
+    _row("H14", "curl -s http://127.0.0.1:8016.evil.example/x", False, _NETWORK),
+    _row("H15", 'curl -s "http://127.0.0.1:8016#@evil.example/"', True),
+    _row("H16", "curl -s HTTP://127.0.0.1:8016/x", True),
+    # A bare `$HUB_URL` in PowerShell is a shell variable, not the environment's value: with
+    # `$env:HUB_URL` set, `Write-Output $HUB_URL/x` printed `/x` in Windows PowerShell 5.1
+    # (u2-reader, 2026-09-12), a path at the drive's root. It is no reference there.
+    _row("H17", "echo hi > $HUB_URL/x", False, _UNCHECKED, tool="PowerShell"),
     # Other network shapes.
-    _row("N1", "pip install https://example.com/pkg.tar.gz", False, _NETWORK, moves=True),
-    _row("N2", "git clone https://github.com/o/r.git", False, _NETWORK, moves=True),
-    _row("N3", "curl -s example.com/x", True, moves=True),
+    _row("N1", "pip install https://example.com/pkg.tar.gz", False, _NETWORK),
+    _row("N2", "git clone https://github.com/o/r.git", False, _NETWORK),
+    _row("N3", "curl -s example.com/x", True),
     _row("N4", "curl -s example.com", True),
     _row("N5", "curl -s 127.0.0.1:9/x", False, _outside("/x")),
     _row("N6", "git clone git@github.com:o/r.git", False, _outside("/r.git")),
-    _row("N7", "curl file:///etc/passwd", False, _outside("file:///etc/passwd"), moves=True),
-    # F331: N7's rule, as a write. On POSIX today this is allowed, and curl writes the file.
-    _row(
-        "F331",
-        "curl -T notes.md file:///tmp/stray.txt",
-        False,
-        marks=[pytest.mark.xfail(not _WINDOWS, strict=True, reason="a-url-is-not-a-path §2")],
-    ),
+    _row("N7", "curl file:///etc/passwd", False, _outside("file:///etc/passwd")),
+    # F331: N7's rule, as a write. On POSIX the whole-command regex allowed this, and curl wrote
+    # the file.
+    _row("F331", "curl -T notes.md file:///tmp/stray.txt", False),
     # Glued paths: the backstop's rows.
     _row("G1", "curl -o/tmp/x $HUB_URL/api", False, _outside("/tmp/x")),
     _row("G2", "curl -d @/etc/passwd $HUB_URL/api", False, _outside("/etc/passwd")),
     _row("G3", "gcc -I../include x.c", False, _outside("/include")),
     _row("G4", "tar -C/tmp -xf a.tar", False, _outside("/tmp")),
-    _row("G5", "echo hi > $1/stray.txt", False, _UNCHECKED, moves=True),
-    _row("G6", "echo hi > sub/$X/stray.txt", False, _UNCHECKED, moves=True),
+    _row("G5", "echo hi > $1/stray.txt", False, _UNCHECKED),
+    _row("G6", "echo hi > sub/$X/stray.txt", False, _UNCHECKED),
     # Windows forms that keep their answer on every platform.
     _row("X1a", r"echo hi > ..\stray.txt", True),
     _row("X2b", r"type %USERPROFILE%\x", True),
@@ -249,120 +239,107 @@ _TABLE = [
     _row("X4", "cmd 2>/dev/null", False, _outside("/dev/null")),
     _row("X5", "python src/*.py", False, _outside("/*.py")),
     _row("X6", "git show HEAD:sub/hello.py", False, _outside("/hello.py")),
-    _row("X7", "python $(pwd)/sub/hello.py", False, _UNCHECKED, moves=True),
+    _row("X7", "python $(pwd)/sub/hello.py", False, _UNCHECKED),
     # A NUL byte: `ntpath.realpath` accepts it, and `posixpath.realpath` raises ValueError, which
-    # today escapes `_decide` (D5, "Totality"). The reader's totality (§2.5) turns it into a
-    # decision, so on POSIX the row fails today by raising.
-    _row(
-        "X8",
-        "cat sub/a\x00b",
-        False,
-        marks=[
-            pytest.mark.xfail(
-                not _WINDOWS, raises=ValueError, strict=True, reason="a-url-is-not-a-path §2.5"
-            )
-        ],
-    ),
+    # once escaped `_decide` on POSIX (D5, "Totality").
+    _row("X8", "cat sub/a\x00b", False),
     # What R1's reader let through, and what it refused (R2's rows).
-    _row("E1", "echo hi > '.'./stray.txt", False, _outside("../stray.txt"), moves=True),
-    _row("E2", 'echo hi > .""./stray.txt', False, _outside("../stray.txt"), moves=True),
+    _row("E1", "echo hi > '.'./stray.txt", False, _outside("../stray.txt")),
+    _row("E2", 'echo hi > .""./stray.txt', False, _outside("../stray.txt")),
     _row(
         "E4",
         "echo hi > $HUB_URL/../../../stray.txt",
         False,
         _outside("$HUB_URL/../../../stray.txt"),
-        moves=True,
     ),
     _row(
         "E5",
         'echo hi > "$HUB_URL/../../../stray.txt"',
         False,
         _outside("$HUB_URL/../../../stray.txt"),
-        moves=True,
     ),
     _row(
         "E6",
         "echo hi > http://127.0.0.1:8016/../../../stray.txt",
         False,
         _outside("http://127.0.0.1:8016/../../../stray.txt"),
-        moves=True,
     ),
     _row(
         "E6b",
         "cp a http://127.0.0.1:8016/x#/../../../../stray.txt",
         False,
         _outside("http://127.0.0.1:8016/x#/../../../../stray.txt"),
-        moves=True,
     ),
-    _row("E7", 'curl "$HUB_URL"@evil.example', False, _UNCHECKED, moves=True),
+    _row("E7", 'curl "$HUB_URL"@evil.example', False, _UNCHECKED),
     _row("E8", 'curl "$HUB_URL"@evil.example/x', False),
-    _row("E9", "echo hi > $(echo .)./stray.txt", False, _UNCHECKED, moves=True),
+    _row("E9", "echo hi > $(echo .)./stray.txt", False, _UNCHECKED),
     _row("E10", "echo hi > `echo .`./stray.txt", False),
     _row("E11", "sh -c \"echo hi > '.'./stray.txt\"", False, _outside("/stray.txt")),
     _row("E12", 'sh -c "echo hi > ../stray.txt"', False),
-    _row("E13", "curl $HUB_URL/$X", False, _UNCHECKED, moves=True),
-    _row("E14", "echo hi > $HUB_URL/../../x", True, moves=True),
+    _row("E13", "curl $HUB_URL/$X", False, _UNCHECKED),
+    _row("E14", "echo hi > $HUB_URL/../../x", True),
     # The fixture's workspace directory is named `work`, so these name it.
-    _row("E15", "cp notes.md ../work=y/z", False, _outside("../work=y/z"), moves=True),
-    _row("E16", 'echo hi > "../work y.txt"', False, _outside("../work y.txt"), moves=True),
+    _row("E15", "cp notes.md ../work=y/z", False, _outside("../work=y/z")),
+    _row("E16", 'echo hi > "../work y.txt"', False, _outside("../work y.txt")),
     _row("E17", "echo hi > ../work,y", False),
     _row("E18", "curl -o<root>=x $HUB_URL/api", False),
     _row("E19", "echo hi > '../work'\"\"x", False),
+    # A `$HUB_URL` the shell will not expand is a directory name, one component where the Hub's URL
+    # is three. Read as a reference, `/../..` climbs out of the URL and stays inside; bash climbs
+    # out of `$HUB_URL` and the workspace both. Measured in Git Bash 5.2.37: each wrote its file in
+    # the workspace's parent (u2-reader, 2026-09-12). R2's and R3's readers allowed both.
+    _row("E20", "echo hi > '$HUB_URL'/../../stray.txt", False),
+    _row("E21", "echo hi > \\$HUB_URL/../../stray.txt", False),
+    _row("E22", 'echo hi > "\\$HUB_URL/../../stray.txt"', False),
     _row("S2", 'echo "$(cat /etc/x)"', False, _outside("/etc/x")),
     _row("S3", "echo `cat /etc/x`", False),
     # Bodies and messages that name a path (R2). J2 and J3 are forms of F300's own request.
-    _row("J1", 'curl -d \'{"description": "update src/a.py"}\' $HUB_URL/x', True, moves=True),
-    _row("J2", _H1.replace('\'{"title": "x"}\'', '"{\\"title\\": \\"x\\"}"'), True, moves=True),
+    _row("J1", 'curl -d \'{"description": "update src/a.py"}\' $HUB_URL/x', True),
+    _row("J2", _H1.replace('\'{"title": "x"}\'', '"{\\"title\\": \\"x\\"}"'), True),
     _row(
         "J3",
         _H1.replace('\'{"title": "x"}\'', '"{\\"title\\": \\"fix sub/hello.py\\"}"'),
         True,
-        moves=True,
     ),
-    _row("J4", "git commit -m 'fix: sub/hello.py'", True, moves=True),
+    _row("J4", "git commit -m 'fix: sub/hello.py'", True),
     _row("J5", "python -c \"open('/etc/x','w')\"", False),
     _row("J6", 'sh -c "echo hi > /etc/x"', False),
-    _row("J7", "git commit -m 'fix sub/hello.py, and sub/other.py'", True, moves=True),
-    _row("J8", "python sub/hello.py --out=sub/out.txt", True, moves=True),
+    _row("J7", "git commit -m 'fix sub/hello.py, and sub/other.py'", True),
+    _row("J8", "python sub/hello.py --out=sub/out.txt", True),
     _row(
         "H2p",
         _H2 + ' -H "Content-Type: application/json" -d "{`"title`": `"x`"}"',
         True,
         tool="PowerShell",
-        moves=True,
     ),
 ]
 
-# Windows reads `\` as a separator, so these rows move there. On POSIX, where `\` is an ordinary
-# character, the same commands keep today's answer, and so do R3's backstop rows Z1-Z3.
+# Windows reads `\` as a separator, so these rows moved there. On POSIX, where `\` is an ordinary
+# character, the same commands kept the answer they had, and so did R3's backstop rows Z1-Z3.
 _BACKSLASH_ROWS = (
     [
-        _row("X1b", r'echo hi > "..\stray.txt"', False, _outside(r"..\stray.txt"), moves=True),
+        _row("X1b", r'echo hi > "..\stray.txt"', False, _outside(r"..\stray.txt")),
         _row(
             "X1c",
             r"echo hi > ..\stray.txt",
             False,
             _outside(r"..\stray.txt"),
             tool="PowerShell",
-            moves=True,
         ),
-        _row("X2p", r"type %USERPROFILE%\x", False, _UNCHECKED, tool="PowerShell", moves=True),
+        _row("X2p", r"type %USERPROFILE%\x", False, _UNCHECKED, tool="PowerShell"),
         _row(
             "X3p",
             r"Get-Content $env:USERPROFILE\x",
             False,
             _UNCHECKED,
             tool="PowerShell",
-            moves=True,
         ),
         _row("E3", r"echo hi > .\./stray.txt", False),
         # The workspace, written in MSYS form: `os.path` on Windows reads `/c/...` as `C:\c\...`.
         _row("X9", "python <msys>/sub/hello.py", False),
-        _row("Z1", r'sort -o"..\stray.txt" notes.md', False, _outside(r"\stray.txt"), moves=True),
-        _row(
-            "Z2", r'curl -o"..\out" http://127.0.0.1:8016/api', False, _outside(r"\out"), moves=True
-        ),
-        _row("Z3", r'gcc -I"sub\include" x.c', False, _outside(r"\include"), moves=True),
+        _row("Z1", r'sort -o"..\stray.txt" notes.md', False, _outside(r"\stray.txt")),
+        _row("Z2", r'curl -o"..\out" http://127.0.0.1:8016/api', False, _outside(r"\out")),
+        _row("Z3", r'gcc -I"sub\include" x.c', False, _outside(r"\include")),
     ]
     if _WINDOWS
     else [
@@ -410,19 +387,132 @@ def test_a_fetch_is_not_governed(workspace, monkeypatch):
         pytest.param("Bash", _H1, id="H1"),
         pytest.param("PowerShell", _H2, id="H2"),
         pytest.param("Bash", _H3, id="H3"),
-        # On POSIX today's regex reads the URL as a relative path and allows it (see H4 above).
-        pytest.param(
-            "Bash",
-            _H4,
-            id="H4",
-            marks=pytest.mark.xfail(not _WINDOWS, strict=True, reason="a-url-is-not-a-path §2"),
-        ),
+        pytest.param("Bash", _H4, id="H4"),
     ],
 )
 def test_the_run_s_own_hub_is_nobody_s_without_hub_url(workspace, monkeypatch, tool, command):
     """H12. With `HUB_URL` unset in the approver, no address is the run's own Hub."""
     monkeypatch.delenv("HUB_URL", raising=False)
     assert _decide(tool, {"command": command})["allow"] is False
+
+
+# --- What a refusal may say (D5) --------------------------------------------------------------
+
+
+def test_the_restated_reason_cap_is_the_hub_s():
+    """`mcp_server.py` may not import the Hub, so the cap is restated there (task 2.4). Pydantic 2
+    keeps a field's `max_length` in its `.metadata` as `MaxLen`, not as an attribute."""
+    # Unimportable only where the Hub's dependencies are stubbed; anywhere else, every API test
+    # would fail beside this one.
+    agent_actions = pytest.importorskip("hub.api.v1.agent_actions")
+    from hub import mcp_server
+
+    caps = [
+        m.max_length
+        for m in agent_actions.PermissionDecisionCreate.model_fields["reason"].metadata
+        if hasattr(m, "max_length")
+    ]
+    assert caps == [mcp_server.MAX_REASON_CHARS]
+
+
+def _longest_reasons(workspace):
+    """A refusal of every kind, each quoting a word far past the bound."""
+    long = "x" * 5000
+    return {
+        "outside": _decide("Bash", {"command": f"cat /{long}"}),
+        "network": _decide("Bash", {"command": f"curl https://example.com/{long}"}),
+        "unchecked": _decide("Bash", {"command": f"cat $HOME/{long}"}),
+        "continues": _decide("Bash", {"command": f"cp a ../work={long}/z"}),
+        "file tool": _decide("Write", {"file_path": str(workspace.parent / long)}),
+        "unprintable": _decide("Bash", {"command": "cat /" + "\U000e0001" * 5000}),
+    }
+
+
+def test_no_refusal_is_longer_than_the_hub_records(workspace, monkeypatch):
+    """The longest fixed wording plus a quotation bounded as rendered stays under the cap, so the
+    Hub records every refusal rather than rejecting its report (D5)."""
+    from hub import mcp_server
+
+    monkeypatch.setenv("HUB_URL", _HUB)
+    for kind, decision in _longest_reasons(workspace).items():
+        assert decision["allow"] is False, kind
+        assert len(decision["reason"]) <= mcp_server.MAX_REASON_CHARS, kind
+        assert "…" in decision["reason"], kind
+
+
+def test_a_long_url_is_refused_within_the_cap(workspace, monkeypatch):
+    """A 1,200-character URL gave a 1,224-character reason under the whole-command regex, which the
+    Hub rejects, so the refusal went unrecorded. The quotation is now bounded."""
+    from hub import mcp_server
+
+    monkeypatch.setenv("HUB_URL", _HUB)
+    url = "https://example.com/" + "a" * (1200 - len("https://example.com/"))
+    assert len(url) == 1200
+    decision = _decide("Bash", {"command": f"curl -s {url}"})
+    assert decision["allow"] is False
+    assert decision["reason"].startswith("'https://example.com/aaa")
+    assert len(decision["reason"]) <= mcp_server.MAX_REASON_CHARS
+
+
+def test_the_bound_is_on_the_rendered_quotation_not_the_word(workspace, monkeypatch):
+    """`repr` renders each U+E0001 as ten characters, so 200 characters of word can render as
+    2,000. The bound applies after rendering (D5, row L1)."""
+    from hub import mcp_server
+
+    monkeypatch.setenv("HUB_URL", _HUB)
+    decision = _decide("Bash", {"command": "curl https://example.com/x" + "\U000e0001" * 400})
+    assert decision["allow"] is False
+    assert "network address" in decision["reason"]
+    assert len(decision["reason"]) <= mcp_server.MAX_REASON_CHARS
+
+
+@pytest.mark.parametrize(
+    "tool, tool_input",
+    [
+        pytest.param("Bash", {"command": "cat sub/a\x00b"}, id="shell"),
+        pytest.param("Bash", {"command": "cat /tmp/a\x00b"}, id="shell-absolute"),
+        pytest.param("Bash", {"command": "curl file:///tmp/a%00b"}, id="file-url"),
+        pytest.param("Write", {"file_path": "a\x00b"}, id="file-tool"),
+    ],
+)
+def test_a_nul_byte_still_gets_a_decision(workspace, monkeypatch, tool, tool_input):
+    """`posixpath.realpath` raises ValueError on a NUL byte, which once escaped `_decide` on Linux,
+    CI's platform, although its docstring promises every input a decision (D5, task 2.5). Either
+    answer is acceptable; raising is not."""
+    monkeypatch.setenv("HUB_URL", _HUB)
+    decision = _decide(tool, tool_input)
+    assert decision["allow"] in (True, False)
+    assert isinstance(decision["reason"], str)
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo 'unbalanced",
+        'echo "unbalanced $(cat',
+        "echo `unbalanced",
+        "echo \\",
+        "$(" * 50 + "cat /etc/x" + ")" * 50,
+        "\x00\x01\x02 \\\\ '\" ` $ ${ $( %%",
+    ],
+)
+@pytest.mark.parametrize("tool", ["Bash", "PowerShell", "Task"])
+def test_the_reader_is_total(workspace, monkeypatch, tool, command):
+    """No string makes the reader raise: an unbalanced quote runs to the end, and nesting past its
+    bound falls back to reading the whole text (D1)."""
+    monkeypatch.setenv("HUB_URL", _HUB)
+    decision = _decide(tool, {"command": command})
+    assert decision["allow"] in (True, False)
+
+
+def test_a_path_nested_past_the_bound_is_still_read(workspace, monkeypatch):
+    """Fifty nested substitutions exceed what is lexed; the whole-text fallback still sees
+    `/etc/x`."""
+    monkeypatch.setenv("HUB_URL", _HUB)
+    command = "echo " + "$(" * 50 + "cat /etc/x" + ")" * 50
+    decision = _decide("Bash", {"command": command})
+    assert decision["allow"] is False
+    assert "/etc/x" in decision["reason"]
 
 
 # --- The wire shape ---------------------------------------------------------------------------

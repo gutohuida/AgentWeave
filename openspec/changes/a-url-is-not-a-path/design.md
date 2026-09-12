@@ -627,3 +627,70 @@ The trim set. D3's N3 widening (re-derived: every byte N3 sends leaves today wit
 D4's own-Hub test, D6's `python -c` refusal, and the rendered bound. The delta's requirement
 scenarios were correct; the defect was in the design's rule 6, not in what the spec requires — and
 R3 adds one scenario so a test pins the glued-backslash case.
+
+## D11a — What the implementation changed, and why (S2, night 2026-09-12)
+
+The implementation is held to D2's table, not to R2's code. Implementing it found one escape that
+both design readers let through. It also made three smaller choices that the prose leaves open.
+Each is pinned by a row or a test.
+
+**1. A `$` the shell will not expand is not a reference (an escape, measured).** R2's lexer keeps
+a quoted or escaped `$` as a plain `$`. So `'$HUB_URL'/../../x` lexes to the same word as the
+active `$HUB_URL/../../x`. Rule 2 then puts the Hub's URL in its place. That is three components,
+`http:`, the empty one and `127.0.0.1:8016`, so the two `..` stay inside, and the command is
+allowed. The shell writes something else. To bash the word is a directory called `$HUB_URL`,
+which is one component, and the same two `..` leave the workspace.
+
+Measured in Git Bash 5.2.37, with the directories `$HUB_URL` and `http:/127.0.0.1:8016` created
+inside the workspace, as an agent could create them. Each of these wrote its file in the
+workspace's parent, rc=0:
+- `echo hi > '$HUB_URL'/../../x` (**E20**);
+- `echo hi > \$HUB_URL/../../x` (**E21**);
+- `echo hi > "\$HUB_URL/../../x"` (**E22**).
+
+R2's `reader.py` and R3's `reader3.py` both **allow** all three. The whole-command regex refused
+them.
+
+So the lexer now writes a `$` that the shell will not expand as a private-use sentinel. There are
+two cases: a `$` inside single quotes, and a `$` after an escape in either dialect. Rule 2's
+pattern needs a real `$`, so a literal one is never a reference. The word falls to rule 3 and is
+refused as cannot be checked.
+
+Rule 3 still counts the sentinel as an expansion. This deliberately does **not** take up D10
+item 7's refinement, which would stop rule 3 refusing a single-quoted literal `$`. That
+over-refusal stays a residual. The reason given for E20–E22 is therefore true of the rule rather
+than of the word: the word holds no expansion. A refusal renders the sentinel back as `$`.
+
+**2. A reference follows the tool's dialect (row H17).** R2's reader accepted `$HUB_URL`,
+`${HUB_URL}` and `$env:HUB_URL` under every tool. PowerShell does not expand a bare `$HUB_URL` to
+the environment's value, as R3 noted in D11 and this pass re-measured: with `$env:HUB_URL` set,
+Windows PowerShell 5.1's `Write-Output $HUB_URL/x` printed `/x`, a path at the drive's root. So
+under the `PowerShell` tool only `$env:HUB_URL`, in any case, is a reference. Under `Bash`, only
+`$HUB_URL` and `${HUB_URL}` are. Any other tool is read both ways, each with its own spelling.
+This is what D4's heading, *"which spelling counts as a reference follows the shell"*, says. R2's
+code did not do it. H17, `echo hi > $HUB_URL/x` through the PowerShell tool, was refused by the
+whole-command regex. R2's reader allowed it. It is now refused as cannot be checked.
+
+**3. A continuing word names the argument only when the extension decided it.** D1 says a
+continuing word's refusal quotes the whole argument. The implementation judges the word as it
+stands first. If it is already outside, the refusal names the word. Only when the extension alone
+finds it outside (E15, E16, E17, E18) does the refusal quote the whole argument. The answer is
+the same either way. What changes is H11's reason: D2 says *"unchanged"*, and it is, as
+`'/api/v1/agent-actions/tasks'`. R2's code would have quoted F301's whole `python -c` script.
+
+**4. Totality at the edges.**
+- A substitution nested more than eight deep is not lexed further. Instead, the text at that
+  depth is read with the backstop, the way whole commands used to be read. R2 skipped it, which
+  would have allowed a path hidden fifty levels down.
+- `urlsplit` raises on a malformed IPv6 host, and `url2pathname` raises on a malformed `file:`
+  path. Both are caught and refused.
+- The file-tool branch's resolution now also catches `ValueError` (§2.5). Its quotation uses the
+  same 200-character rendered bound, so a long `file_path` can no longer produce a reason the Hub
+  rejects. Its logic is otherwise unchanged.
+
+**Found, not fixed: bash's ANSI-C quoting on POSIX (F332).** In bash, `$'..\x2fstray.txt'` is
+`../stray.txt`. On POSIX none of the three readings sees a `/` in it: this reader (measured under
+WSL), R2's, and the whole-command regex. So all three allow it, and it is a residual this change
+neither opens nor closes. Bash 5.2.21 on Linux ran it and wrote the file in the workspace's parent
+(measured). On Windows the `\` is a separator, so rule 3 refuses it. It is filed as **F332 (A)**
+for a proposal of its own: the lexer should decode `$'…'`, and that needs its own rows.

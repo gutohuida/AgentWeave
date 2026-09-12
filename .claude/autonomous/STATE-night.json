@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 2,
+  "iteration": 3,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "u2-reader",
-  "next_action": "Queue item u2-reader: implement tasks.md S2 (2.1-2.7) of openspec/changes/a-url-is-not-a-path in hub/hub/mcp_server.py (stdlib + fastmcp only; approve_tool_call keeps NO return annotation). Read design.md D1, D4, D5 and the S1.4 note in tasks.md first. The table in hub/tests/test_permission_approver.py is the authority; testbed/scratch/r2f300/reader.py and r3f300/reader3.py are design aids. Remove every S1 xfail (including the platform-scoped ones) as rows go green, verify on Windows AND under WSL (command in u2-reader's detail), run the baseline_chunk, commit and push. If the firing runs short, stop at a green point where the remaining strict xfails still hold, commit, and split the item in the log.",
+  "current": "u3-wire-docs",
+  "next_action": "Queue item u3-wire-docs: a-url-is-not-a-path tasks 3.1 (two cases through a REAL spawn of mcp_server.py beside _call_tool_over_stdio in hub/tests/test_permission_approver.py, AW_WORKSPACE_DIR + HUB_URL in the child env: curl -s https://example.com/x -> deny with message starting \"Denied: 'https://example.com/x' is a network address\"; curl -s \"$HUB_URL/api/v1/agent-actions/tasks\" -> allow; neither carries structuredContent), 4.1 (docs/reference/permission-postures.md paragraph, per tasks.md), and 8.3 openspec validate --strict a-url-is-not-a-path. The reader landed in u2 (see log iteration 3 and design D11a). Run the file on Windows, commit and push.",
   "queue": [
     {
       "id": "compose",
@@ -36,9 +36,9 @@
     },
     {
       "id": "u2-reader",
-      "status": "open",
+      "status": "done",
       "title": "a-url-is-not-a-path S2: the reader (lexer + words + six rules + backstop), own-Hub test, refusal texts, bound, totality",
-      "detail": "2.1-2.7 in hub/hub/mcp_server.py (stdlib + fastmcp ONLY; approve_tool_call gains NO return annotation; test_response_carries_no_structured_content must still pass). Windows backstop is backslash-aware (R3). shlex NOT used. 2.3 D5 texts verbatim from design.md. 2.4 cap constant beside MIN_WAITING_SECONDS; test reads PermissionDecisionCreate.model_fields['reason'].metadata MaxLen. 2.5 NUL-byte totality test. 2.6 docstring rewrite, delete the 'Relative paths are left alone' sentence. 2.7 every S1.4 xfail removed - grep shows none. testbed/scratch/r2f300/reader.py is a design aid, not the implementation: the table is the authority. If the firing runs short, stop at a green point where the remaining strict xfails still hold, commit, and split this item in the log. FROM u1: 2.7 means EVERY a-url-is-not-a-path xfail in the file, including the platform-conditional ones (_MOVES, _MOVES_ON_WINDOWS, X8's POSIX raises mark, H12-H4's POSIX mark, F331's POSIX mark) - delete the _MOVES/_MOVES_ON_WINDOWS constants and the moves= parameter once unused. Verify POSIX too, not only Windows: from hub/, `wsl -d Ubuntu -- bash -lc \"cd /mnt/c/Users/huida/Documents/projects/AgentWeave/hub && PYTHONPATH=../testbed/scratch/night0912:. python3 -m pytest -p posix_stubs --noconftest -q -p no:cacheprovider -o addopts= tests/test_permission_approver.py\"` (pipe through tr -d '\\0'); and testbed/scratch/night0912/why_each_row.py on both. WSL's python3 has pytest+fastmcp, not the Hub deps - posix_stubs.py covers that. The reader must use os.sep/os.path so POSIX rows keep today's X/Z answers."
+      "detail": "DONE iteration 3. Reader in hub/hub/mcp_server.py (lexer per dialect, words+continues, six rules, D4 own-Hub, D5 texts verbatim 197/168/26, MAX_REASON_CHARS=1000 + 200-char rendered bound, (OSError, ValueError) totality, \\-aware backstop on Windows). grep -c xfail = 0. Windows: file 176 passed/1 skipped; baseline chunk 285 passed/1 skipped. WSL: 170 passed/1 skipped (cap test, stub env)/2 failed (sse_starlette stub env, not _decide); why_each_row 0 disagreements on both. Found and fixed an escape the design's reader opened: a quoted/escaped $HUB_URL was read as a reference (E20-E22, measured writing outside in Git Bash; R2 and R3 readers allow). Departures recorded in design D11a (literal-$ sentinel, dialect references H17, continuing-word reason, nesting fallback). F332 (A) filed: POSIX bash $'..\\x2f...' writes outside, allowed before and after."
     },
     {
       "id": "u3-wire-docs",
@@ -50,7 +50,7 @@
       "id": "u4-mutations",
       "status": "open",
       "title": "a-url-is-not-a-path S5: sixteen mutation checks, each killed by a NAMED row",
-      "detail": "5.1-5.16, one firing, from a clean committed tree. After EACH restore, git status --short must be empty (or show only the scratch log). Record which named row failed for each into the log as a table. If a row survives its mutation, fix the test (commit), never weaken the claim. Windows-only legs (5.8, 5.12, 5.16) run here. If the firing runs short, stop BEFORE a mutation and record which remain."
+      "detail": "5.1-5.16, one firing, from a clean committed tree. After EACH restore, git status --short must be empty (or show only the scratch log). Record which named row failed for each into the log as a table. If a row survives its mutation, fix the test (commit), never weaken the claim. Windows-only legs (5.8, 5.12, 5.16) run here. If the firing runs short, stop BEFORE a mutation and record which remain. FROM u2: add a 17th check: remove the _LITERAL_DOLLAR sentinel in _lex (both append sites) -> E20, E21, E22 must fail (already measured once in u2: all three failed). MUTATE WITH py -3.11 (utf-8), NEVER a PowerShell Get-Content/WriteAllText round trip: it mojibakes the file's em dashes (DEAD-ENDS, 2026-09-12). Restore with git checkout only from a committed tree."
     },
     {
       "id": "u5-gate",
@@ -74,7 +74,7 @@
       "id": "u8-close",
       "status": "open",
       "title": "a-url-is-not-a-path S9 + S10: four Status lines, corrections, archive",
-      "detail": "9.1 F300, F312, F321, F323 each fixed <sha>, naming the task and quoting 6.2's evidence; dated in-place corrections to F312 ('No agent on the default posture can make any network request...' - curl example.com with no / was always allowed, D2 N4) and F300 ('any URL in any shell command is denied'). 9.2 F322, F299, F301 stay open - say so in the commit. 9.3 do NOT edit DECISIONS.md; put D6's correction to 1c/1d in decisions_for_user unless tonight's review page carried it. 9.4 validate --strict, compare MODIFIED block with main agent-capability-plane (every scenario survives, F301 clause verbatim), archive via openspec-archive-change. 10.1 test-guide true to what shipped. S7 (7.1-7.3) is human-only and stays open (precedent: archived changes 2026-08-21-task-dependencies, 2026-08-24-a-reviewer-can-see-the-work). Re-run scripts/classify_findings.py after and check exactly F300/F312/F321/F323 moved OPEN->RESOLVED. After this item: start a-refused-review-leaves-nothing-behind ONLY if at least 3 hours remain before stop_at (operator's rule); otherwise go to w-final. FROM u1: F331 (A) is also closed by this change - set it fixed <sha> with the CI Linux job's evidence (the F331/N7/R10 rows passing on Linux) plus, if the drive Hub cannot be Linux, say the fix is tested-not-driven on POSIX. classify_findings.py should then show F300/F312/F321/F323/F331 OPEN->RESOLVED. F300/F312's in-place corrections cite F331: their URL claims hold on Windows only."
+      "detail": "9.1 F300, F312, F321, F323 each fixed <sha>, naming the task and quoting 6.2's evidence; dated in-place corrections to F312 ('No agent on the default posture can make any network request...' - curl example.com with no / was always allowed, D2 N4) and F300 ('any URL in any shell command is denied'). 9.2 F322, F299, F301 stay open - say so in the commit. 9.3 do NOT edit DECISIONS.md; put D6's correction to 1c/1d in decisions_for_user unless tonight's review page carried it. 9.4 validate --strict, compare MODIFIED block with main agent-capability-plane (every scenario survives, F301 clause verbatim), archive via openspec-archive-change. 10.1 test-guide true to what shipped. S7 (7.1-7.3) is human-only and stays open (precedent: archived changes 2026-08-21-task-dependencies, 2026-08-24-a-reviewer-can-see-the-work). Re-run scripts/classify_findings.py after and check exactly F300/F312/F321/F323 moved OPEN->RESOLVED. After this item: start a-refused-review-leaves-nothing-behind ONLY if at least 3 hours remain before stop_at (operator's rule); otherwise go to w-final. FROM u1: F331 (A) is also closed by this change - set it fixed <sha> with the CI Linux job's evidence (the F331/N7/R10 rows passing on Linux) plus, if the drive Hub cannot be Linux, say the fix is tested-not-driven on POSIX. classify_findings.py should then show F300/F312/F321/F323/F331 OPEN->RESOLVED. F300/F312's in-place corrections cite F331: their URL claims hold on Windows only. FROM u2: F332 (A, POSIX ANSI-C quoting) stays OPEN - it is not this change's; say so in the commit beside F322/F299/F301. The test guide should mention E20-E22 and H17 as D11a rows."
     },
     {
       "id": "r1-pin",
@@ -140,9 +140,12 @@
   "notes_for_tomorrow": [
     "Open severity-A findings with no proposal (measured by scripts/classify_findings.py at compose): F299, F301, F325. The playbook routes these to the day window. DECISIONS.md 1c/1d rests on a false python -c measurement - re-derive F301's notice before proposing it (from the 2026-09-12 review page).",
     "Classifier CONFLICT verdicts at compose: F52 (A), F292 (B). Hand-check them.",
-    "CI reds on this branch today are the two known intermittents (F292 at 34711633220, F314 at 34716889283). Both are open; F314 is B, F292 is B/CONFLICT."
+    "CI reds on this branch today are the two known intermittents (F292 at 34711633220, F314 at 34716889283). Both are open; F314 is B, F292 is B/CONFLICT.",
+    "F332 (A) filed in u2-reader: on POSIX, bash's ANSI-C quoting ($'..\\x2fx') writes a traversal no reader of the command text sees; measured writing outside under WSL bash 5.2.21. No proposal. Repair sketched in the finding (decode $'...' in the lexer, own rows)."
   ],
-  "decisions_for_user": [],
+  "decisions_for_user": [
+    "a-url-is-not-a-path's implementation departs from R2's reader in four places, recorded in design D11a. One closes an escape the approved design would have opened (E20-E22: a quoted '$HUB_URL' read as a reference). None widens an answer beyond D2's table. Worth a look on the next review page; no action needed unless you disagree."
+  ],
   "limits": [
     "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
     "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",

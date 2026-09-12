@@ -26405,3 +26405,35 @@ fix is seen to land.
 uncommitted). The table's per-row cause is in `testbed/scratch/night0912/why_each_row.py`.
 
 **Related:** F323 (the Windows twin: an escape the regex never saw), F300, F312.
+
+## F332 (A) — on POSIX, bash's ANSI-C quoting writes a traversal no reader of the command text sees
+
+**Status:** open. Filed 2026-09-12 by the night window, while implementing `a-url-is-not-a-path`
+§2 (queue item `u2-reader`). **Measured under WSL Ubuntu, not through a live run.** Nothing
+here was driven: `_decide` was called directly, and bash was run on its own in the same WSL.
+
+**The claim.** In bash, `$'…'` decodes backslash escapes, so `$'..\x2fstray.txt'` is the word
+`../stray.txt`. The command text contains no `/`. Run from `/tmp/ansic/ws` in bash 5.2.21,
+`echo hi > $'..\x2fansic_stray.txt'` exited 0 and **wrote `/tmp/ansic/ansic_stray.txt`**, in the
+workspace's parent. Each of these readers allows it on Linux:
+- the whole-command regex (`c12a7d3`);
+- `a-url-is-not-a-path`'s reader, measured by `testbed/scratch/night0912/d11a_check.py` under WSL;
+- R2's and R3's design aids, by inspection, because neither decodes `$'…'`.
+
+That breaches *"Traversal and links cannot escape"* (`agent-run-sandboxing`), on the Docker
+deployment's platform. Octal (`\057`), `/` and `\U0000002f` are the same mechanism, and
+were not run.
+
+On Windows the escape is refused: `\` is a separator there, so the word `$..\x2fstray.txt` holds
+a `$` and a separator, and rule 3 refuses it. That was measured through the reader, not through
+Git Bash.
+
+**Not closed by `a-url-is-not-a-path`.** That change neither opens this nor closes it (design
+D11a, *"Found, not fixed"*). There is a clean repair: the lexer can decode `$'…'` as bash does,
+and then judge the decoded word. It needs its own rows, because it touches every escape bash
+supports, so it is left for a proposal.
+
+**Reproduce:** `wsl -d Ubuntu -- bash testbed/scratch/night0912/ansic.sh` (scratch, uncommitted),
+which cleans up after itself.
+
+**Related:** F331 (the same class of POSIX-only escape), F323.
