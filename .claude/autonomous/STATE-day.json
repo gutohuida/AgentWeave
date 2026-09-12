@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "eac213c",
     "stop_at": "2026-09-12T17:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-12-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d5-review",
-    "next_action": "D-5: write the review page spec-queue/review/review-2026-09-12.html per day-window.md D-5, then append a 2026-09-12 section to spec-queue/APPROVALS.md (one row per specced change, no status token). Read the d5-review queue item's detail AND the 2026-09-12 day log's Iteration 5 'For D-5' note first. Self-contained, theme-aware HTML. Order: (1) the branch is fresh, one day, and the merge gate OPENED at iteration 1 (6f7e486..eac213c landed on master, 21 commits/29 files, 2026-09-08 cycle fully landed); (2) what the night built (F306+F316) and driven-vs-tested; (3) today's drive findings (F319 raised to A, F320 filed); (4) the F300+F312 change a-url-is-not-a-path, and what R2 AND R3 each changed - R2 replaced R1's word split after 16 escapes (5 live) and filed F323; R3 found a live Windows escape R2's reader PASSED (sort -o\"..\\x\", measured writing outside) plus a regression R2 introduced (Z2), and made rule 6's backstop backslash-aware; (5) what the night does if nothing is approved; (6) the research briefly, incl the 2026-09-11 late-not-skipped correction. The a-url-is-not-a-path change is fully specced (R1/R2/R3 done, validate --strict passes) and ready for the night to implement. Use scripts/uishot.py only if a screenshot is wanted; the page itself needs no Hub.",
+    "current": "d6-repair",
+    "next_action": "D-6: repair F318 in scripts/classify_findings.py, only if the carve-out holds. First grep openspec/specs for any requirement it touches (none expected); no migration, no API/schema change; the finding must carry a reproduction (FINDINGS.md '## F318 (B)', ~:25668). Bug: the cross-section arm calls dequote() inside the per-line loop, so a re.S quotation that wraps lines is read as prose. Before editing, run the classifier over the real ledger and write down the census; state the exact movement F318 predicts; fix (dequote over the whole section before the per-line scan, or equivalent); re-run and require exactly that movement and no other. Add a test in tests/ (find the classifier's existing test file) and mutation-check it (revert the fix, watch the named test fail, restore, git status clean). Do NOT write computed counts into FINDINGS.md (it is the tool's input). Set F318's Status line to 'fixed <sha>' in a follow-up edit after the fix commit. ruff/black(--target-version py311) on touched files. If it turns out to want a spec, stop and queue it. Then D-7 (Codex charter delivery finding) is next.",
     "queue": [
         {
             "id": "compose",
@@ -49,9 +49,10 @@
         },
         {
             "id": "d5-review",
-            "status": "open",
+            "status": "done",
             "title": "D-5 review page review-2026-09-12.html + the APPROVALS row",
-            "detail": "Per day-window.md D-5: self-contained, theme-aware HTML at spec-queue/review/review-2026-09-12.html. Order: (1) the branch - autonomous/2026-09-12-daily, fresh, one day, and the merge gate OPENED: 6f7e486..eac213c landed on master (21 commits, 29 files), the 2026-09-08 cycle fully landed; (2) what the night built (F306+F316) and what was driven vs tested; (3) today's drive findings; (4) the F300+F312 change, and what R2 and R3 each changed (say so if nothing); (5) what the night does if nothing is approved; (6) the research, briefly, including the 2026-09-11 late-not-skipped correction. Then append a 2026-09-12 section to spec-queue/APPROVALS.md with a row per specced change and no status token. Section (4) must say R2 replaced R1's word split after measuring 16 escapes in it (5 live in Git Bash), and that R2 filed F323 (A, live escape today)."
+            "detail": "Per day-window.md D-5: self-contained, theme-aware HTML at spec-queue/review/review-2026-09-12.html. Order: (1) the branch - autonomous/2026-09-12-daily, fresh, one day, and the merge gate OPENED: 6f7e486..eac213c landed on master (21 commits, 29 files), the 2026-09-08 cycle fully landed; (2) what the night built (F306+F316) and what was driven vs tested; (3) today's drive findings; (4) the F300+F312 change, and what R2 and R3 each changed (say so if nothing); (5) what the night does if nothing is approved; (6) the research, briefly, including the 2026-09-11 late-not-skipped correction. Then append a 2026-09-12 section to spec-queue/APPROVALS.md with a row per specced change and no status token. Section (4) must say R2 replaced R1's word split after measuring 16 escapes in it (5 live in Git Bash), and that R2 filed F323 (A, live escape today).",
+            "result": "DONE iteration 6. spec-queue/review/review-2026-09-12.html written (self-contained, theme-aware, tags balance, no external refs), six sections in playbook order, the eight decisions_for_user in one box at the top (two change tonight's build: F321 folded in; D3 widening + /dev/null). Measured for it: validate --strict passes 11:17; 46 tasks (5/7/1/1/16/4/3/4/4/1); classifier 7 open A (F299,F300,F301,F312,F319,F321,F323), four the change's, three unproposed; default queue lands no feature. spec-queue/APPROVALS.md gained a 2026-09-12 section above 2026-09-11 with one row paragraph for a-url-is-not-a-path and no status token (checked)."
         },
         {
             "id": "d6-repair",

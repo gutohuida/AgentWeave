@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave daily review — 2026-09-12</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --panel-2: #f4f4f2;
+    --ink: #1c1c1a;
+    --ink-dim: #5c5c56;
+    --ink-faint: #85857d;
+    --rule: #e0e0da;
+    --rule-strong: #c9c9c1;
+    --accent: #6b4fbb;
+    --sev-a: #b3261e;
+    --sev-a-bg: #fbe9e7;
+    --sev-b: #a8590a;
+    --sev-b-bg: #fdf0e0;
+    --sev-c: #4d6a1f;
+    --sev-c-bg: #eef4e2;
+    --sev-d: #4a5568;
+    --sev-d-bg: #eceef2;
+    --ok: #2f6b3a;
+    --ok-bg: #e8f3ea;
+    --warn-bg: #fdf6e0;
+    --warn-rule: #d9b84a;
+    --code-bg: #f2f2ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --panel: #1e1e23;
+      --panel-2: #26262c;
+      --ink: #e9e9e6;
+      --ink-dim: #b0b0a8;
+      --ink-faint: #86867e;
+      --rule: #33333a;
+      --rule-strong: #4a4a52;
+      --accent: #b09aec;
+      --sev-a: #ff9c92;
+      --sev-a-bg: #3a1f1d;
+      --sev-b: #f0b878;
+      --sev-b-bg: #392a17;
+      --sev-c: #b3d67a;
+      --sev-c-bg: #26301a;
+      --sev-d: #b4c0d4;
+      --sev-d-bg: #24282f;
+      --ok: #8fd39c;
+      --ok-bg: #1c2c20;
+      --warn-bg: #322a14;
+      --warn-rule: #8a7527;
+      --code-bg: #24242a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    padding: 2.2rem 1.25rem 5rem;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  header.page { border-bottom: 2px solid var(--rule-strong); padding-bottom: 1.1rem; margin-bottom: 1.6rem; }
+  header.page h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -0.015em; }
+  header.page .sub { color: var(--ink-dim); font-size: .95rem; }
+  h2 {
+    font-size: 1.22rem; letter-spacing: -0.01em;
+    margin: 2.6rem 0 .5rem; padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: .5rem; }
+  h3 { font-size: 1.02rem; margin: 1.5rem 0 .4rem; }
+  h4 { font-size: .93rem; margin: 1.1rem 0 .3rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .8rem; padding-left: 1.35rem; }
+  li { margin: .3rem 0; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .875em;
+  }
+  code { background: var(--code-bg); padding: .1em .34em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule);
+    border-radius: 6px; padding: .75rem .9rem; overflow-x: auto; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0 1rem; font-size: .93rem; }
+  th, td { text-align: left; padding: .48rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); border-bottom: 1px solid var(--rule-strong); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0; }
+  .note { border-left: 3px solid var(--warn-rule); background: var(--warn-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .note strong:first-child { display: block; margin-bottom: .2rem; }
+  .sev { display: inline-block; min-width: 1.35rem; text-align: center; font-weight: 700; font-size: .78rem; padding: .1rem .38rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+  .sev.a { color: var(--sev-a); background: var(--sev-a-bg); }
+  .sev.b { color: var(--sev-b); background: var(--sev-b-bg); }
+  .sev.c { color: var(--sev-c); background: var(--sev-c-bg); }
+  .sev.d { color: var(--sev-d); background: var(--sev-d-bg); }
+  .pill { display: inline-block; font-size: .76rem; font-weight: 600; letter-spacing: .03em; padding: .12rem .5rem; border-radius: 999px; border: 1px solid var(--rule-strong); color: var(--ink-dim); }
+  .pill.ok, .pill.driven { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .pill.tested { color: var(--sev-b); background: var(--sev-b-bg); border-color: transparent; }
+  .fid { font-family: ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
+  .loc { font-family: ui-monospace, monospace; font-size: .82em; color: var(--ink-faint); white-space: nowrap; }
+  .lede { font-size: 1.02rem; color: var(--ink-dim); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .28rem 1rem; font-size: .93rem; margin: .6rem 0; }
+  .kv dt { color: var(--ink-faint); }
+  .kv dd { margin: 0; }
+  .ask { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1.1rem; margin: 1rem 0; background: var(--panel); }
+  .ask h4 { color: var(--accent); margin-top: 0; }
+  .ok-banner { border-left: 3px solid var(--ok); background: var(--ok-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  a:visited { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  footer.page { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .85rem; }
+  .small { font-size: .88rem; color: var(--ink-dim); }
+  .measured { color: var(--ink-faint); font-size: .82rem; font-style: italic; }
+  @media (max-width: 34rem) {
+    body { padding: 1.4rem .8rem 3rem; font-size: 15px; }
+    table { font-size: .86rem; }
+    .kv { grid-template-columns: 1fr; gap: .1rem .5rem; }
+    .kv dd { margin-bottom: .45rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>Daily review — 2026-09-12</h1>
+  <div class="sub">
+    Branch <code>autonomous/2026-09-12-daily</code> · <strong>fresh today, one day</strong> ·
+    <strong>the merge gate opened</strong> and the 2026-09-08 cycle is on <code>master</code> ·
+    <strong>one change specced</strong>, 46 tasks, 0 ticked, three rounds, and
+    <strong>R2 and R3 both changed it</strong> · four findings filed (two of them severity A), and
+    <code>F319</code> raised to A
+  </div>
+</header>
+
+<div class="ok-banner">
+  <strong>The previous cycle landed.</strong> At 09:00 the gate waited for CI on the arming commit
+  <code>eac213c</code> before writing anything, then measured all four conditions from a clean tree.
+  All four passed. <code>master</code> was fast-forwarded <code>6f7e486..eac213c</code>: 21 commits,
+  29 files, +5815 −162. Nothing from the 2026-09-08 branch is left unmerged. §1 has the table.
+</div>
+
+<p class="lede">
+  What this page needs from you: <strong>one change to approve, reject or revise</strong>
+  (<code>a-url-is-not-a-path</code>, §4), which closes four severity-A findings, two of them live
+  escapes from the workspace on Windows. There are also <strong>eight decisions</strong>, listed
+  immediately below. Two of them bear on tonight's build; the rest are about the order after
+  tonight and about the loop itself. If you approve nothing, tonight builds no feature (§5).
+</p>
+
+<!-- ============================== decisions ============================== -->
+<div class="ask">
+  <h4>Eight things only you can decide</h4>
+  <p class="small">Decisions 1 and 2 change what tonight builds. The other six do not.</p>
+  <ol>
+    <li id="d1">
+      <strong>Approve <code>a-url-is-not-a-path</code>, or not.</strong> It closes <code>F300</code>,
+      <code>F312</code>, <code>F321</code> and <code>F323</code>, all severity A. <code>F323</code>
+      is a <strong>live escape today</strong>: in a default-posture Claude run on Windows,
+      <code>echo hi &gt; "..\stray.txt"</code> in the Bash tool is allowed as "inside your
+      workspace" and writes next to the workspace. It rides on this approval. If you want it fixed
+      sooner, or separately, say so.
+    </li>
+    <li id="d2">
+      <strong><code>F321</code> is folded in without a verdict of its own.</strong> Under the
+      default posture, <code>python sub/hello.py</code> inside the workspace is refused as outside
+      (measured live). R1 folded it in because a URL-only fix cannot deliver <code>F300</code>'s
+      verdict: the instructed request's <code>Content-Type: application/json</code> header is
+      refused as <code>'/json'</code>. If you want it separate, the change shrinks to
+      <code>design.md</code> D8(a), and <code>F300</code> still cannot fire.
+    </li>
+    <li id="d3">
+      <strong>The one widening beyond the verdict (<code>design.md</code> D3), and
+      <code>/dev/null</code> (D10).</strong> <code>curl example.com/x</code> moves from refused to
+      allowed, because a schemeless address is syntactically a relative path.
+      <code>curl example.com</code>, without the <code>/x</code>, is already allowed today. The
+      alternative is a host heuristic that refuses dotted directory names for a network reason.
+      Separately: should <code>/dev/null</code> pass? It is refused today and after. Task 7.3 asks
+      you to decide both in <code>DECISIONS.md</code>, after the build if you prefer. With no answer,
+      the night builds D3 as written.
+    </li>
+    <li id="d4">
+      <strong><code>F319</code> is now severity A, measured live</strong> (§3). Today followed
+      <code>DIRECTION.md</code> 2026-09-11's fixed order, because <code>F319</code> has no verdict.
+      Whether it moves ahead of <code>F299</code> in a 2026-09-13 section is yours to decide.
+      <code>F320</code> (B, filed today) is its queue-starvation neighbour, and one change could
+      carry both.
+    </li>
+    <li id="d5">
+      <strong><code>DECISIONS.md</code> 1c/1d rest on a measurement that is false.</strong>
+      <code>F301</code>'s exact <code>S1_python_c</code> command, run through <code>_decide</code>,
+      is <strong>refused</strong> (<code>'/api/v1/agent-actions/tasks' is outside your
+      workspace</code>). 1c's table records <em>allow</em>. So 1d's "notice first, instruct
+      <code>python -c</code>" would instruct a refused command, and this change does not make it
+      pass (D6). Option C's conclusion survives on other witnesses. After this change, the shape
+      the notice <em>already</em> instructs (<code>curl "$HUB_URL/…"</code>) is the one
+      <code>_decide</code> allows. <code>DIRECTION.md</code> position 4 (<code>F301</code>'s notice)
+      should be re-derived before it is proposed. <code>DECISIONS.md</code> was not edited.
+    </li>
+    <li id="d6">
+      <strong><code>CLAUDE.md</code>'s trial-Hub section says migration head <code>0101</code>.
+      It is <code>0102</code></strong>, on this branch and, since this morning's landing, on
+      <code>master</code>. Three fresh profiles migrated <code>0101→0102</code> today.
+      <code>CLAUDE.md</code> is your file and was not edited. Update the two sentences, or authorise
+      a window to.
+    </li>
+    <li id="d7">
+      <strong>A merge-gate note, from one sample, not a playbook edit.</strong> Yesterday's page
+      proposed gating on <code>HEAD~1</code> or on the newest green sha. Today suggests that is not
+      needed. The gate opened because compose <em>waited for the arming commit's CI (~10 min)
+      before writing</em>. Whether to write "compose waits for the arming commit's CI" into
+      <code>day-window.md</code> step 1 is your call.
+    </li>
+    <li id="d8">
+      <strong>Correction: yesterday's decision 1 was wrong.</strong> The research task did not skip
+      2026-09-11. It started at 09:04:33 and finished at 09:22:46 with <code>rc=0</code>, about
+      1h54m after its 07:10 trigger. Yesterday's check ran about thirty seconds after it began. It
+      was <strong>late, not skipped</strong>. Why it started late is <strong>unverified</strong>.
+      Today's run started on time. No action is needed unless lateness recurs.
+    </li>
+  </ol>
+</div>
+
+<!-- ============================== 1 ============================== -->
+<h2 id="s1"><span class="num">1</span>The branch, and the merge gate</h2>
+
+<dl class="kv">
+  <dt>Branch</dt><dd><code>autonomous/2026-09-12-daily</code>, cut from <code>eac213c</code> this morning</dd>
+  <dt>Spans</dt><dd>One day, 2026-09-12. The branch it replaces spanned five, 2026-09-08 through today.</dd>
+  <dt>Gate</dt><dd><strong>Opened.</strong> <code>master</code> fast-forwarded <code>6f7e486..eac213c</code> and pushed.</dd>
+  <dt>Landed</dt><dd>The 2026-09-11 day window: the <code>F306</code> spec loop, the <code>F292</code> measurement, and <code>F317</code>'s classifier repair. The 2026-09-11 night's build of <code>an-agent-that-recorded-the-evidence-is-the-author</code>, archived at <code>cf8e178</code>.</dd>
+</dl>
+
+<table>
+  <thead><tr><th>Condition</th><th>Measured at 09:00–09:15</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr><td>Not <code>master</code>, and <code>HEAD..master</code> is 0</td><td><code>autonomous/2026-09-08-daily</code>. <code>HEAD..master</code> 0, <code>HEAD..origin/master</code> 0.</td><td><span class="pill ok">pass</span></td></tr>
+    <tr><td>Clean tree, and <code>HEAD</code> equals <code>@{u}</code></td><td>Empty. Both <code>eac213cddb89</code>.</td><td><span class="pill ok">pass</span></td></tr>
+    <tr><td>CI concluded <code>success</code> for this exact sha</td><td><code>eac213c</code>: run 34681944629, <code>completed success</code>, polled until it concluded</td><td><span class="pill ok">pass</span></td></tr>
+    <tr><td>Newest <code>DIRECTION.md</code> section has no line-initial <code>HOLD MERGE</code></td><td>Newest section is <code>## 2026-09-11</code>. <code>grep '^HOLD MERGE'</code> over the whole file finds nothing.</td><td><span class="pill ok">pass</span></td></tr>
+  </tbody>
+</table>
+
+<p>
+  This is the gate's second landing, after 2026-09-07. It also answers yesterday's diagnosis. The
+  gate can pass only in a gap no firing occupies, and <strong>that gap exists for a window's first
+  firing</strong>, if it waits the 10–15 minutes CI takes before writing anything. The arming
+  commit touches only a log and state files, and CI for it starts the moment the arm pushes.
+  Today's cost was about ten minutes of the firing. Decision 7 is the note that follows from it.
+</p>
+
+<!-- ============================== 2 ============================== -->
+<h2 id="s2"><span class="num">2</span>What the night built</h2>
+
+<p>
+  One change, all nine commits (<code>de5733e..cf8e178</code>):
+  <code>an-agent-that-recorded-the-evidence-is-the-author</code>, which closes
+  <span class="fid">F306</span> <span class="sev a">A</span> and
+  <span class="fid">F316</span> <span class="sev a">A</span>. An agent that recorded the evidence
+  for a task could be staffed to review it, and approved its own work. The change is
+  <strong>built and archived</strong>: 43 of 43 tasks, fix <code>4929ea0</code>, tests
+  <code>40bd429</code>, ten mutations each killing its target leg, and the whole Hub suite at
+  <strong>4057 passed, 0 failed</strong>. Nothing is left over from the night.
+</p>
+
+<table>
+  <thead><tr><th>Claim</th><th>How it is known</th><th></th></tr></thead>
+  <tbody>
+    <tr><td>Pre-fix, the evidence author approves its own work</td><td>Live, on <code>37b8226</code> in a worktree: approved at seq 8, <code>proj-34d006e2f3e5</code>, read from the transition table</td><td><span class="pill driven">driven</span></td></tr>
+    <tr><td>Fixed, the flow staffs only the other agent</td><td>Live: the only staffing was the other agent, approved at seq 4, <code>proj-192ee0e59efb</code></td><td><span class="pill driven">driven</span></td></tr>
+    <tr><td>The author is refused at every door</td><td>Live: MCP approval 403, flow firing 409, hand dispatch 403, and the §3.4 wedge <code>PATCH</code> 403 with the assignee rolled back</td><td><span class="pill driven">driven</span></td></tr>
+    <tr><td>Unaccepted evidence still names its author (4.6)</td><td>Tested by the night. <strong>Driven today</strong> as a side effect of D-1: an <code>awaiting</code> record still refused its author the review.</td><td><span class="pill driven">driven today</span></td></tr>
+    <tr><td>The actor-kind filter (4.5)</td><td>Tested by the night. <strong>Driven today</strong>: a task with only operator-kind evidence was staffed with a fresh agent, and a real Haiku review ran (<code>run-1a4df5c4750d</code>).</td><td><span class="pill driven">driven today</span></td></tr>
+    <tr><td><code>F316</code>'s restaff route (4.10, 4.10a)</td><td>Unit level only. Not driven by the night, and not by today.</td><td><span class="pill tested">tested only</span></td></tr>
+  </tbody>
+</table>
+
+<p class="small">
+  The <code>claude</code> CLI moved from 2.1.238 to <strong>2.1.269</strong> at 23:00:04 last night,
+  between the night's arm and its compose, so every Claude run it drove was on 2.1.269. No
+  <code>Run</code> row records the version. <code>F306</code> is Hub-side logic, so the night's
+  results are very probably unaffected. That is <strong>inferred, not measured</strong>.
+</p>
+
+<!-- ============================== 3 ============================== -->
+<h2 id="s3"><span class="num">3</span>What today's drive found</h2>
+
+<p>
+  A scoped drive, not a sweep (<code>SURVEY.md:144</code> records the 17-row sweep complete). The
+  drive Hub was on port 8016, from source at <code>50bd12e</code>, with a fresh profile
+  <code>drive0912d</code> and a fresh git fixture <code>proj-e594aacf615a</code>. It spent two real
+  Haiku turns, created no job, and was stopped afterwards. Every assertion reads the drive
+  database, not a response.
+</p>
+
+<div class="card">
+  <p>
+    <span class="fid">F319</span> <span class="sev a">A</span> <em>raised from B</em> —
+    <strong>a refused review dispatch leaves the task held by the refused reviewer, with no
+    run.</strong> It was reached live, through <code>POST /agent/trigger</code>, on both legs the
+    night had left unverified. <em>After staging:</em> a pruned commit, or an obstructed review
+    path, answers <code>409</code> correctly. But the task has already been staged into
+    <code>under_review</code>, and it stays there, held by the refused reviewer, with a transition
+    <strong>attributed to the operator</strong>. A second reviewer is then refused, <em>"already
+    under review"</em>. <em>Entry guard:</em> a review queued behind the reviewer's own running
+    turn is refused at delivery once that turn records evidence, and the task reads
+    <code>(completed, X)</code>. On the board, these are ordinary <em>Under Review · Idle</em>
+    cards with no marker.
+    <br><span class="loc">turn_scheduler.py:349</span> commits the staging before
+    <span class="loc">review_turn.py:201-218</span> and
+    <span class="loc">worktrees.py:599-604</span> refuse
+  </p>
+</div>
+
+<div class="card">
+  <p>
+    <span class="fid">F320</span> <span class="sev b">B</span> <em>new</em> —
+    <strong>the scheduling pass that abandons a refused queue head returns, and the entry behind it
+    is never delivered.</strong> A divergence response correctly restaffed a review to an agent
+    whose queue head was <code>F319</code>'s stranded entry. The pass abandoned that head and
+    returned. The divergence entry stayed <code>queued</code>, with 0 attempts and no waiting
+    reason, and the task stayed <code>under_review</code>, held by an idle agent. It was still
+    like that 9m52s later. <code>GET /queue/&lt;agent&gt;/status</code> reports nothing wrong. The
+    mechanism does not need <code>F319</code>: any head refused to its limit strands what is
+    behind it until some unrelated event arrives.
+    <br><span class="loc">turn_scheduler.py:460-471, :512</span> ·
+    <span class="loc">agent_trigger.py:2433</span> ("There is no tick")
+  </p>
+</div>
+
+<p>Found by the spec rounds rather than the drive, and filed today:</p>
+<table>
+  <thead><tr><th>Finding</th><th>One sentence</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr><td><span class="fid">F321</span> <span class="sev a">A</span></td><td>Under the default posture, <code>python sub/hello.py</code> inside the workspace is refused as <code>'/hello.py' is outside your workspace</code>. Live, <code>claude</code> 2.1.269. It breaches <em>"Work inside the workspace proceeds"</em>.</td><td><span class="loc">mcp_server.py:936</span></td></tr>
+    <tr><td><span class="fid">F323</span> <span class="sev a">A</span></td><td>On Windows, <code>echo hi &gt; "..\stray.txt"</code> in the Bash tool is allowed and writes outside the workspace. Live, through the approver. It breaches <em>"Traversal and links cannot escape"</em>.</td><td><span class="loc">mcp_server.py:936</span></td></tr>
+    <tr><td><span class="fid">F322</span> <span class="sev b">B</span></td><td>On Codex, "Workspace only" decides a command by its working directory, so network is decided by cwd, and the same posture answers a URL oppositely on the two runners. <strong>Read, not run</strong>: Codex is undrivable.</td><td><span class="loc">codex_appserver.py:280-283</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ============================== 4 ============================== -->
+<h2 id="s4"><span class="num">4</span>What was specced: <code>a-url-is-not-a-path</code></h2>
+
+<dl class="kv">
+  <dt>Closes</dt><dd><code>F300</code>, <code>F312</code>, <code>F321</code>, <code>F323</code>, all severity A</dd>
+  <dt>Verdicts</dt><dd><code>DECISIONS.md</code> F312 option C (<code>:630-656</code>); F300 narrowed (<code>:694</code>, 1d). <code>DIRECTION.md</code> 2026-09-11 position 2.</dd>
+  <dt>Deltas</dt><dd><code>agent-run-sandboxing</code>: 3 ADDED requirements, 19 scenarios. <code>agent-capability-plane</code>: 1 MODIFIED, the <code>F300</code> clause only, with the <code>F301</code> clause verbatim.</dd>
+  <dt>Validate</dt><dd><code>openspec validate --strict a-url-is-not-a-path</code> passes, re-run 11:17 today</dd>
+</dl>
+
+<h3>The problem</h3>
+<p>
+  Under "Workspace only", the posture every ordinary Claude run gets by default, the approver reads
+  a shell command with one regex, <code>_ABSOLUTE_PATH_RE</code> (<code>mcp_server.py:936</code>).
+  The regex does not know where a word starts. It opens a candidate at any <code>/</code>, and at
+  any letter followed by <code>:/</code>. So it refuses the request the Hub's own notice tells a
+  run to make (<code>'/api/v1/…' is outside your workspace</code>, <code>F300</code>). It refuses
+  every URL for a filesystem reason, because the <code>s:</code> of <code>https:</code> reads as a
+  drive letter (<code>F312</code>). It refuses the workspace's own subdirectories
+  (<code>F321</code>). And because it knows <code>\</code> only after a drive letter, it lets a
+  quoted Windows traversal out (<code>F323</code>).
+</p>
+
+<h3>The argument</h3>
+<p>
+  <strong>A fix that removes only URLs cannot fire.</strong> <code>F300</code>'s request needs
+  <code>-H "Content-Type: application/json"</code>, and the regex refuses <code>/json</code>. So
+  the change must decide where in a word a path may begin. But the regex's looseness is also
+  what refuses five real escapes today, <em>by accident</em>: <code>&gt; ../x</code>,
+  <code>tee ../x</code>, <code>cp … ../../x</code>, <code>&gt; ~/x</code>,
+  <code>&gt; "$HOME/x"</code>. A plain word-anchored regex would allow all five with the suite
+  still green. So <code>_decide</code> is taught to read a command <em>as the shell that runs it
+  will</em>: a lexer in the tool's dialect (<code>Bash</code>, <code>PowerShell</code>, or both
+  when the tool is unknown), then words judged by what they are at their start. A URL with a
+  scheme is a network address. It is allowed only if it is the run's own <code>HUB_URL</code>, and
+  refused otherwise with a reason that names network access, not the filesystem, and points at
+  <code>ask_user</code>. A run-time expansion into a path is refused as uncheckable. Absolute and
+  plain relative paths are resolved against the workspace. Anything else with a separator falls
+  back to today's reading, as a backstop. The change claims nothing about containing egress:
+  <code>curl example.com</code>, <code>pip install</code>, and any <code>WebFetch</code> stay
+  allowed. It says that, in the reason text and in the non-goals.
+</p>
+
+<h3>What each round changed</h3>
+<table>
+  <thead><tr><th>Round</th><th>What it found</th><th>What it changed</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>R1</strong></td>
+      <td>
+        <code>F321</code>, live. The URL-only fix cannot fire (<code>/json</code>). <code>F301</code>'s
+        <code>python -c</code> is refused today, contrary to <code>DECISIONS.md</code> 1c (decision
+        5). <code>WebFetch</code> is unrestricted. A refusal reason over 1,000 characters is answered
+        422 and never recorded. A NUL byte makes the approver raise on POSIX.
+      </td>
+      <td>
+        Wrote the proposal: a word reader with six ordered rules and today's regex kept as a
+        per-word backstop. Prototyped over 56 rows, 16 of which move. One widening (D3), and
+        <code>F321</code> folded in.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>R2</strong></td>
+      <td>
+        <strong>R1's reader let through sixteen commands that today refuses</strong>, and
+        <strong>five of them wrote outside the workspace, run in Git Bash on this machine</strong>.
+        R1 split words at quotes, where a shell joins them (<code>'.'./x</code> is
+        <code>../x</code>). An own-Hub address could climb out as a path
+        (<code>"$HUB_URL/../../../x"</code>). A word could end at the workspace's name while the
+        shell carried it on (<code>../ws=y/z</code>). R1 also refused <code>F300</code>'s own
+        request under bash's <code>\"</code> escapes. <strong>Filed <code>F323</code> (A), a live
+        escape today.</strong> The reason bound did not bound: <code>repr</code> renders 200
+        characters as up to 2,002.
+      </td>
+      <td>
+        <strong>Replaced R1's word split with a dialect-aware lexer.</strong> Own-Hub words are
+        judged as the paths they spell. The expansion rule applies anywhere in a word. The bound
+        applies to the rendered quotation. Scenarios 13 → 18, none dropped. It fixed R1's count
+        slip (12 → 13) and corrected D6's argument, whose outcome was unchanged.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>R3</strong></td>
+      <td>
+        <strong>A live Windows escape that R2's reader passed.</strong> A backslash traversal glued
+        to an option falls to rule 6's backstop, which kept today's regex, and that regex knows
+        <code>\</code> only after a drive letter. <code>sort -o"..\stray.txt" notes.md</code> was
+        measured writing to the workspace's parent in Git Bash. It is an escape today too. And
+        <code>curl -o"..\out" http://&lt;hub&gt;/api</code>, refused today, <strong>was opened by
+        R2</strong>, a regression.
+      </td>
+      <td>
+        On Windows, the backstop opens a candidate at a bare <code>\</code>, symmetric with
+        <code>/</code>. This is the <strong>sole</strong> divergence from R2: all 78 canonical rows
+        agree. It adds one scenario (18 → 19), mutation check 5.16, and drive ask 5. It inherits one
+        over-refusal, <code>gcc -I"sub\include"</code>, the twin of today's <code>-I../include</code>.
+        Attacked and left standing: the lexer's dialect rules against both real shells, the
+        continuing-word rule, own-Hub-as-path, D3, and the rendered bound.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>After R3, 28 rows change answer on Windows: 21 to allowed and 7 to refused.</strong> Of
+  the seven, five are escapes today: <code>"..\stray.txt"</code> in the Bash tool; three
+  PowerShell forms (<code>..\stray.txt</code>, <code>%USERPROFILE%\x</code>,
+  <code>$env:USERPROFILE\x</code>); and R3's <code>sort -o"..\x"</code>. One is
+  <code>curl "$HUB_URL"@evil.example</code>. The last is the <code>gcc -I"sub\include"</code>
+  over-refusal R3 accepted. Every other row keeps its answer, including the sixteen R2 found in
+  R1's reader. That is the sixth consecutive outing on which the
+  round discipline found a real defect, and this time the last round caught an escape that both
+  earlier rounds missed, in the one rule R2 had grown least.
+</p>
+
+<div class="note">
+  <strong>A residual R3 recorded and did not fix.</strong> A single-quoted literal <code>$</code>
+  next to a separator is over-refused as uncheckable, for example
+  <code>curl -d '{"price":"$5/mo"}' $HUB_URL/api</code>. It is refused today too, so it is not a
+  regression. The clean fix is to mark active expansions at lex time. R3 deferred it rather than
+  ship a new lexer rule unreviewed in the last round (<code>design.md</code> D10 item 7). It is a
+  small follow-up, if you want it.
+</div>
+
+<h3>The cost</h3>
+<ul>
+  <li><strong>46 tasks in 10 sections, 0 ticked.</strong> §1 pins the table against the unmodified
+    <code>_decide</code>, with strict xfails, <em>before</em> the reader moves (5). §2 is the reader
+    (7). §3 is the wire shape (1). §4 is docs (1). §5 is <strong>16 mutation checks</strong>, one
+    per rule. §6 is the live drive (4). §7 is human-only (3). §8 is the gate (4). §9 is close-out
+    (4). §10 is the test guide (1).</li>
+  <li><strong>Python only.</strong> One file, <code>hub/hub/mcp_server.py</code>, plus
+    <code>test_permission_approver.py</code> and one docs paragraph. No migration, no API or schema
+    change, <strong>no UI bundle</strong>. <code>mcp_server.py</code> may import only stdlib and
+    fastmcp. <code>approve_tool_call</code> is untouched and keeps no return annotation.</li>
+  <li><strong>A live drive on two trees</strong>: a pre-fix worktree and the fixed tree, Haiku,
+    five asks each, including both Windows escapes. Plus the whole Hub suite, which is 15–47 minutes
+    and must be backgrounded.</li>
+  <li><strong>Leaves open, and names:</strong> <code>F301</code> (the notice), <code>F299</code>,
+    and <code>F322</code> (Codex).</li>
+</ul>
+
+<!-- ============================== 5 ============================== -->
+<h2 id="s5"><span class="num">5</span>What the night does if you approve nothing</h2>
+
+<p>
+  With no status token, the FIX window falls to <code>night-window.md</code>'s default queue. It
+  is walked here against today's tree:
+</p>
+<ol>
+  <li><strong>Unarchived changes that only need archiving: none.</strong>
+    <code>openspec/changes/</code> holds only <code>a-url-is-not-a-path</code>, at 0 of 46.</li>
+  <li><strong>Open findings, A first.</strong> The classifier reads <strong>seven open
+    A</strong>: <code>F299</code>, <code>F300</code>, <code>F301</code>, <code>F312</code>,
+    <code>F319</code>, <code>F321</code>, <code>F323</code>. Four are this change's, and an
+    unapproved change is not built. <code>F299</code>, <code>F301</code> and <code>F319</code> have
+    no proposal, so each is a note to tomorrow's day window, not night work.</li>
+  <li><strong>Then open B, and <code>APPROVED</code> rows</strong>: there are no approved rows. The
+    B candidates that need no spec are carve-out repairs such as <code>F318</code>, the
+    classifier's cross-section arm. <code>F318</code> is queued as today's <code>D-6</code>, so it
+    may already be gone by tonight.</li>
+</ol>
+<p>
+  <strong>So an unapproved night lands no feature</strong>, and both Windows escapes stay open.
+  <code>ORDER:</code> and <code>NOTHING TONIGHT</code> are both available.
+</p>
+
+<!-- ============================== 6 ============================== -->
+<h2 id="s6"><span class="num">6</span>The research, briefly</h2>
+
+<p>
+  <code>research-2026-09-12.md</code> arrived on time (started 07:10, written 07:33). It was built
+  around today's change, and two of its three candidates were fed into R1 as data.
+</p>
+<ol>
+  <li><strong>Pin the refusals the regex makes by accident before the URL change moves it.</strong>
+    Five real parent-directory escapes are refused today only because the regex matches inside a
+    word, and a token-anchored fix silently allows all five. <em>For AgentWeave:</em> absorbed.
+    R1 re-measured the table, and all five stay refused after the change, each for a true reason.
+    §1 of the tasks pins them before the reader moves.</li>
+  <li><strong>The network verdict holds on one runner.</strong> Codex's <code>decide_approval</code>
+    accepts a command by its cwd alone, and Codex 0.146.0 exposes a
+    <code>networkApprovalContext</code> AgentWeave never reads. <em>For AgentWeave:</em> the
+    change states Codex as a non-goal and filed <code>F322</code>, so <code>F312</code> is not
+    read as closed on both runners. Every Codex claim is unverified.</li>
+  <li><strong>Codex runs never receive their charter on the default transport</strong>
+    (<code>thread/start</code> and <code>turn/start</code> carry none), and the <code>exec</code>
+    fallback <em>replaces</em> Codex's own system prompt with it. <em>For AgentWeave:</em> a
+    defect-shaped claim, queued as today's <code>D-7</code> to be verified against the code and
+    filed as a finding. Codex is undrivable, so it will be read, not reproduced.</li>
+</ol>
+<p class="small">
+  The correction is decision 8: the 2026-09-11 research was late, not skipped. It is copied as
+  <code>spec-queue/research/2026-09-11-late-0922.md</code> so the record is complete. Nothing reads
+  it.
+</p>
+
+<footer class="page">
+  Written by the FILL window, 2026-09-12, iteration 6 (<code>D-5</code>). Sources:
+  <code>.claude/autonomous/2026-09-12-day-log.md</code> iterations 1–5,
+  <code>openspec/changes/a-url-is-not-a-path/</code>, <code>scripts/drive/FINDINGS.md</code>
+  (<code>F319</code>–<code>F323</code>), and <code>scripts/classify_findings.py</code>'s census as run
+  at 11:17. Approvals go in <code>spec-queue/APPROVALS.md</code>, section 2026-09-12.
+</footer>
+
+</div>
+</body>
+</html>

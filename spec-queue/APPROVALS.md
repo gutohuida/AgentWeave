@@ -16,6 +16,58 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-12
+
+Written by the FILL window, 2026-09-12, from `review/review-2026-09-12.html`. **No status token is
+supplied below — that is the operator's to write.** A row with no token is not an approval and the
+FIX window builds nothing from it.
+
+**Note for whoever reads this at 23:00:** this section is now the newest, so the 2026-09-11 section
+below is history. Its approved change is built and archived
+(`openspec/changes/archive/2026-09-12-an-agent-that-recorded-the-evidence-is-the-author`), and its
+token is not an instruction. There is deliberately **no `ORDER:` line** — absent an operator
+decision the default queue applies, and section 5 of today's page walks what that produces.
+Measured: **it produces no feature.** `openspec/changes/` holds one non-archive directory, the
+change below, at 0 of 46 tasks. Nothing is waiting to be archived. Of the seven open severity-A
+findings the classifier reads, four belong to that change and three (`F299`, `F301`, `F319`) have no
+proposal.
+
+`a-url-is-not-a-path` — F300 (A), F312 (A), F321 (A) and F323 (A). Under the default posture the
+workspace approver reads a shell command with one regex that does not know where a word starts. It
+refuses the request the Hub's own notice instructs, every URL for a filesystem reason, and the
+workspace's own subdirectories. And on Windows it lets a quoted traversal out: `F323`,
+`echo hi > "..\stray.txt"` in the Bash tool, **measured live writing outside the workspace today**.
+46 tasks, 0 ticked. **Python only** — `hub/hub/mcp_server.py` plus its tests and one docs paragraph;
+no migration, no API or schema change, **no UI bundle**, so the Python lint set is required (§8) and
+`make ui` is not. It includes a live drive on a pre-fix worktree and the fixed tree, and 16 mutation
+checks. `openspec validate --strict` passes, re-run 2026-09-12 11:17. All three rounds changed it:
+R2 replaced R1's word split with a shell lexer after measuring sixteen escapes in it (five live), and
+R3 found a live glued-backslash escape R2's reader passed (`sort -o"..\stray.txt"`) and made the
+backstop `\`-aware on Windows. The argument is section 4 of the review page.
+
+**Eight decisions on the page**, in one box near the top. Two change what tonight builds:
+
+- **Decision 2** — `F321` is folded in without a verdict of its own. Splitting it out shrinks the
+  change to `design.md` D8(a), and leaves `F300` unable to fire. **No answer means it stays folded
+  in.**
+- **Decision 3** — the one widening beyond the verdict (`curl example.com/x` becomes allowed, D3),
+  and whether `/dev/null` should pass (D10). Task 7.3 takes both into `DECISIONS.md`, after the build
+  if you prefer. **No answer means the night builds D3 as written.**
+
+Decision 1 is the row above. The other five are not work for tonight and want no row here: `F319`'s place in the order now that
+it is an A; `DECISIONS.md` 1c/1d resting on a false `python -c` measurement (re-derive `F301`'s
+notice before proposing it); `CLAUDE.md`'s migration head (`0101` → `0102`); the merge-gate note
+("compose waits for the arming commit's CI"); and the correction that the 2026-09-11 research was
+late, not skipped.
+
+**The merge gate opened this morning.** `master` is `eac213c`: `6f7e486..eac213c`, 21 commits,
+landed. Nothing from the 2026-09-08 branch is unmerged.
+
+If you approve nothing, the FIX window falls to the default queue, and both Windows escapes stay
+open. `ORDER:` and `NOTHING TONIGHT` are both available.
+
+---
+
 ## 2026-09-11
 
 Written by the FILL window, 2026-09-11, from `review/review-2026-09-11.html`. **No status token is
