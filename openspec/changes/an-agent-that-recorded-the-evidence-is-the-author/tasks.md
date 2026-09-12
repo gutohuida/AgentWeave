@@ -291,13 +291,46 @@ do not treat a green file list as evidence of anything here.
   silent review was restaffed (`div-c524b3378859`, `restaffed`) and seq 4 `under_review→approved` is
   `r7bf306p`'s. Staffing reproduced 2/2, approval 1/2. Transcripts beside the kept database in
   `profiles/drive0912p/n6-transcripts/`.
-- [ ] 5.2 Re-run it after the fix. The flow staffs the other agent, and the author's approval is
+- [x] 5.2 Re-run it after the fix. The flow staffs the other agent, and the author's approval is
   refused if attempted by hand. Record the sequence numbers, not a summary.
-- [ ] 5.3 Drive the **operator-sees-it** half: a project where the author is the only other agent.
+
+  **Done 2026-09-12 (night iteration 8), from the tables.** Fixed tree from the main checkout at
+  `cddf32b`, port 8015, profile `drive0912`, PID 17692 started 01:01:25 with no `.py` under
+  `hub/hub` or `src` newer. `proj-192ee0e59efb`, `task-88efa63d19ee`, author `r7af7a` (sorts
+  first): `ev-b6a5a19738e9` `implementation`, `actor='r7af7a'`, on unbound `run-1feb9dc376f2`;
+  seq 1–3 `pending→in_progress→completed→under_review` all `operator`; the **first and only run
+  bound to the task is `run-1d7e3883437a`, agent `r7bf7a`, initiator `autonomous`**, and
+  `run_divergences` is empty for the task — so this is firing 2's own staffing, not a restaff;
+  **seq 4 `under_review→approved`, `actor_kind='run'`, `actor_agent='r7bf7a'`,
+  `run-1d7e3883437a`.** Drive 19/19. The pre-fix tree staffed the author 2/2 on the same fixture
+  shape (5.1). **The author's approval by hand**, on 5.3's task `task-714b1ea52e2e` (evidence
+  `ev-36b8d06a09fd`, `actor='r7af7b'`): operator seq 7 `completed→under_review` with no assignee,
+  then `r7af7b` triggered unbound (`run-cee1b5540146`) called
+  `mcp__agentweave__update_task(status='approved')` on the first attempt and was answered **403**
+  *"agent 'r7af7b' recorded evidence for this task … No agent is recorded as completing it"*;
+  status stayed `under_review`, no seq 8.
+- [x] 5.3 Drive the **operator-sees-it** half: a project where the author is the only other agent.
   The firing must surface *"could not staff this step"* naming the task, and the sentence must not
   claim any agent completed it. That sentence is the whole of what the operator gets in place of the
   queue's status histogram, and it is the cost this change knowingly buys.
-- [ ] 5.4 Every real agent turn binds `claude-haiku-4-5`. Never leave a job enabled.
+
+  **Done 2026-09-12 (night iteration 8).** `proj-99af62baca17`, `task-714b1ea52e2e`, only `r7af7b`
+  bound. Firing 2 answered **409** *"could not staff this step: no agent is free to take it. Every
+  agent on the roster is either running a turn, already holding active work, or has worked on this
+  task and so may not review it."* — the same sentence as the loop's `stall_reason`. It does not
+  say *completed*. **The sentence names "this task", not its id; the id reaches the operator on
+  `review_unstaffed` (`evt-c52509784f8b`, `task_id: task-714b1ea52e2e`, same reason)** — the
+  split `a-review-a-flow-cannot-staff-is-named` shipped, not a gap here. By hand on the same task:
+  the **S3.5** dispatch (`POST /agent/trigger`, `agent=r7af7b`, `review_task_id`) → **403**, no run,
+  no queue entry, no new worktree; the **S3.4** wedge (`PATCH assignee=r7af7b,
+  status=under_review`) → **403**, status `completed` and assignee `None` afterwards, no
+  transition. Drive 13/13.
+- [x] 5.4 Every real agent turn binds `claude-haiku-4-5`. Never leave a job enabled.
+
+  **Held 2026-09-12 (night iteration 8).** All four runs in `drive0912` joined to their runner:
+  `claude-haiku-4-5-20251001`. `GET /jobs` is `[]` on both projects; `ai_jobs` holds both jobs
+  `enabled=0` with `archived_at` set; `apscheduler_jobs` is empty. (5.1's `drive0912p` was checked
+  the same way in iteration 7.)
 
 ## 6. The gate
 
