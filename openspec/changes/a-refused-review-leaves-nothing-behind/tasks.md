@@ -17,6 +17,12 @@ against the **unmodified** tree. It marks every assertion that must move with
 remove those markers as the code lands. A strict xfail that starts passing early is a failure: a leg
 may not change answer before its mechanism exists.
 
+**An xfail marks a whole test, never one assertion (R2).** A test that asserts what holds today and
+what must move, under one strict xfail, stops at the first failing assertion, so whatever follows it
+is never run and whatever precedes it is pinned by nothing. Where a task below says a part *passes
+today* and a part is *xfail*, write **two tests**: a pin that asserts only what holds today, and an
+xfail that asserts only what must move.
+
 ## 1. Pin the defect before the fix
 
 All in a new `hub/tests/test_a_refused_review_leaves_nothing_behind.py`. The module docstring cites
@@ -45,8 +51,10 @@ that must fail it.
   Assert all of these. The snapshot is unchanged. There is no `Run`. The entry is `queued` with
   `delivery_attempts == 1`. Its `waiting_reason` equals `ScheduleResult.waiting_reason` and contains
   the refusal's distinguishing words (*"not a git repository"*, *"is not present in this
-  repository"*, *"refusing existing path"*). `ScheduleResult.refusal.status_code == 409`. **Only
-  the snapshot assertion is xfail(§2).** The rest pass today (measured, `design.md` D0).
+  repository"*, *"refusing existing path"*). `ScheduleResult.refusal.status_code == 409`. Two tests
+  per leg: `…_records_the_refusal` holds everything but the snapshot and passes today (measured,
+  `design.md` D0); `…_leaves_the_task_as_it_was` holds the snapshot and the absence of a `Run`, and
+  is xfail(§2).
 - [ ] 1.3 **B1 through the route.** `POST /agent/trigger` names the reviewer and `review_task_id`.
   Assert all of these:
   - The answer is `409`, and its `detail` names the commit.
@@ -56,6 +64,9 @@ that must fail it.
 
   Then `POST` again, naming a **different** reviewer. Its `detail` must not contain
   `"already under review"` (xfail §2). It may still be refused for the commit.
+
+  As two tests: the `409`, its `detail` and the withdrawn entry with its event are a pin; the
+  snapshot and the second reviewer's answer are xfail(§2).
 - [ ] 1.4 **Leg A, the timing gap, through the route.**
   1. Register agent X with a runner.
   2. Insert a `Run(status="running")` row for X.
@@ -69,10 +80,14 @@ that must fail it.
   contains *"recorded evidence for this task"*. After the last pass the entry is `withdrawn`, its
   `abandoned_reason` contains the guard's sentence, and a `queue_entry_abandoned` row exists. The
   §3.4 guard is **not** patched. It is what refuses.
+
+  As two tests sharing one fixture: the `waiting_reason` after each pass, the withdrawal and the
+  event are a pin; the snapshot after each pass is xfail(§2).
 - [ ] 1.5 **Leg T, a deferral after the staging.** Delete `HUB_URL` from the environment and make
   `agent_trigger.bound_address.get` return `None`. The default `ensure_review_checkout` stub is
   fine. Queue the review and call `schedule_agent` once. The snapshot is unchanged (xfail §2). The
-  entry is `queued` with `delivery_attempts == 0`. `terminal_failure is False`, and `refusal is None`.
+  entry is `queued` with `delivery_attempts == 0`. `terminal_failure is False`, and `refusal is None`
+  (a pin: these pass today).
 - [ ] 1.6 **F320 at the scheduler**, with `trigger_agent_directly` patched (as
   `test_a_delivery_attempt_means_a_delivery.py:29` does). The mock records the entry ids it is
   called with. **It raises `RuntimeError("test guard")` on any call past the number the case
@@ -92,13 +107,34 @@ that must fail it.
   - (e) H alone at `LIMIT - 1`, refused. The result's `waiting_reason` is the refusal and
     `terminal_failure` is `True`. This passes today, and it is a pin: it keeps §3's result rule from
     regressing the ordinary case.
+  - (f) **The rider (R2, `design.md` D4).** Set the project's `turn_delivery_cap` to 2. In one
+    conversation, in this order: H1, a review entry at `LIMIT - 1`; M, a plain message at 0; H6, a
+    review entry at `LIMIT - 1`. The mock refuses every call, request-level, and allows three. Assert
+    only that H1 is `withdrawn` and M is `queued` at **1** attempt. This passes today (one call,
+    `[H1, M]`; H6 is not reached and stays at `LIMIT - 1`), and it is a pin. With the loop H6 is
+    reached and withdrawn too, which (d) already covers, so (f) does not assert H6. Against R1's
+    loop without the once-per-pass rule (f) fails: R2 measured M carried
+    by `[H1, M]`, `[M, H6]` and `[M]` and `withdrawn` at 3 in one pass.
 - [ ] 1.7 **F320 through the route.** Seed H as in 1.6. Then `POST /agent/trigger` a plain message
   to the same agent, which opens a new conversation. The mock refuses H and returns a started
   response for the route's own entry. The answer reports that conversation as started, with
   `status == "running"` (xfail §3). Today it answers `queued`, *"queued behind other input"*.
-- [ ] 1.8 **The one-caller pin.** Scan `hub/hub/**/*.py` for `trigger_agent_directly(` outside its
-  own `def`. The only file must be `turn_scheduler.py`. The docstring says why: `design.md` D2(e),
-  where the rollback lives in the one caller. This passes today.
+- [ ] 1.8 **The one-caller pin.** Parse every `hub/hub/**/*.py` with `ast` and collect each `Name`
+  node, `Attribute` node and import `alias` spelled `trigger_agent_directly`. That covers a call, a
+  module-qualified call, an import under another name, and a reference passed as a callable, and it
+  ignores the docstrings and comments that name the function. Outside `agent_trigger.py` (the `def`
+  itself), the only file may be `turn_scheduler.py`. A text search for `trigger_agent_directly(`
+  misses `partial(trigger_agent_directly, …)` and anything imported `as` another name. The test's
+  docstring says why: `design.md` D2(e), where the rollback lives in the one caller. This passes
+  today.
+- [ ] 1.8a **An open divergence is not closed by a refused review (R2, `design.md` D8).** Give the
+  B1 task an open `RunDivergence` row before the dispatch (a completed task can carry one: a run bound
+  to it that ends without moving it opens one, and R2 read no status filter on that in
+  `run_divergence.py`; read, not measured). After the refused
+  `schedule_agent`, the row's `resolved_at` is still `NULL` and no `run_divergence_resolved`
+  `EventLog` row exists (xfail §2: today the committed staging closes it). Capture
+  `sse_manager.broadcast` and record in the docstring, without asserting it, that the broadcast
+  still escapes. That is D8's accepted residual, and §8.5 files it.
 - [ ] 1.9 Run §1 against the unmodified tree. Every xfail must xfail and every pin must pass.
   **Any other outcome means the test is wrong, not the code.** Stop, re-measure with
   `testbed/scratch/r1f319/test_zz_r1f319_scratch.py`, and record what differed here. Commit §1 alone,
@@ -142,6 +178,12 @@ that must fail it.
   `schedule_agent` keeps the lock and the session and loops. It stops unless `gave_up` is
   non-empty. Bound the loop at `len(initial queued entries) + 1` attempts, counted once when the
   pass begins, and state D4's argument that the bound is never reached in the comment beside it.
+- [ ] 3.1a **Count each entry at most once per pass (R2, `design.md` D4).** `schedule_agent` holds a
+  set of the entry ids counted in this pass and hands it to every attempt. The counting loop skips
+  an entry already in the set: it still gets the refusal's words as its `waiting_reason`, and it is
+  neither counted nor given up on again. So an attempt can give up only on entries it counted, and
+  one pass raises an entry's `delivery_attempts` by at most one, which is what a single pass does
+  today. The comment names F114 and the measured rider case. 1.6(f) must still pass.
 - [ ] 3.2 The result rule of D5, keyed on `nothing_queued`, **not** on the string
   `"queue is empty"`. Where the last attempt has `nothing_queued` and an earlier attempt gave up,
   return that earlier attempt's result.
@@ -161,20 +203,23 @@ that must fail it.
 No existing test fails for F319's absence (`design.md` D6), so each mechanism is mutated once. A
 named test must fail. Record which test failed, then restore.
 
-- [ ] 4.1 Delete the rollback line. 1.2, 1.3, 1.4 and 1.5 must fail on the snapshot.
+- [ ] 4.1 Delete the rollback line. The snapshot tests of 1.2, 1.3, 1.4 and 1.5 must fail, and so
+  must 1.8a.
 - [ ] 4.2 Move the rollback **below** the first `await db.commit()` of the branch. 1.2 must fail,
   because the first commit lands the staging.
 - [ ] 4.3 Keep the rollback, and do the `waiting_reason` write **before** it. The `waiting_reason`
   assertions of 1.2 and 1.4 must fail, because the write is rolled back with the staging.
-- [ ] 4.4 Keep the rollback and drop the re-read. These five tests must fail with
-  `MissingGreenlet`:
+- [ ] 4.4 Keep the rollback and drop the re-read of `entries` (keep the `selected` re-read and the
+  captured `conversation_id`, so the mutation isolates the one row set only the workspace branch
+  reads). These five tests must fail with `MissingGreenlet`:
   - `test_a_blocked_agent_workspace_holds_the_operators_message`
   - `test_a_binding_inherited_from_the_thread_spends_the_heads_attempts`
   - `test_a_second_unbound_conversation_does_not_make_the_head_expendable`
   - `test_a_task_bound_entry_waiting_elsewhere_spends_the_heads_attempts`
   - `test_an_entry_in_the_refused_batch_naming_a_vanished_task_does_not_count`
 
-  R1 measured exactly these five (D3).
+  R1 measured exactly these five (D3), with a rollback that re-read nothing. R2 did not run this
+  narrower mutation. If one of the five passes under it, record which, and why, in `design.md` D3.
 - [ ] 4.5 Make the loop continue after **any** non-transient refusal, not only after giving up.
   1.6(b) must fail, because B is counted more than once.
 - [ ] 4.6 Also continue after a transient refusal. 1.6(c) must fail, on its guard `RuntimeError`.
@@ -183,6 +228,8 @@ named test must fail. Record which test failed, then restore.
   `"queue is empty"`.
 - [ ] 4.9 With the loop in place, restore §3.4's old expectation `("queued", 0)`. That test must
   fail. This confirms that D6's change is caused by the loop and by nothing else.
+- [ ] 4.10 Remove 3.1a's once-per-pass guard, keeping the loop. 1.6(f) must fail, with M
+  `withdrawn` at 3 (R2 measured exactly this against R1's prototype).
 
 ## 5. Drive it — the tests are an argument, and a drive is the product
 
@@ -241,9 +288,9 @@ the process. Export `AW_HUB` and `AW_KEY` before every harness run.
   the waiting input's reason, then as a notice that the input was given up on. This change keeps
   that and adds nothing. Decide whether it is enough, and write the answer down, or leave it open in
   writing.
-- [ ] 6.3 **`design.md` D7.** Confirm or overturn the reading that *"whichever path"* does not
-  reach a flow's own committed staging. That is the operator's to decide. If the review page does
-  not already carry it, put it in `decisions_for_user`.
+- [ ] 6.3 **The operator question at the top of `proposal.md` (F327, `design.md` D7).** Its answer
+  must be written in `DECISIONS.md` by the operator before approval. If it is not there, this change
+  is not approved, and nothing here decides it on the operator's behalf.
 
 ## 7. The gate
 
@@ -263,7 +310,12 @@ the process. Export `AW_HUB` and `AW_KEY` before every harness run.
   leg F.
 - [ ] 8.3 F326 stays **open**. Say so in the close-out commit, so nobody reads this change as
   closing it.
-- [ ] 8.4 `openspec validate --strict a-refused-review-leaves-nothing-behind`, then archive with the
+- [ ] 8.4 F327 stays **open** unless the operator's answer brought it into this change. Say which in
+  the close-out commit.
+- [ ] 8.5 File the escaped `run_divergence_resolved` broadcast (`design.md` D8, 1.8a) as a finding,
+  severity D, with 1.8a as its reproduction. It exists only once §2 has landed, which is why it is
+  filed here and not earlier.
+- [ ] 8.6 `openspec validate --strict a-refused-review-leaves-nothing-behind`, then archive with the
   `openspec-archive-change` skill. After syncing, confirm that the main requirement *"Dispatching a
   review staffs the task, whichever path dispatched it"* is **byte-identical** to before. This
   change adds requirements beside it and does not modify it (`design.md` D9).

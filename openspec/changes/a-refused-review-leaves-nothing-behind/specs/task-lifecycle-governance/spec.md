@@ -26,11 +26,6 @@ Discarding the staffing SHALL NOT discard the explanation of why it was discarde
 Each further attempt to deliver the same refused request SHALL leave the task as it was. A refusal
 repeated on every attempt SHALL NOT accumulate a record of the task entering review.
 
-This requirement is stated over the staffing a dispatch performs. A holder and status that a flow
-recorded when it selected the review, in a commit of its own before any turn was dispatched, are
-the flow's record of its selection. A refused dispatch leaves them as that commit left them, and
-the flow names the review nobody is doing (`agent-flows`).
-
 #### Scenario: A review whose commit is gone from the repository is refused and changes nothing
 
 - **WHEN** the operator dispatches a review of a completed task whose evidence names a commit the

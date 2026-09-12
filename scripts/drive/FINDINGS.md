@@ -25841,6 +25841,13 @@ too. In the prototype of that change's D1, the scheduler rolls back before it re
 refusal. With that in place, every leg (B0, B1, B2, A and T) leaves the task as it was, and the
 entry keeps the refusal's sentence as its `waiting_reason`.
 
+**R2 of that change measured the reach bullet above that said "unverified either way" for the
+flow's own producers (2026-09-12).** A flow firing whose staffed review is refused on dispatch (B1,
+B2) is left `under_review`, held by the refused reviewer, with no run: F319's end state through a
+different door, and not reached by the rollback, because the firing committed its staging before
+the dispatch began. Filed separately as **F327**, measured in
+`testbed/scratch/r2f319/test_zz_r2f319_flow.py`.
+
 ---
 
 ## F320 (B) — the scheduling pass that abandons a refused head returns, and the entry queued behind it is never delivered
@@ -26238,5 +26245,61 @@ any reason"*, and the ledger should record where that is not true.
 **A possible repair, not proposed.** Move the address check and `build_command` above the review
 block, since neither depends on the review checkout (inferred). Or release the review checkout on
 a non-transient refusal raised after provisioning.
+
+---
+
+## F327 (B) — a review a flow staffed and whose dispatch is then refused leaves the flow's reviewer holding the task, reported as in flight until the input is given up
+
+**Status:** open. Filed 2026-09-12 by R2 of `a-refused-review-leaves-nothing-behind`, measured at unit level on the unmodified tree at `75b11ac`. That change does not fix it: covering it needs a decision its verdict does not make, raised as the operator question at the top of its `proposal.md`.
+
+**The claim.** F319 is the dispatch's own staging committed by the scheduler. This is the same end
+state reached by a different door. A flow firing stages its review **before** the dispatch, in the
+commit that queues the review turn (`scheduler.py:2794`, committed at `:2891`), as `agent-flows`
+*"A dispatched review leaves the reviewable pool"* requires. When that turn's dispatch is then
+refused, nothing undoes the firing's staging, because it was never the dispatch's. The task is left
+`under_review`, held by a reviewer that never ran. `task-lifecycle-governance` *"Dispatching a
+review staffs the task, whichever path dispatched it"* says staffing SHALL hold *"for every path"*
+and that *"a request that is never delivered leaves no task held by a reviewer that never ran"*; the
+two main specs already disagree, and this is where.
+
+**Measured.** `testbed/scratch/r2f319/test_zz_r2f319_flow.py`, copied into `hub/tests`, run once
+and deleted. A flow (`_flow` from `test_flow_fires_a_review_turn.py`) with one completed task
+authored by `builder`, fired once through `JobScheduler._fire_job_internal`; the ladder staffs
+`critic`. Two legs, the real `ensure_review_checkout`:
+
+| step | B1: evidence names a commit the repository lacks | B2: `.agentweave/reviews/critic` is a plain directory |
+|---|---|---|
+| before | `('completed', None, 1 transition)` | same |
+| firing 1 | task `('under_review', 'critic', 2)`; entry `queued`, 1 attempt, `waiting_reason` the refusal; `JobRun` **failed** with the refusal; no run | same, with the checkout sentence |
+| `decide_firing` | **`in_flight`**, `stall_reason` empty, `_cannot_staff` = `(task-1, critic)` | same |
+| two more `schedule_agent("critic")` | entry `withdrawn` at 3, `queue_entry_abandoned`; task unchanged | same |
+| `decide_firing` | `stalled`: *"critic is named on task-1 … and is not reviewing it … Ask critic again, review it yourself, or send it back with revision_needed."* | same |
+| firing 2 | `JobRun` skipped with that sentence, `review_unstaffed` emitted; task unchanged | same |
+| operator dispatches `other` | **`409` "Task task-1 is already under review by 'critic' … or let the review in flight finish."** | same |
+| operator dispatches `critic` again | `409`, the commit sentence; task unchanged | — |
+
+**What the operator is told, and when.** Once at once: the job card's failed run carries the
+refusal. Then the flow calls the task **in flight** for as long as the refused entry is still
+queued, which is until two more passes are made for that reviewer, and on a quiet project nothing
+makes them (F320's *"There is no tick"*). Only after the entry is given up does the firing name the
+wedge. Throughout, sending a different reviewer is refused with *"let the review in flight
+finish"*, about a review that never started — F319's D9 symptom, on the flow path.
+
+**Reach.** B1 needs a commit pruned after the evidence named it; B2 an obstructed checkout path;
+both are repository states `decide_firing`'s up-front check (`commit_for_task_review`, a database
+read) does not ask. The transient refusal (the Hub's address unknown) also lands here, but a
+deferral that clears starts the review the flow staffed, which is correct. The entry guard (leg A)
+needs the ladder and the dispatch to drift. `_fire_additional_selection` (`scheduler.py:3156`) and a
+divergence restaff (`run_divergence.py:458`, committed before `schedule_agent` at `:840`) stage the
+same way before the dispatch; they are read, not measured.
+
+**Why B and not A.** Unlike F319 the operator is told at the moment of the refusal (the failed job
+run) and, after the input is given up, told again in words that name the remedy. It is severity B
+because in between the flow says the review is in flight and refuses every other reviewer.
+
+**Shapes of a repair, not proposed:** stage the flow's review in the dispatch instead of before it,
+keeping it out of the reviewable pool by the pending entry rather than by the status (a change to
+`agent-flows`); or return a flow-staged task to where it was on a refused dispatch, which needs an
+edge the lifecycle does not declare and leaves two transition rows.
 
 ---

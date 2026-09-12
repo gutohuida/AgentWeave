@@ -91,10 +91,16 @@ F320.
 
 ## What this does not show
 
-- **Flows.** A flow records its reviewer when it selects the review, before any turn is sent. If
-  that turn is then refused, the task stays as the flow left it. The flow names *"a review nobody is
-  doing"* on its next firing. This change does not alter that (`design.md` D7), and the operator is
-  asked to confirm the reading (task 6.3).
+- **Flows (F327, open).** A flow records its reviewer when it selects the review, before any turn
+  is sent. If that turn is then refused, the task stays **Under Review** with the flow's reviewer on
+  it, which is F319's end state. Three things tell you:
+  1. The job's run fails at once, with the refusal's words.
+  2. The flow then calls the task *in flight* for as long as the refused input is still queued.
+  3. It names *"a review nobody is doing"* only after the input is given up.
+
+  Meanwhile, sending another reviewer is refused with *"let the review in flight finish"*. This
+  change does not alter any of that unless the operator's answer to the question at the top of
+  `proposal.md` brings it in (task 6.3). R2 measured it at unit level (`design.md` D7).
 - **The review checkout directory.** A refusal raised *after* the reviewer's checkout was prepared
   can leave `.agentweave/reviews/<agent>` behind. That is F326, which is open and not fixed here.
 - **A faster answer for check 3.** The request is still answered *queued* at first. Nothing about

@@ -1,3 +1,44 @@
+> ## OPERATOR QUESTION (R2): does *"whichever path"* reach a review a flow staffed before it dispatched it?
+>
+> **Answer it in `DECISIONS.md` before approving this change.** Tasks §6.3 blocks on it.
+>
+> **What R2 measured** (F327, `design.md` D7). Suppose a flow staffs a review and its dispatch is
+> then refused (a pruned commit, or an obstructed checkout). The task is left `under_review`, held
+> by the refused reviewer, with no run. That is F319's end state. The operator is told once, at
+> the refusal: the job run fails with the refusal's words. After that the flow reports the task
+> **in flight** until the queued input is given up. That takes two more passes for that reviewer,
+> and on a quiet project nothing makes them. Only then does it name *"a review nobody is doing"*.
+> Throughout, sending a different reviewer is refused with *"… or let the review in flight
+> finish"*.
+>
+> **Why this change cannot reach it.** The rollback discards what the dispatch staged. The flow
+> staged its review earlier, in a commit of its own. The two main specs also disagree on exactly
+> this point:
+> - `agent-flows` requires the firing to stage *"in the same commit that queues the review turn"*.
+> - `task-lifecycle-governance` says, for every path, that staffing *"SHALL NOT be performed when
+>   the request to review is recorded … so that a request that is never delivered leaves no task
+>   held by a reviewer that never ran"*.
+>
+> **The options:**
+> - **(a) Ship tonight as scoped. R2 recommends this.** This change fixes the dispatch's own
+>   staging on the route and the scheduler (F319 as measured), and F320. F327 stays open and is the
+>   next spec loop. R1's claim that the flow's state already meets the verdict is withdrawn. The
+>   delta now says nothing about flows, so it contradicts neither main spec.
+> - **(b) Widen this change.** The flow stops staging before the dispatch. The dispatch stages the
+>   review instead, as it already does for a review entry, and the pool exclusion reads the pending
+>   entry (`tasks_with_a_turn_pending_or_running`) instead of the status. That modifies
+>   `agent-flows` and the firing code, and no round has examined it. It cannot be built tonight
+>   without breaking the round discipline.
+> - **(c) Compensate on the flow path.** A refused dispatch of a flow-staffed review returns the task
+>   to `completed`. That needs an `under_review -> completed` edge the lifecycle does not declare,
+>   and it leaves two transition rows, which the verdict's *"no … transition row survives"* forbids.
+> - **(d) Declare the flow's state acceptable (R1's reading).** Then the main requirement's
+>   *"every path"* and *"never delivered"* clauses must be MODIFIED to exempt flows, and the
+>   in-flight window and the *"let the review in flight finish"* refusal stay.
+>
+> **Why (a).** It is the only option that ships tonight without skipping rounds. It records the
+> verdict's intent as an open finding, F327, instead of defining it away.
+
 > **File isolation from `a-url-is-not-a-path` (approved for the same night).** This change does
 > **not** touch `hub/hub/mcp_server.py`, `hub/tests/test_permission_approver.py` or
 > `docs/reference/permission-postures.md`. Its code is `hub/hub/turn_scheduler.py` and one comment in
@@ -78,6 +119,62 @@ under `testbed/scratch/r1f319/`. Each was copied into `hub/tests`, run once and 
   whose savepoint opened the transaction **commits** on release. Another session saw the write, and
   the outer rollback did not undo it (D2).
 
+### What R2 found, and what it changed
+
+R2 started again from the code and from the verdict, measured on `75b11ac`. The scratch is in
+`testbed/scratch/r2f319/`, and `design.md` D12 records the re-derivation. **R2 found two defects in
+R1's argument, and in both the facts were right.**
+
+- **R1 declared a flow's staged review compliant, and wrote that into the delta.** The added
+  requirement's last paragraph said a refused dispatch leaves a flow's staging *"as that commit
+  left them"*, and that the flow names the review. R2 drove the flow path (F327). The staging does
+  survive, which R1 said. But the flow calls the task *in flight* until the input is given up, and
+  a different reviewer is refused *"let the review in flight finish"*. And the main requirement
+  that the delta sits beside says staffing holds *"for every path"*, and that *"a request that is
+  never delivered leaves no task held by a reviewer that never ran"*. So the delta added a
+  paragraph that contradicts a main requirement left standing. **R2 removed the paragraph, filed
+  F327, and raised the operator question above.**
+- **R1's reason for stopping the loop is F114, and the loop reaches F114 anyway.** R1 went on only
+  after giving up, so that one pass could not spend an input's three attempts. But input rides in
+  another input's turn. **Measured** against R1's own prototype, with a delivery cap of 2: a plain
+  message at 0 attempts rode in `[H1, M]`, then in `[M, H6]`, then went alone as `[M]`. It was
+  counted three times and withdrawn, all in one pass. The added requirement's first line said the
+  rule held *"so that no input's allowance is spent on the way"*, which is not true. **R2 added one
+  rule.** A pass counts an input at most once, however many of its attempts carry it, which is
+  what a pass that does not go on already does. The input is still attempted each time. Measured
+  with that rule, M ends at 1 attempt in every shape (D4, tasks 3.1a and 1.6(f), mutation 4.10, and
+  one new scenario).
+
+**What R2 changed in the plan.**
+- An xfail marks a whole test and never one assertion, so each leg that mixed a pin with an xfail
+  is now two tests.
+- 1.8 scans with `ast`, because a text search misses an aliased import or a `partial`.
+- 1.8a pins that a refused review does not close an open divergence.
+- 4.4 is narrowed to one re-read.
+- 6.3 now blocks approval on the operator question.
+
+**What R2 attacked, and what held.** Each item says whether it was run or read.
+- **Nothing escapes the rollback except one broadcast.**
+  - Read: no commit inside the dispatch before a refusal.
+  - Read: no `TriggerAgentError` after the `Run` commit at `agent_trigger.py:1235`.
+  - Read: an unexpected exception already discards the staging, because the session closes without
+    a commit.
+  - The one exception is `run_divergence_resolved`. Its reach is read: a divergence opens on a run
+    that ends without moving its task, whatever the task's status. It surfaces as a live activity
+    line (`eventSummary.ts:142`) saying a divergence was resolved when it is still open. That is an
+    accepted residual (D8), which task 1.8a pins and task 8.5 files.
+- **D5, run.** The route, queued behind a head it gives up on, answers `queued` today and `running`
+  with the loop. A job firing's run is `failed` today with the head's reason, and `in_progress` with
+  the loop.
+- **Leg F's premise, run.** `/continue` counts an attempt for a request-level refusal: 1, 2, then
+  withdrawn at 3.
+- **The loop ends, read.** A transient refusal stops the pass. Every repetition follows a withdrawal,
+  so the loop cannot busy-loop.
+- **The re-drain alternative, inferred.** It deadlocks, because `asyncio.Lock` is not reentrant.
+- **The one caller, read.** `trigger_agent_directly` has one caller.
+- **D9, read.** The delta stays ADDED, and with the flow paragraph removed it contradicts no main
+  scenario.
+
 ## What Changes
 
 - **`turn_scheduler.schedule_agent`, refusal branch.** On `TriggerAgentError`, first
@@ -92,6 +189,10 @@ under `testbed/scratch/r1f319/`. Each was copied into `hub/tests`, run once and 
   refusal, an attempt counted without being given up on, or an early return. Each repetition follows
   at least one entry leaving the queue, and an entry that arrives meanwhile has no attempts, so it
   cannot be given up on in its first attempt. That bounds the loop (D4).
+- **One pass counts an input at most once (R2).** Input that rode in the turn that was given up
+  on can be carried again by the next attempt. It is attempted again, and its count is not raised
+  again in that pass. Without this, one pass can give up on input no pass had refused before (D4,
+  measured).
 - **What the pass reports** is the last attempt's result, except where that attempt found the queue
   empty. Then it reports the attempt that emptied it (D5).
 - **Comments that are false today are corrected**: `agent_trigger.py:788-793` (a refusal abandons
@@ -107,16 +208,18 @@ under `testbed/scratch/r1f319/`. Each was copied into `hub/tests`, run once and 
   `DIRECTION.md` 2026-09-13 says must stand. Nothing in `task_transition_service.py` changes. Leg A
   is closed because the guard's refusal now discards the assignee that
   `enter_selected_task` wrote so the guard could judge it.
-- **The flow's own staging.** `_do_fire_job` (`scheduler.py:2794`, committed at `:2891`),
-  `_fire_additional_selection` (`:3156`) and a divergence restaff (`run_divergence.py:458`) record
-  their reviewer **before** the dispatch, in a commit of their own, as their design requires (F45).
-  A refused dispatch leaves those tasks exactly as that commit left them. That is *"as it was before
-  the dispatch"*. Undoing them would need a reverse transition the lifecycle does not declare. And
-  `agent-flows` already names a review nobody is doing (D7). **R2 should attack this reading of
-  "whichever path".**
+- **The flow's own staging, pending the operator question above.** `_do_fire_job`
+  (`scheduler.py:2794`, committed at `:2891`), `_fire_additional_selection` (`:3156`) and a
+  divergence restaff (`run_divergence.py:458`) record their reviewer **before** the dispatch, in a
+  commit of their own, as `agent-flows` requires. The rollback cannot reach that commit. R2
+  measured what it leaves: F327, the same end state as F319, reported late. Under option (a) it is
+  **not** fixed here, and this proposal does **not** claim that it meets the verdict (D7).
 - **Timers.** No tick is introduced. F320 is closed inside the pass that gives up.
 - **The review checkout left by a refusal raised after provisioning.** Measured: leg T leaves
   `.agentweave/reviews/<reviewer>` registered. Filed as **F326 (D)**, and out of this verdict (D8).
+- **The `run_divergence_resolved` broadcast a refused staging already sent (R2).** The rollback
+  keeps the divergence open, which is the truth. The live activity line that announced it resolved
+  cannot be recalled. This is accepted, pinned by task 1.8a, and filed at close-out by §8.5 (D8).
 - **Who a successful review entry is attributed to.** `enter_selected_task` records
   `completed -> under_review` as `operator()`, whoever dispatched. After this change that row exists
   only when the review starts. Its attribution is unchanged.
@@ -132,7 +235,7 @@ under `testbed/scratch/r1f319/`. Each was copied into `hub/tests`, run once and 
   *"A refused review leaves no checkout behind … for any reason"*, which R1 measured false for
   refusals raised after provisioning (F326). D9 explains the choice.
 - `agent-conversation-workspace`: ADDED *"Giving up on queued input goes on to the input behind
-  it"* (6 scenarios).
+  it"* (7 scenarios, one of them R2's *"Going on never counts one input twice in a pass"*).
 
 ## Impact
 
@@ -146,4 +249,5 @@ under `testbed/scratch/r1f319/`. Each was copied into `hub/tests`, run once and 
 - **Harness:** `scripts/drive/t_d1_0912_f319_reach.py` gains a fixed-tree mode, and an F320 leg that
   uses only operator routes.
 - **No** migration, no API or schema change, no UI change.
-- **Findings:** closes F319 and F320 when built and driven. Files F326 (D), which stays open.
+- **Findings:** closes F319 and F320 when built and driven. F326 (D, R1) and F327 (B, R2) stay
+  open, F327 unless the operator's answer brings it in.

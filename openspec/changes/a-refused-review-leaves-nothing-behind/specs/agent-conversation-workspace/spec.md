@@ -2,7 +2,7 @@
 
 ### Requirement: Giving up on queued input goes on to the input behind it
 
-Where an attempt to start an agent's turn ends by giving up on the input that turn was built from, the system SHALL go on, in the same pass and without waiting for any other event, to attempt the input queued behind it, and SHALL go on only after giving up, so that no input's allowance is spent on the way.
+Where an attempt to start an agent's turn ends by giving up on the input that turn was built from, the system SHALL go on, in the same pass and without waiting for any other event, to attempt the input queued behind it, SHALL go on only after giving up, and SHALL count a delivery attempt against any one input at most once in a pass.
 
 The system gives up on refused input at a limit so that input that can never be delivered stops
 holding up the queue behind it (*"A delivery attempt is counted only where a delivery was
@@ -19,6 +19,14 @@ where the refusal prevents the agent from running at all, where a delivery attem
 the input was not given up on, and where there was nothing to attempt. Going on after any of those
 would repeat the same refusal, or would spend the allowance of input nobody gave up on. Spending
 that allowance in one pass destroys the input that the allowance exists to protect.
+
+Going on only after giving up is not, by itself, enough to protect the input behind. Input rides in
+a turn built from other input, so input that rode in the turn the system gave up on can be carried
+again by the next attempt, and by the one after that. Counted each time, one pass could give up on
+input that no pass before it had ever refused, which is the loss the allowance exists to prevent.
+So a pass SHALL count each input at most once, however many of its attempts carry it, which is
+what a pass that does not go on already does. The input is still attempted each time; only the
+count is not raised again.
 
 The pass SHALL end. Every attempt after the first follows the system giving up on input that was
 already queued when the pass began. Input that arrives during the pass has had no attempts, so it
@@ -44,6 +52,15 @@ attempt, what the pass reports SHALL be the attempt that gave up, not the empty 
 - **THEN** one delivery attempt is counted against the input behind it
 - **AND** that input remains queued
 - **AND** the pass stops
+
+#### Scenario: Going on never counts one input twice in a pass
+
+- **WHEN** input that no attempt has been counted against rides in a turn built from other input,
+  and the system gives up on that other input
+- **AND** the same pass carries the riding input again, in its next attempt, and that attempt is
+  refused too
+- **THEN** one delivery attempt in total is counted against the riding input in that pass
+- **AND** the riding input remains queued
 
 #### Scenario: A refusal that clears on its own does not make the pass go on
 
