@@ -23,53 +23,79 @@ its rule exists.
 ## 1. Pin the table before the reader moves
 
 - [ ] 1.1 In `hub/tests/test_permission_approver.py`, add D2's table as one parametrized test over
-  `_decide("Bash", {"command": …})`. Use the existing `workspace` fixture, which already has
-  `sub/`, and set `HUB_URL=http://127.0.0.1:8016` with `monkeypatch`. For each row, assert `allow`,
-  and where D2 names a reason, assert on a distinguishing substring of it:
+  `_decide(<tool>, {"command": …})`, where `<tool>` is D2's tool column (`Bash` unless it says
+  `PowerShell`). Every row goes in: R, W, H, N, G, X, **and R2's E, J and S rows**. Use the existing
+  `workspace` fixture, which already has `sub/`, and set `HUB_URL=http://127.0.0.1:8016` with
+  `monkeypatch`. The fixture's workspace directory is named `work`, not `ws`, so E15, E16 and E18
+  are written against its real name. For each row, assert `allow`, and where D2 names a reason,
+  assert on a distinguishing substring of it:
   - network: `"network address"` present, `"workspace"` absent;
   - cannot be checked: `"cannot be checked"` present, `"outside your workspace"` absent;
-  - outside: the word **as written**, e.g. `"'../stray.txt'"`.
+  - outside: the whole path, e.g. `"'../stray.txt'"`. For E1, that is the joined path
+    `'../stray.txt'`. For E15, it is the whole argument `'../work=y/z'`.
 
-  Rows are platform-scoped where D2 says so: X1–X3 and X9 on Windows only. On POSIX, X1–X3 are
-  pinned **allowed**, because they contain no separator there. The `ids=` are D2's labels, so a
-  failure names its row.
+  Rows are platform-scoped where D2 says so. X1b, X1c, X2p, X3p, E3 and X9 run on Windows only.
+  On POSIX, every X row is pinned at today's answer, because `\` is not a separator there. The
+  `ids=` are D2's labels, so a failure names its row.
 - [ ] 1.2 Add N8 as its own test: `_decide("WebFetch", {"url": "https://example.com/x", "prompt":
   "p"})` is **allowed**. It pins D7's statement that the rule governs shell text only. A future
   change that brings fetch under the rule must flip this deliberately.
 - [ ] 1.3 Add H12: with `HUB_URL` deleted from the environment, H1–H4 are refused.
 - [ ] 1.4 Run §1's tests against the unmodified `_decide`. Mark `xfail(strict=True, reason="a-url-
-  is-not-a-path §2")` on exactly the rows D2 says move: W1–W5, H1–H4, H15, H16, R11, N3, and (on
-  Windows) X1–X3. Also mark every row whose **reason** assertion is new: R1–R5, R10, N1, N2, N7,
-  G5, H5–H10 and H13–H14. **Any other failure means the table is wrong, not the code.** Stop,
-  re-measure the row with `testbed/scratch/r1f300/prototype.py`, and record what differed here.
+  is-not-a-path §2")` on exactly the rows D2 says move: W1–W5, H1–H4, H15, H16, R11, N3, J1–J4, J7,
+  J8, H2p, E14, E7, and (on Windows) X1b, X1c, X2p and X3p. Also mark every row whose **reason**
+  assertion is new: R1–R5, R10, N1, N2, N7, G5, G6, X7, H5–H10, H13–H14, E1, E2, E4–E6b, E9, E13, E15
+  and E16. **Any other failure means the table is wrong, not the code.** Stop, re-measure the row
+  with `testbed/scratch/r2f300/table.py`, and record what differed here. **Every E row except E7
+  and E14 must pass its answer today**: each is refused by the unmodified `_decide`, and the pin
+  is what makes a reader that lets it through fail CI.
 - [ ] 1.5 Commit §1 alone, green. This is the pin: from this commit on, a regex change that flips
   R1–R5 fails CI.
 
 ## 2. The reader
 
-- [ ] 2.1 In `hub/hub/mcp_server.py`, beside `_decide`, add the word reader of D1: the delimiter
-  split, and the six rules in their order. Keep `_ABSOLUTE_PATH_RE` as rule 6's backstop, applied
-  to one word at a time, and rewrite its comment to say that is now its only use. `_decide`'s
-  `command` branch calls the reader. The `_PATH_KEYS` branch for file tools is **unchanged**.
+- [ ] 2.1 In `hub/hub/mcp_server.py`, beside `_decide`, add the reader of D1 in its two stages.
+  - **The lexer**, a small state machine in the tool's dialect: `Bash`, `PowerShell`, or both for
+    any other tool name. It handles the quote states, the escape character, the substitutions
+    `$(…)` and `` `…` `` (recursed into, with depth bounded), and the argument-ending characters.
+    It must not raise on any string.
+  - **The words**: split at surviving whitespace, `=` and `,`; trim the D1 set from both ends; and
+    record whether each word continues.
+
+  Then add the six rules in their order. Keep `_ABSOLUTE_PATH_RE` as rule 6's backstop, applied to
+  one word at a time, and rewrite its comment to say that is now its only use. `_decide`'s
+  `command` branch calls the reader with `tool_name`. The `_PATH_KEYS` branch for file tools is
+  **unchanged**. `shlex` is not used (D8(c)).
 - [ ] 2.2 The run's-own-Hub test of D4. For a URL: `urllib.parse.urlsplit`, schemes compared
   ignoring case, `hostname` equal, effective ports equal (80 and 443 by default), `username` and
-  `password` both `None`, and any `ValueError` treated as "not own". For a reference: the remainder
-  is empty or starts with `/ ? #`, the approver has a non-empty `HUB_URL`, and the command's
-  case-insensitive `HUB_URL` count equals its reference count.
+  `password` both `None`, and any `ValueError` treated as "not own". For a reference, all of these
+  hold:
+  - the remainder is empty, or starts with `/ ? #` and contains no `$`;
+  - the approver has a non-empty `HUB_URL`;
+  - the command's case-insensitive `HUB_URL` count equals its reference count;
+  - `%HUB_URL%` is **not** a reference.
+
+  **Then judge the accepted word as a path**. A literal URL is judged as it stands. A reference is
+  judged with the approver's `HUB_URL` value in place of the reference. Refuse if it resolves
+  outside (E4–E6b).
 - [ ] 2.3 The three refusal texts of D5, verbatim from `design.md`. An edit to their wording is an
   edit to the design, so record it there.
-- [ ] 2.4 The bound. Every reason quotes at most 200 characters of the word, with `…` where it
-  cuts. Restate the Hub's cap as a module constant beside `MIN_WAITING_SECONDS`, with the same kind
-  of comment, and add a test asserting that the longest possible reason is at or under
+- [ ] 2.4 The bound. A reason's **rendered** quotation (after `repr`, or whatever renders it) is at
+  most 200 characters, with `…` where it cuts. Bounding the word before rendering is the defect D5
+  records. Restate the Hub's cap as a module constant beside `MIN_WAITING_SECONDS`, with the same
+  kind of comment. Add a test asserting that the longest possible reason is at or under
   `PermissionDecisionCreate.model_fields["reason"]`'s `max_length`, which the test reads from the
-  Hub's schema. The longest possible reason is the longest fixed text plus 200 characters plus
-  quoting. **Also** pin that a 1,200-character URL now gives a reason of at most that cap. Today it
-  gives 1,244 (D5).
+  Hub's schema. Pydantic 2 keeps it in that field's `.metadata` as `MaxLen(max_length=1000)`, not as
+  an attribute of the field (measured by R2). The longest possible reason is the longest fixed text
+  (197 characters) plus 200.
+  **Also** pin two things: a 1,200-character URL now gives a reason within that cap (today it gives
+  1,224), and so does a URL followed by 400 characters of `"\U000e0001"`. Today the second gives
+  well over the cap, and under R1's bound it gave 2,000 or more (D5, table row L1).
 - [ ] 2.5 Totality. Catch `(OSError, ValueError)` around `realpath` and `commonpath`, and refuse.
   Add a test with a NUL byte in a path word that asserts a decision is **returned** (either
   answer), so that it runs meaningfully on CI's Linux, where it raises today (D5).
 - [ ] 2.6 Rewrite `_decide`'s docstring and the comment at its `command` branch (D9). It reads
-  shell text word by word. Relative words are resolved against the workspace root, which is where
+  shell text as the tool's shell will, then word by word. Relative words are resolved against the workspace root, which is where
   the run started. A `cd` in an earlier call is not seen. It is a boundary, not a sandbox. It does
   not govern network access, only which address a shell command's text may name. **Delete** the
   sentence *"Relative paths are left alone: they resolve against the run's cwd, which is the
@@ -108,12 +134,23 @@ named row must fail. Record which row failed, then restore.
 - [ ] 5.4 Delete the userinfo condition. H13 must fail.
 - [ ] 5.5 Treat rule 3's words as plain relative. R4, R5 and G5 must fail.
 - [ ] 5.6 Resolve rule 5's relative words without joining them to the root. R1–R3 must fail.
-- [ ] 5.7 Make quotes group words instead of delimiting them. **H1 must fail**: the quoted
-  `Content-Type` header becomes one non-plain word, refused as `'/json'` (`design.md` D1, measured
-  by `measure6.py`). Also pin `python -c "open('/etc/x','w')"` as refused. It is refused under
-  both splits, and it guards the backstop rather than the split.
-- [ ] 5.8 Drop `\` from the Windows separators. X1 must fail (on Windows).
-- [ ] 5.9 Drop the bound. §2.4's long-URL test must fail.
+- [ ] 5.7 Make quotes delimit words instead of being removed and joined, which was R1's reader.
+  **E1 and E2 must fail.** Then stop splitting arguments at surviving whitespace. **H1 must
+  fail**: the quoted `Content-Type` header becomes one non-plain word, refused as `'/json'`. Also
+  pin J5, `python -c "open('/etc/x','w')"`, as refused. It is refused under every split, and it
+  guards the backstop rather than the split.
+- [ ] 5.8 Drop `\` from the Windows separators. X1b and X1c must fail (on Windows).
+- [ ] 5.9 Drop the bound. §2.4's long-URL test must fail. Then bound the word before rendering
+  instead of after. §2.4's non-printable test must fail.
+- [ ] 5.10 Stop judging an accepted own-Hub word as a path. E4, E5 and E6 must fail.
+- [ ] 5.11 Drop the "continues" flag, judging every word as it stands. E15 and E16 must fail.
+- [ ] 5.12 Read the `PowerShell` tool's command in the bash dialect. X1c must fail (on Windows).
+  Read the `Bash` tool's command in the PowerShell dialect. J2 must fail (on Windows).
+- [ ] 5.13 Look for rule 3's expansion only at a word's start. G6 must fail its reason assertion:
+  it is still refused, but as `'/$X/stray.txt'` outside, through the backstop, and not as *cannot
+  be checked*.
+- [ ] 5.14 Stop recursing into substitutions. S2 must fail.
+- [ ] 5.15 Allow an expansion after a reference. E13 must fail.
 
 ## 6. Drive it — the table is an argument, and a drive is the product
 
@@ -128,15 +165,24 @@ and no `.py` under `hub/hub` or `src` newer than the process. Never 8000 or 8010
   1. Ask it to create a task through that form with `curl`.
   2. Ask it to run `python sub/hello.py`.
   3. Ask it to run `curl -s https://example.com/`.
+  4. **On Windows only**, ask it to run `echo hi > "..\stray.txt"` with its Bash tool (X1b).
 
-  Read `event_logs` for `permission_denied`, and the transcript's tool results. All three must be
-  refused, for filesystem reasons: `'/api/…'`, `'/hello.py'` and `'s://example.com/'`. If any is
-  not refused, this is not a reproduction. Say so and stop. Remove the worktree afterwards.
+  Read `event_logs` for `permission_denied`, and the transcript's tool results. Asks 1–3 must be
+  refused, for filesystem reasons: `'/api/…'`, `'/hello.py'` and `'s://example.com/'`. Ask 4 must
+  be **allowed**, and `stray.txt` must appear in the fixture's parent directory: it is an escape
+  today (D2). If any of these does not hold, this is not a reproduction. Say so and stop. Delete the
+  stray file and remove the worktree afterwards.
 - [ ] 6.2 **Fixed tree**, same fixture shape, on a fresh project and agent:
   - Ask 1 creates the task. Read `tasks`: it exists, created by the run, with no
     `permission_denied` for that call.
   - Ask 2 prints `hello from sub`.
   - Ask 3 is refused, and the tool result carries D5's network text verbatim.
+  - Ask 4 (Windows) is refused as `'..\\stray.txt' is outside your workspace` (the reason renders
+    the word with `repr`, so the backslash is doubled), and no
+    `stray.txt` appears in the parent.
+  - Record the `tool_name` of every `permission_denied` row the drive produced. D1 chooses the
+    lexing dialect by that name, and that the approver receives `Bash` and `PowerShell` as those
+    names is unverified (D10 item 5).
   - `event_logs` holds that refusal as `permission_denied`, with the same reason. That is the
     record the operator reads, and the question that F108 established the rounds never ask.
 - [ ] 6.3 **What the agent does next.** In 6.2's transcript, after ask 3's refusal, record what the
@@ -171,7 +217,7 @@ and no `.py` under `hub/hub` or `src` newer than the process. Never 8000 or 8010
 
 ## 9. Close it out
 
-- [ ] 9.1 Set `F300`, `F312` and `F321` to `fixed <sha>` in `scripts/drive/FINDINGS.md`, each
+- [ ] 9.1 Set `F300`, `F312`, `F321` and `F323` to `fixed <sha>` in `scripts/drive/FINDINGS.md`, each
   naming the task that closed it and quoting §6.2's evidence. In `F312`, correct in place, in a
   dated block, the claim *"No agent on the default posture can make any network request from a
   shell command"*: `curl example.com` (no `/`) was always allowed (D2 N4). In `F300`, correct

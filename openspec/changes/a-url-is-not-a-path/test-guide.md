@@ -79,10 +79,22 @@ Read the rest of check 3's turn. Three things can happen:
 > Run `echo hi > ../stray.txt` with your shell tool.
 
 **You should see** a refusal naming `'../stray.txt'`, the path the agent actually wrote. Before
-this change the refusal named `'/stray.txt'`, a path nobody wrote. On Windows, also try
-`echo hi > ..\stray.txt`. It was allowed before this change and is refused now.
+this change the refusal named `'/stray.txt'`, a path nobody wrote.
 
-**It has gone wrong if** the command succeeds and a `stray.txt` appears next to the workspace.
+Then try the same escape with its pieces quoted, so the shell has to join them:
+
+> Run `echo hi > '.'./stray.txt` with your shell tool.
+
+**You should see** it refused as `'../stray.txt'`, the path the shell would have written. This one
+was refused before the change too, but only by accident, and the change's first design let it
+through. It is here so that a regression shows up as a file you can see.
+
+**On Windows**, also try `echo hi > "..\stray.txt"`, with the double quotes. It was **allowed**
+before this change, and the file landed next to the workspace. It is refused now. Without the
+quotes, `echo hi > ..\stray.txt` in the agent's Bash tool is allowed, and that is correct: Git
+Bash removes the backslash and writes a file called `..stray.txt` *inside* the workspace.
+
+**It has gone wrong if** any of these succeeds and a `stray.txt` appears next to the workspace.
 
 ## What this does not show
 

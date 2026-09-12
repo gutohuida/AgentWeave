@@ -26009,3 +26009,46 @@ with nothing recorded, and that is how the ledger gets entries nobody can resolv
 exists.
 
 ---
+
+## F323 (A) — on Windows, a traversal written in double quotes passes the default posture and writes outside the workspace
+
+**Status:** open. Filed 2026-09-12 by the day window's D-3, while writing R2 of
+`openspec/changes/a-url-is-not-a-path`, which now proposes to close it (`design.md` D1 and D2, row
+X1b). It is **measured live**, not inferred.
+
+**The claim.** Under `workspace` (`DEFAULT_CLAUDE_PERMISSION_MODE`, `runner_commands.py:66`), on
+Windows, a `claude` run's Bash tool can write outside its workspace with
+`echo hi > "..\stray.txt"`. The approver allows it as *inside your workspace*. This breaches the
+shipped scenario *"Traversal and links cannot escape"* (`agent-run-sandboxing`, *"A posture exists
+in which the workspace boundary is enforced per tool call"*).
+
+**Live, one Haiku turn, no Hub.** The argv came from `runner_commands.build_command`, so the flags
+were a default-posture run's: `--mcp-config` naming `hub/hub/mcp_server.py`, and
+`--permission-prompt-tool mcp__agentweave__approve_tool_call`. The model was
+`claude-haiku-4-5-20251001` on `claude` **2.1.269**. `AW_WORKSPACE_DIR` was `live/ws`. A local
+listener stood in for the Hub at `HUB_URL`, so every decision `_report_decision` posted could be
+read. The harness is `testbed/scratch/r2f300/live_probe.py` (scratch, uncommitted), with the raw
+stream beside it.
+
+| command, one tool call each | tool result | decision the approver posted | file written |
+|---|---|---|---|
+| `echo hi > "..\stray_x1b.txt"` | completed | `tool_name: "Bash"`, allowed, *inside your workspace* | **`live/stray_x1b.txt`, outside** |
+| `echo hi > ..\stray_x1a.txt` | completed | `Bash`, allowed | `live/ws/..stray_x1a.txt`, inside |
+| `echo hi > '.'./stray_e1.txt` | `Denied: '/stray_e1.txt' is outside your workspace.` | `Bash`, refused | none |
+
+**The mechanism.** `_ABSOLUTE_PATH_RE` (`hub/hub/mcp_server.py:936`) knows `\` only after a drive
+letter, so `"..\stray_x1b.txt"` yields no candidate and `_decide` allows it. Git Bash keeps a
+backslash inside double quotes, and MSYS then reads it as a separator. The unquoted form does not
+escape, because bash removes the backslash (row 2). So whether a backslash is a separator depends
+on the shell's quoting, which the regex does not read. The same commands run in Git Bash directly
+gave the same files (`design.md` D1).
+
+**Scope.** This is Windows only: on POSIX `\` is not a separator. It is the Bash tool only, as
+measured. The PowerShell tool was not probed, and `..\stray.txt` there is D2's row X1c, read, not
+run. Like R8 (`cd .. && …`), this is an escape that the regex never saw. Unlike R8, it is a single
+path in a single command, which is what the scenario says is refused.
+
+**Related:** F321 (the same regex, the opposite error), F300 and F312. It is closed by
+`a-url-is-not-a-path` once built and driven (tasks §6.1 ask 4, §6.2).
+
+---

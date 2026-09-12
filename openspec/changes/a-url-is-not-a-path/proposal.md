@@ -10,7 +10,7 @@ _ABSOLUTE_PATH_RE = re.compile(r"(?:[A-Za-z]:[\\/]|/)[^\s\"'|;&><)]*")
 ```
 
 The regex does not know where a word starts. It begins a candidate at any `/`, and at any letter
-followed by `:/`. That produces three findings, each measured, from one mechanism:
+followed by `:/`. That produces four findings, each measured, from one mechanism:
 
 - **F300 (A).** It refuses the request the Hub's own notice tells a run to make:
   `curl "$HUB_URL/api/v1/agent-actions/tasks"` → `'/api/v1/agent-actions/tasks' is outside your
@@ -22,6 +22,11 @@ followed by `:/`. That produces three findings, each measured, from one mechanis
   workspace. `python sub/hello.py` → `Denied: '/hello.py' is outside your workspace.` That was
   **observed live** on `claude` 2.1.269 with the argv the Hub builds (`scripts/drive/FINDINGS.md`,
   F321). This breaches the shipped scenario *"Work inside the workspace proceeds"*.
+- **F323 (A), filed by R2.** The same regex knows `\` only after a drive letter. So on Windows,
+  `echo hi > "..\stray.txt"` in the Bash tool yields no candidate, and it is allowed. Git Bash keeps
+  a backslash inside double quotes, and the file lands next to the workspace. That was **observed
+  live** on `claude` 2.1.269, through the approver. This breaches the shipped scenario *"Traversal
+  and links cannot escape"*.
 
 The operator decided F300 and F312 (`spec-queue/DECISIONS.md`: F312 option C at `:630-656`, F300
 narrowed at `:694`). Allow the run's own Hub URL. Refuse every other URL with a reason that names
@@ -60,47 +65,79 @@ instruct a refused command.** This is a correction for the operator. It is not r
 path argument in it and allows. So the verdict's URL rule is a rule about *shell command text*, and
 this change says so rather than implying a network boundary.
 
+### What R2 found, and what it changed
+
+R2 re-derived the design against today's `_decide` and against a real shell. **R1's word reader
+let through sixteen commands that today's regex refuses.** R2 ran five of them in Git Bash on this
+machine, and each wrote a file outside the workspace. R1 split words at quote characters, and a
+shell does not split there. It removes the quotes and joins the pieces, so `'.'./stray.txt` is
+`../stray.txt`. Two more classes came out of the same re-derivation. An address accepted as the
+run's own Hub can be used as a relative path that climbs out: `"$HUB_URL/../../../x"`. And a word
+can end at the workspace's own name while the shell carries it on into a sibling: `../ws=y/z`.
+R1's reader also refused F300's request on Windows whenever the JSON body used bash's `\"`
+escapes. R2 replaced the split with a lexer that reads the command as the tool's shell will, and
+kept every rule after it (`design.md` D1, D2's E and J rows, D8(f)).
+
+R2 also found that the reason bound did not bound the reason. `repr` can render a 200-character
+word as 2,002 characters (D5). And X1's answer depends on the shell: in Git Bash an unquoted
+`..\stray.txt` writes *inside*, while a quoted `"..\stray.txt"` writes outside. **Today's
+`_decide` allows the quoted one.** It is an escape today, and this change closes it (D2, X1b).
+
 ## What Changes
 
-- `_decide` reads a shell command **word by word**, and judges each word by what it *is* at its start
-  (`design.md` D1):
+- `_decide` reads a shell command **as the shell that runs it will**. It removes the quotes and
+  escapes that shell removes, joins what it joins, and marks what it expands, in the dialect of
+  the tool that carries the command: `Bash`, `PowerShell`, or both when the tool is unknown. Then it
+  judges each word by what it *is* at its start (`design.md` D1):
   - **A URL with a scheme** is a network address. It is allowed when its scheme, host and port are
     the run's own `HUB_URL`, and it carries no userinfo. Any other is refused, with a reason that
     says it is a network address, names `$HUB_URL` as the one address a shell command may name, and
-    points at `ask_user`. A `file:` URL is a path, not a network address.
-  - **A reference to `HUB_URL`** (`$HUB_URL`, `${HUB_URL}`, `$env:HUB_URL`, `%HUB_URL%`) followed
-    by nothing, `/`, `?` or `#` is the run's own Hub. That holds only when the command names
-    `HUB_URL` nowhere else, so a command cannot reassign it and then use it, and only when the
-    approver has a `HUB_URL` to compare with.
-  - **A word the shell expands at run time into a path** (any other variable, or `~`, followed by a
-    separator) is refused with a reason saying it cannot be checked. Today these are refused for a
-    false reason.
+    points at `ask_user`. A `file:` URL is a path, not a network address. **An address accepted as
+    the run's own Hub is still judged as the relative path it spells**, because the shell can write
+    to it.
+  - **A reference to `HUB_URL`** (`$HUB_URL`, `${HUB_URL}`, `$env:HUB_URL`) followed by nothing, or
+    by `/`, `?` or `#` with no expansion after it, is the run's own Hub. That holds only when the
+    command names `HUB_URL` nowhere else, so a command cannot reassign it and then use it. It also
+    needs the approver to have a `HUB_URL` to compare with. It too is judged as the path it spells.
+  - **A word the shell expands at run time into a path** is refused, with a reason saying it cannot
+    be checked. That is a variable or a command substitution anywhere in the word, or a leading
+    `~`, together with a separator. Today these are refused for a false reason.
   - **An absolute path, or a plain relative path** (word characters and separators only), is
     resolved against the workspace, the relative one joined to it, and refused if it lands outside.
-    The reason names the path as written.
+    The reason names the whole path, not a fragment of it. **A word that the shell's argument
+    carries on** is judged as the name it continues into.
   - **Anything else containing a separator** falls back to today's reading of that word alone. This
     is the backstop that keeps `@/etc/x`, `-o/tmp/x`, `host:/x` and similar refused exactly as they
     are today.
-- A refusal's reason quotes the refused word **bounded** (D5), so it always fits the 1000-character
-  `reason` that `POST /agent-actions/permission-decisions` accepts (`agent_actions.py:840`). An
-  over-long reason is answered 422, `_report_decision` swallows that, and the refusal is never
-  recorded.
+- A refusal's reason quotes the refused word **bounded as rendered** (D5), so it always fits the
+  1000-character `reason` that `POST /agent-actions/permission-decisions` accepts
+  (`agent_actions.py:840`). An over-long reason is answered 422, `_report_decision` swallows that,
+  and the refusal is never recorded.
 - The comment and docstring on `_decide` are rewritten to say what it reads. `docs/reference/
   permission-postures.md` stops describing it as reading "absolute paths out of the command text".
 - `agent-capability-plane`'s *"A run whose harness cannot use MCP is told how to reach the plane"*
   has its F300 clause corrected, because that clause becomes false. **Its F301 clause is left
   verbatim**, because `DECISIONS.md` 1d reserves that repair to the notice change.
 
-**What moves, measured on a prototype of this reading** (`design.md` D2, 56 labelled rows): 16
-rows change answer.
-- **12 go from refused to allowed.** Seven are requests to the run's own Hub, by URL or by
-  reference.
-  Four are paths inside the workspace (`sub/hello.py`, a pytest node id, `origin/main...HEAD`,
-  `sub/../hello.py`). One is **`curl example.com/x`**, the one widening that is not the verdict's,
-  decided in D3.
-- **3 go from allowed to refused,** all Windows forms of real escapes: `..\stray.txt`,
-  `%USERPROFILE%\x` and `$env:USERPROFILE\x`.
-- **Every other row keeps its answer.**
+**What moves, measured on R2's reading of this design** (`design.md` D2, 91 commands): 26
+change answer on Windows.
+- **21 go from refused to allowed.**
+  - Seven are requests to the run's own Hub, by URL or by reference (R11, H1–H4, H15, H16).
+  - Five are paths inside the workspace: `sub/hello.py` run and `git add`ed, a pytest node id,
+    `origin/main...HEAD`, and `sub/../hello.py` (W1–W5).
+  - One is **`curl example.com/x`**. It is the one widening that is not the verdict's, decided in
+    D3 (N3).
+  - Eight are R2's rows. They are request bodies and commit messages that name a path, a
+    PowerShell-escaped request, and `$HUB_URL/../../x`, which writes inside (J1–J4, J7, J8, H2p,
+    E14).
+- **5 go from allowed to refused.** Four are Windows forms of real escapes: `"..\stray.txt"` in
+  the Bash tool, and `..\stray.txt`, `%USERPROFILE%\x` and `$env:USERPROFILE\x` in the PowerShell
+  tool. One is `curl "$HUB_URL"@evil.example` (E7).
+- **Every other row keeps its answer.** That includes all sixteen escapes R2 found in R1's reader,
+  which stay refused.
+
+R1's version of this list counted 12 refused-to-allowed and 16 in total. That was an arithmetic
+slip: its own rows W1–W5 are five, not four, so it was 13, and 16 in total.
 
 ## Non-goals
 
@@ -126,8 +163,8 @@ rows change answer.
 ### Modified Capabilities
 
 - `agent-run-sandboxing`: three ADDED requirements. A network address in a shell command is decided
-  as a network address. A path in a shell command is judged by where it resolves. A refusal's reason
-  fits the record that carries it.
+  as a network address. A path in a shell command is judged by where it resolves, as the shell will
+  read it. A refusal's reason fits the record that carries it.
 - `agent-capability-plane`: *"A run whose harness cannot use MCP is told how to reach the plane"* is
   MODIFIED, in its F300 clause only.
 
@@ -144,5 +181,6 @@ rows change answer.
   `agent_trigger.py`. `HUB_URL` already reaches the approver: `agent_trigger.py:1140-1164` sets it
   in the run's environment, and F300's own drive saw the spawned `mcp_server.py` use it
   (`FINDINGS.md`, F300, *"Confirmed by the same session"*).
-- **Findings:** closes F300, F312 and F321 when built and driven. Leaves F301, F299 and the new F322
-  open, and names each.
+- **Findings:** closes F300, F312, F321 and F323 when built and driven. F323 was filed by R2: a
+  quoted Windows traversal escapes today, measured live. Leaves F301, F299 and F322 open, and names
+  each.
