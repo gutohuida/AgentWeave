@@ -26086,3 +26086,101 @@ Neither repair needs a spec.
 **Related:** F304, F318.
 
 ---
+
+## F325 (A) — on Codex's default transport a run never receives its canonical context, so a bound charter reaches no Codex agent
+
+**Status:** open. Filed 2026-09-12 by the day window's `D-7`, from research 2026-09-12 §3, and
+verified against the code at `34014e0` by reading. **Read, not run:** live reproduction is not
+possible, because Codex is undrivable (the plan was cancelled on 2026-08-29). No proposal.
+
+**The claim.** Every turn renders the canonical context: charter, operating profile, the tool
+section for this run's access path, workspace facts, spec-document blocks, and the review block on a
+review turn. It is written to `<work_dir>/.agentweave/context/<agent>.md`
+(`hub/hub/api/v1/agent_trigger.py:1001-1047`). What happens next depends on the runner:
+
+| runner / transport | how the context is handed over | code |
+|---|---|---|
+| `claude` | `--append-system-prompt-file <path>` | `hub/hub/runner_commands.py:229-230` |
+| `codex`, `exec` (opt-out, `--no-app-server`) | `-c model_instructions_file=<path>` | `runner_commands.py:311-312` |
+| `codex`, `app-server` (**the default**) | **nothing**: the file is written and never read | below |
+
+**The app-server row, measured line by line.** `uses_app_server` (`hub/hub/codex_appserver.py:79-87`)
+returns true for every `codex` runner without `--no-app-server`. It has done so since `4b9604f`
+(2026-08-06 21:55). `build_command` receives `context_file` (`agent_trigger.py:1089-1104`), but
+`cmd` *"is unused on the app-server transport"* (`:1269-1272`). What the app-server path gets is
+`prompt` (`:1265`), which is `"\n\n".join([*notices, message])` (`:1074`): the access-path notice,
+the auto-snapshot notice, the spec-phase notice and the message. `_execute_codex_appserver_run`
+(`:2619`) passes it to `codex_run_turn` unchanged (`:2803`). `prompt` appears nowhere else in that
+function. `run_turn` has no parameter for context (`codex_appserver.py:904-926`). `thread/start`
+and `thread/resume` get `cwd`, `sandbox`, `approvalPolicy`, an optional `model` and an optional
+`config` (`:955-990`). `config` is the rendered config-style controls plus the Hub's MCP server.
+The catalog's only config-style control is Codex's effort (`hub/hub/model_catalog.py:231`,
+`model_reasoning_effort`). `turn/start` gets the thread ID and `prompt` alone (`:998-1001`). Nothing
+points the agent at the file: `hub/hub/api/v1/agents.py:1602-1604` removed that pointer on purpose,
+because the file's contents are *"already delivered as the system prompt"*. That comment was
+committed in `828718b` at 2026-08-07 00:17, 2h22m **after** app-server became the default.
+`grep AGENTS.md` over `hub/hub/` returns nothing, so no second route exists.
+
+**Every line number in research §3 held** at `34014e0`. Two statements moved:
+
+- The research dates the comment "the same day" as the default. It was committed after.
+- The research counts six app-server tests. There are eight (`hub/tests/test_agent_trigger.py:107`,
+  used at `:1285 :1414 :2435 :2477 :2532 :2577 :2628 :2666`), and none asserts anything about
+  context. The `exec` flag is pinned, by `hub/tests/test_runner_parsing.py:204-210`, which the
+  research did not mention. Any repair changes it.
+
+**What the protocol offers, regenerated here.** `codex app-server generate-json-schema` (CLI
+0.146.0, the installed build) was run into `testbed/scratch/d7codex/schema/`, with no model turn.
+`ThreadStartParams` has 15 properties, including `baseInstructions` and `developerInstructions`,
+both `string | null`. `ThreadResumeParams` carries both. `TurnStartParams` carries neither. The
+`Config` definition has a `developer_instructions` key. The schema describes none of them. On
+`HEAD`, `git log -S` over `hub/` and `src/` finds **0** commits for `developerInstructions`,
+`baseInstructions` or `developer_instructions`. With `--all`, it finds `developerInstructions` only
+in `50bd12e`, the research file copied into `spec-queue/`, and in `578afad`, a T3 Code checkpoint
+ref.
+
+**What it breaches.** `agent-context-onboarding`, *Canonical per-agent runtime context*: "The Hub
+SHALL build canonical runtime context for each configured agent and supply it to every run", with
+the scenario *Runtime launch injects generated context*. `agent-charter`, scenario *Agent context
+resolves its bound charter*: "WHEN an agent with a bound charter begins a turn, THEN the supplied
+context includes that charter's content". On a `codex` runner with default flags, neither holds.
+Severity A because the operator acts on what the agent does, believing a charter governs it.
+
+**Where the research overstates.** It says a Codex reviewer "is not told what it is doing". For a
+review dispatched by a loop or a flow, it is told. The scheduler prepends the loop briefing to the
+queue entry's `content` (`hub/hub/scheduler.py:2826-2833` and `:3180-3187`), which becomes the
+prompt, and the briefing says *"**This turn is a review.** Somebody else finished the task below"*
+(`:2187`, `:2201`). What a Codex reviewer lacks is the context's review block
+(`agents.py:1610-1661`): the commit under review, *detached HEAD is expected*, *"Do not fix what you
+find. Report it."*, and *end the review with a verdict through `update_task`*. A review dispatched
+straight through `POST /agent/trigger` has only its message. The research's sentence holds for that
+path.
+
+**Unverified: the `exec` half.** That `model_instructions_file` **replaces** Codex's built-in
+instructions, rather than adding to them, is Codex's behaviour. This repository does not pin it.
+`openspec/changes/archive/2026-04-26-add-codex-runner/design.md` D2 chose the flag without saying
+which it does. The only probe of the flag is recorded in handoff-0039 (2026-08-13) and the archived
+`2026-08-13-the-spec-tool-reaches-the-agent` tasks.md 1.4: a passphrase that existed only in the
+file came back. That shows the file reaches the model, not what it displaces. The research quotes
+`codex-rs/config/src/config_toml.rs:250-254` at `654b0a7`: *"override the built-in instructions
+… STRONGLY DISCOURAGED"*. This window does not browse and did not re-read it.
+
+**Plausible, unverified: a 2026-08-13 conclusion may rest on this.** That probe was a direct
+`codex exec` from the shell. Handoff-0039 records the `--skip-git-repo-check` and closed-stdin traps
+it hit. The Hub-driven Codex iterations it was run to explain did not follow a precedence statement
+that was *"verified present in the delivered context file"*. They ran through the Hub a week after
+app-server became the default. Their runner's flags are not recorded, and the harness
+(`testbed/scratch/spec_loop.py`) no longer exists. If they ran on app-server, the probe tested a
+channel they never used, and the context never reached them. That would also explain why the fix
+that worked was moving the directive into the turn prompt, since the prompt is the one channel
+app-server delivers.
+
+**Confirming probe, for whoever can drive Codex.** Bind a charter containing a marker word to a
+Codex agent with default flags, run one turn, and ask it to *quote* its `## Charter` section. Ask
+it to quote rather than obey (`FINDINGS.md:14811-14814`). On the code as read, it will say it has
+no charter.
+
+**Related:** F322 (the other Codex-only defect filed today, same basis), F306 (the right agent
+reviews; on Codex app-server that agent does not get the review block).
+
+---
