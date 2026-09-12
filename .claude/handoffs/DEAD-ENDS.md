@@ -123,6 +123,18 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   (`Get-Process | StartTime`) instead.
 - **`pytest <nonexistent_file.py>` runs nothing and reports success-shaped output.** Check the
   collected count, not just the exit code.
+- **`gh run view <id> --log-failed | grep -i failed` matches *passing* tests** *(2026-09-12)*: the
+  Hub suite has dozens of tests whose names contain `failed`
+  (`test_spawn_failure_marks_run_failed PASSED`), so the grep returns twelve green lines and hides
+  the red one. Grep for the summary instead: `grep -E "(FAILED|ERROR) tests/|=+ .*(passed|failed).* =+"`.
+- **Classify a red `hub-test` by its signature before blaming a commit** *(2026-09-12: 4 of ~11
+  runs red that day, every one on a doc-only commit)*. There are **two** known intermittents with
+  different signatures:
+  - **F292:** a setup `ERROR` with `sqlite3.OperationalError: database is locked`.
+  - **F314:** `FAILED test_flow_holds_the_loop_requirements.py::test_a_wide_flows_state_is_still_one_call`,
+    `RuntimeError: <asyncio.locks.Lock …> is bound to a different event loop`.
+
+  A red with either signature on a commit that touched no Python is not that commit's.
 
 ## git
 
@@ -320,6 +332,14 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 - **A payload-shaped model function must be tested against real route ordering.** A fixture in an
   order the route never emits is not evidence (F190: ascending lifecycle events fed to a route
   that returns newest-first, green for a month while the behaviour could not fire).
+- **A race test whose mocked dispatch takes no database lock cannot show a concurrency repair
+  works** *(2026-09-12, F328)*. R3 of `a-refused-review-leaves-nothing-behind` pinned "an entry
+  withdrawn during the dispatch is not counted" with a patched `trigger_agent_directly` that
+  recorded nothing, and it passed. A real review dispatch holds SQLite's write lock while it
+  records the reviewer. The operator's concurrent `DELETE` waits on that lock and commits *after*
+  the re-read the repair relied on. The pre-approval review's test O2 (a real staging, 0.3 s delay)
+  measured the repair doing nothing. It is the payload-ordering rule above in another form: **the
+  stand-in must take the locks the real thing takes**, or the race you are testing cannot happen.
 
 ## Browser and preview tooling
 
@@ -418,6 +438,17 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   gate removed: what still fails is static, what now executes never was. This is what showed F301's
   five "refusal classes" to be reasons a command *needs approval* rather than reasons it is
   forbidden.
+- **An interactive session can run a whole spec loop as sequential Opus subagents** *(measured
+  2026-09-12)*. For `a-refused-review-leaves-nothing-behind`, R1 took 32 min, R2 24 min, R3 19 min,
+  and the pre-approval review 15 min: about 1.5 h from nothing to an approvable change. **Each of
+  the four found a real defect in the one before.** What made it work:
+  - Each prompt names the binding verdict, the previous round's own "attack this" list, and the
+    rule to re-derive against the code rather than re-read.
+  - Each round commits and pushes its own work, with explicit paths.
+  - Each reviewer is told to modify no tracked file and to leave the tree clean, because the 22:55
+    arm refuses a dirty tree.
+  - An operator question a round raises is put to the operator with `AskUserQuestion` **while the
+    next round runs on the recommended answer**, which costs no wall-clock time.
 
 ## The installed CLI (`agentweave` from PyPI, outside this repo)
 
