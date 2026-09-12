@@ -27,42 +27,44 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ## 2026-09-13
 
-Written 2026-09-12 afternoon by a DECIDE session, on the operator's instruction. **It replaces the
-order in `## 2026-09-11` below.** That order's position 1 (F306) shipped on the 2026-09-11 night.
-Position 2 (`a-url-is-not-a-path`, F300 + F312 + F321 + F323) is approved for the 2026-09-12 night.
+Written 2026-09-12 by a DECIDE session, on the operator's instruction, and **rewritten that
+evening**. It replaces the order in `## 2026-09-11` below. The 2026-09-12 night is approved for
+**two** changes, in this order: `a-url-is-not-a-path` (F300 + F312 + F321 + F323) and
+`a-refused-review-leaves-nothing-behind` (F319 + F320). F319 + F320 was specced that afternoon by a
+session (R1 `75b11ac`, R2 `895aad9`, R3 `32df122`, pre-approval review `992eab9`), so it is **not**
+this spec loop's.
 
-### The spec loop takes `F319 + F320` as ONE change
+### `D-1` drives what the night built, both changes
 
-`D-2/D-3/D-4` are R1/R2/R3 on **F319 (A)**, a refused review leaves the refused reviewer holding
-the task, and **F320 (B)**, the pass that abandons a refused head never delivers the entry behind
-it. The verdict is `DECISIONS.md` *"F319 + F320, decided 2026-09-12 afternoon"*. It is binding on
-**what** (a refusal leaves the task as it was, and the operator is told; abandonment moves on to
-the next entry). It leaves **how** to R1. Do not re-litigate the what.
+Scope the drive to both. If either change is **not archived** when the window arms, note how far
+it got and leave it. It is the night's to resume. Its unticked tasks count toward step 6's drain
+count, which then decides how many loops run.
 
-What R1 starts from, already measured (`scripts/drive/FINDINGS.md` F319, F320):
+### The spec loop takes `F299`, and a second loop takes `F327` if the drain count allows
 
-- **Three live reproductions, and a harness that makes them.** B1 is a pruned commit, B2 an
-  obstructed checkout path, and A is a review queued behind the reviewer's own running turn. The
-  harness is `scripts/drive/t_d1_0912_f319_reach.py`, and its database is kept at
-  `profiles/drive0912d`. **Every leg must reach the fixed tree and leave the task as it was.** A fix
-  that closes B1/B2 by reordering the repository checks does not, on its own, close A, which is a
-  timing gap and not a missing check.
-- **Leg A exists because of `4929ea0`** (the F306 fix's §3.4 entry-guard fallback). R1 must not
-  close it by weakening that guard. F306's verdict stands.
-- **F320's mechanism** is `turn_scheduler.py` `~:460-512`: it abandons the head at
-  `DELIVERY_ATTEMPT_LIMIT` and then `return`s. There is no tick (`agent_trigger.py:2433`).
+Step 6 of `day-window.md` now runs **two** loops at a drain count of 0, one at 1, and none at 2 or
+more (operator, 2026-09-12).
 
-**`D-1` (the drive)** is the night's build of `a-url-is-not-a-path`, scoped as usual. **If that
-change is not archived** when the window arms, note it and leave it. It is the night's to resume,
-and that does not block this spec loop, because the two changes share no file.
+- **First loop: F299 (A)**, no grounds, no approver flag. The verdict is `DECISIONS.md` 1b.
+- **Second loop, only at drain count 0: F327 (B)**, a review a flow or a divergence restaff staffed
+  *before* its dispatch, which the dispatch then refuses, still leaves F319's end state. It is
+  decided in principle by the F319 verdict (*"whichever path"*) and by row `F327-scope`, which
+  sends it to its own spec loop. On 2026-09-12, R2's option **(b)** (the dispatch stages, and the
+  flow stops staging first) was rejected **only for that night, as unexamined**. It is the starting
+  point here. Options (c) and (d) stay rejected. R3 of the F319 change found (b) larger than R2
+  said, because the divergence restaff's task is already `under_review` and collides with D9;
+  start there. It will MODIFY `agent-flows` (*"in the same commit that queues the review turn"*).
+- **Collision check, as step 6 requires:** F299 is expected to touch `runner_commands.py`, and F327
+  touches `scheduler.py`, `run_divergence.py` and the review staffing path. If R1 of F299 finds
+  they share a file, run F299 alone and say so.
 
 ### The order for the days after
 
-One per day. The round discipline is not compressible.
+The round discipline is not compressible.
 
 ```
-1. F319 + F320 as ONE       (A+B)  a refused review leaves nothing behind -- 2026-09-13, above
-2. F299                     (A)    no grounds, no approver flag
+1. F299                     (A)    no grounds, no approver flag              -- 2026-09-13
+2. F327                     (B)    a flow-staffed review refused at dispatch  -- 2026-09-13 if drain = 0
 3. F301's notice change            re-derive first: DECISIONS 1c/1d rest on a false measurement
                                    (S1_python_c is refused by today's _decide; a-url-is-not-a-path
                                    design D6)
@@ -72,8 +74,9 @@ One per day. The round discipline is not compressible.
 **Not in the order, deliberately:** `F325` (A, Codex app-server runs receive no context) runs on
 a runner nobody can drive, so a fix could be unit-tested and never driven. It has no verdict.
 `F292` (B, the CI `database is locked` flake) failed 2 of 6 CI runs on 2026-09-12, both on doc-only
-commits. It is severity B and has no proposal. Either one enters the order only by an operator
-decision.
+commits. It is severity B and has no proposal. `F328` (D, narrowed by tonight's change and not
+closed) and `F326` (D) are candidates for the D-6 no-spec carve-out if they pass its test. F325 and
+F292 enter the order only by an operator decision.
 
 ---
 

@@ -85,6 +85,32 @@ executable changed, and `openspec validate --strict` was re-run after the edit.
 
 Decisions 2 and 3 on the page were not answered separately, so their stated defaults apply. **`F321` stays folded in**, and the review agreed, because splitting it leaves F300 unable to fire. **D3 is built as written**, which means `curl example.com/x` becomes allowed. `/dev/null` stays refused. §7.1–§7.3 are human-only verification and stay open for the operator. §9.3 still holds: the night does not edit `DECISIONS.md`.
 
+**A second change, specced and decided the same evening.** The operator judged one change too
+little for an 8-hour night. So a session ran the full spec loop on F319 + F320 in the afternoon:
+R1 `75b11ac`, R2 `895aad9`, R3 `32df122`. The operator answered R2's question with option (a)
+(`DECISIONS.md` `F327-scope`, `0e41a15`). An adversarial Opus review then ran before approval, and
+its doc-only repairs landed at `992eab9`. **All three rounds and the review each found a real
+defect.** The one the review found is that R3's `queued`-only re-read narrows F328 and does not
+close it.
+
+- APPROVED  a-refused-review-leaves-nothing-behind   F319 (A) + F320 (B), **52 tasks**, 0 ticked. Code is `hub/hub/turn_scheduler.py` plus one comment in `hub/hub/api/v1/agent_trigger.py`. No migration, no schema, no API shape, **no UI bundle**, so the Python lint set *is* required (§7) and `make ui` is not. It shares no code file with `a-url-is-not-a-path`; the only shared file is `FINDINGS.md`, in separate sections. `openspec validate --strict` passes, re-run 19:30. **Verify it as two findings:** §8.1 and §8.2 each set their own `Status:` line. **F326, F327 and F328 stay open** (§8.3, §8.4, §8.5a). Never set F328 `fixed`.
+
+ORDER: a-url-is-not-a-path, a-refused-review-leaves-nothing-behind
+
+**How the night runs the second change.** This is the pre-approval review's sizing: 98 tasks is
+about 5.7 of 8 hours at last night's pace, and only if both drives go cleanly.
+1. Build `a-url-is-not-a-path` first and finish it. Start `a-refused-review-leaves-nothing-behind`
+   only if **at least 3 hours** remain.
+2. Commit per section, in this order: §1, §2, mutations 4.1–4.4c, §3, the remaining mutations, §7,
+   §5, §8. **§2 alone is a green, coherent stopping point**, and it fixes F319 at unit level.
+3. Do not start the live drive (§5) with less than **75 minutes** left.
+4. **Never close out (§8) without the drive.** No `fixed` status for F319 or F320 without §5.
+5. Give each change's drive its own fresh profile, for example `drive0913u` and `drive0913r`, and
+   its own free port.
+
+If the window ends mid-change, the next night resumes it, and the day window's drain count sees
+it and runs one spec loop instead of two.
+
 ---
 
 ## 2026-09-11
