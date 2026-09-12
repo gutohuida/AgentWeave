@@ -1,97 +1,40 @@
 {
-  "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-  "playbook": ".claude/loops/night-window.md",
-  "runner": "claude",
-  "model": "opus",
-  "permission_mode": "unattended-full-access",
-  "branch": "autonomous/2026-09-08-daily",
-  "parent_branch": "master",
-  "parent_sha": "6f7e486",
-  "stop_at": "2026-09-12T07:00:00+01:00",
-  "iteration": 9,
-  "log_file": ".claude/autonomous/2026-09-11-night-log.md",
-  "findings_file": "scripts/drive/FINDINGS.md",
-  "approvals_file": "spec-queue/APPROVALS.md",
-  "change": "openspec/changes/archive/2026-09-12-an-agent-that-recorded-the-evidence-is-the-author",
-  "prefix_sha": "37b8226",
-  "current": null,
-  "next_action": null,
-  "queue": [
-    {
-      "id": "compose",
-      "status": "done",
-      "title": "Compose this window's queue from the playbook",
-      "detail": "DONE iteration 1. APPROVALS.md 2026-09-11 section: one APPROVED row (an-agent-that-recorded-the-evidence-is-the-author, F306+F316, 42 tasks), no ORDER:, no NOTHING TONIGHT. Backlog source 1 empty (the approved change is the only non-archive change, 0/42 ticked). Backlog source 2: open severity-A findings F299 F300 F301 F312 have no proposal (notes_for_tomorrow); F306/F316 ARE the approved change. Baseline chunk (20 files, command in n1-source) measured GREEN: 440 passed, 0 failed, 5m49s, py -3.11 from hub/."
-    },
-    {
-      "id": "n1-source",
-      "status": "done",
-      "title": "S1 + S2 + S3 source edits, five call sites, plus the S4.11 fixture repair",
-      "detail": "DONE iteration 2: 20/43 ticked (S1, S2, S3, 4.11, and new 4.11a - R4's S3.4 reversal moved a SECOND existing test, test_a_flow_names_what_it_cannot_staff.py wedge test; fixture repaired to operator evidence). Chunk green on the final tree (see log). ORIGINAL: task_transition_service.py: agents_that_recorded_evidence_for (1.1-1.4), union term (2.1-2.2), _guard_author_is_not_reviewer fallback on the evidence term ALONE (3.1-3.3), _guard_reviewer_is_not_the_author entry fallback (3.4/3.4a/3.4b - NOT optional, R4). scheduler.py:625 and :1574 read-only confirmation (2.3). run_divergence.py _answer_failed_review two-branch derivation + excluded_because='has worked on this task' on the operator-completed branch (2.4/2.4a/2.5). api/v1/agent_trigger.py review_dispatch_refusal fallback, after status/holder checks (3.5/3.6 - state in the commit that 3.1 and 3.5 read as one rule). 4.11: second agent approves. Baseline chunk (from hub/): py -3.11 -m pytest -q -p no:cacheprovider tests/test_launchability.py tests/test_agent_trigger.py tests/test_a_task_waits_while_its_run_waits.py tests/test_a_flow_names_what_it_cannot_staff.py tests/test_reviewer_is_not_the_author.py tests/test_one_action_lands_the_work.py tests/test_approval_waits_for_the_turn.py tests/test_actor_aware_claimability.py tests/test_a_loop_does_not_staff_its_own_review.py tests/test_approval_refuses_unaccepted_evidence.py tests/test_briefing_names_its_contract.py tests/test_loop_lands_its_work.py tests/test_operator_is_told_the_truth.py tests/test_review_divergence.py tests/test_requirement_evidence.py tests/test_agent_evidence_grant.py tests/test_mcp_body_contract.py tests/test_review_dispatch_staffs_the_task.py tests/test_run_divergence.py tests/test_flow_divergence_regime.py - background it, ~10 min. 6.3 openspec validate --strict if any delta is touched (none should be)."
-    },
-    {
-      "id": "n2-tests",
-      "status": "done",
-      "title": "S4.1-4.6a, 4.9, 4.10, 4.10a - the new test file, green against the implementation",
-      "detail": "DONE iteration 3: hub/tests/test_the_evidence_names_the_author.py, 12 tests, 12 passed; with 4 neighbour suites 95 passed. Ticked 4.1-4.6 (26/43). Written+green but deliberately UNTICKED: 4.6a, 4.10 (partial-tree halves) and 4.9, 4.10a (each bullet carries its own 'Mutation: must fail' clause). Extra test beyond tasks.md: test_the_direct_dispatch_refuses_the_evidence_author_before_the_checkout (trigger_agent_directly, refused by S3.4). 4.5 uses an agent NAMED 'operator' - the only way the actor_kind filter is observable (POST /spec/evidence writes actor='operator'). ORIGINAL: hub/tests/test_the_evidence_names_the_author.py with F306's live reproduction (run + task ids from FINDINGS.md F306) in the module docstring. Leg fixtures are load-bearing: 4.2 author sorts FIRST by name (D6); 4.4 task.assignee == the staffed reviewer when it approves; 4.6 awaiting AND rejected; 4.6a both halves (evidence author refused at entry, different agent permitted); 4.9 asserts no checkout was created, not only the 403; 4.10 asserts the exact R3 numbers (surfaced, assignee stays the silent reviewer, nothing queued); 4.10a asserts the run_diverged reason says 'worked on' and not 'completed'. Green, committed, pushed. NO mutations this firing."
-    },
-    {
-      "id": "n3-mutations",
-      "status": "done",
-      "title": "S4.7 mutation table + the 4.6a/4.9/4.10/4.10a mutations, all inside ONE firing",
-      "detail": "DONE iteration 4: all ten mutations (a-j) in one firing, tree clean after every restore; every target leg FAILED under its own mutation, none survived, no fixture changed. Table in the log. Ticked 4.6a, 4.7, 4.9, 4.10, 4.10a (31/43). (h) exposed F319 (B, filed, no proposal): a scheduler-path review refusal commits enter_selected_task's staged assignee (turn_scheduler.py:349) - measured on the UNMUTATED tree too, task left ('completed', <refused reviewer>). 4.9 fails only on its holder assertion under (h). Two test docstrings corrected (4.9, direct-dispatch); no assertion touched. ORIGINAL: Read the mutation-hygiene block at the top of tasks.md S4 first. Start only from a clean tree with n1+n2 committed. Mutations: remove union term (4.2 fails); remove guard fallback (4.3); fallback -> union (4.4); drop actor_kind filter (4.5); add review_state=='accepted' (4.6); remove S3.4 fallback (4.6a - this is also the 'S1-S3.3 alone' tree 4.6a must be run against); S3.4 fallback -> union (4.6a permissive half); remove S3.5 fallback (4.9); remove S2.4 (4.10 - and run 4.10 against the S1-S3-only tree too); drop excluded_because (4.10a). After EACH restore: git status --short must be empty. Table goes into the log. If a leg survives its mutation, fix the fixture (commit), never weaken the claim. If the firing runs short, stop BEFORE a mutation and record which remain. TEST NAMES (file hub/tests/test_the_evidence_names_the_author.py): 4.2 test_the_flow_staffs_the_agent_that_did_not_record_the_evidence; 4.3 test_the_author_s_approval_is_refused_and_records_nothing; 4.4 test_the_reviewer_the_flow_staffed_is_accepted; 4.5 test_the_operator_s_evidence_leaves_every_agent_eligible; 4.6 test_unaccepted_evidence_still_names_its_author; 4.6a test_the_evidence_author_cannot_be_entered_as_the_reviewer; 4.9 test_dispatching_the_evidence_author_as_reviewer_is_refused_before_the_turn (+ direct-dispatch test under the S3.4 mutation); 4.10 test_a_silent_review_is_not_restaffed_onto_the_agent_that_worked_it; 4.10a test_the_surfaced_reason_says_worked_on_not_completed. Run the whole file under each mutation (~8s) and record EVERY test's pass/fail, not only the target leg. After recording, tick 4.6a, 4.7, 4.9, 4.10, 4.10a only for legs that failed under their mutation."
-    },
-    {
-      "id": "n4-gate",
-      "status": "done",
-      "title": "S4.8 whole Hub suite + S6.1-6.4 gate",
-      "detail": "DONE iteration 5 on 99d64fc: whole Hub suite 4057 passed, 86 skipped, 0 failed, 0 errors, 27m06s. R4's S3.4 moved nothing beyond 4.11/4.11a, and F314/F292 did not fire. ruff/black(py311)/mypy clean over CI's paths, migrations diff empty, openspec validate --strict valid. Ticked 4.8, 6.1-6.4 (36/43). ORIGINAL: This run is the FIRST measurement of R4's S3.4 blast radius (the proposal's '1 failed, 4044 passed' predates R4; iteration 2 found a second moved test by chunk). Any further failure refused by _guard_reviewer_is_not_the_author at a fixture's own under_review move is the same class: repair the fixture the 4.11a way, record it, never relax the guard. From hub/: py -3.11 -m pytest tests/ -q, backgrounded to a scratch file (15-47 min; far over the 600s cap). F314 (test_flow_holds_the_loop_requirements.py ~1 in 8) and F292 (test_reviewer_is_not_the_author.py setup ERROR) are known intermittents on an unmodified tree - a failure there is re-run in isolation before being attributed, and the attribution is written down either way. Lint exactly CI's set: ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/. 6.4: git diff 37b8226.. -- hub/hub/migrations must be empty. 6.3 openspec validate --strict."
-    },
-    {
-      "id": "n5-playbook",
-      "status": "done",
-      "title": "Repair night-window.md's drive-Hub recipe: the beta profile does not exist",
-      "detail": "DONE iteration 6, doc-only. night-window.md Driving: the drive port is chosen per night after netstat, never 8000/8010, and recorded in the log. The profile is a fresh profiles/drive<MMDD>. AW_BOOTSTRAP_API_KEY is set at first launch, because a source launch writes no bootstrap-key.txt. AW_HUB and AW_KEY must be exported, because aw.py:14 defaults AW_HUB to 8010, the trial Hub. day-window.md:182 and daily-review SKILL.md:113 carried the same fixed 8011 and were repaired too. Recipe driven twice on 8013: the missing dir was created and migrated to 0102, the known key got 200, a wrong key got 401. Probe stopped and scratch removed. ORIGINAL: .claude/loops/night-window.md:120 still names ~/.agentweave/hub/profiles/beta/agentweave.db. beta was deleted 2026-09-07 (CLAUDE.md); the 2026-09-10 night log (line 122) recorded this and did not repair it - the exact 'recorded is not fixed' pattern the playbook's Limits forbid. Also: it says port 8011, and last night 8011 and 8012 were both already LISTENING. Replace with: a fresh per-night profile (e.g. profiles/drive<MMDD>), a port chosen after netstat shows it free, and never 8000/8010. Small doc-only commit; do it before n6 so the drive runs from a correct instruction."
-    },
-    {
-      "id": "n6-drive-prefix",
-      "status": "done",
-      "title": "S5.1 - reproduce F306 on the PRE-FIX tree via git worktree, and prove it from the tables",
-      "detail": "DONE iteration 7: F306 reproduced on the pre-fix worktree 37b8226, proven from the tables on attempt 2 of 2. Port 8014, profile drive0912p (kept, with n6-transcripts/). Attempt 2 proj-34d006e2f3e5 task-9ba36b0bd788: seq 8 under_review->approved actor_kind=run actor_agent=r7af306q run-bb80909c0e15; ev-4d13beb472c4 implementation accepted actor=r7af306q on unbound run-1a7f8b790e34; seq 5-7 operator/NULL. Drive printed 19/19. Attempt 1 proj-7a9ec0f070ba task-11fd55c52ee1 did NOT reproduce the approval: author r7af306p was staffed (run-b9d360b2d62c) but never called update_task (Haiku, MCP adapter online); restaffed (div-c524b3378859) onto r7bf306p, which approved at seq 4. Staffing 2/2, approval 1/2. Worktree removed, Hub stopped, no job enabled. Ticked 5.1 (37/43). ORIGINAL: git worktree add ../aw-f306-prefix <prefix_sha> (the commit BEFORE n1's; recorded in this file's prefix_sha). NEVER git stash. Hub from that worktree's hub/, on a free port, fresh profile, fresh project, two Haiku agents; scripts/drive/t_row12_review_leg.py with AW_COMPLETE_BY=untouched. The drive's own assertion passes on both trees - the ONLY proof is task_transitions showing the approving transition with actor_agent == the evidence author, and requirement_evidence naming that actor. No row -> say so and leave 5.2 unticked. Stop the Hub, git worktree remove afterwards. Never leave a job enabled."
-    },
-    {
-      "id": "n7-drive-fixed",
-      "status": "done",
-      "title": "S5.2 + S5.3 + S5.4 - the fixed tree, live",
-      "detail": "DONE iteration 8, proven from the tables. Port 8015, profile drive0912 (kept, with n7-transcripts/), PID 17692, no .py newer than start, HEAD cddf32b. 5.2: proj-192ee0e59efb task-88efa63d19ee, author r7af7a (ev-b6a5a19738e9, unbound run); first and ONLY bound run run-1d7e3883437a is r7bf7a (autonomous), no run_divergences; seq 4 under_review->approved actor_agent=r7bf7a. Drive 19/19. Author's hand approval: proj-99af62baca17 task-714b1ea52e2e, operator seq 7 ->under_review unassigned, r7af7b unbound run-cee1b5540146 called update_task(approved) first try -> 403 evidence sentence, no seq 8. 5.3: same project, only r7af7b bound, firing 2 409 'could not staff this step ... has worked on this task' = stall_reason; sentence says 'this task', id carried by review_unstaffed evt-c52509784f8b (the shipped split, not a finding); harness check 'names this task instead' passes on its disjunct, label overstates (harness-only, not changed). S3.5 dispatch 403, no run/entry/worktree; S3.4 wedge 403, task completed/assignee None, no transition. Drive 13/13. 5.4: 4 runs all haiku-4-5; jobs [] by API, ai_jobs enabled=0 archived, apscheduler_jobs empty. Ticked 5.2-5.4 (40/43). No new findings. ORIGINAL: Hub from the main checkout on a free port; confirm no .py under hub/hub or src is newer than the process start. 5.2: same drive - the flow staffs the OTHER agent; the author's hand approval is refused; record sequence numbers. 5.3: a project where the author is the only other agent - the firing surfaces 'could not staff this step' naming the task, and the sentence does not claim any agent completed it. Also try the S3.4 wedge by hand (operator PATCH assignee=<evidence author>, status=under_review) and the S3.5 dispatch refusal (POST /agent/trigger naming the author) - both are what the operator would meet. Haiku only; no job left enabled. Findings into FINDINGS.md."
-    },
-    {
-      "id": "n8-close",
-      "status": "done",
-      "title": "S7.0 + S7.1 ledger, S7.2 validate + archive",
-      "detail": "DONE iteration 9. F316 and F306 Status -> fixed 4929ea0 (tests 40bd429), checked as TWO findings; F306's D6 ordering note and D5 kind-scoping bullet corrected in place in dated blocks; F306 closes with a both-trees drive record; F316 states the restaff route is unit-proven (4.10/4.10a mutation-killed), not live-driven, and why. Index paragraph: open severity-A = F299 F300 F301 F312, computed. Census before/after (F313's rule): exactly F306 OPEN->RESOLVED and F316 CONFLICT->RESOLVED moved; B/C/D/? verdicts identical. 7 MODIFIED blocks compared to main before sync (no main edit postdates the delta), openspec archive synced them, verified verbatim by script, validate --specs --strict 43/43. Archived as archive/2026-09-12-an-agent-that-recorded-the-evidence-is-the-author, 43/43 tasks. APPROVALS BUILT note (FIX window, not operator). n7's harness-label overstatement repaired (label only). Window-close entry written."
-    }
-  ],
-  "notes_for_tomorrow": [
-    "Open severity-A findings with no proposal: F299, F300, F301 (DAY-3 decision material) and F312. Each needs the day window's spec loop before any night can build it.",
-    "F319 (B, filed 2026-09-12 n3): a review refused on the scheduler path leaves the refused reviewer holding the task (turn_scheduler.py:349 commits enter_selected_task's staged assignee), measured on the unmutated tree too. Its ReviewTurnRefused-after-staging leg is unverified and would make it an A. Recommended as the day window's FIRST spec-loop candidate.",
-    "F318 (B, classifier cross-section arm dequotes per line): open, no proposal. It no longer affects the A count now that F316 declares its own status, but it will misfile the next section that quotes a wrapped title. F292 (B): mitigation measured refuted as a fix, no proposal for the real fix.",
-    "Harness item, noticed in n6, not investigated: scripts/drive/t_row12_review_leg.py section E expects the reviewer to have an origin_type='job' queue entry, and a RESTAFFED reviewer (run_divergence restaff path) has none, so a drive that hits a Haiku silent review prints 15/19 on a tree that behaved correctly. Decide what section E should assert on a restaff (skip, or assert a 'divergence' entry instead). A harness design question, small, no product change."
-  ],
-  "decisions_for_user": [
-    "CLAUDE.md's trial-Hub section says the trial DB was 'migrated to head 0101' and 'this checkout is at 0101'. This branch's migration head is 0102 (three fresh profiles each migrated 0101->0102 on 2026-09-12). CLAUDE.md is the operator's file and was not edited: update the two sentences, or authorise a window to.",
-    "Merge: this branch now carries an-agent-that-recorded-the-evidence-is-the-author (product commit 4929ea0, tests 40bd429) on top of master@6f7e486. Merging is the operator's decision; the day window's merge gate is the only automated path."
-  ],
-  "limits": [
-    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-    "Every claim is measured or labelled unverified.",
-    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-  ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-12-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "eac213c",
+    "stop_at":  "2026-09-13T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-12-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
