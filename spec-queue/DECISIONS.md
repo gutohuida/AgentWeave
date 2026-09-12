@@ -578,6 +578,37 @@ serving four-day-old code.
 
 ## Decided
 
+### F319 + F320, decided 2026-09-12 afternoon — a refused review leaves nothing behind
+
+**DECIDED 2026-09-12 ~15:30, by the operator, in session.** The session recommended it and the
+operator agreed. F319 became severity A that morning (day window D-1, driven live), and F320 was
+filed beside it in the same drive. Neither had a verdict.
+
+- DECIDED   F319  **A refused review dispatch leaves the task exactly as it was before the dispatch,
+  and the operator is told.** No assignee, status change or transition row survives a refusal,
+  whichever refusal it is and whichever path (the route, or the scheduler) reached it.
+- DECIDED   F320  **A scheduling pass that abandons a refused queue head moves on to the next
+  entry.** Abandonment exists *"so a permanently wrong entry stops wedging the whole queue"*, and
+  the pass that abandons it is today the last pass anything makes (`agent_trigger.py:2433`,
+  *"There is no tick"*).
+- DECIDED   F319+F320  **One change, not two.** Both live in `turn_scheduler.py`'s refusal branch.
+  The commit that persists the staging is at `:349`, and the `return` after abandonment is at
+  `~:512`. Two proposals would edit the same lines.
+
+**Left to R1, deliberately.** R1 chooses the mechanism: undo the staging on refusal, or ask the
+repository-reading refusals (`review_turn.py` commit-present, git-repo, checkout-path) before
+`enter_selected_task` stages anything. Neither is decided here. R1 also answers whether the
+waiting-reason write at `:349` can keep recording the refusal's words without committing the
+staged assignee.
+
+**Why it goes first, ahead of F299.** It breaks the review path the loop and flows use every day,
+while F299 needs a harness that blocks MCP servers, which this machine's is not. It is silent: the
+board shows an ordinary `Under Review · Idle` card, and the next reviewer is refused by D9. And
+the 2026-09-11 night's F306 fix widened it. As the session reads the code and the D-1 log, leg A's
+refusal comes from the §3.4 entry-guard fallback added at `4929ea0`, and before that commit the
+same sequence ended in a self-review. The fix is right, and it left a stall where the self-review
+was.
+
 ### F306 and F312, decided 2026-09-10 evening — and the scope verdict's mechanism, amended
 
 **DECIDED 2026-09-10 ~18:50, by the operator, in session**, after a code exploration of both

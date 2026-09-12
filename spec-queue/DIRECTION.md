@@ -25,6 +25,58 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ---
 
+## 2026-09-13
+
+Written 2026-09-12 afternoon by a DECIDE session, on the operator's instruction. **It replaces the
+order in `## 2026-09-11` below.** That order's position 1 (F306) shipped on the 2026-09-11 night.
+Position 2 (`a-url-is-not-a-path`, F300 + F312 + F321 + F323) is approved for the 2026-09-12 night.
+
+### The spec loop takes `F319 + F320` as ONE change
+
+`D-2/D-3/D-4` are R1/R2/R3 on **F319 (A)**, a refused review leaves the refused reviewer holding
+the task, and **F320 (B)**, the pass that abandons a refused head never delivers the entry behind
+it. The verdict is `DECISIONS.md` *"F319 + F320, decided 2026-09-12 afternoon"*. It is binding on
+**what** (a refusal leaves the task as it was, and the operator is told; abandonment moves on to
+the next entry). It leaves **how** to R1. Do not re-litigate the what.
+
+What R1 starts from, already measured (`scripts/drive/FINDINGS.md` F319, F320):
+
+- **Three live reproductions, and a harness that makes them.** B1 is a pruned commit, B2 an
+  obstructed checkout path, and A is a review queued behind the reviewer's own running turn. The
+  harness is `scripts/drive/t_d1_0912_f319_reach.py`, and its database is kept at
+  `profiles/drive0912d`. **Every leg must reach the fixed tree and leave the task as it was.** A fix
+  that closes B1/B2 by reordering the repository checks does not, on its own, close A, which is a
+  timing gap and not a missing check.
+- **Leg A exists because of `4929ea0`** (the F306 fix's §3.4 entry-guard fallback). R1 must not
+  close it by weakening that guard. F306's verdict stands.
+- **F320's mechanism** is `turn_scheduler.py` `~:460-512`: it abandons the head at
+  `DELIVERY_ATTEMPT_LIMIT` and then `return`s. There is no tick (`agent_trigger.py:2433`).
+
+**`D-1` (the drive)** is the night's build of `a-url-is-not-a-path`, scoped as usual. **If that
+change is not archived** when the window arms, note it and leave it. It is the night's to resume,
+and that does not block this spec loop, because the two changes share no file.
+
+### The order for the days after
+
+One per day. The round discipline is not compressible.
+
+```
+1. F319 + F320 as ONE       (A+B)  a refused review leaves nothing behind -- 2026-09-13, above
+2. F299                     (A)    no grounds, no approver flag
+3. F301's notice change            re-derive first: DECISIONS 1c/1d rest on a false measurement
+                                   (S1_python_c is refused by today's _decide; a-url-is-not-a-path
+                                   design D6)
+4. the three R-3 leftovers         F209's reason; queue/settings port-then-remove; entry 19 narrowed
+```
+
+**Not in the order, deliberately:** `F325` (A, Codex app-server runs receive no context) runs on
+a runner nobody can drive, so a fix could be unit-tested and never driven. It has no verdict.
+`F292` (B, the CI `database is locked` flake) failed 2 of 6 CI runs on 2026-09-12, both on doc-only
+commits. It is severity B and has no proposal. Either one enters the order only by an operator
+decision.
+
+---
+
 ## 2026-09-11
 
 Written 2026-09-10 evening by a DECIDE session, on the operator's instruction, after four verdicts
