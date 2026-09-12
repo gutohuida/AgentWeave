@@ -552,6 +552,15 @@ boundary, not a sandbox"*. The change rewrites the `_decide` comment that claims
 *"resolve against the run's cwd, which is the workspace"*, because that is the claim F321 and R1
 both show is false. The rewrite states the resolution rule and this limit instead.
 
+**PowerShell has its own members of this class, and they are named here so nobody infers the list
+is Bash-only** (added 2026-09-12 by the pre-approval Opus review). A path *built at runtime* by a
+cmdlet or .NET call never appears as a word the reader can judge: `Set-Content (Join-Path ..
+stray.txt) "hi"` was **measured** in Windows PowerShell 5.1 writing `stray.txt` in the workspace's
+parent, and the reader sees only the separator-less words `..` and `stray.txt` (rule 4). The same
+holds for `Resolve-Path`, `Convert-Path` and `[IO.Path]::Combine('..', 'x')`. These are allowed today
+and after, for the same reason `cd ..` is. They are residuals, not rows this change closes. Closing
+them is a separate change with its own rounds.
+
 ## D10 — Open, for R2, R3 and the operator
 
 1. **N3.** Accept the one widening, or pay for D8(d)? (D3.)

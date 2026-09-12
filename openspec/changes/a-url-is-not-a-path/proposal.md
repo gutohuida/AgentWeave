@@ -170,7 +170,9 @@ item 7). After R3, **28 rows move on Windows** (21 to allowed, 7 to refused).
   becomes a command `_decide` allows. Rewriting the notice is `DIRECTION.md` 2026-09-11 position 4,
   and point 3 above bears on it.
 - **Escapes that never passed through the regex.** `cd .. && echo hi > stray.txt`,
-  `git -C .. status`, and a `cd` in an earlier call are allowed today and after. The docstring
+  `git -C .. status`, a `cd` in an earlier call, and PowerShell's runtime path builders
+  (`Set-Content (Join-Path .. x)`, `Resolve-Path`, `Convert-Path`, `[IO.Path]::Combine`; design
+  D9) are allowed today and after. The docstring
   already says *"a boundary, not a sandbox"*. They are recorded as pinned rows so nobody reads this
   change as tightening the boundary.
 

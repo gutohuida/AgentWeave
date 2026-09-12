@@ -41,7 +41,7 @@ expect them to move.
 | | |
 |---|---|
 | **Port** | `8010` |
-| **Database** | `~/.agentweave/hub/profiles/trial/agentweave.db` — created fresh 2026-09-07, migrated to head `0101` |
+| **Database** | `~/.agentweave/hub/profiles/trial/agentweave.db` — created fresh 2026-09-07; at head `0102` (read from its `alembic_version`, 2026-09-12) |
 | **PID file** | `~/.agentweave/hub/hub-trial-8010.pid` (per-launch-script; any other `hub-*.pid` may be stale — check `Get-Process -Id <pid>` before trusting one) |
 | **This repo registered as** | `proj-d85a82bf4216`, working directory the repo root |
 | **Bootstrap key** | `~/.agentweave/hub/profiles/trial/bootstrap-key.txt`, sent as `Authorization: Bearer <key>` (not `X-API-Key`) |
@@ -74,7 +74,7 @@ DATABASE_URL="sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/trial/
 whose bundled migrations lag this checkout, so on any branch past the installed head it dies with
 `Migration failed: Can't locate revision identified by '00NN'`. This cost two sessions on
 2026-08-24 before it was written down. The gap is now large: the installed build is PyPI **1.1.0**
-at migration head `0081`, while this checkout is at `0101` and roughly 1,400 commits past the
+at migration head `0081`, while this checkout is at `0102` and roughly 1,400 commits past the
 `Release 1.1.0` commit — both still calling themselves `1.1.0`.
 
 Point the Vite dev server at it with `AW_DEV_HUB=http://127.0.0.1:8010 npm run dev`, and

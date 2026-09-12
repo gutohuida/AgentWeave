@@ -66,6 +66,25 @@ landed. Nothing from the 2026-09-08 branch is unmerged.
 If you approve nothing, the FIX window falls to the default queue, and both Windows escapes stay
 open. `ORDER:` and `NOTHING TONIGHT` are both available.
 
+**Correction by the DECIDE session:** the page carries eight decisions, and `STATE-day.json` carries
+ten. Two were added after the page was written. Item 9 is R3's live `sort -o"..\stray.txt"` escape,
+which the change already closes. Item 10 is **`F325` (A)**: Codex's default app-server transport
+sends a run no canonical context at all. It was filed at D-7 and is not on the page. It is not work
+for tonight.
+
+**DECIDED by the operator, in session, 2026-09-12 afternoon**, after an adversarial Opus review run
+before approving, as on 2026-09-11. The review's verdict was **approve**. It measured both live
+Windows escapes (F323, and R3's Z1) writing outside today and refused by the design. It measured
+F300's instructed request, header included, going from denied to allowed. It found **no escape the
+design allows that today refuses.** It found one residual class the design did not name: PowerShell
+runtime path builders (`Set-Content (Join-Path .. x)`, measured writing outside). Those are allowed
+today and after. The class is now named in `design.md` D9 and the proposal's non-goals. Nothing
+executable changed, and `openspec validate --strict` was re-run after the edit.
+
+- APPROVED  a-url-is-not-a-path   F300 (A) + F312 (A) + F321 (A) + F323 (A), **46 tasks**, 0 ticked. Python only: `hub/hub/mcp_server.py`, its tests, one docs paragraph. No migration, no schema, no API shape, **no UI bundle**, so the Python lint set *is* required (§8) and `make ui` is not. **Verify it as four findings.** §9.1 sets four `Status:` lines, and a run that closes fewer has closed part of a change. **§6.2 must record the actual `tool_name` of every `permission_denied` row.** D1 picks the lexing dialect by that name, and nobody has verified it; the review could not, because it ran no agent turn. **Both Windows escapes must be driven pre-fix and fixed** (§6.2 asks 4 and 5). A table row is not a substitute.
+
+Decisions 2 and 3 on the page were not answered separately, so their stated defaults apply. **`F321` stays folded in**, and the review agreed, because splitting it leaves F300 unable to fire. **D3 is built as written**, which means `curl example.com/x` becomes allowed. `/dev/null` stays refused. §7.1–§7.3 are human-only verification and stay open for the operator. §9.3 still holds: the night does not edit `DECISIONS.md`.
+
 ---
 
 ## 2026-09-11
