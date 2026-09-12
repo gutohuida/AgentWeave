@@ -252,8 +252,18 @@ def dequote_lines(lines):
     return out[:-1]
 
 
+# BLIND SPOT 11 (F324, found 2026-09-12 while driving blind spot 10's repair: a line it reported
+# at 25591 sat at 25587 in an editor). `str.splitlines()` also breaks on form feed, vertical
+# tab, U+001C-1E, U+0085 and U+2028/2029. F304's body carried four form feeds -- a path whose
+# backslash-f became a control character -- so every line number printed after it, including
+# four open severity-A findings, was four higher than the one an editor or `Read` shows. A
+# line is what ends in `\n`; text mode has already folded `\r\n` and a lone `\r` into it.
 def load(path=PATH):
-    return open(path, encoding="utf-8", errors="replace").read().splitlines()
+    with open(path, encoding="utf-8", errors="replace") as f:
+        lines = f.read().split("\n")
+    if lines[-1] == "":
+        lines.pop()
+    return lines
 
 
 def classify(lines):

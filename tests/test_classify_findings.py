@@ -369,6 +369,36 @@ It does a thing, and the thing is wrong.
     assert got[7] == "UNCLASSIFIED"
 
 
+def test_a_control_character_inside_a_line_does_not_move_the_numbering(tmp_path):
+    """Blind spot 11 (F324). `load()` used `str.splitlines()`, which also breaks on a form
+    feed. F304's body carried four -- `%TEMP%` + backslash + `f295drive...`, the backslash-f
+    turned into U+000C -- so every line number reported after it was four higher than an
+    editor's, F312, F319, F321 and F323 among them. Numbering is by `\\n` alone.
+    """
+    ledger = tmp_path / "FINDINGS.md"
+    ledger.write_text(
+        "# Findings\n"
+        "\n"
+        "## F304 (C) — a finding\n"
+        "**Status:** open\n"
+        "Kept: `%TEMP%\f295drive020814\f295.db` and a vertical tab\vthat is no line break either.\n"
+        "\n"
+        "## F312 (A) — the next finding\n"
+        "**Status:** open\n"
+        "\n"
+        "## F318 (B) — a later note\n"
+        "F312 is **fixed** in `92c1481`.\n",
+        encoding="utf-8",
+    )
+    lines = cf.load(ledger)
+    assert len(lines) == 11, "one entry per `\\n`-terminated line, no trailing empty entry"
+    got = {r["num"]: r for r in cf.classify(lines)}
+    assert got[312]["line"] == 7, "the heading an editor shows at line 7 is reported at 7"
+    assert got[318]["line"] == 10
+    assert [e[1] for e in got[312]["ext"]] == [11], "evidence lines use the editor's numbering"
+    assert got[312]["verdict"] == "CONFLICT", "the verdicts do not depend on the numbering"
+
+
 # --- the structural invariant, against the real ledger -----------------------------------
 
 

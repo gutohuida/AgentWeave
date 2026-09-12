@@ -24609,7 +24609,7 @@ surface: a stored row that cannot say why it ended. Whether anything renders it 
 
 **Reproduction:** `py -3.11 scripts/drive/f295_shutdown_drive.py`, then read the `runs` table in the
 database the script prints — the cancelled run's `error` is `''`. Two databases with it are kept:
-`%TEMP%295drive020814295.db` and `%TEMP%295drive110952295.db`.
+`%TEMP%\f295drive020814\f295.db` and `%TEMP%\f295drive110952\f295.db`.
 
 **Adjacent, deliberately not merged.** `F298` is about how the cancellation is *reported to the
 console*; this is about what is *stored on the row*. The same `isinstance` branch would serve both,
