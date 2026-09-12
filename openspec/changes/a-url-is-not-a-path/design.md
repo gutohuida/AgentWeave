@@ -152,6 +152,12 @@ row whose answer could move, and to every residual worth recording. Measured by 
 `_decide`, and every one agrees. Every *after* cell below is R2's lexing reading. It keeps every
 answer R1 decided except X1–X3, which R2 splits by dialect.
 
+**The *today* column is Windows (measured 2026-09-12 at S1, night window).** On POSIX, today's
+regex yields `s://…` for `https://…` and `e:///…` for `file:///…`, relative paths there, so R10,
+N1, N2, N7, H4–H7 and H13–H16 are **allowed** today on Linux, and `curl -T x file:///…` wrote
+outside the workspace (F331). X8 raises there (D5). No *after* cell changes: each of those rows is
+decided by rule 1 on every platform. tasks §1.4 records how the pins are platform-scoped.
+
 **The research's rows, re-measured.** Every answer and every reason in the *today* column was
 reproduced exactly as §1 reports it.
 

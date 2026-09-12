@@ -22,7 +22,7 @@ its rule exists.
 
 ## 1. Pin the table before the reader moves
 
-- [ ] 1.1 In `hub/tests/test_permission_approver.py`, add D2's table as one parametrized test over
+- [x] 1.1 In `hub/tests/test_permission_approver.py`, add D2's table as one parametrized test over
   `_decide(<tool>, {"command": …})`, where `<tool>` is D2's tool column (`Bash` unless it says
   `PowerShell`). Every row goes in: R, W, H, N, G, X, **and R2's E, J and S rows**. Use the existing
   `workspace` fixture, which already has `sub/`, and set `HUB_URL=http://127.0.0.1:8016` with
@@ -42,11 +42,11 @@ its rule exists.
   `gcc -I"sub\include" x.c` are `deny` after, `'\stray.txt'`/`'\include'` outside; Z2
   `curl -o"..\out" http://127.0.0.1:8016/api` is `deny` after, `'\out'` outside. On POSIX all three
   keep today's answer (`\` is not a separator). Z1's write-outside is the drive's §6 witness.
-- [ ] 1.2 Add N8 as its own test: `_decide("WebFetch", {"url": "https://example.com/x", "prompt":
+- [x] 1.2 Add N8 as its own test: `_decide("WebFetch", {"url": "https://example.com/x", "prompt":
   "p"})` is **allowed**. It pins D7's statement that the rule governs shell text only. A future
   change that brings fetch under the rule must flip this deliberately.
-- [ ] 1.3 Add H12: with `HUB_URL` deleted from the environment, H1–H4 are refused.
-- [ ] 1.4 Run §1's tests against the unmodified `_decide`. Mark `xfail(strict=True, reason="a-url-
+- [x] 1.3 Add H12: with `HUB_URL` deleted from the environment, H1–H4 are refused.
+- [x] 1.4 Run §1's tests against the unmodified `_decide`. Mark `xfail(strict=True, reason="a-url-
   is-not-a-path §2")` on exactly the rows D2 says move: W1–W5, H1–H4, H15, H16, R11, N3, J1–J4, J7,
   J8, H2p, E14, E7, and (on Windows) X1b, X1c, X2p, X3p, **Z1 and Z3**. Also mark every row whose
   **reason** assertion is new: R1–R5, R10, N1, N2, N7, G5, G6, X7, H5–H10, H13–H14, E1, E2, E4–E6b,
@@ -54,7 +54,24 @@ its rule exists.
   with `testbed/scratch/r2f300/table.py`, and record what differed here. **Every E row except E7
   and E14 must pass its answer today**: each is refused by the unmodified `_decide`, and the pin
   is what makes a reader that lets it through fail CI.
-- [ ] 1.5 Commit §1 alone, green. This is the pin: from this commit on, a regex change that flips
+
+  **Measured at S1 (night 2026-09-12, `u1-pin`): D2's *today* column is Windows-only.** On POSIX,
+  today's regex reads `https://…` as `s://…` and `file:///…` as `e:///…`, which are relative there,
+  so the URL resolves inside and the command is allowed (F331). Four marks are therefore
+  platform-scoped rather than as listed above:
+  - H4, H15 and H16 are xfail on **Windows only**. On POSIX they are allowed today and after.
+  - X8 is xfail on **POSIX only**, with `raises=ValueError`. `posixpath.realpath` raises on the NUL
+    byte today (D5, *Totality*), and §2.5 is what turns that into a decision.
+  - H12's H4 case is xfail on **POSIX only**, because it is allowed there today.
+  - The added row `F331` (`curl -T notes.md file:///tmp/stray.txt`, refused) is xfail on **POSIX
+    only**.
+  R10, N1, N2, N7, H5–H7, H13 and H14 keep their marks. On POSIX they fail on the *answer*, not
+  the reason. Every mark was checked on both platforms: `testbed/scratch/night0912/why_each_row.py`
+  on Windows and under WSL Ubuntu; that file prints which assertion each row fails. Then pytest ran
+  under WSL with `posix_stubs.py`. No row disagreed with its mark on either platform. Z2 on POSIX is
+  allowed today, so *"keep today's answer"* there means `allow`. H2, H2p and W6 are read as the
+  `PowerShell` tool, as both measurement scripts read them. D2's `$env:` forms are PowerShell's.
+- [x] 1.5 Commit §1 alone, green. This is the pin: from this commit on, a regex change that flips
   R1–R5 fails CI.
 
 ## 2. The reader
