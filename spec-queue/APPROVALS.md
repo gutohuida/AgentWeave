@@ -107,6 +107,35 @@ one. A boundary landing mid-cycle pushes the hole reopened under a message sayin
 **No `ORDER:` line.** This is the only approved change, so the order is not in question, and an
 `ORDER:` line is read verbatim with no date check — a liability the moment it outlives its day.
 
+**BUILT — written by the FIX window at close-out, 2026-09-12, not by the operator.** The approved
+row above is complete: **43 of 43 tasks ticked** with actuals. That is the 42 approved plus 4.11a,
+which iteration 2 added because R4's §3.4 moved a second existing test; that fixture was repaired to
+operator evidence, and the guard was left as it was. Fix `4929ea0`, tests `40bd429`. **All five
+call sites are in**, §3.4 included, as the row demanded. There are ten mutations and each one
+killed its target leg. The whole Hub suite gave **4057 passed, 0 failed**, and CI's lint set is
+clean.
+
+**Driven live on both trees, and proven from the tables, not the harness.** The drive harness
+prints green on either tree.
+
+- **Pre-fix** (`37b8226` in a worktree): the evidence author approved its own work at seq 8 on
+  `proj-34d006e2f3e5`.
+- **Fixed**: the flow's only staffing was the other agent, and it approved at seq 4 on
+  `proj-192ee0e59efb`. The author was refused through its own MCP approval (403), a flow firing
+  (409, *"could not staff this step"*), hand dispatch (403, before any run), and the operator's
+  §3.4 `PATCH` (403, with the assignee rolled back).
+
+Deltas were synced into `openspec/specs/agent-flows` and `task-lifecycle-governance`, 7 blocks
+verbatim, and the change is archived as
+`openspec/changes/archive/2026-09-12-an-agent-that-recorded-the-evidence-is-the-author`.
+
+**Verified as two findings, as the row demanded.** `F306` and `F316` each carry their own
+`**Status:** fixed 4929ea0` line. `F306`'s two statements that R1 refuted are corrected in place.
+`F316`'s entry says plainly that its restaff route is proven at unit level and not on a live Hub.
+The census moved exactly those two verdicts. One new finding came out of the mutation run:
+`F319 (B)`, a scheduler-path refusal that leaves the refused reviewer holding the task. It is filed
+and has no proposal.
+
 ---
 
 ## 2026-09-10

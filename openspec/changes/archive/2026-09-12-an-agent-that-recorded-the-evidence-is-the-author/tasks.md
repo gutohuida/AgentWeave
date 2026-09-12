@@ -355,12 +355,27 @@ do not treat a green file list as evidence of anything here.
 
 ## 7. Close it out
 
-- [ ] 7.0 Set `F316`'s Status line to `fixed <sha>` as well, and say which task closed it (2.4).
+- [x] 7.0 Set `F316`'s Status line to `fixed <sha>` as well, and say which task closed it (2.4).
   It was filed by this change's R2 and is closed by it; a finding left open because it was fixed
   inside somebody else's change is how the ledger grows entries nobody can resolve.
-- [ ] 7.1 Set `F306`'s Status line in `scripts/drive/FINDINGS.md` to `fixed <sha>`, and correct the
+  *Done 2026-09-12 (night iteration 9).* `fixed 4929ea0` (tests `40bd429`), naming 2.4 and 2.4a.
+  The entry says plainly that the restaff route was proven at unit level (4.10 and 4.10a, both
+  mutation-killed) and not driven live on the fixed tree, and it says why.
+- [x] 7.1 Set `F306`'s Status line in `scripts/drive/FINDINGS.md` to `fixed <sha>`, and correct the
   two statements R1 measured false: the *"Unverified: whether ordering is deterministic"* note
   (`design.md` D6) and the `kind`-scoping suggestion in its shape-of-a-fix list (`design.md` D5).
   The entry is the ledger; leaving a refuted suggestion in it is how the next round re-proposes it.
-- [ ] 7.2 `openspec validate --strict an-agent-that-recorded-the-evidence-is-the-author`, then
+  *Done 2026-09-12 (night iteration 9).* `fixed 4929ea0`. Both statements were corrected in place,
+  each in a dated block that quotes what it replaces. The entry now closes with a record of the
+  drive on both trees, with ids and sequence numbers. F306 and F316 were checked as **two**
+  findings. The classifier census was captured before and after the edit, and exactly two verdicts
+  moved (A: `OPEN=5 CONFLICT=2` → `OPEN=4 CONFLICT=1`, and F52 is the remaining conflict). Once
+  line offsets are stripped, the B, C, D and `?` lines are unchanged.
+- [x] 7.2 `openspec validate --strict an-agent-that-recorded-the-evidence-is-the-author`, then
   archive with the `openspec-archive-change` skill.
+  *Done 2026-09-12 (night iteration 9).* `is valid`. Before syncing, each of the 7 MODIFIED blocks
+  was compared with its main-spec block. Every main scenario survives in the delta, except
+  *"A task whose completer is unknown may enter review"*, which S3.4 split into its two conditional
+  scenarios on purpose. No main-spec edit postdates the delta: the specs were last touched at
+  `5d43a40`, and the delta was first written at `35cdd38`. So the whole-block replacement that
+  `openspec archive` does *is* the sync, and I ran it without `--skip-specs`.

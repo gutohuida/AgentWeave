@@ -8,14 +8,14 @@
   "parent_branch": "master",
   "parent_sha": "6f7e486",
   "stop_at": "2026-09-12T07:00:00+01:00",
-  "iteration": 8,
+  "iteration": 9,
   "log_file": ".claude/autonomous/2026-09-11-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "change": "openspec/changes/an-agent-that-recorded-the-evidence-is-the-author",
+  "change": "openspec/changes/archive/2026-09-12-an-agent-that-recorded-the-evidence-is-the-author",
   "prefix_sha": "37b8226",
-  "current": "n8-close",
-  "next_action": "Queue item n8-close (S7.0 + S7.1 + S7.2), then the window's final log entry. The ONLY open tasks are 7.0, 7.1, 7.2 (40/43 ticked). (1) BEFORE editing FINDINGS.md, capture the classifier census (F313's rule: find the classifier script the prior nights used - grep scripts/ for the one that classifies FINDINGS.md Status lines - and save its full output to %TEMP%). (2) 7.0: F316 Status -> 'fixed 4929ea0' (the fix commit; tests 40bd429), naming task 2.4 (run_divergence._answer_failed_review two-branch derivation) as what closed it. (3) 7.1: F306 Status -> 'fixed 4929ea0'; correct the two R1-refuted statements in F306's entry - the 'Unverified: whether ordering is deterministic' note (see design.md D6: the ladder orders by name, deterministic) and the kind-scoping suggestion in its shape-of-a-fix list (design.md D5 says why kind is NOT scoped). Cite the drives: pre-fix n6 (drive0912p, proj-34d006e2f3e5 seq 8 approved by author r7af306q) and fixed n7 (drive0912, proj-192ee0e59efb task-88efa63d19ee seq 4 approved by r7bf7a on run-1d7e3883437a, the first and only bound run; author refused 403 on proj-99af62baca17 task-714b1ea52e2e, no seq 8). Verify F306 and F316 as TWO findings. Re-derive the index paragraph's open severity-A list (was F299 F300 F301 F306 F312 + F316; F306/F316 leave it). (4) 7.2: openspec validate --strict; sync the change's deltas into openspec/specs/ (agent-flows, task-lifecycle-governance - check openspec/changes/<change>/specs/ for the exact set) by hand or via openspec-sync-specs, openspec validate --specs --strict, then archive (openspec-archive-change skill / git mv into openspec/changes/archive/2026-09-12-an-agent-that-recorded-the-evidence-is-the-author). Tick 7.0-7.2. (5) Re-run the classifier; require exactly the F306/F316 verdicts to move and nothing else. (6) spec-queue/APPROVALS.md: add a BUILT note under the 2026-09-11 row, labelled as written by the night window, not the operator. (7) Final log entry per night-window.md 'Ending the window' (what changed - product vs docs commits; proven vs inferred; open findings incl. F319 and the harness-label note from n7; decisions for operator incl. CLAUDE.md migration head 0101->0102 staleness from n5; what to distrust). (8) state: n8 done, next_action null. Commit, push.",
+  "current": null,
+  "next_action": null,
   "queue": [
     {
       "id": "compose",
@@ -67,17 +67,21 @@
     },
     {
       "id": "n8-close",
-      "status": "open",
+      "status": "done",
       "title": "S7.0 + S7.1 ledger, S7.2 validate + archive",
-      "detail": "Capture the classifier census BEFORE editing (F313's rule). F316 Status -> fixed <sha> naming task 2.4; F306 Status -> fixed <sha>, and correct the two R1-refuted statements (D6 ordering note, D5 kind-scoping suggestion). Verify as TWO findings - closing one and reporting done is half a change. Index paragraph's open severity-A list re-derived (was F299 F300 F301 F306 F312 per last night, + F316 since). Sync deltas into openspec/specs/agent-flows and task-lifecycle-governance by hand, openspec validate --specs --strict, git mv into archive/. Re-run the classifier after and require exactly the F306/F316 verdicts to move. APPROVALS.md BUILT note labelled as not the operator's. Then the window's final log entry per the playbook's 'Ending the window', and next_action null."
+      "detail": "DONE iteration 9. F316 and F306 Status -> fixed 4929ea0 (tests 40bd429), checked as TWO findings; F306's D6 ordering note and D5 kind-scoping bullet corrected in place in dated blocks; F306 closes with a both-trees drive record; F316 states the restaff route is unit-proven (4.10/4.10a mutation-killed), not live-driven, and why. Index paragraph: open severity-A = F299 F300 F301 F312, computed. Census before/after (F313's rule): exactly F306 OPEN->RESOLVED and F316 CONFLICT->RESOLVED moved; B/C/D/? verdicts identical. 7 MODIFIED blocks compared to main before sync (no main edit postdates the delta), openspec archive synced them, verified verbatim by script, validate --specs --strict 43/43. Archived as archive/2026-09-12-an-agent-that-recorded-the-evidence-is-the-author, 43/43 tasks. APPROVALS BUILT note (FIX window, not operator). n7's harness-label overstatement repaired (label only). Window-close entry written."
     }
   ],
   "notes_for_tomorrow": [
-    "Open severity-A findings with no proposal - F299, F300, F301, F312 - need the day window's spec loop before any night can build them.",
-    "F318 (B, classifier cross-section arm dequotes per line) is open with no proposal; F292 (B) mitigation measured refuted as a fix, no proposal for the real fix. The FILL note named an 'F292 concurrent sampler (conftest.py-only, no spec)' as default-queue work; the playbook's rule is that a finding with no proposal goes to the day window first, so tonight does not build it.",
-    "F319 (B) filed 2026-09-12 by n3: a review refused on the scheduler path leaves the refused reviewer holding the task (turn_scheduler.py:349 commits enter_selected_task's staged assignee). No proposal; its ReviewTurnRefused-after-staging leg is unverified and would make it A - the day window's spec loop should drive that first."
+    "Open severity-A findings with no proposal: F299, F300, F301 (DAY-3 decision material) and F312. Each needs the day window's spec loop before any night can build it.",
+    "F319 (B, filed 2026-09-12 n3): a review refused on the scheduler path leaves the refused reviewer holding the task (turn_scheduler.py:349 commits enter_selected_task's staged assignee), measured on the unmutated tree too. Its ReviewTurnRefused-after-staging leg is unverified and would make it an A. Recommended as the day window's FIRST spec-loop candidate.",
+    "F318 (B, classifier cross-section arm dequotes per line): open, no proposal. It no longer affects the A count now that F316 declares its own status, but it will misfile the next section that quotes a wrapped title. F292 (B): mitigation measured refuted as a fix, no proposal for the real fix.",
+    "Harness item, noticed in n6, not investigated: scripts/drive/t_row12_review_leg.py section E expects the reviewer to have an origin_type='job' queue entry, and a RESTAFFED reviewer (run_divergence restaff path) has none, so a drive that hits a Haiku silent review prints 15/19 on a tree that behaved correctly. Decide what section E should assert on a restaff (skip, or assert a 'divergence' entry instead). A harness design question, small, no product change."
   ],
-  "decisions_for_user": [],
+  "decisions_for_user": [
+    "CLAUDE.md's trial-Hub section says the trial DB was 'migrated to head 0101' and 'this checkout is at 0101'. This branch's migration head is 0102 (three fresh profiles each migrated 0101->0102 on 2026-09-12). CLAUDE.md is the operator's file and was not edited: update the two sentences, or authorise a window to.",
+    "Merge: this branch now carries an-agent-that-recorded-the-evidence-is-the-author (product commit 4929ea0, tests 40bd429) on top of master@6f7e486. Merging is the operator's decision; the day window's merge gate is the only automated path."
+  ],
   "limits": [
     "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
     "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",

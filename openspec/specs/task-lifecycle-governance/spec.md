@@ -226,6 +226,36 @@ rule requiring only "a different run" is satisfied by an agent continuing its ow
 nothing — observed in live use on 2026-08-10, when an agent completed a task on one run and
 approved it on the next.
 
+**Where no agent is recorded as completing the task, the system SHALL refuse the transition when the
+requesting agent is recorded as having produced evidence for that task.** An operator completion
+records no agent, and a task written straight into `completed` records nothing at all; in both the
+comparison this rule is built on has nothing to compare, and permitting on that basis let an agent
+approve work it had itself recorded as its own — measured on a live Hub on 2026-09-09, where an
+agent recorded implementation evidence for a task, the operator marked the task finished, and the
+same agent's approval was accepted with nothing refusing it and nothing recording that it had
+happened.
+
+This does not weaken the permission that an unattributable move receives. Refusing every move the
+system cannot attribute would stop legitimate work over a missing history row; this refuses on the
+strength of a **record that exists** — an evidence row in which the agent named this task as the
+subject of its own work.
+
+**That fallback SHALL be the evidence record alone, and SHALL NOT be the wider determination of
+which agents may have authored the task.** The wider determination includes the agent the task is
+assigned to, and a task dispatched for review is assigned to its reviewer — so comparing against it
+would refuse the reviewer the system itself staffed, on every operator-completed task, which is the
+whole of the review path this rule exists to protect. Of the records that associate an agent with a
+task, the evidence is the one the act of reviewing does not create.
+
+**Evidence SHALL refuse its author whatever the state of its review.** An agent whose evidence was
+rejected, or whose evidence is still awaiting a decision, still produced the work the row records.
+Keying the refusal on a review decision would make the authority to review a task depend on the
+outcome of the review being requested.
+
+**Evidence recorded by the operator SHALL NOT refuse any agent.** A person recording what
+demonstrates the work is not an agent claiming authorship of it, so a task whose evidence came only
+from the operator remains reviewable by any agent.
+
 This rule binds agent runs only. The operator SHALL be permitted to approve work regardless of who
 produced it — a single-operator project would otherwise be unable to approve anything — and the
 history states that an operator did so.
@@ -250,6 +280,34 @@ history states that an operator did so.
 - **AND** the transition is otherwise legal
 - **THEN** the request succeeds
 
+#### Scenario: The agent that recorded the evidence is refused on operator-completed work
+
+- **WHEN** the operator recorded a task's move to `completed`, and an agent that recorded evidence
+  for that task requests `approved`
+- **THEN** the request is refused with a typed error naming the evidence as the reason
+- **AND** the refusal does not state that any agent completed the task
+- **AND** the task remains in its pre-request status
+- **AND** no transition is recorded
+
+#### Scenario: The reviewer the flow staffed is not refused
+
+- **WHEN** a flow staffs a reviewer for an operator-completed task, assigning the task to that
+  reviewer, and the reviewer requests `approved`
+- **AND** that reviewer recorded no evidence for the task
+- **THEN** the request succeeds
+
+#### Scenario: Awaiting or rejected evidence refuses its author just the same
+
+- **WHEN** an agent's evidence for an operator-completed task is still awaiting a decision, or was
+  rejected, and that agent requests `approved`
+- **THEN** the request is refused
+
+#### Scenario: Evidence the operator recorded refuses nobody
+
+- **WHEN** an operator-completed task's only evidence was recorded by the operator, and an agent
+  that no other record associates with the task requests `approved`
+- **THEN** the request succeeds
+
 #### Scenario: The operator may approve any work
 
 - **WHEN** the operator approves a task, including one they moved to `completed` themselves
@@ -261,11 +319,17 @@ history states that an operator did so.
 - **WHEN** the agent that completed a task requests `rejected` or `revision_needed` on it
 - **THEN** the request is refused on the same grounds as self-approval
 
+#### Scenario: The evidence fallback covers rejection and revision too
+
+- **WHEN** an agent that recorded evidence for an operator-completed task requests `rejected` or
+  `revision_needed` on it
+- **THEN** the request is refused on the same grounds as its refused approval
+
 ### Requirement: A task entering review must not still name its author as its holder
 
 The system SHALL refuse a transition to `under_review` when the task's assignee is the **agent**
-recorded as having moved it to `completed`. Where the task has no assignee, or no completer is
-recorded, the transition SHALL be permitted.
+recorded as having moved it to `completed`. Where the task has no assignee the transition SHALL be
+permitted.
 
 This rule binds **every actor, including the operator**, and that is what distinguishes it from
 author/reviewer separation above. That rule is about authority — who is entitled to sign work off —
@@ -274,11 +338,20 @@ rule is about the state the move produces, which misdescribes the world whoever 
 asserts that a reviewer holds the task while naming its author. An operator who intends to review
 the work themselves SHALL do so by clearing or reassigning the assignee, which the refusal states.
 
-The permitted cases are deliberate. An unassigned task claims that nobody holds it, so nothing is
-false and no work is stranded. An unattributable one follows the same asymmetry the offer rule uses
-— refuse to *offer* finished work whose author cannot be ruled out, but permit an actor to *act* on
-it — because a rule that blocked every move it could not attribute would strand tasks completed
-before transitions were recorded.
+**Where no completer is recorded, the system SHALL refuse the transition when the assignee is
+recorded as having produced evidence for that task, and SHALL permit it otherwise.** The
+unattributable case was previously permitted outright, on the asymmetry the offer rule uses — refuse
+to *offer* finished work whose author cannot be ruled out, but permit an actor to *act* on it. That
+asymmetry is sound only while acting remains possible. Once author/reviewer separation refuses an
+evidence author's verdict on an operator-completed task, permitting the same agent to be named as
+its holder produces a task that no actor can move out of `under_review`: the agent is refused every
+review outcome, and because no transition on the task names it, the flow reports the review as
+genuinely in progress and never restaffs it. Refusing the entry is what keeps the two rules
+describing one world — the operator learns before a turn is spent, and the remedy is the one this
+refusal already names.
+
+An unassigned task claims that nobody holds it, so nothing is false and no work is stranded, and
+that case stays permitted unchanged.
 
 Because the assignee is read at the moment of the transition, any surface that sets both a status
 and an assignee in one operation SHALL apply the assignee first, so that a single request naming a
@@ -305,10 +378,26 @@ reviewer and sending the task to review is accepted rather than refused on the a
 - **WHEN** a completed task with no assignee is moved to `under_review`
 - **THEN** the request succeeds
 
-#### Scenario: A task whose completer is unknown may enter review
+#### Scenario: A task whose completer is unknown may enter review when its holder recorded nothing
 
-- **WHEN** a completed task with no recorded completer is moved to `under_review`
+- **WHEN** a completed task with no recorded completer is moved to `under_review` while assigned to
+  an agent that recorded no evidence for it
 - **THEN** the request succeeds
+
+#### Scenario: A task whose completer is unknown is refused when its holder recorded the evidence
+
+- **WHEN** a completed task with no recorded completer is moved to `under_review` while assigned to
+  an agent that recorded evidence for it
+- **THEN** the request is refused with a typed error naming the evidence as the reason
+- **AND** the refusal does not state that any agent completed the task
+- **AND** the task remains in its pre-request status
+
+#### Scenario: The reviewer a flow staffs still enters review
+
+- **WHEN** a flow staffs a reviewer for an operator-completed task and assigns the task to it before
+  moving the task to `under_review`
+- **THEN** the request succeeds, because a staffed reviewer is never an agent that recorded the
+  task's evidence
 
 ### Requirement: A review a flow cannot staff is not reported as staffed
 
@@ -387,11 +476,12 @@ in review, and only who holds it was wrong.
   that no transition on it names
 - **THEN** it is reported as held by that assignee
 
-The route is supported and produces a review that is genuinely in progress: dispatching a review by
-hand refuses only an agent *recorded* as completing the task, so on a task with no recorded
-completion any agent may be dispatched, and dispatching staffs the task. Treating every such task as
-unstaffable would report a real reviewer's work as nobody's — which is the same false statement this
-requirement exists to prevent, made in the opposite direction.
+The route is supported and produces a review that is genuinely in progress: on a task with no
+recorded completion, dispatching a review by hand refuses only an agent the record names as the
+work's author — the agent recorded as completing it, or the agent recorded as having produced its
+evidence — so an agent named by neither may be dispatched, and dispatching staffs the task. Treating
+every such task as unstaffable would report a real reviewer's work as nobody's — which is the same
+false statement this requirement exists to prevent, made in the opposite direction.
 
 ### Requirement: Governance holds identically over HTTP and MCP
 
@@ -1726,6 +1816,15 @@ Staffing records a holder, and recording a holder for work that is not at a poin
 reviewed takes that work from whoever holds it while moving it nowhere. The refusal SHALL name the
 status the task is actually in.
 
+**A review SHALL be refused where the named reviewer is recorded as having produced evidence for
+the named task and no agent is recorded as completing it.** Such a reviewer's verdict is refused by
+the rule separating author from reviewer, so dispatching it pays for a turn whose conclusion has
+nowhere to go — and leaves the task held by an agent that no transition on it names, which this
+capability specifies SHALL be reported as a review genuinely in progress and SHALL NOT be restaffed.
+The refusal SHALL name the evidence as its reason and SHALL NOT state that any agent completed the
+task. This refusal SHALL be the same rule as the one that refuses the verdict, and SHALL NOT be a
+second statement of it that can drift.
+
 A review SHALL be refused where the named task is already under review and held by a different
 reviewer. Replacing that holder is a handover, and a handover that travels no transition leaves the
 task's recorded history unable to explain who holds it or why it changed. The refusal SHALL name the
@@ -1785,6 +1884,21 @@ that never ran.
 - **WHEN** a review is requested for a task already under review and held by a different reviewer
 - **THEN** the request is refused, naming the current holder
 - **AND** the task's holder is unchanged
+
+#### Scenario: A reviewer that recorded the task's evidence is refused before any turn begins
+
+- **WHEN** the operator dispatches a review of a task the operator moved to `completed`, naming an
+  agent that recorded evidence for that task
+- **THEN** the request is refused, naming the evidence as the reason
+- **AND** the refusal does not state that any agent completed the task
+- **AND** the task's status and holder are unchanged
+- **AND** no reviewing turn has been started and no checkout has been created
+
+#### Scenario: A reviewer that recorded nothing for the task is still dispatched by hand
+
+- **WHEN** the operator dispatches a review of a task the operator moved to `completed`, naming an
+  agent that recorded no evidence for it
+- **THEN** the task is held by that reviewer and is in review before the turn begins
 
 #### Scenario: A refusal is reported as a refusal, not as acceptance
 

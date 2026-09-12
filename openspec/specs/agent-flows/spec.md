@@ -74,17 +74,35 @@ agent completed such a task, so no agent's own sign-off is at stake; but an agen
 produced the work, and offering it that work to review is self-approval reached by a different route.
 
 **The agents that have worked a task SHALL be determined from every record that associates an agent
-with it — its recorded transitions, the agent it is assigned to, and the runs recorded as bound to
-it — and SHALL NOT be determined from any of those alone.** Each names a different fact and each is
-incomplete. The history is required because who holds a task is overwritten by every reassignment,
-so a task returned for revision and picked up by a second agent has two authors and only the history
-names both. The assignee is required because an agent takes a transition only when it *changes* a
-task's status: an agent working a task that is already in progress records nothing, so a task the
-operator started by hand and then marked finished can carry a full history that names no agent while
-an agent produced all of the work. The bound runs are required because the assignee holds one name
-and is not overwritten by a later agent, so the *second* agent to work an already-started task is
-named by neither of the other two — and it is that agent, not the first, that the other two terms
-would offer its own work to review.
+with it — its recorded transitions, the agent it is assigned to, the runs recorded as bound to it,
+and the agents recorded as having produced evidence for it — and SHALL NOT be determined from any of
+those alone.** Each names a different fact and each is incomplete. The history is required because
+who holds a task is overwritten by every reassignment, so a task returned for revision and picked up
+by a second agent has two authors and only the history names both. The assignee is required because
+an agent takes a transition only when it *changes* a task's status: an agent working a task that is
+already in progress records nothing, so a task the operator started by hand and then marked finished
+can carry a full history that names no agent while an agent produced all of the work. The bound runs
+are required because the assignee holds one name and is not overwritten by a later agent, so the
+*second* agent to work an already-started task is named by neither of the other two — and it is that
+agent, not the first, that the other two terms would offer its own work to review.
+
+**The evidence is required because it is the only one of the four in which the agent states its own
+authorship.** The other three are circumstantial: this agent moved the task, holds it, or ran about
+it. Evidence recorded against a task is the agent asserting that this is its work, and it carries the
+commit the reviewer is then given to read. An agent whose turn was never bound to a task, that was
+never assigned it and that took no transition on it — the ordinary shape when an operator drives an
+agent from the composer — is named by nothing else, and it is the agent whose work the operator then
+marks finished.
+
+**Evidence SHALL exclude its author whatever the state of its review.** An agent whose evidence was
+rejected, or whose evidence is still awaiting a decision, still produced the work the row records.
+Keying the exclusion on a review decision would reintroduce the gap one status value along, and would
+make who may review a task depend on the outcome of the review being staffed.
+
+**Evidence recorded by the operator SHALL NOT exclude any agent.** A person recording what
+demonstrates the work is not an agent claiming authorship of it, and a task whose evidence came only
+from the operator has no agent-authored record at all — so every agent remains eligible to review it,
+which is the case this rule must not take away.
 
 Because no completion is recorded, no record proves which agent authored the work, and the Hub SHALL
 NOT act as though one does. The determination SHALL therefore be over-inclusive by construction: a
@@ -138,6 +156,24 @@ agent out, so nothing rules the author out either.
 - **WHEN** a task's most recent completion was recorded by the operator, and an agent's run was
   bound to that task while another agent was recorded on its transitions and held its assignment
 - **THEN** that agent is not fired for it
+
+#### Scenario: The agent that recorded the evidence is excluded although no other record names it
+
+- **WHEN** a task's most recent completion was recorded by the operator, and an agent recorded
+  evidence for that task from a run that was never bound to it, having taken no transition on it and
+  never held its assignment
+- **THEN** that agent is not fired for it
+
+#### Scenario: Evidence still awaiting a decision excludes its author
+
+- **WHEN** the only record naming an agent on an operator-completed task is evidence whose review is
+  still awaiting a decision, or whose review rejected it
+- **THEN** that agent is not fired for it
+
+#### Scenario: Evidence the operator recorded excludes nobody
+
+- **WHEN** an operator-completed task's only evidence was recorded by the operator
+- **THEN** an agent that no other record associates with that task may be fired for it
 
 #### Scenario: A task with no recorded completion stays claimable by nobody
 
@@ -215,11 +251,37 @@ failed review is met by the same rule that staffed it rather than by a second me
 reviewer that failed had been **declared**, the Hub SHALL surface it and SHALL NOT substitute
 another agent — the reasoning above does not weaken because the declared agent ran and said nothing.
 Where the reviewer that failed had been selected by **availability**, the Hub SHALL resolve again,
-excluding the agent that failed.
+excluding the agent that failed. **That second resolution SHALL exclude the work's author by the
+same determination the first one used**, and SHALL NOT substitute a narrower one: where no agent is
+recorded as completing the task, it SHALL exclude every agent any record associates with the task,
+exactly as the resolution that staffed the review did. A second resolution that rules out only the
+reviewer who said nothing offers the work to an agent the first resolution had already excluded as
+its author, and the silence of one reviewer is not a fact about who wrote the work.
+
+**Where that second resolution can staff nobody, the reason it surfaces SHALL describe the
+exclusion it actually applied.** Widening who is excluded without widening the sentence that
+explains the exclusion produces a reason stating that an excluded agent completed the task on a
+task no agent completed — which this capability already forbids for the first resolution, and the
+second one surfaces its reason to the same operator through the same event. The two resolutions
+SHALL NOT come to different accounts of one task.
 
 **The Hub SHALL NOT resolve, as a task's reviewer, an agent that could not record a verdict on it.**
 An agent is barred from judging work it completed, so naming it would produce a review refused on
 arrival; the resolution SHALL exclude it rather than discover the refusal afterwards.
+
+#### Scenario: The author is not offered the work by the second resolution either
+
+- **WHEN** a reviewer staffed for a task the operator moved to `completed` ends its turn without
+  recording a verdict, and the Hub resolves a replacement
+- **THEN** an agent that any record associates with that task is not selected
+- **AND** the agent that gave no verdict is not selected
+
+#### Scenario: The second resolution's surfaced reason does not claim an agent completed the work
+
+- **WHEN** a reviewer staffed for a task the operator moved to `completed` ends its turn without
+  recording a verdict, and no agent is left for the Hub to resolve
+- **THEN** the surfaced reason states that the excluded agents worked on the task
+- **AND** it does not state that any of them completed it
 
 #### Scenario: A declared reviewer that resolves is used
 
@@ -544,6 +606,12 @@ exclusion derived only from the completion would let two permissive rules agree 
 The exclusion SHALL be the same determination claimability uses, or a task the flow offers an agent
 is one the flow would then refuse to staff onto it.
 
+**An agent that recorded evidence for the task SHALL be among those excluded.** This is not an
+addition to the boundary but the boundary reaching the record that states authorship most directly:
+the ladder is already forbidden from resolving an agent that could not record a verdict on the task,
+and author/reviewer separation refuses such an agent's verdict. A ladder that staffed it would name
+a reviewer whose review is refused on arrival.
+
 Everything else about the resolution SHALL be unchanged: the declaration outranks availability, an
 unresolvable declaration is surfaced and never substituted, and a task with nothing to check out is
 surfaced with that as its reason rather than with a reason about who completed it.
@@ -569,11 +637,25 @@ say so.
 - **WHEN** a flow resolves a reviewer for a task the operator moved to `completed`
 - **THEN** an agent recorded on one of that task's earlier transitions is not selected
 
+#### Scenario: The agent that recorded the evidence is not resolved as its reviewer
+
+- **WHEN** a flow resolves a reviewer for a task the operator moved to `completed`, and one eligible
+  agent recorded that task's evidence while another did not
+- **THEN** the agent that recorded the evidence is not selected
+- **AND** the other agent is fired for the review
+
 #### Scenario: A single-agent project surfaces rather than self-approving
 
 - **WHEN** the only agent in the project is one recorded on that task's transitions
 - **THEN** no agent is fired for the review
 - **AND** the flow surfaces that it could not staff the review, naming the task
+
+#### Scenario: A project whose only other agent recorded the evidence surfaces rather than self-approving
+
+- **WHEN** every agent free to review an operator-completed task recorded evidence for it
+- **THEN** no agent is fired for the review
+- **AND** the flow surfaces that it could not staff the review, naming the task
+- **AND** the surfaced reason does not state that any agent completed it
 
 #### Scenario: The surfaced reason does not claim an agent completed the work
 

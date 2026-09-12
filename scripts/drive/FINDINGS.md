@@ -441,6 +441,27 @@ found this"* on a line naming one finding number. A single-number line about a f
 still indistinguishable from a verdict on a different finding, exactly as `F313` says, and the floor
 it describes is where this landed.
 
+**Revised 2026-09-12 (night window, `n8-close`): the open severity-A set is four: `F299`, `F300`,
+`F301`, `F312`.** Computed with `py -3.11 scripts/classify_findings.py` after the edit, not read
+off the paragraph above. `F306` and `F316` leave the set together, as two findings closed by one
+change, `an-agent-that-recorded-the-evidence-is-the-author` (fix `4929ea0`, tests `40bd429`). Each
+entry now carries its own Status line and its own evidence. The instrument prints all four under
+`OPEN`, and the only severity-A `CONFLICT` left is `F52`, the long-standing one that really is
+about its own finding. So the two-number arrangement the correction above had to keep is no longer
+needed **for this set**. That is because the section `F318` misread now declares its own state. The
+classifier arm itself has not changed, so it still misreads a wrapped quotation, and any future
+section can land in the same place.
+
+**Written under `F313`'s rule, and the rule held.** Every verdict was captured before a word here
+was edited and recomputed after. The requirement was that exactly two verdicts move, `F306` from
+open and `F316` from conflict, and nothing else. Stripped of line offsets, the B, C, D and `?`
+verdict lists match across the two runs.
+
+**Below A, this window filed one: `F319` (B).** A review refused on the scheduler path leaves the
+refused reviewer holding the task. It has no proposal. Its worst leg, a refusal after the assignee
+is staged, has not been verified, and if that leg holds the finding is an A. That makes it the day
+window's first spec-loop candidate, not a night build.
+
 ### Two more defects, found the same day by an adversarial review that was told to falsify
 
 **The first three below were found by me. These two were found by an Opus review agent spawned at
@@ -24639,8 +24660,10 @@ and larger. **Not fixed here** — it changes the loop's own contract and belong
 
 ## F306 (A) — an agent can be staffed to review, and approve, work it recorded evidence for
 
-**Status:** open — filed 2026-09-09 (night window, iteration 3), **measured on a live Hub**, not
-fixed. Found by F142's row-four drive, and it lives inside F142's own repair. It does **not** reopen
+**Status:** fixed `4929ea0` (tests `40bd429`) by `an-agent-that-recorded-the-evidence-is-the-author`,
+archived 2026-09-12 (night window, `n8-close`), and driven live on both trees — see the block at the
+end of this entry. Filed 2026-09-09 (night window, iteration 3), **measured on a live Hub**. Found
+by F142's row-four drive, and it lives inside F142's own repair. It does **not** reopen
 F142: that finding's two claims — operator-completed work is routed for review at all, and a refusal
 names the task rather than the queue's status histogram — held on both arms (20/20 on
 `operator_after_agent`, 19/19 on `untouched`; the counts differ because the two modes assert
@@ -24702,9 +24725,16 @@ repair, which fails closed.
 an agent turn **not bound to a task** (the ordinary shape when an operator drives an agent from the
 composer), that agent recording evidence with a `task_id` (`record_evidence` takes one, and the flow
 briefing asks for evidence), and the operator marking the task complete themselves — which is
-precisely the operator behaviour F140 and F142 are both about. What is **not** established is how
-often the reviewer ladder picks the author rather than another agent when both are eligible; here
-the pool was two and it picked the author. Unverified: whether ordering is deterministic.
+precisely the operator behaviour F140 and F142 are both about. Here the pool was two and it picked
+the author.
+
+**Corrected 2026-09-12: the ordering is deterministic, and that makes this worse, not rarer.** This
+paragraph used to end *"what is not established is how often the reviewer ladder picks the author
+… Unverified: whether ordering is deterministic."* The change's R1 measured it (`design.md` D6):
+`_agents_that_are_free` orders by `Agent.name`, and rung 2 takes the first eligible candidate,
+stable across repeats and independent of insertion order. So it is not a frequency. An author whose
+name sorts first among the free agents reviewed its own work on every firing, for every task it
+authored. The pre-fix drive agrees: the flow staffed the author 2 times out of 2 (below).
 
 **A truly untouched task is reachable and is not affected.** `POST /spec/evidence`
 (`hub/hub/api/v1/spec.py:801-833`) records evidence as `Actor(kind="operator")`, so an operator can
@@ -24726,11 +24756,55 @@ who may review, which needs one:
 The first is the same principle the exclusion already states, extended; the second closes the door
 rather than the corridor. **Both are guesses until someone reads what else writes evidence rows.**
 
+**Corrected 2026-09-12: the first bullet's `kind` scoping is refuted, and the change shipped without
+it** (`design.md` D5). Scoping needs a closed vocabulary. The corpus forbids one:
+`requirement-traceability` says the set of kinds *"SHALL be open to additions"*, and
+`agent-capability-plane` says *"open ones SHALL stay open"*. `db.models.EVIDENCE_KINDS` exists but
+is advisory, and nothing validates against it. This finding's own reproduction stored
+`kind='implementation'`, which is not one of its six words, so scoping on it would fail open on
+the first word outside the list. The product does not ask a reviewer for evidence either, because
+`_briefing_evidence_lines` returns nothing for a review. The residue is written down in D5 as a
+known cost: a reviewer that records evidence anyway is excluded from a later review of the same
+task. What shipped is the **unscoped** union plus the guard fallback, which is both bullets with the
+first bullet's scoping taken out, and it reaches five call sites rather than two.
+
 **How it was found is worth keeping.** The drive's own assertion — *"with NOBODY excluded — any
 bound agent may take it"* — passed, truthfully. It accepts `reviewer in pool or reviewer == AGENT`,
 so a correctly-empty exclusion and an exclusion that missed the author are the same string to it.
 The defect sits one level under the claim, and only reading `task_transitions` and
 `requirement_evidence` in the drive database told them apart.
+
+### `F306` — driven on both trees, 2026-09-12, and read from the tables both times
+
+The drive harness prints green on both trees, so the proof here is the database, not the harness.
+
+**Pre-fix tree** (`37b8226`, from a git worktree; port 8014, profile `drive0912p`, kept).
+`proj-34d006e2f3e5`, `task-9ba36b0bd788`: seq 5–7 were operator moves with `actor_agent` NULL.
+**Seq 8, `under_review→approved`, has `actor_agent='r7af306q'`** on `run-bb80909c0e15`, and
+`ev-4d13beb472c4` (`implementation`, accepted) has `actor='r7af306q'` on an unbound run. That is
+this finding's row, reproduced. The flow staffed the author 2 times out of 2. The author approved
+in 1 of the 2. In the other it never called `update_task`, and the silent review was restaffed.
+
+**Fixed tree** (`cddf32b`; port 8015, profile `drive0912`, kept). `proj-192ee0e59efb`,
+`task-88efa63d19ee`: the author `r7af7a` recorded `ev-b6a5a19738e9`, and the task's first and
+**only** bound run is `run-1d7e3883437a`, agent `r7bf7a`. No `run_divergences` row exists, so no
+restaff stands in for the fix. **Seq 4, `under_review→approved`, has `actor_agent='r7bf7a'`.**
+
+The author was also refused at each of the other doors, all on `proj-99af62baca17`,
+`task-714b1ea52e2e`:
+
+- Its own `update_task(approved)` through the real MCP path was refused with 403, and no seq 8 was
+  written.
+- A flow firing where it was the only other agent returned 409 *"could not staff this step"*. The
+  sentence does not claim that anyone completed the task.
+- `POST /agent/trigger` naming it as the reviewer was refused with 403 before any run, queue entry
+  or checkout existed.
+- The operator's `PATCH` assigning it with `status=under_review` was refused with 403. The assignee
+  rolled back and no transition was written.
+
+Transcripts and table dumps are in `profiles/drive0912/n7-transcripts/` and
+`profiles/drive0912p/n6-transcripts/`. Log: `.claude/autonomous/2026-09-11-night-log.md`,
+iterations 7 and 8.
 
 ---
 ## F307 (B) — a confirmation dialog's first Tab leaves the panel, into the editor behind the scrim
@@ -25382,10 +25456,28 @@ this), `F310`.
 
 ## F316 (A) — the reviewer resolved after a *silent* review excludes only the completer, so on operator-completed work it can pick the author
 
-**Status:** open — filed 2026-09-11 (day window, iteration 4, spec-loop R2 on `F306`).
+**Status:** fixed `4929ea0` (tests `40bd429`) by `an-agent-that-recorded-the-evidence-is-the-author`
+**task 2.4**, which gives `run_divergence._answer_failed_review` the same two-branch derivation as the
+other call sites: `completion_attribution`, then `agents_that_may_have_authored` where no agent
+completed the work. Task 2.4a adds the `excluded_because='has worked on this task'` reason on the
+operator-completed branch. The change was archived 2026-09-12 (night window, `n8-close`).
+Filed 2026-09-11 (day window, iteration 4, spec-loop R2 on `F306`).
 **REPRODUCED 2026-09-11** (iteration 5, spec-loop R3) at unit level against the tree at `8d227de`;
-it was filed as derived-from-the-code and the reachability argument is no longer unverified. Still
-not driven on a live Hub, which would be the stronger evidence and is not what closes it.
+it was filed as derived-from-the-code and the reachability argument is no longer unverified.
+
+**What proves it, and what does not.** The unit legs are 4.10 and 4.10a in
+`hub/tests/test_the_evidence_names_the_author.py`. Each **failed** under its own mutation:
+removing 2.4, and dropping the `excluded_because` reason (night log 2026-09-11, iteration 4). With
+2.4 in place, the silent review is `surfaced`, the assignee stays on the silent reviewer, and
+nothing is queued. The restaff path itself was **not** driven on the fixed tree. On the fixed
+tree the flow's first staffing already excludes the author, so a live restaff onto the author needs
+a firing that picks the author, and after the fix none does. What was driven on the fixed tree is
+the operator-facing half: a firing with no eligible reviewer says *"has worked on this task"* and
+does not say *"completed"* (§5.3, 409 on `proj-99af62baca17`). The pre-fix drive **did** exercise
+the restaff path: attempt 1's silent author review was restaffed onto the other agent
+(`div-c524b3378859`). But there the silent reviewer **was** the author, so it was barred for having
+said nothing, and this finding's failure could not show. Nobody has driven a live Hub through a
+non-author going silent on an author's operator-completed task. The unit legs cover that route.
 
 **The reproduction.** An operator-completed task (`in_progress` and `completed` both taken by
 `operator()`), agent `aa-author` associated with it by a **bound run only** — named on no
@@ -25462,8 +25554,8 @@ finished the work.**
 derivation the other two use — `completion_attribution`, then `agents_that_may_have_authored` where
 no agent completed — which would also pick up `F306`'s fourth source for free, since it would then
 be calling the union rather than recomposing it. The round writing `F306`'s proposal folded this in
-on that argument (`openspec/changes/an-agent-that-recorded-the-evidence-is-the-author/`, R2); if
-that change ships, this is closed by it and the entry should say which commit.
+on that argument (`openspec/changes/an-agent-that-recorded-the-evidence-is-the-author/`, R2). That
+change shipped the obvious fix as task 2.4. The commit is on the Status line.
 
 **Related:** `F306` (the same blind spot, one source over), `F142` (the widening that did not reach
 this call site), `F167`.

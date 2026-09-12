@@ -426,8 +426,11 @@ def main():
             refusal[:220],
         )
         if c not in (200, 201):
+            # A disjunction, so the label says so: the rung-3 sentence is about "this task" without
+            # carrying its id (the id rides on the loop's `review_unstaffed` event), and a label
+            # reading "names this task" was read as "the id is in the sentence" (night 2026-09-12).
             check(
-                "...and it names this task instead",
+                "...and it is about this task instead (its id, or 'has worked on this task')",
                 task_id in refusal or "has worked on this task" in refusal,
                 refusal[:220],
             )
