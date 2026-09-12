@@ -518,7 +518,9 @@ def test_a_path_nested_past_the_bound_is_still_read(workspace, monkeypatch):
 # --- The wire shape ---------------------------------------------------------------------------
 
 
-def _call_tool_over_stdio(arguments: dict, workspace_dir: str) -> dict:
+def _call_tool_over_stdio(
+    arguments: dict, workspace_dir: str, env_overrides: dict | None = None
+) -> dict:
     """Speak JSON-RPC to a real spawn of the MCP server and return the raw tools/call result.
 
     Asserting on the Python return value cannot see `structuredContent`, which is added by
@@ -527,6 +529,7 @@ def _call_tool_over_stdio(arguments: dict, workspace_dir: str) -> dict:
     env = dict(os.environ)
     env["AW_WORKSPACE_DIR"] = workspace_dir
     env.pop("AW_RUN_TOKEN", None)
+    env.update(env_overrides or {})
     proc = subprocess.Popen(
         [sys.executable, str(MCP_SERVER)],
         stdin=subprocess.PIPE,
@@ -604,6 +607,34 @@ def test_response_carries_no_structured_content():
     answer = json.loads(result["content"][0]["text"])
     assert answer["behavior"] == "allow"
     assert answer["updatedInput"] == {"file_path": "a.txt", "content": "hi"}
+
+
+def _shell_answer_over_stdio(command: str) -> dict:
+    """The answer Claude receives for one `Bash` command, on the default posture, in a real spawn
+    whose environment names the run's own Hub."""
+    with tempfile.TemporaryDirectory() as tmp:
+        result = _call_tool_over_stdio(
+            {"tool_name": "Bash", "input": {"command": command}, "tool_use_id": "toolu_url"},
+            workspace_dir=tmp,
+            env_overrides={"HUB_URL": _HUB, "AW_PERMISSION_POSTURE": ""},
+        )
+    assert "structuredContent" not in result
+    assert result.get("isError") in (False, None)
+    return json.loads(result["content"][0]["text"])
+
+
+def test_a_network_address_is_refused_on_the_wire():
+    """The reason Claude is given names the URL as a network address, not as a path."""
+    answer = _shell_answer_over_stdio("curl -s https://example.com/x")
+    assert answer["behavior"] == "deny"
+    assert answer["message"].startswith("Denied: 'https://example.com/x' is a network address")
+
+
+def test_the_run_s_own_hub_is_allowed_on_the_wire():
+    """The documented HTTP form reaches its own Hub through the real server, not only `_decide`."""
+    answer = _shell_answer_over_stdio('curl -s "$HUB_URL/api/v1/agent-actions/tasks"')
+    assert answer["behavior"] == "allow"
+    assert answer["updatedInput"] == {"command": 'curl -s "$HUB_URL/api/v1/agent-actions/tasks"'}
 
 
 def test_tool_use_id_is_accepted():

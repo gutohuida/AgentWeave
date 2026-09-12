@@ -51,9 +51,17 @@ recorded as findings rather than fixed:
 
 - **A shell command declares no path.** `Bash` carries a command string, so nothing extracts a
   destination from it and **no shell write is ever recorded**, under any posture. Under **Workspace
-  only** the approval tool does read absolute paths out of the command text — enough to refuse the
-  literal case, not enough to be a wall, and it describes itself accurately as *a boundary, not a
-  sandbox*. Under the postures that check nothing, a shell redirect leaves no trace at all.
+  only** the approval tool reads the command text as the tool's shell (bash or PowerShell) will read
+  it — quotes removed, joined words joined — and resolves each path it finds, relative or absolute,
+  against the run's workspace; a word whose destination the shell decides only at run time (a
+  variable, `~`, a command substitution) is refused rather than guessed. That is enough to refuse
+  what the text spells, not enough to be a wall: a `cd` in an earlier call, or a path a program
+  builds for itself, never appears in the text, and the tool describes itself accurately as *a
+  boundary, not a sandbox*. It also lets a shell command name only one network address, the run's
+  own Hub (`$HUB_URL`), and refuses `curl https://example.com/x` for naming another. That is a rule
+  about what the command's text may say, not a network boundary: an address the text does not spell
+  as a URL (`curl example.com`) is not recognised as one, and `WebFetch` is not checked at all.
+  Under the postures that check nothing, a shell redirect leaves no trace at all.
 - **A link is followed, but the path you are shown is the one the agent typed.** A symlink or
   junction inside the workspace pointing out of it is resolved before the comparison, so the write
   is correctly refused or correctly recorded as outside. What is reported alongside that verdict is

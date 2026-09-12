@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 3,
+  "iteration": 4,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "u3-wire-docs",
-  "next_action": "Queue item u3-wire-docs: a-url-is-not-a-path tasks 3.1 (two cases through a REAL spawn of mcp_server.py beside _call_tool_over_stdio in hub/tests/test_permission_approver.py, AW_WORKSPACE_DIR + HUB_URL in the child env: curl -s https://example.com/x -> deny with message starting \"Denied: 'https://example.com/x' is a network address\"; curl -s \"$HUB_URL/api/v1/agent-actions/tasks\" -> allow; neither carries structuredContent), 4.1 (docs/reference/permission-postures.md paragraph, per tasks.md), and 8.3 openspec validate --strict a-url-is-not-a-path. The reader landed in u2 (see log iteration 3 and design D11a). Run the file on Windows, commit and push.",
+  "current": "u4-mutations",
+  "next_action": "Queue item u4-mutations: a-url-is-not-a-path tasks 5.1-5.16 plus the 17th (remove the _LITERAL_DOLLAR sentinel in _lex, both append sites -> E20/E21/E22 fail), one firing, from the clean committed tree. Mutate with py -3.11 (utf-8 read/write), NEVER PowerShell Get-Content/WriteAllText; restore with git checkout from the committed tree and check git status --short is clean after EACH restore. Record which NAMED row failed for each into the log as a table. A row that survives its mutation means fix the test (commit), never weaken the claim. If the firing runs short, stop BEFORE a mutation and record which remain.",
   "queue": [
     {
       "id": "compose",
@@ -42,9 +42,9 @@
     },
     {
       "id": "u3-wire-docs",
-      "status": "open",
+      "status": "done",
       "title": "a-url-is-not-a-path S3 wire shape + S4 docs",
-      "detail": "3.1 two cases through a REAL spawn of mcp_server.py beside _call_tool_over_stdio (AW_WORKSPACE_DIR + HUB_URL in the child env): curl example.com denied with 'Denied: 'https://example.com/x' is a network address' prefix; curl \"$HUB_URL/api/v1/agent-actions/tasks\" allowed; neither carries structuredContent. 4.1 docs/reference/permission-postures.md paragraph. 8.3 openspec validate --strict a-url-is-not-a-path."
+      "detail": "DONE iteration 4. 3.1: test_a_network_address_is_refused_on_the_wire + test_the_run_s_own_hub_is_allowed_on_the_wire through a real spawn (_call_tool_over_stdio gained env_overrides; HUB_URL=http://127.0.0.1:8016, AW_PERMISSION_POSTURE empty). Both FAIL against c12a7d3's server (measured: pre-fix answers were deny 's://example.com/x' outside / deny '/api/v1/agent-actions/tasks' outside), control passes. 4.1 docs paragraph, every claim checked against _decide first. 8.3 valid. test_permission_approver.py 178 passed/1 skipped on Windows. Not run on WSL; CI Linux is the first POSIX run."
     },
     {
       "id": "u4-mutations",

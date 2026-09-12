@@ -162,7 +162,7 @@ its rule exists.
 
 ## 3. The wire shape
 
-- [ ] 3.1 Beside `_call_tool_over_stdio`, add two cases through a **real spawn** of
+- [x] 3.1 Beside `_call_tool_over_stdio`, add two cases through a **real spawn** of
   `mcp_server.py`, with `AW_WORKSPACE_DIR` and `HUB_URL` in the child's environment.
   - `curl -s https://example.com/x` answers `behavior: deny`, with a message that begins
     `Denied: 'https://example.com/x' is a network address`.
@@ -171,9 +171,14 @@ its rule exists.
   Both results carry **no** `structuredContent`. This is the only test that sees the answer Claude
   actually receives.
 
+  *Done (night 2026-09-12): `test_a_network_address_is_refused_on_the_wire` and
+  `test_the_run_s_own_hub_is_allowed_on_the_wire`. Both fail against c12a7d3's server, measured:
+  it answered `Denied: 's://example.com/x' is outside your workspace.` and
+  `Denied: '/api/v1/agent-actions/tasks' is outside your workspace.`.*
+
 ## 4. Docs
 
-- [ ] 4.1 `docs/reference/permission-postures.md`, *"A shell command declares no path"*. Replace
+- [x] 4.1 `docs/reference/permission-postures.md`, *"A shell command declares no path"*. Replace
   *"the approval tool does read absolute paths out of the command text"* with what D1 reads, in one
   or two sentences. Add one sentence saying that a shell command under **Workspace only** may name
   only the run's own Hub as a network address, and that this is a rule about the command's text,
@@ -276,7 +281,9 @@ and no `.py` under `hub/hub` or `src` newer than the process. Never 8000 or 8010
   --target-version py311`, `mypy src/`. Use CI's path list, not a narrower one.
 - [ ] 8.2 `py -3.11 -m pytest tests/ -q` from `hub/` (the whole Hub suite), under `py -3.11`, never
   bare `python`.
-- [ ] 8.3 `openspec validate --strict a-url-is-not-a-path` after every delta edit.
+- [x] 8.3 `openspec validate --strict a-url-is-not-a-path` after every delta edit.
+  *Measured at S3/S4 (night 2026-09-12): "Change 'a-url-is-not-a-path' is valid". No delta was
+  edited in S2–S4; 9.4 runs it again before archiving.*
 - [ ] 8.4 No migration, no API or schema change. `git diff <base>.. -- hub/hub/migrations
   hub/hub/api hub/ui` is empty.
 
