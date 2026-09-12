@@ -26330,3 +26330,27 @@ that turn to be refused. What it costs is one false event and a wrong reason on 
 already chose to drop. Nothing is lost that was wanted.
 
 ---
+
+## F329 (A) — a first `agentweave` start builds a database no conversation can be written to
+
+**Status:** fixed for every database built from now on, by `hub/hub/migrations/env.py`; **open for a database already built this way**, which nothing repairs. Filed 2026-09-12 from the operator's own first start in `LoopEngine` (PyPI 1.1.0 Hub, this checkout's CLI): every send in the composer failed with *"Could not start the conversation"*.
+
+**The claim.** `_hub_native_start` (`src/agentweave/cli.py`) runs `alembic upgrade head` in the CLI process before it spawns the server, and the Docker image does the same (`hub/Dockerfile`: `alembic … upgrade head && uvicorn`). `init_db`, which the server runs next, does `create_all` and *then* the upgrade. The chain cannot build a database on its own. No migration creates `projects`; `create_all` always has. So every migration that recreates a table guards on `projects` and returns early, trusting that "`create_all` builds the rest from the model". Run alone on an empty file, the chain creates `conversations` in its `0017` shape and skips `0035`, `0058`, `0073` and `0091`. `create_all` then leaves the existing table alone. The database is stamped head without `conversations.title`, and every conversation insert fails: `sqlite3.OperationalError: table conversations has no column named title`, returned to the UI as a bare 500.
+
+**Measured.** At this checkout's head, 28 schema objects differ between the two orders. Missing columns on three tables: `conversations.{sequence,title,title_set_by_operator,origin}`, `inbound_queue_entries.divergence_source_run_id` and `evidence_reviews.sequence`. Five missing indexes, among them the unique `uq_projects_path_key`. Foreign keys differ on `agents`, `runs`, `agent_outputs` and `inbound_queue_entries`. The other 17 tables have the same columns in a different shape: order, server defaults, constraints. PyPI 1.1.0 shows the same defect, with `0081` as its head. The operator's `live` profile has no drift, because it was not built through this path.
+
+**Why nothing caught it.** Every migration test builds with `create_all` first, and every CLI test mocks `_hub_run_migrations`. The only path a fresh install takes was the one path no test ran.
+
+**The fix.** `env.py` builds an *empty* database migrated to *head* from the models before running the chain. That is `init_db`'s order, at the one place every door shares: the CLI, Docker, and a hand-typed `alembic upgrade head`. A database built up to an older revision is still built by the chain, because it is a test constructing history. A command with no destination (`alembic current`) touches nothing. Compared clause by clause, the two orders now give the same schema: 164 objects, no differences. Tests: `test_an_empty_database_migrated_alone_gets_the_schema_init_db_builds` (fails without the fix), `…_built_to_an_older_revision_keeps_that_revisions_schema`, `test_a_read_only_command_leaves_an_empty_database_empty`, and, at the CLI's boundary with the real step unmocked, `test_first_start_migrations_leave_a_database_that_can_hold_a_conversation`, which fails without the fix on the operator's exact error. Driven: `_hub_native_start` on an empty file, port 8013, then the composer's two calls. The trigger returned `200`, and a Haiku run completed with exit code 0 on a titled conversation.
+
+**What stays open.** A database that a first start has already built is stamped head. `env.py` leaves it alone because it is not empty, and no migration re-applies what the skipped ones would have done. Its conversation, queue and evidence-review tables are necessarily empty, since every insert into them failed. The rest of the drift is indexes and foreign keys. The remedy today is to delete the database and start again. A repair migration is the durable one, and it is not written.
+
+---
+
+## F330 (C) — every refused send from the exploring composer leaves an empty specification document behind
+
+**Status:** open. Filed 2026-09-12 alongside F329, which produced eight of these in `LoopEngine/spec/changes/`.
+
+**The claim.** `NewConversationSurface.tsx` creates the exploring document *before* it posts the turn. That order is deliberate: the first turn has to carry the document. But when `/agent/trigger` then refuses, nothing removes the document, so each retry mints another placeholder (`emerald-fenrir`, `silver-thunderbird`, …), each an empty `exploring` change spec. The operator is left with one orphan per attempt, in the repository and in the spec list, for turns that never ran.
+
+**A possible repair, not proposed.** Let `/agent/trigger` create the document inside the same request that queues the turn, so a refusal rolls both back. Or have the composer withdraw the document it created when the trigger fails.

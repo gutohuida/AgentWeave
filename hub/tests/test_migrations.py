@@ -3493,3 +3493,102 @@ def test_migration_0102_is_guarded_when_runs_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0102"
+
+
+# ---------------------------------------------------------------------------
+# F329 — an empty database migrated by alembic alone gets init_db's schema
+# ---------------------------------------------------------------------------
+
+
+def _schema_clauses(db_file: Path) -> dict:
+    """Every schema object's DDL, a table's as the multiset of its top-level clauses.
+
+    Clause order is not part of a schema: batch mode's table recreation emits a table's
+    constraints in reflection order, which differs between two builds of the same schema.
+    """
+
+    def clauses(sql: str) -> list[str]:
+        body = sql[sql.index("(") + 1 : sql.rindex(")")]
+        out, depth, current = [], 0, ""
+        for ch in body:
+            depth += ch == "("
+            depth -= ch == ")"
+            if ch == "," and depth == 0:
+                out.append(" ".join(current.split()))
+                current = ""
+            else:
+                current += ch
+        out.append(" ".join(current.split()))
+        return sorted(out)
+
+    with sqlite3.connect(db_file) as conn:
+        return {
+            (kind, name): clauses(sql) if kind == "table" else " ".join(sql.split())
+            for kind, name, sql in conn.execute(
+                "SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL"
+            )
+        }
+
+
+def test_an_empty_database_migrated_alone_gets_the_schema_init_db_builds(tmp_path) -> None:
+    """F329. The CLI's native start and the Docker image run `alembic upgrade head` on a fresh
+    database *before* the server's `create_all`; `init_db` runs them the other way round.
+
+    Before the fix the chain, run alone, created `conversations` in its `0017` shape and skipped
+    every later change to it (each guards on `projects`, which no migration creates), and the
+    server's `create_all` could not repair a table that already existed: 28 schema objects
+    differed and every conversation an operator started failed on `conversations.title`.
+    """
+    reference = tmp_path / "init_db_order.db"
+    _run(_create_all_at(f"sqlite+aiosqlite:///{reference}"))
+    _run_alembic_with(f"sqlite+aiosqlite:///{reference}")
+
+    fresh = tmp_path / "cli_order.db"
+    _run_alembic_with(f"sqlite+aiosqlite:///{fresh}")
+    _run(_create_all_at(f"sqlite+aiosqlite:///{fresh}"))
+
+    expected, actual = _schema_clauses(reference), _schema_clauses(fresh)
+    differing = sorted(
+        key for key in expected.keys() | actual.keys() if expected.get(key) != actual.get(key)
+    )
+    assert differing == []
+
+    with sqlite3.connect(fresh) as conn:
+        assert (
+            conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == HEAD_REVISION
+        )
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
+        assert {"sequence", "title", "title_set_by_operator", "origin"} <= columns
+
+
+def test_an_empty_database_built_to_an_older_revision_keeps_that_revisions_schema(tmp_path) -> None:
+    """Only head is built from the models. A database built up to an older revision is a test
+    constructing history, and today's tables stamped `0034` would be a schema `0034` never had."""
+    db_file = tmp_path / "history_0034.db"
+    _upgrade_to(f"sqlite+aiosqlite:///{db_file}", "0034")
+
+    with sqlite3.connect(db_file) as conn:
+        tables = {
+            row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        assert "projects" not in tables
+        assert "title" not in {row[1] for row in conn.execute("PRAGMA table_info(conversations)")}
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0034"
+
+
+def test_a_read_only_command_leaves_an_empty_database_empty(tmp_path) -> None:
+    """`alembic current` runs `env.py` with no destination; reporting must not build tables."""
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "current.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.current(cfg)
+
+    with sqlite3.connect(db_file) as conn:
+        assert (
+            conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0] == 0
+        )

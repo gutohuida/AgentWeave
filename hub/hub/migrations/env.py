@@ -3,6 +3,7 @@
 import asyncio
 from logging.config import fileConfig
 
+import sqlalchemy as sa
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -41,7 +42,43 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _build_an_empty_database_from_the_models(connection) -> None:
+    """Give an empty database migrated to head the schema `init_db` would have built (F329).
+
+    The chain cannot build a database on its own. No migration creates `projects` — `create_all`
+    always has — and so every migration that recreates a table guards on `projects` and returns
+    early without it, trusting that "`create_all` builds the rest from the model". That holds only
+    when `create_all` runs *first*, which is `init_db`'s order. The CLI's native start and the
+    Docker image both run `alembic upgrade head` alone on a fresh database and let the server's
+    `create_all` follow; by then the chain has already created `conversations` (`0017`) in its
+    oldest shape while skipping every change to it, `create_all` leaves an existing table alone,
+    and the database is stamped head without `conversations.title`. Every conversation the operator
+    then starts fails on the INSERT. `conversations` is the loudest of 28 schema objects that
+    differ from `init_db`'s build — missing columns, indexes (`uq_projects_path_key` among them)
+    and foreign keys.
+
+    Here rather than in either caller, so every door — the CLI, the Docker image, a hand-typed
+    `alembic upgrade head` — gets the same database `init_db` builds. Only for head: a database
+    being built up to an older revision is a test constructing history, and giving it today's
+    tables would stamp a schema that revision never had. Only for an empty database: one that
+    already has tables is being upgraded, which is the chain's job. And never for a command
+    with no destination (`alembic current`), which must not change what it reports on.
+    """
+    try:
+        destination = context.get_revision_argument()
+    except KeyError:
+        # `current`, `check` and the other read-only commands pass no destination at all.
+        return
+    if destination != context.get_head_revision():
+        return
+    with connection.begin():
+        if sa.inspect(connection).get_table_names():
+            return
+        target_metadata.create_all(connection)
+
+
 def do_run_migrations(connection):
+    _build_an_empty_database_from_the_models(connection)
     context.configure(connection=connection, target_metadata=target_metadata)
     with context.begin_transaction():
         context.run_migrations()

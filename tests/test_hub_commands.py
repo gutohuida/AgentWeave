@@ -641,3 +641,45 @@ class TestResetCommand:
         assert not default_data_dir.exists()
         assert profile_a_dir.exists()
         assert (profile_a_dir / "agentweave.db").exists()
+
+
+def test_first_start_migrations_leave_a_database_that_can_hold_a_conversation(tmp_path):
+    """F329, at the CLI's own boundary. Every other test here mocks `_hub_run_migrations`, which
+    is how a first `agentweave` start shipped a database no conversation could be written to.
+
+    This runs the real step against an empty file, with the CLI's own alembic configuration (no
+    ini, `script_location` only), then the server's `create_all`, then the INSERT that failed:
+    `table conversations has no column named title`.
+    """
+    import asyncio
+
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    import hub.config
+    from agentweave.cli import _hub_run_migrations
+    from hub.config import settings
+    from hub.conversations import new_conversation
+    from hub.db.models import Base, Project
+
+    db_url = f"sqlite+aiosqlite:///{(tmp_path / 'first-start.db').as_posix()}"
+    # The directory the CLI derives from `hub.main.__file__`; `hub.main` itself is not importable
+    # from this repository's root, whose own `hub/` directory shadows the package's `__init__`.
+    hub_pkg_dir = Path(hub.config.__file__).parent
+    with patch.object(settings, "database_url", db_url):
+        assert _hub_run_migrations(hub_pkg_dir) is True
+
+    async def _serve_and_start_a_conversation() -> None:
+        engine = create_async_engine(db_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            async with AsyncSession(engine) as session:
+                session.add(Project(id="proj-first", name="first"))
+                session.add(
+                    new_conversation(project_id="proj-first", agent="Architect", origin="operator")
+                )
+                await session.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_serve_and_start_a_conversation())
